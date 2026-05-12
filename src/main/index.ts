@@ -91,6 +91,11 @@ function registerIpcHandlers(): void {
   })
 }
 
+// Kill all child processes when app quits — prevents orphaned dev servers
+app.on('before-quit', () => {
+  processManager.stopAll()
+})
+
 app.whenReady().then(() => {
   createWindow()
 

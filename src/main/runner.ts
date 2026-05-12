@@ -66,21 +66,50 @@ class ProcessManager {
     if (!managed) return false
 
     const pid = managed.child.pid
-    if (pid != null) {
-      try {
-        if (process.platform === 'win32') {
-          spawn('taskkill', ['/pid', String(pid), '/f', '/t'])
-        } else {
-          process.kill(-pid, 'SIGTERM')
-          setTimeout(() => {
-            try { process.kill(pid, 'SIGKILL') } catch { /* already dead */ }
-          }, 3000)
-        }
-      } catch {
-        // Process may already be dead
+    if (pid == null) {
+      this.processes.delete(projectId)
+      return true
+    }
+
+    try {
+      if (process.platform === 'win32') {
+        // /T kills the entire process tree (shell → dev server → node → vite)
+        // /F forces termination, no graceful shutdown prompt
+        const killer = spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {
+          stdio: 'ignore',
+        })
+        // If taskkill itself fails, fall back to direct kill
+        killer.on('error', () => {
+          try { managed.child.kill() } catch { /* dead */ }
+        })
+      } else {
+        // Negative PID = kill entire process group (Unix)
+        try { process.kill(-pid, 'SIGTERM') } catch { /* already dead */ }
+        setTimeout(() => {
+          try { process.kill(-pid, 'SIGKILL') } catch { /* already dead */ }
+        }, 2000)
       }
+    } catch {
+      try { managed.child.kill() } catch { /* already dead */ }
     }
     return true
+  }
+
+  /** Kill all running processes — called on app quit */
+  stopAll(): void {
+    for (const [projectId, managed] of this.processes) {
+      const pid = managed.child.pid
+      if (pid != null) {
+        try {
+          if (process.platform === 'win32') {
+            spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
+          } else {
+            process.kill(-pid, 'SIGKILL')
+          }
+        } catch { /* best effort */ }
+      }
+      this.processes.delete(projectId)
+    }
   }
 
   sendInput(projectId: string, data: string): void {
