@@ -31,26 +31,26 @@ function Toolbar({
   searchRef: React.RefObject<HTMLInputElement>
 }) {
   return (
-    <header className="h-16 bg-card border-b flex items-center px-6 gap-4 shrink-0">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6 gap-4 shrink-0">
       {/* Logo + app name */}
       <div className="flex items-center gap-2.5 mr-4">
-        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-          <span className="text-[11px] font-bold text-primary-foreground">L</span>
+        <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+          <span className="text-[11px] font-bold text-white">L</span>
         </div>
-        <span className="text-sm font-semibold text-foreground">Launcher</span>
+        <span className="text-sm font-semibold text-gray-900">Launcher</span>
       </div>
 
       {/* Search */}
       <div className="flex-1 max-w-lg relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 pointer-events-none" strokeWidth={1.8} />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" strokeWidth={1.8} />
         <Input
           ref={searchRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-9 pl-9 pr-16 text-sm bg-muted border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+          className="h-9 pl-9 pr-16 text-sm bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0"
         />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-muted-foreground/40 select-none pointer-events-none bg-muted px-1.5 py-0.5 rounded">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-gray-400 select-none pointer-events-none bg-gray-100 px-1.5 py-0.5 rounded">
           <Command className="w-3 h-3" strokeWidth={1.8} />
           <span>K</span>
         </div>
@@ -67,7 +67,7 @@ function Toolbar({
           className="h-8 w-8"
           onClick={onSettingsClick}
         >
-          <Settings className="w-4 h-4 text-muted-foreground" strokeWidth={1.8} />
+          <Settings className="w-4 h-4 text-gray-500" strokeWidth={1.8} />
         </Button>
         <Button size="sm" className="h-9 gap-1.5 text-sm rounded-xl" onClick={onAddFolder}>
           <Plus className="w-4 h-4" strokeWidth={1.8} />
@@ -93,7 +93,7 @@ function Section({
     <div className="mb-8">
       <div className="flex items-center gap-2 mb-4">
         {icon}
-        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
           {title}
         </h2>
       </div>
@@ -137,13 +137,13 @@ function DragOverlay() {
       }}
     >
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
-          <FolderPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-50 flex items-center justify-center">
+          <FolderPlus className="w-8 h-8 text-blue-600" strokeWidth={1.5} />
         </div>
-        <p className="text-lg font-medium text-primary">
+        <p className="text-lg font-medium text-blue-600">
           Drop project folders anywhere
         </p>
-        <p className="text-sm text-muted-foreground mt-1">
+        <p className="text-sm text-gray-500 mt-1">
           Release to add to your workspace
         </p>
       </div>
@@ -273,16 +273,16 @@ export function HomePage() {
   // ── Empty state ──
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col bg-background">
+      <div className="h-screen flex flex-col bg-[#f6f8fb]">
         {isDragOver && <DragOverlay />}
 
         {/* Minimal toolbar */}
-        <header className="h-16 bg-card border-b flex items-center px-6 shrink-0">
+        <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-[11px] font-bold text-primary-foreground">L</span>
+            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+              <span className="text-[11px] font-bold text-white">L</span>
             </div>
-            <span className="text-sm font-semibold text-foreground">Launcher</span>
+            <span className="text-sm font-semibold text-gray-900">Launcher</span>
           </div>
           <div className="flex-1" />
           <Button
@@ -291,21 +291,21 @@ export function HomePage() {
             className="h-8 w-8"
             onClick={() => navigate('/settings')}
           >
-            <Settings className="w-4 h-4 text-muted-foreground" strokeWidth={1.8} />
+            <Settings className="w-4 h-4 text-gray-500" strokeWidth={1.8} />
           </Button>
         </header>
 
         {/* Empty content */}
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
-            <div className="w-20 h-20 rounded-2xl bg-muted border flex items-center justify-center">
-              <FolderPlus className="w-10 h-10 text-muted-foreground/40" strokeWidth={1.5} />
+            <div className="w-20 h-20 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-center">
+              <FolderPlus className="w-10 h-10 text-gray-300" strokeWidth={1.5} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-foreground mb-2">
+              <h1 className="text-xl font-semibold text-gray-900 mb-2">
                 Drop your project folder here
               </h1>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-500">
                 or browse to add a project
               </p>
             </div>
@@ -313,7 +313,7 @@ export function HomePage() {
               <Plus className="w-4 h-4" strokeWidth={1.8} />
               Add Project Folder
             </Button>
-            <p className="text-xs text-muted-foreground/50">
+            <p className="text-xs text-gray-400">
               Supports: Node.js &middot; Python &middot; Vite &middot; Next.js
               &middot; Django &middot; more
             </p>
@@ -325,7 +325,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen flex flex-col bg-[#f6f8fb]">
       {isDragOver && <DragOverlay />}
 
       <Toolbar
@@ -340,16 +340,16 @@ export function HomePage() {
         <div className="max-w-5xl mx-auto w-full px-8 py-8">
           {/* Welcome */}
           <div className="mb-8">
-            <h1 className="text-lg font-semibold text-foreground">
+            <h1 className="text-lg font-semibold text-gray-900">
               Welcome back
             </h1>
-            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+            <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
               <span>
                 {projects.length} project{projects.length !== 1 ? 's' : ''}
               </span>
               {runningCount > 0 && (
                 <>
-                  <span className="text-border">&middot;</span>
+                  <span className="text-gray-200">&middot;</span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                     {runningCount} running
@@ -377,7 +377,7 @@ export function HomePage() {
             title={
               pinnedProjects.length > 0 ? 'All Projects' : 'Recent Projects'
             }
-            icon={<FolderOpen className="w-3.5 h-3.5 text-muted-foreground" strokeWidth={1.8} />}
+            icon={<FolderOpen className="w-3.5 h-3.5 text-gray-500" strokeWidth={1.8} />}
           >
             {recentProjects.length > 0 ? (
               <ProjectGrid
@@ -385,7 +385,7 @@ export function HomePage() {
                 onSelect={handleSelect}
               />
             ) : (
-              <div className="text-center py-16 text-sm text-muted-foreground/60">
+              <div className="text-center py-16 text-sm text-gray-400">
                 {searchQuery
                   ? 'No projects match your search'
                   : 'No projects yet'}

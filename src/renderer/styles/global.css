@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  /* Light theme: Linear / Raycast inspired */
   --color-background: #f6f8fb;
   --color-foreground: #111827;
   --color-card: #ffffff;
@@ -22,12 +21,6 @@
   --color-input: #e5e7eb;
   --color-ring: #2563eb;
   --radius: 0.75rem;
-
-  /* App-specific */
-  --color-brand: #2563eb;
-  --color-brand-hover: #1d4ed8;
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
 }
 
 [data-theme='dark'] {
@@ -50,11 +43,6 @@
   --color-border: #272a31;
   --color-input: #272a31;
   --color-ring: #3b82f6;
-
-  --color-brand: #3b82f6;
-  --color-brand-hover: #2563eb;
-  --color-danger: #ef4444;
-  --color-success: #22c55e;
 }
 
 * {
@@ -65,16 +53,14 @@
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--color-background);
-  color: var(--color-foreground);
+  background: #f6f8fb;
+  color: #111827;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Layout — moved to Tailwind utilities in components */
+/* ── Legacy page styles (Detail / Settings) ── */
 
-/* Buttons */
 .btn {
   padding: 8px 16px;
   border: none;
@@ -85,85 +71,37 @@ body {
   transition: background 0.2s;
 }
 
-.btn-start {
-  background: var(--color-success);
-  color: #fff;
-}
-
-.btn-start:hover {
-  opacity: 0.9;
-}
-
-.btn-stop {
-  background: var(--color-danger);
-  color: #fff;
-}
-
-.btn-stop:hover {
-  opacity: 0.9;
-}
+.btn-start { background: #22c55e; color: #fff; }
+.btn-start:hover { opacity: 0.9; }
+.btn-stop { background: #ef4444; color: #fff; }
+.btn-stop:hover { opacity: 0.9; }
 
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-foreground);
 }
+.btn-ghost:hover { background: var(--color-secondary); }
 
-.btn-ghost:hover {
-  background: var(--color-secondary);
-}
-
-/* Detail page */
 .detail-page {
   padding: 24px;
   height: 100vh;
   display: flex;
   flex-direction: column;
 }
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.detail-info {
-  margin-bottom: 16px;
-  font-size: 13px;
-  color: var(--color-muted-foreground);
-  line-height: 1.6;
-}
-
-.detail-command {
-  margin-bottom: 16px;
-}
-
-.detail-command label {
-  display: block;
-  font-size: 13px;
-  margin-bottom: 4px;
-  color: var(--color-muted-foreground);
-}
-
+.detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.detail-info { margin-bottom: 16px; font-size: 13px; color: var(--color-muted-foreground); line-height: 1.6; }
+.detail-command { margin-bottom: 16px; }
+.detail-command label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--color-muted-foreground); }
 .detail-command input {
-  width: 100%;
-  padding: 8px;
+  width: 100%; padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: monospace;
-  font-size: 14px;
-  flex: 1;
+  font-family: monospace; font-size: 14px; flex: 1;
 }
-
-.detail-controls {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
+.detail-controls { display: flex; gap: 8px; margin-bottom: 16px; }
 .detail-terminal {
   flex: 1;
   border: 1px solid var(--color-border);
@@ -172,9 +110,6 @@ body {
   min-height: 300px;
 }
 
-/* Empty state — moved to Tailwind utilities in Home.tsx */
-
-/* Error state */
 .error-state {
   display: flex;
   flex-direction: column;
@@ -184,35 +119,11 @@ body {
   gap: 16px;
 }
 
-/* Settings */
-.settings-page {
-  padding: 24px;
-  max-width: 600px;
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.settings-section {
-  margin-bottom: 24px;
-}
-
-.settings-section h2 {
-  font-size: 18px;
-  margin-bottom: 12px;
-}
-
-.setting-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
-}
-
+.settings-page { padding: 24px; max-width: 600px; }
+.settings-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.settings-section { margin-bottom: 24px; }
+.settings-section h2 { font-size: 18px; margin-bottom: 12px; }
+.setting-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
 .setting-row select {
   padding: 6px 12px;
   border: 1px solid var(--color-border);
@@ -222,51 +133,23 @@ body {
   font-size: 14px;
 }
 
-.text-secondary {
-  color: var(--color-muted-foreground);
-  font-size: 14px;
-}
-
-/* Type badge (shared by Detail + ProjectCard) */
+.text-secondary { color: var(--color-muted-foreground); font-size: 14px; }
 .project-type-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+  display: inline-block; padding: 2px 8px;
+  border-radius: 4px; color: #fff;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
 }
 
-/* Card entrance stagger animation */
+/* ── Animations ── */
+
 @keyframes card-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+.card-enter { animation: card-enter 0.3s ease-out both; }
 
-.card-enter {
-  animation: card-enter 0.3s ease-out both;
-}
-
-/* Drag overlay pulse animation */
 @keyframes drag-pulse {
-  0%, 100% {
-    border-color: rgba(37, 99, 235, 0.2);
-    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.06);
-  }
-  50% {
-    border-color: rgba(37, 99, 235, 0.4);
-    box-shadow: 0 0 24px 0 rgba(37, 99, 235, 0.12);
-  }
+  0%, 100% { border-color: rgba(37,99,235,0.2); box-shadow: 0 0 0 0 rgba(37,99,235,0.06); }
+  50%      { border-color: rgba(37,99,235,0.4); box-shadow: 0 0 24px 0 rgba(37,99,235,0.12); }
 }
-
-.drag-overlay-border {
-  animation: drag-pulse 2s ease-in-out infinite;
-  pointer-events: none;
-}
+.drag-overlay-border { animation: drag-pulse 2s ease-in-out infinite; pointer-events: none; }
