@@ -91,9 +91,21 @@ function registerIpcHandlers(): void {
   })
 }
 
-// Kill all child processes when app quits — prevents orphaned dev servers
-app.on('before-quit', () => {
+// Kill all child processes when app quits — prevents orphaned dev servers.
+// e.preventDefault() + setTimeout(app.quit) gives taskkill time to complete
+// before the Electron main process exits and orphans the child tree.
+let isQuitting = false
+
+app.on('before-quit', (e) => {
+  if (isQuitting) return
+  e.preventDefault()
+  isQuitting = true
+
   processManager.stopAll()
+
+  setTimeout(() => {
+    app.quit()
+  }, 1500)
 })
 
 app.whenReady().then(() => {

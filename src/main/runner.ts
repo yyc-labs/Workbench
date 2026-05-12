@@ -24,10 +24,14 @@ class ProcessManager {
   start(projectId: string, command: string, cwd: string): boolean {
     if (this.processes.has(projectId)) return false
 
-    const child = spawn(command, [], {
+    // Split "npm run dev" → ["npm", "run", "dev"] so we can avoid shell:true.
+    // Without the shell wrapper, the spawned command IS the process tree root,
+    // making taskkill /t reliable (no extra cmd.exe parent).
+    const [cmd, ...args] = command.split(' ')
+
+    const child = spawn(cmd, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: true,
       env: { ...process.env },
     })
 
@@ -95,20 +99,10 @@ class ProcessManager {
     return true
   }
 
-  /** Kill all running processes — called on app quit */
+  /** Kill all running processes — called on app quit. Delegates to stop() so exit events handle cleanup. */
   stopAll(): void {
-    for (const [projectId, managed] of this.processes) {
-      const pid = managed.child.pid
-      if (pid != null) {
-        try {
-          if (process.platform === 'win32') {
-            spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
-          } else {
-            process.kill(-pid, 'SIGKILL')
-          }
-        } catch { /* best effort */ }
-      }
-      this.processes.delete(projectId)
+    for (const projectId of this.processes.keys()) {
+      this.stop(projectId)
     }
   }
 
