@@ -1,7 +1,7 @@
 import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
-import { Pin, Play, Square, Folder, Clock, ExternalLink } from 'lucide-react'
+import { Pin, Play, Square, Folder, Clock, ExternalLink, Loader2 } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -100,19 +100,26 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         )}
       </div>
 
-      {/* Row 4: Running URL (detected from stdout) */}
-      {isRunning && processUrl && (
-        <button
-          className="w-full mb-3 flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-2 transition-colors cursor-pointer"
-          onClick={async (e) => {
-            e.stopPropagation()
-            await window.electronAPI.openExternal(processUrl)
-          }}
-          title={`Open ${processUrl} in browser`}
-        >
-          <ExternalLink className="h-3 w-3 shrink-0" />
-          <span className="truncate">{processUrl}</span>
-        </button>
+      {/* Row 4: Running URL or loading placeholder */}
+      {isRunning && (
+        processUrl ? (
+          <button
+            className="w-full mb-3 flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-2 transition-colors cursor-pointer"
+            onClick={async (e) => {
+              e.stopPropagation()
+              await window.electronAPI.openExternal(processUrl)
+            }}
+            title={`Open ${processUrl} in browser`}
+          >
+            <ExternalLink className="h-3 w-3 shrink-0" />
+            <span className="truncate">{processUrl}</span>
+          </button>
+        ) : (
+          <div className="w-full mb-3 flex items-center gap-1.5 text-xs rounded-lg px-3 py-2 bg-gray-50 text-gray-400">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+            <span>Detecting server address...</span>
+          </div>
+        )
       )}
 
       {/* Row 5: Action button */}
