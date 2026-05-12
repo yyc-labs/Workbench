@@ -24,14 +24,13 @@ class ProcessManager {
   start(projectId: string, command: string, cwd: string): boolean {
     if (this.processes.has(projectId)) return false
 
-    // Split "npm run dev" → ["npm", "run", "dev"] so we can avoid shell:true.
-    // Without the shell wrapper, the spawned command IS the process tree root,
-    // making taskkill /t reliable (no extra cmd.exe parent).
-    const [cmd, ...args] = command.split(' ')
-
-    const child = spawn(cmd, args, {
+    // shell:true is intentional for a project launcher — commands like
+    // "npm run dev", "python manage.py runserver", "cargo run" need shell
+    // parsing for cross-platform compatibility (npm.cmd on Windows, etc.)
+    const child = spawn(command, [], {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: true,
       env: { ...process.env },
     })
 
