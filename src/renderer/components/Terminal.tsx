@@ -20,16 +20,15 @@ export function Terminal({ projectId }: TerminalProps) {
 
     const term = new XTerm({
       cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
+      fontSize: 13,
+      fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
       theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#d4d4d4',
+        background: '#0d1117',
+        foreground: '#e6edf3',
+        cursor: '#e6edf3',
         selectionBackground: '#264f78',
       },
-      rows: 24,
-      cols: 80,
+      allowProposedApi: true,
     })
 
     const fitAddon = new FitAddon()
@@ -37,8 +36,7 @@ export function Terminal({ projectId }: TerminalProps) {
     fitAddonRef.current = fitAddon
 
     term.open(containerRef.current)
-    term.write('Project Launcher\r\n')
-    term.write('Press Start to run the project.\r\n\r\n')
+    term.writeln('Project Launcher — Press Run to start the project.\r\n')
 
     term.onData((data: string) => {
       sendInput(projectId, data)
@@ -46,13 +44,23 @@ export function Terminal({ projectId }: TerminalProps) {
 
     xtermRef.current = term
 
-    setTimeout(() => fitAddon.fit(), 50)
+    // Initial fit: requestAnimationFrame ensures flex layout has settled
+    requestAnimationFrame(() => {
+      fitAddon.fit()
+    })
+
+    // ResizeObserver: re-fit when container changes size (flex, panel resize, etc.)
+    const observer = new ResizeObserver(() => {
+      fitAddon.fit()
+    })
+    observer.observe(containerRef.current)
 
     return () => {
+      observer.disconnect()
       term.dispose()
       xtermRef.current = null
     }
-  }, [projectId])
+  }, [projectId, sendInput])
 
   useEffect(() => {
     const cleanup = window.electronAPI.onProcessOutput(
@@ -70,23 +78,17 @@ export function Terminal({ projectId }: TerminalProps) {
     const cleanup = window.electronAPI.onProcessStatus(
       ({ projectId: pid, status }) => {
         if (pid === projectId && xtermRef.current) {
-          xtermRef.current.write(`\r\n*** Process status: ${status} ***\r\n`)
+          xtermRef.current.write(`\r\n\x1b[2m*** ${status} ***\x1b[0m\r\n`)
         }
       }
     )
     return cleanup
   }, [projectId])
 
-  useEffect(() => {
-    const handleResize = () => fitAddonRef.current?.fit()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', minHeight: '300px' }}
+      className="h-full w-full"
     />
   )
 }
