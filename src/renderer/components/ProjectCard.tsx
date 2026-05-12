@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/appStore'
 import { Card, CardContent } from './ui/card'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
-import { Pin, Play, Square, Folder, Clock } from 'lucide-react'
+import { Pin, Play, Square, Folder, Clock, ChevronRight } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -35,19 +35,14 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
   return (
     <Card
-      className={`group relative bg-zinc-900 border-zinc-800 hover:-translate-y-0.5 hover:shadow-lg hover:border-amber-500/20 transition-all duration-200 card-enter ${
-        isRunning
-          ? 'border-l-2 border-l-green-500/60 bg-zinc-900/80'
-          : ''
-      }`}
+      className="group relative bg-card border shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)] hover:-translate-y-1 hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)] transition-all duration-200 ease-out card-enter cursor-pointer"
       style={{ animationDelay: `${index * 50}ms` }}
+      onClick={() => onSelect(project.id)}
     >
       {/* Pin toggle — top right */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-2 right-2 h-6 w-6 text-zinc-500 hover:text-amber-400"
-        title={project.pinned ? 'Unpin from favorites' : 'Pin to favorites'}
+      <button
+        className="absolute top-3 right-3 p-1 rounded-md text-muted-foreground hover:text-amber-500 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
+        title={project.pinned ? 'Unpin' : 'Pin to favorites'}
         onClick={(e) => {
           e.stopPropagation()
           togglePin(project.id)
@@ -56,71 +51,80 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         <Pin
           className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-400 text-amber-400' : ''}`}
         />
-      </Button>
+      </button>
 
-      <CardContent className="p-4 pt-3">
-        {/* Row: status dot + project name */}
-        <div className="flex items-center gap-2 mb-1 pr-6">
+      <CardContent className="p-5">
+        {/* Row: project icon + name + running dot */}
+        <div className="flex items-center gap-2.5 mb-1.5 pr-7">
+          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shrink-0">
+            <Folder className="h-4 w-4 text-primary" strokeWidth={1.8} />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-foreground truncate">
+              {project.name}
+            </h3>
+          </div>
           <div
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              isRunning ? 'bg-green-500' : 'bg-zinc-600'
+            className={`w-2 h-2 rounded-full shrink-0 ml-auto ${
+              isRunning ? 'bg-green-500' : 'bg-muted-foreground/30'
             }`}
+            title={isRunning ? 'Running' : 'Stopped'}
           />
-          <h3
-            className="text-sm font-semibold text-zinc-100 truncate cursor-pointer hover:text-amber-400 transition-colors"
-            onClick={() => onSelect(project.id)}
-          >
-            {project.name}
-          </h3>
         </div>
 
         {/* Row: path */}
         <p
-          className="text-xs text-zinc-500 truncate mb-2 flex items-center gap-1"
+          className="text-xs text-muted-foreground truncate mb-3"
           title={project.path}
         >
-          <Folder className="h-3 w-3 shrink-0" />
           {project.path}
         </p>
 
         {/* Row: badges + time */}
-        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          <Badge variant="secondary" className="text-[10px] h-5 px-2 capitalize">
+        <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+          <Badge variant="secondary" className="text-[10px] h-5 px-2 capitalize font-medium">
             {project.type}
           </Badge>
           {project.packageManager && (
-            <Badge variant="secondary" className="text-[10px] h-5 px-2">
+            <Badge variant="secondary" className="text-[10px] h-5 px-2 font-medium">
               {project.packageManager}
             </Badge>
           )}
           {project.lastOpened && (
-            <span className="text-[10px] text-zinc-600 ml-auto flex items-center gap-1">
+            <span className="text-[10px] text-muted-foreground/60 ml-auto flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {timeAgo(project.lastOpened)}
             </span>
           )}
         </div>
 
-        {/* Start / Stop button */}
-        <Button
-          variant={isRunning ? 'outline' : 'default'}
-          size="sm"
-          className={`w-full h-8 text-xs ${
-            isRunning
-              ? 'border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
-              : ''
-          }`}
-          onClick={() =>
-            isRunning ? stopProject(project.id) : startProject(project.id)
-          }
-        >
-          {isRunning ? (
+        {/* Action button */}
+        {isRunning ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-9 text-xs rounded-xl border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300"
+            onClick={(e) => {
+              e.stopPropagation()
+              stopProject(project.id)
+            }}
+          >
             <Square className="h-3 w-3" />
-          ) : (
+            Stop
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="w-full h-9 text-xs rounded-xl gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation()
+              startProject(project.id)
+            }}
+          >
             <Play className="h-3 w-3" />
-          )}
-          {isRunning ? 'Stop' : 'Start'}
-        </Button>
+            Open
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

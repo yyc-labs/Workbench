@@ -15,7 +15,7 @@ import {
   Command,
 } from 'lucide-react'
 
-// ── Sub-components ──────────────────────────────────────────────
+// ── Toolbar ──────────────────────────────────────────────────────
 
 function Toolbar({
   searchQuery,
@@ -31,49 +31,54 @@ function Toolbar({
   searchRef: React.RefObject<HTMLInputElement>
 }) {
   return (
-    <div className="h-12 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-lg flex items-center px-4 gap-3 shrink-0">
+    <header className="h-16 bg-card border-b flex items-center px-6 gap-4 shrink-0">
       {/* Logo + app name */}
-      <div className="flex items-center gap-2 mr-2">
-        <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-          <span className="text-[10px] font-bold text-white">L</span>
+      <div className="flex items-center gap-2.5 mr-4">
+        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+          <span className="text-[11px] font-bold text-primary-foreground">L</span>
         </div>
-        <span className="text-sm font-medium text-zinc-300">Launcher</span>
+        <span className="text-sm font-semibold text-foreground">Launcher</span>
       </div>
 
       {/* Search */}
-      <div className="flex-1 max-w-md relative">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500 pointer-events-none" />
+      <div className="flex-1 max-w-lg relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/40 pointer-events-none" strokeWidth={1.8} />
         <Input
           ref={searchRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-8 pl-8 pr-16 text-xs bg-zinc-800/50 border-zinc-700/50 text-zinc-300 placeholder:text-zinc-500 rounded-md focus-visible:ring-amber-500/30"
+          className="h-9 pl-9 pr-16 text-sm bg-muted border-border text-foreground placeholder:text-muted-foreground/50 rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[10px] text-zinc-600 select-none pointer-events-none">
-          <Command className="w-3 h-3" />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-muted-foreground/40 select-none pointer-events-none bg-muted px-1.5 py-0.5 rounded">
+          <Command className="w-3 h-3" strokeWidth={1.8} />
           <span>K</span>
         </div>
       </div>
 
+      {/* Spacer */}
+      <div className="flex-1" />
+
       {/* Actions */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
           onClick={onSettingsClick}
         >
-          <Settings className="w-4 h-4 text-zinc-400" />
+          <Settings className="w-4 h-4 text-muted-foreground" strokeWidth={1.8} />
         </Button>
-        <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={onAddFolder}>
-          <Plus className="w-3.5 h-3.5" />
-          Add
+        <Button size="sm" className="h-9 gap-1.5 text-sm rounded-xl" onClick={onAddFolder}>
+          <Plus className="w-4 h-4" strokeWidth={1.8} />
+          New Project
         </Button>
       </div>
-    </div>
+    </header>
   )
 }
+
+// ── Section ──────────────────────────────────────────────────────
 
 function Section({
   title,
@@ -85,15 +90,19 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2 mb-3">
+    <div className="mb-8">
+      <div className="flex items-center gap-2 mb-4">
         {icon}
-        <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{title}</h2>
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {title}
+        </h2>
       </div>
       {children}
     </div>
   )
 }
+
+// ── Project Grid ─────────────────────────────────────────────────
 
 function ProjectGrid({
   projects,
@@ -103,7 +112,7 @@ function ProjectGrid({
   onSelect: (id: string) => void
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,420px))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
       {projects.map((project, index) => (
         <ProjectCard
           key={project.id}
@@ -116,23 +125,25 @@ function ProjectGrid({
   )
 }
 
+// ── Drag Overlay ─────────────────────────────────────────────────
+
 function DragOverlay() {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center drag-overlay-border border-4 border-dashed rounded-none"
       style={{
-        backgroundColor: 'rgba(245, 158, 11, 0.03)',
-        borderColor: 'rgba(245, 158, 11, 0.3)',
+        backgroundColor: 'rgba(37, 99, 235, 0.03)',
+        borderColor: 'rgba(37, 99, 235, 0.25)',
       }}
     >
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/10 flex items-center justify-center">
-          <FolderPlus className="w-8 h-8 text-amber-400" />
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <FolderPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
         </div>
-        <p className="text-lg font-medium text-amber-300">
+        <p className="text-lg font-medium text-primary">
           Drop project folders anywhere
         </p>
-        <p className="text-sm text-amber-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Release to add to your workspace
         </p>
       </div>
@@ -154,16 +165,13 @@ export function HomePage() {
 
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Drag overlay state (counter pattern to handle child elements)
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounter = useRef(0)
 
-  // ── Load saved config on mount ──
   useEffect(() => {
     loadConfig()
   }, [loadConfig])
 
-  // ── Keyboard: Cmd+K / Ctrl+K focuses search ──
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -175,7 +183,6 @@ export function HomePage() {
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // ── Document-level drag events ──
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {
       e.preventDefault()
@@ -223,7 +230,6 @@ export function HomePage() {
     }
   }, [addProject])
 
-  // ── Derived data ──
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects
     const q = searchQuery.toLowerCase().trim()
@@ -249,7 +255,6 @@ export function HomePage() {
     [processes]
   )
 
-  // ── Handlers ──
   const handleAddFolder = useCallback(async () => {
     const dirPath = await window.electronAPI.selectDirectory()
     if (dirPath) {
@@ -268,29 +273,51 @@ export function HomePage() {
   // ── Empty state ──
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-zinc-950">
+      <div className="h-screen flex flex-col bg-background">
         {isDragOver && <DragOverlay />}
 
-        <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
-          <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-            <FolderPlus className="w-8 h-8 text-zinc-400" />
+        {/* Minimal toolbar */}
+        <header className="h-16 bg-card border-b flex items-center px-6 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+              <span className="text-[11px] font-bold text-primary-foreground">L</span>
+            </div>
+            <span className="text-sm font-semibold text-foreground">Launcher</span>
           </div>
-          <div>
-            <h1 className="text-xl font-semibold text-zinc-100 mb-2">
-              Drop your project folder here
-            </h1>
-            <p className="text-sm text-zinc-500">
-              or browse to add a project
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => navigate('/settings')}
+          >
+            <Settings className="w-4 h-4 text-muted-foreground" strokeWidth={1.8} />
+          </Button>
+        </header>
+
+        {/* Empty content */}
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
+            <div className="w-20 h-20 rounded-2xl bg-muted border flex items-center justify-center">
+              <FolderPlus className="w-10 h-10 text-muted-foreground/40" strokeWidth={1.5} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-foreground mb-2">
+                Drop your project folder here
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                or browse to add a project
+              </p>
+            </div>
+            <Button onClick={handleAddFolder} className="gap-2 rounded-xl h-10 px-5" size="lg">
+              <Plus className="w-4 h-4" strokeWidth={1.8} />
+              Add Project Folder
+            </Button>
+            <p className="text-xs text-muted-foreground/50">
+              Supports: Node.js &middot; Python &middot; Vite &middot; Next.js
+              &middot; Django &middot; more
             </p>
           </div>
-          <Button onClick={handleAddFolder} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Project Folder
-          </Button>
-          <p className="text-xs text-zinc-700">
-            Supports: Node.js &middot; Python &middot; Vite &middot; Next.js
-            &middot; Django &middot; more
-          </p>
         </div>
       </div>
     )
@@ -298,7 +325,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col bg-zinc-950">
+    <div className="h-screen flex flex-col bg-background">
       {isDragOver && <DragOverlay />}
 
       <Toolbar
@@ -310,20 +337,20 @@ export function HomePage() {
       />
 
       <ScrollArea className="flex-1">
-        <div className="max-w-5xl mx-auto w-full px-6 py-6">
+        <div className="max-w-5xl mx-auto w-full px-8 py-8">
           {/* Welcome */}
-          <div className="mb-6">
-            <h1 className="text-lg font-semibold text-zinc-100">
+          <div className="mb-8">
+            <h1 className="text-lg font-semibold text-foreground">
               Welcome back
             </h1>
-            <p className="text-xs text-zinc-500 mt-1 flex items-center gap-2">
+            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
               <span>
                 {projects.length} project{projects.length !== 1 ? 's' : ''}
               </span>
               {runningCount > 0 && (
                 <>
-                  <span className="text-zinc-600">&middot;</span>
-                  <span className="flex items-center gap-1">
+                  <span className="text-border">&middot;</span>
+                  <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                     {runningCount} running
                   </span>
@@ -336,7 +363,7 @@ export function HomePage() {
           {pinnedProjects.length > 0 && (
             <Section
               title="Favorites"
-              icon={<Pin className="w-4 h-4 text-amber-400" />}
+              icon={<Pin className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />}
             >
               <ProjectGrid
                 projects={pinnedProjects}
@@ -345,12 +372,12 @@ export function HomePage() {
             </Section>
           )}
 
-          {/* Recent / All Projects section */}
+          {/* All Projects section */}
           <Section
             title={
               pinnedProjects.length > 0 ? 'All Projects' : 'Recent Projects'
             }
-            icon={<FolderOpen className="w-4 h-4 text-zinc-400" />}
+            icon={<FolderOpen className="w-3.5 h-3.5 text-muted-foreground" strokeWidth={1.8} />}
           >
             {recentProjects.length > 0 ? (
               <ProjectGrid
@@ -358,7 +385,7 @@ export function HomePage() {
                 onSelect={handleSelect}
               />
             ) : (
-              <div className="text-center py-12 text-zinc-600 text-sm">
+              <div className="text-center py-16 text-sm text-muted-foreground/60">
                 {searchQuery
                   ? 'No projects match your search'
                   : 'No projects yet'}
