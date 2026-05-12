@@ -85,10 +85,10 @@ function Section({
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-8">
-      <div className="flex items-center gap-2 mb-4">
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
         {icon}
-        <h2 className="text-sm font-medium text-zinc-400">{title}</h2>
+        <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{title}</h2>
       </div>
       {children}
     </div>
@@ -103,7 +103,7 @@ function ProjectGrid({
   onSelect: (id: string) => void
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,420px))] gap-3">
       {projects.map((project, index) => (
         <ProjectCard
           key={project.id}
@@ -310,19 +310,23 @@ export function HomePage() {
       />
 
       <ScrollArea className="flex-1">
-        <div className="max-w-6xl mx-auto w-full px-6 py-6">
+        <div className="max-w-5xl mx-auto w-full px-6 py-6">
           {/* Welcome */}
-          <div className="mb-8">
-            <h1 className="text-2xl font-semibold text-zinc-100">
+          <div className="mb-6">
+            <h1 className="text-lg font-semibold text-zinc-100">
               Welcome back
             </h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              {projects.length} project{projects.length !== 1 ? 's' : ''}
+            <p className="text-xs text-zinc-500 mt-1 flex items-center gap-2">
+              <span>
+                {projects.length} project{projects.length !== 1 ? 's' : ''}
+              </span>
               {runningCount > 0 && (
                 <>
-                  {' '}
-                  &middot;{' '}
-                  <span className="text-green-400">{runningCount} running</span>
+                  <span className="text-zinc-600">&middot;</span>
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    {runningCount} running
+                  </span>
                 </>
               )}
             </p>

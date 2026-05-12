@@ -35,7 +35,11 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
   return (
     <Card
-      className={`group relative bg-zinc-900 border-zinc-800 hover:-translate-y-0.5 hover:shadow-lg hover:border-amber-500/20 transition-all duration-200 card-enter`}
+      className={`group relative bg-zinc-900 border-zinc-800 hover:-translate-y-0.5 hover:shadow-lg hover:border-amber-500/20 transition-all duration-200 card-enter ${
+        isRunning
+          ? 'border-l-2 border-l-green-500/60 bg-zinc-900/80'
+          : ''
+      }`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       {/* Pin toggle — top right */}
@@ -43,6 +47,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         variant="ghost"
         size="icon"
         className="absolute top-2 right-2 h-6 w-6 text-zinc-500 hover:text-amber-400"
+        title={project.pinned ? 'Unpin from favorites' : 'Pin to favorites'}
         onClick={(e) => {
           e.stopPropagation()
           togglePin(project.id)
@@ -84,7 +89,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
             {project.type}
           </Badge>
           {project.packageManager && (
-            <Badge variant="outline" className="text-[10px] h-5 px-2 text-zinc-400">
+            <Badge variant="secondary" className="text-[10px] h-5 px-2">
               {project.packageManager}
             </Badge>
           )}
@@ -98,9 +103,13 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
         {/* Start / Stop button */}
         <Button
-          variant={isRunning ? 'destructive' : 'default'}
+          variant={isRunning ? 'outline' : 'default'}
           size="sm"
-          className="w-full h-8 text-xs"
+          className={`w-full h-8 text-xs ${
+            isRunning
+              ? 'border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50'
+              : ''
+          }`}
           onClick={() =>
             isRunning ? stopProject(project.id) : startProject(project.id)
           }
