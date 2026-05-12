@@ -160,6 +160,7 @@ export function HomePage() {
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
   const addProject = useAppStore((s) => s.addProject)
   const loadConfig = useAppStore((s) => s.loadConfig)
+  const appendOutput = useAppStore((s) => s.appendOutput)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const navigate = useNavigate()
 
@@ -182,6 +183,14 @@ export function HomePage() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  // ── Listen for process output globally (needed for card URL detection) ──
+  useEffect(() => {
+    const cleanup = window.electronAPI.onProcessOutput(({ projectId, data }) => {
+      appendOutput(projectId, data)
+    })
+    return cleanup
+  }, [appendOutput])
 
   useEffect(() => {
     const onDragEnter = (e: DragEvent) => {
