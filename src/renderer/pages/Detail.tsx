@@ -2,6 +2,29 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { Terminal } from '../components/Terminal'
+import { Folder, Code2, Package, ChevronLeft, Play, Square, ArrowUpRight } from 'lucide-react'
+
+function InfoCard({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+      <div className="flex items-center gap-1.5 text-gray-400 mb-1">
+        <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
+        <span className="text-[10px] uppercase tracking-wider font-medium">{label}</span>
+      </div>
+      <p className="text-sm text-gray-900 font-medium truncate" title={value}>
+        {value}
+      </p>
+    </div>
+  )
+}
 
 export function DetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -9,20 +32,27 @@ export function DetailPage() {
   const project = useAppStore((s) =>
     s.projects.find((p) => p.id === projectId)
   )
-  const startProject = useAppStore((s) => s.startProject)
-  const stopProject = useAppStore((s) => s.stopProject)
   const processStatus = projectId
     ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped')
     : 'stopped'
+  const processUrl = projectId
+    ? useAppStore((s) => s.processUrls[projectId] || '')
+    : ''
+  const startProject = useAppStore((s) => s.startProject)
+  const stopProject = useAppStore((s) => s.stopProject)
   const [customCommand, setCustomCommand] = useState(
     project?.customCommand ?? ''
   )
 
   if (!project || !projectId) {
     return (
-      <div className="error-state">
-        <h2>Project not found</h2>
-        <button className="btn btn-ghost" onClick={() => navigate('/')}>
+      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#f6f8fb]">
+        <h2 className="text-lg font-semibold text-gray-900">Project not found</h2>
+        <button
+          className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 transition-colors"
+          onClick={() => navigate('/')}
+        >
+          <ChevronLeft className="w-4 h-4" strokeWidth={1.8} />
           Back to Home
         </button>
       </div>
@@ -34,9 +64,7 @@ export function DetailPage() {
   const handleSaveCommand = async () => {
     const trimmed = customCommand.trim()
     project.customCommand = trimmed || undefined
-    // Force re-render by updating the store's project reference
     setCustomCommand(trimmed)
-    // Persist
     const { projects } = useAppStore.getState()
     await window.electronAPI.setConfig({
       projects: projects.map((p) => ({
@@ -48,55 +76,133 @@ export function DetailPage() {
   }
 
   return (
-    <div className="detail-page">
-      <header className="detail-header">
-        <button className="btn btn-ghost" onClick={() => navigate('/')}>
-          &larr; Back
-        </button>
-        <h1>{project.name}</h1>
-        <span className="project-type-badge" style={{ backgroundColor: 'var(--accent)' }}>
-          {project.type}
-        </span>
+    <div className="h-screen flex flex-col bg-[#f6f8fb]">
+      {/* ── Header ── */}
+      <header className="flex items-center justify-between px-6 py-5 shrink-0">
+        <div className="flex items-center gap-4 min-w-0">
+          <button
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            onClick={() => navigate('/')}
+          >
+            <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
+          </button>
+
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold text-gray-900 tracking-tight truncate">
+              {project.name}
+            </h1>
+            <p className="text-xs text-gray-500 truncate">{project.path}</p>
+          </div>
+
+          {/* Status badge */}
+          <div
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${
+              isRunning
+                ? 'bg-emerald-500/10 text-emerald-600'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isRunning ? 'bg-emerald-500' : 'bg-gray-400'
+              }`}
+            />
+            {isRunning ? 'Running' : 'Stopped'}
+          </div>
+        </div>
+
+        {/* Action buttons + URL */}
+        <div className="flex items-center gap-3 shrink-0">
+          {isRunning && processUrl && (
+            <button
+              className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors"
+              onClick={() => window.electronAPI.openExternal(processUrl)}
+            >
+              <ArrowUpRight className="w-3 h-3" />
+              <span className="truncate max-w-[180px]">{processUrl}</span>
+            </button>
+          )}
+          <button
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+              isRunning
+                ? 'border border-red-200 text-red-500 hover:bg-red-50'
+                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+            }`}
+            onClick={() =>
+              isRunning ? stopProject(projectId) : startProject(projectId)
+            }
+          >
+            {isRunning ? (
+              <>
+                <Square className="w-3.5 h-3.5" />
+                Stop
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5" />
+                Run
+              </>
+            )}
+          </button>
+        </div>
       </header>
 
-      <section className="detail-info">
-        <p>Path: {project.path}</p>
-        <p>Default command: {project.command}</p>
-        {project.packageManager && (
-          <p>Package manager: {project.packageManager}</p>
-        )}
-      </section>
-
-      <section className="detail-command">
-        <label htmlFor="custom-command">Custom command (optional):</label>
-        <div style={{ display: 'flex', gap: 8 }}>
+      {/* ── Body ── */}
+      <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
+        {/* Command bar */}
+        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 mb-4">
+          <span className="text-xs text-gray-400 select-none">$</span>
           <input
-            id="custom-command"
             type="text"
             value={customCommand}
             onChange={(e) => setCustomCommand(e.target.value)}
             placeholder={project.command}
+            className="flex-1 bg-transparent border-none text-sm font-mono text-gray-900 outline-none placeholder:text-gray-400"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveCommand()
+            }}
           />
-          <button className="btn btn-ghost" onClick={handleSaveCommand}>
-            Save
-          </button>
+          {customCommand && customCommand !== project.command && (
+            <button
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded-md hover:bg-blue-50 transition-colors shrink-0"
+              onClick={handleSaveCommand}
+            >
+              Save
+            </button>
+          )}
         </div>
-      </section>
 
-      <section className="detail-controls">
-        <button
-          className={`btn ${isRunning ? 'btn-stop' : 'btn-start'}`}
-          onClick={() =>
-            isRunning ? stopProject(projectId) : startProject(projectId)
-          }
-        >
-          {isRunning ? 'Stop' : 'Start'}
-        </button>
-      </section>
+        {/* Info cards */}
+        <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
+          <InfoCard label="Path" value={project.path} icon={Folder} />
+          <InfoCard
+            label="Type"
+            value={project.type}
+            icon={Code2}
+          />
+          <InfoCard
+            label="Package Manager"
+            value={project.packageManager || 'npm'}
+            icon={Package}
+          />
+        </div>
 
-      <section className="detail-terminal">
-        <Terminal projectId={projectId} />
-      </section>
+        {/* Terminal panel */}
+        <div className="flex-1 min-h-0 rounded-2xl border border-gray-200 bg-[#0d1117] shadow-lg overflow-hidden flex flex-col">
+          {/* macOS-style title bar */}
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#161b22] border-b border-gray-800 shrink-0">
+            <span className="w-3 h-3 rounded-full bg-red-500/70" />
+            <span className="w-3 h-3 rounded-full bg-amber-500/70" />
+            <span className="w-3 h-3 rounded-full bg-green-500/70" />
+            <span className="ml-3 text-[11px] text-gray-500 font-mono select-none">
+              terminal
+            </span>
+          </div>
+          <div className="flex-1 min-h-0">
+            <Terminal projectId={projectId} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
