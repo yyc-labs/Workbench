@@ -29,6 +29,7 @@ export function Terminal({ projectId }: TerminalProps) {
         selectionBackground: '#264f78',
       },
       allowProposedApi: true,
+      convertEol: true,
     })
 
     const fitAddon = new FitAddon()
@@ -36,7 +37,14 @@ export function Terminal({ projectId }: TerminalProps) {
     fitAddonRef.current = fitAddon
 
     term.open(containerRef.current)
-    term.writeln('Project Launcher — Press Run to start the project.\r\n')
+
+    // Replay existing logs captured before this Terminal mounted (e.g. from Home page)
+    const existingOutput = useAppStore.getState().terminalOutputs[projectId]
+    if (existingOutput) {
+      term.write(existingOutput)
+    } else {
+      term.writeln('Project Launcher — Press Run to start the project.\r\n')
+    }
 
     term.onData((data: string) => {
       sendInput(projectId, data)
@@ -66,8 +74,9 @@ export function Terminal({ projectId }: TerminalProps) {
     const cleanup = window.electronAPI.onProcessOutput(
       ({ projectId: pid, data }) => {
         if (pid === projectId && xtermRef.current) {
-          xtermRef.current.write(data)
-          appendOutput(projectId, data)
+          const normalized = data.replace(/\r?\n/g, '\r\n')
+          xtermRef.current.write(normalized)
+          appendOutput(projectId, normalized)
         }
       }
     )

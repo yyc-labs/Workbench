@@ -187,7 +187,8 @@ export function HomePage() {
   // ── Listen for process output globally (needed for card URL detection) ──
   useEffect(() => {
     const cleanup = window.electronAPI.onProcessOutput(({ projectId, data }) => {
-      appendOutput(projectId, data)
+      const normalized = data.replace(/\r?\n/g, '\r\n')
+      appendOutput(projectId, normalized)
     })
     return cleanup
   }, [appendOutput])
