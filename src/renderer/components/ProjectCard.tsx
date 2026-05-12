@@ -1,7 +1,7 @@
 import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
-import { Pin, Play, Square, Folder, Clock, ExternalLink, Loader2 } from 'lucide-react'
+import { Pin, Play, Square, Folder, Clock, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -29,6 +29,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const togglePin = useAppStore((s) => s.togglePin)
+  const removeProject = useAppStore((s) => s.removeProject)
 
   const isRunning = processStatus === 'running'
 
@@ -42,22 +43,34 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
       style={{ animationDelay: `${index * 50}ms` }}
       onClick={() => onSelect(project.id)}
     >
-      {/* Pin toggle — top right */}
-      <button
-        className="absolute top-3 right-3 p-1 rounded-md text-gray-400 hover:text-amber-500 hover:bg-amber-50 opacity-0 group-hover:opacity-100 transition-all"
-        title={project.pinned ? 'Unpin' : 'Pin to favorites'}
-        onClick={(e) => {
-          e.stopPropagation()
-          togglePin(project.id)
-        }}
-      >
-        <Pin
-          className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-400 text-amber-400' : ''}`}
-        />
-      </button>
+      {/* Hover actions — top right */}
+      <div className="absolute top-3 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+        <button
+          className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+          title="Remove project"
+          onClick={(e) => {
+            e.stopPropagation()
+            removeProject(project.id)
+          }}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+        <button
+          className="p-1 rounded-md text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+          title={project.pinned ? 'Unpin' : 'Pin to favorites'}
+          onClick={(e) => {
+            e.stopPropagation()
+            togglePin(project.id)
+          }}
+        >
+          <Pin
+            className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-400 text-amber-400' : ''}`}
+          />
+        </button>
+      </div>
 
       {/* Row 1: icon + name + status dot */}
-      <div className="flex items-center gap-2.5 mb-2 pr-7">
+      <div className="flex items-center gap-2.5 mb-2 pr-16">
         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
           <Folder className="h-4 w-4 text-blue-600" strokeWidth={1.8} />
         </div>
