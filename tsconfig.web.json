@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out/web",
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/*"]
+    }
+  },
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/shared/**/*.ts"
+  ]
+}

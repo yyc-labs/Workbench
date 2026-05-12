@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+@theme {
+  /* shadcn/ui slate palette */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222.2 84% 4.9%);
+  --color-primary: hsl(222.2 47.4% 11.2%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-accent: hsl(210 40% 96.1%);
+  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(222.2 84% 4.9%);
+  --radius: 0.5rem;
+
+  /* App-specific */
+  --color-brand: #0066cc;
+  --color-brand-hover: #0052a3;
+  --color-danger: #cc0000;
+  --color-success: #2e7d32;
+}
+
+[data-theme='dark'] {
+  --color-background: hsl(222.2 84% 4.9%);
+  --color-foreground: hsl(210 40% 98%);
+  --color-card: hsl(222.2 84% 4.9%);
+  --color-card-foreground: hsl(210 40% 98%);
+  --color-popover: hsl(222.2 84% 4.9%);
+  --color-popover-foreground: hsl(210 40% 98%);
+  --color-primary: hsl(210 40% 98%);
+  --color-primary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-secondary: hsl(217.2 32.6% 17.5%);
+  --color-secondary-foreground: hsl(210 40% 98%);
+  --color-muted: hsl(217.2 32.6% 17.5%);
+  --color-muted-foreground: hsl(215 20.2% 65.1%);
+  --color-accent: hsl(217.2 32.6% 17.5%);
+  --color-accent-foreground: hsl(210 40% 98%);
+  --color-destructive: hsl(0 62.8% 30.6%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(217.2 32.6% 17.5%);
+  --color-input: hsl(217.2 32.6% 17.5%);
+  --color-ring: hsl(212.7 26.8% 83.9%);
+
+  --color-brand: #4da6ff;
+  --color-brand-hover: #3399ff;
+  --color-danger: #f44336;
+  --color-success: #4caf50;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  overflow: hidden;
+}
+
+/* Layout — moved to Tailwind utilities in components */
+
+/* Buttons */
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.btn-start {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.btn-start:hover {
+  opacity: 0.9;
+}
+
+.btn-stop {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.btn-stop:hover {
+  opacity: 0.9;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-foreground);
+}
+
+.btn-ghost:hover {
+  background: var(--color-secondary);
+}
+
+/* Detail page */
+.detail-page {
+  padding: 24px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detail-info {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--color-muted-foreground);
+  line-height: 1.6;
+}
+
+.detail-command {
+  margin-bottom: 16px;
+}
+
+.detail-command label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--color-muted-foreground);
+}
+
+.detail-command input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: monospace;
+  font-size: 14px;
+  flex: 1;
+}
+
+.detail-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.detail-terminal {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+}
+
+/* Empty state — moved to Tailwind utilities in Home.tsx */
+
+/* Error state */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+}
+
+/* Settings */
+.settings-page {
+  padding: 24px;
+  max-width: 600px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.setting-row select {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-size: 14px;
+}
+
+.text-secondary {
+  color: var(--color-muted-foreground);
+  font-size: 14px;
+}
+
+/* Type badge (shared by Detail + ProjectCard) */
+.project-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Card entrance stagger animation */
+@keyframes card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.card-enter {
+  animation: card-enter 0.3s ease-out both;
+}
+
+/* Drag overlay pulse animation */
+@keyframes drag-pulse {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.2);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.1);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 0 24px 0 rgba(245, 158, 11, 0.15);
+  }
+}
+
+.drag-overlay-border {
+  animation: drag-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
