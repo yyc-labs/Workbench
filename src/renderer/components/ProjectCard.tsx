@@ -1,7 +1,6 @@
 import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
-import { Button } from './ui/button'
 import { Pin, Play, Square, Folder, Clock, ExternalLink } from 'lucide-react'
 
 interface ProjectCardProps {
@@ -118,10 +117,8 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
       {/* Row 5: Action button */}
       {isRunning ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full h-9 text-xs rounded-xl border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300"
+        <button
+          className="w-full h-9 text-xs rounded-xl border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 flex items-center justify-center gap-1.5 font-medium transition-colors"
           onClick={(e) => {
             e.stopPropagation()
             stopProject(project.id)
@@ -129,11 +126,10 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         >
           <Square className="h-3 w-3" />
           Stop
-        </Button>
+        </button>
       ) : (
-        <Button
-          size="sm"
-          className="w-full h-9 text-xs rounded-xl gap-1.5"
+        <button
+          className="w-full h-9 text-xs rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1.5 font-medium transition-colors"
           onClick={(e) => {
             e.stopPropagation()
             startProject(project.id)
@@ -141,7 +137,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         >
           <Play className="h-3 w-3" />
           Open
-        </Button>
+        </button>
       )}
     </div>
   )
