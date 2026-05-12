@@ -141,20 +141,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   appendOutput: (projectId: string, data: string) => {
     set((state) => {
-      // Detect localhost URL from stdout (only first match per session)
+      const normalized = data.replace(/\r?\n/g, '\r\n')
+      const nextOutput = (state.terminalOutputs[projectId] || '') + normalized
+
+      // URL detection: search accumulated buffer (handles chunked stdout)
+      // Strip ANSI before matching to avoid color codes splitting the URL
       const alreadyHasUrl = state.processUrls[projectId]
-      const urlMatch = alreadyHasUrl
-        ? null
-        : data.match(/(https?:\/\/[\w.-]+:\d{2,5})/i)
+      const clean = alreadyHasUrl ? '' : nextOutput.replace(/\x1b\[[0-9;]*m/g, '')
+      const urlMatch = clean ? clean.match(/https?:\/\/[\w.-]+:\d{2,5}/i) : null
       const processUrls = urlMatch
-        ? { ...state.processUrls, [projectId]: urlMatch[1] }
+        ? { ...state.processUrls, [projectId]: urlMatch[0] }
         : state.processUrls
 
       return {
-        terminalOutputs: {
-          ...state.terminalOutputs,
-          [projectId]: (state.terminalOutputs[projectId] || '') + data,
-        },
+        terminalOutputs: { ...state.terminalOutputs, [projectId]: nextOutput },
         processUrls,
       }
     })

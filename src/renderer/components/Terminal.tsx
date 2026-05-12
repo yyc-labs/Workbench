@@ -13,7 +13,6 @@ export function Terminal({ projectId }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const sendInput = useAppStore((s) => s.sendInput)
-  const appendOutput = useAppStore((s) => s.appendOutput)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -74,14 +73,12 @@ export function Terminal({ projectId }: TerminalProps) {
     const cleanup = window.electronAPI.onProcessOutput(
       ({ projectId: pid, data }) => {
         if (pid === projectId && xtermRef.current) {
-          const normalized = data.replace(/\r?\n/g, '\r\n')
-          xtermRef.current.write(normalized)
-          appendOutput(projectId, normalized)
+          xtermRef.current.write(data)
         }
       }
     )
     return cleanup
-  }, [projectId, appendOutput])
+  }, [projectId])
 
   useEffect(() => {
     const cleanup = window.electronAPI.onProcessStatus(
