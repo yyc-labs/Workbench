@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join } from 'path'
 import { processManager } from './runner'
 import { detectProject } from './detector'
@@ -74,6 +74,10 @@ function registerIpcHandlers(): void {
       return updateConfig(partial as Partial<{ projects: never; theme: 'system' | 'light' | 'dark' }>)
     }
   )
+
+  ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
+    return shell.openExternal(url)
+  })
 
   ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async () => {
     if (!mainWindow) return null

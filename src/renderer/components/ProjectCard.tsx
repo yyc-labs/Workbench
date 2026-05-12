@@ -2,7 +2,7 @@ import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
-import { Pin, Play, Square, Folder, Clock } from 'lucide-react'
+import { Pin, Play, Square, Folder, Clock, ExternalLink } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -26,6 +26,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const processStatus = useAppStore(
     (s) => s.processes[project.id]?.status ?? 'stopped'
   )
+  const processUrl = useAppStore((s) => s.processUrls[project.id] || '')
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const togglePin = useAppStore((s) => s.togglePin)
@@ -100,7 +101,22 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         )}
       </div>
 
-      {/* Row 4: Action button */}
+      {/* Row 4: Running URL (detected from stdout) */}
+      {isRunning && processUrl && (
+        <button
+          className="w-full mb-3 flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-2 transition-colors cursor-pointer"
+          onClick={async (e) => {
+            e.stopPropagation()
+            await window.electronAPI.openExternal(processUrl)
+          }}
+          title={`Open ${processUrl} in browser`}
+        >
+          <ExternalLink className="h-3 w-3 shrink-0" />
+          <span className="truncate">{processUrl}</span>
+        </button>
+      )}
+
+      {/* Row 5: Action button */}
       {isRunning ? (
         <Button
           variant="outline"

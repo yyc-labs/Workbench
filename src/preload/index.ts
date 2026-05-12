@@ -21,6 +21,9 @@ const api = {
 
   selectDirectory: () => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY),
 
+  openExternal: (url: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
+
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {

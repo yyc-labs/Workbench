@@ -20,6 +20,7 @@ declare global {
       onProcessExit: (
         cb: (d: { projectId: string; code: number | null }) => void
       ) => () => void
+      openExternal: (url: string) => Promise<void>
     }
   }
 }
@@ -28,6 +29,7 @@ interface AppState {
   projects: ProjectInfo[]
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
+  processUrls: Record<string, string>
   config: AppConfig
   searchQuery: string
 
@@ -44,6 +46,7 @@ interface AppState {
   setSearchQuery: (query: string) => void
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
+  clearProcessUrl: (projectId: string) => void
 }
 
 async function persistProjects(projects: ProjectInfo[]): Promise<void> {
@@ -61,6 +64,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   projects: [],
   processes: {},
   terminalOutputs: {},
+  processUrls: {},
   config: { projects: [], theme: 'system' },
   searchQuery: '',
 
@@ -112,6 +116,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...state.terminalOutputs,
         [projectId]: '',
       },
+      processUrls: {
+        ...state.processUrls,
+        [projectId]: '',
+      },
     }))
 
     await window.electronAPI.startProcess(projectId, command, project.path)
@@ -132,12 +140,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   appendOutput: (projectId: string, data: string) => {
-    set((state) => ({
-      terminalOutputs: {
-        ...state.terminalOutputs,
-        [projectId]: (state.terminalOutputs[projectId] || '') + data,
-      },
-    }))
+    set((state) => {
+      // Detect localhost URL from stdout (only first match per session)
+      const alreadyHasUrl = state.processUrls[projectId]
+      const urlMatch = alreadyHasUrl
+        ? null
+        : data.match(/(https?:\/\/[\w.-]+:\d{2,5})/i)
+      const processUrls = urlMatch
+        ? { ...state.processUrls, [projectId]: urlMatch[1] }
+        : state.processUrls
+
+      return {
+        terminalOutputs: {
+          ...state.terminalOutputs,
+          [projectId]: (state.terminalOutputs[projectId] || '') + data,
+        },
+        processUrls,
+      }
+    })
   },
 
   clearOutput: (projectId: string) => {
@@ -197,5 +217,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       ),
     }))
     // Persisted on next explicit save (add/remove/togglePin) to avoid IPC spam per navigation
+  },
+
+  clearProcessUrl: (projectId: string) => {
+    set((state) => ({
+      processUrls: {
+        ...state.processUrls,
+        [projectId]: '',
+      },
+    }))
   },
 }))
