@@ -13,6 +13,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    icon: join(__dirname, '../../icon/Y.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -21,6 +22,8 @@ function createWindow(): void {
     },
     show: false,
   })
+
+  mainWindow.setMenuBarVisibility(false)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()

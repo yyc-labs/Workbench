@@ -3,7 +3,7 @@ import { useAppStore } from '../stores/appStore'
 import { Card, CardContent } from './ui/card'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
-import { Pin, Play, Square, Folder, Clock, ChevronRight } from 'lucide-react'
+import { Pin, Play, Square, Folder, Clock } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
