@@ -199,12 +199,10 @@ class ProcessManager {
     const ptySpawn = this.getPtySpawn()
     let pty: IPty
 
-    if (this.capability.backend === 'wsl-pty') {
-      // Always route through WSL — Claude and other tools require Linux.
-      // Convert Windows paths (C:\...) to WSL paths (/mnt/c/...) on the fly.
+    if (process.platform === 'win32' && this.capability.hasWsl) {
+      // Route through WSL when available — used by Claude and other Linux tools.
+      // Converts Windows paths to WSL paths on the fly.
       const wslPath = wslBridge.toWslPath(cwd)
-      // Wrap in bash -lc so shell operators (&&, ||, ;) are handled correctly.
-      // Plain "exec ${command}" would exec only the first word (e.g. "clear").
       const escapedCmd = command.replace(/'/g, "'\\''")
       const shellCmd = `${this.wslEnvPrefix()}cd '${wslPath}' && exec bash -lc '${escapedCmd}'`
       pty = ptySpawn('wsl.exe', this.wslShellArgs(shellCmd), {
@@ -223,7 +221,9 @@ class ProcessManager {
       })
     }
 
-    return this.finalizePtyStart(projectId, pty, this.capability.backend as 'wsl-pty' | 'direct-pty')
+    const backendTag: 'wsl-pty' | 'direct-pty' =
+      process.platform === 'win32' && this.capability.hasWsl ? 'wsl-pty' : 'direct-pty'
+    return this.finalizePtyStart(projectId, pty, backendTag)
   }
 
   private finalizePtyStart(
