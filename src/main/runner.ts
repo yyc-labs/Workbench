@@ -55,8 +55,9 @@ class ProcessManager {
     if (useWsl === false && process.platform === 'win32') {
       return this.startHostNative(projectId, command, cwd)
     }
-    if (useWsl === true && !this.capability.hasWsl) {
-      return false
+    if (useWsl === true) {
+      if (!this.capability.hasWsl) return false
+      return this.startWithPty(projectId, command, cwd)
     }
 
     switch (this.capability.backend) {

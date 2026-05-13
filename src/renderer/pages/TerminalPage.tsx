@@ -30,17 +30,9 @@ export function TerminalPage() {
   const reattachProject = useAppStore((s) => s.reattachProject)
 
   // ── Auto-start Claude on page entry ──
-  // Explicily source nvm + .profile so claude is on PATH even when the tmux
-  // shell is non-interactive (bash -c skips .bashrc).  hash -r clears bash's
-  // command-lookup cache so the new PATH takes effect immediately.
-  const claudeCommand = [
-    'export NVM_DIR="$HOME/.nvm"',
-    '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"',
-    '[ -s "$HOME/.profile" ] && . "$HOME/.profile"',
-    'hash -r',
-    'clear',
-    '(claude --continue || (clear && claude))',
-  ].join(' && ')
+  // Env vars (PATH, API keys, proxy, WSL path fixes) are injected by the
+  // runner's env-capture system — no need to source nvm/.profile here.
+  const claudeCommand = 'hash -r && clear && (claude --continue || (clear && claude))'
   const hasAutoStarted = useRef(false)
 
   useEffect(() => {
@@ -194,7 +186,7 @@ export function TerminalPage() {
         {/* Terminal shell — Claude output (WSL) */}
         <div
           className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
-          style={{ background: '#2b2f36' }}
+          style={{ background: '#2b2f36' ,borderRadius: '20px' }}
         >
           {/* Title bar — dark, integrated into shell */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
