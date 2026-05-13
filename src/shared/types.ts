@@ -71,6 +71,9 @@ export interface Capability {
   hasWsl: boolean
   hasTmux: boolean
   wslDistro?: string
+  wslShell: string
+  /** Full WSL environment captured at boot via bash -ilc env. */
+  wslEnv?: Record<string, string>
 }
 
 export interface TmuxSessionInfo {

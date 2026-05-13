@@ -1,4 +1,5 @@
 import { spawn as spawnChild, type ChildProcess } from 'child_process'
+import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
 import type { BackendMode, Capability, PtySize } from '../shared/types'
@@ -15,6 +16,7 @@ export const IPC_CHANNELS = {
 interface PtyManagedProcess {
   pty: IPty
   projectId: string
+  sessionName?: string
   startTime: number
   backend: 'tmux' | 'wsl-pty' | 'direct-pty'
 }
@@ -46,8 +48,16 @@ class ProcessManager {
 
   // ── public API ──────────────────────────────────────────
 
-  start(projectId: string, command: string, cwd: string): boolean {
+  start(projectId: string, command: string, cwd: string, useWsl?: boolean): boolean {
     if (this.processes.has(projectId)) return false
+
+    // Per-process environment override: Windows-native vs WSL
+    if (useWsl === false && process.platform === 'win32') {
+      return this.startHostNative(projectId, command, cwd)
+    }
+    if (useWsl === true && !this.capability.hasWsl) {
+      return false
+    }
 
     switch (this.capability.backend) {
       case 'tmux':
@@ -110,24 +120,76 @@ class ProcessManager {
     return require('node-pty').spawn
   }
 
+  /** Build WSL shell args: ['-d', <distro>, '-e', <shell>, <-lc|-c>, <cmd>] */
+  private wslShellArgs(cmd: string): string[] {
+    const distro = this.capability.wslDistro || 'Ubuntu'
+    const shell = this.capability.wslShell || 'bash'
+    const flag = shell === 'bash' ? '-lc' : '-c'
+    return ['-d', distro, '-e', shell, flag, cmd]
+  }
+
+  /** Build shell export chain from captured WSL environment.
+   *  Filters out shell-internal vars (_ , PWD, SHLVL, etc.) that are
+   *  harmless to export but add noise.  Single quotes with escape. */
+  private wslEnvPrefix(): string {
+    const env = this.capability.wslEnv
+    if (!env) return ''
+    const parts: string[] = []
+    for (const [k, v] of Object.entries(env)) {
+      if (['_', 'PWD', 'OLDPWD', 'SHLVL', 'TERM'].includes(k)) continue
+      parts.push(`export ${k}='${v.replace(/'/g, "'\\''")}'`)
+    }
+    return parts.join(' && ') + ' && '
+  }
+
+  // ── backend: host-native (Windows cmd.exe) ──────────────
+
+  private startHostNative(projectId: string, command: string, cwd: string): boolean {
+    if (!this.capability.hasPty) {
+      return this.startWithSpawn(projectId, command, cwd)
+    }
+    const ptySpawn = this.getPtySpawn()
+    const pty = ptySpawn('cmd.exe', ['/c', command], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 24,
+      cwd,
+      env: process.env as Record<string, string>,
+    })
+    return this.finalizePtyStart(projectId, pty, 'direct-pty')
+  }
+
   // ── backend: tmux ───────────────────────────────────────
 
   private startWithTmux(projectId: string, command: string, cwd: string): boolean {
-    const sessionName = getSessionName(projectId)
+    const projectName = basename(cwd)
+    const sessionName = getSessionName(projectId, projectName)
     const wslPath = wslBridge.toWslPath(cwd)
     const ptySpawn = this.getPtySpawn()
 
-    // Create detached tmux session (fire-and-forget; if it fails pty attach will show the error)
-    tmuxManager.createSession(sessionName, command, wslPath)
+    // Use tmux -A (attach-or-create): single step, no race condition.
+    // When command is non-empty: creates new session if needed, then attaches.
+    // When command is empty: only attaches to existing session (reattach flow).
+    // Prepend captured WSL env so the tmux session inherits PATH, API keys,
+    // proxy settings etc. even though the shell is non-interactive.
+    const hasCommand = command && command.trim().length > 0
+    const wrappedCommand = hasCommand ? this.wslEnvPrefix() + command : command
+    const attachCmd = hasCommand
+      ? tmuxManager.attachOrCreateCommand(sessionName, wrappedCommand, wslPath)
+      : tmuxManager.attachOrCreateCommand(sessionName)
 
-    const attachCmd = tmuxManager.attachCommand(sessionName)
-    const pty = ptySpawn('wsl.exe', ['-e', 'bash', '-lc', attachCmd], {
+    const pty = ptySpawn('wsl.exe', this.wslShellArgs(attachCmd), {
       name: 'xterm-color',
       cols: 80,
       rows: 24,
     })
 
-    return this.finalizePtyStart(projectId, pty, 'tmux')
+    const result = this.finalizePtyStart(projectId, pty, 'tmux')
+    if (result) {
+      const managed = this.processes.get(projectId) as PtyManagedProcess
+      managed.sessionName = sessionName
+    }
+    return result
   }
 
   // ── backend: wsl-pty | direct-pty ──────────────────────
@@ -137,9 +199,14 @@ class ProcessManager {
     let pty: IPty
 
     if (this.capability.backend === 'wsl-pty') {
+      // Always route through WSL — Claude and other tools require Linux.
+      // Convert Windows paths (C:\...) to WSL paths (/mnt/c/...) on the fly.
       const wslPath = wslBridge.toWslPath(cwd)
-      const shellCmd = `cd '${wslPath}' && exec ${command}`
-      pty = ptySpawn('wsl.exe', ['-e', 'bash', '-lc', shellCmd], {
+      // Wrap in bash -lc so shell operators (&&, ||, ;) are handled correctly.
+      // Plain "exec ${command}" would exec only the first word (e.g. "clear").
+      const escapedCmd = command.replace(/'/g, "'\\''")
+      const shellCmd = `${this.wslEnvPrefix()}cd '${wslPath}' && exec bash -lc '${escapedCmd}'`
+      pty = ptySpawn('wsl.exe', this.wslShellArgs(shellCmd), {
         name: 'xterm-color',
         cols: 80,
         rows: 24,
@@ -260,7 +327,7 @@ class ProcessManager {
     try { pty.write('\x03') } catch { /* dead */ }
 
     if (backend === 'tmux') {
-      const sessionName = getSessionName(projectId)
+      const sessionName = managed.sessionName || getSessionName(projectId)
       tmuxManager.killSession(sessionName)
     }
 
