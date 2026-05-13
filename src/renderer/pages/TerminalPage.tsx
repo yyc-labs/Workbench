@@ -78,8 +78,8 @@ export function TerminalPage() {
     <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* ── Header ── */}
       <header
-        className="flex items-center justify-between px-6 py-5 shrink-0"
-        style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
+        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5"
+        style={{ background: 'rgba(255,255,255,0.88)' }}
       >
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -193,12 +193,8 @@ export function TerminalPage() {
       <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
         {/* Terminal shell — Claude output (WSL) */}
         <div
-          className="flex-1 min-h-0 rounded-[20px] overflow-hidden flex flex-col"
-          style={{
-            background: '#3a3d44',
-            boxShadow:
-              'inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.08)',
-          }}
+          className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
+          style={{ background: '#2b2f36' }}
         >
           {/* Title bar — dark, integrated into shell */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
@@ -210,7 +206,7 @@ export function TerminalPage() {
             </span>
           </div>
           {/* xterm area */}
-          <div className="flex-1 min-h-0 m-3 rounded-[14px] overflow-hidden bg-[#343840]">
+          <div className="flex-1 min-h-0 m-3 overflow-hidden bg-[#2b2f36]">
             <Terminal projectId={claudeProcessId} />
           </div>
         </div>
