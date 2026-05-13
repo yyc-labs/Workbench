@@ -1,7 +1,8 @@
+import { useNavigate } from 'react-router-dom'
 import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
-import { Pin, Play, Square, Folder, Clock, ExternalLink, Loader2, Trash2 } from 'lucide-react'
+import { Pin, Play, Square, Folder, ExternalLink, Loader2, Trash2, FileText } from 'lucide-react'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -9,19 +10,8 @@ interface ProjectCardProps {
   index?: number
 }
 
-function timeAgo(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000)
-  if (seconds < 60) return 'just now'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return `${Math.floor(days / 30)}mo ago`
-}
-
 export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) {
+  const navigate = useNavigate()
   const processStatus = useAppStore(
     (s) => s.processes[project.id]?.status ?? 'stopped'
   )
@@ -32,133 +22,140 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const removeProject = useAppStore((s) => s.removeProject)
 
   const isRunning = processStatus === 'running'
+  const isDetached = processStatus === 'detached'
+  const isActive = isRunning || isDetached
 
   return (
     <div
-      className="group relative bg-white border border-gray-200 rounded-2xl p-5
-                 hover:-translate-y-1 transition-all duration-200 ease-out
-                 card-enter cursor-pointer
-                 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.04)]
-                 hover:shadow-[0_12px_30px_rgba(0,0,0,0.08)]"
-      style={{ animationDelay: `${index * 50}ms` }}
+      className="group relative flex items-center gap-4 bg-white border border-gray-200
+                 rounded-xl px-5 py-3.5 cursor-pointer
+                 hover:border-gray-300 transition-all duration-150 ease-out
+                 shadow-[0_1px_2px_rgba(0,0,0,0.04)]
+                 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]
+                 card-enter"
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={() => onSelect(project.id)}
     >
-      {/* Hover actions — top right */}
-      <div className="absolute top-3 right-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
-        <button
-          className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-          title="Remove project"
-          onClick={(e) => {
-            e.stopPropagation()
-            removeProject(project.id)
-          }}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-        <button
-          className="p-1 rounded-md text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
-          title={project.pinned ? 'Unpin' : 'Pin to favorites'}
-          onClick={(e) => {
-            e.stopPropagation()
-            togglePin(project.id)
-          }}
-        >
-          <Pin
-            className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-400 text-amber-400' : ''}`}
-          />
-        </button>
+      {/* ── Left: icon ── */}
+      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+        <Folder className="h-4.5 w-4.5 text-blue-600" strokeWidth={1.8} />
       </div>
 
-      {/* Row 1: icon + name + status dot */}
-      <div className="flex items-center gap-2.5 mb-2 pr-16">
-        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-          <Folder className="h-4 w-4 text-blue-600" strokeWidth={1.8} />
-        </div>
-        <div className="min-w-0">
+      {/* ── Center: info ── */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">
             {project.name}
           </h3>
+          {/* Status dot */}
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              isRunning ? 'bg-emerald-500' : isDetached ? 'bg-amber-500' : 'bg-gray-300'
+            }`}
+            title={isRunning ? 'Running' : isDetached ? 'Session Available' : 'Stopped'}
+          />
         </div>
-        <div
-          className={`w-2 h-2 rounded-full shrink-0 ml-auto ${
-            isRunning ? 'bg-green-500' : 'bg-gray-300'
-          }`}
-          title={isRunning ? 'Running' : 'Stopped'}
-        />
-      </div>
-
-      {/* Row 2: path */}
-      <p
-        className="text-xs text-gray-500 truncate mb-3"
-        title={project.path}
-      >
-        {project.path}
-      </p>
-
-      {/* Row 3: badges + time */}
-      <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-        <Badge variant="secondary" className="text-[10px] h-5 px-2 capitalize font-medium">
-          {project.type}
-        </Badge>
-        {project.packageManager && (
-          <Badge variant="secondary" className="text-[10px] h-5 px-2 font-medium">
-            {project.packageManager}
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-xs text-gray-500 truncate max-w-[280px]" title={project.path}>
+            {project.path}
+          </p>
+          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 capitalize font-medium shrink-0">
+            {project.type}
           </Badge>
-        )}
-        {project.lastOpened && (
-          <span className="text-[10px] text-gray-400 ml-auto flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {timeAgo(project.lastOpened)}
-          </span>
-        )}
+          {project.packageManager && (
+            <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-medium shrink-0">
+              {project.packageManager}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      {/* Row 4: Running URL or loading placeholder */}
-      {isRunning && (
-        processUrl ? (
+      {/* ── Right: actions ── */}
+      <div className="flex items-center gap-2 shrink-0">
+        {/* URL */}
+        {isRunning && processUrl && (
           <button
-            className="w-full mb-3 flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-2 transition-colors cursor-pointer"
-            onClick={async (e) => {
+            className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 transition-colors max-w-[200px]"
+            onClick={(e) => {
               e.stopPropagation()
-              await window.electronAPI.openExternal(processUrl)
+              window.electronAPI.openExternal(processUrl)
             }}
-            title={`Open ${processUrl} in browser`}
+            title={processUrl}
           >
             <ExternalLink className="h-3 w-3 shrink-0" />
             <span className="truncate">{processUrl}</span>
           </button>
-        ) : (
-          <div className="w-full mb-3 flex items-center gap-1.5 text-xs rounded-lg px-3 py-2 bg-gray-50 text-gray-400">
+        )}
+        {isRunning && !processUrl && (
+          <div className="flex items-center gap-1 text-xs text-gray-400 bg-gray-50 rounded-lg px-2.5 py-1.5">
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-            <span>Detecting server address...</span>
+            <span className="hidden sm:inline">Detecting...</span>
           </div>
-        )
-      )}
+        )}
 
-      {/* Row 5: Action button */}
-      {isRunning ? (
+        {/* Open / Stop button */}
+        {isActive ? (
+          <button
+            className="h-8 px-3 text-xs rounded-lg border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 flex items-center gap-1 font-medium transition-colors shrink-0"
+            onClick={(e) => {
+              e.stopPropagation()
+              stopProject(project.id)
+            }}
+          >
+            <Square className="h-3 w-3" />
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        ) : (
+          <button
+            className="h-8 px-3 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1 font-medium transition-colors shrink-0"
+            onClick={(e) => {
+              e.stopPropagation()
+              startProject(project.id)
+            }}
+          >
+            <Play className="h-3 w-3" />
+            <span className="hidden sm:inline">Open</span>
+          </button>
+        )}
+
+        {/* Details button — navigate to Detail page */}
         <button
-          className="w-full h-9 text-xs rounded-xl border border-red-200 text-red-500 hover:bg-red-50 hover:border-red-300 flex items-center justify-center gap-1.5 font-medium transition-colors"
+          className="h-8 w-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          title="View details"
           onClick={(e) => {
             e.stopPropagation()
-            stopProject(project.id)
+            navigate(`/project/${project.id}`)
           }}
         >
-          <Square className="h-3 w-3" />
-          Stop
+          <FileText className="h-4 w-4" />
         </button>
-      ) : (
-        <button
-          className="w-full h-9 text-xs rounded-xl bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1.5 font-medium transition-colors"
-          onClick={(e) => {
-            e.stopPropagation()
-            startProject(project.id)
-          }}
-        >
-          <Play className="h-3 w-3" />
-          Open
-        </button>
-      )}
+
+        {/* Hover: Pin + Trash */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+          <button
+            className="p-1 rounded-md text-gray-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+            title={project.pinned ? 'Unpin' : 'Pin'}
+            onClick={(e) => {
+              e.stopPropagation()
+              togglePin(project.id)
+            }}
+          >
+            <Pin
+              className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-400 text-amber-400' : ''}`}
+            />
+          </button>
+          <button
+            className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="Remove"
+            onClick={(e) => {
+              e.stopPropagation()
+              removeProject(project.id)
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

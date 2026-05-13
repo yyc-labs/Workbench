@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ProjectInfo, ProcessInfo, AppConfig } from '../../shared/types'
+import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession } from '../../shared/types'
 
 declare global {
   interface Window {
@@ -21,6 +21,11 @@ declare global {
         cb: (d: { projectId: string; code: number | null }) => void
       ) => () => void
       openExternal: (url: string) => Promise<void>
+      resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
+      getCapability: () => Promise<Capability>
+      listTmuxSessions: () => Promise<TmuxSessionInfo[]>
+      killTmuxSession: (id: string) => Promise<boolean>
+      rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
     }
   }
 }
@@ -32,12 +37,16 @@ interface AppState {
   processUrls: Record<string, string>
   config: AppConfig
   searchQuery: string
+  capability: Capability | null
+  tmuxSessions: TmuxSessionInfo[]
 
   loadConfig: () => Promise<void>
+  initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
   startProject: (projectId: string) => Promise<void>
   stopProject: (projectId: string) => Promise<void>
+  reattachProject: (projectId: string) => Promise<void>
   appendOutput: (projectId: string, data: string) => void
   clearOutput: (projectId: string) => void
   updateProcessStatus: (projectId: string, status: string) => void
@@ -47,6 +56,8 @@ interface AppState {
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
   clearProcessUrl: (projectId: string) => void
+  loadTmuxSessions: () => Promise<void>
+  markProjectDetached: (projectId: string) => void
 }
 
 async function persistProjects(projects: ProjectInfo[]): Promise<void> {
@@ -67,6 +78,48 @@ export const useAppStore = create<AppState>((set, get) => ({
   processUrls: {},
   config: { projects: [], theme: 'system' },
   searchQuery: '',
+  capability: null,
+  tmuxSessions: [],
+
+  initApp: async () => {
+    // Load persisted config + projects
+    const config = await window.electronAPI.getConfig()
+    const projects: ProjectInfo[] = []
+    for (const saved of config.projects) {
+      const project = await window.electronAPI.detectProjects(saved.path)
+      if (project) {
+        if (saved.customCommand) project.customCommand = saved.customCommand
+        if (saved.pinned) project.pinned = saved.pinned
+        if (saved.lastOpened) project.lastOpened = saved.lastOpened
+        projects.push(project)
+      }
+    }
+
+    // Get capability info
+    const capability = await window.electronAPI.getCapability()
+
+    // P0 2: Rehydrate tmux sessions if available
+    let tmuxSessions: TmuxSessionInfo[] = []
+    if (capability?.hasTmux) {
+      const recovered = await window.electronAPI.rehydrateTmuxSessions()
+      tmuxSessions = await window.electronAPI.listTmuxSessions()
+
+      // Mark projects with existing tmux sessions as detached
+      for (const rec of recovered) {
+        const matched = projects.find((p) => {
+          // Match via wsl path = project path converted
+          const wslPath = rec.cwd.replace(/\\/g, '/').toLowerCase()
+          const projPath = p.path.replace(/\\/g, '/').toLowerCase()
+          return wslPath.includes(projPath) || projPath.includes(wslPath)
+        })
+        if (matched) {
+          get().markProjectDetached(matched.id)
+        }
+      }
+    }
+
+    set({ config, projects, capability, tmuxSessions })
+  },
 
   loadConfig: async () => {
     const config = await window.electronAPI.getConfig()
@@ -224,6 +277,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       processUrls: {
         ...state.processUrls,
         [projectId]: '',
+      },
+    }))
+  },
+
+  reattachProject: async (projectId: string) => {
+    const project = get().projects.find((p) => p.id === projectId)
+    if (!project) return
+
+    const command = project.customCommand || project.command
+
+    set((state) => ({
+      processes: {
+        ...state.processes,
+        [projectId]: { pid: null, status: 'running', startTime: Date.now() },
+      },
+    }))
+
+    await window.electronAPI.startProcess(projectId, command, project.path)
+  },
+
+  loadTmuxSessions: async () => {
+    try {
+      const sessions = await window.electronAPI.listTmuxSessions()
+      set({ tmuxSessions: sessions })
+    } catch { /* tmux not available */ }
+  },
+
+  markProjectDetached: (projectId: string) => {
+    set((state) => ({
+      processes: {
+        ...state.processes,
+        [projectId]: { pid: null, status: 'detached', startTime: undefined },
       },
     }))
   },

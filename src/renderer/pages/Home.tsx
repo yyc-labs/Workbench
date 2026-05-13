@@ -112,7 +112,7 @@ function ProjectGrid({
   onSelect: (id: string) => void
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4">
+    <div className="flex flex-col gap-2">
       {projects.map((project, index) => (
         <ProjectCard
           key={project.id}
@@ -265,7 +265,7 @@ export function HomePage() {
   const handleSelect = useCallback(
     (id: string) => {
       updateLastOpened(id)
-      navigate(`/project/${id}`)
+      navigate(`/terminal/${id}`)
     },
     [updateLastOpened, navigate]
   )

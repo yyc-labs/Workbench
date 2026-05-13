@@ -12,6 +12,8 @@ export function Terminal({ projectId }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const projectIdRef = useRef(projectId)
+  projectIdRef.current = projectId
   const sendInput = useAppStore((s) => s.sendInput)
 
   useEffect(() => {
@@ -20,12 +22,22 @@ export function Terminal({ projectId }: TerminalProps) {
     const term = new XTerm({
       cursorBlink: true,
       fontSize: 13,
+      lineHeight: 1.5,
+      letterSpacing: 0.3,
       fontFamily: "'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
       theme: {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#e6edf3',
-        selectionBackground: '#264f78',
+        background: '#f6f8fc',
+        foreground: '#1f2937',
+        cursor: '#2563eb',
+        selectionBackground: '#bfdbfe80',
+        black: '#111827',
+        red: '#dc2626',
+        green: '#16a34a',
+        yellow: '#ca8a04',
+        blue: '#2563eb',
+        magenta: '#7c3aed',
+        cyan: '#0891b2',
+        white: '#374151',
       },
       allowProposedApi: true,
       convertEol: true,
@@ -37,7 +49,6 @@ export function Terminal({ projectId }: TerminalProps) {
 
     term.open(containerRef.current)
 
-    // Replay existing logs captured before this Terminal mounted (e.g. from Home page)
     const existingOutput = useAppStore.getState().terminalOutputs[projectId]
     if (existingOutput) {
       term.write(existingOutput)
@@ -46,17 +57,19 @@ export function Terminal({ projectId }: TerminalProps) {
     }
 
     term.onData((data: string) => {
-      sendInput(projectId, data)
+      sendInput(projectIdRef.current, data)
+    })
+
+    term.onResize(({ cols, rows }) => {
+      window.electronAPI.resizeTerminal(projectIdRef.current, cols, rows)
     })
 
     xtermRef.current = term
 
-    // Initial fit: requestAnimationFrame ensures flex layout has settled
     requestAnimationFrame(() => {
       fitAddon.fit()
     })
 
-    // ResizeObserver: re-fit when container changes size (flex, panel resize, etc.)
     const observer = new ResizeObserver(() => {
       fitAddon.fit()
     })

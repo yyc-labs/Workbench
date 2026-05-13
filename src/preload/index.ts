@@ -24,6 +24,18 @@ const api = {
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
 
+  resizeTerminal: (projectId: string, cols: number, rows: number) =>
+    ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
+
+  getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
+
+  listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),
+
+  killTmuxSession: (projectId: string) =>
+    ipcRenderer.invoke(IPC.TMUX_KILL_SESSION, projectId),
+
+  rehydrateTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_REHYDRATE),
+
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {

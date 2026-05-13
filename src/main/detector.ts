@@ -1,4 +1,5 @@
-import { readdirSync } from 'fs'
+import { readdirSync, readFileSync } from 'fs'
+import { join } from 'path'
 import { basename } from 'path'
 import type { ProjectInfo } from '../shared/types'
 import { RULES, globMatch, detectPackageManager } from '../shared/rules'
@@ -21,6 +22,17 @@ function substitutePackageManager(
   return command.replace('npm', pm)
 }
 
+/** Read package.json dependencies if the file exists in the directory */
+function readPackageDep(dirPath: string, dep: string): boolean {
+  try {
+    const raw = readFileSync(join(dirPath, 'package.json'), 'utf-8')
+    const pkg = JSON.parse(raw)
+    return !!(pkg.dependencies?.[dep] || pkg.devDependencies?.[dep])
+  } catch {
+    return false
+  }
+}
+
 export function detectProject(dirPath: string): ProjectInfo | null {
   let files: string[]
   try {
@@ -31,7 +43,10 @@ export function detectProject(dirPath: string): ProjectInfo | null {
 
   const name = basename(dirPath)
 
-  for (const rule of RULES) {
+  // Sort by priority descending — highest priority rule wins first match
+  const sortedRules = [...RULES].sort((a, b) => b.priority - a.priority)
+
+  for (const rule of sortedRules) {
     const matchedPatterns = rule.matchPatterns.filter((pattern) =>
       files.some((f) => globMatch(pattern, f))
     )
@@ -39,6 +54,11 @@ export function detectProject(dirPath: string): ProjectInfo | null {
     if (matchedPatterns.length === 0) continue
 
     if (rule.requiresAll && matchedPatterns.length < rule.matchPatterns.length) {
+      continue
+    }
+
+    // Content-based dependency check (e.g. Next.js needs "next" in package.json)
+    if (rule.requireDep && !readPackageDep(dirPath, rule.requireDep)) {
       continue
     }
 

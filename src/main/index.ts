@@ -1,11 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join } from 'path'
-import { processManager } from './runner'
+import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
+import { capabilityManager } from './capability-manager'
+import { tmuxManager, getSessionName } from './tmux-manager'
+import type { Capability } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
+let processManager: ProcessManager | null = null
+let bootCapability: Capability | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -29,7 +34,9 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
-  processManager.setOutputWindow(mainWindow)
+  if (processManager) {
+    processManager.setOutputWindow(mainWindow)
+  }
 
   registerIpcHandlers()
 
@@ -48,21 +55,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC.PROCESS_START,
     (_event, projectId: string, command: string, cwd: string) => {
-      return processManager.start(projectId, command, cwd)
+      return processManager?.start(projectId, command, cwd) ?? false
     }
   )
 
   ipcMain.handle(IPC.PROCESS_STOP, (_event, projectId: string) => {
-    return processManager.stop(projectId)
+    return processManager?.stop(projectId) ?? false
   })
 
   ipcMain.handle(
     IPC.PROCESS_INPUT,
     (_event, projectId: string, data: string) => {
-      processManager.sendInput(projectId, data)
+      processManager?.sendInput(projectId, data)
       return true
     }
   )
+
+  ipcMain.handle(IPC.PROCESS_RESIZE, (_event, projectId: string, cols: number, rows: number) => {
+    processManager?.resize(projectId, cols, rows)
+    return true
+  })
 
   ipcMain.handle(IPC.CONFIG_GET, () => {
     return loadConfig()
@@ -89,26 +101,60 @@ function registerIpcHandlers(): void {
     }
     return null
   })
+
+  // ── WSL / tmux ──────────────────────────────────────────
+
+  ipcMain.handle(IPC.WSL_GET_CAPABILITY, () => {
+    return bootCapability
+  })
+
+  ipcMain.handle(IPC.TMUX_LIST_SESSIONS, () => {
+    return tmuxManager.listLauncherSessions()
+  })
+
+  ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, projectId: string) => {
+    return tmuxManager.killSession(getSessionName(projectId))
+  })
+
+  ipcMain.handle(IPC.TMUX_REHYDRATE, () => {
+    return tmuxManager.rehydrate()
+  })
 }
 
-// Kill all child processes when app quits — prevents orphaned dev servers.
-// e.preventDefault() + setTimeout(app.quit) gives taskkill time to complete
-// before the Electron main process exits and orphans the child tree.
+// ── before-quit ───────────────────────────────────────────
+
 let isQuitting = false
 
-app.on('before-quit', (e) => {
+app.on('before-quit', async (e) => {
   if (isQuitting) return
   e.preventDefault()
   isQuitting = true
 
-  processManager.stopAll()
+  // Kill tmux sessions first (async, but we don't await — best-effort)
+  tmuxManager.killAllLauncherSessions()
+
+  processManager?.stopAll()
 
   setTimeout(() => {
     app.quit()
   }, 1500)
 })
 
-app.whenReady().then(() => {
+// ── startup ──────────────────────────────────────────────
+
+app.whenReady().then(async () => {
+  // P0 1: One-time capability probe
+  await capabilityManager.init()
+  bootCapability = capabilityManager.get()
+
+  // P0 2: Rehydrate tmux sessions if available
+  if (bootCapability.backend === 'tmux') {
+    await tmuxManager.rehydrate()
+  }
+
+  // Create ProcessManager with capability injected
+  processManager = new ProcessManager(bootCapability)
+
   createWindow()
 
   app.on('activate', () => {

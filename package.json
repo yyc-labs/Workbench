@@ -11,10 +11,13 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "postinstall": "electron-rebuild -f -w node-pty",
+    "rebuild:pty": "electron-rebuild -f -w node-pty",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.0",
+    "@electron/rebuild": "^3.6.0",
     "@types/node": "^22.19.19",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
@@ -30,6 +33,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",

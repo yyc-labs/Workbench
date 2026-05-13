@@ -4,20 +4,23 @@ export const RULES: DetectionRule[] = [
   {
     type: 'next.js',
     priority: 100,
-    matchPatterns: ['next.config.*'],
-    defaultCommand: 'next dev',
+    // next.config.* may not exist in modern Next (app router, small projects).
+    // package.json is always required, and the dep check below confirms it's Next.
+    matchPatterns: ['next.config.*', 'package.json'],
+    defaultCommand: 'npm run dev',
+    requireDep: 'next',
   },
   {
     type: 'vite',
     priority: 90,
     matchPatterns: ['vite.config.*'],
-    defaultCommand: 'vite',
+    defaultCommand: 'npm run dev',
   },
   {
     type: 'nuxt',
     priority: 80,
     matchPatterns: ['nuxt.config.*'],
-    defaultCommand: 'nuxt dev',
+    defaultCommand: 'npm run dev',
   },
   {
     type: 'node',

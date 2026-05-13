@@ -6,8 +6,13 @@ export const IPC = {
   PROCESS_OUTPUT: 'process:output',
   PROCESS_STATUS: 'process:status',
   PROCESS_EXIT: 'process:exit',
+  PROCESS_RESIZE: 'process:resize',
   CONFIG_GET: 'config:get',
   CONFIG_SET: 'config:set',
   DIALOG_SELECT_DIRECTORY: 'dialog:selectDirectory',
   SHELL_OPEN_EXTERNAL: 'shell:openExternal',
+  WSL_GET_CAPABILITY: 'wsl:getCapability',
+  TMUX_LIST_SESSIONS: 'tmux:list-sessions',
+  TMUX_KILL_SESSION: 'tmux:kill-session',
+  TMUX_REHYDRATE: 'tmux:rehydrate',
 } as const

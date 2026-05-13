@@ -11,7 +11,9 @@ export type ProjectType =
 
 export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
-export type ProcessStatus = 'running' | 'stopped' | 'error'
+export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
+
+export type ProcessStatus = 'running' | 'stopped' | 'error' | 'detached'
 
 export interface ProjectInfo {
   id: string
@@ -30,11 +32,14 @@ export interface ProcessInfo {
   status: ProcessStatus
   startTime?: number
   error?: string
+  backend?: BackendMode
 }
 
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
+  /** sessionName → projectId mapping for tmux recovery */
+  sessions?: Record<string, string>
 }
 
 export interface SavedProject {
@@ -51,4 +56,34 @@ export interface DetectionRule {
   defaultCommand: string
   fallbackCommand?: string
   requiresAll?: boolean
+  /** If set, package.json must contain this dependency (in dependencies or devDependencies) */
+  requireDep?: string
+}
+
+export interface PtySize {
+  cols: number
+  rows: number
+}
+
+export interface Capability {
+  backend: BackendMode
+  hasPty: boolean
+  hasWsl: boolean
+  hasTmux: boolean
+  wslDistro?: string
+}
+
+export interface TmuxSessionInfo {
+  sessionName: string
+  projectId: string
+  createdAt: number
+  status: 'attached' | 'detached' | 'dead'
+}
+
+export interface RecoveredSession {
+  sessionName: string
+  projectId: string
+  cwd: string
+  status: 'detached'
+  createdAt: number
 }

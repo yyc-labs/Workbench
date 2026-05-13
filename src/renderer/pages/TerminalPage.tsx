@@ -1,34 +1,13 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { Terminal } from '../components/Terminal'
-import { Folder, Code2, Package, ChevronLeft, Play, Square, ArrowUpRight } from 'lucide-react'
+import { ChevronLeft, Play, Square, ArrowUpRight } from 'lucide-react'
 
-function InfoCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
-}) {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-      <div className="flex items-center gap-1.5 text-gray-400 mb-1">
-        <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
-        <span className="text-[10px] uppercase tracking-wider font-medium">{label}</span>
-      </div>
-      <p className="text-sm text-gray-900 font-medium truncate" title={value}>
-        {value}
-      </p>
-    </div>
-  )
-}
-
-export function DetailPage() {
+export function TerminalPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+
   const project = useAppStore((s) =>
     s.projects.find((p) => p.id === projectId)
   )
@@ -38,15 +17,23 @@ export function DetailPage() {
   const processUrl = projectId
     ? useAppStore((s) => s.processUrls[projectId] || '')
     : ''
+
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const reattachProject = useAppStore((s) => s.reattachProject)
-  const processBackend = projectId
-    ? useAppStore((s) => s.processes[projectId]?.backend)
-    : undefined
-  const [customCommand, setCustomCommand] = useState(
-    project?.customCommand ?? ''
-  )
+
+  // Auto-start / auto-reattach on mount
+  useEffect(() => {
+    if (!projectId) return
+    if (processStatus === 'running') return
+
+    if (processStatus === 'detached') {
+      reattachProject(projectId)
+    } else if (processStatus === 'stopped' || processStatus === 'error') {
+      startProject(projectId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!project || !projectId) {
     return (
@@ -66,20 +53,6 @@ export function DetailPage() {
   const isRunning = processStatus === 'running'
   const isDetached = processStatus === 'detached'
   const isActive = isRunning || isDetached
-
-  const handleSaveCommand = async () => {
-    const trimmed = customCommand.trim()
-    project.customCommand = trimmed || undefined
-    setCustomCommand(trimmed)
-    const { projects } = useAppStore.getState()
-    await window.electronAPI.setConfig({
-      projects: projects.map((p) => ({
-        path: p.path,
-        customCommand: p.customCommand,
-        pinned: p.pinned,
-      })),
-    })
-  }
 
   return (
     <div className="h-screen flex flex-col bg-[#f6f8fb]">
@@ -171,44 +144,6 @@ export function DetailPage() {
 
       {/* ── Body ── */}
       <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
-        {/* Command bar */}
-        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 mb-4">
-          <span className="text-xs text-gray-400 select-none">$</span>
-          <input
-            type="text"
-            value={customCommand}
-            onChange={(e) => setCustomCommand(e.target.value)}
-            placeholder={project.command}
-            className="flex-1 bg-transparent border-none text-sm font-mono text-gray-900 outline-none placeholder:text-gray-400"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSaveCommand()
-            }}
-          />
-          {customCommand && customCommand !== project.command && (
-            <button
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded-md hover:bg-blue-50 transition-colors shrink-0"
-              onClick={handleSaveCommand}
-            >
-              Save
-            </button>
-          )}
-        </div>
-
-        {/* Info cards */}
-        <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
-          <InfoCard label="Path" value={project.path} icon={Folder} />
-          <InfoCard
-            label="Type"
-            value={project.type}
-            icon={Code2}
-          />
-          <InfoCard
-            label="Package Manager"
-            value={project.packageManager || 'npm'}
-            icon={Package}
-          />
-        </div>
-
         {/* Terminal panel */}
         <div className="flex-1 min-h-0 rounded-2xl border border-gray-200 bg-white shadow-lg overflow-hidden flex flex-col">
           {/* macOS-style title bar */}
