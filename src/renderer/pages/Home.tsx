@@ -31,7 +31,10 @@ function Toolbar({
   searchRef: React.RefObject<HTMLInputElement>
 }) {
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6 gap-4 shrink-0">
+    <header
+      className="h-16 flex items-center px-6 gap-4 shrink-0"
+      style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
+    >
       {/* Logo + app name */}
       <div className="flex items-center gap-2.5 mr-4">
         <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -48,9 +51,9 @@ function Toolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-9 pl-9 pr-16 text-sm bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0"
+          className="h-9 pl-9 pr-16 text-sm bg-[#f1f1ef] border-[#e2e2df] text-gray-900 placeholder:text-gray-400 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0"
         />
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-gray-400 select-none pointer-events-none bg-gray-100 px-1.5 py-0.5 rounded">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-gray-400 select-none pointer-events-none bg-[#eae9e6] px-1.5 py-0.5 rounded">
           <Command className="w-3 h-3" strokeWidth={1.8} />
           <span>K</span>
         </div>
@@ -273,11 +276,14 @@ export function HomePage() {
   // ── Empty state ──
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col bg-[#f6f8fb]">
+      <div className="h-screen flex flex-col bg-[#f1f1ef]">
         {isDragOver && <DragOverlay />}
 
         {/* Minimal toolbar */}
-        <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6 shrink-0">
+        <header
+          className="h-16 flex items-center px-6 shrink-0"
+          style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
+        >
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
               <span className="text-[11px] font-bold text-white">L</span>
@@ -298,7 +304,7 @@ export function HomePage() {
         {/* Empty content */}
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
-            <div className="w-20 h-20 rounded-2xl bg-gray-50 border border-gray-200 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-2xl bg-[#eae9e6] border border-[#e2e2df] flex items-center justify-center">
               <FolderPlus className="w-10 h-10 text-gray-300" strokeWidth={1.5} />
             </div>
             <div>
@@ -325,7 +331,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col bg-[#f6f8fb]">
+    <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {isDragOver && <DragOverlay />}
 
       <Toolbar

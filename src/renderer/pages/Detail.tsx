@@ -215,7 +215,7 @@ export function DetailPage() {
         {/* Terminal shell — graphite panel */}
         <div
           className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
-          style={{ background: '#2b2f36' }}
+          style={{ background: '#2b2f36' ,borderRadius: '20px' }}
         >
           {/* Title bar — dark, integrated into shell */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">

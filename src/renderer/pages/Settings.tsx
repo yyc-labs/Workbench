@@ -35,8 +35,8 @@ function Sidebar({
           onClick={() => onSelect(item.id)}
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
             active === item.id
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-white/60'
+              ? 'bg-[#f6f6f4] text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-[#f6f6f4]/60'
           }`}
         >
           <item.icon className="w-4 h-4" strokeWidth={1.8} />
@@ -57,14 +57,14 @@ function SegmentedControl({
   onChange: (v: 'system' | 'light' | 'dark') => void
 }) {
   return (
-    <div className="inline-flex rounded-xl bg-gray-100 p-1 gap-0.5">
+    <div className="inline-flex rounded-xl bg-[#eae9e6] p-1 gap-0.5">
       {THEME_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
             value === opt.value
-              ? 'bg-white text-gray-900 shadow-sm'
+              ? 'bg-[#f6f6f4] text-gray-900 shadow-sm'
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
@@ -106,7 +106,7 @@ function RulesPanel() {
         {RULES.map((rule) => (
           <div
             key={rule.type}
-            className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3"
+            className="flex items-center gap-4 rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-4 py-3"
           >
             <span className="w-8 text-[10px] font-semibold text-gray-400 text-center shrink-0">
               P{rule.priority}
@@ -120,7 +120,7 @@ function RulesPanel() {
                 {rule.requiresAll ? ' (all required)' : ''}
               </p>
             </div>
-            <code className="text-[11px] text-gray-400 bg-gray-50 rounded-md px-2 py-0.5 font-mono shrink-0">
+            <code className="text-[11px] text-gray-400 bg-[#eae9e6] rounded-md px-2 py-0.5 font-mono shrink-0">
               {rule.defaultCommand}
             </code>
           </div>
@@ -150,7 +150,7 @@ function AboutPanel() {
           ['State', 'Zustand'],
           ['Terminal', 'xterm.js'],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+          <div key={label} className="rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-4 py-3">
             <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium mb-0.5">
               {label}
             </p>
@@ -188,11 +188,14 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#f6f8fb]">
+    <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* Header */}
-      <header className="flex items-center gap-4 px-6 py-4 shrink-0">
+      <header
+        className="flex items-center gap-4 px-6 py-4 shrink-0"
+        style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
+      >
         <button
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6] transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />

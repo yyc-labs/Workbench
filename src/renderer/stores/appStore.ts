@@ -5,7 +5,7 @@ declare global {
   interface Window {
     electronAPI: {
       detectProjects: (path: string) => Promise<ProjectInfo | null>
-      startProcess: (id: string, cmd: string, cwd: string) => Promise<boolean>
+      startProcess: (id: string, cmd: string, cwd: string, useWsl?: boolean) => Promise<boolean>
       stopProcess: (id: string) => Promise<boolean>
       sendInput: (id: string, data: string) => Promise<boolean>
       getConfig: () => Promise<AppConfig>
@@ -44,9 +44,9 @@ interface AppState {
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
-  startProject: (projectId: string) => Promise<void>
+  startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean) => Promise<void>
   stopProject: (projectId: string) => Promise<void>
-  reattachProject: (projectId: string) => Promise<void>
+  reattachProject: (projectId: string, processId?: string) => Promise<void>
   appendOutput: (projectId: string, data: string) => void
   clearOutput: (projectId: string) => void
   updateProcessStatus: (projectId: string, status: string) => void
@@ -154,28 +154,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     await persistProjects(get().projects)
   },
 
-  startProject: async (projectId: string) => {
+  startProject: async (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
 
-    const command = project.customCommand || project.command
+    const command = commandOverride || project.customCommand || project.command
+    const pid = processId || projectId
 
     set((state) => ({
       processes: {
         ...state.processes,
-        [projectId]: { pid: null, status: 'running', startTime: Date.now() },
+        [pid]: { pid: null, status: 'running', startTime: Date.now() },
       },
       terminalOutputs: {
         ...state.terminalOutputs,
-        [projectId]: '',
+        [pid]: '',
       },
       processUrls: {
         ...state.processUrls,
-        [projectId]: '',
+        [pid]: '',
       },
     }))
 
-    await window.electronAPI.startProcess(projectId, command, project.path)
+    await window.electronAPI.startProcess(pid, command, project.path, useWsl)
   },
 
   stopProject: async (projectId: string) => {
@@ -281,20 +282,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
-  reattachProject: async (projectId: string) => {
+  reattachProject: async (projectId: string, processId?: string) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
 
-    const command = project.customCommand || project.command
+    const pid = processId || projectId
 
     set((state) => ({
       processes: {
         ...state.processes,
-        [projectId]: { pid: null, status: 'running', startTime: Date.now() },
+        [pid]: { pid: null, status: 'running', startTime: Date.now() },
       },
     }))
 
-    await window.electronAPI.startProcess(projectId, command, project.path)
+    // Pass empty command — runner will only attach to existing tmux session (no creation)
+    await window.electronAPI.startProcess(pid, '', project.path)
   },
 
   loadTmuxSessions: async () => {

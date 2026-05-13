@@ -27,11 +27,11 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
   return (
     <div
-      className="group relative flex items-center gap-4 bg-white border border-gray-200
+      className="group relative flex items-center gap-4 bg-[#f6f6f4] border border-[#e2e2df]
                  rounded-xl px-5 py-3.5 cursor-pointer
-                 hover:border-gray-300 transition-all duration-150 ease-out
-                 shadow-[0_1px_2px_rgba(0,0,0,0.04)]
-                 hover:shadow-[0_4px_12px_rgba(0,0,0,0.06)]
+                 hover:border-[#d4d4cf] transition-all duration-150 ease-out
+                 shadow-[0_1px_2px_rgba(0,0,0,0.03)]
+                 hover:shadow-[0_4px_12px_rgba(0,0,0,0.05)]
                  card-enter"
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={() => onSelect(project.id)}
@@ -87,7 +87,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           </button>
         )}
         {isRunning && !processUrl && (
-          <div className="flex items-center gap-1 text-xs text-gray-400 bg-gray-50 rounded-lg px-2.5 py-1.5">
+          <div className="flex items-center gap-1 text-xs text-gray-400 bg-[#eae9e6] rounded-lg px-2.5 py-1.5">
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
             <span className="hidden sm:inline">Detecting...</span>
           </div>
@@ -110,7 +110,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
             className="h-8 px-3 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1 font-medium transition-colors shrink-0"
             onClick={(e) => {
               e.stopPropagation()
-              startProject(project.id)
+              startProject(project.id, undefined, undefined, false)
             }}
           >
             <Play className="h-3 w-3" />

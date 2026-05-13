@@ -8,17 +8,30 @@ export interface WslStatus {
 class WslBridge {
   private _available: boolean | null = null
   private _distro: string | null = null
+  private _shell: string | null = null
 
   /** One-shot check: is WSL installed? Uses execSync because it's only called at boot. */
   isAvailable(): boolean {
     if (this._available !== null) return this._available
     try {
-      const out = execSync('wsl.exe --status', { stdio: 'pipe', timeout: 5000 })
+      execSync('wsl.exe --status', { stdio: 'pipe', timeout: 5000 })
       this._available = true
 
-      const distroOut = execSync('wsl.exe -l -q', { encoding: 'utf-8', timeout: 5000 })
+      // wsl.exe outputs UTF-16LE when stdout is piped on Windows
+      const distroBuf = execSync('wsl.exe -l -q', { timeout: 5000 })
+      const distroOut = distroBuf.toString('utf16le').replace(/^﻿/, '')
       const distros = distroOut.trim().split('\n').filter(Boolean)
-      this._distro = distros[0] || 'Ubuntu'
+      // Prefer Ubuntu, fall back to first listed
+      this._distro = distros.find((d) => d.toLowerCase().includes('ubuntu')) || distros[0] || 'Ubuntu'
+
+      // Detect available shell inside the target distro
+      try {
+        execSync(`wsl.exe -d ${this._distro} -e bash -c "echo ok"`, { stdio: 'pipe', timeout: 5000 })
+        this._shell = 'bash'
+      } catch {
+        this._shell = 'sh'
+      }
+
       return true
     } catch {
       this._available = false
@@ -29,6 +42,12 @@ class WslBridge {
   getDistro(): string {
     this.isAvailable()
     return this._distro ?? 'Ubuntu'
+  }
+
+  /** Returns the detected shell: 'bash' or 'sh'. Call after isAvailable() returns true. */
+  getShell(): string {
+    this.isAvailable()
+    return this._shell ?? 'sh'
   }
 
   /** Convert Windows path to WSL path. C:\Users\me\proj → /mnt/c/Users/me/proj */
@@ -53,7 +72,9 @@ class WslBridge {
   /** Execute a command inside WSL. Async, non-blocking. */
   exec(cmd: string, timeoutMs = 15000): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn('wsl.exe', ['-e', 'bash', '-lc', cmd], {
+      const shell = this.getShell()
+      const shellFlag = shell === 'bash' ? '-lc' : '-c'
+      const child = spawn('wsl.exe', ['-d', this._distro!, '-e', shell, shellFlag, cmd], {
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 

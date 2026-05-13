@@ -5,7 +5,7 @@ import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { capabilityManager } from './capability-manager'
-import { tmuxManager, getSessionName } from './tmux-manager'
+import { tmuxManager } from './tmux-manager'
 import type { Capability } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -54,8 +54,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.PROCESS_START,
-    (_event, projectId: string, command: string, cwd: string) => {
-      return processManager?.start(projectId, command, cwd) ?? false
+    (_event, projectId: string, command: string, cwd: string, useWsl?: boolean) => {
+      return processManager?.start(projectId, command, cwd, useWsl) ?? false
     }
   )
 
@@ -113,7 +113,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, projectId: string) => {
-    return tmuxManager.killSession(getSessionName(projectId))
+    return tmuxManager.killSessionByProjectId(projectId)
   })
 
   ipcMain.handle(IPC.TMUX_REHYDRATE, () => {

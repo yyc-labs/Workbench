@@ -11,9 +11,19 @@ function simpleHash(input: string): string {
   return Math.abs(hash).toString(36)
 }
 
-/** P0 3: Safe tmux session name — hash-based, no special chars, max ~14 chars */
-function safeSessionName(projectId: string): string {
-  return `lx_${simpleHash(projectId)}`
+/** Sanitize project name for use in tmux session name */
+function sanitizeName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24)
+}
+
+/** P0 3: Safe tmux session name — human-readable with hash for uniqueness */
+function safeSessionName(projectId: string, projectName?: string): string {
+  const hash = projectId.startsWith('p') ? projectId.slice(1, 7) : simpleHash(projectId).slice(0, 6)
+  if (projectName) {
+    const safe = sanitizeName(projectName)
+    if (safe) return `lx_${safe}_${hash}`
+  }
+  return `lx_${hash}`
 }
 
 class TmuxManager {
@@ -41,6 +51,17 @@ class TmuxManager {
       .catch(() => false)
   }
 
+  /** Build tmux attach-or-create command for use in pty shell.
+   *  When command+wslPath are provided: creates new session if needed, then attaches.
+   *  When command is empty: only attaches to existing session (no creation). */
+  attachOrCreateCommand(sessionName: string, command?: string, wslPath?: string): string {
+    if (command && wslPath) {
+      const escaped = command.replace(/'/g, "'\\''")
+      return `exec tmux new-session -A -s '${sessionName}' -c '${wslPath}' '${escaped}'`
+    }
+    return `exec tmux new-session -A -s '${sessionName}'`
+  }
+
   attachCommand(sessionName: string): string {
     return `exec tmux attach-session -t '${sessionName}'`
   }
@@ -58,7 +79,9 @@ class TmuxManager {
         .filter(Boolean)
         .map((line) => {
           const [name, createdUnix] = line.split('|')
-          const projectId = name.startsWith('lx_') ? name.slice(3) : name
+          // Extract hash from session name: lx_<hash> or lx_<name>_<hash>
+          const hashPart = name.lastIndexOf('_') !== -1 ? name.slice(name.lastIndexOf('_') + 1) : name
+          const projectId = `p${hashPart}`
           return {
             sessionName: name,
             projectId,
@@ -103,6 +126,14 @@ class TmuxManager {
     return recovered
   }
 
+  /** Kill a session by projectId — looks up the actual session name first. */
+  async killSessionByProjectId(projectId: string): Promise<boolean> {
+    const sessions = await this.listLauncherSessions()
+    const match = sessions.find((s) => s.projectId === projectId)
+    if (!match) return false
+    return this.killSession(match.sessionName)
+  }
+
   async killAllLauncherSessions(): Promise<void> {
     const sessions = await this.listLauncherSessions()
     for (const s of sessions) {
@@ -129,8 +160,8 @@ class TmuxManager {
 }
 
 /** Session name from projectId (P0 3). Export for use in runner. */
-export function getSessionName(projectId: string): string {
-  return safeSessionName(projectId)
+export function getSessionName(projectId: string, projectName?: string): string {
+  return safeSessionName(projectId, projectName)
 }
 
 export const tmuxManager = new TmuxManager()

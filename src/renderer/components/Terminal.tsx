@@ -20,7 +20,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
     if (!containerRef.current) return
 
     const term = new XTerm({
-      rendererType: 'canvas',
+      // rendererType: 'canvas',
       cursorBlink: true,
       fontSize: 13,
       lineHeight: 1.5,
@@ -33,7 +33,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
       rightClickSelectsWord: true,
       macOptionIsMeta: true,
       theme: {
-        background: '#343840',
+        background: '#2b2f36',
         foreground: '#d4d4d4',
         cursor: '#8b949e',
         cursorAccent: '#343840',
@@ -68,7 +68,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
     if (existingOutput) {
       term.write(existingOutput)
     } else {
-      term.writeln('Starting Claude...\r\n')
+      // term.writeln('Starting Claude...\r\n')
     }
 
     term.onData((data: string) => {
@@ -172,6 +172,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
     <div
       ref={containerRef}
       className="h-full w-full"
+      style={{ backgroundColor: '#2b2f36' }}
       onClick={() => xtermRef.current?.focus()}
     />
   )

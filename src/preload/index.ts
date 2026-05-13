@@ -5,8 +5,8 @@ const api = {
   detectProjects: (dirPath: string) =>
     ipcRenderer.invoke(IPC.DETECT_DIRECTORY, dirPath),
 
-  startProcess: (projectId: string, command: string, cwd: string) =>
-    ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd),
+  startProcess: (projectId: string, command: string, cwd: string, useWsl?: boolean) =>
+    ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd, useWsl),
 
   stopProcess: (projectId: string) =>
     ipcRenderer.invoke(IPC.PROCESS_STOP, projectId),
