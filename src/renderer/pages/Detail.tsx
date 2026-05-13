@@ -14,7 +14,7 @@ function InfoCard({
   icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
+    <div className="rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-4 py-3">
       <div className="flex items-center gap-1.5 text-gray-400 mb-1">
         <Icon className="w-3.5 h-3.5" strokeWidth={1.8} />
         <span className="text-[10px] uppercase tracking-wider font-medium">{label}</span>
@@ -50,7 +50,7 @@ export function DetailPage() {
 
   if (!project || !projectId) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#f6f8fb]">
+      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#f1f1ef]">
         <h2 className="text-lg font-semibold text-gray-900">Project not found</h2>
         <button
           className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 transition-colors"
@@ -82,12 +82,15 @@ export function DetailPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#f6f8fb]">
+    <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* ── Header ── */}
-      <header className="flex items-center justify-between px-6 py-5 shrink-0">
+      <header
+        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5"
+        style={{ background: 'rgba(255,255,255,0.88)' }}
+      >
         <div className="flex items-center gap-4 min-w-0">
           <button
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6] transition-colors"
             onClick={() => navigate('/')}
           >
             <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
@@ -107,7 +110,7 @@ export function DetailPage() {
                 ? 'bg-emerald-500/10 text-emerald-600'
                 : isDetached
                   ? 'bg-amber-500/10 text-amber-600'
-                  : 'bg-gray-100 text-gray-500'
+                  : 'bg-[#eae9e6] text-gray-500'
             }`}
           >
             <span
@@ -151,7 +154,7 @@ export function DetailPage() {
                 : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
             }`}
             onClick={() =>
-              isActive ? stopProject(projectId) : startProject(projectId)
+              isActive ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
             }
           >
             {isActive ? (
@@ -172,7 +175,7 @@ export function DetailPage() {
       {/* ── Body ── */}
       <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
         {/* Command bar */}
-        <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 mb-4">
+        <div className="flex items-center gap-2 rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-3 py-2 mb-4">
           <span className="text-xs text-gray-400 select-none">$</span>
           <input
             type="text"
@@ -209,18 +212,22 @@ export function DetailPage() {
           />
         </div>
 
-        {/* Terminal panel */}
-        <div className="flex-1 min-h-0 rounded-2xl border border-gray-200 bg-white shadow-lg overflow-hidden flex flex-col">
-          {/* macOS-style title bar */}
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 shrink-0">
-            <span className="w-3 h-3 rounded-full bg-red-400" />
-            <span className="w-3 h-3 rounded-full bg-amber-400" />
-            <span className="w-3 h-3 rounded-full bg-green-400" />
-            <span className="ml-3 text-[11px] text-gray-400 font-mono select-none">
+        {/* Terminal shell — graphite panel */}
+        <div
+          className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
+          style={{ background: '#2b2f36' }}
+        >
+          {/* Title bar — dark, integrated into shell */}
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
+            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
+            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
+            <span className="ml-3 text-[11px] text-white/25 font-mono select-none">
               terminal
             </span>
           </div>
-          <div className="flex-1 min-h-0 p-3 bg-[#f6f8fc]">
+          {/* xterm area */}
+          <div className="flex-1 min-h-0 m-3 overflow-hidden bg-[#2b2f36]">
             <Terminal projectId={projectId} />
           </div>
         </div>
