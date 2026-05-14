@@ -210,6 +210,7 @@ function registerIpcHandlers(): void {
 
     return new Promise<boolean>((resolve) => {
       const child = spawn('wt.exe', [
+        '--title', sessionName,
         'wsl', '-d', distro,
         '--', 'bash', '-c',
         `exec tmux attach-session -t '${sessionName}'`
