@@ -79,14 +79,18 @@ function focusTerminalWindow(sessionName: string): void {
   })
 
   let out = ''
-  child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
-  child.stdout?.on('end', () => { if (out.trim()) console.log('[focusTerminalWindow PS stdout]\n', out.trim()) })
+  child.stdout?.on('data', (d: Buffer) => { out += d.toString(); console.log('[focusTerminalWindow PS stdout chunk]', d.toString()) })
   let err = ''
-  child.stderr?.on('data', (d: Buffer) => { err += d.toString() })
-  child.stderr?.on('end', () => { if (err.trim()) console.error('[focusTerminalWindow PS stderr]\n', err.trim()) })
+  child.stderr?.on('data', (d: Buffer) => { err += d.toString(); console.error('[focusTerminalWindow PS stderr chunk]', d.toString()) })
 
   child.on('error', (err) => {
     console.error('[focusTerminalWindow] spawn failed:', err.message)
+  })
+
+  child.on('close', (code) => {
+    console.log(`[focusTerminalWindow] PS exited code=${code}`)
+    if (out.trim()) console.log('[focusTerminalWindow PS stdout]\n', out.trim())
+    if (err.trim()) console.error('[focusTerminalWindow PS stderr]\n', err.trim())
   })
 
   child.unref()
