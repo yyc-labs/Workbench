@@ -66,11 +66,11 @@ class TmuxManager {
     return `exec tmux attach-session -t '${sessionName}'`
   }
 
-  /** List sessions with lx_ prefix. Returns session metadata from tmux. */
+  /** List all tmux sessions. Returns raw session metadata. */
   async listLauncherSessions(): Promise<TmuxSessionInfo[]> {
     try {
       const raw = await wslBridge.exec(
-        `tmux list-sessions -F '#{session_name}|#{session_created}' 2>/dev/null || true`
+        `tmux list-sessions -F '#{session_name}|#{session_created}|#{session_attached}' 2>/dev/null || true`
       )
       if (!raw) return []
 
@@ -78,18 +78,14 @@ class TmuxManager {
         .split('\n')
         .filter(Boolean)
         .map((line) => {
-          const [name, createdUnix] = line.split('|')
-          // Extract hash from session name: lx_<hash> or lx_<name>_<hash>
-          const hashPart = name.lastIndexOf('_') !== -1 ? name.slice(name.lastIndexOf('_') + 1) : name
-          const projectId = `p${hashPart}`
+          const [name, createdUnix, attached] = line.split('|')
           return {
             sessionName: name,
-            projectId,
+            projectId: '',
             createdAt: parseInt(createdUnix, 10) * 1000 || 0,
-            status: 'detached' as const,
+            status: (attached !== '0' ? 'attached' : 'detached') as 'attached' | 'detached',
           }
         })
-        .filter((s) => s.sessionName.startsWith('lx_'))
     } catch {
       return []
     }

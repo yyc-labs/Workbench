@@ -28,13 +28,13 @@ class RuntimeManager {
   }
 
   /** Background start — spawns the Claude init script via detached WSL process.
-   *  Does NOT open a terminal window. Use `openTerminal()` for that. */
+   *  Does NOT open a terminal window. Use `openTerminal()` for that.
+   *  Session name is computed in main process to match the script's MD5 naming. */
   async startRuntime(
     projectId: string,
-    sessionName: string,
     projectPath: string,
   ): Promise<boolean> {
-    return window.electronAPI.startRuntime(projectId, projectPath, sessionName)
+    return window.electronAPI.startRuntime(projectId, projectPath)
   }
 
   /** Open Windows Terminal attached to an existing tmux session. */
@@ -42,9 +42,9 @@ class RuntimeManager {
     await window.electronAPI.openTerminal(sessionName)
   }
 
-  /** Stop — kills the tmux session. */
-  async stopRuntime(projectId: string): Promise<void> {
-    await window.electronAPI.killTmuxSession(projectId)
+  /** Stop — kills the tmux session by name. */
+  async stopRuntime(sessionName: string): Promise<void> {
+    await window.electronAPI.killTmuxSession(sessionName)
   }
 
   /** Returns raw tmux session list. Caller (store) constructs SessionRuntime[]. */

@@ -16,5 +16,6 @@ export const IPC = {
   TMUX_KILL_SESSION: 'tmux:kill-session',
   TMUX_REHYDRATE: 'tmux:rehydrate',
   RUNTIME_START: 'runtime:start',
+  RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',
 } as const

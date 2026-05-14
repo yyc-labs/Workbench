@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
-import { join } from 'path'
+import { join, basename } from 'path'
+import { createHash } from 'crypto'
+import { spawn } from 'child_process'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -7,8 +9,7 @@ import { IPC } from './ipc'
 import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
-import { setRuntimeEntry, removeRuntimeEntry } from './runtime-registry'
-import { spawn } from 'child_process'
+import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
 import type { Capability } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -107,48 +108,81 @@ function registerIpcHandlers(): void {
 
   // ── Runtime Manager ──────────────────────────────────────
 
-  ipcMain.handle(IPC.RUNTIME_START, async (_event, projectId: string, projectPath: string, sessionName: string) => {
-    const distro = bootCapability?.wslDistro || 'Ubuntu'
-    const wslPath = wslBridge.toWslPath(projectPath)
-    const scriptPath = '~/tools/claude-code-script/start-claude-with-env.sh'
+  ipcMain.handle(
+    IPC.RUNTIME_START,
+    async (_event, projectId: string, projectPath: string) => {
+      const distro = bootCapability?.wslDistro || 'Ubuntu'
+      const wslPath = wslBridge.toWslPath(projectPath)
 
-    // Array args — no shell string interpolation, avoids quoting bugs with
-    // paths containing quotes, spaces, $, (, ), etc.
-    const child = spawn('wsl.exe', [
-      '-d', distro,
-      '--', 'bash', '-lc',
-      `nohup "${scriptPath}" "${wslPath}" >/dev/null 2>&1 & disown`
-    ], {
-      detached: true,
-      stdio: 'ignore',
-    })
-    child.unref()
+      // Match the script's session naming: basename + first 6 chars of MD5(path)
+      const md5 = createHash('md5').update(wslPath).digest('hex').slice(0, 6)
+      const sessionName = `${basename(projectPath)}-${md5}`
 
-    // Persist metadata only (not used as session existence source of truth)
-    setRuntimeEntry({
-      projectId,
-      sessionName,
-      createdAt: Date.now(),
-      lastOpened: Date.now(),
-    })
+      return new Promise<boolean>((resolve) => {
+        const child = spawn(
+          'wsl.exe',
+          [
+            '-d',
+            distro,
+            '--',
+            'bash',
+            '-lc',
+            `$HOME/tools/claude-code-script/start-claude-with-env.sh '${wslPath}'`
+          ],
+          {
+            detached: true,
+            windowsHide: true,
+            stdio: 'ignore',
+          }
+        )
 
-    return true
-  })
+        child.on('error', (err) => {
+          console.error('[runtime:start] spawn failed:', err.message)
+          resolve(false)
+        })
+
+        child.on('spawn', () => {
+          setRuntimeEntry({
+            projectId,
+            sessionName,
+            createdAt: Date.now(),
+            lastOpened: Date.now(),
+          })
+
+          resolve(true)
+        })
+
+        child.unref()
+      })
+    }
+  )
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
     const distro = bootCapability?.wslDistro || 'Ubuntu'
 
-    const child = spawn('wt.exe', [
-      'wsl', '-d', distro,
-      '--', 'bash', '-lc',
-      `exec tmux attach-session -t '${sessionName}'`
-    ], {
-      detached: true,
-      stdio: 'ignore',
-    })
-    child.unref()
+    return new Promise<boolean>((resolve) => {
+      const child = spawn('wt.exe', [
+        'wsl', '-d', distro,
+        '--', 'bash', '-lc',
+        `exec tmux attach-session -t '${sessionName}'`
+      ], {
+        detached: true,
+        stdio: 'ignore',
+      })
 
-    return true
+      child.on('error', (err) => {
+        console.error('[runtime:open-terminal] spawn failed:', err.message)
+        resolve(false)
+      })
+
+      child.on('close', () => resolve(true))
+
+      child.unref()
+    })
+  })
+
+  ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {
+    return listRuntimeEntries()
   })
 
   // ── WSL / tmux ──────────────────────────────────────────
@@ -161,8 +195,8 @@ function registerIpcHandlers(): void {
     return tmuxManager.listLauncherSessions()
   })
 
-  ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, projectId: string) => {
-    return tmuxManager.killSessionByProjectId(projectId)
+  ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, sessionName: string) => {
+    return tmuxManager.killSession(sessionName)
   })
 
   ipcMain.handle(IPC.TMUX_REHYDRATE, () => {

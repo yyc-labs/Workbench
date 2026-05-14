@@ -36,6 +36,10 @@ export function setRuntimeEntry(entry: RuntimeEntry): void {
   saveRegistry(reg)
 }
 
+export function listRuntimeEntries(): RuntimeEntry[] {
+  return Object.values(loadRegistry().entries)
+}
+
 export function removeRuntimeEntry(projectId: string): void {
   const reg = loadRegistry()
   delete reg.entries[projectId]

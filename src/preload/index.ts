@@ -31,13 +31,16 @@ const api = {
 
   listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),
 
-  killTmuxSession: (projectId: string) =>
-    ipcRenderer.invoke(IPC.TMUX_KILL_SESSION, projectId),
+  killTmuxSession: (sessionName: string) =>
+    ipcRenderer.invoke(IPC.TMUX_KILL_SESSION, sessionName),
 
   rehydrateTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_REHYDRATE),
 
-  startRuntime: (projectId: string, projectPath: string, sessionName: string) =>
-    ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, sessionName),
+  startRuntime: (projectId: string, projectPath: string) =>
+    ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath),
+
+  listRuntimeEntries: () =>
+    ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),
 
   openTerminal: (sessionName: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName),

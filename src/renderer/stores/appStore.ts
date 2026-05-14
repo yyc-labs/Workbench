@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession, SessionRuntime } from '../../shared/types'
+import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession, SessionRuntime, RuntimeEntry } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
 declare global {
@@ -25,9 +25,10 @@ declare global {
       resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
       getCapability: () => Promise<Capability>
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
-      killTmuxSession: (id: string) => Promise<boolean>
+      killTmuxSession: (sessionName: string) => Promise<boolean>
       rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
-      startRuntime: (projectId: string, projectPath: string, sessionName: string) => Promise<boolean>
+      startRuntime: (projectId: string, projectPath: string) => Promise<boolean>
+      listRuntimeEntries: () => Promise<RuntimeEntry[]>
       openTerminal: (sessionName: string) => Promise<boolean>
     }
   }
@@ -43,6 +44,7 @@ interface AppState {
   capability: Capability | null
   tmuxSessions: TmuxSessionInfo[]
   sessions: Record<string, SessionRuntime>
+  runtimeEntries: Record<string, RuntimeEntry>
 
   loadConfig: () => Promise<void>
   initApp: () => Promise<void>
@@ -51,6 +53,7 @@ interface AppState {
   startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean) => Promise<void>
   stopProject: (projectId: string) => Promise<void>
   reattachProject: (projectId: string, processId?: string) => Promise<void>
+  loadRuntimeEntries: () => Promise<void>
   appendOutput: (projectId: string, data: string) => void
   clearOutput: (projectId: string) => void
   updateProcessStatus: (projectId: string, status: string) => void
@@ -89,6 +92,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   capability: null,
   tmuxSessions: [],
   sessions: {},
+  runtimeEntries: {},
 
   initApp: async () => {
     // Load persisted config + projects
@@ -129,22 +133,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set({ config, projects, capability, tmuxSessions })
 
+    // Load runtime entries (session names computed by main process via MD5)
+    await get().loadRuntimeEntries()
+
     // Initial session refresh (after state is set so projects are available)
-    const rawSessions = await runtimeManager.listTmuxSessions()
-    const initialSessions: Record<string, SessionRuntime> = {}
-    for (const project of projects) {
-      const sessionName = runtimeManager.getSessionName(project.id, project.name)
-      const tmux = rawSessions.find((s) => s.sessionName === sessionName)
-      initialSessions[project.id] = {
-        projectId: project.id,
-        sessionName,
-        status: tmux
-          ? (tmux.status === 'attached' ? 'attached' : 'detached')
-          : 'stopped',
-        createdAt: tmux?.createdAt ?? 0,
-      }
-    }
-    set({ sessions: initialSessions })
+    await get().refreshSessions()
   },
 
   loadConfig: async () => {
@@ -342,39 +335,62 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   refreshSessions: async () => {
-    const { projects } = get()
-    const rawSessions = await runtimeManager.listTmuxSessions()
-    const result: Record<string, SessionRuntime> = {}
+    try {
+      const { projects, runtimeEntries } = get()
+      const rawSessions = await runtimeManager.listTmuxSessions()
+      const result: Record<string, SessionRuntime> = {}
 
-    for (const project of projects) {
-      const sessionName = runtimeManager.getSessionName(project.id, project.name)
-      const tmux = rawSessions.find((s) => s.sessionName === sessionName)
+      for (const project of projects) {
+        // Use session name from runtime entry (computed by main process via MD5).
+        // Falls back to old lx_ format for projects with no runtime entry.
+        const entry = runtimeEntries[project.id]
+        const sessionName = entry?.sessionName
+          || runtimeManager.getSessionName(project.id, project.name)
 
-      result[project.id] = {
-        projectId: project.id,
-        sessionName,
-        status: tmux
-          ? (tmux.status === 'attached' ? 'attached' : 'detached')
-          : 'stopped',
-        createdAt: tmux?.createdAt ?? 0,
+        const tmux = rawSessions.find((s) => s.sessionName === sessionName)
+
+        result[project.id] = {
+          projectId: project.id,
+          sessionName,
+          status: tmux
+            ? (tmux.status === 'attached' ? 'attached' : 'detached')
+            : 'stopped',
+          createdAt: tmux?.createdAt ?? 0,
+        }
       }
-    }
 
-    set({ sessions: result })
+      set({ sessions: result })
+    } catch {
+      // tmux may not be available or WSL bridge timed out — sessions stay as-is
+    }
+  },
+
+  loadRuntimeEntries: async () => {
+    try {
+      const entries = await window.electronAPI.listRuntimeEntries()
+      const map: Record<string, RuntimeEntry> = {}
+      for (const e of entries) {
+        map[e.projectId] = e
+      }
+      set({ runtimeEntries: map })
+    } catch {
+      // registry not available
+    }
   },
 
   startRuntime: async (projectId: string) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
-    const sessionName = runtimeManager.getSessionName(projectId, project.name)
-    await runtimeManager.startRuntime(projectId, sessionName, project.path)
+    await runtimeManager.startRuntime(projectId, project.path)
+    // Reload runtime entries so we pick up the newly computed session name
+    await get().loadRuntimeEntries()
     await get().refreshSessions()
   },
 
   stopRuntime: async (projectId: string) => {
     const session = get().sessions[projectId]
     if (!session || session.status === 'stopped') return
-    await runtimeManager.stopRuntime(projectId)
+    await runtimeManager.stopRuntime(session.sessionName)
     await get().refreshSessions()
   },
 

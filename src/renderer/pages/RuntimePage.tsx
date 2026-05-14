@@ -38,40 +38,74 @@ export function RuntimePage() {
   const handleStartRuntime = useCallback(async () => {
     if (!projectId || !project) return
     setActionLoading('start')
-    const sessionName = runtimeManager.getSessionName(projectId, project.name)
-    await runtimeManager.startRuntime(projectId, sessionName, project.path)
-    await refreshSessions()
-    setActionLoading(null)
-  }, [projectId, project, refreshSessions])
+    try {
+      // Store action: starts runtime (main process computes session name via MD5),
+      // reloads runtime entries, does initial session refresh
+      await startRuntime(projectId)
+
+      // Poll until the tmux session appears (background script is async in WSL)
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        await refreshSessions()
+        const s = useAppStore.getState().sessions[projectId]
+        if (s && s.status !== 'stopped') break
+      }
+    } catch (err) {
+      console.error('[RuntimePage] start runtime failed:', err)
+    } finally {
+      setActionLoading(null)
+    }
+  }, [projectId, project, startRuntime, refreshSessions])
 
   const handleStopRuntime = useCallback(async () => {
     if (!projectId) return
     setActionLoading('stop')
-    await stopRuntime(projectId)
-    setActionLoading(null)
+    try {
+      await stopRuntime(projectId)
+    } catch (err) {
+      console.error('[RuntimePage] stop runtime failed:', err)
+    } finally {
+      setActionLoading(null)
+    }
   }, [projectId, stopRuntime])
 
   const handleOpenTerminal = useCallback(async () => {
     if (!projectId || !session) return
-    await openTerminal(projectId)
+    try {
+      await openTerminal(projectId)
+    } catch (err) {
+      console.error('[RuntimePage] open terminal failed:', err)
+    }
   }, [projectId, session, openTerminal])
 
   const handleRestart = useCallback(async () => {
     if (!projectId || !project || !session) return
     setActionLoading('restart')
-    const sessionName = session.sessionName
+    try {
+      const sessionName = session.sessionName
 
-    // Kill
-    await runtimeManager.stopRuntime(projectId)
+      // Kill
+      await runtimeManager.stopRuntime(sessionName)
 
-    // Wait for tmux to actually remove the session (poll, not blind sleep)
-    await runtimeManager.waitForSessionGone(sessionName, 10000)
+      // Wait for tmux to actually remove the session (poll, not blind sleep)
+      await runtimeManager.waitForSessionGone(sessionName, 10000)
 
-    // Re-create
-    await runtimeManager.startRuntime(projectId, sessionName, project.path)
-    await refreshSessions()
-    setActionLoading(null)
-  }, [projectId, project, session, refreshSessions])
+      // Re-create (store action computes session name + reloads entries + refreshes)
+      await startRuntime(projectId)
+
+      // Poll until the tmux session reappears
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+        await refreshSessions()
+        const s = useAppStore.getState().sessions[projectId]
+        if (s && s.status !== 'stopped') break
+      }
+    } catch (err) {
+      console.error('[RuntimePage] restart failed:', err)
+    } finally {
+      setActionLoading(null)
+    }
+  }, [projectId, project, session, startRuntime, refreshSessions])
 
   const isLoading = actionLoading !== null
   const isStopped = session?.status === 'stopped'
