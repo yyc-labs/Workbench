@@ -106,16 +106,14 @@ export function DetailPage() {
           {/* Status — inline text when stopped, pill badge when active */}
           {isActive ? (
             <div
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium shrink-0 ${
-                isRunning
-                  ? 'bg-emerald-500/10 text-emerald-600'
-                  : 'bg-amber-500/10 text-amber-600'
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium shrink-0 ${isRunning
+                ? 'bg-emerald-500/10 text-emerald-600'
+                : 'bg-amber-500/10 text-amber-600'
+                }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  isRunning ? 'bg-emerald-500' : 'bg-amber-500'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-emerald-500' : 'bg-amber-500'
+                  }`}
               />
               {isRunning ? 'Running' : 'Session Available'}
             </div>
@@ -146,11 +144,10 @@ export function DetailPage() {
             </button>
           )}
           <button
-            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-              isActive
-                ? 'border border-red-200 text-red-500 hover:bg-red-50'
-                : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
-            }`}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${isActive
+              ? 'border border-red-200 text-red-500 hover:bg-red-50'
+              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+              }`}
             onClick={() =>
               isActive ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
             }
@@ -222,9 +219,9 @@ export function DetailPage() {
             className="flex items-center shrink-0 border-b border-white/5"
             style={{ gap: '6px', padding: '11px 14px' }}
           >
-            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
-            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
-            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
+            <span className="rounded-full" style={{ width: '10px', height: '10px', background: '#ff5f57', opacity: 0.7 }} />
+            <span className="rounded-full" style={{ width: '10px', height: '10px', background: '#febc2e', opacity: 0.7 }} />
+            <span className="rounded-full" style={{ width: '10px', height: '10px', background: '#28c840', opacity: 0.7 }} />
             <span
               className="font-mono select-none uppercase tracking-widest font-medium"
               style={{
