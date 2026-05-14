@@ -16,12 +16,12 @@ let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
-/** Track wt.exe PID per session — enables focus-on-reclick */
-const sessionTerminals = new Map<string, number>()
+/** Title prefix used to find and focus the external terminal window */
+const terminalTitlePrefix = 'IDE-claude:'
 
-function focusWindow(pid: number): void {
+function focusTerminalWindow(sessionName: string): void {
   exec(
-    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate(${pid})"`,
+    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate('${terminalTitlePrefix}${sessionName}')"`,
     { timeout: 3000 },
     () => {} // fire-and-forget
   )
@@ -173,43 +173,32 @@ function registerIpcHandlers(): void {
     const exists = await tmuxManager.sessionExists(sessionName)
     if (!exists) return false
 
-    // If we already have a tracked terminal for this session, focus it
-    const existingPid = sessionTerminals.get(sessionName)
-    if (existingPid !== undefined) {
-      try {
-        process.kill(existingPid, 0) // signal 0 = existence check
-        focusWindow(existingPid)
-        return true
-      } catch {
-        // Process is dead — remove stale tracking, fall through to spawn
-        sessionTerminals.delete(sessionName)
-      }
+    // If a terminal is already attached to this session, focus it — don't open a new one
+    const clients = await tmuxManager.countClients(sessionName)
+    if (clients > 0) {
+      focusTerminalWindow(sessionName)
+      return true
     }
 
     const distro = bootCapability?.wslDistro || 'Ubuntu'
 
     return new Promise<boolean>((resolve) => {
       const child = spawn('wt.exe', [
+        '--title', `${terminalTitlePrefix}${sessionName}`,
         'wsl', '-d', distro,
         '--', 'bash', '-c',
-        `exec tmux attach-session -t '${sessionName}'`
+        `tmux set-option -t '${sessionName}' set-titles off 2>/dev/null; exec tmux attach-session -t '${sessionName}'`
       ], {
         detached: true,
         stdio: 'ignore',
       })
 
-      sessionTerminals.set(sessionName, child.pid!)
-
       child.on('error', (err) => {
         console.error('[runtime:open-terminal] spawn failed:', err.message)
-        sessionTerminals.delete(sessionName)
         resolve(false)
       })
 
-      child.on('close', () => {
-        sessionTerminals.delete(sessionName)
-        resolve(true)
-      })
+      child.on('close', () => resolve(true))
 
       child.unref()
     })
