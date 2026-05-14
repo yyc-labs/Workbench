@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join, basename } from 'path'
 import { createHash } from 'crypto'
 import { spawn } from 'child_process'
+import { tmpdir } from 'os'
+import { writeFileSync, readFileSync, unlinkSync } from 'fs'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -26,7 +28,11 @@ function focusTerminalWindow(sessionName: string): void {
 
   console.log(`[focusTerminalWindow] sessionName="${sessionName}" matchTitle="${matchTitle}"`)
 
+  // Write PS log to temp file — stdout may not flush with detached+pipe on Windows
+  const logFile = join(tmpdir(), `focus-terminal-${Date.now()}.log`)
+
   const ps = [
+    `$logFile = '${logFile.replace(/\\/g, '\\\\')}'`,
     'Add-Type -TypeDefinition @\'',
     'using System;',
     'using System.Runtime.InteropServices;',
@@ -70,18 +76,13 @@ function focusTerminalWindow(sessionName: string): void {
     '} else {',
     '  $log += "NOT FOUND — no window title contains matchTitle"',
     '}',
-    '$log -join "\`n"',
+    '$log -join "`n" | Out-File -FilePath $logFile -Encoding utf8',
   ].join('\n')
 
   const child = spawn('powershell', ['-NoProfile', '-Command', ps], {
     detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: 'ignore',
   })
-
-  let out = ''
-  child.stdout?.on('data', (d: Buffer) => { out += d.toString(); console.log('[focusTerminalWindow PS stdout chunk]', d.toString()) })
-  let err = ''
-  child.stderr?.on('data', (d: Buffer) => { err += d.toString(); console.error('[focusTerminalWindow PS stderr chunk]', d.toString()) })
 
   child.on('error', (err) => {
     console.error('[focusTerminalWindow] spawn failed:', err.message)
@@ -89,8 +90,13 @@ function focusTerminalWindow(sessionName: string): void {
 
   child.on('close', (code) => {
     console.log(`[focusTerminalWindow] PS exited code=${code}`)
-    if (out.trim()) console.log('[focusTerminalWindow PS stdout]\n', out.trim())
-    if (err.trim()) console.error('[focusTerminalWindow PS stderr]\n', err.trim())
+    try {
+      const content = readFileSync(logFile, 'utf-8').trim()
+      if (content) console.log('[focusTerminalWindow PS log]\n', content)
+      unlinkSync(logFile)
+    } catch {
+      // log file not written — PS may have failed before Out-File
+    }
   })
 
   child.unref()
