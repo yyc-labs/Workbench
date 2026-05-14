@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession } from '../../shared/types'
+import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession, SessionRuntime } from '../../shared/types'
+import { runtimeManager } from '../runtime/RuntimeManager'
 
 declare global {
   interface Window {
@@ -41,6 +42,7 @@ interface AppState {
   searchQuery: string
   capability: Capability | null
   tmuxSessions: TmuxSessionInfo[]
+  sessions: Record<string, SessionRuntime>
 
   loadConfig: () => Promise<void>
   initApp: () => Promise<void>
@@ -60,6 +62,10 @@ interface AppState {
   clearProcessUrl: (projectId: string) => void
   loadTmuxSessions: () => Promise<void>
   markProjectDetached: (projectId: string) => void
+  refreshSessions: () => Promise<void>
+  startRuntime: (projectId: string) => Promise<void>
+  stopRuntime: (projectId: string) => Promise<void>
+  openTerminal: (projectId: string) => Promise<void>
 }
 
 async function persistProjects(projects: ProjectInfo[]): Promise<void> {
@@ -82,6 +88,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   searchQuery: '',
   capability: null,
   tmuxSessions: [],
+  sessions: {},
 
   initApp: async () => {
     // Load persisted config + projects
@@ -121,6 +128,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ config, projects, capability, tmuxSessions })
+
+    // Initial session refresh (after state is set so projects are available)
+    const rawSessions = await runtimeManager.listTmuxSessions()
+    const initialSessions: Record<string, SessionRuntime> = {}
+    for (const project of projects) {
+      const sessionName = runtimeManager.getSessionName(project.id, project.name)
+      const tmux = rawSessions.find((s) => s.sessionName === sessionName)
+      initialSessions[project.id] = {
+        projectId: project.id,
+        sessionName,
+        status: tmux
+          ? (tmux.status === 'attached' ? 'attached' : 'detached')
+          : 'stopped',
+        createdAt: tmux?.createdAt ?? 0,
+      }
+    }
+    set({ sessions: initialSessions })
   },
 
   loadConfig: async () => {
@@ -315,5 +339,48 @@ export const useAppStore = create<AppState>((set, get) => ({
         [projectId]: { pid: null, status: 'detached', startTime: undefined },
       },
     }))
+  },
+
+  refreshSessions: async () => {
+    const { projects } = get()
+    const rawSessions = await runtimeManager.listTmuxSessions()
+    const result: Record<string, SessionRuntime> = {}
+
+    for (const project of projects) {
+      const sessionName = runtimeManager.getSessionName(project.id, project.name)
+      const tmux = rawSessions.find((s) => s.sessionName === sessionName)
+
+      result[project.id] = {
+        projectId: project.id,
+        sessionName,
+        status: tmux
+          ? (tmux.status === 'attached' ? 'attached' : 'detached')
+          : 'stopped',
+        createdAt: tmux?.createdAt ?? 0,
+      }
+    }
+
+    set({ sessions: result })
+  },
+
+  startRuntime: async (projectId: string) => {
+    const project = get().projects.find((p) => p.id === projectId)
+    if (!project) return
+    const sessionName = runtimeManager.getSessionName(projectId, project.name)
+    await runtimeManager.startRuntime(projectId, sessionName, project.path)
+    await get().refreshSessions()
+  },
+
+  stopRuntime: async (projectId: string) => {
+    const session = get().sessions[projectId]
+    if (!session || session.status === 'stopped') return
+    await runtimeManager.stopRuntime(projectId)
+    await get().refreshSessions()
+  },
+
+  openTerminal: async (projectId: string) => {
+    const session = get().sessions[projectId]
+    if (!session) return
+    await runtimeManager.openTerminal(session.sessionName)
   },
 }))
