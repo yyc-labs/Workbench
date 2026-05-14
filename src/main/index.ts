@@ -16,7 +16,14 @@ let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
+/** Focus a Windows Terminal window whose title matches the script-generated pattern:
+  *   {basename}:bash  (script does printf '\033]0;%s\007' "$PROJECT_NAME") */
 function focusTerminalWindow(sessionName: string): void {
+  // sessionName = {basename}-{6charMd5}  →  extract basename, append :bash
+  const lastDash = sessionName.lastIndexOf('-')
+  const basename = lastDash !== -1 ? sessionName.slice(0, lastDash) : sessionName
+  const matchTitle = `${basename}:bash`
+
   const ps = [
     'Add-Type -TypeDefinition @\'',
     'using System;',
@@ -36,12 +43,12 @@ function focusTerminalWindow(sessionName: string): void {
     '  public delegate bool EnumWinProc(IntPtr hWnd, IntPtr lParam);',
     '}',
     '\'@',
-    '$sn = "' + sessionName + '"',
+    `$match = "${matchTitle}"`,
     '$found = [IntPtr]::Zero',
     '$cb = [TF+EnumWinProc]{ param($h,$l)',
     '  $sb = New-Object System.Text.StringBuilder 256',
     '  [TF]::GetWindowText($h, $sb, 256) | Out-Null',
-    '  if ($sb.ToString().Contains($sn)) { $script:found = $h; return $false }',
+    '  if ($sb.ToString().Contains($match)) { $script:found = $h; return $false }',
     '  return $true',
     '}',
     '[TF]::EnumWindows($cb, [IntPtr]::Zero)',
@@ -210,7 +217,6 @@ function registerIpcHandlers(): void {
 
     return new Promise<boolean>((resolve) => {
       const child = spawn('wt.exe', [
-        '--title', sessionName,
         'wsl', '-d', distro,
         '--', 'bash', '-c',
         `exec tmux attach-session -t '${sessionName}'`
