@@ -24,6 +24,8 @@ function focusTerminalWindow(sessionName: string): void {
   const basename = lastDash !== -1 ? sessionName.slice(0, lastDash) : sessionName
   const matchTitle = `${basename}:bash`
 
+  console.log(`[focusTerminalWindow] sessionName="${sessionName}" matchTitle="${matchTitle}"`)
+
   const ps = [
     'Add-Type -TypeDefinition @\'',
     'using System;',
@@ -35,6 +37,8 @@ function focusTerminalWindow(sessionName: string): void {
     '  [DllImport("user32.dll")]',
     '  public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
     '  [DllImport("user32.dll")]',
+    '  public static extern int GetWindowTextLength(IntPtr hWnd);',
+    '  [DllImport("user32.dll")]',
     '  public static extern bool IsIconic(IntPtr hWnd);',
     '  [DllImport("user32.dll")]',
     '  public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);',
@@ -43,21 +47,49 @@ function focusTerminalWindow(sessionName: string): void {
     '  public delegate bool EnumWinProc(IntPtr hWnd, IntPtr lParam);',
     '}',
     '\'@',
+    '$log = @()',
     `$match = "${matchTitle}"`,
+    `$log += "matchTitle=$match"`,
     '$found = [IntPtr]::Zero',
     '$cb = [TF+EnumWinProc]{ param($h,$l)',
     '  $sb = New-Object System.Text.StringBuilder 256',
     '  [TF]::GetWindowText($h, $sb, 256) | Out-Null',
-    '  if ($sb.ToString().Contains($match)) { $script:found = $h; return $false }',
+    '  $title = $sb.ToString()',
+    '  if ($title.Length -gt 0) { $log += "hwnd=$h title=$title" }',
+    '  if ($title.Contains($match)) { $script:found = $h; $log += "MATCHED hwnd=$h"; return $false }',
     '  return $true',
     '}',
+    '$log += "Enumerating windows..."',
     '[TF]::EnumWindows($cb, [IntPtr]::Zero)',
     'if ($script:found -ne [IntPtr]::Zero) {',
-    '  if ([TF]::IsIconic($script:found)) { [TF]::ShowWindow($script:found, 9) | Out-Null }',
-    '  [TF]::SetForegroundWindow($script:found) | Out-Null',
+    '  $iconic = [TF]::IsIconic($script:found)',
+    '  $log += "found hwnd=$($script:found) iconic=$iconic"',
+    '  if ($iconic) { [TF]::ShowWindow($script:found, 9) | Out-Null; $log += "ShowWindow(SW_RESTORE)" }',
+    '  $fg = [TF]::SetForegroundWindow($script:found)',
+    '  $log += "SetForegroundWindow=$fg"',
+    '} else {',
+    '  $log += "NOT FOUND — no window title contains matchTitle"',
     '}',
+    '$log -join "\`n"',
   ].join('\n')
-  spawn('powershell', ['-NoProfile', '-Command', ps], { detached: true, stdio: 'ignore' }).unref()
+
+  const child = spawn('powershell', ['-NoProfile', '-Command', ps], {
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  let out = ''
+  child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
+  child.stdout?.on('end', () => { if (out.trim()) console.log('[focusTerminalWindow PS stdout]\n', out.trim()) })
+  let err = ''
+  child.stderr?.on('data', (d: Buffer) => { err += d.toString() })
+  child.stderr?.on('end', () => { if (err.trim()) console.error('[focusTerminalWindow PS stderr]\n', err.trim()) })
+
+  child.on('error', (err) => {
+    console.error('[focusTerminalWindow] spawn failed:', err.message)
+  })
+
+  child.unref()
 }
 
 function createWindow(): void {
@@ -202,12 +234,15 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
+    console.log(`[open-terminal] sessionName="${sessionName}"`)
     // Silent pre-check: session must exist in tmux
     const exists = await tmuxManager.sessionExists(sessionName)
+    console.log(`[open-terminal] sessionExists=${exists}`)
     if (!exists) return false
 
     // If a terminal is already attached to this session, focus it — don't open a new one
     const clients = await tmuxManager.countClients(sessionName)
+    console.log(`[open-terminal] clients=${clients}`)
     if (clients > 0) {
       focusTerminalWindow(sessionName)
       return true
