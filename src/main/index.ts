@@ -3,7 +3,7 @@ import { join, basename } from 'path'
 import { createHash } from 'crypto'
 import { spawn } from 'child_process'
 import { tmpdir } from 'os'
-import { writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { writeFileSync, unlinkSync } from 'fs'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -18,22 +18,20 @@ let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
-/** Focus a Windows Terminal window whose title matches the script-generated pattern:
-  *   {basename}:bash  (script does printf '\033]0;%s\007' "$PROJECT_NAME") */
+/** Focus a Windows Terminal window whose title contains the session name
+  *   (tmux set-titles produces "{sessionName}:{windowName}" e.g. "ide-electron-69fdda:bash") */
 function focusTerminalWindow(sessionName: string): void {
-  // sessionName = {basename}-{6charMd5}  →  extract basename, append :bash
-  const lastDash = sessionName.lastIndexOf('-')
-  const basename = lastDash !== -1 ? sessionName.slice(0, lastDash) : sessionName
-  const matchTitle = `${basename}:bash`
+  const match = sessionName
 
-  console.log(`[focusTerminalWindow] sessionName="${sessionName}" matchTitle="${matchTitle}"`)
+  console.log(`[focusTerminalWindow] sessionName="${sessionName}" match="${match}"`)
 
-  // Write PS log to temp file — stdout may not flush with detached+pipe on Windows
-  // Use forward slashes so PS single-quoted string is a valid path
-  const logFile = join(tmpdir(), `focus-terminal-${Date.now()}.log`).replace(/\\/g, '/')
+  const ps1File = join(tmpdir(), `focus-terminal-${Date.now()}.ps1`).replace(/\\/g, '/')
 
+  // PS script writes results to stdout — no log file, no detached-process quirks
   const ps = [
-    `$logFile = '${logFile}'`,
+    '$ErrorActionPreference = "Stop"',
+    `$match = '${match}'`,
+    '',
     'Add-Type -TypeDefinition @\'',
     'using System;',
     'using System.Runtime.InteropServices;',
@@ -44,46 +42,60 @@ function focusTerminalWindow(sessionName: string): void {
     '  [DllImport("user32.dll")]',
     '  public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
     '  [DllImport("user32.dll")]',
-    '  public static extern int GetWindowTextLength(IntPtr hWnd);',
-    '  [DllImport("user32.dll")]',
     '  public static extern bool IsIconic(IntPtr hWnd);',
     '  [DllImport("user32.dll")]',
     '  public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);',
     '  [DllImport("user32.dll")]',
     '  public static extern bool SetForegroundWindow(IntPtr hWnd);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern bool BringWindowToTop(IntPtr hWnd);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);',
     '  public delegate bool EnumWinProc(IntPtr hWnd, IntPtr lParam);',
     '}',
     '\'@',
-    '$log = @()',
-    `$match = "${matchTitle}"`,
-    `$log += "matchTitle=$match"`,
+    '',
+    'Write-Output "match=$match"',
+    'Write-Output "Enumerating windows..."',
     '$found = [IntPtr]::Zero',
+    '',
     '$cb = [TF+EnumWinProc]{ param($h,$l)',
     '  $sb = New-Object System.Text.StringBuilder 256',
     '  [TF]::GetWindowText($h, $sb, 256) | Out-Null',
     '  $title = $sb.ToString()',
-    '  if ($title.Length -gt 0) { $log += "hwnd=$h title=$title" }',
-    '  if ($title.Contains($match)) { $script:found = $h; $log += "MATCHED hwnd=$h"; return $false }',
+    '  if ($title.Length -gt 0) { Write-Output "hwnd=$h title=$title" }',
+    '  if ($title.Contains($match)) { $script:found = $h; Write-Output "MATCHED hwnd=$h"; return $false }',
     '  return $true',
     '}',
-    '$log += "Enumerating windows..."',
+    '',
     '[TF]::EnumWindows($cb, [IntPtr]::Zero)',
+    '',
     'if ($script:found -ne [IntPtr]::Zero) {',
     '  $iconic = [TF]::IsIconic($script:found)',
-    '  $log += "found hwnd=$($script:found) iconic=$iconic"',
-    '  if ($iconic) { [TF]::ShowWindow($script:found, 9) | Out-Null; $log += "ShowWindow(SW_RESTORE)" }',
+    '  Write-Output "found hwnd=$($script:found) iconic=$iconic"',
+    '  if ($iconic) { [TF]::ShowWindow($script:found, 9) | Out-Null; Write-Output "ShowWindow(SW_RESTORE)" }',
+    '  [TF]::BringWindowToTop($script:found) | Out-Null; Write-Output "BringWindowToTop done"',
+    '  [TF]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero)',
+    '  [TF]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)',
     '  $fg = [TF]::SetForegroundWindow($script:found)',
-    '  $log += "SetForegroundWindow=$fg"',
+    '  Write-Output "SetForegroundWindow=$fg"',
     '} else {',
-    '  $log += "NOT FOUND — no window title contains matchTitle"',
+    '  Write-Output "NOT FOUND"',
     '}',
-    '$log -join "`n" | Out-File -FilePath $logFile -Encoding utf8',
-  ].join('\n')
+  ].join('\r\n')
 
-  const child = spawn('powershell', ['-NoProfile', '-Command', ps], {
-    detached: true,
-    stdio: 'ignore',
+  writeFileSync(ps1File, ps, 'utf-8')
+
+  // Don't detach — we want stdio pipes to work. unref() lets the app exit without waiting.
+  const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1File], {
+    stdio: ['ignore', 'pipe', 'pipe'],
   })
+
+  let stdout = ''
+  let stderr = ''
+
+  child.stdout!.on('data', (d: Buffer) => { stdout += d.toString() })
+  child.stderr!.on('data', (d: Buffer) => { stderr += d.toString() })
 
   child.on('error', (err) => {
     console.error('[focusTerminalWindow] spawn failed:', err.message)
@@ -91,13 +103,10 @@ function focusTerminalWindow(sessionName: string): void {
 
   child.on('close', (code) => {
     console.log(`[focusTerminalWindow] PS exited code=${code}`)
-    try {
-      const content = readFileSync(logFile, 'utf-8').trim()
-      if (content) console.log('[focusTerminalWindow PS log]\n', content)
-      unlinkSync(logFile)
-    } catch {
-      // log file not written — PS may have failed before Out-File
-    }
+    if (stdout.trim()) console.log('[focusTerminalWindow PS stdout]\n', stdout.trim())
+    else console.log('[focusTerminalWindow PS stdout] EMPTY')
+    if (stderr.trim()) console.log('[focusTerminalWindow PS stderr]\n', stderr.trim())
+    try { unlinkSync(ps1File) } catch { /* best effort */ }
   })
 
   child.unref()

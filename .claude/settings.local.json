@@ -36,7 +36,9 @@
       "Bash(wsl.exe *)",
       "Bash(git *)",
       "Skill(superpowers:writing-plans)",
-      "Skill(git-auto-commit)"
+      "Skill(git-auto-commit)",
+      "Read(//tmp/claude-1000/**)",
+      "Read(//tmp/**)"
     ]
   }
 }
