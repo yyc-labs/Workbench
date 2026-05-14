@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join, basename } from 'path'
 import { createHash } from 'crypto'
-import { spawn } from 'child_process'
+import { spawn, exec } from 'child_process'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -15,6 +15,17 @@ import type { Capability } from '../shared/types'
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+
+/** Track wt.exe PID per session — enables focus-on-reclick */
+const sessionTerminals = new Map<string, number>()
+
+function focusWindow(pid: number): void {
+  exec(
+    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate(${pid})"`,
+    { timeout: 3000 },
+    () => {} // fire-and-forget
+  )
+}
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -158,24 +169,47 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
+    // Silent pre-check: session must exist in tmux
+    const exists = await tmuxManager.sessionExists(sessionName)
+    if (!exists) return false
+
+    // If we already have a tracked terminal for this session, focus it
+    const existingPid = sessionTerminals.get(sessionName)
+    if (existingPid !== undefined) {
+      try {
+        process.kill(existingPid, 0) // signal 0 = existence check
+        focusWindow(existingPid)
+        return true
+      } catch {
+        // Process is dead — remove stale tracking, fall through to spawn
+        sessionTerminals.delete(sessionName)
+      }
+    }
+
     const distro = bootCapability?.wslDistro || 'Ubuntu'
 
     return new Promise<boolean>((resolve) => {
       const child = spawn('wt.exe', [
         'wsl', '-d', distro,
-        '--', 'bash', '-lc',
+        '--', 'bash', '-c',
         `exec tmux attach-session -t '${sessionName}'`
       ], {
         detached: true,
         stdio: 'ignore',
       })
 
+      sessionTerminals.set(sessionName, child.pid!)
+
       child.on('error', (err) => {
         console.error('[runtime:open-terminal] spawn failed:', err.message)
+        sessionTerminals.delete(sessionName)
         resolve(false)
       })
 
-      child.on('close', () => resolve(true))
+      child.on('close', () => {
+        sessionTerminals.delete(sessionName)
+        resolve(true)
+      })
 
       child.unref()
     })

@@ -51,6 +51,13 @@ class TmuxManager {
       .catch(() => false)
   }
 
+  countClients(sessionName: string): Promise<number> {
+    return wslBridge
+      .exec(`tmux list-clients -t '${sessionName}' -F '#{client_name}' 2>/dev/null`)
+      .then((out) => out.trim().split('\n').filter(Boolean).length)
+      .catch(() => 0)
+  }
+
   /** Build tmux attach-or-create command for use in pty shell.
    *  When command+wslPath are provided: creates new session if needed, then attaches.
    *  When command is empty: only attaches to existing session (no creation). */
