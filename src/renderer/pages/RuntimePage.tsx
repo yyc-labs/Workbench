@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
-import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap } from 'lucide-react'
+import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock } from 'lucide-react'
 
 /** Map tmux status → user-facing label */
 function statusLabel(status: string): string {
@@ -219,33 +219,40 @@ export function RuntimePage() {
               </span>
             </div>
 
-            {/* Status indicators */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="text-center">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full mx-auto mb-1.5 ${
-                    isAttached ? 'bg-emerald-500' : !isStopped ? 'bg-amber-500' : 'bg-gray-600'
+            {/* Status indicators — primary status emphasized */}
+            <div className="flex items-center gap-6 mb-6">
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`w-3 h-3 rounded-full ${
+                    isAttached ? 'bg-emerald-500' : !isStopped ? 'bg-amber-500' : 'bg-gray-400'
                   }`}
                 />
-                <p className="text-xs text-gray-400">{sessionLabel}</p>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{sessionLabel}</p>
+                  <p className="text-[10px] text-gray-400">Runtime</p>
+                </div>
               </div>
-              <div className="text-center">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full mx-auto mb-1.5 ${
-                    isAttached ? 'bg-blue-500' : 'bg-gray-600'
+              <span className="w-px h-8 bg-[#e2e2df]" />
+              <div className="flex items-center gap-2.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isAttached ? 'bg-blue-500' : 'bg-gray-300'
                   }`}
                 />
-                <p className="text-xs text-gray-400">
-                  {isAttached ? 'Connected' : 'Disconnected'}
-                </p>
+                <div>
+                  <p className="text-xs text-gray-500">
+                    {isAttached ? 'Connected' : 'Disconnected'}
+                  </p>
+                </div>
               </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-700 font-mono mb-1.5">
+              <span className="w-px h-8 bg-[#e2e2df]" />
+              <div className="text-xs text-gray-400">
+                Created{' '}
+                <span className="text-gray-600 font-mono">
                   {session?.createdAt
                     ? new Date(session.createdAt).toLocaleTimeString()
                     : '—'}
-                </p>
-                <p className="text-[10px] text-gray-400">Created</p>
+                </span>
               </div>
             </div>
 
@@ -254,7 +261,7 @@ export function RuntimePage() {
               {isStopped ? (
                 <button
                   disabled={isLoading}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 shadow-sm"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 shadow-sm"
                   onClick={handleStartRuntime}
                 >
                   {actionLoading === 'start' ? (
@@ -312,11 +319,20 @@ export function RuntimePage() {
             </h3>
             <div className="space-y-2 text-sm font-mono">
               {isStopped ? (
-                <p className="text-gray-400">— Press "Start Runtime" to launch Claude</p>
+                <div className="flex items-center gap-3 text-gray-400">
+                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                  <span>Press "Start Runtime" to launch Claude</span>
+                </div>
               ) : isAttached ? (
-                <p className="text-gray-500">— Claude runtime active, terminal connected</p>
+                <div className="flex items-center gap-3 text-gray-500">
+                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                  <span>Claude runtime active, terminal connected</span>
+                </div>
               ) : (
-                <p className="text-gray-500">— Session running in background</p>
+                <div className="flex items-center gap-3 text-gray-500">
+                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                  <span>Session running in background</span>
+                </div>
               )}
             </div>
           </div>

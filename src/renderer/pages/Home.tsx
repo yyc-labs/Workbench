@@ -11,6 +11,8 @@ import {
   Settings,
   Plus,
   Zap,
+  Pin,
+  FolderOpen,
 } from 'lucide-react'
 
 // ── Toolbar ──────────────────────────────────────────────────────
@@ -274,8 +276,11 @@ export function HomePage() {
 
           {pinnedProjects.length > 0 && (
             <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pinned</h2>
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-1 h-4 rounded-full bg-amber-400" />
+                <Pin className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />
+                <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pinned</h2>
+                <span className="text-[10px] text-gray-400">{pinnedProjects.length}</span>
               </div>
               <div className="flex flex-col gap-2">
                 {pinnedProjects.map((project, index) => (
@@ -286,10 +291,13 @@ export function HomePage() {
           )}
 
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-1 h-4 rounded-full bg-blue-400" />
+              <FolderOpen className="w-3.5 h-3.5 text-blue-500" strokeWidth={2} />
+              <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
                 {pinnedProjects.length > 0 ? 'All Projects' : 'Projects'}
               </h2>
+              <span className="text-[10px] text-gray-400">{recentProjects.length}</span>
             </div>
             {recentProjects.length > 0 ? (
               <div className="flex flex-col gap-2">

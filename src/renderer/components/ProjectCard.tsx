@@ -29,7 +29,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
   return (
     <div
-      className="group relative flex items-center gap-4 rounded-xl px-5 py-3.5 cursor-pointer
+      className="group relative flex items-center gap-4 rounded-xl px-5 py-2.5 cursor-pointer
                  transition-all duration-150 ease-out card-enter"
       style={{
         background: '#f6f6f4',
@@ -49,16 +49,31 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-gray-900 truncate">{project.name}</h3>
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${
-              isRuntimeAttached ? 'bg-emerald-500' : isRuntimeDetached ? 'bg-amber-500' : 'bg-gray-600'
-            }`}
-            title={
-              isRuntimeAttached ? 'Runtime Active' : isRuntimeDetached ? 'Runtime Background' : 'Runtime Offline'
-            }
-          />
+          {/* Runtime status */}
+          {isRuntimeActive ? (
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${
+                isRuntimeAttached ? 'text-emerald-600' : 'text-amber-600'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isRuntimeAttached ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+              />
+              {isRuntimeAttached ? 'Active' : 'Background'}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 font-medium shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+              Offline
+            </span>
+          )}
           {isDevRunning && (
-            <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" title="Dev server running" />
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              Dev
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -81,8 +96,8 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         )}
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
+      {/* Actions — compact grouped */}
+      <div className="flex items-center gap-1 shrink-0">
         {isDevRunning && devUrl && (
           <button
             className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 transition-colors max-w-[200px]"

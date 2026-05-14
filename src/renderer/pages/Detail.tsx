@@ -85,7 +85,7 @@ export function DetailPage() {
     <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* ── Header ── */}
       <header
-        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5 mb-4"
+        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5"
         style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
       >
         <div className="flex items-center gap-4 min-w-0">
@@ -103,27 +103,25 @@ export function DetailPage() {
             <p className="text-xs text-gray-500 truncate">{project.path}</p>
           </div>
 
-          {/* Status badge */}
-          <div
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${
-              isRunning
-                ? 'bg-emerald-500/10 text-emerald-600'
-                : isDetached
-                  ? 'bg-amber-500/10 text-amber-600'
-                  : 'bg-[#eae9e6] text-gray-500'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
+          {/* Status — inline text when stopped, pill badge when active */}
+          {isActive ? (
+            <div
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium shrink-0 ${
                 isRunning
-                  ? 'bg-emerald-500'
-                  : isDetached
-                    ? 'bg-amber-500'
-                    : 'bg-gray-400'
+                  ? 'bg-emerald-500/10 text-emerald-600'
+                  : 'bg-amber-500/10 text-amber-600'
               }`}
-            />
-            {isRunning ? 'Running' : isDetached ? 'Session Available' : 'Stopped'}
-          </div>
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isRunning ? 'bg-emerald-500' : 'bg-amber-500'
+                }`}
+              />
+              {isRunning ? 'Running' : 'Session Available'}
+            </div>
+          ) : (
+            <span className="text-[11px] text-gray-400 font-medium shrink-0">Stopped</span>
+          )}
         </div>
 
         {/* Action buttons + URL */}
@@ -173,7 +171,7 @@ export function DetailPage() {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex-1 flex flex-col min-h-0 px-6 pb-6">
+      <div className="flex-1 flex flex-col min-h-0 px-6 pb-6 pt-6">
         {/* Command bar */}
         <div className="flex items-center gap-2 rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-3 py-2 mb-4">
           <span className="text-xs text-gray-400 select-none">$</span>
@@ -197,19 +195,13 @@ export function DetailPage() {
           )}
         </div>
 
-        {/* Info cards */}
-        <div className="grid grid-cols-3 gap-3 mb-4 shrink-0">
+        {/* Info cards — PATH takes full width, Type + PKG MGR below */}
+        <div className="space-y-3 mb-4 shrink-0">
           <InfoCard label="Path" value={project.path} icon={Folder} />
-          <InfoCard
-            label="Type"
-            value={project.type}
-            icon={Code2}
-          />
-          <InfoCard
-            label="Package Manager"
-            value={project.packageManager || 'npm'}
-            icon={Package}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <InfoCard label="Type" value={project.type} icon={Code2} />
+            <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
+          </div>
         </div>
 
         {/* Terminal shell — graphite panel */}
