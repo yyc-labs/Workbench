@@ -6,6 +6,9 @@ import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
+import { wslBridge } from './wsl-bridge'
+import { setRuntimeEntry, removeRuntimeEntry } from './runtime-registry'
+import { spawn } from 'child_process'
 import type { Capability } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -100,6 +103,52 @@ function registerIpcHandlers(): void {
       return result.filePaths[0]
     }
     return null
+  })
+
+  // ── Runtime Manager ──────────────────────────────────────
+
+  ipcMain.handle(IPC.RUNTIME_START, async (_event, projectId: string, projectPath: string, sessionName: string) => {
+    const distro = bootCapability?.wslDistro || 'Ubuntu'
+    const wslPath = wslBridge.toWslPath(projectPath)
+    const scriptPath = '~/tools/claude-code-script/start-claude-with-env.sh'
+
+    // Array args — no shell string interpolation, avoids quoting bugs with
+    // paths containing quotes, spaces, $, (, ), etc.
+    const child = spawn('wsl.exe', [
+      '-d', distro,
+      '--', 'bash', '-lc',
+      `nohup "${scriptPath}" "${wslPath}" >/dev/null 2>&1 & disown`
+    ], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+
+    // Persist metadata only (not used as session existence source of truth)
+    setRuntimeEntry({
+      projectId,
+      sessionName,
+      createdAt: Date.now(),
+      lastOpened: Date.now(),
+    })
+
+    return true
+  })
+
+  ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
+    const distro = bootCapability?.wslDistro || 'Ubuntu'
+
+    const child = spawn('wt.exe', [
+      'wsl', '-d', distro,
+      '--', 'bash', '-lc',
+      `exec tmux attach-session -t '${sessionName}'`
+    ], {
+      detached: true,
+      stdio: 'ignore',
+    })
+    child.unref()
+
+    return true
   })
 
   // ── WSL / tmux ──────────────────────────────────────────

@@ -26,6 +26,8 @@ declare global {
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
       killTmuxSession: (id: string) => Promise<boolean>
       rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
+      startRuntime: (projectId: string, projectPath: string, sessionName: string) => Promise<boolean>
+      openTerminal: (sessionName: string) => Promise<boolean>
     }
   }
 }

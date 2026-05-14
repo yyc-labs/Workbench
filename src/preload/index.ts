@@ -36,6 +36,12 @@ const api = {
 
   rehydrateTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_REHYDRATE),
 
+  startRuntime: (projectId: string, projectPath: string, sessionName: string) =>
+    ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, sessionName),
+
+  openTerminal: (sessionName: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName),
+
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {
