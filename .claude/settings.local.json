@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm view *)",
+      "Bash(python3 -c \"import json,sys; vs=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(vs[-10:]\\)\\)\")",
+      "Bash(npm pack *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('version:', d.get\\('version'\\)\\); deps=d.get\\('dependencies',{}\\); print\\('key deps:', {k:v for k,v in deps.items\\(\\) if k in ['@types/node','typescript']}\\)\")",
+      "Bash(npm info *)",
+      "Bash(python3 -c \"import json,sys; vs=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\([v for v in vs if v.startswith\\('5.'\\) or v.startswith\\('4.'\\)][-10:]\\)\\)\")",
+      "Bash(npm install *)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(npx tsc *)",
+      "Bash(npx electron-vite *)",
+      "Bash(npx electron *)",
+      "Bash(node node_modules/electron/install.js)",
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('@xterm/xterm/package.json'\\)\\)\\)\")",
+      "Bash(npx shadcn@latest *)",
+      "Bash(timeout 15 npm run dev)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npm run *)",
+      "Bash(netstat -tlnp)",
+      "Bash(grep -n '--color-\\\\|@theme\\\\|@import\\\\|@layer\\\\|@utility\\\\|@variant\\\\|--radius\\\\|\\\\.card-enter\\\\|\\\\[data-theme\\\\|\\\\.btn\\\\b\\\\|\\\\.detail' /mnt/d/tools/ide-electron/out/renderer/assets/index-Vv9TNdOE.css)",
+      "Bash(grep -c '--color-' /mnt/d/tools/ide-electron/out/renderer/assets/index-Vv9TNdOE.css)",
+      "Bash(npm cache *)",
+      "Bash([ -f \"/mnt/d/tools/ide-electron/$f\" ])",
+      "Bash(break)",
+      "Bash(git commit *)",
+      "Bash(wsl.exe -l -q)",
+      "Bash(echo \"---EXIT:$?\")",
+      "Bash(wsl.exe *)",
+      "Bash(git *)",
+      "Skill(superpowers:writing-plans)"
+    ]
+  }
+}

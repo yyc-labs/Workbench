@@ -10,7 +10,6 @@ import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
-import { terminalHost } from './terminal-host'
 import type { Capability } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
@@ -159,15 +158,27 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
-    if (!bootCapability) return false
+    const distro = bootCapability?.wslDistro || 'Ubuntu'
 
-    // 1. Ensure singleton Windows Terminal + tmux is running
-    const ok = await terminalHost.ensureHost(bootCapability)
-    if (!ok) return false
+    return new Promise<boolean>((resolve) => {
+      const child = spawn('wt.exe', [
+        'wsl', '-d', distro,
+        '--', 'bash', '-lc',
+        `exec tmux attach-session -t '${sessionName}'`
+      ], {
+        detached: true,
+        stdio: 'ignore',
+      })
 
-    // 2. Switch the client to the target tmux session
-    const distro = bootCapability.wslDistro || 'Ubuntu'
-    return terminalHost.switchSession(sessionName, distro)
+      child.on('error', (err) => {
+        console.error('[runtime:open-terminal] spawn failed:', err.message)
+        resolve(false)
+      })
+
+      child.on('close', () => resolve(true))
+
+      child.unref()
+    })
   })
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {

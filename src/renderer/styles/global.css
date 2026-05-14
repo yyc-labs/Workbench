@@ -175,6 +175,6 @@ body {
   50%      { border-color: rgba(37,99,235,0.4); box-shadow: 0 0 24px 0 rgba(37,99,235,0.12); }
 }
 .drag-overlay-border { animation: drag-pulse 2s ease-in-out infinite; pointer-events: none; }
-.xterm-container {
+/* .xterm-container {
   background: #343840;
-}
+} */
