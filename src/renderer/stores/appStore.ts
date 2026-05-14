@@ -68,7 +68,7 @@ interface AppState {
   refreshSessions: () => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
-  openTerminal: (projectId: string) => Promise<void>
+  openTerminal: (projectId: string) => Promise<boolean>
 }
 
 async function persistProjects(projects: ProjectInfo[]): Promise<void> {
@@ -396,7 +396,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openTerminal: async (projectId: string) => {
     const session = get().sessions[projectId]
-    if (!session) return
-    await runtimeManager.openTerminal(session.sessionName)
+    console.log('[store.openTerminal]', { projectId, hasSession: !!session, sessionName: session?.sessionName })
+    if (!session) { console.log('[store.openTerminal] BAIL — no session'); return false }
+    console.log('[store.openTerminal] calling runtimeManager.openTerminal...')
+    const ok = await runtimeManager.openTerminal(session.sessionName)
+    console.log('[store.openTerminal] runtimeManager returned', ok)
+    return ok
   },
 }))

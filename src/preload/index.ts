@@ -42,8 +42,12 @@ const api = {
   listRuntimeEntries: () =>
     ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),
 
-  openTerminal: (sessionName: string) =>
-    ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName),
+  openTerminal: (sessionName: string) => {
+    console.log('[preload.openTerminal] invoking IPC SHELL_OPEN_TERMINAL sessionName=', sessionName)
+    return ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName)
+      .then((r) => { console.log('[preload.openTerminal] IPC resolved', r); return r })
+      .catch((e) => { console.error('[preload.openTerminal] IPC rejected', e); throw e })
+  },
 
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void

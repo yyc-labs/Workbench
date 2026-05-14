@@ -37,9 +37,12 @@ class RuntimeManager {
     return window.electronAPI.startRuntime(projectId, projectPath)
   }
 
-  /** Open Windows Terminal attached to an existing tmux session. */
-  async openTerminal(sessionName: string): Promise<void> {
-    await window.electronAPI.openTerminal(sessionName)
+  /** Open the singleton Windows Terminal and switch to the target tmux session. */
+  async openTerminal(sessionName: string): Promise<boolean> {
+    console.log('[RuntimeManager.openTerminal] sessionName=', sessionName)
+    const result = await window.electronAPI.openTerminal(sessionName)
+    console.log('[RuntimeManager.openTerminal] IPC returned', result)
+    return result
   }
 
   /** Stop — kills the tmux session by name. */

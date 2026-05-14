@@ -70,9 +70,15 @@ export function RuntimePage() {
   }, [projectId, stopRuntime])
 
   const handleOpenTerminal = useCallback(async () => {
-    if (!projectId || !session) return
+    console.log('[RuntimePage] handleOpenTerminal called', { projectId, hasSession: !!session, sessionName: session?.sessionName, sessionStatus: session?.status })
+    if (!projectId || !session) {
+      console.log('[RuntimePage] handleOpenTerminal BAIL — projectId or session missing')
+      return
+    }
     try {
-      await openTerminal(projectId)
+      console.log('[RuntimePage] calling store.openTerminal...')
+      const result = await openTerminal(projectId)
+      console.log('[RuntimePage] store.openTerminal returned', result)
     } catch (err) {
       console.error('[RuntimePage] open terminal failed:', err)
     }
