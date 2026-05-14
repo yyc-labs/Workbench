@@ -85,7 +85,7 @@ export function DetailPage() {
     <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* ── Header ── */}
       <header
-        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5"
+        className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5 mb-4"
         style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
       >
         <div className="flex items-center gap-4 min-w-0">
@@ -214,24 +214,46 @@ export function DetailPage() {
 
         {/* Terminal shell — graphite panel */}
         <div
-          className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
+          className="flex-1 min-h-0 overflow-hidden flex flex-col"
           style={{
-            background: '#3a3d44',
+            background: '#2f333b',
             borderRadius: '20px',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 24px rgba(0,0,0,0.06)',
+            boxShadow: `
+              inset 0 1px 0 rgba(255,255,255,0.04),
+              0 0 0 1px rgba(255,255,255,0.03),
+              0 20px 48px rgba(0,0,0,0.18)
+            `,
           }}
         >
           {/* Title bar — dark, integrated into shell */}
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-            <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
-            <span className="ml-3 text-[11px] text-white/25 font-mono select-none">
+          <div
+            className="flex items-center shrink-0 border-b border-white/5"
+            style={{ gap: '6px', padding: '11px 14px' }}
+          >
+            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
+            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
+            <span className="rounded-full bg-white/10" style={{ width: '10px', height: '10px' }} />
+            <span
+              className="font-mono select-none uppercase tracking-widest font-medium"
+              style={{
+                marginLeft: '10px',
+                fontSize: '10px',
+                color: 'rgba(255,255,255,0.2)',
+              }}
+            >
               terminal
             </span>
           </div>
-          {/* xterm area */}
-          <div className="flex-1 min-h-0 m-3 overflow-hidden xterm-container" style={{ borderRadius: '14px' }}>
+          {/* xterm inner area */}
+          <div
+            className="flex-1 min-h-0 overflow-hidden xterm-container"
+            style={{
+              margin: '12px',
+              borderRadius: '14px',
+              background: '#282c34',
+              padding: '16px 18px',
+            }}
+          >
             <Terminal projectId={projectId} />
           </div>
         </div>

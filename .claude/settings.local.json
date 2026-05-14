@@ -35,7 +35,8 @@
       "Bash(echo \"---EXIT:$?\")",
       "Bash(wsl.exe *)",
       "Bash(git *)",
-      "Skill(superpowers:writing-plans)"
+      "Skill(superpowers:writing-plans)",
+      "Skill(git-auto-commit)"
     ]
   }
 }
