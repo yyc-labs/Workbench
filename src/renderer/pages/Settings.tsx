@@ -206,7 +206,7 @@ export function SettingsPage() {
       </header>
 
       {/* Body */}
-      <div className="flex-1 flex min-h-0 px-6 pb-8">
+      <div className="flex-1 flex min-h-0 px-6 pb-8 pt-6">
         <Sidebar active={section} onSelect={setSection} />
 
         <main className="flex-1 min-w-0 ml-8">
