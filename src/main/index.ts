@@ -16,12 +16,9 @@ let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
-/** Title prefix used to find and focus the external terminal window */
-const terminalTitlePrefix = 'IDE-claude:'
-
 function focusTerminalWindow(sessionName: string): void {
   exec(
-    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate('${terminalTitlePrefix}${sessionName}')"`,
+    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate('${sessionName}')"`,
     { timeout: 3000 },
     () => {} // fire-and-forget
   )
@@ -184,10 +181,9 @@ function registerIpcHandlers(): void {
 
     return new Promise<boolean>((resolve) => {
       const child = spawn('wt.exe', [
-        '--title', `${terminalTitlePrefix}${sessionName}`,
         'wsl', '-d', distro,
         '--', 'bash', '-c',
-        `tmux set-option -t '${sessionName}' set-titles off 2>/dev/null; exec tmux attach-session -t '${sessionName}'`
+        `exec tmux attach-session -t '${sessionName}'`
       ], {
         detached: true,
         stdio: 'ignore',
