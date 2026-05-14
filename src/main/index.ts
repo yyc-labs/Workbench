@@ -17,19 +17,40 @@ let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
 function focusTerminalWindow(sessionName: string): void {
-  // Register Win32 helpers, then find the window whose title matches the session,
-  // restore if minimized (SW_RESTORE=9), and bring to foreground.
   const ps = [
-    "$d='[DllImport(\"user32.dll\")]public static extern bool'",
-    '$null=Add-Type -MemberDefinition "$d SetForegroundWindow(IntPtr h)" -Name W32 -Namespace TF',
-    '$null=Add-Type -MemberDefinition "$d ShowWindow(IntPtr h,int c)" -Name W32S -Namespace TF',
-    '$null=Add-Type -MemberDefinition "$d IsIconic(IntPtr h)" -Name W32I -Namespace TF',
-    "Get-Process|?{$_.MainWindowTitle -match '" + sessionName + "'}|%{",
-    '$h=$_.MainWindowHandle;if($h){',
-    'if([TF.W32I]::IsIconic($h)){[TF.W32S]::ShowWindow($h,9)}',
-    '[TF.W32]::SetForegroundWindow($h)}}',
-  ].join(' ')
-  spawn('powershell', ['-Command', ps], { detached: true, stdio: 'ignore' }).unref()
+    'Add-Type -TypeDefinition @\'',
+    'using System;',
+    'using System.Runtime.InteropServices;',
+    'using System.Text;',
+    'public class TF {',
+    '  [DllImport("user32.dll")]',
+    '  public static extern bool EnumWindows(EnumWinProc lpEnumFunc, IntPtr lParam);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern bool IsIconic(IntPtr hWnd);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);',
+    '  [DllImport("user32.dll")]',
+    '  public static extern bool SetForegroundWindow(IntPtr hWnd);',
+    '  public delegate bool EnumWinProc(IntPtr hWnd, IntPtr lParam);',
+    '}',
+    '\'@',
+    '$sn = "' + sessionName + '"',
+    '$found = [IntPtr]::Zero',
+    '$cb = [TF+EnumWinProc]{ param($h,$l)',
+    '  $sb = New-Object System.Text.StringBuilder 256',
+    '  [TF]::GetWindowText($h, $sb, 256) | Out-Null',
+    '  if ($sb.ToString().Contains($sn)) { $script:found = $h; return $false }',
+    '  return $true',
+    '}',
+    '[TF]::EnumWindows($cb, [IntPtr]::Zero)',
+    'if ($script:found -ne [IntPtr]::Zero) {',
+    '  if ([TF]::IsIconic($script:found)) { [TF]::ShowWindow($script:found, 9) | Out-Null }',
+    '  [TF]::SetForegroundWindow($script:found) | Out-Null',
+    '}',
+  ].join('\n')
+  spawn('powershell', ['-NoProfile', '-Command', ps], { detached: true, stdio: 'ignore' }).unref()
 }
 
 function createWindow(): void {
