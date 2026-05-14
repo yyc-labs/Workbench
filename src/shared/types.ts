@@ -90,3 +90,25 @@ export interface RecoveredSession {
   status: 'detached'
   createdAt: number
 }
+
+/** Runtime session status — mirrors tmux reality, NOT user-facing labels.
+ *  UI layer maps: attached→Active, detached→Background, stopped→Offline. */
+export type RuntimeStatus = 'attached' | 'detached' | 'stopped'
+
+export interface SessionRuntime {
+  projectId: string
+  sessionName: string
+  status: RuntimeStatus
+  createdAt: number
+}
+
+export interface RuntimeEntry {
+  projectId: string
+  sessionName: string
+  createdAt: number
+  lastOpened: number
+}
+
+export interface RuntimeRegistry {
+  entries: Record<string, RuntimeEntry>
+}
