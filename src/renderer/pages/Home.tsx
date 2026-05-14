@@ -30,14 +30,14 @@ function Toolbar({
 }) {
   return (
     <header
-      className="h-14 flex items-center px-6 gap-4 shrink-0 border-b border-white/5"
-      style={{ background: '#111318' }}
+      className="h-14 flex items-center px-6 gap-4 shrink-0 border-b border-black/5"
+      style={{ background: '#f6f6f4' }}
     >
       <div className="flex items-center gap-2.5 mr-4">
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
           <Zap className="w-4 h-4 text-white" />
         </div>
-        <span className="text-sm font-semibold text-[#e1e4e8]">Claude Runtime</span>
+        <span className="text-sm font-semibold text-gray-900">Claude Runtime</span>
       </div>
 
       <div className="flex-1 max-w-lg relative">
@@ -47,7 +47,7 @@ function Toolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-9 pl-9 text-sm bg-white/5 border-white/10 text-[#e1e4e8] placeholder:text-gray-600 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
+          className="h-9 pl-9 text-sm bg-[#eae9e6] border-[#e2e2df] text-gray-900 placeholder:text-gray-400 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
         />
       </div>
 
@@ -57,7 +57,7 @@ function Toolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-gray-500 hover:text-gray-300 hover:bg-white/5"
+          className="h-8 w-8 text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6]"
           onClick={onSettingsClick}
         >
           <Settings className="w-4 h-4" strokeWidth={1.8} />
@@ -199,42 +199,42 @@ export function HomePage() {
   // ── Empty state ──
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col bg-[#0b0d10]">
+      <div className="h-screen flex flex-col bg-[#f1f1ef]">
         {isDragOver && <DragOverlay />}
         <header
-          className="h-14 flex items-center px-6 shrink-0 border-b border-white/5"
-          style={{ background: '#111318' }}
+          className="h-14 flex items-center px-6 shrink-0 border-b border-black/5"
+          style={{ background: '#f6f6f4' }}
         >
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-semibold text-[#e1e4e8]">Claude Runtime</span>
+            <span className="text-sm font-semibold text-gray-900">Claude Runtime</span>
           </div>
           <div className="flex-1" />
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-gray-500 hover:text-gray-300 hover:bg-white/5"
+            className="h-8 w-8 text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6]"
             onClick={() => navigate('/settings')}
           >
             <Settings className="w-4 h-4" strokeWidth={1.8} />
           </Button>
         </header>
-        <div className="flex-1 flex flex-col items-center justify-center" style={{ background: '#0b0d10' }}>
+        <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
-            <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
-              <FolderPlus className="w-10 h-10 text-gray-700" strokeWidth={1.5} />
+            <div className="w-20 h-20 rounded-2xl bg-[#eae9e6] border border-[#e2e2df] flex items-center justify-center">
+              <FolderPlus className="w-10 h-10 text-gray-400" strokeWidth={1.5} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-[#e1e4e8] mb-2">Add a project folder</h1>
+              <h1 className="text-xl font-semibold text-gray-900 mb-2">Add a project folder</h1>
               <p className="text-sm text-gray-500">Drop a folder or browse to get started</p>
             </div>
             <Button onClick={handleAddFolder} className="gap-2 rounded-xl h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white" size="lg">
               <Plus className="w-4 h-4" strokeWidth={1.8} />
               Add Project Folder
             </Button>
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-gray-400">
               Node.js &middot; Python &middot; Vite &middot; Next.js &middot; Django &middot; more
             </p>
           </div>
@@ -245,7 +245,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col bg-[#0b0d10]">
+    <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {isDragOver && <DragOverlay />}
       <Toolbar
         searchQuery={searchQuery}
@@ -257,12 +257,12 @@ export function HomePage() {
       <ScrollArea className="flex-1">
         <div className="max-w-5xl mx-auto w-full px-8 py-8">
           <div className="mb-8">
-            <h1 className="text-lg font-semibold text-[#e1e4e8]">Projects</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
               <span>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
               {runningCount > 0 && (
                 <>
-                  <span className="text-gray-700">&middot;</span>
+                  <span className="text-gray-400">&middot;</span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {runningCount} runtime{runningCount !== 1 ? 's' : ''} active
@@ -298,7 +298,7 @@ export function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16 text-sm text-gray-600">
+              <div className="text-center py-16 text-sm text-gray-400">
                 {searchQuery ? 'No projects match your search' : 'No projects yet'}
               </div>
             )}

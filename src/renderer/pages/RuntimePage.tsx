@@ -80,10 +80,10 @@ export function RuntimePage() {
 
   if (!project || !projectId) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#0b0d10]">
-        <h2 className="text-lg font-semibold text-[#e1e4e8]">Project not found</h2>
+      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#f1f1ef]">
+        <h2 className="text-lg font-semibold text-gray-900">Project not found</h2>
         <button
-          className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-4 h-4" strokeWidth={1.8} />
@@ -94,22 +94,22 @@ export function RuntimePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#0b0d10]">
+    <div className="h-screen flex flex-col bg-[#f1f1ef]">
       {/* ── Header ── */}
       <header
-        className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-white/5"
-        style={{ background: '#111318' }}
+        className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-black/5"
+        style={{ background: '#f6f6f4' }}
       >
         <div className="flex items-center gap-4 min-w-0">
           <button
-            className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-400 hover:bg-[#eae9e6] transition-colors"
             onClick={() => navigate('/')}
           >
             <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
           </button>
 
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-[#e1e4e8] tracking-tight truncate">
+            <h1 className="text-lg font-semibold text-gray-900 tracking-tight truncate">
               {project.name}
             </h1>
             <p className="text-xs text-gray-500 truncate">{project.path}</p>
@@ -119,10 +119,10 @@ export function RuntimePage() {
           <div
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${
               isAttached
-                ? 'bg-emerald-500/10 text-emerald-400'
+                ? 'bg-emerald-500/10 text-emerald-600'
                 : !isStopped
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'bg-white/5 text-gray-500'
+                  ? 'bg-amber-500/10 text-amber-600'
+                  : 'bg-[#eae9e6] text-gray-500'
             }`}
           >
             <span
@@ -142,7 +142,7 @@ export function RuntimePage() {
         <div className="flex items-center gap-2 shrink-0">
           {isDevRunning && devUrl && (
             <button
-              className="inline-flex items-center gap-1.5 text-xs text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg px-3 py-1.5 transition-colors max-w-[200px]"
+              className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors max-w-[200px]"
               onClick={() => window.electronAPI.openExternal(devUrl)}
             >
               <ExternalLink className="w-3 h-3" />
@@ -152,8 +152,8 @@ export function RuntimePage() {
           <button
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               isDevRunning
-                ? 'border border-red-500/20 text-red-400 hover:bg-red-500/10'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-white/10'
+                ? 'border border-red-200 text-red-500 hover:bg-red-50'
+                : 'text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]'
             }`}
             onClick={() =>
               isDevRunning ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
@@ -173,14 +173,14 @@ export function RuntimePage() {
         <div className="max-w-2xl mx-auto w-full space-y-6">
           {/* Runtime Status Card */}
           <div
-            className="rounded-2xl border border-white/5 p-6"
-            style={{ background: '#111318' }}
+            className="rounded-2xl border border-[#e2e2df] p-6"
+            style={{ background: '#f6f6f4' }}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-[#e1e4e8] uppercase tracking-wider">
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
                 Claude Runtime
               </h2>
-              <span className="text-[11px] text-gray-600 font-mono">
+              <span className="text-[11px] text-gray-400 font-mono">
                 {session?.sessionName ?? '—'}
               </span>
             </div>
@@ -206,12 +206,12 @@ export function RuntimePage() {
                 </p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-300 font-mono mb-1.5">
+                <p className="text-xs text-gray-700 font-mono mb-1.5">
                   {session?.createdAt
                     ? new Date(session.createdAt).toLocaleTimeString()
                     : '—'}
                 </p>
-                <p className="text-[10px] text-gray-600">Created</p>
+                <p className="text-[10px] text-gray-400">Created</p>
               </div>
             </div>
 
@@ -241,7 +241,7 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-gray-400 hover:text-gray-200 hover:bg-white/5 border border-white/10 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df] disabled:opacity-50"
                     onClick={handleRestart}
                   >
                     {actionLoading === 'restart' ? (
@@ -253,7 +253,7 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-red-500 hover:text-red-600 hover:bg-red-50 border border-red-200 disabled:opacity-50"
                     onClick={handleStopRuntime}
                   >
                     {actionLoading === 'stop' ? (
@@ -270,15 +270,15 @@ export function RuntimePage() {
 
           {/* Recent Activity (placeholder) */}
           <div
-            className="rounded-2xl border border-white/5 p-6"
-            style={{ background: '#111318' }}
+            className="rounded-2xl border border-[#e2e2df] p-6"
+            style={{ background: '#f6f6f4' }}
           >
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
               Recent Activity
             </h3>
             <div className="space-y-2 text-sm font-mono">
               {isStopped ? (
-                <p className="text-gray-600">— Press "Start Runtime" to launch Claude</p>
+                <p className="text-gray-400">— Press "Start Runtime" to launch Claude</p>
               ) : isAttached ? (
                 <p className="text-gray-500">— Claude runtime active, terminal connected</p>
               ) : (
@@ -289,28 +289,28 @@ export function RuntimePage() {
 
           {/* Runtime Info */}
           <div
-            className="rounded-2xl border border-white/5 p-6"
-            style={{ background: '#111318' }}
+            className="rounded-2xl border border-[#e2e2df] p-6"
+            style={{ background: '#f6f6f4' }}
           >
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
               Runtime Info
             </h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-[11px] text-gray-600 mb-0.5">Session</p>
-                <p className="text-[#e1e4e8] font-mono text-xs">{session?.sessionName ?? '—'}</p>
+                <p className="text-[11px] text-gray-400 mb-0.5">Session</p>
+                <p className="text-gray-900 font-mono text-xs">{session?.sessionName ?? '—'}</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-600 mb-0.5">Type</p>
-                <p className="text-[#e1e4e8]">{project.type}</p>
+                <p className="text-[11px] text-gray-400 mb-0.5">Type</p>
+                <p className="text-gray-900">{project.type}</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-600 mb-0.5">Runtime</p>
-                <p className="text-[#e1e4e8] font-mono text-xs">Claude Code</p>
+                <p className="text-[11px] text-gray-400 mb-0.5">Runtime</p>
+                <p className="text-gray-900 font-mono text-xs">Claude Code</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-600 mb-0.5">Backend</p>
-                <p className="text-[#e1e4e8] font-mono text-xs">tmux</p>
+                <p className="text-[11px] text-gray-400 mb-0.5">Backend</p>
+                <p className="text-gray-900 font-mono text-xs">tmux</p>
               </div>
             </div>
           </div>
