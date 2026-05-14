@@ -251,6 +251,17 @@ export function RuntimePage() {
 
             {/* Action buttons */}
             <div className="flex items-center gap-3">
+              {/* Open Terminal — always available once a runtime entry exists */}
+              {session && (
+                <button
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                  onClick={handleOpenTerminal}
+                >
+                  <Terminal className="w-4 h-4" />
+                  Open Terminal
+                </button>
+              )}
+
               {isStopped ? (
                 <button
                   disabled={isLoading}
@@ -267,22 +278,11 @@ export function RuntimePage() {
               ) : (
                 <>
                   <button
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
-                    onClick={handleOpenTerminal}
-                  >
-                    <Terminal className="w-4 h-4" />
-                    Open Terminal
-                  </button>
-                  <button
                     disabled={isLoading}
                     className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df] disabled:opacity-50"
                     onClick={handleRestart}
                   >
-                    {actionLoading === 'restart' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
+                    <RefreshCw className={`w-4 h-4 ${actionLoading === 'restart' ? 'animate-spin' : ''}`} />
                     Restart
                   </button>
                   <button
