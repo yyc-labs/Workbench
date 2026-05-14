@@ -33,10 +33,10 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
       rightClickSelectsWord: true,
       macOptionIsMeta: true,
       theme: {
-        background: '#2b2f36',
+        background: '#343840',
         foreground: '#d4d4d4',
         cursor: '#8b949e',
-        cursorAccent: '#343840',
+        cursorAccent: '#3a3d44',
         selectionBackground: 'rgba(255,255,255,0.10)',
         black: '#585d67',
         red: '#e06c75',
@@ -171,8 +171,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
   return (
     <div
       ref={containerRef}
-      className="h-full w-full"
-      style={{ backgroundColor: '#2b2f36' }}
+      className="h-full w-full xterm-container"
       onClick={() => xtermRef.current?.focus()}
     />
   )

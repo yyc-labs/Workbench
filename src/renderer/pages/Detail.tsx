@@ -86,7 +86,7 @@ export function DetailPage() {
       {/* ── Header ── */}
       <header
         className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-black/5"
-        style={{ background: 'rgba(255,255,255,0.88)' }}
+        style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
       >
         <div className="flex items-center gap-4 min-w-0">
           <button
@@ -215,7 +215,11 @@ export function DetailPage() {
         {/* Terminal shell — graphite panel */}
         <div
           className="flex-1 min-h-0 overflow-hidden flex flex-col border border-white/5"
-          style={{ background: '#2b2f36' ,borderRadius: '20px' }}
+          style={{
+            background: '#3a3d44',
+            borderRadius: '20px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 24px rgba(0,0,0,0.06)',
+          }}
         >
           {/* Title bar — dark, integrated into shell */}
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5 shrink-0">
@@ -227,7 +231,7 @@ export function DetailPage() {
             </span>
           </div>
           {/* xterm area */}
-          <div className="flex-1 min-h-0 m-3 overflow-hidden bg-[#2b2f36]">
+          <div className="flex-1 min-h-0 m-3 overflow-hidden xterm-container" style={{ borderRadius: '14px' }}>
             <Terminal projectId={projectId} />
           </div>
         </div>
