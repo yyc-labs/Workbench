@@ -37,10 +37,11 @@ class RuntimeManager {
     return window.electronAPI.startRuntime(projectId, projectPath)
   }
 
-  /** Open the singleton Windows Terminal and switch to the target tmux session. */
-  async openTerminal(sessionName: string): Promise<boolean> {
-    console.log('[RuntimeManager.openTerminal] sessionName=', sessionName)
-    const result = await window.electronAPI.openTerminal(sessionName)
+  /** Open the singleton Windows Terminal and switch to the target tmux session.
+   *   statusHint: when 'attached', main process skips WSL tmux checks and focuses directly. */
+  async openTerminal(sessionName: string, statusHint?: string): Promise<boolean> {
+    console.log('[RuntimeManager.openTerminal] sessionName=', sessionName, 'statusHint=', statusHint)
+    const result = await window.electronAPI.openTerminal(sessionName, statusHint)
     console.log('[RuntimeManager.openTerminal] IPC returned', result)
     return result
   }

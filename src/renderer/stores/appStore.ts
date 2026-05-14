@@ -29,7 +29,7 @@ declare global {
       rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
       startRuntime: (projectId: string, projectPath: string) => Promise<boolean>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
-      openTerminal: (sessionName: string) => Promise<boolean>
+      openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
     }
   }
 }
@@ -68,7 +68,7 @@ interface AppState {
   refreshSessions: () => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
-  openTerminal: (projectId: string) => Promise<boolean>
+  openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
 }
 
 async function persistProjects(projects: ProjectInfo[]): Promise<void> {
@@ -394,12 +394,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refreshSessions()
   },
 
-  openTerminal: async (projectId: string) => {
+  openTerminal: async (projectId: string, statusHint?: string) => {
     const session = get().sessions[projectId]
     console.log('[store.openTerminal]', { projectId, hasSession: !!session, sessionName: session?.sessionName })
     if (!session) { console.log('[store.openTerminal] BAIL — no session'); return false }
     console.log('[store.openTerminal] calling runtimeManager.openTerminal...')
-    const ok = await runtimeManager.openTerminal(session.sessionName)
+    const ok = await runtimeManager.openTerminal(session.sessionName, statusHint)
     console.log('[store.openTerminal] runtimeManager returned', ok)
     return ok
   },

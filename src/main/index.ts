@@ -253,14 +253,21 @@ function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string) => {
-    console.log(`[open-terminal] sessionName="${sessionName}"`)
-    // Silent pre-check: session must exist in tmux
+  ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string, statusHint?: string) => {
+    console.log(`[open-terminal] sessionName="${sessionName}" statusHint=${statusHint ?? 'none'}`)
+
+    // Fast path: renderer already knows session is attached — skip WSL checks entirely
+    if (statusHint === 'attached') {
+      console.log('[open-terminal] fast path — skipping WSL, focusing directly')
+      focusTerminalWindow(sessionName)
+      return true
+    }
+
+    // Slow path: check tmux session existence and client count via WSL
     const exists = await tmuxManager.sessionExists(sessionName)
     console.log(`[open-terminal] sessionExists=${exists}`)
     if (!exists) return false
 
-    // If a terminal is already attached to this session, focus it — don't open a new one
     const clients = await tmuxManager.countClients(sessionName)
     console.log(`[open-terminal] clients=${clients}`)
     if (clients > 0) {

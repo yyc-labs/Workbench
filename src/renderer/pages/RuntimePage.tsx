@@ -75,12 +75,15 @@ export function RuntimePage() {
       console.log('[RuntimePage] handleOpenTerminal BAIL — projectId or session missing')
       return
     }
+    setActionLoading('openTerminal')
     try {
       console.log('[RuntimePage] calling store.openTerminal...')
-      const result = await openTerminal(projectId)
+      const result = await openTerminal(projectId, session?.status)
       console.log('[RuntimePage] store.openTerminal returned', result)
     } catch (err) {
       console.error('[RuntimePage] open terminal failed:', err)
+    } finally {
+      setTimeout(() => setActionLoading(null), 200)
     }
   }, [projectId, session, openTerminal])
 
@@ -280,10 +283,15 @@ export function RuntimePage() {
               ) : (
                 <>
                   <button
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                    disabled={isLoading}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
                     onClick={handleOpenTerminal}
                   >
-                    <Terminal className="w-4 h-4" />
+                    {actionLoading === 'openTerminal' ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Terminal className="w-4 h-4" />
+                    )}
                     Open Terminal
                   </button>
                   <button
