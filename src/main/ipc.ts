@@ -18,4 +18,6 @@ export const IPC = {
   RUNTIME_START: 'runtime:start',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',
+  SHELL_OPEN_FOLDER: 'shell:openFolder',
+  SHELL_OPEN_VSCODE: 'shell:openVsCode',
 } as const

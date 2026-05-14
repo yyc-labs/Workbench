@@ -30,6 +30,8 @@ declare global {
       startRuntime: (projectId: string, projectPath: string) => Promise<boolean>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
+      openFolder: (folderPath: string) => Promise<void>
+      openInVsCode: (folderPath: string) => Promise<void>
     }
   }
 }

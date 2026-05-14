@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
-import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock } from 'lucide-react'
+import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock, FolderOpen } from 'lucide-react'
 
 /** Map tmux status → user-facing label */
 function statusLabel(status: string): string {
@@ -83,7 +83,7 @@ export function RuntimePage() {
     } catch (err) {
       console.error('[RuntimePage] open terminal failed:', err)
     } finally {
-      setTimeout(() => setActionLoading(null), 200)
+      setTimeout(() => setActionLoading(null), 300)
     }
   }, [projectId, session, openTerminal])
 
@@ -320,6 +320,26 @@ export function RuntimePage() {
                   </button>
                 </>
               )}
+            </div>
+
+            {/* Quick actions — file system */}
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]"
+                onClick={() => window.electronAPI.openFolder(project.path)}
+              >
+                <FolderOpen className="w-4 h-4" />
+                Open Folder
+              </button>
+              <button
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]"
+                onClick={() => window.electronAPI.openInVsCode(project.path)}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                  <path d="M17.5 3.5L6.5 8.5L2 12L6.5 15.5L17.5 20.5L17.5 17L9.5 12L17.5 7Z" fill="#007ACC" />
+                </svg>
+                Open in VS Code
+              </button>
             </div>
           </div>
 

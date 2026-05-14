@@ -191,6 +191,15 @@ function registerIpcHandlers(): void {
     return shell.openExternal(url)
   })
 
+  ipcMain.handle(IPC.SHELL_OPEN_FOLDER, async (_event, folderPath: string) => {
+    const err = await shell.openPath(folderPath)
+    if (err) throw new Error(`Failed to open folder: ${err}`)
+  })
+
+  ipcMain.handle(IPC.SHELL_OPEN_VSCODE, (_event, folderPath: string) => {
+    spawn('code', [folderPath], { detached: true, shell: true, stdio: 'ignore' }).unref()
+  })
+
   ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async () => {
     if (!mainWindow) return null
     const result = await dialog.showOpenDialog(mainWindow, {

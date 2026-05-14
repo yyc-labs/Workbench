@@ -24,6 +24,12 @@ const api = {
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
 
+  openFolder: (folderPath: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_FOLDER, folderPath),
+
+  openInVsCode: (folderPath: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_VSCODE, folderPath),
+
   resizeTerminal: (projectId: string, cols: number, rows: number) =>
     ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
 
