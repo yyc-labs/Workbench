@@ -29,10 +29,11 @@ function focusTerminalWindow(sessionName: string): void {
   console.log(`[focusTerminalWindow] sessionName="${sessionName}" matchTitle="${matchTitle}"`)
 
   // Write PS log to temp file — stdout may not flush with detached+pipe on Windows
-  const logFile = join(tmpdir(), `focus-terminal-${Date.now()}.log`)
+  // Use forward slashes so PS single-quoted string is a valid path
+  const logFile = join(tmpdir(), `focus-terminal-${Date.now()}.log`).replace(/\\/g, '/')
 
   const ps = [
-    `$logFile = '${logFile.replace(/\\/g, '\\\\')}'`,
+    `$logFile = '${logFile}'`,
     'Add-Type -TypeDefinition @\'',
     'using System;',
     'using System.Runtime.InteropServices;',
