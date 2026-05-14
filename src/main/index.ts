@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { join, basename } from 'path'
 import { createHash } from 'crypto'
-import { spawn, exec } from 'child_process'
+import { spawn } from 'child_process'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -17,11 +17,19 @@ let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 
 function focusTerminalWindow(sessionName: string): void {
-  exec(
-    `powershell -Command "(New-Object -ComObject WScript.Shell).AppActivate('${sessionName}')"`,
-    { timeout: 3000 },
-    () => {} // fire-and-forget
-  )
+  // Register Win32 helpers, then find the window whose title matches the session,
+  // restore if minimized (SW_RESTORE=9), and bring to foreground.
+  const ps = [
+    "$d='[DllImport(\"user32.dll\")]public static extern bool'",
+    '$null=Add-Type -MemberDefinition "$d SetForegroundWindow(IntPtr h)" -Name W32 -Namespace TF',
+    '$null=Add-Type -MemberDefinition "$d ShowWindow(IntPtr h,int c)" -Name W32S -Namespace TF',
+    '$null=Add-Type -MemberDefinition "$d IsIconic(IntPtr h)" -Name W32I -Namespace TF',
+    "Get-Process|?{$_.MainWindowTitle -match '" + sessionName + "'}|%{",
+    '$h=$_.MainWindowHandle;if($h){',
+    'if([TF.W32I]::IsIconic($h)){[TF.W32S]::ShowWindow($h,9)}',
+    '[TF.W32]::SetForegroundWindow($h)}}',
+  ].join(' ')
+  spawn('powershell', ['-Command', ps], { detached: true, stdio: 'ignore' }).unref()
 }
 
 function createWindow(): void {
