@@ -40,3 +40,20 @@ git commit -m "feat(ui):新增xxx功能"
 git commit -m "style:优化xxx页面视觉表现"
 git commit -m "chore:调整xxx工程配置"
 ```
+
+## 详细提交内容示例（用 `-` 列表）
+提交标题示例：
+`feat(ui):完善多链接展示与交互`
+
+提交说明示例：
+- appStore: `processUrls` 从单个字符串改为数组，正则全局匹配捕获全部 URL
+- 新增 `UrlPopover` 组件：hover 时弹出浮层列出所有链接，每个链接可点击打开浏览器或复制
+- `Detail`、`ProjectCard`、`RuntimePage` 的链接展示区域接入 `UrlPopover`
+
+可复制到命令行（多行 message）：
+```bash
+git commit -m "feat(ui):完善多链接展示与交互" \
+  -m "- appStore: processUrls 从单个字符串改为数组，正则全局匹配捕获全部URL" \
+  -m "- 新增 UrlPopover 组件：hover 时弹出浮层列出所有链接，每个链接可点击打开浏览器或复制" \
+  -m "- Detail、ProjectCard、RuntimePage 的链接展示区域接入 UrlPopover"
+```
