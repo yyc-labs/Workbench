@@ -41,6 +41,17 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const isDevRunning = devStatus === 'running'
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+
+  const handleOpenTerminal = useCallback(async () => {
+    if (isOpeningTerminal) return
+    setIsOpeningTerminal(true)
+    try {
+      await openTerminal(project.id, session?.status)
+    } finally {
+      setTimeout(() => setIsOpeningTerminal(false), 400)
+    }
+  }, [isOpeningTerminal, openTerminal, project.id, session?.status])
 
   return (
     <div
@@ -149,10 +160,11 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
           isDevRunning={isDevRunning}
+          isOpeningTerminal={isOpeningTerminal}
           currentCli={currentCli}
           onStartRuntime={() => startRuntime(project.id)}
           onStopRuntime={() => stopRuntime(project.id)}
-          onOpenTerminal={() => openTerminal(project.id)}
+          onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id, undefined, undefined, false)}
           onStopProject={() => stopProject(project.id)}

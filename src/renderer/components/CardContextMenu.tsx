@@ -4,6 +4,7 @@ import {
   Play,
   Square,
   Terminal,
+  RefreshCw,
   FolderOpen,
   Code2,
   Zap,
@@ -17,23 +18,25 @@ interface CardContextMenuProps {
   onClose: () => void
   isRuntimeActive: boolean
   isDevRunning: boolean
+  isOpeningTerminal: boolean
   currentCli: CliTool
-  onStartRuntime: () => void
-  onStopRuntime: () => void
-  onOpenTerminal: () => void
-  onSwitchCli: () => void
-  onStartProject: () => void
-  onStopProject: () => void
-  onOpenFolder: () => void
-  onOpenVsCode: () => void
+  onStartRuntime: () => void | Promise<void>
+  onStopRuntime: () => void | Promise<void>
+  onOpenTerminal: () => void | Promise<void>
+  onSwitchCli: () => void | Promise<void>
+  onStartProject: () => void | Promise<void>
+  onStopProject: () => void | Promise<void>
+  onOpenFolder: () => void | Promise<void>
+  onOpenVsCode: () => void | Promise<void>
 }
 
 interface MenuItem {
   label: string
   icon: React.ReactNode
   show: boolean
-  action: () => void
+  action: () => void | Promise<void>
   primary?: boolean
+  disabled?: boolean
   iconColorClass: string
 }
 
@@ -48,6 +51,7 @@ export function CardContextMenu({
   onClose,
   isRuntimeActive,
   isDevRunning,
+  isOpeningTerminal,
   currentCli,
   onStartRuntime,
   onStopRuntime,
@@ -59,8 +63,8 @@ export function CardContextMenu({
   onOpenVsCode,
 }: CardContextMenuProps) {
   const handleClick = useCallback(
-    (action: () => void) => {
-      action()
+    async (action: () => void | Promise<void>) => {
+      await action()
       onClose()
     },
     [onClose]
@@ -99,9 +103,12 @@ export function CardContextMenu({
         },
         {
           label: '打开 Terminal',
-          icon: <Terminal className="w-4 h-4" />,
+          icon: isOpeningTerminal
+            ? <RefreshCw className="w-4 h-4 animate-spin" />
+            : <Terminal className="w-4 h-4" />,
           show: isRuntimeActive,
           action: onOpenTerminal,
+          disabled: isOpeningTerminal,
           iconColorClass: 'text-primary',
         },
         {
@@ -217,12 +224,13 @@ export function CardContextMenu({
           {section.items.map((item) => (
             <button
               key={item.label}
+              disabled={item.disabled}
               className={`group w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-[color:var(--color-foreground)] transition-all duration-150 hover:bg-[color:var(--color-accent)]/70 hover:translate-x-0.5 ${
                 item.primary
                   ? 'bg-primary/10 border border-primary/20 hover:bg-primary/15'
                   : ''
-              }`}
-              onClick={() => handleClick(item.action)}
+              } ${item.disabled ? 'opacity-60 cursor-not-allowed hover:translate-x-0 hover:bg-transparent' : ''}`}
+              onClick={() => { void handleClick(item.action) }}
             >
               <span
                 className={`${item.iconColorClass} ${

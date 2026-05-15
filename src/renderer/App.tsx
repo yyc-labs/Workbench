@@ -22,7 +22,11 @@ function ThemeSync() {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
 
     const applyTheme = () => {
-      document.documentElement.setAttribute('data-theme', resolveTheme(theme))
+      const nextTheme = resolveTheme(theme)
+      if (document.documentElement.getAttribute('data-theme') !== nextTheme) {
+        document.documentElement.setAttribute('data-theme', nextTheme)
+      }
+      document.documentElement.style.colorScheme = nextTheme
     }
 
     applyTheme()

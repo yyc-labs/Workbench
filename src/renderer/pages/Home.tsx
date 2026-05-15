@@ -113,19 +113,17 @@ function DragOverlay() {
 
 export function HomePage() {
   const projects = useAppStore((s) => s.projects)
+  const isAppReady = useAppStore((s) => s.isAppReady)
   const sessions = useAppStore((s) => s.sessions)
   const searchQuery = useAppStore((s) => s.searchQuery)
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
   const addProject = useAppStore((s) => s.addProject)
-  const loadConfig = useAppStore((s) => s.loadConfig)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const navigate = useNavigate()
 
   const searchRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const dragCounter = useRef(0)
-
-  useEffect(() => { loadConfig() }, [loadConfig])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -213,6 +211,10 @@ export function HomePage() {
   )
 
   // ── Empty state ──
+  if (!isAppReady) {
+    return <div className="h-screen" />
+  }
+
   if (projects.length === 0) {
     return (
       <div className="h-screen flex flex-col">

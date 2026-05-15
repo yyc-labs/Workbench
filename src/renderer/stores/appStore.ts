@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession, SessionRuntime, RuntimeEntry } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
+const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode') as AppConfig['theme'] | null) ?? 'system'
+let initAppPromise: Promise<void> | null = null
+
 declare global {
   interface Window {
     electronAPI: {
@@ -37,6 +40,7 @@ declare global {
 }
 
 interface AppState {
+  isAppReady: boolean
   projects: ProjectInfo[]
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
@@ -88,11 +92,12 @@ async function persistProjects(projects: ProjectInfo[]): Promise<void> {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
+  isAppReady: false,
   projects: [],
   processes: {},
   terminalOutputs: {},
   processUrls: {},
-  config: { projects: [], theme: 'system' },
+  config: { projects: [], theme: initialThemeMode },
   searchQuery: '',
   capability: null,
   tmuxSessions: [],
@@ -100,6 +105,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   runtimeEntries: {},
 
   initApp: async () => {
+    if (get().isAppReady) return
+    if (initAppPromise) return initAppPromise
+
+    initAppPromise = (async () => {
     // Load persisted config + projects
     const config = await window.electronAPI.getConfig()
     const projects: ProjectInfo[] = []
@@ -144,6 +153,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     // Initial session refresh (after state is set so projects are available)
     await get().refreshSessions()
+    set({ isAppReady: true })
+    })()
+
+    try {
+      await initAppPromise
+    } finally {
+      initAppPromise = null
+    }
   },
 
   loadConfig: async () => {

@@ -10,13 +10,18 @@ function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
   return theme
 }
 
+let initialThemeMode: ThemeMode = 'system'
+
 // Apply theme before renderer boot to avoid first-paint flicker.
 try {
-  const theme = ipcRenderer.sendSync(IPC.CONFIG_GET_THEME_SYNC) as ThemeMode
-  const effective = resolveTheme(theme)
+  initialThemeMode = ipcRenderer.sendSync(IPC.CONFIG_GET_THEME_SYNC) as ThemeMode
+  const effective = resolveTheme(initialThemeMode)
   if (document.documentElement.getAttribute('data-theme') !== effective) {
     document.documentElement.setAttribute('data-theme', effective)
   }
+  document.documentElement.setAttribute('data-theme-mode', initialThemeMode)
+  document.documentElement.style.backgroundColor = effective === 'dark' ? '#09090b' : '#f5f7fb'
+  document.documentElement.style.colorScheme = effective
 } catch {
   // Best effort; renderer ThemeSync will apply theme later.
 }
