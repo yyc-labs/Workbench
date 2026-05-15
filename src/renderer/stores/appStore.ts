@@ -40,7 +40,7 @@ interface AppState {
   projects: ProjectInfo[]
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
-  processUrls: Record<string, string>
+  processUrls: Record<string, string[]>
   config: AppConfig
   searchQuery: string
   capability: Capability | null
@@ -193,7 +193,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
       processUrls: {
         ...state.processUrls,
-        [pid]: '',
+        [pid]: [],
       },
     }))
 
@@ -219,13 +219,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       const normalized = data.replace(/\r?\n/g, '\r\n')
       const nextOutput = (state.terminalOutputs[projectId] || '') + normalized
 
-      // URL detection: search accumulated buffer (handles chunked stdout)
-      // Strip ANSI before matching to avoid color codes splitting the URL
-      const alreadyHasUrl = state.processUrls[projectId]
-      const clean = alreadyHasUrl ? '' : nextOutput.replace(/\x1b\[[0-9;]*m/g, '')
-      const urlMatch = clean ? clean.match(/https?:\/\/[\w.-]+:\d{2,5}/i) : null
-      const processUrls = urlMatch
-        ? { ...state.processUrls, [projectId]: urlMatch[0] }
+      // URL detection: find ALL URLs in accumulated buffer
+      const clean = nextOutput.replace(/\x1b\[[0-9;]*m/g, '')
+      const urlMatches = clean.match(/https?:\/\/[\w.-]+:\d{2,5}/gi)
+      const uniqueUrls: string[] = urlMatches ? [...new Set(urlMatches)] : []
+      const processUrls = uniqueUrls.length > 0
+        ? { ...state.processUrls, [projectId]: uniqueUrls }
         : state.processUrls
 
       return {
@@ -298,7 +297,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       processUrls: {
         ...state.processUrls,
-        [projectId]: '',
+        [projectId]: [],
       },
     }))
   },

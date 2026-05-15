@@ -3,6 +3,7 @@ import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
 import { Pin, Play, Square, Folder, ExternalLink, Trash2, FileText, Zap } from 'lucide-react'
+import { UrlPopover } from './UrlPopover'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -14,7 +15,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const navigate = useNavigate()
 
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
-  const devUrl = useAppStore((s) => s.processUrls[project.id] || '')
+  const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
 
@@ -98,15 +99,17 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
       {/* Actions — compact grouped */}
       <div className="flex items-center gap-1 shrink-0">
-        {isDevRunning && devUrl && (
-          <button
-            className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 transition-colors max-w-[200px]"
-            onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(devUrl) }}
-            title={devUrl}
-          >
-            <ExternalLink className="h-3 w-3 shrink-0" />
-            <span className="truncate">{devUrl}</span>
-          </button>
+        {isDevRunning && devUrls.length > 0 && (
+          <UrlPopover urls={devUrls}>
+            <button
+              className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 transition-colors max-w-[200px]"
+              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(devUrls[0]) }}
+              title={devUrls[0]}
+            >
+              <ExternalLink className="h-3 w-3 shrink-0" />
+              <span className="truncate">{devUrls[0]}</span>
+            </button>
+          </UrlPopover>
         )}
         {isDevRunning ? (
           <button

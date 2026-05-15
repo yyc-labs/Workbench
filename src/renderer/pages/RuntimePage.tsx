@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock, FolderOpen } from 'lucide-react'
+import { UrlPopover } from '../components/UrlPopover'
 
 /** Map tmux status → user-facing label */
 function statusLabel(status: string): string {
@@ -23,7 +24,7 @@ export function RuntimePage() {
   )
   const session = useAppStore((s) => (projectId ? s.sessions[projectId] : undefined))
   const devStatus = useAppStore((s) => s.processes[projectId!]?.status ?? 'stopped')
-  const devUrl = useAppStore((s) => s.processUrls[projectId!] || '')
+  const devUrls = useAppStore((s) => s.processUrls[projectId!] || [])
   const isDevRunning = devStatus === 'running'
 
   const startRuntime = useAppStore((s) => s.startRuntime)
@@ -183,14 +184,16 @@ export function RuntimePage() {
 
         {/* Dev server actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {isDevRunning && devUrl && (
-            <button
-              className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors max-w-[200px]"
-              onClick={() => window.electronAPI.openExternal(devUrl)}
-            >
-              <ExternalLink className="w-3 h-3" />
-              <span className="truncate">{devUrl}</span>
-            </button>
+          {isDevRunning && devUrls.length > 0 && (
+            <UrlPopover urls={devUrls}>
+              <button
+                className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors max-w-[200px]"
+                onClick={() => window.electronAPI.openExternal(devUrls[0])}
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span className="truncate">{devUrls[0]}</span>
+              </button>
+            </UrlPopover>
           )}
           <button
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { Terminal } from '../components/Terminal'
 import { Folder, Code2, Package, ChevronLeft, Play, Square, ArrowUpRight } from 'lucide-react'
+import { UrlPopover } from '../components/UrlPopover'
 
 function InfoCard({
   label,
@@ -35,9 +36,9 @@ export function DetailPage() {
   const processStatus = projectId
     ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped')
     : 'stopped'
-  const processUrl = projectId
-    ? useAppStore((s) => s.processUrls[projectId] || '')
-    : ''
+  const processUrls = projectId
+    ? useAppStore((s) => s.processUrls[projectId] || [])
+    : [] as string[]
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const reattachProject = useAppStore((s) => s.reattachProject)
@@ -124,14 +125,16 @@ export function DetailPage() {
 
         {/* Action buttons + URL */}
         <div className="flex items-center gap-3 shrink-0">
-          {isRunning && processUrl && (
-            <button
-              className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors"
-              onClick={() => window.electronAPI.openExternal(processUrl)}
-            >
-              <ArrowUpRight className="w-3 h-3" />
-              <span className="truncate max-w-[180px]">{processUrl}</span>
-            </button>
+          {isRunning && processUrls.length > 0 && (
+            <UrlPopover urls={processUrls}>
+              <button
+                className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors"
+                onClick={() => window.electronAPI.openExternal(processUrls[0])}
+              >
+                <ArrowUpRight className="w-3 h-3" />
+                <span className="truncate max-w-[180px]">{processUrls[0]}</span>
+              </button>
+            </UrlPopover>
           )}
           {/* Reattach button (detached tmux session) */}
           {isDetached && (
