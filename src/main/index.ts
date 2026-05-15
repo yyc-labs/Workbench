@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
 import { join, basename } from 'path'
 import { createHash } from 'crypto'
 import { spawn } from 'child_process'
@@ -12,11 +12,29 @@ import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
-import type { Capability } from '../shared/types'
+import type { Capability, AppConfig } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+
+type ThemeMode = AppConfig['theme']
+
+function resolveEffectiveTheme(theme: ThemeMode): 'light' | 'dark' {
+  if (theme === 'system') {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  }
+  return theme
+}
+
+function getWindowBackgroundColor(theme: ThemeMode): string {
+  return resolveEffectiveTheme(theme) === 'dark' ? '#09090b' : '#f5f7fb'
+}
+
+function applyWindowBackground(theme: ThemeMode): void {
+  if (!mainWindow) return
+  mainWindow.setBackgroundColor(getWindowBackgroundColor(theme))
+}
 
 /** Focus a Windows Terminal window whose title contains the session name
   *   (tmux set-titles produces "{sessionName}:{windowName}" e.g. "ide-electron-69fdda:bash") */
@@ -113,11 +131,14 @@ function focusTerminalWindow(sessionName: string): void {
 }
 
 function createWindow(): void {
+  const config = loadConfig()
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: getWindowBackgroundColor(config.theme),
     icon: join(__dirname, '../../icon/Y.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -180,10 +201,18 @@ function registerIpcHandlers(): void {
     return loadConfig()
   })
 
+  ipcMain.on(IPC.CONFIG_GET_THEME_SYNC, (event) => {
+    event.returnValue = loadConfig().theme
+  })
+
   ipcMain.handle(
     IPC.CONFIG_SET,
     (_event, partial: Record<string, unknown>) => {
-      return updateConfig(partial as Partial<{ projects: never; theme: 'system' | 'light' | 'dark' }>)
+      const updated = updateConfig(partial as Partial<{ projects: never; theme: 'system' | 'light' | 'dark' }>)
+      if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
+        applyWindowBackground(updated.theme)
+      }
+      return updated
     }
   )
 
@@ -355,6 +384,13 @@ app.on('before-quit', async (e) => {
 // ── startup ──────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  nativeTheme.on('updated', () => {
+    const { theme } = loadConfig()
+    if (theme === 'system') {
+      applyWindowBackground(theme)
+    }
+  })
+
   // P0 1: One-time capability probe
   await capabilityManager.init()
   bootCapability = capabilityManager.get()

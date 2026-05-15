@@ -8,6 +8,7 @@ export const IPC = {
   PROCESS_EXIT: 'process:exit',
   PROCESS_RESIZE: 'process:resize',
   CONFIG_GET: 'config:get',
+  CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',
   DIALOG_SELECT_DIRECTORY: 'dialog:selectDirectory',
   SHELL_OPEN_EXTERNAL: 'shell:openExternal',

@@ -1,6 +1,26 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
 
+type ThemeMode = 'system' | 'light' | 'dark'
+
+function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
+  if (theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return theme
+}
+
+// Apply theme before renderer boot to avoid first-paint flicker.
+try {
+  const theme = ipcRenderer.sendSync(IPC.CONFIG_GET_THEME_SYNC) as ThemeMode
+  const effective = resolveTheme(theme)
+  if (document.documentElement.getAttribute('data-theme') !== effective) {
+    document.documentElement.setAttribute('data-theme', effective)
+  }
+} catch {
+  // Best effort; renderer ThemeSync will apply theme later.
+}
+
 const api = {
   detectProjects: (dirPath: string) =>
     ipcRenderer.invoke(IPC.DETECT_DIRECTORY, dirPath),
