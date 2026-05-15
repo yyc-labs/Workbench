@@ -34,10 +34,11 @@ export function UrlPopover({ urls, children }: UrlPopoverProps) {
 
   const popover = show && (
     <div
-      className="fixed z-[9999] bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 px-1 min-w-[300px]"
+      className="fixed z-[9999] bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 px-1 min-w-[220px]"
       style={{ top: pos.top, left: pos.left }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
+      onClick={(e) => e.stopPropagation()}
     >
       {urls.map((url) => (
         <div
