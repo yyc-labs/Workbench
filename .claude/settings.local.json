@@ -38,7 +38,15 @@
       "Skill(superpowers:writing-plans)",
       "Skill(git-auto-commit)",
       "Read(//tmp/claude-1000/**)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Skill(superpowers:brainstorming)",
+      "Bash(codex --version)",
+      "Bash(chmod +x *)",
+      "Bash(bash -n /home/ubuntu/tools/claude-code-script/lib/tmux-session.sh)",
+      "Bash(bash -n /home/ubuntu/tools/claude-code-script/lib/cli-prefs.sh)",
+      "Bash(bash -n /home/ubuntu/tools/claude-code-script/start_cc.sh)",
+      "Bash(bash -n /home/ubuntu/tools/claude-code-script/start_codex.sh)",
+      "Bash(bash -n /home/ubuntu/tools/claude-code-script/start-claude-with-env.sh)"
     ]
   }
 }

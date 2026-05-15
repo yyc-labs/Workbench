@@ -42,8 +42,8 @@ const api = {
 
   rehydrateTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_REHYDRATE),
 
-  startRuntime: (projectId: string, projectPath: string) =>
-    ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath),
+  startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') =>
+    ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, cli),
 
   listRuntimeEntries: () =>
     ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),

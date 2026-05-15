@@ -27,7 +27,7 @@ declare global {
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
       killTmuxSession: (sessionName: string) => Promise<boolean>
       rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
-      startRuntime: (projectId: string, projectPath: string) => Promise<boolean>
+      startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
@@ -68,6 +68,7 @@ interface AppState {
   loadTmuxSessions: () => Promise<void>
   markProjectDetached: (projectId: string) => void
   refreshSessions: () => Promise<void>
+  setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
   openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
@@ -80,6 +81,7 @@ async function persistProjects(projects: ProjectInfo[]): Promise<void> {
       customCommand: p.customCommand,
       pinned: p.pinned,
       lastOpened: p.lastOpened,
+      cli: p.cli,
     })),
   })
 }
@@ -106,6 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (saved.customCommand) project.customCommand = saved.customCommand
         if (saved.pinned) project.pinned = saved.pinned
         if (saved.lastOpened) project.lastOpened = saved.lastOpened
+        if (saved.cli) project.cli = saved.cli
         projects.push(project)
       }
     }
@@ -151,6 +154,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (saved.customCommand) project.customCommand = saved.customCommand
         if (saved.pinned) project.pinned = saved.pinned
         if (saved.lastOpened) project.lastOpened = saved.lastOpened
+        if (saved.cli) project.cli = saved.cli
         projects.push(project)
       }
     }
@@ -171,6 +175,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeProject: async (projectId: string) => {
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== projectId),
+    }))
+    await persistProjects(get().projects)
+  },
+
+  setProjectCli: async (projectId: string, cli: 'claude' | 'codex') => {
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, cli } : p
+      ),
     }))
     await persistProjects(get().projects)
   },
@@ -382,7 +395,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   startRuntime: async (projectId: string) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
-    await runtimeManager.startRuntime(projectId, project.path)
+    await runtimeManager.startRuntime(projectId, project.path, project.cli)
     // Reload runtime entries so we pick up the newly computed session name
     await get().loadRuntimeEntries()
     await get().refreshSessions()

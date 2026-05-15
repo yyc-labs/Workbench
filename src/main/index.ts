@@ -215,13 +215,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.RUNTIME_START,
-    async (_event, projectId: string, projectPath: string) => {
+    async (_event, projectId: string, projectPath: string, cli?: 'claude' | 'codex') => {
       const distro = bootCapability?.wslDistro || 'Ubuntu'
       const wslPath = wslBridge.toWslPath(projectPath)
 
       // Match the script's session naming: basename + first 6 chars of MD5(path)
       const md5 = createHash('md5').update(wslPath).digest('hex').slice(0, 6)
       const sessionName = `${basename(projectPath)}-${md5}`
+
+      // Build CLI tool flag for the launcher script
+      const cliFlag = cli === 'codex' ? ' --cli codex' : ''
 
       return new Promise<boolean>((resolve) => {
         const child = spawn(
@@ -232,7 +235,7 @@ function registerIpcHandlers(): void {
             '--',
             'bash',
             '-lc',
-            `$HOME/tools/claude-code-script/start-claude-with-env.sh '${wslPath}'`
+            `$HOME/tools/claude-code-script/start-claude-with-env.sh${cliFlag} '${wslPath}'`
           ],
           {
             detached: true,

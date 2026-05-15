@@ -32,24 +32,35 @@ function Toolbar({
 }) {
   return (
     <header
-      className="h-14 flex items-center px-6 gap-4 shrink-0 border-b border-black/5"
-      style={{ background: '#f6f6f4' }}
+      className="h-14 flex items-center px-6 gap-4 shrink-0 border-b"
+      style={{
+        background: 'var(--color-card)',
+        borderBottomColor: 'var(--color-border)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+      }}
     >
       <div className="flex items-center gap-2.5 mr-4">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm"
+          style={{ background: 'linear-gradient(135deg, #635bff 0%, #554ee8 100%)' }}
+        >
           <Zap className="w-4 h-4 text-white" />
         </div>
-        <span className="text-sm font-semibold text-gray-900">Claude Runtime</span>
+        <span className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime</span>
       </div>
 
       <div className="flex-1 max-w-lg relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 pointer-events-none" strokeWidth={1.8} />
+        <Search
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--color-muted-foreground)] pointer-events-none"
+          strokeWidth={1.8}
+        />
         <Input
           ref={searchRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-9 pl-9 text-sm bg-[#eae9e6] border-[#e2e2df] text-gray-900 placeholder:text-gray-400 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
+          className="h-9 pl-9 text-sm rounded-xl border bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
       </div>
 
@@ -59,12 +70,12 @@ function Toolbar({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6]"
+          className="h-8 w-8 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
           onClick={onSettingsClick}
         >
           <Settings className="w-4 h-4" strokeWidth={1.8} />
         </Button>
-        <Button size="sm" className="h-9 gap-1.5 text-sm rounded-xl bg-blue-600 hover:bg-blue-700 text-white" onClick={onAddFolder}>
+        <Button size="sm" className="h-9 gap-1.5 text-sm rounded-xl bg-primary hover:bg-primary-hover text-white shadow-sm" onClick={onAddFolder}>
           <Plus className="w-4 h-4" strokeWidth={1.8} />
           New Project
         </Button>
@@ -80,16 +91,19 @@ function DragOverlay() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center drag-overlay-border border-4 border-dashed rounded-none"
       style={{
-        backgroundColor: 'rgba(59, 130, 246, 0.03)',
-        borderColor: 'rgba(59, 130, 246, 0.2)',
+        backgroundColor: 'rgba(99, 91, 255, 0.05)',
+        borderColor: 'rgba(99, 91, 255, 0.2)',
       }}
     >
       <div className="text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-500/10 flex items-center justify-center">
-          <FolderPlus className="w-8 h-8 text-blue-400" strokeWidth={1.5} />
+        <div
+          className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+          style={{ background: 'rgba(99, 91, 255, 0.12)' }}
+        >
+          <FolderPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
         </div>
-        <p className="text-lg font-medium text-blue-400">Drop project folders anywhere</p>
-        <p className="text-sm text-gray-500 mt-1">Release to add to your workspace</p>
+        <p className="text-lg font-medium text-primary">Drop project folders anywhere</p>
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">Release to add to your workspace</p>
       </div>
     </div>
   )
@@ -201,23 +215,31 @@ export function HomePage() {
   // ── Empty state ──
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col bg-[#f1f1ef]">
+      <div className="h-screen flex flex-col">
         {isDragOver && <DragOverlay />}
         <header
-          className="h-14 flex items-center px-6 shrink-0 border-b border-black/5"
-          style={{ background: '#f6f6f4' }}
+          className="h-14 flex items-center px-6 shrink-0 border-b"
+          style={{
+            background: 'var(--color-card)',
+            borderBottomColor: 'var(--color-border)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+          }}
         >
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #635bff 0%, #554ee8 100%)' }}
+            >
               <Zap className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-semibold text-gray-900">Claude Runtime</span>
+            <span className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime</span>
           </div>
           <div className="flex-1" />
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6]"
+            className="h-8 w-8 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={() => navigate('/settings')}
           >
             <Settings className="w-4 h-4" strokeWidth={1.8} />
@@ -225,18 +247,21 @@ export function HomePage() {
         </header>
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
-            <div className="w-20 h-20 rounded-2xl bg-[#eae9e6] border border-[#e2e2df] flex items-center justify-center">
-              <FolderPlus className="w-10 h-10 text-gray-400" strokeWidth={1.5} />
+            <div
+              className="w-20 h-20 rounded-2xl border flex items-center justify-center surface-card"
+              style={{ borderColor: 'var(--color-border)' }}
+            >
+              <FolderPlus className="w-10 h-10 text-[color:var(--color-muted-foreground)]" strokeWidth={1.5} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900 mb-2">Add a project folder</h1>
-              <p className="text-sm text-gray-500">Drop a folder or browse to get started</p>
+              <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] mb-2">Add a project folder</h1>
+              <p className="text-sm text-[color:var(--color-muted-foreground)]">Drop a folder or browse to get started</p>
             </div>
-            <Button onClick={handleAddFolder} className="gap-2 rounded-xl h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white" size="lg">
+            <Button onClick={handleAddFolder} className="gap-2 rounded-xl h-10 px-5 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
               <Plus className="w-4 h-4" strokeWidth={1.8} />
               Add Project Folder
             </Button>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">
               Node.js &middot; Python &middot; Vite &middot; Next.js &middot; Django &middot; more
             </p>
           </div>
@@ -247,7 +272,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col bg-[#f1f1ef]">
+    <div className="h-screen flex flex-col">
       {isDragOver && <DragOverlay />}
       <Toolbar
         searchQuery={searchQuery}
@@ -259,12 +284,12 @@ export function HomePage() {
       <ScrollArea className="flex-1">
         <div className="max-w-5xl mx-auto w-full px-8 py-8">
           <div className="mb-8">
-            <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
-            <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-[color:var(--color-foreground)]">Projects</h1>
+            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1 flex items-center gap-2">
               <span>{projects.length} project{projects.length !== 1 ? 's' : ''}</span>
               {runningCount > 0 && (
                 <>
-                  <span className="text-gray-400">&middot;</span>
+                  <span className="text-[color:var(--color-muted-foreground)]/70">&middot;</span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                     {runningCount} runtime{runningCount !== 1 ? 's' : ''} active
@@ -279,8 +304,8 @@ export function HomePage() {
               <div className="flex items-center gap-2.5 mb-4">
                 <span className="w-1 h-4 rounded-full bg-amber-400" />
                 <Pin className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />
-                <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Pinned</h2>
-                <span className="text-[10px] text-gray-400">{pinnedProjects.length}</span>
+                <h2 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">Pinned</h2>
+                <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{pinnedProjects.length}</span>
               </div>
               <div className="flex flex-col gap-2">
                 {pinnedProjects.map((project, index) => (
@@ -292,12 +317,12 @@ export function HomePage() {
 
           <div>
             <div className="flex items-center gap-2.5 mb-4">
-              <span className="w-1 h-4 rounded-full bg-blue-400" />
-              <FolderOpen className="w-3.5 h-3.5 text-blue-500" strokeWidth={2} />
-              <h2 className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              <span className="w-1 h-4 rounded-full bg-primary" />
+              <FolderOpen className="w-3.5 h-3.5 text-primary" strokeWidth={2} />
+              <h2 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">
                 {pinnedProjects.length > 0 ? 'All Projects' : 'Projects'}
               </h2>
-              <span className="text-[10px] text-gray-400">{recentProjects.length}</span>
+              <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
             </div>
             {recentProjects.length > 0 ? (
               <div className="flex flex-col gap-2">
@@ -306,7 +331,7 @@ export function HomePage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16 text-sm text-gray-400">
+              <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">
                 {searchQuery ? 'No projects match your search' : 'No projects yet'}
               </div>
             )}

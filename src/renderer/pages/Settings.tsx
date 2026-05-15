@@ -35,8 +35,8 @@ function Sidebar({
           onClick={() => onSelect(item.id)}
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
             active === item.id
-              ? 'bg-[#f6f6f4] text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700 hover:bg-[#f6f6f4]/60'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm border border-[color:var(--color-border)]'
+              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]/60'
           }`}
         >
           <item.icon className="w-4 h-4" strokeWidth={1.8} />
@@ -57,15 +57,15 @@ function SegmentedControl({
   onChange: (v: 'system' | 'light' | 'dark') => void
 }) {
   return (
-    <div className="inline-flex rounded-xl bg-[#eae9e6] p-1 gap-0.5">
+    <div className="inline-flex rounded-xl bg-[color:var(--color-background-sunken)] p-1 gap-0.5 border border-[color:var(--color-border)]">
       {THEME_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
             value === opt.value
-              ? 'bg-[#f6f6f4] text-gray-900 shadow-sm'
-              : 'text-gray-500 hover:text-gray-700'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm border border-[color:var(--color-border)]'
+              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
           }`}
         >
           <opt.icon className="w-3.5 h-3.5" strokeWidth={1.8} />
@@ -82,8 +82,8 @@ function GeneralPanel({ theme, onThemeChange }: { theme: string; onThemeChange: 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-sm font-semibold text-gray-900">Appearance</h2>
-        <p className="text-xs text-gray-500 mt-1 mb-4">
+        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Appearance</h2>
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 mb-4">
           Customize how the application looks and feels.
         </p>
         <SegmentedControl value={theme} onChange={onThemeChange} />
@@ -96,8 +96,8 @@ function RulesPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-sm font-semibold text-gray-900">Detection Rules</h2>
-        <p className="text-xs text-gray-500 mt-1">
+        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Detection Rules</h2>
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
           Projects are detected by matching files in the directory. Higher priority rules are checked first.
         </p>
       </div>
@@ -106,21 +106,22 @@ function RulesPanel() {
         {RULES.map((rule) => (
           <div
             key={rule.type}
-            className="flex items-center gap-4 rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-4 py-3"
+            className="flex items-center gap-4 rounded-xl border px-4 py-3 surface-card"
+            style={{ borderColor: 'var(--color-border)' }}
           >
-            <span className="w-8 text-[10px] font-semibold text-gray-400 text-center shrink-0">
+            <span className="w-8 text-[10px] font-semibold text-[color:var(--color-muted-foreground)] text-center shrink-0">
               P{rule.priority}
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 capitalize">
+              <p className="text-sm font-medium text-[color:var(--color-foreground)] capitalize">
                 {rule.type}
               </p>
-              <p className="text-xs text-gray-500 font-mono truncate">
+              <p className="text-xs text-[color:var(--color-muted-foreground)] font-mono truncate">
                 {rule.matchPatterns.join(', ')}
                 {rule.requiresAll ? ' (all required)' : ''}
               </p>
             </div>
-            <code className="text-[11px] text-gray-400 bg-[#eae9e6] rounded-md px-2 py-0.5 font-mono shrink-0">
+            <code className="text-[11px] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)] rounded-md px-2 py-0.5 font-mono shrink-0 border border-[color:var(--color-border)]">
               {rule.defaultCommand}
             </code>
           </div>
@@ -134,12 +135,12 @@ function AboutPanel() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center shadow-sm">
+        <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-sm">
           <span className="text-lg font-bold text-white">L</span>
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">Project Launcher</h2>
-          <p className="text-xs text-gray-500">v1.0.0</p>
+          <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Project Launcher</h2>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">v1.0.0</p>
         </div>
       </div>
 
@@ -150,11 +151,11 @@ function AboutPanel() {
           ['State', 'Zustand'],
           ['Terminal', 'xterm.js'],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border border-[#e2e2df] bg-[#f6f6f4] px-4 py-3">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium mb-0.5">
+          <div key={label} className="rounded-xl border px-4 py-3 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <p className="text-[10px] text-[color:var(--color-muted-foreground)] uppercase tracking-wider font-medium mb-0.5">
               {label}
             </p>
-            <p className="text-sm text-gray-900 font-medium">{value}</p>
+            <p className="text-sm text-[color:var(--color-foreground)] font-medium">{value}</p>
           </div>
         ))}
       </div>
@@ -188,19 +189,24 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#f1f1ef]">
+    <div className="h-screen flex flex-col">
       {/* Header */}
       <header
         className="flex items-center gap-4 px-6 py-4 shrink-0"
-        style={{ background: 'rgba(255,255,255,0.55)', backdropFilter: 'blur(20px)' }}
+        style={{
+          background: 'var(--color-card)',
+          borderBottom: '1px solid var(--color-border)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
       >
         <button
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-[#eae9e6] transition-colors"
+          className="p-1.5 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
         </button>
-        <h1 className="text-lg font-semibold text-gray-900 tracking-tight">
+        <h1 className="text-lg font-semibold text-[color:var(--color-foreground)] tracking-tight">
           Settings
         </h1>
       </header>

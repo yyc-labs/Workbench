@@ -15,6 +15,8 @@ export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 
 export type ProcessStatus = 'running' | 'stopped' | 'error' | 'detached'
 
+export type CliTool = 'claude' | 'codex'
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -25,6 +27,8 @@ export interface ProjectInfo {
   packageManager?: PackageManager
   pinned?: boolean
   lastOpened?: number
+  /** AI coding CLI tool preference — defaults to 'claude' */
+  cli?: CliTool
 }
 
 export interface ProcessInfo {
@@ -47,6 +51,8 @@ export interface SavedProject {
   customCommand?: string
   pinned?: boolean
   lastOpened?: number
+  /** AI coding CLI tool preference — defaults to 'claude' when absent */
+  cli?: CliTool
 }
 
 export interface DetectionRule {

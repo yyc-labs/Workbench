@@ -7,7 +7,9 @@ import {
   FolderOpen,
   Code2,
   Zap,
+  Bot,
 } from 'lucide-react'
+import type { CliTool } from '../../shared/types'
 
 interface CardContextMenuProps {
   x: number
@@ -15,13 +17,29 @@ interface CardContextMenuProps {
   onClose: () => void
   isRuntimeActive: boolean
   isDevRunning: boolean
+  currentCli: CliTool
   onStartRuntime: () => void
   onStopRuntime: () => void
   onOpenTerminal: () => void
+  onSwitchCli: () => void
   onStartProject: () => void
   onStopProject: () => void
   onOpenFolder: () => void
   onOpenVsCode: () => void
+}
+
+interface MenuItem {
+  label: string
+  icon: React.ReactNode
+  show: boolean
+  action: () => void
+  primary?: boolean
+  iconColorClass: string
+}
+
+interface MenuSection {
+  title: string
+  items: MenuItem[]
 }
 
 export function CardContextMenu({
@@ -30,9 +48,11 @@ export function CardContextMenu({
   onClose,
   isRuntimeActive,
   isDevRunning,
+  currentCli,
   onStartRuntime,
   onStopRuntime,
   onOpenTerminal,
+  onSwitchCli,
   onStartProject,
   onStopProject,
   onOpenFolder,
@@ -54,7 +74,6 @@ export function CardContextMenu({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Click outside
   useEffect(() => {
     const timer = setTimeout(() => {
       const onClick = () => onClose()
@@ -64,74 +83,163 @@ export function CardContextMenu({
     return () => clearTimeout(timer)
   }, [onClose])
 
-  const items: { label: string; icon: React.ReactNode; show: boolean; action: () => void }[] = [
+  const cliLabel = currentCli === 'codex' ? 'Codex' : 'Claude'
+
+  const sections: MenuSection[] = [
     {
-      label: '启动 Runtime',
-      icon: <Zap className="w-3.5 h-3.5" />,
-      show: !isRuntimeActive,
-      action: onStartRuntime,
+      title: 'Runtime',
+      items: [
+        {
+          label: `启动 ${cliLabel}`,
+          icon: <Zap className="w-4 h-4" />,
+          show: !isRuntimeActive,
+          action: onStartRuntime,
+          primary: true,
+          iconColorClass: 'text-primary',
+        },
+        {
+          label: '打开 Terminal',
+          icon: <Terminal className="w-4 h-4" />,
+          show: isRuntimeActive,
+          action: onOpenTerminal,
+          iconColorClass: 'text-primary',
+        },
+        {
+          label: '停止 Runtime',
+          icon: <Square className="w-4 h-4" />,
+          show: isRuntimeActive,
+          action: onStopRuntime,
+          iconColorClass: 'text-red-500',
+        },
+      ],
     },
     {
-      label: '打开 Terminal',
-      icon: <Terminal className="w-3.5 h-3.5" />,
-      show: isRuntimeActive,
-      action: onOpenTerminal,
+      title: 'Project',
+      items: [
+        {
+          label: '启动项目',
+          icon: <Play className="w-4 h-4" />,
+          show: !isDevRunning,
+          action: onStartProject,
+          iconColorClass: 'text-emerald-500',
+        },
+        {
+          label: '停止项目',
+          icon: <Square className="w-4 h-4" />,
+          show: isDevRunning,
+          action: onStopProject,
+          iconColorClass: 'text-red-500',
+        },
+      ],
     },
     {
-      label: '停止 Runtime',
-      icon: <Square className="w-3.5 h-3.5" />,
-      show: isRuntimeActive,
-      action: onStopRuntime,
+      title: 'Workspace',
+      items: [
+        {
+          label: '打开文件夹',
+          icon: <FolderOpen className="w-4 h-4" />,
+          show: true,
+          action: onOpenFolder,
+          iconColorClass: 'text-[color:var(--color-muted-foreground)]',
+        },
+        {
+          label: '打开 VS Code',
+          icon: <Code2 className="w-4 h-4" />,
+          show: true,
+          action: onOpenVsCode,
+          iconColorClass: 'text-[color:var(--color-muted-foreground)]',
+        },
+      ],
     },
     {
-      label: '启动项目',
-      icon: <Play className="w-3.5 h-3.5" />,
-      show: !isDevRunning,
-      action: onStartProject,
-    },
-    {
-      label: '停止项目',
-      icon: <Square className="w-3.5 h-3.5" />,
-      show: isDevRunning,
-      action: onStopProject,
-    },
-    {
-      label: '打开文件夹',
-      icon: <FolderOpen className="w-3.5 h-3.5" />,
-      show: true,
-      action: onOpenFolder,
-    },
-    {
-      label: '打开 VS Code',
-      icon: <Code2 className="w-3.5 h-3.5" />,
-      show: true,
-      action: onOpenVsCode,
+      title: 'AI',
+      items: [
+        {
+          label: `切换为 ${currentCli === 'codex' ? 'Claude' : 'Codex'}`,
+          icon: <Bot className="w-4 h-4" />,
+          show: true,
+          action: onSwitchCli,
+          iconColorClass: 'text-primary',
+        },
+      ],
     },
   ]
 
-  // Adjust position so menu doesn't overflow viewport
-  const adjustedX = Math.min(x, window.innerWidth - 200)
-  const adjustedY = Math.min(y, window.innerHeight - items.filter((i) => i.show).length * 36 - 16)
+  const visibleSections = sections
+    .map((s) => ({ ...s, items: s.items.filter((i) => i.show) }))
+    .filter((s) => s.items.length > 0)
+
+  const totalItemCount = visibleSections.reduce((acc, s) => acc + s.items.length, 0)
+
+  const adjustedX = Math.min(x, window.innerWidth - 235)
+  const adjustedY = Math.min(y, window.innerHeight - totalItemCount * 40 - visibleSections.length * 28 - 60)
 
   return createPortal(
     <div
-      className="fixed z-[9998] bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 px-1 min-w-[180px]"
-      style={{ top: adjustedY, left: adjustedX }}
+      className="fixed z-[9998] min-w-[220px] rounded-2xl p-1.5"
+      style={{
+        top: adjustedY,
+        left: adjustedX,
+        background: 'var(--color-popover)',
+        border: '1px solid var(--color-border)',
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
+        boxShadow: '0 14px 40px rgba(0, 0, 0, 0.35)',
+      }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {items
-        .filter((i) => i.show)
-        .map((item) => (
-          <button
-            key={item.label}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            onClick={() => handleClick(item.action)}
-          >
-            <span className="text-gray-400">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
+      {/* Status header */}
+      <div className="flex items-center gap-2 px-3 py-2.5 mb-1 rounded-xl bg-[color:var(--color-accent)]/65 border border-[color:var(--color-border)]">
+        <span
+          className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+            isRuntimeActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-[color:var(--color-muted-foreground)]'
+          }`}
+        />
+        <span className="text-xs text-[color:var(--color-muted-foreground)]">
+          {isRuntimeActive ? (
+            <>
+              <span className="text-[color:var(--color-foreground)] font-medium">{cliLabel}</span>
+              <span> session running</span>
+            </>
+          ) : (
+            'Runtime inactive'
+          )}
+        </span>
+      </div>
+
+      {/* Sections */}
+      {visibleSections.map((section) => (
+        <div key={section.title}>
+          <div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
+            {section.title}
+          </div>
+          {section.items.map((item) => (
+            <button
+              key={item.label}
+              className={`group w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-[color:var(--color-foreground)] transition-all duration-150 hover:bg-[color:var(--color-accent)]/70 hover:translate-x-0.5 ${
+                item.primary
+                  ? 'bg-primary/10 border border-primary/20 hover:bg-primary/15'
+                  : ''
+              }`}
+              onClick={() => handleClick(item.action)}
+            >
+              <span
+                className={`${item.iconColorClass} ${
+                  item.primary
+                    ? ''
+                    : 'group-hover:text-[color:var(--color-foreground)]'
+                } transition-colors duration-150 flex-shrink-0`}
+              >
+                {item.icon}
+              </span>
+              <span className={item.primary ? 'text-primary font-medium' : ''}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      ))}
     </div>,
     document.body
   )

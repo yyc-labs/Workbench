@@ -27,14 +27,15 @@ class RuntimeManager {
     return deriveSessionName(projectId, projectName)
   }
 
-  /** Background start — spawns the Claude init script via detached WSL process.
+  /** Background start — spawns the AI Coding CLI init script via detached WSL process.
    *  Does NOT open a terminal window. Use `openTerminal()` for that.
    *  Session name is computed in main process to match the script's MD5 naming. */
   async startRuntime(
     projectId: string,
     projectPath: string,
+    cli?: 'claude' | 'codex',
   ): Promise<boolean> {
-    return window.electronAPI.startRuntime(projectId, projectPath)
+    return window.electronAPI.startRuntime(projectId, projectPath, cli)
   }
 
   /** Open the singleton Windows Terminal and switch to the target tmux session.

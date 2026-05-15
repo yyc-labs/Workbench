@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
+import type { CliTool } from '../../shared/types'
 import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock, FolderOpen } from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
 
@@ -117,6 +118,7 @@ export function RuntimePage() {
     }
   }, [projectId, project, session, startRuntime, refreshSessions])
 
+  const cliLabel = (project?.cli || 'claude') === 'codex' ? 'Codex' : 'Claude'
   const isLoading = actionLoading !== null
   const isStopped = session?.status === 'stopped'
   const isAttached = session?.status === 'attached'
@@ -124,10 +126,10 @@ export function RuntimePage() {
 
   if (!project || !projectId) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4 bg-[#f1f1ef]">
-        <h2 className="text-lg font-semibold text-gray-900">Project not found</h2>
+      <div className="h-screen flex flex-col items-center justify-center gap-4">
+        <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Project not found</h2>
         <button
-          className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 transition-colors"
+          className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-4 h-4" strokeWidth={1.8} />
@@ -138,35 +140,40 @@ export function RuntimePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#f1f1ef]">
+    <div className="h-screen flex flex-col">
       {/* ── Header ── */}
       <header
-        className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-black/5"
-        style={{ background: '#f6f6f4' }}
+        className="flex items-center justify-between px-6 py-4 shrink-0 border-b"
+        style={{
+          background: 'var(--color-card)',
+          borderBottomColor: 'var(--color-border)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+        }}
       >
         <div className="flex items-center gap-4 min-w-0">
           <button
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-400 hover:bg-[#eae9e6] transition-colors"
+            className="p-1.5 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
             onClick={() => navigate('/')}
           >
             <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
           </button>
 
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-gray-900 tracking-tight truncate">
+            <h1 className="text-lg font-semibold text-[color:var(--color-foreground)] tracking-tight truncate">
               {project.name}
             </h1>
-            <p className="text-xs text-gray-500 truncate">{project.path}</p>
+            <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
           </div>
 
           {/* Runtime status badge */}
           <div
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${
               isAttached
-                ? 'bg-emerald-500/10 text-emerald-600'
+                ? 'bg-emerald-500/12 text-emerald-500'
                 : !isStopped
-                  ? 'bg-amber-500/10 text-amber-600'
-                  : 'bg-[#eae9e6] text-gray-500'
+                  ? 'bg-amber-500/12 text-amber-500'
+                  : 'bg-[color:var(--color-secondary)]/70 text-[color:var(--color-muted-foreground)] border border-[color:var(--color-border)]'
             }`}
           >
             <span
@@ -175,7 +182,7 @@ export function RuntimePage() {
                   ? 'bg-emerald-500'
                   : !isStopped
                     ? 'bg-amber-500'
-                    : 'bg-gray-600'
+                    : 'bg-[color:var(--color-muted-foreground)]'
               }`}
             />
             {sessionLabel}
@@ -187,7 +194,7 @@ export function RuntimePage() {
           {isDevRunning && devUrls.length > 0 && (
             <UrlPopover urls={devUrls}>
               <button
-                className="inline-flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg px-3 py-1.5 transition-colors max-w-[200px]"
+                className="inline-flex items-center gap-1.5 text-xs text-primary rounded-lg px-3 py-1.5 transition-colors max-w-[200px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/50 hover:bg-[color:var(--color-secondary)]"
                 onClick={() => window.electronAPI.openExternal(devUrls[0])}
               >
                 <ExternalLink className="w-3 h-3" />
@@ -198,9 +205,10 @@ export function RuntimePage() {
           <button
             className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               isDevRunning
-                ? 'border border-red-200 text-red-500 hover:bg-red-50'
-                : 'text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]'
+                ? 'border text-red-500 hover:bg-red-500/10'
+                : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]'
             }`}
+            style={isDevRunning ? { borderColor: 'rgba(248, 113, 113, 0.35)' } : undefined}
             onClick={() =>
               isDevRunning ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
             }
@@ -219,14 +227,13 @@ export function RuntimePage() {
         <div className="max-w-2xl mx-auto w-full space-y-6">
           {/* Runtime Status Card */}
           <div
-            className="rounded-2xl border border-[#e2e2df] p-6"
-            style={{ background: '#f6f6f4' }}
+            className="rounded-2xl p-6 surface-card"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-                Claude Runtime
+              <h2 className="text-sm font-semibold text-[color:var(--color-foreground)] uppercase tracking-wider">
+                {cliLabel} Runtime
               </h2>
-              <span className="text-[11px] text-gray-400 font-mono">
+              <span className="text-[11px] text-[color:var(--color-muted-foreground)] font-mono">
                 {session?.sessionName ?? '—'}
               </span>
             </div>
@@ -236,31 +243,31 @@ export function RuntimePage() {
               <div className="flex items-center gap-2.5">
                 <span
                   className={`w-3 h-3 rounded-full ${
-                    isAttached ? 'bg-emerald-500' : !isStopped ? 'bg-amber-500' : 'bg-gray-400'
+                    isAttached ? 'bg-emerald-500' : !isStopped ? 'bg-amber-500' : 'bg-[color:var(--color-muted-foreground)]/60'
                   }`}
                 />
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">{sessionLabel}</p>
-                  <p className="text-[10px] text-gray-400">Runtime</p>
+                  <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{sessionLabel}</p>
+                  <p className="text-[10px] text-[color:var(--color-muted-foreground)]">Runtime</p>
                 </div>
               </div>
-              <span className="w-px h-8 bg-[#e2e2df]" />
+              <span className="w-px h-8 bg-[color:var(--color-border)]" />
               <div className="flex items-center gap-2.5">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    isAttached ? 'bg-blue-500' : 'bg-gray-300'
+                    isAttached ? 'bg-primary' : 'bg-[color:var(--color-muted-foreground)]/55'
                   }`}
                 />
                 <div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
                     {isAttached ? 'Connected' : 'Disconnected'}
                   </p>
                 </div>
               </div>
-              <span className="w-px h-8 bg-[#e2e2df]" />
-              <div className="text-xs text-gray-400">
+              <span className="w-px h-8 bg-[color:var(--color-border)]" />
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">
                 Created{' '}
-                <span className="text-gray-600 font-mono">
+                <span className="text-[color:var(--color-foreground)]/75 font-mono">
                   {session?.createdAt
                     ? new Date(session.createdAt).toLocaleTimeString()
                     : '—'}
@@ -287,7 +294,7 @@ export function RuntimePage() {
                 <>
                   <button
                     disabled={isLoading}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-blue-600 text-white hover:bg-blue-700 shadow-sm disabled:opacity-50"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-primary text-white hover:bg-primary-hover shadow-sm disabled:opacity-50"
                     onClick={handleOpenTerminal}
                   >
                     {actionLoading === 'openTerminal' ? (
@@ -299,7 +306,7 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df] disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)] disabled:opacity-50"
                     onClick={handleRestart}
                   >
                     {actionLoading === 'restart' ? (
@@ -311,7 +318,8 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-red-500 hover:text-red-600 hover:bg-red-50 border border-red-200 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-red-500 hover:text-red-600 hover:bg-red-500/10 border disabled:opacity-50"
+                    style={{ borderColor: 'rgba(248, 113, 113, 0.35)' }}
                     onClick={handleStopRuntime}
                   >
                     {actionLoading === 'stop' ? (
@@ -328,14 +336,14 @@ export function RuntimePage() {
             {/* Quick actions — file system */}
             <div className="flex items-center gap-3 mt-3">
               <button
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]"
                 onClick={() => window.electronAPI.openFolder(project.path)}
               >
                 <FolderOpen className="w-4 h-4" />
                 Open Folder
               </button>
               <button
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-gray-500 hover:text-gray-400 hover:bg-[#eae9e6] border border-[#e2e2df]"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]"
                 onClick={() => window.electronAPI.openInVsCode(project.path)}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
@@ -348,26 +356,25 @@ export function RuntimePage() {
 
           {/* Recent Activity (placeholder) */}
           <div
-            className="rounded-2xl border border-[#e2e2df] p-6"
-            style={{ background: '#f6f6f4' }}
+            className="rounded-2xl p-6 surface-card"
           >
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
               Recent Activity
             </h3>
             <div className="space-y-2 text-sm font-mono">
               {isStopped ? (
-                <div className="flex items-center gap-3 text-gray-400">
-                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
-                  <span>Press "Start Runtime" to launch Claude</span>
+                <div className="flex items-center gap-3 text-[color:var(--color-muted-foreground)]">
+                  <Clock className="w-4 h-4 text-[color:var(--color-muted-foreground)]/70" strokeWidth={1.5} />
+                  <span>Press "Start Runtime" to launch {cliLabel}</span>
                 </div>
               ) : isAttached ? (
-                <div className="flex items-center gap-3 text-gray-500">
-                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
-                  <span>Claude runtime active, terminal connected</span>
+                <div className="flex items-center gap-3 text-[color:var(--color-muted-foreground)]">
+                  <Clock className="w-4 h-4 text-[color:var(--color-muted-foreground)]/70" strokeWidth={1.5} />
+                  <span>{cliLabel} runtime active, terminal connected</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 text-gray-500">
-                  <Clock className="w-4 h-4 text-gray-300" strokeWidth={1.5} />
+                <div className="flex items-center gap-3 text-[color:var(--color-muted-foreground)]">
+                  <Clock className="w-4 h-4 text-[color:var(--color-muted-foreground)]/70" strokeWidth={1.5} />
                   <span>Session running in background</span>
                 </div>
               )}
@@ -376,28 +383,27 @@ export function RuntimePage() {
 
           {/* Runtime Info */}
           <div
-            className="rounded-2xl border border-[#e2e2df] p-6"
-            style={{ background: '#f6f6f4' }}
+            className="rounded-2xl p-6 surface-card"
           >
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
               Runtime Info
             </h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <p className="text-[11px] text-gray-400 mb-0.5">Session</p>
-                <p className="text-gray-900 font-mono text-xs">{session?.sessionName ?? '—'}</p>
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Session</p>
+                <p className="text-[color:var(--color-foreground)] font-mono text-xs">{session?.sessionName ?? '—'}</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-400 mb-0.5">Type</p>
-                <p className="text-gray-900">{project.type}</p>
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Type</p>
+                <p className="text-[color:var(--color-foreground)]">{project.type}</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-400 mb-0.5">Runtime</p>
-                <p className="text-gray-900 font-mono text-xs">Claude Code</p>
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Runtime</p>
+                <p className="text-[color:var(--color-foreground)] font-mono text-xs">{cliLabel} Code</p>
               </div>
               <div>
-                <p className="text-[11px] text-gray-400 mb-0.5">Backend</p>
-                <p className="text-gray-900 font-mono text-xs">tmux</p>
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Backend</p>
+                <p className="text-[color:var(--color-foreground)] font-mono text-xs">tmux</p>
               </div>
             </div>
           </div>
