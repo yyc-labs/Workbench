@@ -168,6 +168,7 @@ function AboutPanel() {
 export function SettingsPage() {
   const navigate = useNavigate()
   const config = useAppStore((s) => s.config)
+  const setThemeConfig = useAppStore((s) => s.setTheme)
   const [theme, setTheme] = useState(config.theme)
   const [section, setSection] = useState<Section>('general')
 
@@ -177,15 +178,7 @@ export function SettingsPage() {
 
   const handleThemeChange = async (newTheme: 'system' | 'light' | 'dark') => {
     setTheme(newTheme)
-    await window.electronAPI.setConfig({ theme: newTheme })
-    document.documentElement.setAttribute(
-      'data-theme',
-      newTheme === 'system'
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-        : newTheme
-    )
+    await setThemeConfig(newTheme)
   }
 
   return (

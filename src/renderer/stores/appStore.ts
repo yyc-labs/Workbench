@@ -49,6 +49,7 @@ interface AppState {
   runtimeEntries: Record<string, RuntimeEntry>
 
   loadConfig: () => Promise<void>
+  setTheme: (theme: AppConfig['theme']) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
@@ -159,6 +160,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     }
     set({ config, projects })
+  },
+
+  setTheme: async (theme: AppConfig['theme']) => {
+    const updated = await window.electronAPI.setConfig({ theme })
+    set((state) => ({
+      config: {
+        ...state.config,
+        theme: updated.theme,
+      },
+    }))
   },
 
   addProject: async (dirPath: string) => {

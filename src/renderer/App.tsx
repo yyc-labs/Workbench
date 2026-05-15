@@ -6,6 +6,36 @@ import { RuntimePage } from './pages/RuntimePage'
 import { SettingsPage } from './pages/Settings'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
+import type { AppConfig } from '../shared/types'
+
+function resolveTheme(theme: AppConfig['theme']): 'light' | 'dark' {
+  if (theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return theme
+}
+
+function ThemeSync() {
+  const theme = useAppStore((s) => s.config.theme)
+
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+
+    const applyTheme = () => {
+      document.documentElement.setAttribute('data-theme', resolveTheme(theme))
+    }
+
+    applyTheme()
+
+    if (theme !== 'system') return
+
+    const onSystemThemeChange = () => applyTheme()
+    media.addEventListener('change', onSystemThemeChange)
+    return () => media.removeEventListener('change', onSystemThemeChange)
+  }, [theme])
+
+  return null
+}
 
 function ProcessOutputListener() {
   const appendOutput = useAppStore((s) => s.appendOutput)
@@ -57,6 +87,7 @@ export function App() {
   return (
     <Router>
       <AppInit />
+      <ThemeSync />
       <ProcessOutputListener />
       <SessionPoller />
       <Routes>
