@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
 import { Pin, Play, Square, Folder, ExternalLink, Trash2, FileText, Zap } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
+import { CardContextMenu } from './CardContextMenu'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -18,6 +20,9 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const startRuntime = useAppStore((s) => s.startRuntime)
+  const stopRuntime = useAppStore((s) => s.stopRuntime)
+  const openTerminal = useAppStore((s) => s.openTerminal)
 
   const session = useAppStore((s) => s.sessions[project.id])
   const isRuntimeAttached = session?.status === 'attached'
@@ -27,6 +32,8 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const togglePin = useAppStore((s) => s.togglePin)
   const removeProject = useAppStore((s) => s.removeProject)
   const isDevRunning = devStatus === 'running'
+
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
 
   return (
     <div
@@ -40,6 +47,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#d4d4cf' }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e2df' }}
       onClick={() => onSelect(project.id)}
+      onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: e.clientX, y: e.clientY }) }}
     >
       {/* Icon */}
       <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
@@ -96,6 +104,23 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           </p>
         )}
       </div>
+
+      {menuPos && (
+        <CardContextMenu
+          x={menuPos.x}
+          y={menuPos.y}
+          onClose={() => setMenuPos(null)}
+          isRuntimeActive={isRuntimeActive}
+          isDevRunning={isDevRunning}
+          onStartRuntime={() => startRuntime(project.id)}
+          onStopRuntime={() => stopRuntime(project.id)}
+          onOpenTerminal={() => openTerminal(project.id)}
+          onStartProject={() => startProject(project.id, undefined, undefined, false)}
+          onStopProject={() => stopProject(project.id)}
+          onOpenFolder={() => window.electronAPI.openFolder(project.path)}
+          onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
+        />
+      )}
 
       {/* Actions — compact grouped */}
       <div className="flex items-center gap-1 shrink-0">
