@@ -70,6 +70,9 @@ const api = {
   startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') =>
     ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, cli),
 
+  getRuntimeDiagnostics: () =>
+    ipcRenderer.invoke(IPC.RUNTIME_DIAGNOSTICS),
+
   listRuntimeEntries: () =>
     ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),
 

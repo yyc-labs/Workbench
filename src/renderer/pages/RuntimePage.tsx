@@ -78,11 +78,13 @@ export function RuntimePage() {
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
   const [docError, setDocError] = useState<string | null>(null)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
 
   const handleStartRuntime = useCallback(async () => {
     if (!projectId || !project) return
     setActionLoading('start')
     try {
+      setRuntimeError(null)
       // Store action: starts runtime (main process computes session name via MD5),
       // reloads runtime entries, does initial session refresh
       await startRuntime(projectId)
@@ -96,6 +98,7 @@ export function RuntimePage() {
       }
     } catch (err) {
       console.error('[RuntimePage] start runtime failed:', err)
+      setRuntimeError(err instanceof Error ? err.message : String(err))
     } finally {
       setActionLoading(null)
     }
@@ -350,6 +353,11 @@ export function RuntimePage() {
       {/* ── Body ── */}
       <div className="flex-1 flex flex-col min-h-0 px-6 py-6 overflow-auto">
         <div className="max-w-2xl mx-auto w-full space-y-6">
+          {runtimeError && (
+            <div className="rounded-xl border border-red-300/40 bg-red-500/10 text-red-600 px-4 py-3 text-sm whitespace-pre-line">
+              {runtimeError}
+            </div>
+          )}
           {/* Runtime Status Card */}
           <div className="rounded-2xl p-6 surface-card">
             <div className="flex items-center justify-between mb-4">

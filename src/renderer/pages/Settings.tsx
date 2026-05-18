@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { RULES } from '../../shared/rules'
-import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon } from 'lucide-react'
+import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon, Wrench } from 'lucide-react'
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -10,7 +10,7 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark', icon: Moon },
 ] as const
 
-type Section = 'general' | 'rules' | 'about'
+type Section = 'general' | 'runtime' | 'rules' | 'about'
 
 // ── Sidebar ──
 
@@ -23,6 +23,7 @@ function Sidebar({
 }) {
   const items: { id: Section; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }> }[] = [
     { id: 'general', label: 'General', icon: Palette },
+    { id: 'runtime', label: 'Runtime', icon: Wrench },
     { id: 'rules', label: 'Rules', icon: Database },
     { id: 'about', label: 'About', icon: Info },
   ]
@@ -131,6 +132,95 @@ function RulesPanel() {
   )
 }
 
+function RuntimePanel({
+  runtimeLauncherScript,
+  onRuntimeLauncherScriptSave,
+}: {
+  runtimeLauncherScript: string
+  onRuntimeLauncherScriptSave: (v: string) => Promise<void>
+}) {
+  const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
+  const [diag, setDiag] = useState<{
+    issues: string[]
+    hasWsl: boolean
+    hasTmux: boolean
+    launcherScriptExists: boolean
+    launcherScriptExecutable: boolean
+  } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setScriptPath(runtimeLauncherScript)
+  }, [runtimeLauncherScript])
+
+  const runDiagnostics = async () => {
+    setLoading(true)
+    try {
+      const result = await window.electronAPI.getRuntimeDiagnostics()
+      setDiag({
+        issues: result.issues,
+        hasWsl: result.hasWsl,
+        hasTmux: result.hasTmux,
+        launcherScriptExists: result.launcherScriptExists,
+        launcherScriptExecutable: result.launcherScriptExecutable,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime Launcher</h2>
+        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 mb-4">
+          Configure the WSL script used to boot Claude/Codex runtime sessions.
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={scriptPath}
+            onChange={(e) => setScriptPath(e.target.value)}
+            className="flex-1 h-9 rounded-lg border px-3 text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)]"
+            placeholder="$HOME/tools/claude-code-script/start-claude-with-env.sh"
+          />
+          <button
+            className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover"
+            onClick={() => onRuntimeLauncherScriptSave(scriptPath.trim())}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-[color:var(--color-foreground)]">Diagnostics</h3>
+          <button
+            className="h-8 px-3 rounded-lg border text-xs border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            onClick={() => void runDiagnostics()}
+            disabled={loading}
+          >
+            {loading ? 'Checking...' : 'Run Check'}
+          </button>
+        </div>
+        {diag && (
+          <div className="rounded-xl border px-4 py-3 surface-card space-y-1 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+            <p>WSL: {diag.hasWsl ? 'OK' : 'Missing'}</p>
+            <p>tmux: {diag.hasTmux ? 'OK' : 'Missing'}</p>
+            <p>Script exists: {diag.launcherScriptExists ? 'Yes' : 'No'}</p>
+            <p>Script executable: {diag.launcherScriptExecutable ? 'Yes' : 'No'}</p>
+            {diag.issues.length > 0 && (
+              <div className="mt-2 text-red-500 whitespace-pre-line">
+                {diag.issues.map((it) => `- ${it}`).join('\n')}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AboutPanel() {
   return (
     <div className="space-y-6">
@@ -169,6 +259,7 @@ export function SettingsPage() {
   const navigate = useNavigate()
   const config = useAppStore((s) => s.config)
   const setThemeConfig = useAppStore((s) => s.setTheme)
+  const setRuntimeLauncherScript = useAppStore((s) => s.setRuntimeLauncherScript)
   const [theme, setTheme] = useState(config.theme)
   const [section, setSection] = useState<Section>('general')
 
@@ -211,6 +302,12 @@ export function SettingsPage() {
         <main className="flex-1 min-w-0 ml-8">
           {section === 'general' && (
             <GeneralPanel theme={theme} onThemeChange={handleThemeChange} />
+          )}
+          {section === 'runtime' && (
+            <RuntimePanel
+              runtimeLauncherScript={config.runtimeLauncherScript || '$HOME/tools/claude-code-script/start-claude-with-env.sh'}
+              onRuntimeLauncherScriptSave={setRuntimeLauncherScript}
+            />
           )}
           {section === 'rules' && <RulesPanel />}
           {section === 'about' && <AboutPanel />}

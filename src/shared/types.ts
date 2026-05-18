@@ -50,6 +50,8 @@ export interface ProcessInfo {
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
+  /** WSL-side launcher script path for runtime boot */
+  runtimeLauncherScript?: string
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
 }
@@ -127,4 +129,15 @@ export interface RuntimeEntry {
 
 export interface RuntimeRegistry {
   entries: Record<string, RuntimeEntry>
+}
+
+export interface RuntimeDiagnostics {
+  checkedAt: number
+  hasWsl: boolean
+  hasTmux: boolean
+  distro?: string
+  launcherScript: string
+  launcherScriptExists: boolean
+  launcherScriptExecutable: boolean
+  issues: string[]
 }

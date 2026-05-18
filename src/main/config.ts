@@ -12,6 +12,7 @@ function getConfigPath(): string {
 const DEFAULT_CONFIG: AppConfig = {
   projects: [],
   theme: 'system',
+  runtimeLauncherScript: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
 }
 
 let cachedConfig: AppConfig | undefined

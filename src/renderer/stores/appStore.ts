@@ -9,11 +9,25 @@ import type {
   SessionRuntime,
   RuntimeEntry,
   ProjectDocLink,
+  RuntimeDiagnostics,
 } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
 const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode') as AppConfig['theme'] | null) ?? 'system'
 let initAppPromise: Promise<void> | null = null
+const MAX_TERMINAL_OUTPUT_CHARS = 1_000_000
+const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
+
+function trimTerminalBuffer(text: string): string {
+  if (text.length <= MAX_TERMINAL_OUTPUT_CHARS) return text
+  return text.slice(text.length - MAX_TERMINAL_OUTPUT_CHARS)
+}
+
+function collectUrlsFromText(text: string): string[] {
+  const clean = text.replace(/\x1b\[[0-9;]*m/g, '')
+  const matches = clean.match(URL_PATTERN)
+  return matches ? [...new Set(matches)] : []
+}
 
 function normalizeComparablePath(input: string): string {
   const normalized = input.replace(/\\/g, '/').toLowerCase()
@@ -55,6 +69,7 @@ declare global {
       killTmuxSession: (sessionName: string) => Promise<boolean>
       rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
       startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
+      getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
@@ -78,6 +93,7 @@ interface AppState {
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
+  setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
@@ -217,6 +233,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
+  setRuntimeLauncherScript: async (scriptPath: string) => {
+    const updated = await window.electronAPI.setConfig({ runtimeLauncherScript: scriptPath })
+    set((state) => ({
+      config: {
+        ...state.config,
+        runtimeLauncherScript: updated.runtimeLauncherScript,
+      },
+    }))
+  },
+
   addProject: async (dirPath: string) => {
     const existing = get().projects.find((p) => p.path === dirPath)
     if (existing) return
@@ -295,19 +321,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   appendOutput: (projectId: string, data: string) => {
     set((state) => {
       const normalized = data.replace(/\r?\n/g, '\r\n')
-      const nextOutput = (state.terminalOutputs[projectId] || '') + normalized
+      const prevOutput = state.terminalOutputs[projectId] || ''
+      const nextOutput = trimTerminalBuffer(prevOutput + normalized)
 
-      // URL detection: find ALL URLs in accumulated buffer
-      const clean = nextOutput.replace(/\x1b\[[0-9;]*m/g, '')
-      const urlMatches = clean.match(/https?:\/\/[\w.-]+:\d{2,5}/gi)
-      const uniqueUrls: string[] = urlMatches ? [...new Set(urlMatches)] : []
-      const processUrls = uniqueUrls.length > 0
-        ? { ...state.processUrls, [projectId]: uniqueUrls }
-        : state.processUrls
+      // Incremental URL detection from new chunk, with fallback re-sync for safety.
+      const prevUrls = state.processUrls[projectId] || []
+      const chunkUrls = collectUrlsFromText(normalized)
+      let uniqueUrls = prevUrls
+      if (chunkUrls.length > 0) {
+        const merged = [...prevUrls, ...chunkUrls]
+        uniqueUrls = [...new Set(merged)]
+      }
+      if (uniqueUrls.length === 0 && nextOutput.length > 0) {
+        uniqueUrls = collectUrlsFromText(nextOutput)
+      }
 
       return {
         terminalOutputs: { ...state.terminalOutputs, [projectId]: nextOutput },
-        processUrls,
+        processUrls: { ...state.processUrls, [projectId]: uniqueUrls },
       }
     })
   },
@@ -460,7 +491,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   startRuntime: async (projectId: string) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
-    await runtimeManager.startRuntime(projectId, project.path, project.cli)
+    const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
+    if (diagnostics.issues.length > 0) {
+      const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
+      throw new Error(`Runtime preflight checks failed:\n${message}`)
+    }
+    const ok = await runtimeManager.startRuntime(projectId, project.path, project.cli)
+    if (!ok) {
+      throw new Error('Runtime failed to start. Please run Runtime diagnostics in Settings.')
+    }
     // Reload runtime entries so we pick up the newly computed session name
     await get().loadRuntimeEntries()
     await get().refreshSessions()
