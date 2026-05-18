@@ -342,11 +342,6 @@ class ProcessManager {
     // Graceful Ctrl+C
     try { pty.write('\x03') } catch { /* dead */ }
 
-    if (backend === 'tmux') {
-      const sessionName = managed.sessionName || getSessionName(projectId)
-      tmuxManager.killSession(sessionName)
-    }
-
     // Force kill after grace period
     setTimeout(() => {
       try { pty.kill('SIGTERM') } catch { /* already dead */ }

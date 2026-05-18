@@ -146,6 +146,19 @@ class TmuxManager {
     }
   }
 
+  /** Kill provided session names only; ignores missing sessions. */
+  async killSessions(sessionNames: string[]): Promise<void> {
+    for (const name of sessionNames) {
+      if (!name) continue
+      const escaped = name.replace(/'/g, "'\\''")
+      try {
+        await wslBridge.exec(`tmux kill-session -t '${escaped}'`)
+      } catch {
+        // Ignore already-gone sessions
+      }
+    }
+  }
+
   async sendKeys(sessionName: string, keys: string): Promise<boolean> {
     const escaped = keys.replace(/'/g, "'\\''")
     return wslBridge
