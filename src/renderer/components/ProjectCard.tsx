@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ProjectInfo, CliTool } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Badge } from './ui/badge'
-import { Pin, Play, Square, Folder, ExternalLink, Trash2, FileText, Zap, Sparkles, Terminal } from 'lucide-react'
+import { Pin, Play, Square, Folder, ExternalLink, Trash2, FileText, Zap, Sparkles, Terminal, BookOpen } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
 
@@ -39,6 +39,8 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const togglePin = useAppStore((s) => s.togglePin)
   const removeProject = useAppStore((s) => s.removeProject)
   const isDevRunning = devStatus === 'running'
+  const docLinks = project.docLinks ?? []
+  const defaultDocLink = docLinks[0]
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
@@ -166,7 +168,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           onStopRuntime={() => stopRuntime(project.id)}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
-          onStartProject={() => startProject(project.id, undefined, undefined, false)}
+          onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onOpenFolder={() => window.electronAPI.openFolder(project.path)}
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
@@ -187,6 +189,18 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
             </button>
           </UrlPopover>
         )}
+        {defaultDocLink && (
+          <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
+            <button
+              className="flex items-center gap-1 text-xs text-[color:var(--color-muted-foreground)] rounded-lg px-2.5 py-1.5 transition-colors max-w-[170px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/35 hover:bg-[color:var(--color-secondary)]/70 hover:text-[color:var(--color-foreground)]"
+              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(defaultDocLink.url) }}
+              title={defaultDocLink.url}
+            >
+              <BookOpen className="h-3 w-3 shrink-0" />
+              <span className="truncate">{defaultDocLink.title}</span>
+            </button>
+          </UrlPopover>
+        )}
         {isDevRunning ? (
           <button
             className="h-8 px-3 text-xs rounded-lg border text-red-500 hover:bg-red-500/10 flex items-center gap-1 font-medium transition-colors shrink-0"
@@ -199,7 +213,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         ) : (
           <button
             className="h-8 px-3 text-xs rounded-lg bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
-            onClick={(e) => { e.stopPropagation(); startProject(project.id, undefined, undefined, false) }}
+            onClick={(e) => { e.stopPropagation(); startProject(project.id) }}
           >
             <Play className="h-3 w-3" />
             <span className="hidden sm:inline">Run</span>

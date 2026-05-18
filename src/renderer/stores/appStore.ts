@@ -1,9 +1,33 @@
 import { create } from 'zustand'
-import type { ProjectInfo, ProcessInfo, AppConfig, Capability, TmuxSessionInfo, RecoveredSession, SessionRuntime, RuntimeEntry } from '../../shared/types'
+import type {
+  ProjectInfo,
+  ProcessInfo,
+  AppConfig,
+  Capability,
+  TmuxSessionInfo,
+  RecoveredSession,
+  SessionRuntime,
+  RuntimeEntry,
+  ProjectDocLink,
+} from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
 const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode') as AppConfig['theme'] | null) ?? 'system'
 let initAppPromise: Promise<void> | null = null
+
+function normalizeComparablePath(input: string): string {
+  const normalized = input.replace(/\\/g, '/').toLowerCase()
+  const uncWsl = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/[^/]+\/?(.*)$/)
+  if (uncWsl) {
+    const rest = uncWsl[1] ?? ''
+    return rest ? `/${rest.replace(/^\/+/, '')}` : '/'
+  }
+  const drive = normalized.match(/^([a-z]):\/(.*)$/)
+  if (drive) {
+    return `/mnt/${drive[1]}/${drive[2]}`
+  }
+  return normalized
+}
 
 declare global {
   interface Window {
@@ -74,6 +98,7 @@ interface AppState {
   markProjectDetached: (projectId: string) => void
   refreshSessions: () => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
+  setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
   openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
@@ -87,6 +112,7 @@ async function persistProjects(projects: ProjectInfo[]): Promise<void> {
       pinned: p.pinned,
       lastOpened: p.lastOpened,
       cli: p.cli,
+      docLinks: p.docLinks ?? [],
     })),
   })
 }
@@ -119,6 +145,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (saved.pinned) project.pinned = saved.pinned
         if (saved.lastOpened) project.lastOpened = saved.lastOpened
         if (saved.cli) project.cli = saved.cli
+        project.docLinks = saved.docLinks ?? []
         projects.push(project)
       }
     }
@@ -136,8 +163,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       for (const rec of recovered) {
         const matched = projects.find((p) => {
           // Match via wsl path = project path converted
-          const wslPath = rec.cwd.replace(/\\/g, '/').toLowerCase()
-          const projPath = p.path.replace(/\\/g, '/').toLowerCase()
+          const wslPath = normalizeComparablePath(rec.cwd)
+          const projPath = normalizeComparablePath(p.path)
           return wslPath.includes(projPath) || projPath.includes(wslPath)
         })
         if (matched) {
@@ -173,6 +200,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (saved.pinned) project.pinned = saved.pinned
         if (saved.lastOpened) project.lastOpened = saved.lastOpened
         if (saved.cli) project.cli = saved.cli
+        project.docLinks = saved.docLinks ?? []
         projects.push(project)
       }
     }
@@ -211,6 +239,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       projects: state.projects.map((p) =>
         p.id === projectId ? { ...p, cli } : p
+      ),
+    }))
+    await persistProjects(get().projects)
+  },
+
+  setProjectDocLinks: async (projectId: string, docLinks: ProjectDocLink[]) => {
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, docLinks } : p
       ),
     }))
     await persistProjects(get().projects)

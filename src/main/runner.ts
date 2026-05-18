@@ -48,10 +48,25 @@ class ProcessManager {
 
   // ── public API ──────────────────────────────────────────
 
+  private isWslUncPath(pathValue: string): boolean {
+    const normalized = pathValue.replace(/\\/g, '/')
+    return /^\/\/(?:wsl\.localhost|wsl\$)\//i.test(normalized)
+  }
+
   start(projectId: string, command: string, cwd: string, useWsl?: boolean): boolean {
     if (this.processes.has(projectId)) return false
 
+    // UNC WSL paths cannot be used as cwd for cmd.exe.
+    // Force WSL backend even when UI requested host-native mode.
+    const forceWslForPath =
+      process.platform === 'win32' &&
+      this.capability.hasWsl &&
+      this.isWslUncPath(cwd)
+
     // Per-process environment override: Windows-native vs WSL
+    if (forceWslForPath) {
+      return this.startWithPty(projectId, command, cwd)
+    }
     if (useWsl === false && process.platform === 'win32') {
       return this.startHostNative(projectId, command, cwd)
     }

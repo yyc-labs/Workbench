@@ -75,6 +75,7 @@ export function detectProject(dirPath: string): ProjectInfo | null {
       type: rule.type,
       command,
       packageManager: pm === 'npm' ? undefined : pm,
+      docLinks: [],
     }
   }
 

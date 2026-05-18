@@ -2,17 +2,57 @@ import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
-import type { CliTool } from '../../shared/types'
-import { ChevronLeft, Play, Square, ExternalLink, RefreshCw, Terminal, Zap, Clock, FolderOpen } from 'lucide-react'
+import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
+import {
+  ChevronLeft,
+  Play,
+  Square,
+  ExternalLink,
+  RefreshCw,
+  Terminal,
+  Zap,
+  Clock,
+  FolderOpen,
+  BookOpen,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
 
 /** Map tmux status → user-facing label */
 function statusLabel(status: string): string {
   switch (status) {
-    case 'attached': return 'Active'
-    case 'detached': return 'Background'
-    case 'stopped': return 'Offline'
-    default: return status
+    case 'attached':
+      return 'Active'
+    case 'detached':
+      return 'Background'
+    case 'stopped':
+      return 'Offline'
+    default:
+      return status
+  }
+}
+
+function createDocLinkId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeDocUrl(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const parsed = new URL(withProtocol)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+    return parsed.toString()
+  } catch {
+    return null
   }
 }
 
@@ -20,9 +60,7 @@ export function RuntimePage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
 
-  const project = useAppStore((s) =>
-    s.projects.find((p) => p.id === projectId)
-  )
+  const project = useAppStore((s) => s.projects.find((p) => p.id === projectId))
   const session = useAppStore((s) => (projectId ? s.sessions[projectId] : undefined))
   const devStatus = useAppStore((s) => s.processes[projectId!]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[projectId!] || [])
@@ -34,8 +72,12 @@ export function RuntimePage() {
   const refreshSessions = useAppStore((s) => s.refreshSessions)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
 
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [docTitleInput, setDocTitleInput] = useState('')
+  const [docUrlInput, setDocUrlInput] = useState('')
+  const [docError, setDocError] = useState<string | null>(null)
 
   const handleStartRuntime = useCallback(async () => {
     if (!projectId || !project) return
@@ -72,7 +114,12 @@ export function RuntimePage() {
   }, [projectId, stopRuntime])
 
   const handleOpenTerminal = useCallback(async () => {
-    console.log('[RuntimePage] handleOpenTerminal called', { projectId, hasSession: !!session, sessionName: session?.sessionName, sessionStatus: session?.status })
+    console.log('[RuntimePage] handleOpenTerminal called', {
+      projectId,
+      hasSession: !!session,
+      sessionName: session?.sessionName,
+      sessionStatus: session?.status,
+    })
     if (!projectId || !session) {
       console.log('[RuntimePage] handleOpenTerminal BAIL — projectId or session missing')
       return
@@ -118,7 +165,69 @@ export function RuntimePage() {
     }
   }, [projectId, project, session, startRuntime, refreshSessions])
 
+  const handleAddDocLink = useCallback(async () => {
+    if (!project) return
+
+    const normalizedUrl = normalizeDocUrl(docUrlInput)
+    if (!normalizedUrl) {
+      setDocError('Please enter a valid http/https URL')
+      return
+    }
+
+    const duplicate = (project.docLinks ?? []).some(
+      (link) => link.url.toLowerCase() === normalizedUrl.toLowerCase()
+    )
+    if (duplicate) {
+      setDocError('This documentation link already exists')
+      return
+    }
+
+    let title = docTitleInput.trim()
+    if (!title) {
+      try {
+        title = new URL(normalizedUrl).hostname
+      } catch {
+        title = 'Documentation'
+      }
+    }
+
+    const nextLinks = [
+      ...(project.docLinks ?? []),
+      { id: createDocLinkId(), title, url: normalizedUrl },
+    ]
+
+    await setProjectDocLinks(project.id, nextLinks)
+    setDocTitleInput('')
+    setDocUrlInput('')
+    setDocError(null)
+  }, [project, docTitleInput, docUrlInput, setProjectDocLinks])
+
+  const handleRemoveDocLink = useCallback(
+    async (linkId: string) => {
+      if (!project) return
+      const nextLinks = (project.docLinks ?? []).filter((link) => link.id !== linkId)
+      await setProjectDocLinks(project.id, nextLinks)
+    },
+    [project, setProjectDocLinks]
+  )
+
+  const handleSetDefaultDocLink = useCallback(
+    async (linkId: string) => {
+      if (!project) return
+      const links = project.docLinks ?? []
+      const index = links.findIndex((link) => link.id === linkId)
+      if (index <= 0) return
+
+      const nextLinks = [links[index], ...links.slice(0, index), ...links.slice(index + 1)]
+      await setProjectDocLinks(project.id, nextLinks)
+    },
+    [project, setProjectDocLinks]
+  )
+
+  const docLinks = project?.docLinks ?? []
+  const defaultDocLink = docLinks[0]
   const cliLabel = (project?.cli || 'claude') === 'codex' ? 'Codex' : 'Claude'
+  const environmentLabel = project ? projectEnvironmentLabel(detectProjectEnvironment(project.path)) : 'Unknown'
   const isLoading = actionLoading !== null
   const isStopped = session?.status === 'stopped'
   const isAttached = session?.status === 'attached'
@@ -164,32 +273,33 @@ export function RuntimePage() {
               {project.name}
             </h1>
             <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]/85 mt-0.5">
+              Environment: {environmentLabel}
+            </p>
           </div>
 
           {/* Runtime status badge */}
           <div
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${
-              isAttached
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${isAttached
                 ? 'bg-emerald-500/12 text-emerald-500'
                 : !isStopped
                   ? 'bg-amber-500/12 text-amber-500'
                   : 'bg-[color:var(--color-secondary)]/70 text-[color:var(--color-muted-foreground)] border border-[color:var(--color-border)]'
-            }`}
+              }`}
           >
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isAttached
+              className={`w-1.5 h-1.5 rounded-full ${isAttached
                   ? 'bg-emerald-500'
                   : !isStopped
                     ? 'bg-amber-500'
                     : 'bg-[color:var(--color-muted-foreground)]'
-              }`}
+                }`}
             />
             {sessionLabel}
           </div>
         </div>
 
-        {/* Dev server actions */}
+        {/* Dev server / docs actions */}
         <div className="flex items-center gap-2 shrink-0">
           {isDevRunning && devUrls.length > 0 && (
             <UrlPopover urls={devUrls}>
@@ -202,21 +312,36 @@ export function RuntimePage() {
               </button>
             </UrlPopover>
           )}
+          {defaultDocLink && (
+            <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
+              <button
+                className="inline-flex items-center gap-1.5 text-xs text-[color:var(--color-muted-foreground)] rounded-lg px-3 py-1.5 transition-colors max-w-[220px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/40 hover:bg-[color:var(--color-secondary)]/70 hover:text-[color:var(--color-foreground)]"
+                onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                title={defaultDocLink.url}
+              >
+                <BookOpen className="w-3 h-3" />
+                <span className="truncate">Docs: {defaultDocLink.title}</span>
+              </button>
+            </UrlPopover>
+          )}
           <button
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              isDevRunning
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${isDevRunning
                 ? 'border text-red-500 hover:bg-red-500/10'
                 : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]'
-            }`}
+              }`}
             style={isDevRunning ? { borderColor: 'rgba(248, 113, 113, 0.35)' } : undefined}
             onClick={() =>
-              isDevRunning ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
+              isDevRunning ? stopProject(projectId) : startProject(projectId)
             }
           >
             {isDevRunning ? (
-              <><Square className="w-3 h-3" /> Stop Dev</>
+              <>
+                <Square className="w-3 h-3" /> Stop Dev
+              </>
             ) : (
-              <><Play className="w-3 h-3" /> Run Dev</>
+              <>
+                <Play className="w-3 h-3" /> Run Dev
+              </>
             )}
           </button>
         </div>
@@ -226,9 +351,7 @@ export function RuntimePage() {
       <div className="flex-1 flex flex-col min-h-0 px-6 py-6 overflow-auto">
         <div className="max-w-2xl mx-auto w-full space-y-6">
           {/* Runtime Status Card */}
-          <div
-            className="rounded-2xl p-6 surface-card"
-          >
+          <div className="rounded-2xl p-6 surface-card">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-[color:var(--color-foreground)] uppercase tracking-wider">
                 {cliLabel} Runtime
@@ -242,9 +365,12 @@ export function RuntimePage() {
             <div className="flex items-center gap-6 mb-6">
               <div className="flex items-center gap-2.5">
                 <span
-                  className={`w-3 h-3 rounded-full ${
-                    isAttached ? 'bg-emerald-500' : !isStopped ? 'bg-amber-500' : 'bg-[color:var(--color-muted-foreground)]/60'
-                  }`}
+                  className={`w-3 h-3 rounded-full ${isAttached
+                      ? 'bg-emerald-500'
+                      : !isStopped
+                        ? 'bg-amber-500'
+                        : 'bg-[color:var(--color-muted-foreground)]/60'
+                    }`}
                 />
                 <div>
                   <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{sessionLabel}</p>
@@ -254,9 +380,8 @@ export function RuntimePage() {
               <span className="w-px h-8 bg-[color:var(--color-border)]" />
               <div className="flex items-center gap-2.5">
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    isAttached ? 'bg-primary' : 'bg-[color:var(--color-muted-foreground)]/55'
-                  }`}
+                  className={`w-2 h-2 rounded-full ${isAttached ? 'bg-primary' : 'bg-[color:var(--color-muted-foreground)]/55'
+                    }`}
                 />
                 <div>
                   <p className="text-xs text-[color:var(--color-muted-foreground)]">
@@ -268,9 +393,7 @@ export function RuntimePage() {
               <div className="text-xs text-[color:var(--color-muted-foreground)]">
                 Created{' '}
                 <span className="text-[color:var(--color-foreground)]/75 font-mono">
-                  {session?.createdAt
-                    ? new Date(session.createdAt).toLocaleTimeString()
-                    : '—'}
+                  {session?.createdAt ? new Date(session.createdAt).toLocaleTimeString() : '—'}
                 </span>
               </div>
             </div>
@@ -347,17 +470,128 @@ export function RuntimePage() {
                 onClick={() => window.electronAPI.openInVsCode(project.path)}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <path d="M17.5 3.5L6.5 8.5L2 12L6.5 15.5L17.5 20.5L17.5 17L9.5 12L17.5 7Z" fill="#007ACC" />
+                  <path
+                    d="M17.5 3.5L6.5 8.5L2 12L6.5 15.5L17.5 20.5L17.5 17L9.5 12L17.5 7Z"
+                    fill="#007ACC"
+                  />
                 </svg>
                 Open in VS Code
               </button>
             </div>
           </div>
 
+          {/* Project Docs */}
+          <div className="rounded-2xl p-6 surface-card">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">
+                  Documentation Links
+                </h3>
+                <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+                  Save project-specific docs for quick access.
+                </p>
+              </div>
+              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{docLinks.length} links</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1.6fr_auto] gap-2">
+              <input
+                type="text"
+                value={docTitleInput}
+                onChange={(e) => setDocTitleInput(e.target.value)}
+                placeholder="Title (optional)"
+                className="h-9 px-3 rounded-lg border text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <input
+                type="text"
+                value={docUrlInput}
+                onChange={(e) => setDocUrlInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleAddDocLink()
+                }}
+                placeholder="docs.example.com / https://..."
+                className="h-9 px-3 rounded-lg border text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <button
+                className="h-9 px-3 rounded-lg bg-primary text-white hover:bg-primary-hover text-sm font-medium inline-flex items-center justify-center gap-1.5"
+                onClick={() => {
+                  void handleAddDocLink()
+                }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add
+              </button>
+            </div>
+
+            {docError && <p className="text-xs text-red-500 mt-2">{docError}</p>}
+
+            {defaultDocLink && (
+              <div className="mt-3 flex items-center justify-between rounded-lg border border-[color:var(--color-border)] px-3 py-2 bg-[color:var(--color-secondary)]/35">
+                <span className="text-xs text-[color:var(--color-muted-foreground)] truncate">
+                  Default: <span className="text-[color:var(--color-foreground)]">{defaultDocLink.title}</span>
+                </span>
+                <button
+                  className="h-7 px-2 rounded-md text-xs text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1"
+                  onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open Default
+                </button>
+              </div>
+            )}
+
+            {docLinks.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
+                No documentation links yet.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {docLinks.map((link) => (
+                  <div
+                    key={link.id}
+                    className="flex items-center gap-2 rounded-xl border border-[color:var(--color-border)] px-3 py-2"
+                  >
+                    <button
+                      className="flex-1 min-w-0 text-left"
+                      onClick={() => window.electronAPI.openExternal(link.url)}
+                      title={link.url}
+                    >
+                      <p className="text-sm text-[color:var(--color-foreground)] truncate">{link.title}</p>
+                    </button>
+                    <button
+                      className="h-8 px-2 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      onClick={() => window.electronAPI.openExternal(link.url)}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Open
+                    </button>
+                    <button
+                      className="h-8 px-2 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      onClick={() => {
+                        void handleSetDefaultDocLink(link.id)
+                      }}
+                      disabled={docLinks[0]?.id === link.id}
+                      title={docLinks[0]?.id === link.id ? 'Default link' : 'Set as default'}
+                    >
+                      {docLinks[0]?.id === link.id ? 'Default' : 'Set Default'}
+                    </button>
+                    <button
+                      className="h-8 w-8 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 inline-flex items-center justify-center"
+                      onClick={() => {
+                        void handleRemoveDocLink(link.id)
+                      }}
+                      title="Remove"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Recent Activity (placeholder) */}
-          <div
-            className="rounded-2xl p-6 surface-card"
-          >
+          <div className="rounded-2xl p-6 surface-card">
             <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
               Recent Activity
             </h3>
@@ -382,9 +616,7 @@ export function RuntimePage() {
           </div>
 
           {/* Runtime Info */}
-          <div
-            className="rounded-2xl p-6 surface-card"
-          >
+          <div className="rounded-2xl p-6 surface-card">
             <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
               Runtime Info
             </h3>

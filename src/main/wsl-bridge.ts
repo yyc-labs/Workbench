@@ -53,9 +53,20 @@ class WslBridge {
   /** Convert Windows path to WSL path. C:\Users\me\proj → /mnt/c/Users/me/proj */
   toWslPath(windowsPath: string): string {
     const normalized = windowsPath.replace(/\\/g, '/')
-    const match = normalized.match(/^([A-Za-z]):\/(.*)$/)
-    if (match) {
-      return `/mnt/${match[1].toLowerCase()}/${match[2]}`
+
+    // UNC for WSL share:
+    //   \\wsl.localhost\Ubuntu\home\ubuntu\proj
+    //   \\wsl$\Ubuntu\home\ubuntu\proj
+    // -> /home/ubuntu/proj
+    const uncWsl = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/[^/]+\/?(.*)$/i)
+    if (uncWsl) {
+      const rest = uncWsl[1] ?? ''
+      return rest ? `/${rest.replace(/^\/+/, '')}` : '/'
+    }
+
+    const drive = normalized.match(/^([A-Za-z]):\/(.*)$/)
+    if (drive) {
+      return `/mnt/${drive[1].toLowerCase()}/${drive[2]}`
     }
     return normalized
   }

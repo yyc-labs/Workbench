@@ -17,6 +17,12 @@ export type ProcessStatus = 'running' | 'stopped' | 'error' | 'detached'
 
 export type CliTool = 'claude' | 'codex'
 
+export interface ProjectDocLink {
+  id: string
+  title: string
+  url: string
+}
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -29,6 +35,8 @@ export interface ProjectInfo {
   lastOpened?: number
   /** AI coding CLI tool preference — defaults to 'claude' */
   cli?: CliTool
+  /** Project-specific documentation links for quick access */
+  docLinks?: ProjectDocLink[]
 }
 
 export interface ProcessInfo {
@@ -53,6 +61,8 @@ export interface SavedProject {
   lastOpened?: number
   /** AI coding CLI tool preference — defaults to 'claude' when absent */
   cli?: CliTool
+  /** Project-specific documentation links for quick access */
+  docLinks?: ProjectDocLink[]
 }
 
 export interface DetectionRule {

@@ -4,6 +4,7 @@ import { useAppStore } from '../stores/appStore'
 import { Terminal } from '../components/Terminal'
 import { Folder, Code2, Package, ChevronLeft, Play, Square, ArrowUpRight } from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
+import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 
 function InfoCard({
   label,
@@ -48,6 +49,7 @@ export function DetailPage() {
   const [customCommand, setCustomCommand] = useState(
     project?.customCommand ?? ''
   )
+  const environmentLabel = project ? projectEnvironmentLabel(detectProjectEnvironment(project.path)) : 'Unknown'
 
   if (!project || !projectId) {
     return (
@@ -78,6 +80,9 @@ export function DetailPage() {
         path: p.path,
         customCommand: p.customCommand,
         pinned: p.pinned,
+        lastOpened: p.lastOpened,
+        cli: p.cli,
+        docLinks: p.docLinks ?? [],
       })),
     })
   }
@@ -107,6 +112,9 @@ export function DetailPage() {
               {project.name}
             </h1>
             <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]/85 mt-0.5">
+              Environment: {environmentLabel}
+            </p>
           </div>
 
           {/* Status — inline text when stopped, pill badge when active */}
@@ -158,7 +166,7 @@ export function DetailPage() {
               }`}
             style={isActive ? { borderColor: 'rgba(248, 113, 113, 0.35)' } : undefined}
             onClick={() =>
-              isActive ? stopProject(projectId) : startProject(projectId, undefined, undefined, false)
+              isActive ? stopProject(projectId) : startProject(projectId)
             }
           >
             {isActive ? (
