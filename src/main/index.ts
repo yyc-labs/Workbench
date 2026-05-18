@@ -12,7 +12,7 @@ import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
-import type { Capability, AppConfig } from '../shared/types'
+import type { Capability, AppConfig, RuntimeDiagnostics } from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
@@ -34,6 +34,182 @@ function getWindowBackgroundColor(theme: ThemeMode): string {
 function applyWindowBackground(theme: ThemeMode): void {
   if (!mainWindow) return
   mainWindow.setBackgroundColor(getWindowBackgroundColor(theme))
+}
+
+function runtimeLauncherScript(): string {
+  return loadConfig().runtimeLauncherScript || '$HOME/tools/claude-code-script/start-claude-with-env.sh'
+}
+
+function expandWslHomePath(pathValue: string): string {
+  const normalized = pathValue.trim()
+  if (!normalized) return normalized
+
+  const wslHome = bootCapability?.wslEnv?.HOME
+  if (!wslHome) return normalized
+
+  if (normalized === '~') return wslHome
+  if (normalized.startsWith('~/')) return `${wslHome}/${normalized.slice(2)}`
+  if (normalized === '$HOME') return wslHome
+  if (normalized.startsWith('$HOME/')) return `${wslHome}/${normalized.slice(6)}`
+  if (normalized === '${HOME}') return wslHome
+  if (normalized.startsWith('${HOME}/')) return `${wslHome}/${normalized.slice(8)}`
+
+  return normalized
+}
+
+function resolvedRuntimeLauncherScript(): string {
+  return expandWslHomePath(runtimeLauncherScript())
+}
+
+function quoteBashSingle(input: string): string {
+  return input.replace(/'/g, "'\\''")
+}
+
+function resolveWslVsCodeTarget(pathValue: string): { distro: string; linuxPath: string } | null {
+  const normalized = pathValue.trim().replace(/\\/g, '/')
+  if (!normalized) return null
+
+  const uncWsl = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/([^/]+)\/?(.*)$/i)
+  if (uncWsl) {
+    const distro = uncWsl[1]
+    const rest = uncWsl[2] ?? ''
+    const linuxPath = rest ? `/${rest.replace(/^\/+/, '')}` : '/'
+    return { distro, linuxPath }
+  }
+
+  if (normalized.startsWith('/')) {
+    // /mnt/<drive>/... maps to Windows drives and should open locally.
+    if (/^\/mnt\/[a-z](?:\/|$)/i.test(normalized)) {
+      return null
+    }
+    return {
+      distro: bootCapability?.wslDistro || 'Ubuntu',
+      linuxPath: normalized,
+    }
+  }
+
+  // Accept linux paths that miss the leading slash, e.g. "mnt/d/workspace".
+  // These are Windows-mounted paths in WSL form and should open locally.
+  const noLeadingSlash = normalized.replace(/^\/+/, '')
+  if (/^mnt\/[a-z](?:\/|$)/i.test(noLeadingSlash)) {
+    return null
+  }
+
+  return null
+}
+
+function resolveLocalVsCodePath(pathValue: string): string {
+  const normalized = pathValue.trim().replace(/\\/g, '/')
+  if (!normalized) return pathValue
+
+  const noLeadingSlash = normalized.replace(/^\/+/, '')
+  if (/^mnt\/[a-z](?:\/|$)/i.test(noLeadingSlash)) {
+    return wslBridge.toWindowsPath(`/${noLeadingSlash}`)
+  }
+
+  return pathValue
+}
+
+function toWslAuthority(distro: string): string {
+  return `wsl+${distro}`
+}
+
+function asFolderPath(pathValue: string): string {
+  return pathValue.endsWith('/') ? pathValue : `${pathValue}/`
+}
+
+function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
+  const primaryCmd = process.platform === 'win32' ? 'code.cmd' : 'code'
+  const fallbackCmd = 'code'
+
+  const spawnWith = (cmd: string, allowFallback: boolean) => {
+    const child = spawn(cmd, args, {
+      detached: true,
+      shell: true,
+      stdio: 'ignore',
+    })
+
+    child.on('error', (err) => {
+      console.error(`[open-vscode] failed command="${cmd}" args=${JSON.stringify(args)} error=${err.message}`)
+      if (allowFallback && cmd !== fallbackCmd) {
+        spawnWith(fallbackCmd, false)
+      } else {
+        onError?.(err)
+      }
+    })
+
+    child.unref()
+  }
+
+  spawnWith(primaryCmd, true)
+}
+
+function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
+  const escapedPath = quoteBashSingle(linuxFolder)
+  const command = `cd '${escapedPath}' && code .`
+  const child = spawn(
+    'wsl.exe',
+    ['-d', distro, '--', 'bash', '-lc', command],
+    {
+      detached: true,
+      windowsHide: true,
+      stdio: 'ignore',
+    }
+  )
+  child.on('error', (err) => {
+    console.error(`[open-vscode] wsl fallback failed distro="${distro}" path="${linuxFolder}" error=${err.message}`)
+  })
+  child.unref()
+}
+
+async function diagnoseRuntime(): Promise<RuntimeDiagnostics> {
+  const scriptPath = resolvedRuntimeLauncherScript()
+  const issues: string[] = []
+  const hasWsl = bootCapability?.hasWsl ?? false
+  const hasTmux = bootCapability?.hasTmux ?? false
+  const distro = bootCapability?.wslDistro
+  let launcherScriptExists = false
+  let launcherScriptExecutable = false
+
+  if (!hasWsl) {
+    issues.push('WSL is not available')
+  }
+  if (!hasTmux) {
+    issues.push('tmux is not available in WSL')
+  }
+
+  if (hasWsl) {
+    try {
+      const escaped = quoteBashSingle(scriptPath)
+      const flags = await wslBridge.exec(
+        `[ -e '${escaped}' ] && [ -x '${escaped}' ] && echo EXISTS_EXEC || ([ -e '${escaped}' ] && echo EXISTS_NOEXEC) || echo MISSING`
+      )
+      if (flags.includes('EXISTS_EXEC')) {
+        launcherScriptExists = true
+        launcherScriptExecutable = true
+      } else if (flags.includes('EXISTS_NOEXEC')) {
+        launcherScriptExists = true
+        launcherScriptExecutable = false
+        issues.push(`Runtime launcher script is not executable: ${scriptPath}`)
+      } else {
+        issues.push(`Runtime launcher script not found: ${scriptPath}`)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      issues.push(`Failed to check launcher script: ${msg}`)
+    }
+  }
+
+  return {
+    checkedAt: Date.now(),
+    hasWsl,
+    hasTmux,
+    distro,
+    launcherScript: scriptPath,
+    launcherScriptExists,
+    launcherScriptExecutable,
+    issues,
+  }
 }
 
 /** Focus a Windows Terminal window whose title contains the session name
@@ -208,7 +384,13 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC.CONFIG_SET,
     (_event, partial: Record<string, unknown>) => {
-      const updated = updateConfig(partial as Partial<{ projects: never; theme: 'system' | 'light' | 'dark' }>)
+      const updated = updateConfig(
+        partial as Partial<{
+          projects: never
+          theme: 'system' | 'light' | 'dark'
+          runtimeLauncherScript: string
+        }>
+      )
       if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
         applyWindowBackground(updated.theme)
       }
@@ -226,7 +408,23 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_VSCODE, (_event, folderPath: string) => {
-    spawn('code', [folderPath], { detached: true, shell: true, stdio: 'ignore' }).unref()
+    const wslTarget = resolveWslVsCodeTarget(folderPath)
+    if (wslTarget) {
+      const distro = wslTarget.distro
+      const linuxFolder = asFolderPath(wslTarget.linuxPath)
+
+      // Prefer official WSL remote syntax from Windows CLI:
+      //   code --remote wsl+<distro> <path in WSL>
+      // Fallback path for edge cases remains folder-uri.
+      const remoteArgs = ['--remote', toWslAuthority(distro), linuxFolder]
+      spawnVsCode(remoteArgs, () => {
+        spawnVsCodeViaWsl(distro, linuxFolder)
+      })
+      return
+    }
+
+    const localPath = resolveLocalVsCodePath(folderPath)
+    spawnVsCode([localPath])
   })
 
   ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async () => {
@@ -245,6 +443,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC.RUNTIME_START,
     async (_event, projectId: string, projectPath: string, cli?: 'claude' | 'codex') => {
+      const diag = await diagnoseRuntime()
+      if (diag.issues.length > 0) {
+        console.error('[runtime:start] diagnostics failed:', diag.issues.join(' | '))
+        return false
+      }
+
       const distro = bootCapability?.wslDistro || 'Ubuntu'
       const wslPath = wslBridge.toWslPath(projectPath)
 
@@ -254,6 +458,7 @@ function registerIpcHandlers(): void {
 
       // Build CLI tool flag for the launcher script
       const cliFlag = cli === 'codex' ? ' --cli codex' : ''
+      const launcher = quoteBashSingle(resolvedRuntimeLauncherScript())
 
       return new Promise<boolean>((resolve) => {
         const child = spawn(
@@ -264,7 +469,7 @@ function registerIpcHandlers(): void {
             '--',
             'bash',
             '-lc',
-            `$HOME/tools/claude-code-script/start-claude-with-env.sh${cliFlag} '${wslPath}'`
+            `'${launcher}'${cliFlag} '${quoteBashSingle(wslPath)}'`
           ],
           {
             detached: true,
@@ -343,6 +548,10 @@ function registerIpcHandlers(): void {
     return listRuntimeEntries()
   })
 
+  ipcMain.handle(IPC.RUNTIME_DIAGNOSTICS, async () => {
+    return diagnoseRuntime()
+  })
+
   // ── WSL / tmux ──────────────────────────────────────────
 
   ipcMain.handle(IPC.WSL_GET_CAPABILITY, () => {
@@ -371,10 +580,21 @@ app.on('before-quit', async (e) => {
   e.preventDefault()
   isQuitting = true
 
-  // Kill tmux sessions first (async, but we don't await — best-effort)
-  tmuxManager.killAllLauncherSessions()
+  // Only clean sessions associated with this app registry; avoid touching unrelated tmux sessions.
+  const runtimeEntries = listRuntimeEntries()
+  const ownSessionNames = runtimeEntries.map((entry) => entry.sessionName).filter(Boolean)
+  try {
+    await tmuxManager.killSessions(ownSessionNames)
+  } catch (err) {
+    console.error('[before-quit] failed to clean app runtime sessions:', err)
+  }
 
   processManager?.stopAll()
+
+  // Drop registry entries on graceful exit to avoid stale mappings on next boot.
+  for (const entry of runtimeEntries) {
+    removeRuntimeEntry(entry.projectId)
+  }
 
   setTimeout(() => {
     app.quit()

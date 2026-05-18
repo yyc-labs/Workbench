@@ -18,6 +18,11 @@ export function detectProjectEnvironment(pathValue: string): ProjectEnvironment 
     return 'windows'
   }
 
+  // /mnt/<drive>/... are Windows-mounted paths; treat as Windows projects.
+  if (/^\/?mnt\/[a-z](?:\/|$)/i.test(normalized)) {
+    return 'windows'
+  }
+
   if (normalized.startsWith('/')) {
     return 'ubuntu'
   }
