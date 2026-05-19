@@ -26,6 +26,12 @@ See `.claude/rules/` for detailed constraints.
 Never run `npm install` or `npm run build` from WSL on `/mnt/d/` paths.
 Permission errors will corrupt node_modules. Code edits from WSL are fine; all npm ops must run from Windows terminal.
 
+### Hard safety rule (must follow)
+
+- In WSL, do **not** execute any dependency install/rebuild command in this repo.
+- Forbidden in WSL: `npm i`, `npm install`, `pnpm i`, `pnpm install`, `yarn install`, `electron-rebuild`, `node-gyp`, `npx electron-rebuild`.
+- If dependency changes are needed, stop and ask the user first, then only provide Windows PowerShell commands for the user to run manually.
+
 ## AI auto commit
 
 Use the repository auto-commit script after AI edits:

@@ -32,6 +32,7 @@ interface CardContextMenuProps {
   onOpenFolder: () => void | Promise<void>
   onOpenVsCode: () => void | Promise<void>
   onTogglePin?: () => void | Promise<void>
+  onEditMetadata?: () => void | Promise<void>
   onRemoveProject?: () => void | Promise<void>
 }
 
@@ -68,6 +69,7 @@ export function CardContextMenu({
   onOpenFolder,
   onOpenVsCode,
   onTogglePin,
+  onEditMetadata,
   onRemoveProject,
 }: CardContextMenuProps) {
   const handleClick = useCallback(
@@ -170,6 +172,13 @@ export function CardContextMenu({
           show: Boolean(onTogglePin),
           action: onTogglePin ?? (() => undefined),
           iconColorClass: isPinned ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-muted-foreground)]',
+        },
+        {
+          label: '分类和标签',
+          icon: <FolderOpen className="w-4 h-4" />,
+          show: Boolean(onEditMetadata),
+          action: onEditMetadata ?? (() => undefined),
+          iconColorClass: 'text-[color:var(--color-muted-foreground)]',
         },
         {
           label: '移除项目',

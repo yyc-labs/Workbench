@@ -102,7 +102,8 @@ class ProcessManager {
   }
 
   stopAll(): void {
-    for (const projectId of this.processes.keys()) {
+    const ids = [...this.processes.keys()]
+    for (const projectId of ids) {
       this.stop(projectId)
     }
   }

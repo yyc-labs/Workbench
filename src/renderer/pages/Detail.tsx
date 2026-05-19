@@ -160,7 +160,6 @@ export function DetailPage() {
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
-  const reattachProject = useAppStore((s) => s.reattachProject)
 
   const [customCommand, setCustomCommand] = useState(project?.customCommand ?? '')
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
@@ -174,8 +173,7 @@ export function DetailPage() {
   const environment = project ? detectProjectEnvironment(project.path) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
   const isRunning = processStatus === 'running'
-  const isDetached = processStatus === 'detached'
-  const isActive = isRunning || isDetached
+  const isActive = isRunning
   const isAiEnabled = aiCommitConfig?.enabled ?? true
 
   if (!project || !projectId) {
@@ -206,6 +204,8 @@ export function DetailPage() {
         lastOpened: p.lastOpened,
         cli: p.cli,
         docLinks: p.docLinks ?? [],
+        folderId: p.folderId,
+        tagIds: p.tagIds ?? [],
       })),
     })
   }
@@ -370,19 +370,6 @@ export function DetailPage() {
                 <span className="max-w-[180px] truncate">{processUrls[0]}</span>
               </button>
             </UrlPopover>
-          )}
-
-          {isDetached && (
-            <button
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white shadow-sm transition-all"
-              style={{
-                background: 'var(--color-warning)',
-              }}
-              onClick={() => reattachProject(projectId)}
-            >
-              <Play className="h-3.5 w-3.5" />
-              Reattach
-            </button>
           )}
 
           <button

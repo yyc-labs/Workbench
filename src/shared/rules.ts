@@ -17,6 +17,13 @@ export const RULES: DetectionRule[] = [
     defaultCommand: 'npm run dev',
   },
   {
+    type: 'android',
+    priority: 85,
+    matchPatterns: ['settings.gradle*', 'build.gradle*'],
+    defaultCommand: './gradlew installDebug',
+    requiresAll: true,
+  },
+  {
     type: 'nuxt',
     priority: 80,
     matchPatterns: ['nuxt.config.*'],

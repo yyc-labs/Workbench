@@ -48,44 +48,101 @@ function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | '
 async function runAiCommit(projectId: string, projectPath: string): Promise<boolean> {
   const config = loadConfig()
   const aiCfg = config.aiCommit || {}
-  const scriptPath = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
+  const scriptPs1Path = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
+  const scriptShPath = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.sh')
+  const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(projectPath) : null
 
   sendAiCommitStatus(projectId, 'running')
   sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
 
   return new Promise<boolean>((resolve) => {
-    const args = [
+    const windowsPsArgs = [
       '-NoProfile',
       '-ExecutionPolicy',
       'Bypass',
       '-File',
-      scriptPath,
+      scriptPs1Path,
       '-All',
     ]
 
     if (aiCfg.enabled ?? true) {
-      args.push('-UseAi')
+      windowsPsArgs.push('-UseAi')
     }
 
     if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
-      args.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
+      windowsPsArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
     }
     if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
-      args.push('-ApiKey', aiCfg.apiKey.trim())
+      windowsPsArgs.push('-ApiKey', aiCfg.apiKey.trim())
     }
     if (aiCfg.model && aiCfg.model.trim()) {
-      args.push('-Model', aiCfg.model.trim())
+      windowsPsArgs.push('-Model', aiCfg.model.trim())
     }
 
-    const spawnWith = (cmd: string) =>
-      spawn(cmd, args, {
+    const spawnWindowsPowerShell = (cmd: string) =>
+      spawn(cmd, windowsPsArgs, {
         cwd: projectPath,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-    let child = spawnWith('pwsh')
+    const quoteBash = (value: string) => `'${quoteBashSingle(value)}'`
+    let child = (() => {
+      if (wslTarget) {
+        const linuxProjectPath = wslTarget.linuxPath
+        const scriptPs1WslPath = wslBridge.toWslPath(scriptPs1Path)
+        const scriptShWslPath = wslBridge.toWslPath(scriptShPath)
+
+        const pwshParts: string[] = [
+          'pwsh',
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          quoteBash(scriptPs1WslPath),
+          '-All',
+        ]
+
+        if (aiCfg.enabled ?? true) {
+          pwshParts.push('-UseAi')
+        }
+        if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
+          pwshParts.push('-ApiBaseUrl', quoteBash(aiCfg.apiBaseUrl.trim()))
+        }
+        if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
+          pwshParts.push('-ApiKey', quoteBash(aiCfg.apiKey.trim()))
+        }
+        if (aiCfg.model && aiCfg.model.trim()) {
+          pwshParts.push('-Model', quoteBash(aiCfg.model.trim()))
+        }
+
+        const wslCommand = [
+          'set -euo pipefail',
+          `cd ${quoteBash(linuxProjectPath)}`,
+          'if command -v pwsh >/dev/null 2>&1; then',
+          '  echo "[AI Commit] shell: wsl-pwsh"',
+          `  ${pwshParts.join(' ')}`,
+          'else',
+          '  echo "[AI Commit] shell: wsl-bash (pwsh not found, fallback without AI generation)"',
+          `  bash ${quoteBash(scriptShWslPath)} --all`,
+          'fi',
+        ].join('\n')
+
+        return spawn(
+          'wsl.exe',
+          ['-d', wslTarget.distro, '--', 'bash', '-lc', wslCommand],
+          {
+            shell: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          }
+        )
+      }
+
+      return spawnWindowsPowerShell('pwsh')
+    })()
+
     let started = false
+    const allowWindowsFallback = !wslTarget
     let switchedToWindowsPowerShell = false
 
     const stdoutDecoder = new StringDecoder('utf8')
@@ -109,15 +166,17 @@ async function runAiCommit(projectId: string, projectPath: string): Promise<bool
 
     child.on('spawn', () => {
       started = true
-      sendAiCommitOutput(projectId, '[AI Commit] shell: pwsh\r\n')
+      if (!wslTarget) {
+        sendAiCommitOutput(projectId, '[AI Commit] shell: pwsh\r\n')
+      }
       attachStreams()
     })
 
     child.on('error', (err) => {
-      if (!started && !switchedToWindowsPowerShell) {
+      if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
         switchedToWindowsPowerShell = true
         sendAiCommitOutput(projectId, `[AI Commit] pwsh unavailable, fallback to powershell.exe (${err.message})\r\n`)
-        child = spawnWith('powershell.exe')
+        child = spawnWindowsPowerShell('powershell.exe')
         child.on('spawn', () => {
           sendAiCommitOutput(projectId, '[AI Commit] shell: powershell.exe\r\n')
           attachStreams()
@@ -705,9 +764,6 @@ function registerIpcHandlers(): void {
     return tmuxManager.killSession(sessionName)
   })
 
-  ipcMain.handle(IPC.TMUX_REHYDRATE, () => {
-    return tmuxManager.rehydrate()
-  })
 }
 
 // ── before-quit ───────────────────────────────────────────
@@ -753,11 +809,6 @@ app.whenReady().then(async () => {
   // P0 1: One-time capability probe
   await capabilityManager.init()
   bootCapability = capabilityManager.get()
-
-  // P0 2: Rehydrate tmux sessions if available
-  if (bootCapability.backend === 'tmux') {
-    await tmuxManager.rehydrate()
-  }
 
   // Create ProcessManager with capability injected
   processManager = new ProcessManager(bootCapability)

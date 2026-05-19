@@ -1,6 +1,7 @@
 export type ProjectType =
   | 'next.js'
   | 'vite'
+  | 'android'
   | 'nuxt'
   | 'node'
   | 'django'
@@ -13,7 +14,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 
-export type ProcessStatus = 'running' | 'stopped' | 'error' | 'detached'
+export type ProcessStatus = 'running' | 'stopped' | 'error'
 
 export type CliTool = 'claude' | 'codex'
 
@@ -30,6 +31,20 @@ export interface ProjectDocLink {
   url: string
 }
 
+export interface ProjectFolder {
+  id: string
+  name: string
+  color?: string
+  sortOrder: number
+}
+
+export interface ProjectTag {
+  id: string
+  name: string
+  color?: string
+  sortOrder: number
+}
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -44,6 +59,10 @@ export interface ProjectInfo {
   cli?: CliTool
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
+  /** User-defined folder classification */
+  folderId?: string
+  /** User-defined tags */
+  tagIds?: string[]
 }
 
 export interface ProcessInfo {
@@ -57,6 +76,10 @@ export interface ProcessInfo {
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
+  /** User-defined project folders */
+  folders?: ProjectFolder[]
+  /** User-defined project tags */
+  tags?: ProjectTag[]
   /** WSL-side launcher script path for runtime boot */
   runtimeLauncherScript?: string
   /** AI-assisted git commit configuration */
@@ -74,6 +97,10 @@ export interface SavedProject {
   cli?: CliTool
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
+  /** User-defined folder classification */
+  folderId?: string
+  /** User-defined tags */
+  tagIds?: string[]
 }
 
 export interface DetectionRule {

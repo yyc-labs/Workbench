@@ -5,11 +5,12 @@ import type {
   AppConfig,
   Capability,
   TmuxSessionInfo,
-  RecoveredSession,
   SessionRuntime,
   RuntimeEntry,
   ProjectDocLink,
   RuntimeDiagnostics,
+  ProjectFolder,
+  ProjectTag,
 } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
@@ -30,18 +31,38 @@ function collectUrlsFromText(text: string): string[] {
   return matches ? [...new Set(matches)] : []
 }
 
-function normalizeComparablePath(input: string): string {
-  const normalized = input.replace(/\\/g, '/').toLowerCase()
-  const uncWsl = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/[^/]+\/?(.*)$/)
-  if (uncWsl) {
-    const rest = uncWsl[1] ?? ''
-    return rest ? `/${rest.replace(/^\/+/, '')}` : '/'
+function fallbackProjectName(dirPath: string): string {
+  const normalized = dirPath.replace(/[\\/]+$/, '')
+  const parts = normalized.split(/[\\/]/)
+  return parts[parts.length - 1] || dirPath
+}
+
+function fallbackProjectId(filePath: string): string {
+  let hash = 0
+  for (let i = 0; i < filePath.length; i++) {
+    const char = filePath.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash |= 0
   }
-  const drive = normalized.match(/^([a-z]):\/(.*)$/)
-  if (drive) {
-    return `/mnt/${drive[1]}/${drive[2]}`
+  return `p${Math.abs(hash).toString(36)}`
+}
+
+function createEntityId(prefix: 'folder' | 'tag'): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`
   }
-  return normalized
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function createFallbackProject(dirPath: string): ProjectInfo {
+  return {
+    id: fallbackProjectId(dirPath),
+    path: dirPath,
+    name: fallbackProjectName(dirPath),
+    type: 'unknown',
+    command: 'echo Please set project command first',
+    docLinks: [],
+  }
 }
 
 declare global {
@@ -69,7 +90,6 @@ declare global {
       getCapability: () => Promise<Capability>
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
       killTmuxSession: (sessionName: string) => Promise<boolean>
-      rehydrateTmuxSessions: () => Promise<RecoveredSession[]>
       startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
@@ -90,6 +110,8 @@ declare global {
 interface AppState {
   isAppReady: boolean
   projects: ProjectInfo[]
+  folders: ProjectFolder[]
+  tags: ProjectTag[]
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
   processUrls: Record<string, string[]>
@@ -109,7 +131,6 @@ interface AppState {
   removeProject: (projectId: string) => Promise<void>
   startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean) => Promise<void>
   stopProject: (projectId: string) => Promise<void>
-  reattachProject: (projectId: string, processId?: string) => Promise<void>
   loadRuntimeEntries: () => Promise<void>
   appendOutput: (projectId: string, data: string) => void
   clearOutput: (projectId: string) => void
@@ -121,31 +142,52 @@ interface AppState {
   updateLastOpened: (projectId: string) => void
   clearProcessUrl: (projectId: string) => void
   loadTmuxSessions: () => Promise<void>
-  markProjectDetached: (projectId: string) => void
   refreshSessions: () => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
+  createFolder: (name: string, color?: string) => Promise<void>
+  renameFolder: (folderId: string, name: string) => Promise<void>
+  removeFolder: (folderId: string) => Promise<void>
+  assignProjectFolder: (projectId: string, folderId?: string) => Promise<void>
+  createTag: (name: string, color?: string) => Promise<void>
+  renameTag: (tagId: string, name: string) => Promise<void>
+  removeTag: (tagId: string) => Promise<void>
+  setProjectTags: (projectId: string, tagIds: string[]) => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
   openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
 }
 
-async function persistProjects(projects: ProjectInfo[]): Promise<void> {
+function toSavedProjects(projects: ProjectInfo[]): AppConfig['projects'] {
+  return projects.map((p) => ({
+    path: p.path,
+    customCommand: p.customCommand,
+    pinned: p.pinned,
+    lastOpened: p.lastOpened,
+    cli: p.cli,
+    docLinks: p.docLinks ?? [],
+    folderId: p.folderId,
+    tagIds: p.tagIds ?? [],
+  }))
+}
+
+async function persistWorkspace(
+  projects: ProjectInfo[],
+  folders: ProjectFolder[],
+  tags: ProjectTag[],
+): Promise<void> {
   await window.electronAPI.setConfig({
-    projects: projects.map((p) => ({
-      path: p.path,
-      customCommand: p.customCommand,
-      pinned: p.pinned,
-      lastOpened: p.lastOpened,
-      cli: p.cli,
-      docLinks: p.docLinks ?? [],
-    })),
+    projects: toSavedProjects(projects),
+    folders,
+    tags,
   })
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   isAppReady: false,
   projects: [],
+  folders: [],
+  tags: [],
   processes: {},
   terminalOutputs: {},
   processUrls: {},
@@ -165,41 +207,39 @@ export const useAppStore = create<AppState>((set, get) => ({
     const config = await window.electronAPI.getConfig()
     const projects: ProjectInfo[] = []
     for (const saved of config.projects) {
-      const project = await window.electronAPI.detectProjects(saved.path)
-      if (project) {
-        if (saved.customCommand) project.customCommand = saved.customCommand
-        if (saved.pinned) project.pinned = saved.pinned
-        if (saved.lastOpened) project.lastOpened = saved.lastOpened
-        if (saved.cli) project.cli = saved.cli
-        project.docLinks = saved.docLinks ?? []
-        projects.push(project)
+      let project: ProjectInfo | null = null
+      try {
+        project = await window.electronAPI.detectProjects(saved.path)
+      } catch (err) {
+        console.warn('[appStore.initApp] detectProjects failed, fallback to unknown:', saved.path, err)
       }
+      const ensured = project ?? createFallbackProject(saved.path)
+      if (saved.customCommand) ensured.customCommand = saved.customCommand
+      if (saved.pinned) ensured.pinned = saved.pinned
+      if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
+      if (saved.cli) ensured.cli = saved.cli
+      ensured.docLinks = saved.docLinks ?? []
+      ensured.folderId = saved.folderId
+      ensured.tagIds = saved.tagIds ?? []
+      projects.push(ensured)
     }
 
     // Get capability info
     const capability = await window.electronAPI.getCapability()
 
-    // P0 2: Rehydrate tmux sessions if available
     let tmuxSessions: TmuxSessionInfo[] = []
     if (capability?.hasTmux) {
-      const recovered = await window.electronAPI.rehydrateTmuxSessions()
       tmuxSessions = await window.electronAPI.listTmuxSessions()
-
-      // Mark projects with existing tmux sessions as detached
-      for (const rec of recovered) {
-        const matched = projects.find((p) => {
-          // Match via wsl path = project path converted
-          const wslPath = normalizeComparablePath(rec.cwd)
-          const projPath = normalizeComparablePath(p.path)
-          return wslPath.includes(projPath) || projPath.includes(wslPath)
-        })
-        if (matched) {
-          get().markProjectDetached(matched.id)
-        }
-      }
     }
 
-    set({ config, projects, capability, tmuxSessions })
+    set({
+      config,
+      projects,
+      folders: (config.folders ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
+      tags: (config.tags ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
+      capability,
+      tmuxSessions,
+    })
 
     // Load runtime entries (session names computed by main process via MD5)
     await get().loadRuntimeEntries()
@@ -220,17 +260,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     const config = await window.electronAPI.getConfig()
     const projects: ProjectInfo[] = []
     for (const saved of config.projects) {
-      const project = await window.electronAPI.detectProjects(saved.path)
-      if (project) {
-        if (saved.customCommand) project.customCommand = saved.customCommand
-        if (saved.pinned) project.pinned = saved.pinned
-        if (saved.lastOpened) project.lastOpened = saved.lastOpened
-        if (saved.cli) project.cli = saved.cli
-        project.docLinks = saved.docLinks ?? []
-        projects.push(project)
+      let project: ProjectInfo | null = null
+      try {
+        project = await window.electronAPI.detectProjects(saved.path)
+      } catch (err) {
+        console.warn('[appStore.loadConfig] detectProjects failed, fallback to unknown:', saved.path, err)
       }
+      const ensured = project ?? createFallbackProject(saved.path)
+      if (saved.customCommand) ensured.customCommand = saved.customCommand
+      if (saved.pinned) ensured.pinned = saved.pinned
+      if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
+      if (saved.cli) ensured.cli = saved.cli
+      ensured.docLinks = saved.docLinks ?? []
+      ensured.folderId = saved.folderId
+      ensured.tagIds = saved.tagIds ?? []
+      projects.push(ensured)
     }
-    set({ config, projects })
+    set({
+      config,
+      projects,
+      folders: (config.folders ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
+      tags: (config.tags ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
+    })
   },
 
   setTheme: async (theme: AppConfig['theme']) => {
@@ -267,18 +318,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     const existing = get().projects.find((p) => p.path === dirPath)
     if (existing) return
 
-    const project = await window.electronAPI.detectProjects(dirPath)
-    if (!project) return
+    let detected: ProjectInfo | null = null
+    try {
+      detected = await window.electronAPI.detectProjects(dirPath)
+    } catch (err) {
+      console.warn('[appStore.addProject] detectProjects failed, fallback to unknown:', dirPath, err)
+    }
+    const project = detected ?? createFallbackProject(dirPath)
 
     set((state) => ({ projects: [...state.projects, project] }))
-    await persistProjects(get().projects)
+    await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
   removeProject: async (projectId: string) => {
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== projectId),
     }))
-    await persistProjects(get().projects)
+    await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
   setProjectCli: async (projectId: string, cli: 'claude' | 'codex') => {
@@ -287,7 +343,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         p.id === projectId ? { ...p, cli } : p
       ),
     }))
-    await persistProjects(get().projects)
+    await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
   setProjectDocLinks: async (projectId: string, docLinks: ProjectDocLink[]) => {
@@ -296,7 +352,119 @@ export const useAppStore = create<AppState>((set, get) => ({
         p.id === projectId ? { ...p, docLinks } : p
       ),
     }))
-    await persistProjects(get().projects)
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  createFolder: async (name: string, color?: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    const dup = get().folders.some((folder) => folder.name.toLowerCase() === trimmed.toLowerCase())
+    if (dup) return
+
+    const nextFolder: ProjectFolder = {
+      id: createEntityId('folder'),
+      name: trimmed,
+      color: color?.trim() || undefined,
+      sortOrder: get().folders.length,
+    }
+    set((state) => ({
+      folders: [...state.folders, nextFolder],
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  renameFolder: async (folderId: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    const dup = get().folders.some(
+      (folder) => folder.id !== folderId && folder.name.toLowerCase() === trimmed.toLowerCase()
+    )
+    if (dup) return
+
+    set((state) => ({
+      folders: state.folders.map((folder) =>
+        folder.id === folderId ? { ...folder, name: trimmed } : folder
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  removeFolder: async (folderId: string) => {
+    set((state) => ({
+      folders: state.folders.filter((folder) => folder.id !== folderId),
+      projects: state.projects.map((project) =>
+        project.folderId === folderId ? { ...project, folderId: undefined } : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  assignProjectFolder: async (projectId: string, folderId?: string) => {
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId ? { ...project, folderId } : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  createTag: async (name: string, color?: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    const dup = get().tags.some((tag) => tag.name.toLowerCase() === trimmed.toLowerCase())
+    if (dup) return
+
+    const nextTag: ProjectTag = {
+      id: createEntityId('tag'),
+      name: trimmed,
+      color: color?.trim() || undefined,
+      sortOrder: get().tags.length,
+    }
+    set((state) => ({
+      tags: [...state.tags, nextTag],
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  renameTag: async (tagId: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+
+    const dup = get().tags.some(
+      (tag) => tag.id !== tagId && tag.name.toLowerCase() === trimmed.toLowerCase()
+    )
+    if (dup) return
+
+    set((state) => ({
+      tags: state.tags.map((tag) =>
+        tag.id === tagId ? { ...tag, name: trimmed } : tag
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  removeTag: async (tagId: string) => {
+    set((state) => ({
+      tags: state.tags.filter((tag) => tag.id !== tagId),
+      projects: state.projects.map((project) => ({
+        ...project,
+        tagIds: (project.tagIds ?? []).filter((id) => id !== tagId),
+      })),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectTags: async (projectId: string, tagIds: string[]) => {
+    const uniq = [...new Set(tagIds)]
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId ? { ...project, tagIds: uniq } : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
   startProject: async (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean) => {
@@ -413,7 +581,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         p.id === projectId ? { ...p, pinned: !p.pinned } : p
       ),
     }))
-    await persistProjects(get().projects)
+    await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
   updateLastOpened: (projectId: string) => {
@@ -434,37 +602,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
-  reattachProject: async (projectId: string, processId?: string) => {
-    const project = get().projects.find((p) => p.id === projectId)
-    if (!project) return
-
-    const pid = processId || projectId
-
-    set((state) => ({
-      processes: {
-        ...state.processes,
-        [pid]: { pid: null, status: 'running', startTime: Date.now() },
-      },
-    }))
-
-    // Pass empty command — runner will only attach to existing tmux session (no creation)
-    await window.electronAPI.startProcess(pid, '', project.path)
-  },
-
   loadTmuxSessions: async () => {
     try {
       const sessions = await window.electronAPI.listTmuxSessions()
       set({ tmuxSessions: sessions })
     } catch { /* tmux not available */ }
-  },
-
-  markProjectDetached: (projectId: string) => {
-    set((state) => ({
-      processes: {
-        ...state.processes,
-        [projectId]: { pid: null, status: 'detached', startTime: undefined },
-      },
-    }))
   },
 
   refreshSessions: async () => {

@@ -51,3 +51,11 @@ start(projectId, command, cwd, useWsl)
 The app runs on Windows. Claude is a Linux binary and must execute inside WSL. Project dev servers (`npm`, `python`, etc.) are Windows-native and must NOT go through WSL — doing so would run them in a Linux environment where Windows-only tools and paths break.
 
 Tmux added session-management complexity without enough benefit for single-session Claude use. Switching to direct wsl-pty simplifies the architecture and eliminates session-recovery edge cases.
+
+## Dependency Safety (WSL)
+
+### Hard constraint
+
+- Never run dependency install/rebuild commands from WSL in this repo path (`/mnt/d/...`).
+- Forbidden in WSL: `npm i`, `npm install`, `pnpm i`, `pnpm install`, `yarn install`, `electron-rebuild`, `node-gyp`, `npx electron-rebuild`.
+- When dependency changes are required: pause execution, ask user approval, and provide Windows PowerShell commands for manual execution instead of running them in WSL.

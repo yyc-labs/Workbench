@@ -1,18 +1,21 @@
 import { memo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ProjectInfo, CliTool } from '../../shared/types'
+import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Play, Square, Folder, FileText, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
+import { ProjectMetaDialog } from './ProjectMetaDialog'
 
 interface ProjectCardProps {
   project: ProjectInfo
+  folders?: ProjectFolder[]
+  tags?: ProjectTag[]
   onSelect: (id: string) => void
   index?: number
 }
 
-function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
+function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 0 }: ProjectCardProps) {
   const navigate = useNavigate()
 
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
@@ -23,6 +26,8 @@ function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
+  const setProjectTags = useAppStore((s) => s.setProjectTags)
 
   const currentCli: CliTool = project.cli || 'claude'
 
@@ -69,6 +74,7 @@ function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+  const [metaDialogOpen, setMetaDialogOpen] = useState(false)
 
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
@@ -142,6 +148,32 @@ function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
             </span>
           )}
         </div>
+        {project.tagIds && project.tagIds.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {project.tagIds.slice(0, 3).map((tagId) => {
+              const tag = tags.find((item) => item.id === tagId)
+              if (!tag) return null
+              return (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[10px] text-[color:var(--color-muted-foreground)]"
+                  style={{ borderColor: 'var(--color-border)' }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: tag.color || 'var(--color-primary)' }}
+                  />
+                  {tag.name}
+                </span>
+              )
+            })}
+            {project.tagIds.length > 3 && (
+              <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
+                +{project.tagIds.length - 3}
+              </span>
+            )}
+          </div>
+        )}
         <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
           <p className="truncate" title={project.path}>{project.path}</p>
           <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
@@ -193,6 +225,18 @@ function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={() => removeProject(project.id)}
+          onEditMetadata={() => setMetaDialogOpen(true)}
+        />
+      )}
+
+      {metaDialogOpen && (
+        <ProjectMetaDialog
+          project={project}
+          folders={folders}
+          tags={tags}
+          onClose={() => setMetaDialogOpen(false)}
+          onAssignFolder={assignProjectFolder}
+          onSetProjectTags={setProjectTags}
         />
       )}
 

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import type { ProjectInfo } from '../../shared/types'
 import { ProjectCard } from '../components/ProjectCard'
+import { WorkspaceClassifierPanel, type ClassifierFilter } from '../components/WorkspaceClassifierPanel'
+import { WorkspaceManagerDialog } from '../components/ProjectMetaDialog'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ScrollArea } from '../components/ui/scroll-area'
@@ -15,6 +17,7 @@ import {
   Zap,
   Pin,
   FolderOpen,
+  SlidersHorizontal,
 } from 'lucide-react'
 
 type EnvFilter = 'all' | 'ubuntu' | 'windows'
@@ -37,6 +40,7 @@ function Toolbar({
   envCounts,
   onAddFolder,
   onSettingsClick,
+  onManageWorkspace,
   searchRef,
 }: {
   searchQuery: string
@@ -46,6 +50,7 @@ function Toolbar({
   envCounts: { all: number; ubuntu: number; windows: number }
   onAddFolder: () => void
   onSettingsClick: () => void
+  onManageWorkspace: () => void
   searchRef: React.RefObject<HTMLInputElement>
 }) {
   const filterButtonClass = (active: boolean): string =>
@@ -115,6 +120,15 @@ function Toolbar({
             variant="ghost"
             size="icon"
             className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            onClick={onManageWorkspace}
+            title="Manage folders and tags"
+          >
+            <SlidersHorizontal className="w-4 h-4" strokeWidth={1.8} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={onSettingsClick}
           >
             <Settings className="w-4 h-4" strokeWidth={1.8} />
@@ -158,17 +172,28 @@ function DragOverlay() {
 
 export function HomePage() {
   const projects = useAppStore((s) => s.projects)
+  const folders = useAppStore((s) => s.folders)
+  const tags = useAppStore((s) => s.tags)
   const isAppReady = useAppStore((s) => s.isAppReady)
   const sessions = useAppStore((s) => s.sessions)
+  const processes = useAppStore((s) => s.processes)
   const searchQuery = useAppStore((s) => s.searchQuery)
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
   const addProject = useAppStore((s) => s.addProject)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
+  const createFolder = useAppStore((s) => s.createFolder)
+  const renameFolder = useAppStore((s) => s.renameFolder)
+  const removeFolder = useAppStore((s) => s.removeFolder)
+  const createTag = useAppStore((s) => s.createTag)
+  const renameTag = useAppStore((s) => s.renameTag)
+  const removeTag = useAppStore((s) => s.removeTag)
   const navigate = useNavigate()
 
   const searchRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all')
+  const [classifierFilter, setClassifierFilter] = useState<ClassifierFilter>({ type: 'all' })
+  const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
   const isDragOverRef = useRef(false)
   const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastDragOverAtRef = useRef(0)
@@ -308,8 +333,27 @@ export function HomePage() {
     return filteredProjects.filter((p) => envByPath.get(p.path) === envFilter)
   }, [filteredProjects, envFilter, envByPath])
 
-  const pinnedProjects = useMemo(() => envFilteredProjects.filter((p) => p.pinned), [envFilteredProjects])
-  const recentProjects = useMemo(() => envFilteredProjects.filter((p) => !p.pinned), [envFilteredProjects])
+  const filteredByClassifier = useMemo(() => {
+    switch (classifierFilter.type) {
+      case 'all':
+        return envFilteredProjects
+      case 'pinned':
+        return envFilteredProjects.filter((p) => Boolean(p.pinned))
+      case 'running':
+        return envFilteredProjects.filter((p) => processes[p.id]?.status === 'running')
+      case 'uncategorized':
+        return envFilteredProjects.filter((p) => !p.folderId)
+      case 'folder':
+        return envFilteredProjects.filter((p) => p.folderId === classifierFilter.folderId)
+      case 'tag':
+        return envFilteredProjects.filter((p) => (p.tagIds ?? []).includes(classifierFilter.tagId))
+      default:
+        return envFilteredProjects
+    }
+  }, [classifierFilter, envFilteredProjects, processes])
+
+  const pinnedProjects = useMemo(() => filteredByClassifier.filter((p) => p.pinned), [filteredByClassifier])
+  const recentProjects = useMemo(() => filteredByClassifier.filter((p) => !p.pinned), [filteredByClassifier])
 
   const groupedRecentProjects = useMemo(() => {
     const groupOrder: EnvGroupKey[] = ['ubuntu', 'windows', 'other']
@@ -337,6 +381,29 @@ export function HomePage() {
     () => Object.values(sessions).filter((s) => s.status !== 'stopped').length,
     [sessions]
   )
+
+  const classifierCounts = useMemo(() => {
+    const byFolder: Record<string, number> = {}
+    const byTag: Record<string, number> = {}
+
+    for (const p of envFilteredProjects) {
+      if (p.folderId) {
+        byFolder[p.folderId] = (byFolder[p.folderId] ?? 0) + 1
+      }
+      for (const tagId of p.tagIds ?? []) {
+        byTag[tagId] = (byTag[tagId] ?? 0) + 1
+      }
+    }
+
+    return {
+      all: envFilteredProjects.length,
+      pinned: envFilteredProjects.filter((p) => Boolean(p.pinned)).length,
+      running: envFilteredProjects.filter((p) => processes[p.id]?.status === 'running').length,
+      uncategorized: envFilteredProjects.filter((p) => !p.folderId).length,
+      byFolder,
+      byTag,
+    }
+  }, [envFilteredProjects, processes])
 
   const handleAddFolder = useCallback(async () => {
     const dirPath = await window.electronAPI.selectDirectory()
@@ -401,7 +468,7 @@ export function HomePage() {
               Add Project Folder
             </Button>
             <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-              Node.js &middot; Python &middot; Vite &middot; Next.js &middot; Django &middot; more
+              Node.js &middot; Python &middot; Android &middot; Vite &middot; Next.js &middot; Django &middot; more
             </p>
           </div>
         </div>
@@ -421,6 +488,7 @@ export function HomePage() {
         envCounts={envCounts}
         onAddFolder={handleAddFolder}
         onSettingsClick={() => navigate('/settings')}
+        onManageWorkspace={() => setWorkspaceDialogOpen(true)}
         searchRef={searchRef}
       />
       <ScrollArea className="flex-1">
@@ -444,59 +512,99 @@ export function HomePage() {
             </p>
           </div>
 
-          {pinnedProjects.length > 0 && (
-            <div className="mb-9">
-              <div className="flex items-center gap-2.5 mb-3">
-                <Pin className="w-3.5 h-3.5 text-[color:var(--color-warning)]" strokeWidth={1.8} />
-                <h2 className="section-label">Pinned</h2>
-                <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{pinnedProjects.length}</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {pinnedProjects.map((project, index) => (
-                  <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="flex flex-col gap-5 md:flex-row md:items-start">
+            <WorkspaceClassifierPanel
+              folders={folders}
+              tags={tags}
+              activeFilter={classifierFilter}
+              counts={classifierCounts}
+              onChangeFilter={setClassifierFilter}
+            />
 
-          <div>
-            <div className="flex items-center gap-2.5 mb-3">
-              <FolderOpen className="w-3.5 h-3.5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
-              <h2 className="section-label">
-                {pinnedProjects.length > 0 ? 'Projects' : 'Project Groups'}
-              </h2>
-              <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
+            <div className="min-w-0 flex-1">
+              {pinnedProjects.length > 0 && (
+                <div className="mb-9">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <Pin className="w-3.5 h-3.5 text-[color:var(--color-warning)]" strokeWidth={1.8} />
+                    <h2 className="section-label">Pinned</h2>
+                    <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{pinnedProjects.length}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {pinnedProjects.map((project, index) => (
+                      <ProjectCard
+                        key={project.id}
+                        project={project}
+                        folders={folders}
+                        tags={tags}
+                        index={index}
+                        onSelect={handleSelect}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center gap-2.5 mb-3">
+                  <FolderOpen className="w-3.5 h-3.5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
+                  <h2 className="section-label">
+                    {pinnedProjects.length > 0 ? 'Projects' : 'Project Groups'}
+                  </h2>
+                  <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
+                </div>
+                {groupedRecentProjects.length > 0 ? (
+                  <div className="space-y-7">
+                    {groupedRecentProjects.map((group) => (
+                      <section key={group.key}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
+                            {group.label}
+                          </h3>
+                          <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
+                            {group.projects.length}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {group.projects.map((project, index) => (
+                            <ProjectCard
+                              key={project.id}
+                              project={project}
+                              folders={folders}
+                              tags={tags}
+                              index={index}
+                              onSelect={handleSelect}
+                            />
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">
+                    {searchQuery || envFilter !== 'all'
+                      ? 'No projects match your search/filter'
+                      : 'No projects yet'}
+                  </div>
+                )}
+              </div>
             </div>
-            {groupedRecentProjects.length > 0 ? (
-              <div className="space-y-7">
-                {groupedRecentProjects.map((group) => (
-                  <section key={group.key}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
-                        {group.label}
-                      </h3>
-                      <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
-                        {group.projects.length}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      {group.projects.map((project, index) => (
-                        <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">
-                {searchQuery || envFilter !== 'all'
-                  ? 'No projects match your search/filter'
-                  : 'No projects yet'}
-              </div>
-            )}
           </div>
         </div>
       </ScrollArea>
+
+      {workspaceDialogOpen && (
+        <WorkspaceManagerDialog
+          folders={folders}
+          tags={tags}
+          onClose={() => setWorkspaceDialogOpen(false)}
+          onCreateFolder={createFolder}
+          onRenameFolder={renameFolder}
+          onRemoveFolder={removeFolder}
+          onCreateTag={createTag}
+          onRenameTag={renameTag}
+          onRemoveTag={removeTag}
+        />
+      )}
     </div>
   )
 }

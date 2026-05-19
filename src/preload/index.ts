@@ -76,8 +76,6 @@ const api = {
   killTmuxSession: (sessionName: string) =>
     ipcRenderer.invoke(IPC.TMUX_KILL_SESSION, sessionName),
 
-  rehydrateTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_REHYDRATE),
-
   startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') =>
     ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, cli),
 

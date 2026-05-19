@@ -273,7 +273,7 @@ function AiCommitPanel({
         <p className="section-label mb-3">AI</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Auto Commit</h2>
         <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          Configure AI API for Windows PowerShell auto-commit in project detail page.
+          Configure AI API for auto-commit in project detail page (Windows PowerShell and WSL supported).
         </p>
       </div>
 
