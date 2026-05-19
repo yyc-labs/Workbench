@@ -45,8 +45,8 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
         boxShadow: 'var(--shadow-popover)',
-        backdropFilter: 'saturate(180%) blur(28px)',
-        WebkitBackdropFilter: 'saturate(180%) blur(28px)',
+        backdropFilter: 'saturate(165%) blur(22px)',
+        WebkitBackdropFilter: 'saturate(165%) blur(22px)',
       }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}

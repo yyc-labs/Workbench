@@ -50,12 +50,12 @@ function Toolbar({
 }) {
   const filterButtonClass = (active: boolean): string =>
     active
-      ? 'h-8 px-3.5 rounded-full text-xs font-medium text-[color:var(--color-foreground)] bg-[color:var(--color-card)] shadow-sm border border-[color:var(--color-border)]'
-      : 'h-8 px-3.5 rounded-full text-xs font-medium text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-transparent'
+      ? 'h-7 px-3 rounded-full text-xs font-medium text-[color:var(--color-foreground)] bg-[color:var(--color-card)] shadow-sm border border-[color:var(--color-border)]'
+      : 'h-7 px-3 rounded-full text-xs font-medium text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-transparent'
 
   return (
     <header
-      className="app-chrome h-auto min-h-[76px] flex items-center px-8 py-3 gap-5 shrink-0"
+      className="app-chrome h-auto min-h-[68px] flex items-center px-8 py-3 gap-5 shrink-0"
     >
       <div className="flex items-center gap-3 mr-5">
         <div
@@ -79,11 +79,11 @@ function Toolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="quiet-control h-11 pl-11 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+          className="quiet-control h-10 pl-11 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
       </div>
 
-      <div className="quiet-control ml-auto flex items-center rounded-full px-2 py-1.5 gap-2.5">
+      <div className="quiet-control ml-auto flex items-center rounded-full px-1.5 py-1 gap-2.5">
         <div className="flex items-center gap-1.5">
           <button
             className={filterButtonClass(envFilter === 'all')}
@@ -373,10 +373,12 @@ export function HomePage() {
       />
       <ScrollArea className="flex-1">
         <div className="content-breathe">
-          <div className="mb-12">
-            <p className="section-label mb-3">Workspace</p>
-            <h1 className="text-[34px] font-semibold tracking-[-0.045em] text-[color:var(--color-foreground)]">Projects</h1>
-            <p className="text-[15px] text-[color:var(--color-muted-foreground)] mt-3 flex items-center gap-2">
+          <div className="mb-8 flex items-end justify-between gap-6">
+            <div>
+              <p className="section-label mb-2">Workspace</p>
+              <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">Projects</h1>
+            </div>
+            <p className="mb-1 flex items-center gap-2 text-[13px] text-[color:var(--color-muted-foreground)]">
               <span>{envFilteredProjects.length} project{envFilteredProjects.length !== 1 ? 's' : ''}</span>
               {runningCount > 0 && (
                 <>
@@ -391,13 +393,13 @@ export function HomePage() {
           </div>
 
           {pinnedProjects.length > 0 && (
-            <div className="mb-12">
-              <div className="flex items-center gap-2.5 mb-5">
+            <div className="mb-9">
+              <div className="flex items-center gap-2.5 mb-3">
                 <Pin className="w-3.5 h-3.5 text-[color:var(--color-warning)]" strokeWidth={1.8} />
                 <h2 className="section-label">Pinned</h2>
                 <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{pinnedProjects.length}</span>
               </div>
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2">
                 {pinnedProjects.map((project, index) => (
                   <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
                 ))}
@@ -406,7 +408,7 @@ export function HomePage() {
           )}
 
           <div>
-            <div className="flex items-center gap-2.5 mb-5">
+            <div className="flex items-center gap-2.5 mb-3">
               <FolderOpen className="w-3.5 h-3.5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
               <h2 className="section-label">
                 {pinnedProjects.length > 0 ? 'Projects' : 'Project Groups'}
@@ -414,10 +416,10 @@ export function HomePage() {
               <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
             </div>
             {groupedRecentProjects.length > 0 ? (
-              <div className="space-y-10">
+              <div className="space-y-7">
                 {groupedRecentProjects.map((group) => (
                   <section key={group.key}>
-                    <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-3">
                       <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
                         {group.label}
                       </h3>
@@ -425,7 +427,7 @@ export function HomePage() {
                         {group.projects.length}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
                       {group.projects.map((project, index) => (
                         <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
                       ))}

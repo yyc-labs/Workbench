@@ -37,12 +37,12 @@ function InfoCard({
   icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
 }) {
   return (
-    <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+    <div className="rounded-[16px] px-4 py-3 quiet-control">
       <div className="mb-2 flex items-center gap-1.5 text-[color:var(--color-muted-foreground)]">
         <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
         <span className="section-label">{label}</span>
       </div>
-      <p className="truncate text-[15px] font-medium text-[color:var(--color-foreground)]" title={value}>
+      <p className="truncate text-[13px] font-medium text-[color:var(--color-foreground)]" title={value}>
         {value}
       </p>
     </div>
@@ -434,47 +434,17 @@ export function DetailPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col px-8 pb-8 pt-8">
-        <div className="mb-6 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
-          <span className="select-none text-xs text-[color:var(--color-muted-foreground)]">$</span>
-          <input
-            type="text"
-            value={customCommand}
-            onChange={(e) => setCustomCommand(e.target.value)}
-            placeholder={project.command}
-            className="flex-1 border-none bg-transparent text-sm font-mono text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleSaveCommand()
-            }}
-          />
-          {customCommand && customCommand !== project.command && (
-            <button
-              className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
-              onClick={() => void handleSaveCommand()}
-            >
-              Save
-            </button>
-          )}
-        </div>
-
-        <div className="mb-6 space-y-3 shrink-0">
-          <InfoCard label="Path" value={project.path} icon={Folder} />
-          <div className="grid grid-cols-2 gap-3">
-            <InfoCard label="Type" value={project.type} icon={Code2} />
-            <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
-          </div>
-        </div>
-
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-6">
+      <div className="min-h-0 flex-1 px-8 pb-8 pt-8">
+        <div className="grid h-full min-h-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section
             className="min-h-0 min-w-0 overflow-hidden"
             style={{
               background: 'var(--color-terminal-surface)',
-              borderRadius: '24px',
+              borderRadius: '22px',
               boxShadow: `
                 inset 0 1px 0 rgba(255,255,255,0.04),
                 0 0 0 1px rgba(255,255,255,0.03),
-                0 18px 42px rgba(0,0,0,0.16)
+                0 14px 34px rgba(0,0,0,0.14)
               `,
             }}
           >
@@ -499,8 +469,38 @@ export function DetailPage() {
             </div>
           </section>
 
-          <section className="surface-card min-h-0 min-w-0 overflow-hidden rounded-[24px] border" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderBottomColor: 'var(--color-border)' }}>
+          <aside className="min-h-0 min-w-0 overflow-auto rounded-[22px] p-5 surface-card">
+            <div className="mb-5 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
+              <span className="select-none text-xs text-[color:var(--color-muted-foreground)]">$</span>
+              <input
+                type="text"
+                value={customCommand}
+                onChange={(e) => setCustomCommand(e.target.value)}
+                placeholder={project.command}
+                className="min-w-0 flex-1 border-none bg-transparent font-mono text-sm text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleSaveCommand()
+                }}
+              />
+              {customCommand && customCommand !== project.command && (
+                <button
+                  className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
+                  onClick={() => void handleSaveCommand()}
+                >
+                  Save
+                </button>
+              )}
+            </div>
+
+            <div className="mb-5 space-y-3">
+              <InfoCard label="Path" value={project.path} icon={Folder} />
+              <div className="grid grid-cols-2 gap-3">
+                <InfoCard label="Type" value={project.type} icon={Code2} />
+                <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
+              </div>
+            </div>
+
+            <div className="mb-4 flex items-center justify-between">
               <div>
                 <p className="section-label">
                   AI Commit
@@ -531,11 +531,11 @@ export function DetailPage() {
               </div>
             </div>
 
-            <div className="min-h-0 p-4" style={{ height: 'calc(100% - 82px)' }}>
+            <div>
               {rightPaneMode === 'flow' ? (
-                <div className="flex h-full flex-col gap-3 overflow-auto rounded-[20px] p-3 quiet-control">
+                <div className="flex flex-col gap-3">
                   <div
-                    className="rounded-[18px] border px-4 py-3"
+                    className="rounded-[16px] border px-4 py-3"
                     style={{
                       borderColor: 'color-mix(in srgb, var(--color-primary) 28%, transparent)',
                       background: 'color-mix(in srgb, var(--color-primary) 11%, transparent)',
@@ -557,7 +557,7 @@ export function DetailPage() {
                   {flowSteps.map((step) => (
                     <div
                       key={step.key}
-                      className={`rounded-[18px] border px-3.5 py-2.5 ${step.status === 'running'
+                      className={`rounded-[16px] border px-3.5 py-2.5 ${step.status === 'running'
                         ? 'bg-[color:var(--color-warning-background)]'
                         : step.status === 'success'
                           ? 'bg-[color:var(--color-success-background)]'
@@ -591,7 +591,7 @@ export function DetailPage() {
                   ))}
 
                   <div
-                    className="rounded-[18px] border px-4 py-3"
+                    className="rounded-[16px] border px-4 py-3"
                     style={{
                       borderColor: 'color-mix(in srgb, var(--color-primary) 26%, transparent)',
                       background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
@@ -599,7 +599,7 @@ export function DetailPage() {
                   >
                     <p className="text-xs font-medium text-[color:var(--color-foreground)]">AI 说了什么</p>
                     <pre
-                      className="mt-2 whitespace-pre-wrap break-words rounded-2xl border p-3 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
+                      className="mt-2 whitespace-pre-wrap break-words rounded-[14px] border p-3 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
                       style={{ borderColor: 'var(--color-border)', background: 'var(--color-card)' }}
                     >
                       {latestAiRaw || '暂无 AI 原始回复'}
@@ -607,14 +607,14 @@ export function DetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="h-full overflow-auto rounded-[20px] p-4 quiet-control">
+                <div className="max-h-[560px] overflow-auto rounded-[16px] p-4 quiet-control">
                   <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/85">
                     {aiRawText || '暂无原始日志'}
                   </pre>
                 </div>
               )}
             </div>
-          </section>
+          </aside>
         </div>
       </div>
     </div>

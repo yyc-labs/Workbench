@@ -232,9 +232,10 @@ export function RuntimePage() {
   const cliLabel = (project?.cli || 'claude') === 'codex' ? 'Codex' : 'Claude'
   const environmentLabel = project ? projectEnvironmentLabel(detectProjectEnvironment(project.path)) : 'Unknown'
   const isLoading = actionLoading !== null
-  const isStopped = session?.status === 'stopped'
-  const isAttached = session?.status === 'attached'
-  const sessionLabel = statusLabel(session?.status ?? 'stopped')
+  const runtimeStatus = session?.status ?? 'stopped'
+  const isStopped = runtimeStatus === 'stopped'
+  const isAttached = runtimeStatus === 'attached'
+  const sessionLabel = statusLabel(runtimeStatus)
 
   if (!project || !projectId) {
     return (
@@ -347,159 +348,146 @@ export function RuntimePage() {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex-1 flex flex-col min-h-0 px-8 py-10 overflow-auto">
-        <div className="max-w-3xl mx-auto w-full space-y-7">
+      <div className="min-h-0 flex-1 overflow-auto px-8 py-8">
+        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           {runtimeError && (
-            <div className="rounded-[20px] border px-5 py-4 text-sm whitespace-pre-line text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]" style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }}>
+            <div className="rounded-[18px] border px-5 py-4 text-sm whitespace-pre-line text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)] xl:col-span-2" style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }}>
               {runtimeError}
             </div>
           )}
-          {/* Runtime Status Card */}
-          <div className="rounded-[28px] p-8 surface-card">
-            <div className="flex items-center justify-between mb-7">
-              <h2 className="section-label">
-                {cliLabel} Runtime
-              </h2>
-              <span className="text-[11px] text-[color:var(--color-muted-foreground)] font-mono">
-                {session?.sessionName ?? '—'}
-              </span>
-            </div>
-
-            {/* Status indicators — primary status emphasized */}
-            <div className="flex items-center gap-8 mb-8">
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`w-3 h-3 rounded-full ${isAttached
-                      ? 'bg-[color:var(--color-success)]'
-                      : !isStopped
-                        ? 'bg-[color:var(--color-warning)]'
-                        : 'bg-[color:var(--color-muted-foreground)]/60'
-                    }`}
-                />
+          <div className="space-y-6">
+            <div className="rounded-[22px] p-7 surface-card">
+              <div className="mb-7 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">{sessionLabel}</p>
-                  <p className="text-[10px] text-[color:var(--color-muted-foreground)]">Runtime</p>
+                  <p className="section-label mb-2">{cliLabel} Runtime</p>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`h-3 w-3 rounded-full ${isAttached
+                          ? 'bg-[color:var(--color-success)]'
+                          : !isStopped
+                            ? 'bg-[color:var(--color-warning)]'
+                            : 'bg-[color:var(--color-muted-foreground)]/55'
+                        }`}
+                    />
+                    <h2 className="text-[32px] font-semibold tracking-[-0.045em] text-[color:var(--color-foreground)]">{sessionLabel}</h2>
+                  </div>
                 </div>
-              </div>
-              <span className="w-px h-10 bg-[color:var(--color-border)]" />
-              <div className="flex items-center gap-2.5">
-                <span
-                  className={`w-2 h-2 rounded-full ${isAttached ? 'bg-primary' : 'bg-[color:var(--color-muted-foreground)]/55'
-                    }`}
-                />
-                <div>
-                  <p className="text-xs text-[color:var(--color-muted-foreground)]">
-                    {isAttached ? 'Connected' : 'Disconnected'}
-                  </p>
-                </div>
-              </div>
-              <span className="w-px h-10 bg-[color:var(--color-border)]" />
-              <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                Created{' '}
-                <span className="text-[color:var(--color-foreground)]/75 font-mono">
-                  {session?.createdAt ? new Date(session.createdAt).toLocaleTimeString() : '—'}
+                <span className="max-w-[260px] truncate rounded-full bg-[color:var(--color-secondary)]/45 px-3 py-1 text-[11px] font-mono text-[color:var(--color-muted-foreground)]">
+                  {session?.sessionName ?? 'No session'}
                 </span>
               </div>
+
+              <div className="mb-7 grid grid-cols-3 gap-3">
+                <div className="quiet-control rounded-[16px] px-4 py-3">
+                  <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Connection</p>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">{isAttached ? 'Connected' : 'Disconnected'}</p>
+                </div>
+                <div className="quiet-control rounded-[16px] px-4 py-3">
+                  <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Created</p>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">{session?.createdAt ? new Date(session.createdAt).toLocaleTimeString() : '--'}</p>
+                </div>
+                <div className="quiet-control rounded-[16px] px-4 py-3">
+                  <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Backend</p>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">tmux</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {isStopped ? (
+                  <button
+                    disabled={isLoading}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-50"
+                    style={{ background: 'var(--color-success)' }}
+                    onClick={handleStartRuntime}
+                  >
+                    {actionLoading === 'start' ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Zap className="w-4 h-4" />
+                    )}
+                    Start Runtime
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      disabled={isLoading}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-primary-hover disabled:opacity-50"
+                      onClick={handleOpenTerminal}
+                    >
+                      {actionLoading === 'openTerminal' ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Terminal className="w-4 h-4" />
+                      )}
+                      Open Terminal
+                    </button>
+                    <button
+                      disabled={isLoading}
+                      className="quiet-control inline-flex items-center justify-center gap-2 rounded-full border-0 px-4 py-2.5 text-sm font-medium text-[color:var(--color-muted-foreground)] transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-50"
+                      onClick={handleRestart}
+                    >
+                      {actionLoading === 'restart' ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      Restart
+                    </button>
+                    <button
+                      disabled={isLoading}
+                      className="inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium text-[color:var(--color-destructive)] transition-all hover:bg-[color:var(--color-destructive-background)] disabled:opacity-50"
+                      style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
+                      onClick={handleStopRuntime}
+                    >
+                      {actionLoading === 'stop' ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Square className="w-4 h-4" />
+                      )}
+                      Stop
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
-            {/* Action buttons */}
-            <div className="flex items-center gap-3">
-              {isStopped ? (
+            <div className="rounded-[22px] p-6 surface-card">
+              <p className="section-label mb-4">Project Actions</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
-                  disabled={isLoading}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all text-white disabled:opacity-50 shadow-sm"
-                  style={{ background: 'var(--color-success)' }}
-                  onClick={handleStartRuntime}
+                  className="quiet-control inline-flex items-center justify-center gap-2 rounded-full border-0 px-4 py-2.5 text-sm font-medium text-[color:var(--color-muted-foreground)] transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => window.electronAPI.openFolder(project.path)}
                 >
-                  {actionLoading === 'start' ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4" />
-                  )}
-                  Start Runtime
+                  <FolderOpen className="w-4 h-4" />
+                  Open Folder
                 </button>
-              ) : (
-                <>
-                  <button
-                    disabled={isLoading}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all bg-primary text-white hover:bg-primary-hover shadow-sm disabled:opacity-50"
-                    onClick={handleOpenTerminal}
-                  >
-                    {actionLoading === 'openTerminal' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Terminal className="w-4 h-4" />
-                    )}
-                    Open Terminal
-                  </button>
-                  <button
-                    disabled={isLoading}
-                    className="quiet-control inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0 disabled:opacity-50"
-                    onClick={handleRestart}
-                  >
-                    {actionLoading === 'restart' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    Restart
-                  </button>
-                  <button
-                    disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] border disabled:opacity-50"
-                    style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
-                    onClick={handleStopRuntime}
-                  >
-                    {actionLoading === 'stop' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                    Stop
-                  </button>
-                </>
-              )}
-            </div>
-
-            {/* Quick actions — file system */}
-            <div className="flex items-center gap-3 mt-4">
-              <button
-                className="quiet-control flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0"
-                onClick={() => window.electronAPI.openFolder(project.path)}
-              >
-                <FolderOpen className="w-4 h-4" />
-                Open Folder
-              </button>
-              <button
-                className="quiet-control flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0"
-                onClick={() => window.electronAPI.openInVsCode(project.path)}
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M17.5 3.5L6.5 8.5L2 12L6.5 15.5L17.5 20.5L17.5 17L9.5 12L17.5 7Z"
-                    fill="#007ACC"
-                  />
-                </svg>
-                Open in VS Code
-              </button>
+                <button
+                  className="quiet-control inline-flex items-center justify-center gap-2 rounded-full border-0 px-4 py-2.5 text-sm font-medium text-[color:var(--color-muted-foreground)] transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => window.electronAPI.openInVsCode(project.path)}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M17.5 3.5L6.5 8.5L2 12L6.5 15.5L17.5 20.5L17.5 17L9.5 12L17.5 7Z"
+                      fill="#007ACC"
+                    />
+                  </svg>
+                  Open in VS Code
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Project Docs */}
-          <div className="rounded-[28px] p-8 surface-card">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div className="min-w-0">
-                <h3 className="section-label">
-                  Documentation Links
-                </h3>
-                <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
-                  Save project-specific docs for quick access.
-                </p>
+          <aside className="space-y-6">
+            <div className="rounded-[22px] p-6 surface-card">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="section-label">Documentation</h3>
+                  <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">Project-specific links.</p>
+                </div>
+                <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{docLinks.length}</span>
               </div>
-              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{docLinks.length} links</span>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1.6fr_auto] gap-2">
+              <div className="grid grid-cols-1 gap-2">
               <input
                 type="text"
                 value={docTitleInput}
@@ -531,7 +519,7 @@ export function RuntimePage() {
             {docError && <p className="text-xs text-[color:var(--color-destructive)] mt-2">{docError}</p>}
 
             {defaultDocLink && (
-              <div className="quiet-control mt-4 flex items-center justify-between rounded-[18px] px-4 py-3">
+              <div className="quiet-control mt-4 flex items-center justify-between rounded-[16px] px-4 py-3">
                 <span className="text-xs text-[color:var(--color-muted-foreground)] truncate">
                   Default: <span className="text-[color:var(--color-foreground)]">{defaultDocLink.title}</span>
                 </span>
@@ -546,7 +534,7 @@ export function RuntimePage() {
             )}
 
             {docLinks.length === 0 ? (
-              <div className="mt-5 rounded-[20px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
+              <div className="mt-5 rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
                 No documentation links yet.
               </div>
             ) : (
@@ -554,7 +542,7 @@ export function RuntimePage() {
                 {docLinks.map((link) => (
                   <div
                     key={link.id}
-                    className="quiet-control flex items-center gap-2 rounded-[18px] px-4 py-3"
+                    className="quiet-control flex items-center gap-2 rounded-[16px] px-4 py-3"
                   >
                     <button
                       className="flex-1 min-w-0 text-left"
@@ -595,11 +583,8 @@ export function RuntimePage() {
             )}
           </div>
 
-          {/* Recent Activity (placeholder) */}
-          <div className="rounded-[28px] p-8 surface-card">
-            <h3 className="section-label mb-4">
-              Recent Activity
-            </h3>
+            <div className="rounded-[22px] p-6 surface-card">
+            <h3 className="section-label mb-4">Recent Activity</h3>
             <div className="space-y-2 text-sm font-mono">
               {isStopped ? (
                 <div className="flex items-center gap-3 text-[color:var(--color-muted-foreground)]">
@@ -620,11 +605,8 @@ export function RuntimePage() {
             </div>
           </div>
 
-          {/* Runtime Info */}
-          <div className="rounded-[28px] p-8 surface-card">
-            <h3 className="section-label mb-4">
-              Runtime Info
-            </h3>
+            <div className="rounded-[22px] p-6 surface-card">
+            <h3 className="section-label mb-4">Runtime Info</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Session</p>
@@ -644,6 +626,7 @@ export function RuntimePage() {
               </div>
             </div>
           </div>
+          </aside>
         </div>
       </div>
     </div>

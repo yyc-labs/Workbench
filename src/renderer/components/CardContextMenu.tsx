@@ -9,6 +9,8 @@ import {
   Code2,
   Zap,
   Bot,
+  Pin,
+  Trash2,
 } from 'lucide-react'
 import type { CliTool } from '../../shared/types'
 
@@ -20,6 +22,7 @@ interface CardContextMenuProps {
   isDevRunning: boolean
   isOpeningTerminal: boolean
   currentCli: CliTool
+  isPinned?: boolean
   onStartRuntime: () => void | Promise<void>
   onStopRuntime: () => void | Promise<void>
   onOpenTerminal: () => void | Promise<void>
@@ -28,6 +31,8 @@ interface CardContextMenuProps {
   onStopProject: () => void | Promise<void>
   onOpenFolder: () => void | Promise<void>
   onOpenVsCode: () => void | Promise<void>
+  onTogglePin?: () => void | Promise<void>
+  onRemoveProject?: () => void | Promise<void>
 }
 
 interface MenuItem {
@@ -53,6 +58,7 @@ export function CardContextMenu({
   isDevRunning,
   isOpeningTerminal,
   currentCli,
+  isPinned,
   onStartRuntime,
   onStopRuntime,
   onOpenTerminal,
@@ -61,6 +67,8 @@ export function CardContextMenu({
   onStopProject,
   onOpenFolder,
   onOpenVsCode,
+  onTogglePin,
+  onRemoveProject,
 }: CardContextMenuProps) {
   const handleClick = useCallback(
     async (action: () => void | Promise<void>) => {
@@ -156,6 +164,20 @@ export function CardContextMenu({
           action: onOpenVsCode,
           iconColorClass: 'text-[color:var(--color-muted-foreground)]',
         },
+        {
+          label: isPinned ? '取消固定' : '固定项目',
+          icon: <Pin className="w-4 h-4" />,
+          show: Boolean(onTogglePin),
+          action: onTogglePin ?? (() => undefined),
+          iconColorClass: isPinned ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-muted-foreground)]',
+        },
+        {
+          label: '移除项目',
+          icon: <Trash2 className="w-4 h-4" />,
+          show: Boolean(onRemoveProject),
+          action: onRemoveProject ?? (() => undefined),
+          iconColorClass: 'text-[color:var(--color-destructive)]',
+        },
       ],
     },
     {
@@ -189,8 +211,8 @@ export function CardContextMenu({
         left: adjustedX,
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
-        backdropFilter: 'saturate(180%) blur(28px)',
-        WebkitBackdropFilter: 'saturate(180%) blur(28px)',
+        backdropFilter: 'saturate(165%) blur(22px)',
+        WebkitBackdropFilter: 'saturate(165%) blur(22px)',
         boxShadow: 'var(--shadow-popover)',
       }}
       onClick={(e) => e.stopPropagation()}
