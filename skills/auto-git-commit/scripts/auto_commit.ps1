@@ -73,6 +73,11 @@ function Resolve-CommitTypeFromFiles([string[]]$Files) {
   return 'fix'
 }
 
+function Is-ValidCommitType([string]$Value) {
+  $clean = (Normalize-String $Value).ToLower()
+  return @('fix', 'feat', 'style', 'chore', 'refactor', 'docs', 'debug') -contains $clean
+}
+
 function Contains-Cjk([string]$Text) {
   if (-not $Text) { return $false }
   return [regex]::IsMatch($Text, '[\u4E00-\u9FFF]')
@@ -299,17 +304,24 @@ if ($LASTEXITCODE -eq 0) {
 $changedFiles = @(git diff --cached --name-only)
 Write-Step ("staged file count: " + [string](@($changedFiles).Count))
 
+$typeProvided = -not [string]::IsNullOrWhiteSpace($Type)
 $subjectProvided = -not [string]::IsNullOrWhiteSpace($Subject)
+$fallbackType = Resolve-CommitTypeFromFiles $changedFiles
 
-if (-not $Type) {
-  $Type = Resolve-CommitTypeFromFiles $changedFiles
+if ($typeProvided) {
+  $Type = (Normalize-String $Type).ToLower()
+  if (-not (Is-ValidCommitType $Type)) {
+    throw ('Invalid --type: ' + $Type + '. Allowed: fix|feat|style|chore|refactor|docs|debug')
+  }
 }
 
 if ($UseAi) {
   Write-Step 'stage: AI message generation'
   try {
     $aiResult = Try-ApplyAiMessage $Type $Subject $Bullet
-    if ($aiResult.Type) { $Type = [string]$aiResult.Type }
+    if ($aiResult.Type -and (Is-ValidCommitType ([string]$aiResult.Type))) {
+      $Type = (Normalize-String ([string]$aiResult.Type)).ToLower()
+    }
     if ($aiResult.Subject) { $Subject = [string]$aiResult.Subject }
     $Bullet = @($aiResult.Bullets)
     Write-Ai ("final type=" + $Type)
@@ -334,6 +346,17 @@ if (-not $subjectProvided -and (Test-GenericSubject $Subject) -and $Bullet.Count
   if ($summarySubject) {
     $Subject = $summarySubject
     Write-Ai ("subject derived from summary=" + $Subject)
+  }
+}
+
+if ($typeProvided) {
+  # honor explicit --type
+} elseif (-not (Is-ValidCommitType $Type)) {
+  if (Is-ValidCommitType $fallbackType) {
+    $Type = $fallbackType
+    Write-Ai ("type fallback from files=" + $Type)
+  } else {
+    $Type = 'fix'
   }
 }
 
