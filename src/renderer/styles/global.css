@@ -54,32 +54,32 @@
 
 [data-theme='dark'] {
   /* Base */
-  --color-background: #09090b;
-  --color-background-sunken: #050506;
+  --color-background: #111318;
+  --color-background-sunken: #0b0d12;
   --color-foreground: #f4f4f5;
 
   /* Surface */
-  --color-card: rgba(24, 24, 27, 0.82);
+  --color-card: rgba(28, 28, 34, 0.78);
   --color-card-foreground: #fafafa;
-  --color-popover: rgba(24, 24, 27, 0.96);
+  --color-popover: rgba(32, 32, 38, 0.94);
   --color-popover-foreground: #fafafa;
 
   /* Brand */
-  --color-primary: #7c7cff;
-  --color-primary-hover: #9393ff;
+  --color-primary: #8b8bff;
+  --color-primary-hover: #a0a0ff;
   --color-primary-foreground: #ffffff;
 
   /* Secondary */
-  --color-secondary: #18181b;
+  --color-secondary: #1a1c23;
   --color-secondary-foreground: #d4d4d8;
 
   /* Accent */
-  --color-accent: #1f1f28;
-  --color-accent-foreground: #a5b4fc;
+  --color-accent: #202330;
+  --color-accent-foreground: #b4c0ff;
 
   /* Text */
-  --color-muted: #111113;
-  --color-muted-foreground: #71717a;
+  --color-muted: #15171c;
+  --color-muted-foreground: #8b90a0;
 
   /* States */
   --color-success: #22c55e;
@@ -91,14 +91,14 @@
   --color-destructive-foreground: #ffffff;
 
   /* Borders */
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-hover: rgba(124, 124, 255, 0.22);
+  --color-border: rgba(255, 255, 255, 0.07);
+  --color-border-hover: rgba(139, 139, 255, 0.24);
 
   /* Inputs */
-  --color-input: #111113;
+  --color-input: #13151a;
 
   /* Focus */
-  --color-ring: #7c7cff;
+  --color-ring: #8b8bff;
 }
 
 * {
@@ -126,7 +126,7 @@ body {
 
 [data-theme='dark'] body {
   background:
-    radial-gradient(circle at top left, rgba(124, 124, 255, 0.2), transparent 38%),
+    radial-gradient(circle at top left, rgba(124, 124, 255, 0.12), transparent 38%),
     radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.14), transparent 40%),
     var(--color-background);
 }
