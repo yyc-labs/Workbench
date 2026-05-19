@@ -456,75 +456,63 @@ export function DetailPage() {
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
-          <div
+          <section
             className="min-h-0 min-w-0 overflow-hidden"
             style={{
               background: '#2f333b',
               borderRadius: '20px',
               boxShadow: `
-              inset 0 1px 0 rgba(255,255,255,0.04),
-              0 0 0 1px rgba(255,255,255,0.03),
-              0 20px 48px rgba(0,0,0,0.18)
-            `,
+                inset 0 1px 0 rgba(255,255,255,0.04),
+                0 0 0 1px rgba(255,255,255,0.03),
+                0 20px 48px rgba(0,0,0,0.18)
+              `,
             }}
           >
             <div className="flex items-center border-b border-white/5 px-[14px] py-[11px]">
               <span className="h-[10px] w-[10px] rounded-full bg-[#ff5f57]/70" />
               <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#febc2e]/70" />
               <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#28c840]/70" />
-              <span className="ml-[10px] select-none font-mono text-[10px] font-medium uppercase tracking-widest text-white/20">
+              <span className="ml-[10px] select-none font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">
                 service terminal
               </span>
             </div>
-            <div
-              className="xterm-container min-h-0 overflow-hidden"
-              style={{
-                margin: '12px',
-                height: 'calc(100% - 56px)',
-                borderRadius: '14px',
-                background: '#282c34',
-                padding: '16px 18px',
-              }}
-            >
-              <Terminal projectId={projectId} />
-            </div>
-          </div>
-
-          <div
-            className="min-h-0 min-w-0 overflow-hidden"
-            style={{
-              background: '#2f333b',
-              borderRadius: '20px',
-              boxShadow: `
-              inset 0 1px 0 rgba(255,255,255,0.04),
-              0 0 0 1px rgba(255,255,255,0.03),
-              0 20px 48px rgba(0,0,0,0.18)
-            `,
-            }}
-          >
-            <div className="flex items-center justify-between border-b border-white/5 px-[14px] py-[11px]">
-              <div className="flex items-center gap-1.5">
-                <span className="h-[10px] w-[10px] rounded-full bg-[#ff5f57]/70" />
-                <span className="h-[10px] w-[10px] rounded-full bg-[#febc2e]/70" />
-                <span className="h-[10px] w-[10px] rounded-full bg-[#28c840]/70" />
-                <span className="ml-[10px] select-none font-mono text-[10px] font-medium uppercase tracking-widest text-white/20">
-                  ai commit panel
-                </span>
+            <div className="min-h-0 p-3" style={{ height: 'calc(100% - 56px)' }}>
+              <div
+                className="xterm-container h-full min-h-0 overflow-hidden rounded-xl"
+                style={{
+                  background: '#282c34',
+                  padding: '16px 18px',
+                }}
+              >
+                <Terminal projectId={projectId} />
               </div>
-              <div className="flex items-center gap-2">
+            </div>
+          </section>
+
+          <section className="surface-card min-h-0 min-w-0 overflow-hidden rounded-2xl border" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderBottomColor: 'var(--color-border)' }}>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--color-muted-foreground)]">
+                  AI Commit
+                </p>
+                <p className="mt-0.5 text-xs text-[color:var(--color-muted-foreground)]">
+                  Process timeline and diagnostics
+                </p>
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
                 <button
-                  className={`rounded-md px-2 py-1 text-[11px] ${rightPaneMode === 'flow'
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'flow'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                     }`}
                   onClick={() => setRightPaneMode('flow')}
                 >
                   流程
                 </button>
                 <button
-                  className={`rounded-md px-2 py-1 text-[11px] ${rightPaneMode === 'raw'
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'raw'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                     }`}
                   onClick={() => setRightPaneMode('raw')}
                 >
@@ -533,50 +521,76 @@ export function DetailPage() {
               </div>
             </div>
 
-            <div className="min-h-0 p-3" style={{ height: 'calc(100% - 56px)' }}>
+            <div className="min-h-0 p-3" style={{ height: 'calc(100% - 74px)' }}>
               {rightPaneMode === 'flow' ? (
-                <div className="flex h-full flex-col gap-3 overflow-auto rounded-xl bg-[#282c34] p-3">
-                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80">
-                    <div className="flex items-center gap-2">
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${statusClass}`}>
+                <div className="flex h-full flex-col gap-3 overflow-auto rounded-xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
+                  <div
+                    className="rounded-xl border px-3.5 py-3"
+                    style={{
+                      borderColor: 'rgba(99, 91, 255, 0.25)',
+                      background: 'linear-gradient(135deg, rgba(99,91,255,0.12) 0%, rgba(59,130,246,0.08) 100%)',
+                    }}
+                  >
+                    <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
+                      <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] ${statusClass}`}>
                         {statusText}
                       </span>
-                      <span>Tool Terminal: {toolProcessStatus === 'running' ? 'online' : toolProcessStatus}</span>
+                      <span className="min-w-0 whitespace-normal break-all text-[11px] text-[color:var(--color-foreground)]/85">
+                        Tool Terminal: {toolProcessStatus === 'running' ? 'online' : toolProcessStatus}
+                      </span>
                     </div>
-                    <span>{runStartedAt ? `${Math.floor(durationMs / 1000)}s` : '--'}</span>
+                    <div className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
+                      Duration: {runStartedAt ? `${Math.floor(durationMs / 1000)}s` : '--'}
+                    </div>
                   </div>
 
                   {flowSteps.map((step) => (
-                    <div key={step.key} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-                      <div className="flex items-center gap-2 text-sm text-white">
+                    <div
+                      key={step.key}
+                      className={`rounded-xl border px-3 py-2 ${step.status === 'running'
+                        ? 'border-amber-500/30 bg-amber-500/10'
+                        : step.status === 'success'
+                          ? 'border-emerald-500/25 bg-emerald-500/10'
+                          : step.status === 'error'
+                            ? 'border-red-500/25 bg-red-500/10'
+                            : 'bg-[color:var(--color-card)]'
+                        }`}
+                      style={step.status === 'pending' ? { borderColor: 'var(--color-border)' } : undefined}
+                    >
+                      <div className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
                         <span className={`h-2.5 w-2.5 rounded-full ${statusDot(step.status)}`} />
-                        <span>{step.label}</span>
-                        <span className="ml-auto text-[11px] uppercase text-white/50">{step.status}</span>
+                        <span className="font-medium">{step.label}</span>
+                        <span className="ml-auto rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)]">
+                          {step.status}
+                        </span>
                       </div>
                       {step.detail && (
-                        <p className="mt-1 truncate text-[11px] text-white/60" title={step.detail}>
+                        <p className="mt-1 truncate text-[11px] text-[color:var(--color-muted-foreground)]" title={step.detail}>
                           {step.detail}
                         </p>
                       )}
                     </div>
                   ))}
 
-                  <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-                    <p className="text-xs text-white/70">AI 说了什么</p>
-                    <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-5 text-white/80">
+                  <div className="rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(59,130,246,0.25)', background: 'rgba(59,130,246,0.08)' }}>
+                    <p className="text-xs font-medium text-[color:var(--color-foreground)]">AI 说了什么</p>
+                    <pre
+                      className="mt-2 whitespace-pre-wrap break-words rounded-lg border p-2 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-card)' }}
+                    >
                       {latestAiRaw || '暂无 AI 原始回复'}
                     </pre>
                   </div>
                 </div>
               ) : (
-                <div className="h-full overflow-auto rounded-xl bg-[#282c34] p-3">
-                  <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-white/80">
+                <div className="h-full overflow-auto rounded-xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
+                  <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/85">
                     {aiRawText || '暂无原始日志'}
                   </pre>
                 </div>
               )}
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>

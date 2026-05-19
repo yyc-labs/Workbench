@@ -6,9 +6,10 @@ import { useAppStore } from '../stores/appStore'
 
 interface TerminalProps {
   projectId: string
+  variant?: 'default' | 'soft'
 }
 
-export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
+export const Terminal = memo(function Terminal({ projectId, variant = 'default' }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -18,6 +19,54 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
 
   useEffect(() => {
     if (!containerRef.current) return
+
+    const softTheme = {
+      background: '#f7f9fd',
+      foreground: '#1f2937',
+      cursor: '#4f46e5',
+      cursorAccent: '#f7f9fd',
+      selectionBackground: 'rgba(79,70,229,0.14)',
+      black: '#6b7280',
+      red: '#dc2626',
+      green: '#16a34a',
+      yellow: '#ca8a04',
+      blue: '#2563eb',
+      magenta: '#9333ea',
+      cyan: '#0891b2',
+      white: '#111827',
+      brightBlack: '#94a3b8',
+      brightRed: '#ef4444',
+      brightGreen: '#22c55e',
+      brightYellow: '#eab308',
+      brightBlue: '#3b82f6',
+      brightMagenta: '#a855f7',
+      brightCyan: '#06b6d4',
+      brightWhite: '#0f172a',
+    }
+
+    const defaultTheme = {
+      background: '#282c34',
+      foreground: '#d7dae0',
+      cursor: '#aab2bf',
+      cursorAccent: '#282c34',
+      selectionBackground: 'rgba(255,255,255,0.08)',
+      black: '#4b5263',
+      red: '#e06c75',
+      green: '#98c379',
+      yellow: '#e5c07b',
+      blue: '#61afef',
+      magenta: '#c678dd',
+      cyan: '#56b6c2',
+      white: '#abb2bf',
+      brightBlack: '#5c6370',
+      brightRed: '#e06c75',
+      brightGreen: '#98c379',
+      brightYellow: '#e5c07b',
+      brightBlue: '#61afef',
+      brightMagenta: '#c678dd',
+      brightCyan: '#56b6c2',
+      brightWhite: '#ffffff',
+    }
 
     const term = new XTerm({
       // rendererType: 'canvas',
@@ -32,29 +81,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
       convertEol: true,
       rightClickSelectsWord: true,
       macOptionIsMeta: true,
-      theme: {
-        background: '#282c34',
-        foreground: '#d7dae0',
-        cursor: '#aab2bf',
-        cursorAccent: '#282c34',
-        selectionBackground: 'rgba(255,255,255,0.08)',
-        black: '#4b5263',
-        red: '#e06c75',
-        green: '#98c379',
-        yellow: '#e5c07b',
-        blue: '#61afef',
-        magenta: '#c678dd',
-        cyan: '#56b6c2',
-        white: '#abb2bf',
-        brightBlack: '#5c6370',
-        brightRed: '#e06c75',
-        brightGreen: '#98c379',
-        brightYellow: '#e5c07b',
-        brightBlue: '#61afef',
-        brightMagenta: '#c678dd',
-        brightCyan: '#56b6c2',
-        brightWhite: '#ffffff',
-      },
+      theme: variant === 'soft' ? softTheme : defaultTheme,
     })
 
     const fitAddon = new FitAddon()
@@ -129,7 +156,7 @@ export const Terminal = memo(function Terminal({ projectId }: TerminalProps) {
       term.dispose()
       xtermRef.current = null
     }
-  }, [projectId, sendInput])
+  }, [projectId, sendInput, variant])
 
   // ── Output: buffer at rAF rate ────────────────────────────
   useEffect(() => {
