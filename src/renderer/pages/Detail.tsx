@@ -37,12 +37,12 @@ function InfoCard({
   icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>
 }) {
   return (
-    <div className="rounded-xl border px-4 py-3 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-      <div className="mb-1 flex items-center gap-1.5 text-[color:var(--color-muted-foreground)]">
+    <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="mb-2 flex items-center gap-1.5 text-[color:var(--color-muted-foreground)]">
         <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
-        <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
+        <span className="section-label">{label}</span>
       </div>
-      <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]" title={value}>
+      <p className="truncate text-[15px] font-medium text-[color:var(--color-foreground)]" title={value}>
         {value}
       </p>
     </div>
@@ -141,10 +141,10 @@ function parseAiFlowLine(rawLine: string, steps: AiStepState[]): AiStepState[] {
 }
 
 function statusDot(status: AiStepStatus): string {
-  if (status === 'success') return 'bg-emerald-500'
-  if (status === 'running') return 'bg-amber-500'
-  if (status === 'error') return 'bg-red-500'
-  return 'bg-white/20'
+  if (status === 'success') return 'bg-[color:var(--color-success)]'
+  if (status === 'running') return 'bg-[color:var(--color-warning)]'
+  if (status === 'error') return 'bg-[color:var(--color-destructive)]'
+  return 'bg-[color:var(--color-muted-foreground)]/40'
 }
 
 export function DetailPage() {
@@ -318,46 +318,40 @@ export function DetailPage() {
     aiCommitStatus === 'running' ? 'Running' : aiCommitStatus === 'success' ? 'Success' : aiCommitStatus === 'error' ? 'Failed' : 'Idle'
   const statusClass =
     aiCommitStatus === 'running'
-      ? 'text-amber-500 border-amber-500/40 bg-amber-500/10'
+      ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
       : aiCommitStatus === 'success'
-        ? 'text-emerald-500 border-emerald-500/40 bg-emerald-500/10'
+        ? 'text-[color:var(--color-success)] bg-[color:var(--color-success-background)]'
         : aiCommitStatus === 'error'
-          ? 'text-red-500 border-red-500/40 bg-red-500/10'
+          ? 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]'
           : 'text-[color:var(--color-muted-foreground)] border-[color:var(--color-border)]'
 
   const latestAiRaw = [...aiRawLines].reverse().find((line) => line.startsWith('{') || line.startsWith('```') || line.includes('"subject"'))
 
   return (
     <div className="flex h-screen flex-col">
-      <header
-        className="flex shrink-0 items-center justify-between border-b px-6 py-5"
-        style={{
-          background: 'var(--color-card)',
-          borderBottomColor: 'var(--color-border)',
-          backdropFilter: 'blur(18px)',
-          WebkitBackdropFilter: 'blur(18px)',
-        }}
-      >
+      <header className="app-chrome flex min-h-[84px] shrink-0 items-center justify-between px-8 py-4">
         <div className="flex min-w-0 items-center gap-4">
           <button
-            className="rounded-lg p-1.5 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+            className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={() => navigate('/')}
           >
             <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
           </button>
 
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-[color:var(--color-foreground)]">{project.name}</h1>
-            <p className="truncate text-xs text-[color:var(--color-muted-foreground)]">{project.path}</p>
+            <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{project.name}</h1>
+            <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]">{project.path}</p>
             <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
           </div>
 
           {isActive ? (
             <div
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning ? 'bg-emerald-500/12 text-emerald-500' : 'bg-amber-500/12 text-amber-500'
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
+                ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
               {isRunning ? 'Running' : 'Session Available'}
             </div>
           ) : (
@@ -369,7 +363,7 @@ export function DetailPage() {
           {isRunning && processUrls.length > 0 && (
             <UrlPopover urls={processUrls}>
               <button
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/50 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-secondary)]"
+                className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
                 onClick={() => window.electronAPI.openExternal(processUrls[0])}
               >
                 <ArrowUpRight className="h-3 w-3" />
@@ -380,7 +374,10 @@ export function DetailPage() {
 
           {isDetached && (
             <button
-              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-amber-600"
+              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium text-white shadow-sm transition-all"
+              style={{
+                background: 'var(--color-warning)',
+              }}
               onClick={() => reattachProject(projectId)}
             >
               <Play className="h-3.5 w-3.5" />
@@ -389,9 +386,15 @@ export function DetailPage() {
           )}
 
           <button
-            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium transition-all ${isActive ? 'border text-red-500 hover:bg-red-500/10' : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
+              ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+              : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
               }`}
-            style={isActive ? { borderColor: 'rgba(248, 113, 113, 0.35)' } : undefined}
+            style={
+              isActive
+                ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
+                : undefined
+            }
             onClick={() => (isActive ? stopProject(projectId) : startProject(projectId))}
           >
             {isActive ? (
@@ -408,12 +411,19 @@ export function DetailPage() {
           </button>
 
           <button
-            className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
-              ? 'border-amber-500/40 bg-amber-500/10 text-amber-500'
+            className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+              ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
               : aiCommitStatus === 'error'
-                ? 'border-red-500/40 text-red-500 hover:bg-red-500/10'
+                ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
                 : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
               }`}
+            style={
+              aiCommitStatus === 'running'
+                ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                : aiCommitStatus === 'error'
+                  ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                  : undefined
+            }
             onClick={() => void handleAiCommit()}
             disabled={aiCommitStatus === 'running'}
             title={isAiEnabled ? 'Use AI API to generate commit message and commit' : 'AI disabled in Settings, local commit message only'}
@@ -424,8 +434,8 @@ export function DetailPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col px-6 pb-6 pt-6">
-        <div className="mb-4 flex items-center gap-2 rounded-xl border px-3 py-2 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="flex min-h-0 flex-1 flex-col px-8 pb-8 pt-8">
+        <div className="mb-6 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
           <span className="select-none text-xs text-[color:var(--color-muted-foreground)]">$</span>
           <input
             type="text"
@@ -439,7 +449,7 @@ export function DetailPage() {
           />
           {customCommand && customCommand !== project.command && (
             <button
-              className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
+              className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
               onClick={() => void handleSaveCommand()}
             >
               Save
@@ -447,7 +457,7 @@ export function DetailPage() {
           )}
         </div>
 
-        <div className="mb-4 space-y-3 shrink-0">
+        <div className="mb-6 space-y-3 shrink-0">
           <InfoCard label="Path" value={project.path} icon={Folder} />
           <div className="grid grid-cols-2 gap-3">
             <InfoCard label="Type" value={project.type} icon={Code2} />
@@ -455,32 +465,32 @@ export function DetailPage() {
           </div>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
+        <div className="grid min-h-0 flex-1 grid-cols-2 gap-6">
           <section
             className="min-h-0 min-w-0 overflow-hidden"
             style={{
-              background: '#2f333b',
-              borderRadius: '20px',
+              background: 'var(--color-terminal-surface)',
+              borderRadius: '24px',
               boxShadow: `
                 inset 0 1px 0 rgba(255,255,255,0.04),
                 0 0 0 1px rgba(255,255,255,0.03),
-                0 20px 48px rgba(0,0,0,0.18)
+                0 18px 42px rgba(0,0,0,0.16)
               `,
             }}
           >
             <div className="flex items-center border-b border-white/5 px-[14px] py-[11px]">
-              <span className="h-[10px] w-[10px] rounded-full bg-[#ff5f57]/70" />
-              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#febc2e]/70" />
-              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#28c840]/70" />
+              <span className="h-[10px] w-[10px] rounded-full bg-[#f08c8c]/80" />
+              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#e3bb7e]/80" />
+              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#82c2a8]/80" />
               <span className="ml-[10px] select-none font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">
                 service terminal
               </span>
             </div>
-            <div className="min-h-0 p-3" style={{ height: 'calc(100% - 56px)' }}>
+            <div className="min-h-0 p-4" style={{ height: 'calc(100% - 56px)' }}>
               <div
-                className="xterm-container h-full min-h-0 overflow-hidden rounded-xl"
+                className="xterm-container h-full min-h-0 overflow-hidden rounded-[18px]"
                 style={{
-                  background: '#282c34',
+                  background: 'var(--color-terminal-inner)',
                   padding: '16px 18px',
                 }}
               >
@@ -489,19 +499,19 @@ export function DetailPage() {
             </div>
           </section>
 
-          <section className="surface-card min-h-0 min-w-0 overflow-hidden rounded-2xl border" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderBottomColor: 'var(--color-border)' }}>
+          <section className="surface-card min-h-0 min-w-0 overflow-hidden rounded-[24px] border" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderBottomColor: 'var(--color-border)' }}>
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--color-muted-foreground)]">
+                <p className="section-label">
                   AI Commit
                 </p>
                 <p className="mt-0.5 text-xs text-[color:var(--color-muted-foreground)]">
                   Process timeline and diagnostics
                 </p>
               </div>
-              <div className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
+              <div className="quiet-control flex items-center gap-1 rounded-full border-0 p-1">
                 <button
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'flow'
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'flow'
                     ? 'bg-primary text-white'
                     : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                     }`}
@@ -510,7 +520,7 @@ export function DetailPage() {
                   流程
                 </button>
                 <button
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'raw'
+                  className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'raw'
                     ? 'bg-primary text-white'
                     : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                     }`}
@@ -521,14 +531,14 @@ export function DetailPage() {
               </div>
             </div>
 
-            <div className="min-h-0 p-3" style={{ height: 'calc(100% - 74px)' }}>
+            <div className="min-h-0 p-4" style={{ height: 'calc(100% - 82px)' }}>
               {rightPaneMode === 'flow' ? (
-                <div className="flex h-full flex-col gap-3 overflow-auto rounded-xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
+                <div className="flex h-full flex-col gap-3 overflow-auto rounded-[20px] p-3 quiet-control">
                   <div
-                    className="rounded-xl border px-3.5 py-3"
+                    className="rounded-[18px] border px-4 py-3"
                     style={{
-                      borderColor: 'rgba(99, 91, 255, 0.25)',
-                      background: 'linear-gradient(135deg, rgba(99,91,255,0.12) 0%, rgba(59,130,246,0.08) 100%)',
+                      borderColor: 'color-mix(in srgb, var(--color-primary) 28%, transparent)',
+                      background: 'color-mix(in srgb, var(--color-primary) 11%, transparent)',
                     }}
                   >
                     <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
@@ -547,15 +557,23 @@ export function DetailPage() {
                   {flowSteps.map((step) => (
                     <div
                       key={step.key}
-                      className={`rounded-xl border px-3 py-2 ${step.status === 'running'
-                        ? 'border-amber-500/30 bg-amber-500/10'
+                      className={`rounded-[18px] border px-3.5 py-2.5 ${step.status === 'running'
+                        ? 'bg-[color:var(--color-warning-background)]'
                         : step.status === 'success'
-                          ? 'border-emerald-500/25 bg-emerald-500/10'
+                          ? 'bg-[color:var(--color-success-background)]'
                           : step.status === 'error'
-                            ? 'border-red-500/25 bg-red-500/10'
+                            ? 'bg-[color:var(--color-destructive-background)]'
                             : 'bg-[color:var(--color-card)]'
                         }`}
-                      style={step.status === 'pending' ? { borderColor: 'var(--color-border)' } : undefined}
+                      style={
+                        step.status === 'pending'
+                          ? { borderColor: 'var(--color-border)' }
+                          : step.status === 'running'
+                            ? { borderColor: 'color-mix(in srgb, var(--color-warning) 30%, transparent)' }
+                            : step.status === 'success'
+                              ? { borderColor: 'color-mix(in srgb, var(--color-success) 26%, transparent)' }
+                              : { borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }
+                      }
                     >
                       <div className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
                         <span className={`h-2.5 w-2.5 rounded-full ${statusDot(step.status)}`} />
@@ -572,10 +590,16 @@ export function DetailPage() {
                     </div>
                   ))}
 
-                  <div className="rounded-xl border px-3 py-2" style={{ borderColor: 'rgba(59,130,246,0.25)', background: 'rgba(59,130,246,0.08)' }}>
+                  <div
+                    className="rounded-[18px] border px-4 py-3"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--color-primary) 26%, transparent)',
+                      background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+                    }}
+                  >
                     <p className="text-xs font-medium text-[color:var(--color-foreground)]">AI 说了什么</p>
                     <pre
-                      className="mt-2 whitespace-pre-wrap break-words rounded-lg border p-2 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
+                      className="mt-2 whitespace-pre-wrap break-words rounded-2xl border p-3 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
                       style={{ borderColor: 'var(--color-border)', background: 'var(--color-card)' }}
                     >
                       {latestAiRaw || '暂无 AI 原始回复'}
@@ -583,7 +607,7 @@ export function DetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="h-full overflow-auto rounded-xl border p-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-background-sunken)' }}>
+                <div className="h-full overflow-auto rounded-[20px] p-4 quiet-control">
                   <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/85">
                     {aiRawText || '暂无原始日志'}
                   </pre>

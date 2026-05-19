@@ -57,50 +57,52 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
 
   return (
     <div
-      className="group relative flex items-center gap-4 rounded-xl px-5 py-2.5 cursor-pointer card-enter surface-card surface-card-hover"
+      className="group relative flex items-center gap-5 rounded-[24px] px-6 py-4 cursor-pointer card-enter surface-card surface-card-hover"
       style={{
         animationDelay: `${index * 40}ms`,
         background: 'var(--color-card)',
         border: '1px solid var(--color-border)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        backdropFilter: 'saturate(180%) blur(28px)',
+        WebkitBackdropFilter: 'saturate(180%) blur(28px)',
+        boxShadow: 'var(--shadow-card)',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--color-border-hover)'
-        e.currentTarget.style.transform = 'translateY(-1px)'
-        e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.08)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+        e.currentTarget.style.boxShadow = 'var(--shadow-card-hover)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderColor = 'var(--color-border)'
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'
+        e.currentTarget.style.boxShadow = 'var(--shadow-card)'
       }}
       onClick={() => onSelect(project.id)}
       onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: e.clientX, y: e.clientY }) }}
     >
       {/* Icon */}
       <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: 'rgba(99, 91, 255, 0.12)', color: 'var(--color-primary)' }}
+        className="quiet-control w-11 h-11 rounded-[18px] flex items-center justify-center shrink-0"
+        style={{
+          color: 'var(--color-primary)',
+        }}
       >
-        <Folder className="h-4 w-4" strokeWidth={1.8} />
+        <Folder className="h-[18px] w-[18px]" strokeWidth={1.7} />
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-[color:var(--color-foreground)] truncate">{project.name}</h3>
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-[15px] font-medium text-[color:var(--color-foreground)] truncate">{project.name}</h3>
           {/* Runtime status */}
           {isRuntimeActive ? (
             <span
               className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${
-                isRuntimeAttached ? 'text-emerald-600' : 'text-amber-600'
+                isRuntimeAttached ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-warning)]'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  isRuntimeAttached ? 'bg-emerald-500' : 'bg-amber-500'
+                  isRuntimeAttached ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'
                 }`}
               />
               {isRuntimeAttached ? 'Active' : 'Background'}
@@ -118,13 +120,13 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <p className="text-xs text-[color:var(--color-muted-foreground)] truncate max-w-[280px]" title={project.path}>{project.path}</p>
-          <Badge variant="secondary" className="h-5 px-1.5 capitalize shrink-0 bg-[color:var(--color-secondary)]/45 text-[color:var(--color-muted-foreground)] border-[color:var(--color-border)]">
+        <div className="flex items-center gap-2 mt-2">
+          <p className="text-xs text-[color:var(--color-muted-foreground)] truncate max-w-[340px]" title={project.path}>{project.path}</p>
+          <Badge variant="secondary" className="h-5 px-2 capitalize shrink-0 bg-[color:var(--color-secondary)]/45 text-[color:var(--color-muted-foreground)] border-transparent">
             {project.type}
           </Badge>
           {project.packageManager && (
-            <Badge variant="secondary" className="h-5 px-1.5 shrink-0 bg-[color:var(--color-secondary)]/45 text-[color:var(--color-muted-foreground)] border-[color:var(--color-border)]">
+            <Badge variant="secondary" className="h-5 px-2 shrink-0 bg-[color:var(--color-secondary)]/45 text-[color:var(--color-muted-foreground)] border-transparent">
               {project.packageManager}
             </Badge>
           )}
@@ -133,8 +135,16 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
             className="h-5 px-1.5 shrink-0 border"
             style={
               currentCli === 'codex'
-                ? { background: 'rgba(99, 91, 255, 0.14)', color: '#5f59dc', borderColor: 'rgba(99, 91, 255, 0.24)' }
-                : { background: 'rgba(249, 115, 22, 0.12)', color: '#c97137', borderColor: 'rgba(249, 115, 22, 0.24)' }
+                ? {
+                    background: 'color-mix(in srgb, var(--color-primary) 13%, transparent)',
+                    color: 'var(--color-primary)',
+                    borderColor: 'color-mix(in srgb, var(--color-primary) 28%, transparent)',
+                  }
+                : {
+                    background: 'color-mix(in srgb, var(--color-warning) 15%, transparent)',
+                    color: 'var(--color-warning)',
+                    borderColor: 'color-mix(in srgb, var(--color-warning) 30%, transparent)',
+                  }
             }
             title={`AI CLI: ${currentCli}`}
           >
@@ -147,7 +157,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           </Badge>
         </div>
         {isRuntimeActive && session && (
-          <p className="text-[10px] text-[color:var(--color-muted-foreground)] mt-0.5 flex items-center gap-1">
+          <p className="text-[10px] text-[color:var(--color-muted-foreground)] mt-1.5 flex items-center gap-1">
             <Zap className="w-2.5 h-2.5" />
             {session.sessionName}
             {isRuntimeAttached && <span className="text-primary/70">· Connected</span>}
@@ -176,11 +186,11 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
       )}
 
       {/* Actions — compact grouped */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         {isDevRunning && devUrls.length > 0 && (
           <UrlPopover urls={devUrls}>
             <button
-              className="flex items-center gap-1 text-xs text-primary rounded-lg px-2.5 py-1.5 transition-colors max-w-[200px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/50 hover:bg-[color:var(--color-secondary)]"
+              className="quiet-control flex items-center gap-1 text-xs text-primary rounded-full px-3 py-1.5 transition-colors max-w-[200px] border-0 hover:bg-[color:var(--color-accent)]"
               onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(devUrls[0]) }}
               title={devUrls[0]}
             >
@@ -192,7 +202,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         {defaultDocLink && (
           <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
             <button
-              className="flex items-center gap-1 text-xs text-[color:var(--color-muted-foreground)] rounded-lg px-2.5 py-1.5 transition-colors max-w-[170px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/35 hover:bg-[color:var(--color-secondary)]/70 hover:text-[color:var(--color-foreground)]"
+              className="quiet-control flex items-center gap-1 text-xs text-[color:var(--color-muted-foreground)] rounded-full px-3 py-1.5 transition-colors max-w-[170px] border-0 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(defaultDocLink.url) }}
               title={defaultDocLink.url}
             >
@@ -203,8 +213,8 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         )}
         {isDevRunning ? (
           <button
-            className="h-8 px-3 text-xs rounded-lg border text-red-500 hover:bg-red-500/10 flex items-center gap-1 font-medium transition-colors shrink-0"
-            style={{ borderColor: 'rgba(248, 113, 113, 0.35)' }}
+            className="h-8 px-3 text-xs rounded-full border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] flex items-center gap-1 font-medium transition-colors shrink-0"
+            style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
             onClick={(e) => { e.stopPropagation(); stopProject(project.id) }}
           >
             <Square className="h-3 w-3" />
@@ -212,7 +222,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           </button>
         ) : (
           <button
-            className="h-8 px-3 text-xs rounded-lg bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
+            className="h-8 px-3.5 text-xs rounded-full bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
             onClick={(e) => { e.stopPropagation(); startProject(project.id) }}
           >
             <Play className="h-3 w-3" />
@@ -220,7 +230,7 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           </button>
         )}
         <button
-          className="h-8 w-8 rounded-lg flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-secondary)]/70 transition-colors"
+          className="h-8 w-8 rounded-full flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] transition-colors"
           title="View details"
           onClick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}`) }}
         >
@@ -228,14 +238,14 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
         </button>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
           <button
-            className="p-1 rounded-md text-[color:var(--color-muted-foreground)] hover:text-amber-500 hover:bg-amber-500/10 transition-colors"
+            className="p-1.5 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning-background)] transition-colors"
             title={project.pinned ? 'Unpin' : 'Pin'}
             onClick={(e) => { e.stopPropagation(); togglePin(project.id) }}
           >
-            <Pin className={`h-3.5 w-3.5 ${project.pinned ? 'fill-amber-500 text-amber-500' : ''}`} />
+            <Pin className={`h-3.5 w-3.5 ${project.pinned ? 'fill-[color:var(--color-warning)] text-[color:var(--color-warning)]' : ''}`} />
           </button>
           <button
-            className="p-1 rounded-md text-[color:var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+            className="p-1.5 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] transition-colors"
             title="Remove"
             onClick={(e) => { e.stopPropagation(); removeProject(project.id) }}
           >

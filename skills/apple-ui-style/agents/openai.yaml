@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apple UI Style"
+  short_description: "Keep this project's UI quiet, warm, spacious, and Apple-like."
+  default_prompt: "Use the project Apple UI style when adding or updating renderer UI."

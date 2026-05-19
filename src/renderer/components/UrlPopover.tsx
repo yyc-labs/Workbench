@@ -38,15 +38,15 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
 
   const popover = show && (
     <div
-      className="fixed z-[9999] rounded-xl py-1.5 px-1 min-w-[220px]"
+      className="fixed z-[9999] rounded-[20px] py-2 px-1.5 min-w-[220px]"
       style={{
         top: pos.top,
         left: pos.left,
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
-        boxShadow: '0 16px 40px rgba(0,0,0,0.24)',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
+        boxShadow: 'var(--shadow-popover)',
+        backdropFilter: 'saturate(180%) blur(28px)',
+        WebkitBackdropFilter: 'saturate(180%) blur(28px)',
       }}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
@@ -55,7 +55,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       {entries.map((entry) => (
         <div
           key={`${entry.label}:${entry.url}`}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg group/item hover:bg-[color:var(--color-accent)]/70"
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-[14px] group/item hover:bg-[color:var(--color-accent)]/70"
         >
           <button
             className="flex-1 text-left text-xs text-primary hover:text-primary truncate flex items-center gap-1.5 min-w-0"
@@ -66,7 +66,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
             <span className="truncate">{entry.label}</span>
           </button>
           <button
-            className="shrink-0 opacity-0 group-hover/item:opacity-100 px-2 py-0.5 rounded text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-all"
+            className="shrink-0 opacity-0 group-hover/item:opacity-100 px-2 py-0.5 rounded-full text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-all"
             onClick={() => navigator.clipboard.writeText(entry.url)}
           >
             复制

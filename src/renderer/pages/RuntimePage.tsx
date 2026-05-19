@@ -254,28 +254,20 @@ export function RuntimePage() {
   return (
     <div className="h-screen flex flex-col">
       {/* ── Header ── */}
-      <header
-        className="flex items-center justify-between px-6 py-4 shrink-0 border-b"
-        style={{
-          background: 'var(--color-card)',
-          borderBottomColor: 'var(--color-border)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-        }}
-      >
+      <header className="app-chrome flex min-h-[84px] items-center justify-between px-8 py-4 shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <button
-            className="p-1.5 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
+            className="p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
             onClick={() => navigate('/')}
           >
             <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
           </button>
 
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-[color:var(--color-foreground)] tracking-tight truncate">
+            <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] tracking-[-0.03em] truncate">
               {project.name}
             </h1>
-            <p className="text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
+            <p className="mt-0.5 text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]/85 mt-0.5">
               Environment: {environmentLabel}
             </p>
@@ -284,17 +276,17 @@ export function RuntimePage() {
           {/* Runtime status badge */}
           <div
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium shrink-0 ${isAttached
-                ? 'bg-emerald-500/12 text-emerald-500'
+                ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
                 : !isStopped
-                  ? 'bg-amber-500/12 text-amber-500'
+                  ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                   : 'bg-[color:var(--color-secondary)]/70 text-[color:var(--color-muted-foreground)] border border-[color:var(--color-border)]'
               }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${isAttached
-                  ? 'bg-emerald-500'
+                  ? 'bg-[color:var(--color-success)]'
                   : !isStopped
-                    ? 'bg-amber-500'
+                    ? 'bg-[color:var(--color-warning)]'
                     : 'bg-[color:var(--color-muted-foreground)]'
                 }`}
             />
@@ -307,7 +299,7 @@ export function RuntimePage() {
           {isDevRunning && devUrls.length > 0 && (
             <UrlPopover urls={devUrls}>
               <button
-                className="inline-flex items-center gap-1.5 text-xs text-primary rounded-lg px-3 py-1.5 transition-colors max-w-[200px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/50 hover:bg-[color:var(--color-secondary)]"
+                className="quiet-control inline-flex items-center gap-1.5 text-xs text-primary rounded-full px-3 py-1.5 transition-colors max-w-[200px] border-0 hover:bg-[color:var(--color-accent)]"
                 onClick={() => window.electronAPI.openExternal(devUrls[0])}
               >
                 <ExternalLink className="w-3 h-3" />
@@ -318,7 +310,7 @@ export function RuntimePage() {
           {defaultDocLink && (
             <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
               <button
-                className="inline-flex items-center gap-1.5 text-xs text-[color:var(--color-muted-foreground)] rounded-lg px-3 py-1.5 transition-colors max-w-[220px] border border-[color:var(--color-border)] bg-[color:var(--color-secondary)]/40 hover:bg-[color:var(--color-secondary)]/70 hover:text-[color:var(--color-foreground)]"
+                className="quiet-control inline-flex items-center gap-1.5 text-xs text-[color:var(--color-muted-foreground)] rounded-full px-3 py-1.5 transition-colors max-w-[220px] border-0 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                 onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
                 title={defaultDocLink.url}
               >
@@ -328,11 +320,15 @@ export function RuntimePage() {
             </UrlPopover>
           )}
           <button
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${isDevRunning
-                ? 'border text-red-500 hover:bg-red-500/10'
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${isDevRunning
+                ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
                 : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]'
               }`}
-            style={isDevRunning ? { borderColor: 'rgba(248, 113, 113, 0.35)' } : undefined}
+            style={
+              isDevRunning
+                ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                : undefined
+            }
             onClick={() =>
               isDevRunning ? stopProject(projectId) : startProject(projectId)
             }
@@ -351,17 +347,17 @@ export function RuntimePage() {
       </header>
 
       {/* ── Body ── */}
-      <div className="flex-1 flex flex-col min-h-0 px-6 py-6 overflow-auto">
-        <div className="max-w-2xl mx-auto w-full space-y-6">
+      <div className="flex-1 flex flex-col min-h-0 px-8 py-10 overflow-auto">
+        <div className="max-w-3xl mx-auto w-full space-y-7">
           {runtimeError && (
-            <div className="rounded-xl border border-red-300/40 bg-red-500/10 text-red-600 px-4 py-3 text-sm whitespace-pre-line">
+            <div className="rounded-[20px] border px-5 py-4 text-sm whitespace-pre-line text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]" style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }}>
               {runtimeError}
             </div>
           )}
           {/* Runtime Status Card */}
-          <div className="rounded-2xl p-6 surface-card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-[color:var(--color-foreground)] uppercase tracking-wider">
+          <div className="rounded-[28px] p-8 surface-card">
+            <div className="flex items-center justify-between mb-7">
+              <h2 className="section-label">
                 {cliLabel} Runtime
               </h2>
               <span className="text-[11px] text-[color:var(--color-muted-foreground)] font-mono">
@@ -370,22 +366,22 @@ export function RuntimePage() {
             </div>
 
             {/* Status indicators — primary status emphasized */}
-            <div className="flex items-center gap-6 mb-6">
+            <div className="flex items-center gap-8 mb-8">
               <div className="flex items-center gap-2.5">
                 <span
                   className={`w-3 h-3 rounded-full ${isAttached
-                      ? 'bg-emerald-500'
+                      ? 'bg-[color:var(--color-success)]'
                       : !isStopped
-                        ? 'bg-amber-500'
+                        ? 'bg-[color:var(--color-warning)]'
                         : 'bg-[color:var(--color-muted-foreground)]/60'
                     }`}
                 />
                 <div>
-                  <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{sessionLabel}</p>
+                  <p className="text-[17px] font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">{sessionLabel}</p>
                   <p className="text-[10px] text-[color:var(--color-muted-foreground)]">Runtime</p>
                 </div>
               </div>
-              <span className="w-px h-8 bg-[color:var(--color-border)]" />
+              <span className="w-px h-10 bg-[color:var(--color-border)]" />
               <div className="flex items-center gap-2.5">
                 <span
                   className={`w-2 h-2 rounded-full ${isAttached ? 'bg-primary' : 'bg-[color:var(--color-muted-foreground)]/55'
@@ -397,7 +393,7 @@ export function RuntimePage() {
                   </p>
                 </div>
               </div>
-              <span className="w-px h-8 bg-[color:var(--color-border)]" />
+              <span className="w-px h-10 bg-[color:var(--color-border)]" />
               <div className="text-xs text-[color:var(--color-muted-foreground)]">
                 Created{' '}
                 <span className="text-[color:var(--color-foreground)]/75 font-mono">
@@ -411,7 +407,8 @@ export function RuntimePage() {
               {isStopped ? (
                 <button
                   disabled={isLoading}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 shadow-sm"
+                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all text-white disabled:opacity-50 shadow-sm"
+                  style={{ background: 'var(--color-success)' }}
                   onClick={handleStartRuntime}
                 >
                   {actionLoading === 'start' ? (
@@ -425,7 +422,7 @@ export function RuntimePage() {
                 <>
                   <button
                     disabled={isLoading}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all bg-primary text-white hover:bg-primary-hover shadow-sm disabled:opacity-50"
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-all bg-primary text-white hover:bg-primary-hover shadow-sm disabled:opacity-50"
                     onClick={handleOpenTerminal}
                   >
                     {actionLoading === 'openTerminal' ? (
@@ -437,7 +434,7 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)] disabled:opacity-50"
+                    className="quiet-control inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0 disabled:opacity-50"
                     onClick={handleRestart}
                   >
                     {actionLoading === 'restart' ? (
@@ -449,8 +446,8 @@ export function RuntimePage() {
                   </button>
                   <button
                     disabled={isLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all text-red-500 hover:text-red-600 hover:bg-red-500/10 border disabled:opacity-50"
-                    style={{ borderColor: 'rgba(248, 113, 113, 0.35)' }}
+                    className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] border disabled:opacity-50"
+                    style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
                     onClick={handleStopRuntime}
                   >
                     {actionLoading === 'stop' ? (
@@ -465,16 +462,16 @@ export function RuntimePage() {
             </div>
 
             {/* Quick actions — file system */}
-            <div className="flex items-center gap-3 mt-3">
+            <div className="flex items-center gap-3 mt-4">
               <button
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]"
+                className="quiet-control flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0"
                 onClick={() => window.electronAPI.openFolder(project.path)}
               >
                 <FolderOpen className="w-4 h-4" />
                 Open Folder
               </button>
               <button
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]"
+                className="quiet-control flex-1 inline-flex items-center justify-center gap-2 rounded-full px-4 py-2.5 text-sm font-medium transition-all text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-0"
                 onClick={() => window.electronAPI.openInVsCode(project.path)}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
@@ -489,10 +486,10 @@ export function RuntimePage() {
           </div>
 
           {/* Project Docs */}
-          <div className="rounded-2xl p-6 surface-card">
+          <div className="rounded-[28px] p-8 surface-card">
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="min-w-0">
-                <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">
+                <h3 className="section-label">
                   Documentation Links
                 </h3>
                 <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
@@ -508,7 +505,7 @@ export function RuntimePage() {
                 value={docTitleInput}
                 onChange={(e) => setDocTitleInput(e.target.value)}
                 placeholder="Title (optional)"
-                className="h-9 px-3 rounded-lg border text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="quiet-control h-10 px-4 rounded-full border-0 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <input
                 type="text"
@@ -518,10 +515,10 @@ export function RuntimePage() {
                   if (e.key === 'Enter') void handleAddDocLink()
                 }}
                 placeholder="docs.example.com / https://..."
-                className="h-9 px-3 rounded-lg border text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="quiet-control h-10 px-4 rounded-full border-0 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <button
-                className="h-9 px-3 rounded-lg bg-primary text-white hover:bg-primary-hover text-sm font-medium inline-flex items-center justify-center gap-1.5"
+                className="h-10 px-4 rounded-full bg-primary text-white hover:bg-primary-hover text-sm font-medium inline-flex items-center justify-center gap-1.5"
                 onClick={() => {
                   void handleAddDocLink()
                 }}
@@ -531,15 +528,15 @@ export function RuntimePage() {
               </button>
             </div>
 
-            {docError && <p className="text-xs text-red-500 mt-2">{docError}</p>}
+            {docError && <p className="text-xs text-[color:var(--color-destructive)] mt-2">{docError}</p>}
 
             {defaultDocLink && (
-              <div className="mt-3 flex items-center justify-between rounded-lg border border-[color:var(--color-border)] px-3 py-2 bg-[color:var(--color-secondary)]/35">
+              <div className="quiet-control mt-4 flex items-center justify-between rounded-[18px] px-4 py-3">
                 <span className="text-xs text-[color:var(--color-muted-foreground)] truncate">
                   Default: <span className="text-[color:var(--color-foreground)]">{defaultDocLink.title}</span>
                 </span>
                 <button
-                  className="h-7 px-2 rounded-md text-xs text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1"
+                  className="h-7 px-2 rounded-full text-xs text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1"
                   onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
                 >
                   <ExternalLink className="w-3 h-3" />
@@ -549,15 +546,15 @@ export function RuntimePage() {
             )}
 
             {docLinks.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
+              <div className="mt-5 rounded-[20px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
                 No documentation links yet.
               </div>
             ) : (
-              <div className="mt-4 space-y-2">
+              <div className="mt-5 space-y-2.5">
                 {docLinks.map((link) => (
                   <div
                     key={link.id}
-                    className="flex items-center gap-2 rounded-xl border border-[color:var(--color-border)] px-3 py-2"
+                    className="quiet-control flex items-center gap-2 rounded-[18px] px-4 py-3"
                   >
                     <button
                       className="flex-1 min-w-0 text-left"
@@ -567,14 +564,14 @@ export function RuntimePage() {
                       <p className="text-sm text-[color:var(--color-foreground)] truncate">{link.title}</p>
                     </button>
                     <button
-                      className="h-8 px-2 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
                       onClick={() => window.electronAPI.openExternal(link.url)}
                     >
                       <ExternalLink className="w-3 h-3" />
                       Open
                     </button>
                     <button
-                      className="h-8 px-2 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
                       onClick={() => {
                         void handleSetDefaultDocLink(link.id)
                       }}
@@ -584,7 +581,7 @@ export function RuntimePage() {
                       {docLinks[0]?.id === link.id ? 'Default' : 'Set Default'}
                     </button>
                     <button
-                      className="h-8 w-8 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-red-500 hover:bg-red-500/10 inline-flex items-center justify-center"
+                      className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] inline-flex items-center justify-center"
                       onClick={() => {
                         void handleRemoveDocLink(link.id)
                       }}
@@ -599,8 +596,8 @@ export function RuntimePage() {
           </div>
 
           {/* Recent Activity (placeholder) */}
-          <div className="rounded-2xl p-6 surface-card">
-            <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
+          <div className="rounded-[28px] p-8 surface-card">
+            <h3 className="section-label mb-4">
               Recent Activity
             </h3>
             <div className="space-y-2 text-sm font-mono">
@@ -624,8 +621,8 @@ export function RuntimePage() {
           </div>
 
           {/* Runtime Info */}
-          <div className="rounded-2xl p-6 surface-card">
-            <h3 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider mb-3">
+          <div className="rounded-[28px] p-8 surface-card">
+            <h3 className="section-label mb-4">
               Runtime Info
             </h3>
             <div className="grid grid-cols-2 gap-4 text-sm">

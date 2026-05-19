@@ -116,7 +116,7 @@ export function CardContextMenu({
           icon: <Square className="w-4 h-4" />,
           show: isRuntimeActive,
           action: onStopRuntime,
-          iconColorClass: 'text-red-500',
+          iconColorClass: 'text-[color:var(--color-destructive)]',
         },
       ],
     },
@@ -128,14 +128,14 @@ export function CardContextMenu({
           icon: <Play className="w-4 h-4" />,
           show: !isDevRunning,
           action: onStartProject,
-          iconColorClass: 'text-emerald-500',
+          iconColorClass: 'text-[color:var(--color-success)]',
         },
         {
           label: '停止项目',
           icon: <Square className="w-4 h-4" />,
           show: isDevRunning,
           action: onStopProject,
-          iconColorClass: 'text-red-500',
+          iconColorClass: 'text-[color:var(--color-destructive)]',
         },
       ],
     },
@@ -183,25 +183,32 @@ export function CardContextMenu({
 
   return createPortal(
     <div
-      className="fixed z-[9998] min-w-[220px] rounded-2xl p-1.5"
+      className="fixed z-[9998] min-w-[232px] rounded-[22px] p-2"
       style={{
         top: adjustedY,
         left: adjustedX,
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        boxShadow: '0 14px 40px rgba(0, 0, 0, 0.35)',
+        backdropFilter: 'saturate(180%) blur(28px)',
+        WebkitBackdropFilter: 'saturate(180%) blur(28px)',
+        boxShadow: 'var(--shadow-popover)',
       }}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Status header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 mb-1 rounded-xl bg-[color:var(--color-accent)]/65 border border-[color:var(--color-border)]">
+      <div className="quiet-control flex items-center gap-2 px-3 py-2.5 mb-1 rounded-[18px]">
         <span
           className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-            isRuntimeActive ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-[color:var(--color-muted-foreground)]'
+            isRuntimeActive
+              ? 'bg-[color:var(--color-success)]'
+              : 'bg-[color:var(--color-muted-foreground)]'
           }`}
+          style={
+            isRuntimeActive
+              ? { boxShadow: '0 0 8px color-mix(in srgb, var(--color-success) 48%, transparent)' }
+              : undefined
+          }
         />
         <span className="text-xs text-[color:var(--color-muted-foreground)]">
           {isRuntimeActive ? (
@@ -225,11 +232,11 @@ export function CardContextMenu({
             <button
               key={item.label}
               disabled={item.disabled}
-              className={`group w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-[color:var(--color-foreground)] transition-all duration-150 hover:bg-[color:var(--color-accent)]/70 hover:translate-x-0.5 ${
+              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-[16px] text-[13px] text-[color:var(--color-foreground)] transition-all duration-200 hover:bg-[color:var(--color-accent)]/70 ${
                 item.primary
                   ? 'bg-primary/10 border border-primary/20 hover:bg-primary/15'
                   : ''
-              } ${item.disabled ? 'opacity-60 cursor-not-allowed hover:translate-x-0 hover:bg-transparent' : ''}`}
+              } ${item.disabled ? 'opacity-60 cursor-not-allowed hover:bg-transparent' : ''}`}
               onClick={() => { void handleClick(item.action) }}
             >
               <span

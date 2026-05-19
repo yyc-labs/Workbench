@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { RULES } from '../../shared/rules'
 import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon, Wrench, Bot } from 'lucide-react'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -30,14 +32,14 @@ function Sidebar({
   ]
 
   return (
-    <nav className="w-48 shrink-0 flex flex-col gap-1">
+    <nav className="quiet-control w-56 shrink-0 flex flex-col gap-1 rounded-[26px] p-2">
       {items.map((item) => (
         <button
           key={item.id}
           onClick={() => onSelect(item.id)}
-          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+          className={`flex items-center gap-2.5 px-4 py-3 rounded-[18px] text-sm font-medium transition-colors text-left ${
             active === item.id
-              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm border border-[color:var(--color-border)]'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]/60'
           }`}
         >
@@ -59,14 +61,14 @@ function SegmentedControl({
   onChange: (v: 'system' | 'light' | 'dark') => void
 }) {
   return (
-    <div className="inline-flex rounded-xl bg-[color:var(--color-background-sunken)] p-1 gap-0.5 border border-[color:var(--color-border)]">
+    <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
       {THEME_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
             value === opt.value
-              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm border border-[color:var(--color-border)]'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
           }`}
         >
@@ -82,10 +84,11 @@ function SegmentedControl({
 
 function GeneralPanel({ theme, onThemeChange }: { theme: string; onThemeChange: (v: 'system' | 'light' | 'dark') => void }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Appearance</h2>
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 mb-4">
+        <p className="section-label mb-3">Appearance</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Interface</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
           Customize how the application looks and feels.
         </p>
         <SegmentedControl value={theme} onChange={onThemeChange} />
@@ -96,19 +99,20 @@ function GeneralPanel({ theme, onThemeChange }: { theme: string; onThemeChange: 
 
 function RulesPanel() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Detection Rules</h2>
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1">
+        <p className="section-label mb-3">Rules</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Detection Rules</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">
           Projects are detected by matching files in the directory. Higher priority rules are checked first.
         </p>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {RULES.map((rule) => (
           <div
             key={rule.type}
-            className="flex items-center gap-4 rounded-xl border px-4 py-3 surface-card"
+            className="flex items-center gap-4 rounded-[22px] border px-5 py-4 surface-card"
             style={{ borderColor: 'var(--color-border)' }}
           >
             <span className="w-8 text-[10px] font-semibold text-[color:var(--color-muted-foreground)] text-center shrink-0">
@@ -123,7 +127,7 @@ function RulesPanel() {
                 {rule.requiresAll ? ' (all required)' : ''}
               </p>
             </div>
-            <code className="text-[11px] text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)] rounded-md px-2 py-0.5 font-mono shrink-0 border border-[color:var(--color-border)]">
+            <code className="quiet-control text-[11px] text-[color:var(--color-muted-foreground)] rounded-full px-3 py-1 font-mono shrink-0">
               {rule.defaultCommand}
             </code>
           </div>
@@ -171,47 +175,49 @@ function RuntimePanel({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime Launcher</h2>
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 mb-4">
+        <p className="section-label mb-3">Runtime</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Launcher</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
           Configure the WSL script used to boot Claude/Codex runtime sessions.
         </p>
         <div className="flex gap-2">
-          <input
+          <Input
             value={scriptPath}
             onChange={(e) => setScriptPath(e.target.value)}
-            className="flex-1 h-9 rounded-lg border px-3 text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)]"
+            className="quiet-control flex-1 h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="$HOME/tools/claude-code-script/start-claude-with-env.sh"
           />
-          <button
-            className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover"
+          <Button
+            className="h-11 rounded-full px-5 text-sm"
             onClick={() => onRuntimeLauncherScriptSave(scriptPath.trim())}
           >
             Save
-          </button>
+          </Button>
         </div>
       </div>
 
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-sm font-semibold text-[color:var(--color-foreground)]">Diagnostics</h3>
-          <button
-            className="h-8 px-3 rounded-lg border text-xs border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+          <h3 className="text-sm font-medium text-[color:var(--color-foreground)]">Diagnostics</h3>
+          <Button
+            variant="outline"
+            className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={() => void runDiagnostics()}
             disabled={loading}
           >
             {loading ? 'Checking...' : 'Run Check'}
-          </button>
+          </Button>
         </div>
         {diag && (
-          <div className="rounded-xl border px-4 py-3 surface-card space-y-1 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="rounded-[22px] border px-5 py-4 surface-card space-y-1 text-xs" style={{ borderColor: 'var(--color-border)' }}>
             <p>WSL: {diag.hasWsl ? 'OK' : 'Missing'}</p>
             <p>tmux: {diag.hasTmux ? 'OK' : 'Missing'}</p>
             <p>Script exists: {diag.launcherScriptExists ? 'Yes' : 'No'}</p>
             <p>Script executable: {diag.launcherScriptExecutable ? 'Yes' : 'No'}</p>
             {diag.issues.length > 0 && (
-              <div className="mt-2 text-red-500 whitespace-pre-line">
+              <div className="mt-2 text-[color:var(--color-destructive)] whitespace-pre-line">
                 {diag.issues.map((it) => `- ${it}`).join('\n')}
               </div>
             )}
@@ -262,15 +268,16 @@ function AiCommitPanel({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">AI Auto Commit</h2>
-        <p className="text-xs text-[color:var(--color-muted-foreground)] mt-1 mb-4">
+        <p className="section-label mb-3">AI</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Auto Commit</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
           Configure AI API for Windows PowerShell auto-commit in project detail page.
         </p>
       </div>
 
-      <div className="rounded-xl border px-4 py-4 surface-card space-y-4" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
         <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
           <input
             type="checkbox"
@@ -282,42 +289,42 @@ function AiCommitPanel({
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">API Base URL</p>
-          <input
+          <Input
             value={apiBaseUrl}
             onChange={(e) => setApiBaseUrl(e.target.value)}
-            className="w-full h-9 rounded-lg border px-3 text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)]"
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="https://api.openai.com/v1"
           />
         </div>
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">API Key</p>
-          <input
+          <Input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="w-full h-9 rounded-lg border px-3 text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)]"
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="sk-..."
           />
         </div>
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">Model</p>
-          <input
+          <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="w-full h-9 rounded-lg border px-3 text-sm bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)]"
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="gpt-4o-mini"
           />
         </div>
 
-        <button
-          className="h-9 px-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-hover disabled:opacity-60"
+        <Button
+          className="h-10 rounded-full px-5 text-sm disabled:opacity-60"
           disabled={saving}
           onClick={() => void handleSave()}
         >
           {saving ? 'Saving...' : 'Save AI Config'}
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -325,26 +332,27 @@ function AiCommitPanel({
 
 function AboutPanel() {
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-sm">
-          <span className="text-lg font-bold text-white">L</span>
+    <div className="space-y-8">
+      <div className="flex items-center gap-5">
+        <div className="quiet-control w-14 h-14 rounded-[22px] flex items-center justify-center text-primary">
+          <span className="text-lg font-semibold">L</span>
         </div>
         <div>
-          <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">Project Launcher</h2>
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">v1.0.0</p>
+          <p className="section-label mb-1">About</p>
+          <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Project Launcher</h2>
+          <p className="text-sm text-[color:var(--color-muted-foreground)]">v1.0.0</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-4">
         {[
           ['Framework', 'Electron 42'],
           ['UI', 'React 18 + Tailwind v4'],
           ['State', 'Zustand'],
           ['Terminal', 'xterm.js'],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-xl border px-4 py-3 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-            <p className="text-[10px] text-[color:var(--color-muted-foreground)] uppercase tracking-wider font-medium mb-0.5">
+          <div key={label} className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <p className="section-label mb-1">
               {label}
             </p>
             <p className="text-sm text-[color:var(--color-foreground)] font-medium">{value}</p>
@@ -378,31 +386,23 @@ export function SettingsPage() {
   return (
     <div className="h-screen flex flex-col">
       {/* Header */}
-      <header
-        className="flex items-center gap-4 px-6 py-4 shrink-0"
-        style={{
-          background: 'var(--color-card)',
-          borderBottom: '1px solid var(--color-border)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-        }}
-      >
+      <header className="app-chrome flex min-h-[84px] items-center gap-4 px-8 py-4 shrink-0">
         <button
-          className="p-1.5 rounded-lg text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
+          className="p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
         </button>
-        <h1 className="text-lg font-semibold text-[color:var(--color-foreground)] tracking-tight">
+        <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] tracking-[-0.03em]">
           Settings
         </h1>
       </header>
 
       {/* Body */}
-      <div className="flex-1 flex min-h-0 px-6 pb-8 pt-6">
+      <div className="flex-1 flex min-h-0 px-8 pb-10 pt-10">
         <Sidebar active={section} onSelect={setSection} />
 
-        <main className="flex-1 min-w-0 ml-8">
+        <main className="flex-1 min-w-0 ml-12 max-w-3xl">
           {section === 'general' && (
             <GeneralPanel theme={theme} onThemeChange={handleThemeChange} />
           )}

@@ -50,32 +50,28 @@ function Toolbar({
 }) {
   const filterButtonClass = (active: boolean): string =>
     active
-      ? 'h-8 px-3 rounded-lg text-xs font-medium border text-[color:var(--color-foreground)] bg-[color:var(--color-accent)] border-[color:var(--color-border)]'
-      : 'h-8 px-3 rounded-lg text-xs font-medium border text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border-[color:var(--color-border)]'
+      ? 'h-8 px-3.5 rounded-full text-xs font-medium text-[color:var(--color-foreground)] bg-[color:var(--color-card)] shadow-sm border border-[color:var(--color-border)]'
+      : 'h-8 px-3.5 rounded-full text-xs font-medium text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-transparent'
 
   return (
     <header
-      className="h-auto min-h-14 flex items-center px-6 py-2 gap-4 shrink-0 border-b"
-      style={{
-        background: 'var(--color-card)',
-        borderBottomColor: 'var(--color-border)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-      }}
+      className="app-chrome h-auto min-h-[76px] flex items-center px-8 py-3 gap-5 shrink-0"
     >
-      <div className="flex items-center gap-2.5 mr-4">
+      <div className="flex items-center gap-3 mr-5">
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm"
-          style={{ background: 'linear-gradient(135deg, #635bff 0%, #554ee8 100%)' }}
+          className="w-8 h-8 rounded-2xl flex items-center justify-center quiet-control"
+          style={{
+            color: 'var(--color-primary)',
+          }}
         >
-          <Zap className="w-4 h-4 text-white" />
+          <Zap className="w-4 h-4" strokeWidth={1.8} />
         </div>
-        <span className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime</span>
+        <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">Runtime</span>
       </div>
 
-      <div className="w-full max-w-lg relative">
+      <div className="w-full max-w-xl relative">
         <Search
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--color-muted-foreground)] pointer-events-none"
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--color-muted-foreground)] pointer-events-none"
           strokeWidth={1.8}
         />
         <Input
@@ -83,11 +79,11 @@ function Toolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="h-9 pl-9 text-sm rounded-xl border bg-[color:var(--color-background-sunken)] border-[color:var(--color-border)] text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+          className="quiet-control h-11 pl-11 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
       </div>
 
-      <div className="ml-auto flex items-center rounded-xl border px-2 py-1.5 gap-2.5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-secondary)' }}>
+      <div className="quiet-control ml-auto flex items-center rounded-full px-2 py-1.5 gap-2.5">
         <div className="flex items-center gap-1.5">
           <button
             className={filterButtonClass(envFilter === 'all')}
@@ -118,12 +114,12 @@ function Toolbar({
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={onSettingsClick}
           >
             <Settings className="w-4 h-4" strokeWidth={1.8} />
           </Button>
-          <Button size="sm" className="h-9 gap-1.5 text-sm rounded-xl bg-primary hover:bg-primary-hover text-white shadow-sm" onClick={onAddFolder}>
+          <Button size="sm" className="h-9 gap-1.5 text-sm rounded-full bg-primary hover:bg-primary-hover text-white shadow-sm" onClick={onAddFolder}>
             <Plus className="w-4 h-4" strokeWidth={1.8} />
             New Project
           </Button>
@@ -140,19 +136,19 @@ function DragOverlay() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center drag-overlay-border border-4 border-dashed rounded-none"
       style={{
-        backgroundColor: 'rgba(99, 91, 255, 0.05)',
-        borderColor: 'rgba(99, 91, 255, 0.2)',
+        backgroundColor: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+        borderColor: 'color-mix(in srgb, var(--color-primary) 28%, transparent)',
       }}
     >
       <div className="text-center">
         <div
-          className="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
-          style={{ background: 'rgba(99, 91, 255, 0.12)' }}
+          className="quiet-control w-20 h-20 mx-auto mb-6 rounded-[28px] flex items-center justify-center"
+          style={{ color: 'var(--color-primary)' }}
         >
-          <FolderPlus className="w-8 h-8 text-primary" strokeWidth={1.5} />
+          <FolderPlus className="w-9 h-9" strokeWidth={1.5} />
         </div>
-        <p className="text-lg font-medium text-primary">Drop project folders anywhere</p>
-        <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1">Release to add to your workspace</p>
+        <p className="text-xl font-medium text-[color:var(--color-foreground)]">Drop project folders anywhere</p>
+        <p className="text-sm text-[color:var(--color-muted-foreground)] mt-2">Release to add to your workspace</p>
       </div>
     </div>
   )
@@ -313,50 +309,46 @@ export function HomePage() {
       <div className="h-screen flex flex-col">
         {isDragOver && <DragOverlay />}
         <header
-          className="h-14 flex items-center px-6 shrink-0 border-b"
-          style={{
-            background: 'var(--color-card)',
-            borderBottomColor: 'var(--color-border)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-          }}
+          className="app-chrome min-h-[76px] flex items-center px-8 shrink-0"
         >
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm"
-              style={{ background: 'linear-gradient(135deg, #635bff 0%, #554ee8 100%)' }}
+              className="quiet-control w-8 h-8 rounded-2xl flex items-center justify-center"
+              style={{
+                color: 'var(--color-primary)',
+              }}
             >
-              <Zap className="w-4 h-4 text-white" />
+              <Zap className="w-4 h-4" strokeWidth={1.8} />
             </div>
-            <span className="text-sm font-semibold text-[color:var(--color-foreground)]">Runtime</span>
+            <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">Runtime</span>
           </div>
           <div className="flex-1" />
           <Button
             variant="ghost"
             size="icon"
-            className="h-8 w-8 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            className="h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={() => navigate('/settings')}
           >
             <Settings className="w-4 h-4" strokeWidth={1.8} />
           </Button>
         </header>
         <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="flex flex-col items-center gap-6 max-w-md text-center px-6">
+          <div className="flex flex-col items-center gap-8 max-w-md text-center px-8">
             <div
-              className="w-20 h-20 rounded-2xl border flex items-center justify-center surface-card"
+              className="w-24 h-24 rounded-[32px] border flex items-center justify-center surface-card"
               style={{ borderColor: 'var(--color-border)' }}
             >
-              <FolderPlus className="w-10 h-10 text-[color:var(--color-muted-foreground)]" strokeWidth={1.5} />
+              <FolderPlus className="w-11 h-11 text-[color:var(--color-muted-foreground)]" strokeWidth={1.35} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] mb-2">Add a project folder</h1>
-              <p className="text-sm text-[color:var(--color-muted-foreground)]">Drop a folder or browse to get started</p>
+              <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)] mb-3">Add a project folder</h1>
+              <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">Drop a folder or browse to get started. The launcher will keep the workspace quiet and close at hand.</p>
             </div>
-            <Button onClick={handleAddFolder} className="gap-2 rounded-xl h-10 px-5 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
+            <Button onClick={handleAddFolder} className="gap-2 rounded-full h-11 px-6 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
               <Plus className="w-4 h-4" strokeWidth={1.8} />
               Add Project Folder
             </Button>
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">
+            <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
               Node.js &middot; Python &middot; Vite &middot; Next.js &middot; Django &middot; more
             </p>
           </div>
@@ -380,16 +372,17 @@ export function HomePage() {
         searchRef={searchRef}
       />
       <ScrollArea className="flex-1">
-        <div className="max-w-5xl mx-auto w-full px-8 py-8">
-          <div className="mb-8">
-            <h1 className="text-lg font-semibold text-[color:var(--color-foreground)]">Projects</h1>
-            <p className="text-sm text-[color:var(--color-muted-foreground)] mt-1 flex items-center gap-2">
+        <div className="content-breathe">
+          <div className="mb-12">
+            <p className="section-label mb-3">Workspace</p>
+            <h1 className="text-[34px] font-semibold tracking-[-0.045em] text-[color:var(--color-foreground)]">Projects</h1>
+            <p className="text-[15px] text-[color:var(--color-muted-foreground)] mt-3 flex items-center gap-2">
               <span>{envFilteredProjects.length} project{envFilteredProjects.length !== 1 ? 's' : ''}</span>
               {runningCount > 0 && (
                 <>
                   <span className="text-[color:var(--color-muted-foreground)]/70">&middot;</span>
                   <span className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-success)]" />
                     {runningCount} runtime{runningCount !== 1 ? 's' : ''} active
                   </span>
                 </>
@@ -398,14 +391,13 @@ export function HomePage() {
           </div>
 
           {pinnedProjects.length > 0 && (
-            <div className="mb-8">
-              <div className="flex items-center gap-2.5 mb-4">
-                <span className="w-1 h-4 rounded-full bg-amber-400" />
-                <Pin className="w-3.5 h-3.5 text-amber-500" strokeWidth={2} />
-                <h2 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">Pinned</h2>
+            <div className="mb-12">
+              <div className="flex items-center gap-2.5 mb-5">
+                <Pin className="w-3.5 h-3.5 text-[color:var(--color-warning)]" strokeWidth={1.8} />
+                <h2 className="section-label">Pinned</h2>
                 <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{pinnedProjects.length}</span>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {pinnedProjects.map((project, index) => (
                   <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
                 ))}
@@ -414,27 +406,26 @@ export function HomePage() {
           )}
 
           <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <span className="w-1 h-4 rounded-full bg-primary" />
-              <FolderOpen className="w-3.5 h-3.5 text-primary" strokeWidth={2} />
-              <h2 className="text-xs font-semibold text-[color:var(--color-muted-foreground)] uppercase tracking-wider">
+            <div className="flex items-center gap-2.5 mb-5">
+              <FolderOpen className="w-3.5 h-3.5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
+              <h2 className="section-label">
                 {pinnedProjects.length > 0 ? 'Projects' : 'Project Groups'}
               </h2>
               <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
             </div>
             {groupedRecentProjects.length > 0 ? (
-              <div className="space-y-6">
+              <div className="space-y-10">
                 {groupedRecentProjects.map((group) => (
                   <section key={group.key}>
-                    <div className="flex items-center gap-2 mb-3">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[color:var(--color-muted-foreground)]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
                         {group.label}
                       </h3>
                       <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
                         {group.projects.length}
                       </span>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-3">
                       {group.projects.map((project, index) => (
                         <ProjectCard key={project.id} project={project} index={index} onSelect={handleSelect} />
                       ))}
