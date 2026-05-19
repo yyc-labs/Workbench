@@ -12,6 +12,8 @@
     "preview": "electron-vite preview",
     "ai:commit": "bash skills/auto-git-commit/scripts/auto_commit.sh --all",
     "ai:commit:dry": "bash skills/auto-git-commit/scripts/auto_commit.sh --all --dry-run",
+    "ai:commit:split:dry": "pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -UseAi -Split -SplitDryRun",
+    "ai:commit:split": "pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -UseAi -Split",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
     "rebuild:pty": "electron-rebuild -f -w node-pty",

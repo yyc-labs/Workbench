@@ -8,6 +8,10 @@ param(
   [switch]$All,
   [switch]$IncludeUntracked,
   [switch]$DryRun,
+  [switch]$Split,
+  [switch]$SplitDryRun,
+  [ValidateRange(1, 12)]
+  [int]$SplitMaxBatches = 4,
   [switch]$UseAi,
   [string]$ApiBaseUrl = '',
   [string]$ApiKey = '',
@@ -303,6 +307,61 @@ if ($LASTEXITCODE -eq 0) {
 
 $changedFiles = @(git diff --cached --name-only)
 Write-Step ("staged file count: " + [string](@($changedFiles).Count))
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+if ($SplitDryRun) {
+  $Split = $true
+}
+
+if ($Split) {
+  $planScript = Join-Path $scriptDir 'ai_split_plan.ps1'
+  $applyScript = Join-Path $scriptDir 'apply_split_plan.ps1'
+  if (-not (Test-Path $planScript)) {
+    throw ('Missing split plan script: ' + $planScript)
+  }
+  if (-not (Test-Path $applyScript)) {
+    throw ('Missing split apply script: ' + $applyScript)
+  }
+
+  $planParams = @{
+    MaxBatches = $SplitMaxBatches
+  }
+  if ($UseAi) { $planParams.UseAi = $true }
+  if (Normalize-String $ApiBaseUrl) { $planParams.ApiBaseUrl = $ApiBaseUrl }
+  if (Normalize-String $ApiKey) { $planParams.ApiKey = $ApiKey }
+  if (Normalize-String $Model) { $planParams.Model = $Model }
+
+  Write-Step 'stage: split plan generation'
+  $planResult = & $planScript @planParams
+
+  $planPath = ''
+  if ($planResult) {
+    if ($planResult -is [string]) {
+      $planPath = Normalize-String $planResult
+    } elseif ($planResult.planPath) {
+      $planPath = Normalize-String ([string]$planResult.planPath)
+    }
+  }
+  if (-not $planPath -or -not (Test-Path $planPath)) {
+    throw 'Split plan generation failed: plan path is empty or missing.'
+  }
+
+  Write-Step ('split plan: ' + $planPath)
+
+  if ($SplitDryRun -or $DryRun) {
+    Write-Step '[split-dry-run] Plan generated. Skip apply/commit.'
+    try {
+      Write-Host (Get-Content -Raw -Path $planPath)
+    } catch { }
+    exit 0
+  }
+
+  Write-Step 'stage: apply split plan'
+  & $applyScript -PlanPath $planPath
+  Write-Step 'Done.'
+  exit 0
+}
 
 $typeProvided = -not [string]::IsNullOrWhiteSpace($Type)
 $subjectProvided = -not [string]::IsNullOrWhiteSpace($Subject)

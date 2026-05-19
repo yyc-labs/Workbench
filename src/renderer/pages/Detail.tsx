@@ -434,8 +434,8 @@ export function DetailPage() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 px-8 pb-8 pt-8">
-        <div className="grid h-full min-h-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="min-h-0 flex-1 overflow-x-auto px-8 pb-8 pt-8">
+        <div className="grid h-full min-h-0 min-w-[980px] grid-cols-[minmax(0,1fr)_380px] gap-6">
           <section
             className="min-h-0 min-w-0 overflow-hidden"
             style={{

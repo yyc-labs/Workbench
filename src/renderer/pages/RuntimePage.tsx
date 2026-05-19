@@ -348,10 +348,10 @@ export function RuntimePage() {
       </header>
 
       {/* ── Body ── */}
-      <div className="min-h-0 flex-1 overflow-auto px-8 py-8">
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto px-8 py-8">
+        <div className="mx-auto grid min-h-0 min-w-[980px] w-full max-w-6xl grid-cols-[minmax(0,1fr)_360px] gap-6">
           {runtimeError && (
-            <div className="rounded-[18px] border px-5 py-4 text-sm whitespace-pre-line text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)] xl:col-span-2" style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }}>
+            <div className="col-span-2 rounded-[18px] border px-5 py-4 text-sm whitespace-pre-line text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]" style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 30%, transparent)' }}>
               {runtimeError}
             </div>
           )}

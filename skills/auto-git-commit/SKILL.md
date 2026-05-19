@@ -18,6 +18,8 @@ description: 在对话结束时自动执行 Git 提交。适用于需要高频�
    `bash skills/auto-git-commit/scripts/auto_commit.sh --type fix --subject 修复启动白闪`
 3. 如需追加 bullet 说明：
    `bash skills/auto-git-commit/scripts/auto_commit.sh --type feat --subject 完善多链接展示 --bullet "appStore: processUrls 从单值改为数组" --bullet "新增 UrlPopover 组件"`
+4. 如需 AI 分批计划（PowerShell）：
+   `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -UseAi -Split -SplitDryRun`
 
 ## 参数说明
 
@@ -27,6 +29,9 @@ description: 在对话结束时自动执行 Git 提交。适用于需要高频�
 - `--all`：执行 `git add -A`（默认仅添加已跟踪文件 `git add -u`）
 - `--include-untracked`：添加未跟踪文件（`git add .`）
 - `--dry-run`：仅输出将要执行的提交信息，不真正提交
+- `--split`：启用“先规划后执行”的文件级分批提交（PowerShell 脚本）
+- `--split-dry-run`：只生成并输出分批计划，不执行 commit
+- `--split-max-batches`：限制分批数量（默认 4）
 
 ## 提交格式约定
 
@@ -42,3 +47,4 @@ description: 在对话结束时自动执行 Git 提交。适用于需要高频�
 - 该 skill 负责“自动执行提交命令”，不负责强制平台“每次对话必定自动触发”。
 - 若要达到“每轮结束自动提交”，可在你的外层工作流/包装脚本里固定调用本脚本。
 - 提交前请确认不会误提交敏感文件。
+- 分批提交 Phase 1 为文件级策略：同一文件只会出现在一个批次里。
