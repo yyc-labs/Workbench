@@ -58,6 +58,9 @@ const api = {
   resizeTerminal: (projectId: string, cols: number, rows: number) =>
     ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
 
+  runAiCommit: (projectId: string, projectPath: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath),
+
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 
   listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),
@@ -114,6 +117,28 @@ const api = {
     ) => cb(d)
     ipcRenderer.on(IPC.PROCESS_EXIT, handler)
     return () => ipcRenderer.removeListener(IPC.PROCESS_EXIT, handler)
+  },
+
+  onAiCommitOutput: (
+    cb: (data: { projectId: string; data: string }) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: { projectId: string; data: string }
+    ) => cb(d)
+    ipcRenderer.on(IPC.AI_COMMIT_OUTPUT, handler)
+    return () => ipcRenderer.removeListener(IPC.AI_COMMIT_OUTPUT, handler)
+  },
+
+  onAiCommitStatus: (
+    cb: (data: { projectId: string; status: 'running' | 'success' | 'error' }) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: { projectId: string; status: 'running' | 'success' | 'error' }
+    ) => cb(d)
+    ipcRenderer.on(IPC.AI_COMMIT_STATUS, handler)
+    return () => ipcRenderer.removeListener(IPC.AI_COMMIT_STATUS, handler)
   },
 }
 

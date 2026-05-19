@@ -12,6 +12,7 @@ import type {
   RuntimeDiagnostics,
 } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
+import { detectProjectEnvironment } from '../lib/projectEnvironment'
 
 const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode') as AppConfig['theme'] | null) ?? 'system'
 let initAppPromise: Promise<void> | null = null
@@ -74,6 +75,13 @@ declare global {
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
+      runAiCommit: (projectId: string, projectPath: string) => Promise<boolean>
+      onAiCommitOutput: (
+        cb: (d: { projectId: string; data: string }) => void
+      ) => () => void
+      onAiCommitStatus: (
+        cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
+      ) => () => void
     }
   }
 }
@@ -94,6 +102,7 @@ interface AppState {
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
+  setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
@@ -243,6 +252,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
+  setAiCommitConfig: async (aiCommit: NonNullable<AppConfig['aiCommit']>) => {
+    const updated = await window.electronAPI.setConfig({ aiCommit })
+    set((state) => ({
+      config: {
+        ...state.config,
+        aiCommit: updated.aiCommit,
+      },
+    }))
+  },
+
   addProject: async (dirPath: string) => {
     const existing = get().projects.find((p) => p.path === dirPath)
     if (existing) return
@@ -285,6 +304,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const command = commandOverride || project.customCommand || project.command
     const pid = processId || projectId
+    const projectEnv = detectProjectEnvironment(project.path)
+    const resolvedUseWsl =
+      useWsl ?? (projectEnv === 'ubuntu' ? true : projectEnv === 'windows' ? false : undefined)
 
     set((state) => ({
       processes: {
@@ -301,7 +323,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }))
 
-    await window.electronAPI.startProcess(pid, command, project.path, useWsl)
+    await window.electronAPI.startProcess(pid, command, project.path, resolvedUseWsl)
   },
 
   stopProject: async (projectId: string) => {

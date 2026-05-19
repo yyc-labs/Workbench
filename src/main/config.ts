@@ -13,6 +13,12 @@ const DEFAULT_CONFIG: AppConfig = {
   projects: [],
   theme: 'system',
   runtimeLauncherScript: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
+  aiCommit: {
+    enabled: true,
+    apiBaseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: 'gpt-4o-mini',
+  },
 }
 
 let cachedConfig: AppConfig | undefined

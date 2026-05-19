@@ -10,6 +10,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "ai:commit": "bash skills/auto-git-commit/scripts/auto_commit.sh --all",
+    "ai:commit:dry": "bash skills/auto-git-commit/scripts/auto_commit.sh --all --dry-run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
     "rebuild:pty": "electron-rebuild -f -w node-pty",

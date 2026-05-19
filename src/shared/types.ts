@@ -17,6 +17,13 @@ export type ProcessStatus = 'running' | 'stopped' | 'error' | 'detached'
 
 export type CliTool = 'claude' | 'codex'
 
+export interface AiCommitConfig {
+  enabled?: boolean
+  apiBaseUrl?: string
+  apiKey?: string
+  model?: string
+}
+
 export interface ProjectDocLink {
   id: string
   title: string
@@ -52,6 +59,8 @@ export interface AppConfig {
   theme: 'system' | 'light' | 'dark'
   /** WSL-side launcher script path for runtime boot */
   runtimeLauncherScript?: string
+  /** AI-assisted git commit configuration */
+  aiCommit?: AiCommitConfig
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
 }

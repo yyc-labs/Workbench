@@ -4,6 +4,7 @@ import { createHash } from 'crypto'
 import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { writeFileSync, unlinkSync } from 'fs'
+import { StringDecoder } from 'string_decoder'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
 import { loadConfig, updateConfig } from './config'
@@ -34,6 +35,134 @@ function getWindowBackgroundColor(theme: ThemeMode): string {
 function applyWindowBackground(theme: ThemeMode): void {
   if (!mainWindow) return
   mainWindow.setBackgroundColor(getWindowBackgroundColor(theme))
+}
+
+function sendAiCommitOutput(projectId: string, data: string): void {
+  mainWindow?.webContents.send(IPC.AI_COMMIT_OUTPUT, { projectId, data })
+}
+
+function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | 'error'): void {
+  mainWindow?.webContents.send(IPC.AI_COMMIT_STATUS, { projectId, status })
+}
+
+async function runAiCommit(projectId: string, projectPath: string): Promise<boolean> {
+  const config = loadConfig()
+  const aiCfg = config.aiCommit || {}
+  const scriptPath = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
+
+  sendAiCommitStatus(projectId, 'running')
+  sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
+
+  return new Promise<boolean>((resolve) => {
+    const args = [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      scriptPath,
+      '-All',
+    ]
+
+    if (aiCfg.enabled ?? true) {
+      args.push('-UseAi')
+    }
+
+    if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
+      args.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
+    }
+    if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
+      args.push('-ApiKey', aiCfg.apiKey.trim())
+    }
+    if (aiCfg.model && aiCfg.model.trim()) {
+      args.push('-Model', aiCfg.model.trim())
+    }
+
+    const spawnWith = (cmd: string) =>
+      spawn(cmd, args, {
+        cwd: projectPath,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+
+    let child = spawnWith('pwsh')
+    let started = false
+    let switchedToWindowsPowerShell = false
+
+    const stdoutDecoder = new StringDecoder('utf8')
+    const stderrDecoder = new StringDecoder('utf8')
+
+    const attachStreams = () => {
+      child.stdout?.on('data', (buf: Buffer) => {
+        const text = stdoutDecoder.write(buf)
+        if (text) {
+          sendAiCommitOutput(projectId, text.replace(/\r?\n/g, '\r\n'))
+        }
+      })
+
+      child.stderr?.on('data', (buf: Buffer) => {
+        const text = stderrDecoder.write(buf)
+        if (text) {
+          sendAiCommitOutput(projectId, text.replace(/\r?\n/g, '\r\n'))
+        }
+      })
+    }
+
+    child.on('spawn', () => {
+      started = true
+      sendAiCommitOutput(projectId, '[AI Commit] shell: pwsh\r\n')
+      attachStreams()
+    })
+
+    child.on('error', (err) => {
+      if (!started && !switchedToWindowsPowerShell) {
+        switchedToWindowsPowerShell = true
+        sendAiCommitOutput(projectId, `[AI Commit] pwsh unavailable, fallback to powershell.exe (${err.message})\r\n`)
+        child = spawnWith('powershell.exe')
+        child.on('spawn', () => {
+          sendAiCommitOutput(projectId, '[AI Commit] shell: powershell.exe\r\n')
+          attachStreams()
+        })
+        child.on('error', (fallbackErr) => {
+          sendAiCommitOutput(projectId, `[AI Commit] process error: ${fallbackErr.message}\r\n`)
+          sendAiCommitStatus(projectId, 'error')
+          resolve(false)
+        })
+        child.on('close', (code) => {
+          const tailOut = stdoutDecoder.end()
+          if (tailOut) {
+            sendAiCommitOutput(projectId, tailOut.replace(/\r?\n/g, '\r\n'))
+          }
+          const tailErr = stderrDecoder.end()
+          if (tailErr) {
+            sendAiCommitOutput(projectId, tailErr.replace(/\r?\n/g, '\r\n'))
+          }
+          const ok = code === 0
+          sendAiCommitOutput(projectId, `[AI Commit] finished with code ${code}\r\n`)
+          sendAiCommitStatus(projectId, ok ? 'success' : 'error')
+          resolve(ok)
+        })
+        return
+      }
+      sendAiCommitOutput(projectId, `[AI Commit] process error: ${err.message}\r\n`)
+      sendAiCommitStatus(projectId, 'error')
+      resolve(false)
+    })
+
+    child.on('close', (code) => {
+      const tailOut = stdoutDecoder.end()
+      if (tailOut) {
+        sendAiCommitOutput(projectId, tailOut.replace(/\r?\n/g, '\r\n'))
+      }
+      const tailErr = stderrDecoder.end()
+      if (tailErr) {
+        sendAiCommitOutput(projectId, tailErr.replace(/\r?\n/g, '\r\n'))
+      }
+      const ok = code === 0
+      sendAiCommitOutput(projectId, `[AI Commit] finished with code ${code}\r\n`)
+      sendAiCommitStatus(projectId, ok ? 'success' : 'error')
+      resolve(ok)
+    })
+  })
 }
 
 function runtimeLauncherScript(): string {
@@ -389,6 +518,12 @@ function registerIpcHandlers(): void {
           projects: never
           theme: 'system' | 'light' | 'dark'
           runtimeLauncherScript: string
+          aiCommit: {
+            enabled?: boolean
+            apiBaseUrl?: string
+            apiKey?: string
+            model?: string
+          }
         }>
       )
       if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
@@ -397,6 +532,10 @@ function registerIpcHandlers(): void {
       return updated
     }
   )
+
+  ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string) => {
+    return runAiCommit(projectId, projectPath)
+  })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
     return shell.openExternal(url)
