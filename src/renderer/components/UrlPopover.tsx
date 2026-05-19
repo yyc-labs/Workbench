@@ -55,18 +55,18 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       {entries.map((entry) => (
         <div
           key={`${entry.label}:${entry.url}`}
-          className="flex items-center gap-1.5 px-2.5 py-2 rounded-[14px] group/item hover:bg-[color:var(--color-accent)]/70"
+          className="group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
         >
           <button
-            className="flex-1 text-left text-xs text-primary hover:text-primary truncate flex items-center gap-1.5 min-w-0"
+            className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]"
             onClick={() => window.electronAPI.openExternal(entry.url)}
             title={entry.url}
           >
-            <ExternalLink className="w-3 h-3 shrink-0" />
+            <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
             <span className="truncate">{entry.label}</span>
           </button>
           <button
-            className="shrink-0 opacity-0 group-hover/item:opacity-100 px-2 py-0.5 rounded-full text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-all"
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100"
             onClick={() => navigator.clipboard.writeText(entry.url)}
           >
             复制

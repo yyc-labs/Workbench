@@ -54,6 +54,7 @@ declare global {
       getConfig: () => Promise<AppConfig>
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
       selectDirectory: () => Promise<string | null>
+      getPathForFile: (file: File) => string
       onProcessOutput: (
         cb: (d: { projectId: string; data: string }) => void
       ) => () => void

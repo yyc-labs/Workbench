@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
 
 type ThemeMode = 'system' | 'light' | 'dark'
@@ -45,6 +45,14 @@ const api = {
     ipcRenderer.invoke(IPC.CONFIG_SET, partial),
 
   selectDirectory: () => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY),
+
+  getPathForFile: (file: File) => {
+    try {
+      return webUtils.getPathForFile(file)
+    } catch {
+      return ''
+    }
+  },
 
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),

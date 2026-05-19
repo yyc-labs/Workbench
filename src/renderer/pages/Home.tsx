@@ -169,7 +169,23 @@ export function HomePage() {
   const searchRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all')
-  const dragCounter = useRef(0)
+  const isDragOverRef = useRef(false)
+  const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastDragOverAtRef = useRef(0)
+
+  const setDragOverlay = useCallback((next: boolean) => {
+    if (isDragOverRef.current === next) return
+    isDragOverRef.current = next
+    setIsDragOver(next)
+  }, [])
+
+  const stopDragTracking = useCallback(() => {
+    if (dragHeartbeatRef.current) {
+      clearInterval(dragHeartbeatRef.current)
+      dragHeartbeatRef.current = null
+    }
+    setDragOverlay(false)
+  }, [setDragOverlay])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -183,47 +199,75 @@ export function HomePage() {
   }, [])
 
   useEffect(() => {
-    const onDragEnter = (e: DragEvent) => {
+    const onDragOver = (e: DragEvent) => {
+      let hasFiles = isDragOverRef.current
+      if (!hasFiles) {
+        const types = e.dataTransfer?.types
+        hasFiles = Boolean(
+          types &&
+          (types.includes('Files') || (types as unknown as { contains?: (v: string) => boolean }).contains?.('Files'))
+        )
+      }
+      if (!hasFiles) return
+
       e.preventDefault()
-      dragCounter.current++
-      setIsDragOver(true)
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+      setDragOverlay(true)
+      lastDragOverAtRef.current = performance.now()
+
+      if (!dragHeartbeatRef.current) {
+        dragHeartbeatRef.current = setInterval(() => {
+          if (performance.now() - lastDragOverAtRef.current > 180) {
+            stopDragTracking()
+          }
+        }, 120)
+      }
     }
-    const onDragLeave = (e: DragEvent) => {
-      e.preventDefault()
-      dragCounter.current--
-      if (dragCounter.current === 0) setIsDragOver(false)
-    }
-    const onDragOver = (e: DragEvent) => { e.preventDefault() }
+
     const onDrop = async (e: DragEvent) => {
       e.preventDefault()
-      dragCounter.current = 0
-      setIsDragOver(false)
+      stopDragTracking()
       const files = e.dataTransfer?.files
-      if (files) {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i] as File & { path?: string }
-          if (file.path) await addProject(file.path)
+      if (!files || files.length === 0) return
+
+      const api = window.electronAPI as unknown as {
+        getPathForFile?: (file: File) => string
+      }
+      const getPathForFile = typeof api.getPathForFile === 'function' ? api.getPathForFile : undefined
+
+      const pathSet = new Set<string>()
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i] as File & { path?: string }
+        const fromWebUtils = getPathForFile ? getPathForFile(file) : ''
+        const resolvedPath = fromWebUtils || file.path || ''
+        if (resolvedPath) {
+          pathSet.add(resolvedPath)
+        }
+      }
+
+      for (const p of pathSet) {
+        try {
+          await addProject(p)
+        } catch (err) {
+          console.error('[HomePage] drop addProject failed:', p, err)
         }
       }
     }
-    const onDragEnd = () => {
-      dragCounter.current = 0
-      setIsDragOver(false)
+
+    const onWindowBlur = () => {
+      stopDragTracking()
     }
 
-    document.addEventListener('dragenter', onDragEnter)
     document.addEventListener('dragover', onDragOver)
-    document.addEventListener('dragleave', onDragLeave)
     document.addEventListener('drop', onDrop)
-    document.addEventListener('dragend', onDragEnd)
+    window.addEventListener('blur', onWindowBlur)
     return () => {
-      document.removeEventListener('dragenter', onDragEnter)
       document.removeEventListener('dragover', onDragOver)
-      document.removeEventListener('dragleave', onDragLeave)
       document.removeEventListener('drop', onDrop)
-      document.removeEventListener('dragend', onDragEnd)
+      window.removeEventListener('blur', onWindowBlur)
+      stopDragTracking()
     }
-  }, [addProject])
+  }, [addProject, setDragOverlay, stopDragTracking])
 
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects
@@ -236,11 +280,19 @@ export function HomePage() {
     )
   }, [projects, searchQuery])
 
+  const envByPath = useMemo(() => {
+    const map = new Map<string, ProjectEnvironment>()
+    for (const p of filteredProjects) {
+      map.set(p.path, detectProjectEnvironment(p.path))
+    }
+    return map
+  }, [filteredProjects])
+
   const envCounts = useMemo(() => {
     let ubuntu = 0
     let windows = 0
     for (const p of filteredProjects) {
-      const env = detectProjectEnvironment(p.path)
+      const env = envByPath.get(p.path)
       if (env === 'ubuntu') ubuntu++
       else if (env === 'windows') windows++
     }
@@ -249,12 +301,12 @@ export function HomePage() {
       ubuntu,
       windows,
     }
-  }, [filteredProjects])
+  }, [filteredProjects, envByPath])
 
   const envFilteredProjects = useMemo(() => {
     if (envFilter === 'all') return filteredProjects
-    return filteredProjects.filter((p) => detectProjectEnvironment(p.path) === envFilter)
-  }, [filteredProjects, envFilter])
+    return filteredProjects.filter((p) => envByPath.get(p.path) === envFilter)
+  }, [filteredProjects, envFilter, envByPath])
 
   const pinnedProjects = useMemo(() => envFilteredProjects.filter((p) => p.pinned), [envFilteredProjects])
   const recentProjects = useMemo(() => envFilteredProjects.filter((p) => !p.pinned), [envFilteredProjects])
@@ -268,7 +320,7 @@ export function HomePage() {
     }
 
     for (const p of recentProjects) {
-      const env = detectProjectEnvironment(p.path)
+      const env = envByPath.get(p.path) ?? 'unknown'
       if (env === 'ubuntu' || env === 'windows') {
         groups[env].projects.push(p)
       } else {
@@ -279,7 +331,7 @@ export function HomePage() {
     return groupOrder
       .map((k) => groups[k])
       .filter((g) => g.projects.length > 0)
-  }, [recentProjects])
+  }, [recentProjects, envByPath])
 
   const runningCount = useMemo(
     () => Object.values(sessions).filter((s) => s.status !== 'stopped').length,

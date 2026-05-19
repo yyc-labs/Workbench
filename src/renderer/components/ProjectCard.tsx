@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react'
+import { memo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ProjectInfo, CliTool } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { Play, Square, Folder, ExternalLink, FileText, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
+import { Play, Square, Folder, FileText, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
 
@@ -12,7 +12,7 @@ interface ProjectCardProps {
   index?: number
 }
 
-export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) {
+function ProjectCardInner({ project, onSelect, index = 0 }: ProjectCardProps) {
   const navigate = useNavigate()
 
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
@@ -56,6 +56,11 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
   const isDevRunning = devStatus === 'running'
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
+  const linkMenuItems = [
+    ...(isDevRunning ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+    ...docLinks.map((link) => ({ url: link.url, label: `Docs: ${link.title}` })),
+  ]
+  const firstLinkMenuItem = linkMenuItems[0]
   const hoverDocLabel = defaultDocLink
     ? `Docs: ${defaultDocLink.title}`
     : docLinks.length > 0
@@ -204,27 +209,14 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
           )}
           {currentCli}
         </button>
-        {isDevRunning && devUrls.length > 0 && (
-          <UrlPopover urls={devUrls}>
+        {firstLinkMenuItem && (
+          <UrlPopover items={linkMenuItems}>
             <button
-              className="quiet-control hidden h-8 items-center gap-1 rounded-full border-0 px-2.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)] lg:inline-flex"
-              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(devUrls[0]) }}
-              title={devUrls[0]}
+              className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(firstLinkMenuItem.url) }}
+              title="Project links"
             >
-              <ExternalLink className="h-3 w-3 shrink-0" />
-              <span className="truncate">{devUrls[0]}</span>
-            </button>
-          </UrlPopover>
-        )}
-        {defaultDocLink && (
-          <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
-            <button
-              className="quiet-control hidden h-8 items-center gap-1 rounded-full border-0 px-2.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] xl:inline-flex"
-              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(defaultDocLink.url) }}
-              title={defaultDocLink.url}
-            >
-              <BookOpen className="h-3 w-3 shrink-0" />
-              <span className="truncate">{defaultDocLink.title}</span>
+              <BookOpen className="h-3.5 w-3.5 shrink-0" />
             </button>
           </UrlPopover>
         )}
@@ -264,3 +256,5 @@ export function ProjectCard({ project, onSelect, index = 0 }: ProjectCardProps) 
     </div>
   )
 }
+
+export const ProjectCard = memo(ProjectCardInner)
