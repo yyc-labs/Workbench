@@ -102,6 +102,39 @@ function Normalize-ChineseBullets([object[]]$Items) {
   return @($result | Select-Object -First 3)
 }
 
+function Test-GenericSubject([string]$Text) {
+  $clean = Normalize-String $Text
+  if (-not $clean) { return $true }
+
+  $patterns = @(
+    '^更新代码改动(\s*[\(（]\d+\s*files[\)）])?$',
+    '^自动提交当前改动(\s*[\(（]\d+\s*files[\)）])?$',
+    '^提交当前改动(\s*[\(（]\d+\s*files[\)）])?$',
+    '^更新文件变更(\s*[\(（]\d+\s*files[\)）])?$',
+    '^更新项目文件(\s*[\(（]\d+\s*files[\)）])?$'
+  )
+  foreach ($pattern in $patterns) {
+    if ($clean -match $pattern) { return $true }
+  }
+  return $false
+}
+
+function Get-SubjectFromBullets([string[]]$Items) {
+  foreach ($item in $Items) {
+    $text = Normalize-String $item
+    if (-not $text) { continue }
+    if (-not (Contains-Cjk $text)) { continue }
+
+    $text = $text -replace '^[\-\*]\s*', ''
+    $text = $text -replace '[。；;,.，、\s]+$', ''
+    if ($text.Length -gt 40) {
+      $text = $text.Substring(0, 40)
+    }
+    return $text
+  }
+  return ''
+}
+
 function New-TempUtf8FilePath() {
   $name = 'ai-commit-msg-' + [Guid]::NewGuid().ToString('N') + '.txt'
   return Join-Path $env:TEMP $name
@@ -140,8 +173,10 @@ Return JSON only with shape:
 Rules:
 1) JSON only, no markdown.
 2) subject and bullets MUST be Simplified Chinese.
-3) subject should be specific and concise.
-4) bullets can be [].
+3) subject MUST describe the most important concrete change, not file count or generic wording.
+4) Do not use generic subjects like "更新代码改动", "提交当前改动", "更新文件变更".
+5) Prefer deriving subject from the strongest summary bullet when appropriate.
+6) bullets can be [].
 
 Files:
 $Files
@@ -264,13 +299,10 @@ if ($LASTEXITCODE -eq 0) {
 $changedFiles = @(git diff --cached --name-only)
 Write-Step ("staged file count: " + [string](@($changedFiles).Count))
 
+$subjectProvided = -not [string]::IsNullOrWhiteSpace($Subject)
+
 if (-not $Type) {
   $Type = Resolve-CommitTypeFromFiles $changedFiles
-}
-
-if (-not $Subject) {
-  $fileCount = @($changedFiles).Count
-  $Subject = Get-DefaultChineseSubject $fileCount
 }
 
 if ($UseAi) {
@@ -295,6 +327,16 @@ if ($UseAi) {
 
 $Type = Normalize-String $Type
 $Subject = Normalize-String $Subject
+$Bullet = Normalize-ChineseBullets $Bullet
+
+if (-not $subjectProvided -and (Test-GenericSubject $Subject) -and $Bullet.Count -gt 0) {
+  $summarySubject = Get-SubjectFromBullets $Bullet
+  if ($summarySubject) {
+    $Subject = $summarySubject
+    Write-Ai ("subject derived from summary=" + $Subject)
+  }
+}
+
 if (-not $Type) { $Type = 'fix' }
 if (-not $Subject) {
   $Subject = Get-DefaultChineseSubject (@($changedFiles).Count)

@@ -8,6 +8,35 @@ ADD_ALL=0
 INCLUDE_UNTRACKED=0
 declare -a BULLETS=()
 
+has_cjk() {
+  LC_ALL=C grep -q '[^ -~]' <<<"$1"
+}
+
+is_generic_subject() {
+  local text="$1"
+  [[ "$text" =~ ^更新代码改动([[:space:]]*[（(][0-9]+[[:space:]]*files[）)])?$ ]] && return 0
+  [[ "$text" =~ ^自动提交当前改动([[:space:]]*[（(][0-9]+[[:space:]]*files[）)])?$ ]] && return 0
+  [[ "$text" =~ ^提交当前改动([[:space:]]*[（(][0-9]+[[:space:]]*files[）)])?$ ]] && return 0
+  [[ "$text" =~ ^更新文件变更([[:space:]]*[（(][0-9]+[[:space:]]*files[）)])?$ ]] && return 0
+  [[ "$text" =~ ^更新项目文件([[:space:]]*[（(][0-9]+[[:space:]]*files[）)])?$ ]] && return 0
+  return 1
+}
+
+subject_from_bullets() {
+  local bullet text
+  for bullet in "${BULLETS[@]}"; do
+    text="${bullet#"${bullet%%[![:space:]]*}"}"
+    text="${text#-}"
+    text="${text#"${text%%[![:space:]]*}"}"
+    text="${text%"${text##*[![:space:]。；;,.，、]}"}"
+    if [[ -n "$text" ]] && has_cjk "$text"; then
+      echo "${text:0:40}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -80,6 +109,11 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
+subject_provided=0
+if [[ -n "$SUBJECT" ]]; then
+  subject_provided=1
+fi
+
 if [[ -z "$TYPE" ]]; then
   changed_files="$(git diff --cached --name-only)"
   if echo "$changed_files" | grep -Eq '(^|/)(docs|README|CHANGELOG)|\.md$'; then
@@ -93,9 +127,16 @@ if [[ -z "$TYPE" ]]; then
   fi
 fi
 
+if [[ $subject_provided -eq 0 && ${#BULLETS[@]} -gt 0 ]] && { [[ -z "$SUBJECT" ]] || is_generic_subject "$SUBJECT"; }; then
+  summary_subject="$(subject_from_bullets || true)"
+  if [[ -n "$summary_subject" ]]; then
+    SUBJECT="$summary_subject"
+  fi
+fi
+
 if [[ -z "$SUBJECT" ]]; then
   file_count="$(git diff --cached --name-only | wc -l | tr -d ' ')"
-  SUBJECT="自动提交当前改动（${file_count} files）"
+  SUBJECT="更新代码改动 (${file_count} files)"
 fi
 
 commit_cmd=(git commit -m "${TYPE}:${SUBJECT}")

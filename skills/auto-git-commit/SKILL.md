@@ -22,7 +22,7 @@ description: 在对话结束时自动执行 Git 提交。适用于需要高频�
 ## 参数说明
 
 - `--type`：`fix|feat|style|chore|refactor|docs|debug`，默认自动推断
-- `--subject`：提交标题（不含前缀），默认自动生成
+- `--subject`：提交标题（不含前缀），默认优先使用 AI/小点总结生成，最后才回退到文件数兜底
 - `--bullet`：可重复，用于追加多段小点说明
 - `--all`：执行 `git add -A`（默认仅添加已跟踪文件 `git add -u`）
 - `--include-untracked`：添加未跟踪文件（`git add .`）
