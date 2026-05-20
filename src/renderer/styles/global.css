@@ -48,6 +48,23 @@
   /* Focus */
   --color-ring: rgba(10, 132, 255, 0.38);
 
+  /* Scrollbar */
+  --scrollbar-size: 10px;
+  --scrollbar-track: rgba(29, 29, 31, 0.08);
+  --scrollbar-thumb: rgba(29, 29, 31, 0.28);
+  --scrollbar-thumb-hover: rgba(29, 29, 31, 0.38);
+  --scrollbar-thumb-active: rgba(29, 29, 31, 0.5);
+
+  /* Checkbox */
+  --checkbox-size: 18px;
+  --checkbox-radius: 6px;
+  --checkbox-bg: rgba(255, 255, 255, 0.88);
+  --checkbox-bg-hover: #ffffff;
+  --checkbox-border: rgba(29, 29, 31, 0.18);
+  --checkbox-border-hover: rgba(29, 29, 31, 0.32);
+  --checkbox-checkmark: #ffffff;
+  --checkbox-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64), 0 1px 2px rgba(29, 29, 31, 0.08);
+
   /* Terminal */
   --color-terminal-surface: #2c2c2e;
   --color-terminal-inner: #232326;
@@ -104,6 +121,23 @@
   /* Focus */
   --color-ring: rgba(10, 132, 255, 0.46);
 
+  /* Scrollbar */
+  --scrollbar-size: 10px;
+  --scrollbar-track: rgba(245, 245, 247, 0.1);
+  --scrollbar-thumb: rgba(245, 245, 247, 0.26);
+  --scrollbar-thumb-hover: rgba(245, 245, 247, 0.36);
+  --scrollbar-thumb-active: rgba(245, 245, 247, 0.48);
+
+  /* Checkbox */
+  --checkbox-size: 18px;
+  --checkbox-radius: 6px;
+  --checkbox-bg: rgba(44, 44, 46, 0.9);
+  --checkbox-bg-hover: rgba(56, 56, 60, 0.94);
+  --checkbox-border: rgba(245, 245, 247, 0.26);
+  --checkbox-border-hover: rgba(245, 245, 247, 0.4);
+  --checkbox-checkmark: #ffffff;
+  --checkbox-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.28);
+
   /* Terminal */
   --color-terminal-surface: #2c2c2e;
   --color-terminal-inner: #1f1f22;
@@ -148,6 +182,104 @@ body {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
     var(--color-background);
+}
+
+/* ── Unified Scrollbar ── */
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 180ms var(--spring);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Unified Checkbox (Apple-like) ── */
+
+input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  margin: 0;
+  border-radius: var(--checkbox-radius);
+  border: 1px solid var(--checkbox-border);
+  background: var(--checkbox-bg);
+  box-shadow: var(--checkbox-shadow);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--spring),
+    border-color 180ms var(--spring),
+    box-shadow 180ms var(--spring),
+    transform 180ms var(--spring);
+}
+
+input[type='checkbox']::before {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid var(--checkbox-checkmark);
+  border-bottom: 2px solid var(--checkbox-checkmark);
+  transform: translateY(-1px) rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform 180ms var(--spring);
+}
+
+input[type='checkbox']:hover:not(:checked) {
+  background: var(--checkbox-bg-hover);
+  border-color: var(--checkbox-border-hover);
+}
+
+input[type='checkbox']:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 1px 2px rgba(29, 29, 31, 0.14);
+}
+
+input[type='checkbox']:checked::before {
+  transform: translateY(-1px) rotate(45deg) scale(1);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 65%, transparent),
+    var(--checkbox-shadow);
+}
+
+input[type='checkbox']:active {
+  transform: scale(0.96);
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .font-mono,
