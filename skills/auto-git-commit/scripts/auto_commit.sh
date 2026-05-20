@@ -13,6 +13,8 @@ USE_AI=0
 API_BASE_URL=""
 API_KEY=""
 MODEL=""
+DEFAULT_MAX_BULLETS=8
+MAX_BULLETS="${AI_COMMIT_MAX_BULLETS:-$DEFAULT_MAX_BULLETS}"
 declare -a BULLETS=()
 
 has_cjk() {
@@ -77,6 +79,21 @@ is_valid_type() {
     fix|feat|style|chore|refactor|docs|debug) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+normalize_and_limit_bullets() {
+  local -a output=()
+  local raw line
+  for raw in "$@"; do
+    line="${raw#"${raw%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -n "$line" ]] || continue
+    output+=("$line")
+    if (( ${#output[@]} >= MAX_BULLETS )); then
+      break
+    fi
+  done
+  BULLETS=("${output[@]}")
 }
 
 resolve_ai_base_url() {
@@ -292,7 +309,7 @@ const text = fs.readFileSync(0, "utf8");
 try {
   const data = JSON.parse(text);
   const bullets = Array.isArray(data?.bullets) ? data.bullets : [];
-  for (const item of bullets.slice(0, 3)) {
+  for (const item of bullets) {
     const line = String(item ?? "").trim();
     if (line) process.stdout.write(line + "\n");
   }
@@ -312,7 +329,7 @@ except Exception:
 bullets = (data or {}).get("bullets") or []
 if not isinstance(bullets, list):
     bullets = []
-for item in bullets[:3]:
+for item in bullets:
     line = str(item or "").strip()
     if line:
         sys.stdout.write(line + "\n")
@@ -353,7 +370,7 @@ try_apply_ai_message() {
   user_prompt="$(cat <<EOF
 Generate a Chinese git commit suggestion from staged changes.
 Return JSON only with shape:
-{"type":"fix|feat|style|chore|refactor|docs|debug","subject":"<=40 chars","bullets":["<=3 items, each <=50 chars"]}
+{"type":"fix|feat|style|chore|refactor|docs|debug","subject":"<=40 chars","bullets":["0-${MAX_BULLETS} items, each <=50 chars"]}
 
 Rules:
 1) JSON only, no markdown.
@@ -361,7 +378,7 @@ Rules:
 3) subject MUST describe the most important concrete change, not file count or generic wording.
 4) Do not use generic subjects like "更新代码改动", "提交当前改动", "更新文件变更".
 5) Prefer deriving subject from the strongest summary bullet when appropriate.
-6) bullets can be [].
+6) bullets can be [] and should adapt to change scope (0-${MAX_BULLETS} items).
 
 Files:
 $files
@@ -443,6 +460,7 @@ Options:
   --type <fix|feat|style|chore|refactor|docs|debug>
   --subject <中文标题>
   --bullet <说明小点>              (可重复)
+  --max-bullets <1-20>            限制小点数量（默认 8，可用 AI_COMMIT_MAX_BULLETS）
   --all                           使用 git add -A
   --include-untracked             添加未跟踪文件 (git add .)
   --dry-run                       仅打印提交信息，不提交
@@ -469,6 +487,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --bullet)
       BULLETS+=("${2:-}")
+      shift 2
+      ;;
+    --max-bullets)
+      MAX_BULLETS="${2:-}"
       shift 2
       ;;
     --all)
@@ -551,6 +573,15 @@ if (( SPLIT_MAX_BATCHES < 1 || SPLIT_MAX_BATCHES > 12 )); then
   exit 1
 fi
 
+if ! [[ "$MAX_BULLETS" =~ ^[0-9]+$ ]]; then
+  echo "Error: --max-bullets 必须是 1-20 的整数。" >&2
+  exit 1
+fi
+if (( MAX_BULLETS < 1 || MAX_BULLETS > 20 )); then
+  echo "Error: --max-bullets 必须在 1-20 之间。" >&2
+  exit 1
+fi
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 plan_script="${script_dir}/ai_split_plan.ps1"
 apply_script="${script_dir}/apply_split_plan.ps1"
@@ -561,7 +592,7 @@ fi
 
 if (( SPLIT == 1 )); then
   if command -v pwsh >/dev/null 2>&1 && [[ -f "$plan_script" ]] && [[ -f "$apply_script" ]]; then
-    plan_path="$(pwsh -NoProfile -ExecutionPolicy Bypass -File "$plan_script" -MaxBatches "$SPLIT_MAX_BATCHES" | sed -n 's/.*plan generated: //p' | tail -n 1 | tr -d '\r')"
+    plan_path="$(pwsh -NoProfile -ExecutionPolicy Bypass -File "$plan_script" -MaxBatches "$SPLIT_MAX_BATCHES" -MaxBullets "$MAX_BULLETS" | sed -n 's/.*plan generated: //p' | tail -n 1 | tr -d '\r')"
     if [[ -z "$plan_path" || ! -f "$plan_path" ]]; then
       echo "Error: 分批计划生成失败（未得到有效 plan 路径）。" >&2
       exit 1
@@ -574,7 +605,7 @@ if (( SPLIT == 1 )); then
       exit 0
     fi
 
-    pwsh -NoProfile -ExecutionPolicy Bypass -File "$apply_script" -PlanPath "$plan_path"
+    pwsh -NoProfile -ExecutionPolicy Bypass -File "$apply_script" -PlanPath "$plan_path" -MaxBullets "$MAX_BULLETS"
     echo "[auto-commit] Done."
     exit 0
   fi
@@ -693,6 +724,8 @@ fi
 if (( USE_AI == 1 )); then
   try_apply_ai_message "$TYPE" "$SUBJECT"
 fi
+
+normalize_and_limit_bullets "${BULLETS[@]}"
 
 if [[ $subject_provided -eq 0 && ${#BULLETS[@]} -gt 0 ]] && { [[ -z "$SUBJECT" ]] || is_generic_subject "$SUBJECT"; }; then
   summary_subject="$(subject_from_bullets || true)"

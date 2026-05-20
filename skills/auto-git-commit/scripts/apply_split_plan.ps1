@@ -3,6 +3,8 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$PlanPath,
+  [ValidateRange(1, 20)]
+  [int]$MaxBullets = 8,
   [switch]$DryRun
 )
 
@@ -26,6 +28,27 @@ function Write-Step([string]$Message) {
 function Normalize-String([string]$Value) {
   if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
   return $Value.Trim()
+}
+
+function Resolve-MaxBullets([int]$CliValue) {
+  if ($CliValue -ge 1) { return $CliValue }
+  $envValue = Normalize-String $env:AI_COMMIT_MAX_BULLETS
+  if ($envValue -and $envValue -match '^\d+$') {
+    $parsed = [int]$envValue
+    if ($parsed -ge 1 -and $parsed -le 20) { return $parsed }
+  }
+  return 8
+}
+
+function Normalize-Bullets([object[]]$Items, [int]$Limit) {
+  $result = @()
+  foreach ($item in $Items) {
+    $text = Normalize-String ([string]$item)
+    if (-not $text) { continue }
+    $result += $text
+    if ($result.Count -ge $Limit) { break }
+  }
+  return @($result)
 }
 
 function Is-ValidCommitType([string]$Value) {
@@ -90,6 +113,7 @@ foreach ($f in $stagedBefore) {
 }
 
 $batchIndex = 0
+$resolvedMaxBullets = Resolve-MaxBullets $MaxBullets
 foreach ($batch in $plan.batches) {
   $batchIndex++
   $type = (Normalize-String ([string]$batch.type)).ToLower()
@@ -115,7 +139,7 @@ foreach ($batch in $plan.batches) {
 
   $bullets = @()
   if ($batch.bullets) {
-    $bullets = @($batch.bullets | ForEach-Object { Normalize-String ([string]$_) } | Where-Object { $_ } | Select-Object -First 3)
+    $bullets = Normalize-Bullets -Items $batch.bullets -Limit $resolvedMaxBullets
   }
 
   Write-Step ("batch " + [string]$batchIndex + "/" + [string](@($plan.batches).Count) + ": " + [string]$batch.id)

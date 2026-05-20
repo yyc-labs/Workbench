@@ -4,6 +4,8 @@ param(
   [switch]$UseAi,
   [ValidateRange(1, 12)]
   [int]$MaxBatches = 4,
+  [ValidateRange(1, 20)]
+  [int]$MaxBullets = 8,
   [string]$ApiBaseUrl = '',
   [string]$ApiKey = '',
   [string]$Model = '',
@@ -59,6 +61,16 @@ function Resolve-AiModel([string]$Value) {
   $envModel = Normalize-String $env:AI_COMMIT_MODEL
   if ($envModel) { return $envModel }
   return 'gpt-4o-mini'
+}
+
+function Resolve-MaxBullets([int]$CliValue) {
+  if ($CliValue -ge 1) { return $CliValue }
+  $envValue = Normalize-String $env:AI_COMMIT_MAX_BULLETS
+  if ($envValue -and $envValue -match '^\d+$') {
+    $parsed = [int]$envValue
+    if ($parsed -ge 1 -and $parsed -le 20) { return $parsed }
+  }
+  return 8
 }
 
 function Is-ValidCommitType([string]$Value) {
@@ -126,7 +138,18 @@ function New-LocalBatch([string]$Id, [string]$Type, [string]$Subject, [string[]]
   }
 }
 
-function Compress-Batches([object[]]$Batches, [int]$Limit) {
+function Normalize-Bullets([object[]]$Items, [int]$Limit) {
+  $result = @()
+  foreach ($item in $Items) {
+    $text = Normalize-String ([string]$item)
+    if (-not $text) { continue }
+    $result += $text
+    if ($result.Count -ge $Limit) { break }
+  }
+  return @($result)
+}
+
+function Compress-Batches([object[]]$Batches, [int]$Limit, [int]$BulletLimit) {
   $list = New-Object System.Collections.Generic.List[object]
   foreach ($b in $Batches) { $null = $list.Add($b) }
   if ($list.Count -le $Limit) { return @($list.ToArray()) }
@@ -137,7 +160,7 @@ function Compress-Batches([object[]]$Batches, [int]$Limit) {
     $last = $list[$list.Count - 1]
     $last.files = @($last.files + $tail.files | Select-Object -Unique)
     if ($tail.subject) {
-      $last.bullets = @($last.bullets + @('合并批次: ' + [string]$tail.subject) | Where-Object { $_ } | Select-Object -First 3)
+      $last.bullets = Normalize-Bullets -Items (@($last.bullets) + @('合并批次: ' + [string]$tail.subject)) -Limit $BulletLimit
     }
   }
   return @($list.ToArray())
@@ -232,7 +255,7 @@ function New-LocalPlan([string[]]$Files, [int]$BatchLimit) {
     $batches += New-LocalBatch ('batch-' + [string]($batches.Count + 1)) $t $subject $items $bullets
   }
 
-  $batches = Compress-Batches $batches $BatchLimit
+  $batches = Compress-Batches $batches $BatchLimit $resolvedMaxBullets
   for ($i = 0; $i -lt $batches.Count; $i++) {
     $batches[$i].id = 'batch-' + [string]($i + 1)
   }
@@ -245,7 +268,7 @@ function New-LocalPlan([string[]]$Files, [int]$BatchLimit) {
   }
 }
 
-function New-AiSplitPrompt([string]$Files, [string]$Stat, [int]$BatchLimit) {
+function New-AiSplitPrompt([string]$Files, [string]$Stat, [int]$BatchLimit, [int]$BulletLimit) {
   return @"
 Generate a Chinese git split-commit plan from staged changes.
 Return JSON only with shape:
@@ -258,7 +281,7 @@ Return JSON only with shape:
       "id":"batch-1",
       "type":"fix|feat|style|chore|refactor|docs|debug",
       "subject":"<=40 chars",
-      "bullets":["<=3 items, each <=50 chars"],
+      "bullets":["0-$BulletLimit items, each <=50 chars"],
       "files":["exact path from input list"]
     }
   ]
@@ -281,7 +304,7 @@ $Stat
 "@
 }
 
-function Normalize-Plan([object]$Plan, [string[]]$AllFiles, [int]$BatchLimit) {
+function Normalize-Plan([object]$Plan, [string[]]$AllFiles, [int]$BatchLimit, [int]$BulletLimit) {
   $allSet = @{}
   foreach ($f in $AllFiles) { $allSet[$f] = $true }
 
@@ -318,7 +341,7 @@ function Normalize-Plan([object]$Plan, [string[]]$AllFiles, [int]$BatchLimit) {
 
       $bullets = @()
       if ($batch.bullets) {
-        $bullets = @($batch.bullets | ForEach-Object { Normalize-String ([string]$_) } | Where-Object { $_ } | Select-Object -First 3)
+        $bullets = Normalize-Bullets -Items $batch.bullets -Limit $BulletLimit
       }
 
       $normalizedBatches += New-LocalBatch '' $type $subject $files $bullets
@@ -340,7 +363,7 @@ function Normalize-Plan([object]$Plan, [string[]]$AllFiles, [int]$BatchLimit) {
   }
 
   $normalizedBatches = Enforce-PackageLockPairing $normalizedBatches
-  $normalizedBatches = Compress-Batches $normalizedBatches $BatchLimit
+  $normalizedBatches = Compress-Batches $normalizedBatches $BatchLimit $BulletLimit
   for ($i = 0; $i -lt $normalizedBatches.Count; $i++) {
     $normalizedBatches[$i].id = 'batch-' + [string]($i + 1)
   }
@@ -370,6 +393,8 @@ if ($stagedFiles.Count -eq 0) {
   throw 'No staged changes for split plan.'
 }
 
+$resolvedMaxBullets = Resolve-MaxBullets $MaxBullets
+
 $filesText = ($stagedFiles -join "`n")
 $statText = (git diff --cached --stat | Out-String).Trim()
 
@@ -385,7 +410,7 @@ if ($UseAi) {
       Write-Ai ("model=" + $model)
       Write-Ai ("endpoint=" + $apiUrl)
 
-      $userPrompt = New-AiSplitPrompt -Files $filesText -Stat $statText -BatchLimit $MaxBatches
+      $userPrompt = New-AiSplitPrompt -Files $filesText -Stat $statText -BatchLimit $MaxBatches -BulletLimit $resolvedMaxBullets
       $messages = @(
         @{
           role = 'system'
@@ -431,7 +456,7 @@ if (-not $plan) {
   $plan = New-LocalPlan $stagedFiles $MaxBatches
 }
 
-$normalizedPlan = Normalize-Plan -Plan $plan -AllFiles $stagedFiles -BatchLimit $MaxBatches
+$normalizedPlan = Normalize-Plan -Plan $plan -AllFiles $stagedFiles -BatchLimit $MaxBatches -BulletLimit $resolvedMaxBullets
 $path = New-PlanPath $OutputPath
 $dir = Split-Path -Parent $path
 if ($dir -and -not (Test-Path $dir)) {

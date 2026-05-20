@@ -15,7 +15,9 @@ param(
   [switch]$UseAi,
   [string]$ApiBaseUrl = '',
   [string]$ApiKey = '',
-  [string]$Model = ''
+  [string]$Model = '',
+  [ValidateRange(1, 20)]
+  [int]$MaxBullets = 8
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,6 +72,16 @@ function Resolve-AiModel([string]$Value) {
   return 'gpt-4o-mini'
 }
 
+function Resolve-MaxBullets([int]$CliValue) {
+  if ($CliValue -ge 1) { return $CliValue }
+  $envValue = Normalize-String $env:AI_COMMIT_MAX_BULLETS
+  if ($envValue -and $envValue -match '^\d+$') {
+    $parsed = [int]$envValue
+    if ($parsed -ge 1 -and $parsed -le 20) { return $parsed }
+  }
+  return 8
+}
+
 function Resolve-CommitTypeFromFiles([string[]]$Files) {
   if ($Files -match '(^|/|\\)(docs|README|CHANGELOG)' -or $Files -match '\.md$') { return 'docs' }
   if ($Files -match '(^|/|\\)(src/renderer/)' -or $Files -match '\.(css|scss|less)$') { return 'style' }
@@ -100,15 +112,16 @@ function Ensure-ChineseSubject([string]$Candidate, [string]$Fallback) {
   return $Fallback
 }
 
-function Normalize-ChineseBullets([object[]]$Items) {
+function Normalize-ChineseBullets([object[]]$Items, [int]$Limit) {
   $result = @()
   foreach ($item in $Items) {
     $text = Normalize-String ([string]$item)
     if (-not $text) { continue }
     if (-not (Contains-Cjk $text)) { continue }
     $result += $text
+    if ($result.Count -ge $Limit) { break }
   }
-  return @($result | Select-Object -First 3)
+  return @($result)
 }
 
 function Test-GenericSubject([string]$Text) {
@@ -173,11 +186,11 @@ function Extract-JsonObject([string]$Text) {
   return $trimmed
 }
 
-function New-AiPrompt([string]$Files, [string]$Stat, [string]$Patch) {
+function New-AiPrompt([string]$Files, [string]$Stat, [string]$Patch, [int]$BulletLimit) {
   return @"
 Generate a Chinese git commit suggestion from staged changes.
 Return JSON only with shape:
-{"type":"fix|feat|style|chore|refactor|docs|debug","subject":"<=40 chars","bullets":["<=3 items, each <=50 chars"]}
+{"type":"fix|feat|style|chore|refactor|docs|debug","subject":"<=40 chars","bullets":["0-$BulletLimit items, each <=50 chars"]}
 
 Rules:
 1) JSON only, no markdown.
@@ -185,7 +198,7 @@ Rules:
 3) subject MUST describe the most important concrete change, not file count or generic wording.
 4) Do not use generic subjects like "更新代码改动", "提交当前改动", "更新文件变更".
 5) Prefer deriving subject from the strongest summary bullet when appropriate.
-6) bullets can be [].
+6) bullets can be [] and should adapt to change scope (0-$BulletLimit items).
 
 Files:
 $Files
@@ -221,7 +234,7 @@ function Try-ApplyAiMessage([string]$CurrentType, [string]$CurrentSubject, [stri
     $patch = $patch.Substring(0, 12000)
   }
 
-  $userPrompt = New-AiPrompt -Files $files -Stat $stat -Patch $patch
+  $userPrompt = New-AiPrompt -Files $files -Stat $stat -Patch $patch -BulletLimit $resolvedMaxBullets
   $messages = @(
     @{
       role = 'system'
@@ -275,7 +288,7 @@ function Try-ApplyAiMessage([string]$CurrentType, [string]$CurrentSubject, [stri
   if ($nextBullets.Count -eq 0 -and $ai.bullets) {
     $nextBullets = @($ai.bullets | ForEach-Object { Normalize-String ([string]$_) } | Where-Object { $_ })
   }
-  $nextBullets = Normalize-ChineseBullets $nextBullets
+  $nextBullets = Normalize-ChineseBullets -Items $nextBullets -Limit $resolvedMaxBullets
 
   return @{
     Type = $nextType
@@ -287,6 +300,8 @@ function Try-ApplyAiMessage([string]$CurrentType, [string]$CurrentSubject, [stri
 if (-not (Test-Path '.git')) {
   throw 'Current directory is not a git repository root.'
 }
+
+$resolvedMaxBullets = Resolve-MaxBullets $MaxBullets
 
 if ($IncludeUntracked) {
   Write-Step 'git add .'
@@ -328,6 +343,7 @@ if ($Split) {
     MaxBatches = $SplitMaxBatches
   }
   if ($UseAi) { $planParams.UseAi = $true }
+  $planParams.MaxBullets = $resolvedMaxBullets
   if (Normalize-String $ApiBaseUrl) { $planParams.ApiBaseUrl = $ApiBaseUrl }
   if (Normalize-String $ApiKey) { $planParams.ApiKey = $ApiKey }
   if (Normalize-String $Model) { $planParams.Model = $Model }
@@ -358,7 +374,7 @@ if ($Split) {
   }
 
   Write-Step 'stage: apply split plan'
-  & $applyScript -PlanPath $planPath
+  & $applyScript -PlanPath $planPath -MaxBullets $resolvedMaxBullets
   Write-Step 'Done.'
   exit 0
 }
@@ -398,7 +414,7 @@ if ($UseAi) {
 
 $Type = Normalize-String $Type
 $Subject = Normalize-String $Subject
-$Bullet = Normalize-ChineseBullets $Bullet
+$Bullet = Normalize-ChineseBullets -Items $Bullet -Limit $resolvedMaxBullets
 
 if (-not $subjectProvided -and (Test-GenericSubject $Subject) -and $Bullet.Count -gt 0) {
   $summarySubject = Get-SubjectFromBullets $Bullet
