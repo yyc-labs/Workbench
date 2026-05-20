@@ -45,9 +45,25 @@ function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | '
   mainWindow?.webContents.send(IPC.AI_COMMIT_STATUS, { projectId, status })
 }
 
-async function runAiCommit(projectId: string, projectPath: string): Promise<boolean> {
+interface AiCommitRunOverride {
+  split?: boolean
+  splitMaxBatches?: number
+}
+
+async function runAiCommit(
+  projectId: string,
+  projectPath: string,
+  override?: AiCommitRunOverride
+): Promise<boolean> {
   const config = loadConfig()
-  const aiCfg = config.aiCommit || {}
+  const aiCfgRaw = config.aiCommit || {}
+  const aiCfg = {
+    ...aiCfgRaw,
+    split: typeof override?.split === 'boolean' ? override.split : aiCfgRaw.split,
+    splitMaxBatches: typeof override?.splitMaxBatches === 'number'
+      ? override.splitMaxBatches
+      : aiCfgRaw.splitMaxBatches,
+  }
   const splitEnabled = Boolean(aiCfg.split)
   const splitMaxBatches = Math.max(
     1,
@@ -611,8 +627,8 @@ function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string) => {
-    return runAiCommit(projectId, projectPath)
+  ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string, override?: AiCommitRunOverride) => {
+    return runAiCommit(projectId, projectPath, override)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {

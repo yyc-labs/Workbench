@@ -66,8 +66,11 @@ const api = {
   resizeTerminal: (projectId: string, cols: number, rows: number) =>
     ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
 
-  runAiCommit: (projectId: string, projectPath: string) =>
-    ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath),
+  runAiCommit: (
+    projectId: string,
+    projectPath: string,
+    override?: { split?: boolean; splitMaxBatches?: number }
+  ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath, override),
 
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 
