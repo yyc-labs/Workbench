@@ -256,7 +256,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         {firstLinkMenuItem && (
           <UrlPopover items={linkMenuItems}>
             <button
-              className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"
               onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(firstLinkMenuItem.url) }}
               title="Project links"
             >

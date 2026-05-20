@@ -95,21 +95,21 @@ function Toolbar({
             onClick={() => onEnvFilterChange('all')}
             type="button"
           >
-            All {envCounts.all}
+            All
           </button>
           <button
             className={filterButtonClass(envFilter === 'ubuntu')}
             onClick={() => onEnvFilterChange('ubuntu')}
             type="button"
           >
-            Ubuntu {envCounts.ubuntu}
+            Ubuntu
           </button>
           <button
             className={filterButtonClass(envFilter === 'windows')}
             onClick={() => onEnvFilterChange('windows')}
             type="button"
           >
-            Windows {envCounts.windows}
+            Windows
           </button>
         </div>
 
@@ -175,6 +175,7 @@ export function HomePage() {
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
   const isAppReady = useAppStore((s) => s.isAppReady)
+  const config = useAppStore((s) => s.config)
   const sessions = useAppStore((s) => s.sessions)
   const processes = useAppStore((s) => s.processes)
   const searchQuery = useAppStore((s) => s.searchQuery)
@@ -184,9 +185,12 @@ export function HomePage() {
   const createFolder = useAppStore((s) => s.createFolder)
   const renameFolder = useAppStore((s) => s.renameFolder)
   const removeFolder = useAppStore((s) => s.removeFolder)
+  const reorderFolders = useAppStore((s) => s.reorderFolders)
   const createTag = useAppStore((s) => s.createTag)
   const renameTag = useAppStore((s) => s.renameTag)
   const removeTag = useAppStore((s) => s.removeTag)
+  const reorderTags = useAppStore((s) => s.reorderTags)
+  const setStartupDefaultFilter = useAppStore((s) => s.setStartupDefaultFilter)
   const navigate = useNavigate()
 
   const searchRef = useRef<HTMLInputElement>(null)
@@ -194,6 +198,7 @@ export function HomePage() {
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all')
   const [classifierFilter, setClassifierFilter] = useState<ClassifierFilter>({ type: 'all' })
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
+  const defaultFilterAppliedRef = useRef(false)
   const isDragOverRef = useRef(false)
   const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastDragOverAtRef = useRef(0)
@@ -222,6 +227,36 @@ export function HomePage() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (!isAppReady || defaultFilterAppliedRef.current) return
+    defaultFilterAppliedRef.current = true
+
+    const defaultFilter = config.startupDefaultFilter
+    if (!defaultFilter) return
+
+    if (defaultFilter.type === 'folder') {
+      const exists = folders.some((folder) => folder.id === defaultFilter.folderId)
+      if (!exists) {
+        void setStartupDefaultFilter(undefined)
+        return
+      }
+      setClassifierFilter(defaultFilter)
+      return
+    }
+
+    if (defaultFilter.type === 'tag') {
+      const exists = tags.some((tag) => tag.id === defaultFilter.tagId)
+      if (!exists) {
+        void setStartupDefaultFilter(undefined)
+        return
+      }
+      setClassifierFilter(defaultFilter)
+      return
+    }
+
+    setClassifierFilter(defaultFilter)
+  }, [config.startupDefaultFilter, folders, isAppReady, setStartupDefaultFilter, tags])
 
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
@@ -519,6 +554,10 @@ export function HomePage() {
               activeFilter={classifierFilter}
               counts={classifierCounts}
               onChangeFilter={setClassifierFilter}
+              onReorderFolders={reorderFolders}
+              onReorderTags={reorderTags}
+              startupDefaultFilter={config.startupDefaultFilter}
+              onSetStartupDefaultFilter={setStartupDefaultFilter}
             />
 
             <div className="min-w-0 flex-1">

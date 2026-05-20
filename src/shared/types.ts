@@ -17,12 +17,21 @@ export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 export type ProcessStatus = 'running' | 'stopped' | 'error'
 
 export type CliTool = 'claude' | 'codex'
+export type StartupDefaultFilter =
+  | { type: 'all' }
+  | { type: 'pinned' }
+  | { type: 'running' }
+  | { type: 'uncategorized' }
+  | { type: 'folder'; folderId: string }
+  | { type: 'tag'; tagId: string }
 
 export interface AiCommitConfig {
   enabled?: boolean
   apiBaseUrl?: string
   apiKey?: string
   model?: string
+  split?: boolean
+  splitMaxBatches?: number
 }
 
 export interface ProjectDocLink {
@@ -80,8 +89,12 @@ export interface AppConfig {
   folders?: ProjectFolder[]
   /** User-defined project tags */
   tags?: ProjectTag[]
+  /** Sidebar filter selected by default when Home opens */
+  startupDefaultFilter?: StartupDefaultFilter
   /** WSL-side launcher script path for runtime boot */
   runtimeLauncherScript?: string
+  /** Keep runtime tmux sessions alive when app quits */
+  runtimeKeepAliveOnQuit?: boolean
   /** AI-assisted git commit configuration */
   aiCommit?: AiCommitConfig
   /** sessionName → projectId mapping for tmux recovery */

@@ -104,6 +104,20 @@ function parseAiFlowLine(rawLine: string, steps: AiStepState[]): AiStepState[] {
   if (line.includes('staged file count')) {
     next = applyStep(next, 'stage', 'success', line)
   }
+  if (line.includes('stage: split plan generation') || line.includes('[split-plan]')) {
+    next = completePreviousSteps(next, 'ai')
+    next = applyStep(next, 'ai', 'running', line)
+  }
+  if (line.includes('split plan:') || line.includes('plan generated:')) {
+    next = applyStep(next, 'ai', 'success', line)
+  }
+  if (line.includes('stage: apply split plan') || line.includes('[split-apply] batch')) {
+    next = completePreviousSteps(next, 'commit')
+    next = applyStep(next, 'commit', 'running', line)
+  }
+  if (line.includes('[split-apply] Done.')) {
+    next = applyStep(next, 'commit', 'success', line)
+  }
   if (line.includes('stage: AI message generation') || line.includes('Calling AI API')) {
     next = completePreviousSteps(next, 'ai')
     next = applyStep(next, 'ai', 'running', line)

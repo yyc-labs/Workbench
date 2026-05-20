@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { arrayMove } from '@dnd-kit/sortable'
 import type {
   ProjectInfo,
   ProcessInfo,
@@ -11,6 +12,7 @@ import type {
   RuntimeDiagnostics,
   ProjectFolder,
   ProjectTag,
+  StartupDefaultFilter,
 } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
@@ -125,6 +127,7 @@ interface AppState {
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
+  setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
@@ -145,13 +148,16 @@ interface AppState {
   refreshSessions: () => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
+  setStartupDefaultFilter: (filter?: StartupDefaultFilter) => Promise<void>
   createFolder: (name: string, color?: string) => Promise<void>
   renameFolder: (folderId: string, name: string) => Promise<void>
   removeFolder: (folderId: string) => Promise<void>
+  reorderFolders: (activeFolderId: string, overFolderId: string) => Promise<void>
   assignProjectFolder: (projectId: string, folderId?: string) => Promise<void>
   createTag: (name: string, color?: string) => Promise<void>
   renameTag: (tagId: string, name: string) => Promise<void>
   removeTag: (tagId: string) => Promise<void>
+  reorderTags: (activeTagId: string, overTagId: string) => Promise<void>
   setProjectTags: (projectId: string, tagIds: string[]) => Promise<void>
   startRuntime: (projectId: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
@@ -304,6 +310,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
+  setRuntimeKeepAliveOnQuit: async (enabled: boolean) => {
+    const updated = await window.electronAPI.setConfig({ runtimeKeepAliveOnQuit: enabled })
+    set((state) => ({
+      config: {
+        ...state.config,
+        runtimeKeepAliveOnQuit: updated.runtimeKeepAliveOnQuit ?? false,
+      },
+    }))
+  },
+
   setAiCommitConfig: async (aiCommit: NonNullable<AppConfig['aiCommit']>) => {
     const updated = await window.electronAPI.setConfig({ aiCommit })
     set((state) => ({
@@ -355,6 +371,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
+  setStartupDefaultFilter: async (filter?: StartupDefaultFilter) => {
+    const updated = await window.electronAPI.setConfig({ startupDefaultFilter: filter })
+    set((state) => ({
+      config: {
+        ...state.config,
+        startupDefaultFilter: updated.startupDefaultFilter,
+      },
+    }))
+  },
+
   createFolder: async (name: string, color?: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
@@ -392,12 +418,38 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   removeFolder: async (folderId: string) => {
+    const startupDefaultFilter = get().config.startupDefaultFilter
+    if (startupDefaultFilter?.type === 'folder' && startupDefaultFilter.folderId === folderId) {
+      const updated = await window.electronAPI.setConfig({ startupDefaultFilter: undefined })
+      set((state) => ({
+        config: {
+          ...state.config,
+          startupDefaultFilter: updated.startupDefaultFilter,
+        },
+      }))
+    }
+
     set((state) => ({
       folders: state.folders.filter((folder) => folder.id !== folderId),
       projects: state.projects.map((project) =>
         project.folderId === folderId ? { ...project, folderId: undefined } : project
       ),
     }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  reorderFolders: async (activeFolderId: string, overFolderId: string) => {
+    if (activeFolderId === overFolderId) return
+    const current = get().folders
+    const oldIndex = current.findIndex((folder) => folder.id === activeFolderId)
+    const newIndex = current.findIndex((folder) => folder.id === overFolderId)
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
+
+    const reordered = arrayMove(current, oldIndex, newIndex).map((folder, index) => ({
+      ...folder,
+      sortOrder: index,
+    }))
+    set({ folders: reordered })
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
@@ -447,6 +499,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   removeTag: async (tagId: string) => {
+    const startupDefaultFilter = get().config.startupDefaultFilter
+    if (startupDefaultFilter?.type === 'tag' && startupDefaultFilter.tagId === tagId) {
+      const updated = await window.electronAPI.setConfig({ startupDefaultFilter: undefined })
+      set((state) => ({
+        config: {
+          ...state.config,
+          startupDefaultFilter: updated.startupDefaultFilter,
+        },
+      }))
+    }
+
     set((state) => ({
       tags: state.tags.filter((tag) => tag.id !== tagId),
       projects: state.projects.map((project) => ({
@@ -454,6 +517,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         tagIds: (project.tagIds ?? []).filter((id) => id !== tagId),
       })),
     }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  reorderTags: async (activeTagId: string, overTagId: string) => {
+    if (activeTagId === overTagId) return
+    const current = get().tags
+    const oldIndex = current.findIndex((tag) => tag.id === activeTagId)
+    const newIndex = current.findIndex((tag) => tag.id === overTagId)
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
+
+    const reordered = arrayMove(current, oldIndex, newIndex).map((tag, index) => ({
+      ...tag,
+      sortOrder: index,
+    }))
+    set({ tags: reordered })
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
