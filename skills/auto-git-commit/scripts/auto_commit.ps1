@@ -157,9 +157,28 @@ function Get-SubjectFromBullets([string[]]$Items) {
   return ''
 }
 
+function Resolve-TempDir() {
+  $candidates = @(
+    (Normalize-String $env:TEMP),
+    (Normalize-String $env:TMPDIR),
+    (Normalize-String $env:TMP),
+    (Normalize-String ([System.IO.Path]::GetTempPath()))
+  )
+  foreach ($item in $candidates) {
+    if (-not $item) { continue }
+    try {
+      if (-not (Test-Path $item)) {
+        New-Item -ItemType Directory -Force -Path $item | Out-Null
+      }
+      if (Test-Path $item) { return $item }
+    } catch { }
+  }
+  return '.'
+}
+
 function New-TempUtf8FilePath() {
   $name = 'ai-commit-msg-' + [Guid]::NewGuid().ToString('N') + '.txt'
-  return Join-Path $env:TEMP $name
+  return Join-Path (Resolve-TempDir) $name
 }
 
 function Write-Utf8NoBomFile([string]$Path, [string]$Content) {
@@ -214,12 +233,7 @@ $Patch
 function Try-ApplyAiMessage([string]$CurrentType, [string]$CurrentSubject, [string[]]$CurrentBullets) {
   $apiKey = Resolve-AiKey $ApiKey
   if (-not $apiKey) {
-    Write-Step 'AI enabled but no API key provided, fallback to local message.'
-    return @{
-      Type = $CurrentType
-      Subject = $CurrentSubject
-      Bullets = $CurrentBullets
-    }
+    throw 'AI enabled but no API key provided.'
   }
 
   $apiUrl = Resolve-AiBaseUrl $ApiBaseUrl
@@ -408,13 +422,17 @@ if ($UseAi) {
       }
     }
   } catch {
-    Write-Step ("AI message generation failed, fallback to local message: " + $_.Exception.Message)
+    throw ("AI message generation failed, abort commit: " + $_.Exception.Message)
   }
 }
 
 $Type = Normalize-String $Type
 $Subject = Normalize-String $Subject
 $Bullet = Normalize-ChineseBullets -Items $Bullet -Limit $resolvedMaxBullets
+
+if ($UseAi -and -not $subjectProvided -and -not $Subject) {
+  throw 'AI did not return a valid Chinese subject, abort commit.'
+}
 
 if (-not $subjectProvided -and (Test-GenericSubject $Subject) -and $Bullet.Count -gt 0) {
   $summarySubject = Get-SubjectFromBullets $Bullet

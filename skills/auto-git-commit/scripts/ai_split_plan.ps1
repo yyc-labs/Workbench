@@ -102,11 +102,30 @@ function Write-Utf8NoBomFile([string]$Path, [string]$Content) {
   [System.IO.File]::WriteAllText($Path, $Content, $enc)
 }
 
+function Resolve-TempDir() {
+  $candidates = @(
+    (Normalize-String $env:TEMP),
+    (Normalize-String $env:TMPDIR),
+    (Normalize-String $env:TMP),
+    (Normalize-String ([System.IO.Path]::GetTempPath()))
+  )
+  foreach ($item in $candidates) {
+    if (-not $item) { continue }
+    try {
+      if (-not (Test-Path $item)) {
+        New-Item -ItemType Directory -Force -Path $item | Out-Null
+      }
+      if (Test-Path $item) { return $item }
+    } catch { }
+  }
+  return '.'
+}
+
 function New-PlanPath([string]$GivenPath) {
   $clean = Normalize-String $GivenPath
   if ($clean) { return $clean }
   $name = 'ai-split-plan-' + [Guid]::NewGuid().ToString('N') + '.json'
-  return Join-Path $env:TEMP $name
+  return Join-Path (Resolve-TempDir) $name
 }
 
 function Extract-JsonObject([string]$Text) {
@@ -402,7 +421,7 @@ $plan = $null
 if ($UseAi) {
   $apiKey = Resolve-AiKey $ApiKey
   if (-not $apiKey) {
-    Write-Step 'AI split enabled but no API key provided, fallback to local rules.'
+    throw 'AI split enabled but no API key provided.'
   } else {
     try {
       $apiUrl = Resolve-AiBaseUrl $ApiBaseUrl
@@ -447,7 +466,7 @@ if ($UseAi) {
       Write-Host $jsonText
       $plan = $jsonText | ConvertFrom-Json
     } catch {
-      Write-Step ('AI split planning failed, fallback to local rules: ' + $_.Exception.Message)
+      throw ('AI split planning failed, abort split commit: ' + $_.Exception.Message)
     }
   }
 }

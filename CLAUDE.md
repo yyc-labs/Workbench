@@ -39,10 +39,10 @@ Use the repository auto-commit script after AI edits:
 - `npm run ai:commit:dry` -> preview commit message only, no commit
 
 For custom message:
-- `bash skills/auto-git-commit/scripts/auto_commit.sh --all --type fix --subject 修复xxx --bullet "说明1" --bullet "说明2"`
+- `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -Type fix -Subject 修复xxx -Bullet 说明1 -Bullet 说明2`
 
 Notes:
-- Script path: `skills/auto-git-commit/scripts/auto_commit.sh`
+- Script path: `skills/auto-git-commit/scripts/auto_commit.ps1`
 - Default `ai:commit` stages all tracked/untracked/deleted changes in repo (`git add -A`).
 
 ## Key files

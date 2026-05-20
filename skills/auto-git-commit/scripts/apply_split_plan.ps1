@@ -56,9 +56,28 @@ function Is-ValidCommitType([string]$Value) {
   return @('fix', 'feat', 'style', 'chore', 'refactor', 'docs', 'debug') -contains $clean
 }
 
+function Resolve-TempDir() {
+  $candidates = @(
+    (Normalize-String $env:TEMP),
+    (Normalize-String $env:TMPDIR),
+    (Normalize-String $env:TMP),
+    (Normalize-String ([System.IO.Path]::GetTempPath()))
+  )
+  foreach ($item in $candidates) {
+    if (-not $item) { continue }
+    try {
+      if (-not (Test-Path $item)) {
+        New-Item -ItemType Directory -Force -Path $item | Out-Null
+      }
+      if (Test-Path $item) { return $item }
+    } catch { }
+  }
+  return '.'
+}
+
 function New-TempUtf8FilePath() {
   $name = 'ai-split-commit-msg-' + [Guid]::NewGuid().ToString('N') + '.txt'
-  return Join-Path $env:TEMP $name
+  return Join-Path (Resolve-TempDir) $name
 }
 
 function Write-Utf8NoBomFile([string]$Path, [string]$Content) {
@@ -112,91 +131,113 @@ foreach ($f in $stagedBefore) {
   }
 }
 
-$batchIndex = 0
-$resolvedMaxBullets = Resolve-MaxBullets $MaxBullets
-foreach ($batch in $plan.batches) {
-  $batchIndex++
-  $type = (Normalize-String ([string]$batch.type)).ToLower()
-  if (-not (Is-ValidCommitType $type)) {
-    throw ('Invalid batch type in ' + [string]$batch.id + ': ' + [string]$batch.type)
-  }
-
-  $subject = Normalize-String ([string]$batch.subject)
-  if (-not $subject) {
-    throw ('Missing subject in ' + [string]$batch.id)
-  }
-
-  $files = @()
-  foreach ($f0 in $batch.files) {
-    $f = Normalize-String ([string]$f0)
-    if (-not $f) { continue }
-    $files += $f
-  }
-  $files = @($files | Select-Object -Unique)
-  if ($files.Count -eq 0) {
-    throw ('No valid files in ' + [string]$batch.id)
-  }
-
-  $bullets = @()
-  if ($batch.bullets) {
-    $bullets = Normalize-Bullets -Items $batch.bullets -Limit $resolvedMaxBullets
-  }
-
-  Write-Step ("batch " + [string]$batchIndex + "/" + [string](@($plan.batches).Count) + ": " + [string]$batch.id)
-  Write-Step ('git restore --staged :/')
-  git restore --staged :/
-
-  Write-Step ('git add -- ' + ($files -join ' '))
-  git add -- $files
-
-  $stagedNow = @(git diff --cached --name-only)
-  $stagedNowSet = @{}
-  foreach ($f in $stagedNow) { $stagedNowSet[$f] = $true }
-  foreach ($f in $files) {
-    if (-not $stagedNowSet.ContainsKey($f)) {
-      throw ('Expected file not staged in ' + [string]$batch.id + ': ' + $f)
-    }
-  }
-  foreach ($f in $stagedNow) {
-    if (-not ($files -contains $f)) {
-      throw ('Unexpected staged file in ' + [string]$batch.id + ': ' + $f)
-    }
-  }
-
-  $title = $type + ':' + $subject
-  Write-Step ('commit message: ' + $title)
-  foreach ($b in $bullets) {
-    Write-Host ('  - ' + $b)
-  }
-
-  if ($DryRun) {
-    Write-Step '[dry-run] skip commit for this batch'
-    continue
-  }
-
-  $messageLines = @($title)
-  foreach ($b in $bullets) {
-    $messageLines += ''
-    $messageLines += ('- ' + $b)
-  }
-  $commitBody = ($messageLines -join "`n")
-  $msgFile = New-TempUtf8FilePath
-  try {
-    Write-Utf8NoBomFile -Path $msgFile -Content $commitBody
-    Write-Step ('git commit --quiet -F ' + $msgFile)
-    git -c i18n.commitEncoding=utf-8 commit --quiet -F $msgFile
-  } finally {
-    if (Test-Path $msgFile) {
-      Remove-Item -Path $msgFile -Force -ErrorAction SilentlyContinue
-    }
-  }
+$startHead = ''
+$hasStartHead = $false
+git rev-parse --verify HEAD *> $null
+if ($LASTEXITCODE -eq 0) {
+  $startHead = (git rev-parse --verify HEAD | Out-String).Trim()
+  if ($startHead) { $hasStartHead = $true }
 }
 
-if (-not $DryRun) {
-  git diff --cached --quiet
-  if ($LASTEXITCODE -ne 0) {
-    throw 'Staged area is not clean after split apply.'
-  }
-}
+$committedBatchCount = 0
+try {
+  $batchIndex = 0
+  $resolvedMaxBullets = Resolve-MaxBullets $MaxBullets
+  foreach ($batch in $plan.batches) {
+    $batchIndex++
+    $type = (Normalize-String ([string]$batch.type)).ToLower()
+    if (-not (Is-ValidCommitType $type)) {
+      throw ('Invalid batch type in ' + [string]$batch.id + ': ' + [string]$batch.type)
+    }
 
-Write-Step 'Done.'
+    $subject = Normalize-String ([string]$batch.subject)
+    if (-not $subject) {
+      throw ('Missing subject in ' + [string]$batch.id)
+    }
+
+    $files = @()
+    foreach ($f0 in $batch.files) {
+      $f = Normalize-String ([string]$f0)
+      if (-not $f) { continue }
+      $files += $f
+    }
+    $files = @($files | Select-Object -Unique)
+    if ($files.Count -eq 0) {
+      throw ('No valid files in ' + [string]$batch.id)
+    }
+
+    $bullets = @()
+    if ($batch.bullets) {
+      $bullets = Normalize-Bullets -Items $batch.bullets -Limit $resolvedMaxBullets
+    }
+
+    Write-Step ("batch " + [string]$batchIndex + "/" + [string](@($plan.batches).Count) + ": " + [string]$batch.id)
+    Write-Step ('git restore --staged :/')
+    git restore --staged :/
+
+    Write-Step ('git add -- ' + ($files -join ' '))
+    git add -- $files
+
+    $stagedNow = @(git diff --cached --name-only)
+    $stagedNowSet = @{}
+    foreach ($f in $stagedNow) { $stagedNowSet[$f] = $true }
+    foreach ($f in $files) {
+      if (-not $stagedNowSet.ContainsKey($f)) {
+        throw ('Expected file not staged in ' + [string]$batch.id + ': ' + $f)
+      }
+    }
+    foreach ($f in $stagedNow) {
+      if (-not ($files -contains $f)) {
+        throw ('Unexpected staged file in ' + [string]$batch.id + ': ' + $f)
+      }
+    }
+
+    $title = $type + ':' + $subject
+    Write-Step ('commit message: ' + $title)
+    foreach ($b in $bullets) {
+      Write-Host ('  - ' + $b)
+    }
+
+    if ($DryRun) {
+      Write-Step '[dry-run] skip commit for this batch'
+      continue
+    }
+
+    $messageLines = @($title)
+    foreach ($b in $bullets) {
+      $messageLines += ''
+      $messageLines += ('- ' + $b)
+    }
+    $commitBody = ($messageLines -join "`n")
+    $msgFile = New-TempUtf8FilePath
+    try {
+      Write-Utf8NoBomFile -Path $msgFile -Content $commitBody
+      Write-Step ('git commit --quiet -F ' + $msgFile)
+      git -c i18n.commitEncoding=utf-8 commit --quiet -F $msgFile
+      $committedBatchCount++
+    } finally {
+      if (Test-Path $msgFile) {
+        Remove-Item -Path $msgFile -Force -ErrorAction SilentlyContinue
+      }
+    }
+  }
+
+  if (-not $DryRun) {
+    git diff --cached --quiet
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Staged area is not clean after split apply.'
+    }
+  }
+
+  Write-Step 'Done.'
+} catch {
+  if (-not $DryRun -and $committedBatchCount -gt 0) {
+    if ($hasStartHead) {
+      Write-Step ('rollback: git reset --soft ' + $startHead)
+      git reset --soft $startHead
+    } else {
+      Write-Step 'rollback: no initial HEAD, cannot auto-reset commits safely.'
+    }
+  }
+  throw
+}

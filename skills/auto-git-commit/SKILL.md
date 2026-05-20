@@ -13,11 +13,11 @@ description: 在对话结束时自动执行 Git 提交。适用于需要高频�
 ## 使用步骤
 
 1. 在仓库根目录执行脚本：
-   `bash skills/auto-git-commit/scripts/auto_commit.sh`
+   `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -UseAi`
 2. 如需指定类型与标题：
-   `bash skills/auto-git-commit/scripts/auto_commit.sh --type fix --subject 修复启动白闪`
+   `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -Type fix -Subject 修复启动白闪`
 3. 如需追加 bullet 说明：
-   `bash skills/auto-git-commit/scripts/auto_commit.sh --type feat --subject 完善多链接展示 --bullet "appStore: processUrls 从单值改为数组" --bullet "新增 UrlPopover 组件"`
+   `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -Type feat -Subject 完善多链接展示 -Bullet "appStore: processUrls 从单值改为数组" -Bullet "新增 UrlPopover 组件"`
 4. 如需 AI 分批计划（PowerShell）：
    `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -UseAi -Split -SplitDryRun`
 
