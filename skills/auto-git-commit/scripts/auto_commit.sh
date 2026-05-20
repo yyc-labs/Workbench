@@ -134,23 +134,19 @@ if (start >= 0 && end > start) {
 }
 
 extract_json_object_py() {
-  python3 - <<'PY' 2>/dev/null
-import sys, re
+  python3 -c '
+import re, sys
 text = sys.stdin.read().strip()
 if not text:
     raise SystemExit(1)
 if text.startswith("```"):
     text = re.sub(r"^```json\s*", "", text, flags=re.I)
     text = re.sub(r"^```\s*", "", text, flags=re.I)
-    text = re.sub(r"\s*```$", "", text)
-    text = text.strip()
+    text = re.sub(r"\s*```$", "", text).strip()
 start = text.find("{")
 end = text.rfind("}")
-if start >= 0 and end > start:
-    sys.stdout.write(text[start:end+1])
-else:
-    sys.stdout.write(text)
-PY
+sys.stdout.write(text[start:end+1] if start >= 0 and end > start else text)
+' 2>/dev/null
 }
 
 extract_json_object_any() {
@@ -185,20 +181,20 @@ process.stdout.write(JSON.stringify(body));
 
 build_request_json_py() {
   local model="$1"
-  python3 - "$model" <<'PY'
+  python3 -c '
 import json, sys
 model = sys.argv[1]
 prompt = sys.stdin.read()
 body = {
-    "model": model,
-    "temperature": 0.2,
-    "messages": [
-        {"role": "system", "content": "You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese."},
-        {"role": "user", "content": prompt},
-    ],
+  "model": model,
+  "temperature": 0.2,
+  "messages": [
+    {"role": "system", "content": "You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese."},
+    {"role": "user", "content": prompt},
+  ],
 }
 sys.stdout.write(json.dumps(body, ensure_ascii=False))
-PY
+' "$model"
 }
 
 extract_choice_content_node() {
@@ -216,15 +212,29 @@ try {
 }
 
 extract_choice_content_py() {
-  python3 - <<'PY'
+  python3 -c '
 import json, sys
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
     raise SystemExit(1)
-content = (((data or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+choice = ((data or {}).get("choices") or [{}])[0]
+message = (choice.get("message") or {})
+content = message.get("content")
+if isinstance(content, list):
+    parts = []
+    for item in content:
+        if isinstance(item, dict):
+            text = item.get("text")
+            if text:
+                parts.append(str(text))
+        elif item:
+            parts.append(str(item))
+    content = "\n".join(parts)
+if not content:
+    content = choice.get("text") or (data or {}).get("output_text") or ""
 sys.stdout.write(str(content))
-PY
+'
 }
 
 extract_ai_type_node() {
@@ -241,15 +251,14 @@ try {
 }
 
 extract_ai_type_py() {
-  python3 - <<'PY'
+  python3 -c '
 import json, sys
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
     raise SystemExit(1)
-value = str((data or {}).get("type") or "").strip().lower()
-sys.stdout.write(value)
-PY
+sys.stdout.write(str((data or {}).get("type") or "").strip().lower())
+'
 }
 
 extract_ai_subject_node() {
@@ -266,15 +275,14 @@ try {
 }
 
 extract_ai_subject_py() {
-  python3 - <<'PY'
+  python3 -c '
 import json, sys
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
     raise SystemExit(1)
-value = str((data or {}).get("subject") or "").strip()
-sys.stdout.write(value)
-PY
+sys.stdout.write(str((data or {}).get("subject") or "").strip())
+'
 }
 
 extract_ai_bullets_node() {
@@ -295,7 +303,7 @@ try {
 }
 
 extract_ai_bullets_py() {
-  python3 - <<'PY'
+  python3 -c '
 import json, sys
 try:
     data = json.loads(sys.stdin.read())
@@ -307,8 +315,8 @@ if not isinstance(bullets, list):
 for item in bullets[:3]:
     line = str(item or "").strip()
     if line:
-      sys.stdout.write(line + "\n")
-PY
+        sys.stdout.write(line + "\n")
+'
 }
 
 try_apply_ai_message() {

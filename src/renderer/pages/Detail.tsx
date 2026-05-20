@@ -166,6 +166,17 @@ function clampSplitMaxBatches(value: number | undefined): number {
   return Math.max(1, Math.min(12, Math.trunc(value)))
 }
 
+function extractLatestAiSpeech(lines: string[]): string {
+  const aiLines = lines.filter((line) => line.startsWith('[ai]'))
+  if (aiLines.length > 0) {
+    return aiLines.slice(-8).join('\n')
+  }
+  const fallbackJson = [...lines].reverse().find(
+    (line) => line.startsWith('{') || line.startsWith('```') || line.includes('"subject"')
+  )
+  return fallbackJson || ''
+}
+
 export function DetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
@@ -413,7 +424,7 @@ export function DetailPage() {
           ? 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]'
           : 'text-[color:var(--color-muted-foreground)] border-[color:var(--color-border)]'
 
-  const latestAiRaw = [...aiRawLines].reverse().find((line) => line.startsWith('{') || line.startsWith('```') || line.includes('"subject"'))
+  const latestAiRaw = extractLatestAiSpeech(aiRawLines)
 
   return (
     <div className="flex h-screen flex-col">
