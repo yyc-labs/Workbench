@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: AppConfig = {
     apiBaseUrl: 'https://api.openai.com/v1',
     apiKey: '',
     model: 'gpt-4o-mini',
+    wslPwshPath: '/snap/bin/pwsh',
     split: false,
     splitMaxBatches: 4,
   },

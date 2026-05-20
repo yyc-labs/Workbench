@@ -72,6 +72,7 @@ async function runAiCommit(
       ? override.splitMaxBatches
       : aiCfgRaw.splitMaxBatches,
   }
+  const wslPwshPath = (aiCfg.wslPwshPath || '').replace(/[\r\n]/g, '').trim() || '/snap/bin/pwsh'
   const splitEnabled = Boolean(aiCfg.split)
   const splitMaxBatches = Math.max(
     1,
@@ -83,7 +84,7 @@ async function runAiCommit(
     )
   )
   const scriptPs1Path = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
-  const scriptShPath = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.sh')
+  const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
   const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(projectPath) : null
 
   sendAiCommitStatus(projectId, 'running')
@@ -128,46 +129,65 @@ async function runAiCommit(
       })
 
     const quoteBash = (value: string) => `'${quoteBashSingle(value)}'`
+
+    const spawnWslPowerShell = () => {
+      if (!wslTarget || !scriptPs1WslPath) return spawnWindowsPowerShell('pwsh')
+
+      const wslPwshArgs = [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPs1WslPath,
+        '-All',
+      ]
+      if (aiCfg.enabled ?? true) {
+        wslPwshArgs.push('-UseAi')
+      }
+      if (splitEnabled) {
+        wslPwshArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
+      }
+      if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
+        wslPwshArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
+      }
+      if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
+        wslPwshArgs.push('-ApiKey', aiCfg.apiKey.trim())
+      }
+      if (aiCfg.model && aiCfg.model.trim()) {
+        wslPwshArgs.push('-Model', aiCfg.model.trim())
+      }
+
+      const preferredPwsh = quoteBash(wslPwshPath)
+      const quotedArgs = wslPwshArgs.map((arg) => quoteBash(arg)).join(' ')
+      const command = [
+        'set -euo pipefail',
+        `if [ -x ${preferredPwsh} ]; then`,
+        `  echo "[AI Commit] wsl pwsh cmd: ${wslPwshPath}"`,
+        `  exec ${preferredPwsh} ${quotedArgs}`,
+        'else',
+        '  echo "[AI Commit] wsl pwsh cmd: pwsh"',
+        `  exec pwsh ${quotedArgs}`,
+        'fi',
+      ].join('\n')
+
+      return spawn('wsl.exe', [
+        '-d',
+        wslTarget.distro,
+        '--cd',
+        wslTarget.linuxPath,
+        '--',
+        'bash',
+        '-lc',
+        command,
+      ], {
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    }
+
     let child = (() => {
       if (wslTarget) {
-        const linuxProjectPath = wslTarget.linuxPath
-        const scriptShWslPath = wslBridge.toWslPath(scriptShPath)
-        const wslBashParts: string[] = [
-          'bash',
-          quoteBash(scriptShWslPath),
-          '--all',
-        ]
-        if (aiCfg.enabled ?? true) {
-          wslBashParts.push('--use-ai')
-        }
-        if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
-          wslBashParts.push('--api-base-url', quoteBash(aiCfg.apiBaseUrl.trim()))
-        }
-        if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
-          wslBashParts.push('--api-key', quoteBash(aiCfg.apiKey.trim()))
-        }
-        if (aiCfg.model && aiCfg.model.trim()) {
-          wslBashParts.push('--model', quoteBash(aiCfg.model.trim()))
-        }
-        if (splitEnabled) {
-          wslBashParts.push('--split', '--split-max-batches', String(splitMaxBatches))
-        }
-
-        const wslCommand = [
-          'set -euo pipefail',
-          `cd ${quoteBash(linuxProjectPath)}`,
-          'echo "[AI Commit] shell: wsl-bash"',
-          `  ${wslBashParts.join(' ')}`,
-        ].join('\n')
-
-        return spawn(
-          'wsl.exe',
-          ['-d', wslTarget.distro, '--', 'bash', '-lc', wslCommand],
-          {
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          }
-        )
+        return spawnWslPowerShell()
       }
 
       return spawnWindowsPowerShell('pwsh')
@@ -198,9 +218,7 @@ async function runAiCommit(
 
     child.on('spawn', () => {
       started = true
-      if (!wslTarget) {
-        sendAiCommitOutput(projectId, '[AI Commit] shell: pwsh\r\n')
-      }
+      sendAiCommitOutput(projectId, `[AI Commit] shell: ${wslTarget ? 'wsl-pwsh' : 'pwsh'}\r\n`)
       attachStreams()
     })
 
