@@ -9,6 +9,10 @@ INCLUDE_UNTRACKED=0
 SPLIT=0
 SPLIT_DRY_RUN=0
 SPLIT_MAX_BATCHES=4
+USE_AI=0
+API_BASE_URL=""
+API_KEY=""
+MODEL=""
 declare -a BULLETS=()
 
 has_cjk() {
@@ -68,6 +72,360 @@ split_default_subject() {
   esac
 }
 
+is_valid_type() {
+  case "$1" in
+    fix|feat|style|chore|refactor|docs|debug) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+resolve_ai_base_url() {
+  local raw="$API_BASE_URL"
+  if [[ -z "${raw// }" ]]; then
+    raw="${AI_COMMIT_API_BASE_URL:-}"
+  fi
+  if [[ -z "${raw// }" ]]; then
+    raw="https://api.openai.com/v1"
+  fi
+  raw="${raw%/}"
+  if [[ "$raw" =~ /v1$ ]]; then
+    printf '%s\n' "${raw}/chat/completions"
+  else
+    printf '%s\n' "${raw}/v1/chat/completions"
+  fi
+}
+
+resolve_ai_key() {
+  if [[ -n "${API_KEY// }" ]]; then
+    printf '%s\n' "$API_KEY"
+    return 0
+  fi
+  printf '%s\n' "${AI_COMMIT_API_KEY:-}"
+}
+
+resolve_ai_model() {
+  if [[ -n "${MODEL// }" ]]; then
+    printf '%s\n' "$MODEL"
+    return 0
+  fi
+  if [[ -n "${AI_COMMIT_MODEL:-}" ]]; then
+    printf '%s\n' "$AI_COMMIT_MODEL"
+    return 0
+  fi
+  printf '%s\n' "gpt-4o-mini"
+}
+
+extract_json_object_node() {
+  node -e '
+const fs = require("fs");
+let text = fs.readFileSync(0, "utf8").trim();
+if (!text) process.exit(1);
+if (text.startsWith("```")) {
+  text = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/, "").trim();
+}
+const start = text.indexOf("{");
+const end = text.lastIndexOf("}");
+if (start >= 0 && end > start) {
+  process.stdout.write(text.slice(start, end + 1));
+} else {
+  process.stdout.write(text);
+}
+' 2>/dev/null
+}
+
+extract_json_object_py() {
+  python3 - <<'PY' 2>/dev/null
+import sys, re
+text = sys.stdin.read().strip()
+if not text:
+    raise SystemExit(1)
+if text.startswith("```"):
+    text = re.sub(r"^```json\s*", "", text, flags=re.I)
+    text = re.sub(r"^```\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+start = text.find("{")
+end = text.rfind("}")
+if start >= 0 and end > start:
+    sys.stdout.write(text[start:end+1])
+else:
+    sys.stdout.write(text)
+PY
+}
+
+extract_json_object_any() {
+  if command -v node >/dev/null 2>&1; then
+    extract_json_object_node
+    return $?
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    extract_json_object_py
+    return $?
+  fi
+  return 1
+}
+
+build_request_json_node() {
+  local model="$1"
+  node -e '
+const fs = require("fs");
+const model = process.argv[1];
+const prompt = fs.readFileSync(0, "utf8");
+const body = {
+  model,
+  temperature: 0.2,
+  messages: [
+    { role: "system", content: "You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese." },
+    { role: "user", content: prompt },
+  ],
+};
+process.stdout.write(JSON.stringify(body));
+' "$model"
+}
+
+build_request_json_py() {
+  local model="$1"
+  python3 - "$model" <<'PY'
+import json, sys
+model = sys.argv[1]
+prompt = sys.stdin.read()
+body = {
+    "model": model,
+    "temperature": 0.2,
+    "messages": [
+        {"role": "system", "content": "You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese."},
+        {"role": "user", "content": prompt},
+    ],
+}
+sys.stdout.write(json.dumps(body, ensure_ascii=False))
+PY
+}
+
+extract_choice_content_node() {
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(0, "utf8");
+try {
+  const data = JSON.parse(text);
+  const content = data?.choices?.[0]?.message?.content ?? "";
+  process.stdout.write(String(content));
+} catch {
+  process.exit(1);
+}
+'
+}
+
+extract_choice_content_py() {
+  python3 - <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+except Exception:
+    raise SystemExit(1)
+content = (((data or {}).get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+sys.stdout.write(str(content))
+PY
+}
+
+extract_ai_type_node() {
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(0, "utf8");
+try {
+  const data = JSON.parse(text);
+  process.stdout.write(String(data?.type ?? "").trim().toLowerCase());
+} catch {
+  process.exit(1);
+}
+'
+}
+
+extract_ai_type_py() {
+  python3 - <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+except Exception:
+    raise SystemExit(1)
+value = str((data or {}).get("type") or "").strip().lower()
+sys.stdout.write(value)
+PY
+}
+
+extract_ai_subject_node() {
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(0, "utf8");
+try {
+  const data = JSON.parse(text);
+  process.stdout.write(String(data?.subject ?? "").trim());
+} catch {
+  process.exit(1);
+}
+'
+}
+
+extract_ai_subject_py() {
+  python3 - <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+except Exception:
+    raise SystemExit(1)
+value = str((data or {}).get("subject") or "").strip()
+sys.stdout.write(value)
+PY
+}
+
+extract_ai_bullets_node() {
+  node -e '
+const fs = require("fs");
+const text = fs.readFileSync(0, "utf8");
+try {
+  const data = JSON.parse(text);
+  const bullets = Array.isArray(data?.bullets) ? data.bullets : [];
+  for (const item of bullets.slice(0, 3)) {
+    const line = String(item ?? "").trim();
+    if (line) process.stdout.write(line + "\n");
+  }
+} catch {
+  process.exit(1);
+}
+'
+}
+
+extract_ai_bullets_py() {
+  python3 - <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+except Exception:
+    raise SystemExit(1)
+bullets = (data or {}).get("bullets") or []
+if not isinstance(bullets, list):
+    bullets = []
+for item in bullets[:3]:
+    line = str(item or "").strip()
+    if line:
+      sys.stdout.write(line + "\n")
+PY
+}
+
+try_apply_ai_message() {
+  local current_type="$1"
+  local current_subject="$2"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "[auto-commit] AI enabled but curl not found, fallback to local message."
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+    echo "[auto-commit] AI enabled but neither node nor python3 found, fallback to local message."
+    return 0
+  fi
+
+  local api_key api_url model
+  api_key="$(resolve_ai_key)"
+  if [[ -z "${api_key// }" ]]; then
+    echo "[auto-commit] AI enabled but no API key provided, fallback to local message."
+    return 0
+  fi
+  api_url="$(resolve_ai_base_url)"
+  model="$(resolve_ai_model)"
+
+  local files stat patch
+  files="$(git diff --cached --name-only)"
+  stat="$(git diff --cached --stat)"
+  patch="$(git diff --cached --unified=0)"
+  if (( ${#patch} > 12000 )); then
+    patch="${patch:0:12000}"
+  fi
+
+  local user_prompt
+  user_prompt="$(cat <<EOF
+Generate a Chinese git commit suggestion from staged changes.
+Return JSON only with shape:
+{"type":"fix|feat|style|chore|refactor|docs|debug","subject":"<=40 chars","bullets":["<=3 items, each <=50 chars"]}
+
+Rules:
+1) JSON only, no markdown.
+2) subject and bullets MUST be Simplified Chinese.
+3) subject MUST describe the most important concrete change, not file count or generic wording.
+4) Do not use generic subjects like "更新代码改动", "提交当前改动", "更新文件变更".
+5) Prefer deriving subject from the strongest summary bullet when appropriate.
+6) bullets can be [].
+
+Files:
+$files
+
+Stats:
+$stat
+
+Patch:
+$patch
+EOF
+)"
+
+  echo "[ai] model=${model}"
+  echo "[ai] endpoint=${api_url}"
+  echo "[auto-commit] Calling AI API (${model})"
+
+  local request_json response content_raw json_text
+  if command -v node >/dev/null 2>&1; then
+    request_json="$(build_request_json_node "$model" <<<"$user_prompt")"
+  else
+    request_json="$(build_request_json_py "$model" <<<"$user_prompt")"
+  fi
+
+  if ! response="$(curl -sS --max-time 90 \
+    -H "Authorization: Bearer ${api_key}" \
+    -H "Content-Type: application/json" \
+    -d "$request_json" \
+    "$api_url")"; then
+    echo "[auto-commit] AI request failed, fallback to local message."
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    content_raw="$(extract_choice_content_node <<<"$response" || true)"
+  else
+    content_raw="$(extract_choice_content_py <<<"$response" || true)"
+  fi
+  if [[ -z "${content_raw// }" ]]; then
+    echo "[auto-commit] AI response parse failed, fallback to local message."
+    return 0
+  fi 
+
+  if ! json_text="$(extract_json_object_any <<<"$content_raw")"; then
+    echo "[auto-commit] AI JSON extraction failed, fallback to local message."
+    return 0
+  fi
+
+  local ai_type ai_subject
+  if command -v node >/dev/null 2>&1; then
+    ai_type="$(extract_ai_type_node <<<"$json_text" 2>/dev/null || true)"
+    ai_subject="$(extract_ai_subject_node <<<"$json_text" 2>/dev/null || true)"
+    mapfile -t ai_bullets < <(extract_ai_bullets_node <<<"$json_text" 2>/dev/null || true)
+  else
+    ai_type="$(extract_ai_type_py <<<"$json_text" 2>/dev/null || true)"
+    ai_subject="$(extract_ai_subject_py <<<"$json_text" 2>/dev/null || true)"
+    mapfile -t ai_bullets < <(extract_ai_bullets_py <<<"$json_text" 2>/dev/null || true)
+  fi
+
+  if [[ -z "$TYPE" ]] && [[ -n "$ai_type" ]] && is_valid_type "$ai_type"; then
+    TYPE="$ai_type"
+  fi
+  if [[ -z "$SUBJECT" ]] && [[ -n "$ai_subject" ]] && has_cjk "$ai_subject"; then
+    SUBJECT="$ai_subject"
+  fi
+  if [[ ${#BULLETS[@]} -eq 0 ]] && [[ ${#ai_bullets[@]} -gt 0 ]]; then
+    BULLETS=("${ai_bullets[@]}")
+  fi
+
+  echo "[ai] final type=${TYPE:-$current_type}"
+  echo "[ai] final subject=${SUBJECT:-$current_subject}"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -83,6 +441,10 @@ Options:
   --split                         启用文件级分批提交
   --split-dry-run                 仅生成并输出分批计划，不执行 commit
   --split-max-batches <1-12>      限制分批数量（默认 4）
+  --use-ai                        启用 AI 生成提交信息
+  --api-base-url <url>            AI API base URL（默认 https://api.openai.com/v1）
+  --api-key <key>                 AI API key（可用 AI_COMMIT_API_KEY）
+  --model <name>                  AI 模型（默认 gpt-4o-mini）
   -h, --help
 EOF
 }
@@ -124,6 +486,22 @@ while [[ $# -gt 0 ]]; do
       ;;
     --split-max-batches)
       SPLIT_MAX_BATCHES="${2:-}"
+      shift 2
+      ;;
+    --use-ai)
+      USE_AI=1
+      shift
+      ;;
+    --api-base-url)
+      API_BASE_URL="${2:-}"
+      shift 2
+      ;;
+    --api-key)
+      API_KEY="${2:-}"
+      shift 2
+      ;;
+    --model)
+      MODEL="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -302,6 +680,10 @@ if [[ -z "$TYPE" ]]; then
   else
     TYPE="fix"
   fi
+fi
+
+if (( USE_AI == 1 )); then
+  try_apply_ai_message "$TYPE" "$SUBJECT"
 fi
 
 if [[ $subject_provided -eq 0 && ${#BULLETS[@]} -gt 0 ]] && { [[ -z "$SUBJECT" ]] || is_generic_subject "$SUBJECT"; }; then

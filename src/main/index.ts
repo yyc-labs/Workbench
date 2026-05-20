@@ -123,54 +123,33 @@ async function runAiCommit(
     let child = (() => {
       if (wslTarget) {
         const linuxProjectPath = wslTarget.linuxPath
-        const scriptPs1WslPath = wslBridge.toWslPath(scriptPs1Path)
         const scriptShWslPath = wslBridge.toWslPath(scriptShPath)
-
-        const pwshParts: string[] = [
-          'pwsh',
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          quoteBash(scriptPs1WslPath),
-          '-All',
-        ]
-
-        if (aiCfg.enabled ?? true) {
-          pwshParts.push('-UseAi')
-        }
-        if (splitEnabled) {
-          pwshParts.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
-        }
-        if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
-          pwshParts.push('-ApiBaseUrl', quoteBash(aiCfg.apiBaseUrl.trim()))
-        }
-        if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
-          pwshParts.push('-ApiKey', quoteBash(aiCfg.apiKey.trim()))
-        }
-        if (aiCfg.model && aiCfg.model.trim()) {
-          pwshParts.push('-Model', quoteBash(aiCfg.model.trim()))
-        }
-
-        const fallbackBashParts: string[] = [
+        const wslBashParts: string[] = [
           'bash',
           quoteBash(scriptShWslPath),
           '--all',
         ]
+        if (aiCfg.enabled ?? true) {
+          wslBashParts.push('--use-ai')
+        }
+        if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
+          wslBashParts.push('--api-base-url', quoteBash(aiCfg.apiBaseUrl.trim()))
+        }
+        if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
+          wslBashParts.push('--api-key', quoteBash(aiCfg.apiKey.trim()))
+        }
+        if (aiCfg.model && aiCfg.model.trim()) {
+          wslBashParts.push('--model', quoteBash(aiCfg.model.trim()))
+        }
         if (splitEnabled) {
-          fallbackBashParts.push('--split', '--split-max-batches', String(splitMaxBatches))
+          wslBashParts.push('--split', '--split-max-batches', String(splitMaxBatches))
         }
 
         const wslCommand = [
           'set -euo pipefail',
           `cd ${quoteBash(linuxProjectPath)}`,
-          'if command -v pwsh >/dev/null 2>&1; then',
-          '  echo "[AI Commit] shell: wsl-pwsh"',
-          `  ${pwshParts.join(' ')}`,
-          'else',
-          '  echo "[AI Commit] shell: wsl-bash (pwsh not found, fallback without AI generation)"',
-          `  ${fallbackBashParts.join(' ')}`,
-          'fi',
+          'echo "[AI Commit] shell: wsl-bash"',
+          `  ${wslBashParts.join(' ')}`,
         ].join('\n')
 
         return spawn(
