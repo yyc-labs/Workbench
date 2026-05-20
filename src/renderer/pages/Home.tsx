@@ -448,7 +448,7 @@ export function HomePage() {
   const handleSelect = useCallback(
     (id: string) => {
       updateLastOpened(id)
-      navigate(`/runtime/${id}`)
+      navigate(`/project/${id}`)
     },
     [updateLastOpened, navigate]
   )

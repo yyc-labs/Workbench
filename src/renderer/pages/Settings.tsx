@@ -262,6 +262,7 @@ function AiCommitPanel({
     apiBaseUrl?: string
     apiKey?: string
     model?: string
+    wslPwshPath?: string
     split?: boolean
     splitMaxBatches?: number
   }
@@ -270,6 +271,7 @@ function AiCommitPanel({
     apiBaseUrl?: string
     apiKey?: string
     model?: string
+    wslPwshPath?: string
     split?: boolean
     splitMaxBatches?: number
   }) => Promise<void>
@@ -278,6 +280,7 @@ function AiCommitPanel({
   const [apiBaseUrl, setApiBaseUrl] = useState(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState(aiCommit.apiKey || '')
   const [model, setModel] = useState(aiCommit.model || 'gpt-4o-mini')
+  const [wslPwshPath, setWslPwshPath] = useState(aiCommit.wslPwshPath || '/snap/bin/pwsh')
   const [split, setSplit] = useState(Boolean(aiCommit.split ?? false))
   const [splitMaxBatches, setSplitMaxBatches] = useState(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
   const [saving, setSaving] = useState(false)
@@ -287,9 +290,10 @@ function AiCommitPanel({
     setApiBaseUrl(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
     setApiKey(aiCommit.apiKey || '')
     setModel(aiCommit.model || 'gpt-4o-mini')
+    setWslPwshPath(aiCommit.wslPwshPath || '/snap/bin/pwsh')
     setSplit(Boolean(aiCommit.split ?? false))
     setSplitMaxBatches(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
-  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.split, aiCommit.splitMaxBatches])
+  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.wslPwshPath, aiCommit.split, aiCommit.splitMaxBatches])
 
   const handleSave = async () => {
     setSaving(true)
@@ -301,6 +305,7 @@ function AiCommitPanel({
         apiBaseUrl: apiBaseUrl.trim(),
         apiKey: apiKey.trim(),
         model: model.trim(),
+        wslPwshPath: wslPwshPath.trim(),
         split,
         splitMaxBatches: normalizedSplitMaxBatches,
       })
@@ -382,6 +387,16 @@ function AiCommitPanel({
             onChange={(e) => setModel(e.target.value)}
             className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="gpt-4o-mini"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">WSL pwsh path</p>
+          <Input
+            value={wslPwshPath}
+            onChange={(e) => setWslPwshPath(e.target.value)}
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+            placeholder="/snap/bin/pwsh"
           />
         </div>
 
@@ -467,30 +482,34 @@ export function SettingsPage() {
       </header>
 
       {/* Body */}
-      <div className="flex-1 flex min-h-0 px-8 pb-10 pt-10">
-        <Sidebar active={section} onSelect={setSection} />
+      <div className="flex-1 min-h-0 overflow-hidden px-8 pb-10 pt-10">
+        <div className="flex h-full min-h-0 min-w-0">
+          <Sidebar active={section} onSelect={setSection} />
 
-        <main className="flex-1 min-w-0 ml-12 max-w-3xl">
-          {section === 'general' && (
-            <GeneralPanel theme={theme} onThemeChange={handleThemeChange} />
-          )}
-          {section === 'runtime' && (
-            <RuntimePanel
-              runtimeLauncherScript={config.runtimeLauncherScript || '$HOME/tools/claude-code-script/start-claude-with-env.sh'}
-              onRuntimeLauncherScriptSave={setRuntimeLauncherScript}
-              runtimeKeepAliveOnQuit={config.runtimeKeepAliveOnQuit ?? false}
-              onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
-            />
-          )}
-          {section === 'ai' && (
-            <AiCommitPanel
-              aiCommit={config.aiCommit || {}}
-              onSave={setAiCommitConfig}
-            />
-          )}
-          {section === 'rules' && <RulesPanel />}
-          {section === 'about' && <AboutPanel />}
-        </main>
+          <main className="flex-1 min-h-0 min-w-0 ml-12 overflow-y-auto px-6 pt-1">
+            <div className="pb-6 -mb-6">
+              {section === 'general' && (
+                <GeneralPanel theme={theme} onThemeChange={handleThemeChange} />
+              )}
+              {section === 'runtime' && (
+                <RuntimePanel
+                  runtimeLauncherScript={config.runtimeLauncherScript || '$HOME/tools/claude-code-script/start-claude-with-env.sh'}
+                  onRuntimeLauncherScriptSave={setRuntimeLauncherScript}
+                  runtimeKeepAliveOnQuit={config.runtimeKeepAliveOnQuit ?? false}
+                  onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
+                />
+              )}
+              {section === 'ai' && (
+                <AiCommitPanel
+                  aiCommit={config.aiCommit || {}}
+                  onSave={setAiCommitConfig}
+                />
+              )}
+              {section === 'rules' && <RulesPanel />}
+              {section === 'about' && <AboutPanel />}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   )

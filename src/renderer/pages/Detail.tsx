@@ -13,8 +13,21 @@ import {
   type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowUpRight, Bot, ChevronLeft, Code2, Folder, Package, Play, Square } from 'lucide-react'
-import { Terminal } from '../components/Terminal'
+import {
+  ArrowUpRight,
+  BookOpen,
+  Bot,
+  ChevronLeft,
+  Code2,
+  ExternalLink,
+  Folder,
+  FolderOpen,
+  Package,
+  Play,
+  Plus,
+  Square,
+  Trash2,
+} from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { useAppStore } from '../stores/appStore'
@@ -65,6 +78,29 @@ const BASE_AI_STEPS: AiStepState[] = [
   { key: 'commit', label: '执行 git commit', status: 'pending' },
   { key: 'done', label: '完成', status: 'pending' },
 ]
+
+function createDocLinkId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function normalizeDocUrl(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const parsed = new URL(withProtocol)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
 
 function stepStatusText(status: AiStepStatus): string {
   if (status === 'success') return 'completed'
@@ -353,12 +389,11 @@ export function DetailPage() {
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
 
-  const [customCommand, setCustomCommand] = useState(project?.customCommand ?? '')
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
-  const [aiRawLines, setAiRawLines] = useState<string[]>([])
   const [aiRawText, setAiRawText] = useState('')
   const [recentCommits, setRecentCommits] = useState<LatestCommitInfo[]>([])
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
@@ -367,6 +402,9 @@ export function DetailPage() {
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
     String(clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches))
   )
+  const [docTitleInput, setDocTitleInput] = useState('')
+  const [docUrlInput, setDocUrlInput] = useState('')
+  const [docError, setDocError] = useState<string | null>(null)
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -395,6 +433,8 @@ export function DetailPage() {
   const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
   const defaultSplitMaxBatches = clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches)
   const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
+  const docLinks = project?.docLinks ?? []
+  const defaultDocLink = docLinks[0]
 
   if (!project || !projectId) {
     return (
@@ -409,25 +449,6 @@ export function DetailPage() {
         </button>
       </div>
     )
-  }
-
-  const handleSaveCommand = async () => {
-    const trimmed = customCommand.trim()
-    project.customCommand = trimmed || undefined
-    setCustomCommand(trimmed)
-    const { projects } = useAppStore.getState()
-    await window.electronAPI.setConfig({
-      projects: projects.map((p) => ({
-        path: p.path,
-        customCommand: p.customCommand,
-        pinned: p.pinned,
-        lastOpened: p.lastOpened,
-        cli: p.cli,
-        docLinks: p.docLinks ?? [],
-        folderId: p.folderId,
-        tagIds: p.tagIds ?? [],
-      })),
-    })
   }
 
   useEffect(() => {
@@ -466,10 +487,6 @@ export function DetailPage() {
       setAiRawText((prev) => prev + data)
       const split = data.replace(/\r/g, '').split('\n').map((line) => line.trim()).filter(Boolean)
       if (split.length > 0) {
-        setAiRawLines((prev) => {
-          const next = [...prev, ...split]
-          return next.slice(-300)
-        })
         setFlowSteps((prev) => split.reduce((acc, line) => parseAiFlowLine(line, acc), prev))
       }
     })
@@ -479,7 +496,6 @@ export function DetailPage() {
       setAiCommitStatus(status)
       if (status === 'running') {
         setFlowSteps(BASE_AI_STEPS)
-        setAiRawLines([])
         setAiRawText('')
       } else {
         if (status === 'success') {
@@ -640,6 +656,51 @@ export function DetailPage() {
     }
     await useAppStore.getState().setAiCommitConfig(nextConfig)
     setQuickConfigOpen(false)
+  }
+
+  const handleAddDocLink = async () => {
+    if (!project) return
+
+    const normalizedUrl = normalizeDocUrl(docUrlInput)
+    if (!normalizedUrl) {
+      setDocError('请输入有效的 http/https URL')
+      return
+    }
+
+    const duplicate = docLinks.some((link) => link.url.toLowerCase() === normalizedUrl.toLowerCase())
+    if (duplicate) {
+      setDocError('该文档链接已存在')
+      return
+    }
+
+    let title = docTitleInput.trim()
+    if (!title) {
+      try {
+        title = new URL(normalizedUrl).hostname
+      } catch {
+        title = 'Documentation'
+      }
+    }
+
+    const nextLinks = [...docLinks, { id: createDocLinkId(), title, url: normalizedUrl }]
+    await setProjectDocLinks(project.id, nextLinks)
+    setDocTitleInput('')
+    setDocUrlInput('')
+    setDocError(null)
+  }
+
+  const handleRemoveDocLink = async (linkId: string) => {
+    if (!project) return
+    const nextLinks = docLinks.filter((link) => link.id !== linkId)
+    await setProjectDocLinks(project.id, nextLinks)
+  }
+
+  const handleSetDefaultDocLink = async (linkId: string) => {
+    if (!project) return
+    const index = docLinks.findIndex((link) => link.id === linkId)
+    if (index <= 0) return
+    const nextLinks = [docLinks[index], ...docLinks.slice(0, index), ...docLinks.slice(index + 1)]
+    await setProjectDocLinks(project.id, nextLinks)
   }
 
   const statusText =
@@ -930,71 +991,11 @@ export function DetailPage() {
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-x-auto px-8 pb-8 pt-8">
-        <div className="grid h-full min-h-0 min-w-[1100px] grid-cols-[minmax(580px,0.92fr)_minmax(520px,1.08fr)] gap-6">
-          <section
-            className="min-h-0 min-w-0 overflow-hidden"
-            style={{
-              background: 'var(--color-terminal-surface)',
-              borderRadius: '22px',
-              boxShadow: `
-                inset 0 1px 0 rgba(255,255,255,0.04),
-                0 0 0 1px rgba(255,255,255,0.03),
-                0 14px 34px rgba(0,0,0,0.14)
-              `,
-            }}
-          >
-            <div className="flex items-center border-b border-white/5 px-[14px] py-[11px]">
-              <span className="h-[10px] w-[10px] rounded-full bg-[#f08c8c]/80" />
-              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#e3bb7e]/80" />
-              <span className="ml-[6px] h-[10px] w-[10px] rounded-full bg-[#82c2a8]/80" />
-              <span className="ml-[10px] select-none font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">
-                service terminal
-              </span>
-            </div>
-            <div className="min-h-0 p-4" style={{ height: 'calc(100% - 56px)' }}>
-              <div
-                className="xterm-container h-full min-h-0 overflow-hidden rounded-[18px]"
-                style={{
-                  background: 'var(--color-terminal-inner)',
-                  padding: '16px 18px',
-                }}
-              >
-                <Terminal projectId={projectId} />
-              </div>
-            </div>
-          </section>
-
-          <aside className="min-h-0 min-w-0 overflow-auto rounded-[22px] p-5 surface-card">
-            {/* <div className="mb-5 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
-              <span className="select-none text-xs text-[color:var(--color-muted-foreground)]">$</span>
-              <input
-                type="text"
-                value={customCommand}
-                onChange={(e) => setCustomCommand(e.target.value)}
-                placeholder={project.command}
-                className="min-w-0 flex-1 border-none bg-transparent font-mono text-sm text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleSaveCommand()
-                }}
-              />
-              {customCommand && customCommand !== project.command && (
-                <button
-                  className="shrink-0 rounded-full px-3 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary"
-                  onClick={() => void handleSaveCommand()}
-                >
-                  Save
-                </button>
-              )}
-            </div> */}
-
-            {/* <div className="mb-5 space-y-3">
-              <InfoCard label="Path" value={project.path} icon={Folder} />
-              <div className="grid grid-cols-2 gap-3">
-                <InfoCard label="Type" value={project.type} icon={Code2} />
-                <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
-              </div>
-            </div> */}
+      <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-8 pt-7 sm:px-8">
+        {/* <div className="mx-auto grid h-full min-h-0 min-w-[1060px] w-full max-w-[1360px] grid-cols-[minmax(420px,0.82fr)_minmax(560px,1.18fr)] gap-6"> */}
+        <div className="mx-auto grid h-full min-h-0 min-w-[1060px] w-full max-w-[1360px] grid-cols-[minmax(490px,1fr)_minmax(490px,1fr)] gap-6">
+          <aside className="min-h-0 min-w-0 rounded-[24px] surface-card">
+            <div className="h-full min-h-0 overflow-auto p-5">
 
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -1092,7 +1093,7 @@ export function DetailPage() {
 
                   <div
                     ref={recentCommitPanelRef}
-                    className="rounded-[16px] border px-4 py-3"
+                    className="rounded-[16px] border px-4 py-3 surface-card"
                     style={{
                       borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)',
                       background: 'color-mix(in srgb, var(--color-card) 94%, transparent)',
@@ -1106,7 +1107,8 @@ export function DetailPage() {
                         {recentCommits.map((commit) => (
                           <div
                             key={commit.hash}
-                            className="group relative z-0 cursor-pointer rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 transition-colors duration-200 hover:z-40 hover:border-[color:var(--color-primary)]/35 hover:bg-[color:var(--color-background)]"
+                            className="group relative z-0 cursor-pointer rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 transition-all duration-200 hover:z-40 hover:border-[color:var(--color-primary)]/35 hover:bg-[color:var(--color-background)]"
+                            style={{ boxShadow: 'var(--shadow-card)' }}
                             role="button"
                             tabIndex={0}
                             onClick={() => {
@@ -1142,10 +1144,11 @@ export function DetailPage() {
                                 }`}
                             >
                               <div
-                                className="rounded-[14px] border px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+                                className="rounded-[14px] border px-3 py-2.5 backdrop-blur-xl"
                                 style={{
                                   borderColor: 'color-mix(in srgb, var(--color-border) 76%, transparent)',
                                   background: 'color-mix(in srgb, var(--color-card) 82%, transparent)',
+                                  boxShadow: 'var(--shadow-popover)',
                                 }}
                               >
                                 <p className="text-[12.5px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">
@@ -1182,7 +1185,166 @@ export function DetailPage() {
                 </div>
               )}
             </div>
+            </div>
           </aside>
+          <section className="min-h-0 min-w-0 overflow-y-auto px-3 pt-1">
+            <div className="space-y-6">
+            <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
+              {/* <div
+                className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full blur-[48px]"
+                style={{ background: 'color-mix(in srgb, var(--color-primary) 30%, transparent)' }}
+              />
+              <div
+                className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full blur-[52px]"
+                style={{ background: 'color-mix(in srgb, var(--color-success) 18%, transparent)' }}
+              /> */}
+              <div className="relative">
+                <p className="section-label">Workspace Snapshot</p>
+                <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">
+                  {project.name}
+                </h2>
+                <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
+                  {project.path}
+                </p>
+
+                <div className="mt-5 space-y-3">
+                  {/* <InfoCard label="Path" value={project.path} icon={Folder} /> */}
+                  {/* <div className="grid grid-cols-2 gap-3">
+                    <InfoCard label="Type" value={project.type} icon={Code2} />
+                    <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
+                  </div> */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <InfoCard label="Environment" value={environmentLabel} icon={FolderOpen} />
+                    <InfoCard label="Dev Status" value={isRunning ? 'Running' : 'Stopped'} icon={Play} />
+                  </div>
+                </div>
+
+                {(processUrls.length > 0 || defaultDocLink) && (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {processUrls.length > 0 && (
+                      <UrlPopover urls={processUrls}>
+                        <button
+                          className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
+                          onClick={() => window.electronAPI.openExternal(processUrls[0])}
+                        >
+                          <ArrowUpRight className="h-3 w-3" />
+                          <span className="max-w-[220px] truncate">{processUrls[0]}</span>
+                        </button>
+                      </UrlPopover>
+                    )}
+                    {defaultDocLink && (
+                      <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
+                        <button
+                          className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                          onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                        >
+                          <BookOpen className="h-3 w-3" />
+                          <span className="max-w-[220px] truncate">Docs: {defaultDocLink.title}</span>
+                        </button>
+                      </UrlPopover>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[24px] p-6 surface-card">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="section-label">Documentation</p>
+                  <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                    Project links for docs, specs and references
+                  </p>
+                </div>
+                <span className="rounded-full px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] quiet-control">
+                  {docLinks.length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  type="text"
+                  value={docTitleInput}
+                  onChange={(e) => setDocTitleInput(e.target.value)}
+                  placeholder="Title (optional)"
+                  className="quiet-control h-10 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <input
+                  type="text"
+                  value={docUrlInput}
+                  onChange={(e) => setDocUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleAddDocLink()
+                  }}
+                  placeholder="docs.example.com / https://..."
+                  className="quiet-control h-10 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <button
+                  className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
+                  onClick={() => {
+                    void handleAddDocLink()
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Link
+                </button>
+              </div>
+
+              {docError && (
+                <p className="mt-2 text-xs text-[color:var(--color-destructive)]">
+                  {docError}
+                </p>
+              )}
+
+              {docLinks.length === 0 ? (
+                <div className="mt-5 rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
+                  No documentation links yet.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-2.5">
+                  {docLinks.map((link) => (
+                    <div key={link.id} className="quiet-control flex items-center gap-2 rounded-[16px] px-4 py-3">
+                      <button
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => window.electronAPI.openExternal(link.url)}
+                        title={link.url}
+                      >
+                        <p className="truncate text-sm text-[color:var(--color-foreground)]">{link.title}</p>
+                        <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{link.url}</p>
+                      </button>
+                      <button
+                        className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-primary"
+                        onClick={() => window.electronAPI.openExternal(link.url)}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open
+                      </button>
+                      <button
+                        className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => {
+                          void handleSetDefaultDocLink(link.id)
+                        }}
+                        disabled={docLinks[0]?.id === link.id}
+                        title={docLinks[0]?.id === link.id ? 'Default link' : 'Set as default'}
+                      >
+                        {docLinks[0]?.id === link.id ? 'Default' : 'Set Default'}
+                      </button>
+                      <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
+                        onClick={() => {
+                          void handleRemoveDocLink(link.id)
+                        }}
+                        title="Remove"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

@@ -1,8 +1,7 @@
 import { memo, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { Play, Square, Folder, FileText, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
+import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
@@ -16,8 +15,6 @@ interface ProjectCardProps {
 }
 
 function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 0 }: ProjectCardProps) {
-  const navigate = useNavigate()
-
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
   const startProject = useAppStore((s) => s.startProject)
@@ -282,13 +279,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             <span className="hidden sm:inline">Run</span>
           </button>
         )}
-        <button
-          className="h-8 w-8 rounded-full flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] transition-colors"
-          title="View details"
-          onClick={(e) => { e.stopPropagation(); navigate(`/project/${project.id}`) }}
-        >
-          <FileText className="h-4 w-4" />
-        </button>
         <button
           className="h-8 w-8 rounded-full flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
           title="More actions"
