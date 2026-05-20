@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   BackgroundVariant,
-  Controls,
   Handle,
   MarkerType,
   Position,
@@ -33,19 +32,21 @@ interface AiStepState {
 }
 
 type AiFlowNodeData = {
+  key: AiStepKey
   label: string
   status: AiStepStatus
   detail?: string
   index: number
+  isFocused: boolean
 }
 
 type AiFlowNode = FlowNode<AiFlowNodeData, 'ai-step'>
 type AiFlowEdge = FlowEdge<{ status: AiStepStatus }, 'smoothstep'>
-const FLOW_NODE_WIDTH = 220
-const FLOW_NODE_HEIGHT = 84
+const FLOW_NODE_WIDTH = 236
+const FLOW_NODE_HEIGHT = 108
 const FLOW_NODE_START_X = 36
-const FLOW_NODE_START_Y = 56
-const FLOW_NODE_GAP_X = 260
+const FLOW_NODE_START_Y = 44
+const FLOW_NODE_GAP_X = 278
 
 const BASE_AI_STEPS: AiStepState[] = [
   { key: 'start', label: '启动提交任务', status: 'pending' },
@@ -81,38 +82,43 @@ function getFocusedStepKey(steps: AiStepState[], commitStatus: AiCommitStatus): 
 function flowNodeTone(status: AiStepStatus): {
   border: string
   background: string
-  dot: string
-  text: string
+  accent: string
+  statusBackground: string
+  statusText: string
 } {
   if (status === 'success') {
     return {
-      border: 'color-mix(in srgb, var(--color-success) 34%, transparent)',
-      background: 'color-mix(in srgb, var(--color-success-background) 86%, transparent)',
-      dot: 'var(--color-success)',
-      text: 'var(--color-success)',
+      border: 'color-mix(in srgb, var(--color-success) 28%, transparent)',
+      background: 'linear-gradient(160deg, color-mix(in srgb, var(--color-success-background) 95%, transparent) 0%, color-mix(in srgb, var(--color-card) 98%, transparent) 100%)',
+      accent: 'var(--color-success)',
+      statusBackground: 'color-mix(in srgb, var(--color-success-background) 90%, transparent)',
+      statusText: 'var(--color-success)',
     }
   }
   if (status === 'running') {
     return {
-      border: 'color-mix(in srgb, var(--color-warning) 36%, transparent)',
-      background: 'color-mix(in srgb, var(--color-warning-background) 88%, transparent)',
-      dot: 'var(--color-warning)',
-      text: 'var(--color-warning)',
+      border: 'color-mix(in srgb, var(--color-primary) 30%, transparent)',
+      background: 'linear-gradient(160deg, color-mix(in srgb, var(--color-primary) 10%, transparent) 0%, color-mix(in srgb, var(--color-card) 98%, transparent) 100%)',
+      accent: 'var(--color-primary)',
+      statusBackground: 'color-mix(in srgb, var(--color-primary) 13%, transparent)',
+      statusText: 'var(--color-primary)',
     }
   }
   if (status === 'error') {
     return {
       border: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
-      background: 'color-mix(in srgb, var(--color-destructive-background) 86%, transparent)',
-      dot: 'var(--color-destructive)',
-      text: 'var(--color-destructive)',
+      background: 'linear-gradient(160deg, color-mix(in srgb, var(--color-destructive-background) 95%, transparent) 0%, color-mix(in srgb, var(--color-card) 98%, transparent) 100%)',
+      accent: 'var(--color-destructive)',
+      statusBackground: 'color-mix(in srgb, var(--color-destructive-background) 90%, transparent)',
+      statusText: 'var(--color-destructive)',
     }
   }
   return {
-    border: 'var(--color-border)',
-    background: 'color-mix(in srgb, var(--color-background-sunken) 58%, transparent)',
-    dot: 'color-mix(in srgb, var(--color-muted-foreground) 44%, transparent)',
-    text: 'var(--color-muted-foreground)',
+    border: 'color-mix(in srgb, var(--color-border) 85%, transparent)',
+    background: 'linear-gradient(160deg, color-mix(in srgb, var(--color-background-sunken) 62%, transparent) 0%, color-mix(in srgb, var(--color-card) 98%, transparent) 100%)',
+    accent: 'color-mix(in srgb, var(--color-muted-foreground) 42%, transparent)',
+    statusBackground: 'color-mix(in srgb, var(--color-background-sunken) 88%, transparent)',
+    statusText: 'var(--color-muted-foreground)',
   }
 }
 
@@ -120,12 +126,19 @@ function AiFlowStepNode({ data }: NodeProps<AiFlowNode>) {
   const tone = flowNodeTone(data.status)
   return (
     <div
-      className="nodrag nowheel w-[220px] rounded-[14px] border px-3.5 py-3 shadow-sm"
+      className="nodrag nowheel relative w-[236px] overflow-hidden rounded-[18px] border px-4 py-3 transition-all duration-300"
       style={{
         borderColor: tone.border,
         background: tone.background,
+        boxShadow: data.isFocused
+          ? '0 12px 28px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.5)'
+          : '0 6px 18px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.38)',
       }}
     >
+      <span
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2.5px]"
+        style={{ background: tone.accent, opacity: data.status === 'pending' ? 0.42 : 0.95 }}
+      />
       <Handle
         type="target"
         position={Position.Left}
@@ -138,27 +151,32 @@ function AiFlowStepNode({ data }: NodeProps<AiFlowNode>) {
         isConnectable={false}
         className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0"
       />
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span
+          className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]"
+          style={{ borderColor: 'color-mix(in srgb, var(--color-border) 86%, transparent)' }}
+        >
           Step {data.index + 1}
         </span>
-        <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: tone.text }}>
+        <span
+          className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]"
+          style={{
+            color: tone.statusText,
+            borderColor: tone.border,
+            background: tone.statusBackground,
+          }}
+        >
           {stepStatusText(data.status)}
         </span>
       </div>
-      <div className="flex items-start gap-2.5">
-        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tone.dot }} />
-        <div className="min-w-0">
-          <p className="truncate text-[12px] font-medium text-[color:var(--color-foreground)]" title={data.label}>
-            {data.label}
-          </p>
-          {data.detail && (
-            <p className="mt-1 truncate text-[10px] text-[color:var(--color-muted-foreground)]" title={data.detail}>
-              {data.detail}
-            </p>
-          )}
-        </div>
-      </div>
+      <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]" title={data.label}>
+        {data.label}
+      </p>
+      {data.isFocused && data.detail && (
+        <p className="mt-1 truncate text-[10.5px] text-[color:var(--color-muted-foreground)]" title={data.detail}>
+          {data.detail}
+        </p>
+      )}
     </div>
   )
 }
@@ -565,7 +583,6 @@ export function DetailPage() {
     setQuickConfigOpen(false)
   }
 
-  const durationMs = runStartedAt ? (runFinishedAt ?? Date.now()) - runStartedAt : 0
   const statusText =
     aiCommitStatus === 'running' ? 'Running' : aiCommitStatus === 'success' ? 'Success' : aiCommitStatus === 'error' ? 'Failed' : 'Idle'
   const statusClass =
@@ -577,8 +594,7 @@ export function DetailPage() {
           ? 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]'
           : 'text-[color:var(--color-muted-foreground)] border-[color:var(--color-border)]'
 
-  const latestAiRaw = extractLatestAiSpeech(aiRawLines)
-  const flowCompletedCount = flowSteps.filter((s) => s.status === 'success').length
+  const flowFocusedStepKey = getFocusedStepKey(flowSteps, aiCommitStatus)
   const flowNodes = useMemo<AiFlowNode[]>(
     () =>
       flowSteps.map((step, index) => ({
@@ -586,52 +602,58 @@ export function DetailPage() {
         type: 'ai-step',
         position: { x: FLOW_NODE_START_X + index * FLOW_NODE_GAP_X, y: FLOW_NODE_START_Y },
         data: {
+          key: step.key,
           label: step.label,
           status: step.status,
           detail: step.detail,
           index,
+          isFocused: step.key === flowFocusedStepKey,
         },
         draggable: false,
         selectable: false,
       })),
-    [flowSteps]
+    [flowSteps, flowFocusedStepKey]
   )
   const flowEdges = useMemo<AiFlowEdge[]>(
     () =>
       flowSteps.slice(0, -1).map((step, index) => {
         const next = flowSteps[index + 1]
-        const active = step.status === 'success' || step.status === 'running'
-        const errored = step.status === 'error'
+        const errored = step.status === 'error' || next.status === 'error'
+        const running = step.status === 'running' || next.status === 'running'
+        const reached = step.status !== 'pending' || next.status !== 'pending'
+        const completed = step.status === 'success' && next.status !== 'pending'
+        const edgeColor = errored
+          ? 'var(--color-destructive)'
+          : running
+            ? 'var(--color-warning)'
+            : completed
+              ? 'var(--color-success)'
+              : 'color-mix(in srgb, var(--color-border) 88%, transparent)'
+
         return {
           id: `e-${step.key}-${next.key}`,
           source: step.key,
           target: next.key,
           type: 'smoothstep',
-          animated: active && !errored,
+          animated: running && !errored,
           markerEnd: {
             type: MarkerType.ArrowClosed,
             width: 18,
             height: 18,
-            color: errored
-              ? 'var(--color-destructive)'
-              : active
-                ? 'var(--color-primary)'
-                : 'color-mix(in srgb, var(--color-border) 90%, transparent)',
+            color: edgeColor,
           },
           style: {
-            stroke: errored
-              ? 'var(--color-destructive)'
-              : active
-                ? 'var(--color-primary)'
-                : 'color-mix(in srgb, var(--color-border) 90%, transparent)',
-            strokeWidth: active ? 2.2 : 1.6,
-            opacity: active ? 1 : 0.72,
+            stroke: edgeColor,
+            strokeWidth: running ? 2.8 : completed ? 2.4 : 1.6,
+            strokeDasharray: reached ? undefined : '4 7',
+            opacity: reached ? 1 : 0.72,
+            transition: 'stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease',
           },
           pathOptions: { offset: 18 },
           selectable: false,
           focusable: false,
           data: {
-            status: errored ? 'error' : active ? 'running' : 'pending',
+            status: errored ? 'error' : running ? 'running' : reached ? 'success' : 'pending',
           },
         }
       }),
@@ -881,7 +903,7 @@ export function DetailPage() {
           </section>
 
           <aside className="min-h-0 min-w-0 overflow-auto rounded-[22px] p-5 surface-card">
-            <div className="mb-5 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
+            {/* <div className="mb-5 flex items-center gap-3 rounded-full px-4 py-3 quiet-control">
               <span className="select-none text-xs text-[color:var(--color-muted-foreground)]">$</span>
               <input
                 type="text"
@@ -901,15 +923,15 @@ export function DetailPage() {
                   Save
                 </button>
               )}
-            </div>
+            </div> */}
 
-            <div className="mb-5 space-y-3">
+            {/* <div className="mb-5 space-y-3">
               <InfoCard label="Path" value={project.path} icon={Folder} />
               <div className="grid grid-cols-2 gap-3">
                 <InfoCard label="Type" value={project.type} icon={Code2} />
                 <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
               </div>
-            </div>
+            </div> */}
 
             <div className="mb-4 flex items-center justify-between">
               <div>
@@ -944,92 +966,62 @@ export function DetailPage() {
 
             <div>
               {rightPaneMode === 'flow' ? (
-                <div className="flex flex-col gap-3">
-                  <div
-                    className="rounded-[16px] border px-4 py-3"
-                    style={{
-                      borderColor: 'color-mix(in srgb, var(--color-primary) 28%, transparent)',
-                      background: 'color-mix(in srgb, var(--color-primary) 11%, transparent)',
+                <div
+                  className="relative h-[364px] overflow-hidden rounded-[20px] border"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
+                    background:
+                      'linear-gradient(180deg, color-mix(in srgb, var(--color-background) 97%, transparent) 0%, color-mix(in srgb, var(--color-background-sunken) 48%, transparent) 100%)',
+                  }}
+                >
+                  <ReactFlow
+                    nodes={flowNodes}
+                    edges={flowEdges}
+                    nodeTypes={FLOW_NODE_TYPES}
+                    fitView
+                    fitViewOptions={{ padding: 0.16, minZoom: 0.8, maxZoom: 1.2 }}
+                    minZoom={0.95}
+                    maxZoom={0.95}
+                    nodesDraggable={false}
+                    nodesConnectable={false}
+                    elementsSelectable={false}
+                    panOnDrag={false}
+                    panOnScroll={false}
+                    zoomOnScroll={false}
+                    zoomOnPinch={false}
+                    zoomOnDoubleClick={false}
+                    nodesFocusable={false}
+                    edgesFocusable={false}
+                    autoPanOnNodeFocus={false}
+                    preventScrolling={false}
+                    proOptions={{ hideAttribution: true }}
+                    onInit={(instance) => {
+                      flowApiRef.current = instance
+                      flowViewportReadyRef.current = true
+                      flowInitialFocusDoneRef.current = true
+                      flowLastFocusedStepRef.current = 'start'
+                      const startCenterX = FLOW_NODE_START_X + FLOW_NODE_WIDTH / 2
+                      const startCenterY = FLOW_NODE_START_Y + FLOW_NODE_HEIGHT / 2
+                      void instance.setCenter(startCenterX, startCenterY, {
+                        zoom: 0.95,
+                        duration: 0,
+                      })
                     }}
                   >
-                    <div className="flex flex-wrap items-start gap-x-2 gap-y-1.5">
-                      <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] ${statusClass}`}>
-                        {statusText}
-                      </span>
-                      <span className="min-w-0 whitespace-normal break-all text-[11px] text-[color:var(--color-foreground)]/85">
-                        Tool Terminal: {toolProcessStatus === 'running' ? 'online' : toolProcessStatus}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                        Steps: {flowCompletedCount}/{flowSteps.length}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                      Duration: {runStartedAt ? `${Math.floor(durationMs / 1000)}s` : '--'}
-                    </div>
-                  </div>
-
-                  <div
-                    className="relative h-[260px] overflow-hidden rounded-[18px] border"
-                    style={{
-                      borderColor: 'color-mix(in srgb, var(--color-border) 88%, transparent)',
-                      background: 'color-mix(in srgb, var(--color-card) 90%, transparent)',
-                    }}
-                  >
-                    <ReactFlow
-                      nodes={flowNodes}
-                      edges={flowEdges}
-                      nodeTypes={FLOW_NODE_TYPES}
-                      fitView
-                      fitViewOptions={{ padding: 0.25, minZoom: 0.85, maxZoom: 1.2 }}
-                      minZoom={0.5}
-                      maxZoom={1.5}
-                      nodesDraggable={false}
-                      nodesConnectable={false}
-                      elementsSelectable={false}
-                      panOnDrag
-                      panOnScroll
-                      zoomOnScroll
-                      zoomOnPinch
-                      zoomOnDoubleClick={false}
-                      preventScrolling={false}
-                      proOptions={{ hideAttribution: true }}
-                      onInit={(instance) => {
-                        flowApiRef.current = instance
-                        flowViewportReadyRef.current = true
-                        flowInitialFocusDoneRef.current = false
-                      }}
-                    >
-                      <Background
-                        variant={BackgroundVariant.Dots}
-                        gap={18}
-                        size={1.2}
-                        color="color-mix(in srgb, var(--color-border) 95%, transparent)"
-                      />
-                      <Controls
-                        showInteractive={false}
-                        style={{
-                          background: 'var(--color-card)',
-                          borderColor: 'var(--color-border)',
-                          boxShadow: 'var(--shadow-card)',
-                        }}
-                      />
-                    </ReactFlow>
-                  </div>
-
-                  <div
-                    className="rounded-[16px] border px-4 py-3"
-                    style={{
-                      borderColor: 'color-mix(in srgb, var(--color-primary) 26%, transparent)',
-                      background: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
-                    }}
-                  >
-                    <p className="text-xs font-medium text-[color:var(--color-foreground)]">AI 说了什么</p>
-                    <pre
-                      className="mt-2 whitespace-pre-wrap break-words rounded-[14px] border p-3 text-[11px] leading-5 text-[color:var(--color-foreground)]/90"
-                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-card)' }}
-                    >
-                      {latestAiRaw || '暂无 AI 原始回复'}
-                    </pre>
+                    <Background
+                      variant={BackgroundVariant.Lines}
+                      gap={24}
+                      size={0.55}
+                      color="color-mix(in srgb, var(--color-border) 80%, transparent)"
+                    />
+                  </ReactFlow>
+                  <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
+                    <p className="text-[11px] font-medium tracking-[0.02em] text-[color:var(--color-muted-foreground)]">
+                      AI Commit Flow
+                    </p>
+                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
+                      {statusText}
+                    </span>
                   </div>
                 </div>
               ) : (
