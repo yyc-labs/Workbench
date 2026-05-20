@@ -72,6 +72,9 @@ const api = {
     override?: { split?: boolean; splitMaxBatches?: number }
   ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath, override),
 
+  getLatestCommit: (projectPath: string) =>
+    ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, projectPath),
+
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 
   listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),

@@ -50,6 +50,14 @@ interface AiCommitRunOverride {
   splitMaxBatches?: number
 }
 
+interface RecentCommitInfo {
+  hash: string
+  shortHash: string
+  subject: string
+  committedAt: string
+  bullets: string[]
+}
+
 async function runAiCommit(
   projectId: string,
   projectPath: string,
@@ -308,6 +316,80 @@ function resolveWslVsCodeTarget(pathValue: string): { distro: string; linuxPath:
   }
 
   return null
+}
+
+function readRecentCommits(cwd: string): Promise<RecentCommitInfo[]> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      'git',
+      ['log', '-5', '--pretty=format:%H%x1f%h%x1f%s%x1f%cI%x1f%B%x1e'],
+      {
+        cwd,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }
+    )
+
+    let out = ''
+    child.stdout?.on('data', (buf: Buffer) => {
+      out += buf.toString('utf8')
+    })
+
+    child.on('error', () => resolve([]))
+    child.on('close', (code) => {
+      if (code !== 0) {
+        resolve([])
+        return
+      }
+      const records = out
+        .replace(/\r/g, '')
+        .split('\x1e')
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+      const commits: RecentCommitInfo[] = []
+      for (const record of records) {
+        const fields = record.split('\x1f')
+        const hash = fields[0]
+        const shortHash = fields[1]
+        const subject = fields[2]
+        const committedAt = fields[3]
+        const fullMessage = fields.slice(4).join('\x1f')
+        if (!hash || !shortHash || !subject || !committedAt) continue
+        const bullets = fullMessage
+          .replace(/\r/g, '')
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => /^-\s+/.test(line))
+        commits.push({
+          hash,
+          shortHash,
+          subject,
+          committedAt,
+          bullets,
+        })
+      }
+
+      if (commits.length === 0) {
+        resolve([])
+        return
+      }
+
+      const latestTime = new Date(commits[0].committedAt).getTime()
+      if (Number.isNaN(latestTime)) {
+        resolve([commits[0]])
+        return
+      }
+
+      const withinOneMinute = commits.filter((commit) => {
+        const t = new Date(commit.committedAt).getTime()
+        if (Number.isNaN(t)) return false
+        return latestTime - t <= 60_000
+      })
+
+      resolve(withinOneMinute.length > 0 ? withinOneMinute : [commits[0]])
+    })
+  })
 }
 
 function resolveLocalVsCodePath(pathValue: string): string {
@@ -608,6 +690,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string, override?: AiCommitRunOverride) => {
     return runAiCommit(projectId, projectPath, override)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_LATEST_COMMIT, async (_event, projectPath: string) => {
+    return readRecentCommits(projectPath)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {

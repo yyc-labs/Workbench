@@ -10,6 +10,7 @@ export const IPC = {
   AI_COMMIT_RUN: 'ai-commit:run',
   AI_COMMIT_OUTPUT: 'ai-commit:output',
   AI_COMMIT_STATUS: 'ai-commit:status',
+  GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
   CONFIG_GET: 'config:get',
   CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',
