@@ -31,6 +31,14 @@ interface AiStepState {
   detail?: string
 }
 
+interface LatestCommitInfo {
+  hash: string
+  shortHash: string
+  subject: string
+  committedAt: string
+  bullets: string[]
+}
+
 type AiFlowNodeData = {
   key: AiStepKey
   label: string
@@ -43,9 +51,10 @@ type AiFlowNodeData = {
 type AiFlowNode = FlowNode<AiFlowNodeData, 'ai-step'>
 type AiFlowEdge = FlowEdge<{ status: AiStepStatus }, 'smoothstep'>
 const FLOW_NODE_WIDTH = 236
-const FLOW_NODE_HEIGHT = 108
+const FLOW_NODE_HEIGHT = 96
+const FLOW_CANVAS_HEIGHT = 220
 const FLOW_NODE_START_X = 36
-const FLOW_NODE_START_Y = 44
+const FLOW_NODE_START_Y = Math.round((FLOW_CANVAS_HEIGHT - FLOW_NODE_HEIGHT) / 2)
 const FLOW_NODE_GAP_X = 278
 
 const BASE_AI_STEPS: AiStepState[] = [
@@ -126,7 +135,7 @@ function AiFlowStepNode({ data }: NodeProps<AiFlowNode>) {
   const tone = flowNodeTone(data.status)
   return (
     <div
-      className="nodrag nowheel relative w-[236px] overflow-hidden rounded-[18px] border px-4 py-3 transition-all duration-300"
+      className="nodrag nowheel relative flex h-full w-full flex-col overflow-hidden rounded-[18px] border px-4 py-3 transition-all duration-300"
       style={{
         borderColor: tone.border,
         background: tone.background,
@@ -317,15 +326,18 @@ function clampSplitMaxBatches(value: number | undefined): number {
   return Math.max(1, Math.min(12, Math.trunc(value)))
 }
 
-function extractLatestAiSpeech(lines: string[]): string {
-  const aiLines = lines.filter((line) => line.startsWith('[ai]'))
-  if (aiLines.length > 0) {
-    return aiLines.slice(-8).join('\n')
-  }
-  const fallbackJson = [...lines].reverse().find(
-    (line) => line.startsWith('{') || line.startsWith('```') || line.includes('"subject"')
-  )
-  return fallbackJson || ''
+function formatCommitDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
 }
 
 export function DetailPage() {
@@ -348,8 +360,7 @@ export function DetailPage() {
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
   const [aiRawLines, setAiRawLines] = useState<string[]>([])
   const [aiRawText, setAiRawText] = useState('')
-  const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
-  const [runFinishedAt, setRunFinishedAt] = useState<number | null>(null)
+  const [recentCommits, setRecentCommits] = useState<LatestCommitInfo[]>([])
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
   const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
@@ -468,10 +479,7 @@ export function DetailPage() {
         setFlowSteps(BASE_AI_STEPS)
         setAiRawLines([])
         setAiRawText('')
-        setRunStartedAt(Date.now())
-        setRunFinishedAt(null)
       } else {
-        setRunFinishedAt(Date.now())
         if (status === 'success') {
           setFlowSteps((prev) => applyStep(completePreviousSteps(prev, 'done'), 'done', 'success'))
         }
@@ -524,6 +532,30 @@ export function DetailPage() {
     if (rightPaneMode !== 'flow') return
     flowInitialFocusDoneRef.current = false
   }, [rightPaneMode])
+
+  useEffect(() => {
+    if (!project?.path) {
+      setRecentCommits([])
+      return
+    }
+
+    let mounted = true
+    const api = window.electronAPI as unknown as {
+      getLatestCommit?: (projectPath: string) => Promise<LatestCommitInfo[]>
+    }
+
+    const loadLatestCommit = async () => {
+      if (typeof api.getLatestCommit !== 'function') return
+      const result = await api.getLatestCommit(project.path)
+      if (!mounted) return
+      setRecentCommits(result || [])
+    }
+
+    void loadLatestCommit()
+    return () => {
+      mounted = false
+    }
+  }, [project?.path, aiCommitStatus])
 
   const handleAiCommit = async (override?: { split?: boolean; splitMaxBatches?: number }) => {
     if (!projectId || !project) return
@@ -601,6 +633,10 @@ export function DetailPage() {
         id: step.key,
         type: 'ai-step',
         position: { x: FLOW_NODE_START_X + index * FLOW_NODE_GAP_X, y: FLOW_NODE_START_Y },
+        style: {
+          width: FLOW_NODE_WIDTH,
+          height: FLOW_NODE_HEIGHT,
+        },
         data: {
           key: step.key,
           label: step.label,
@@ -966,62 +1002,128 @@ export function DetailPage() {
 
             <div>
               {rightPaneMode === 'flow' ? (
-                <div
-                  className="relative h-[364px] overflow-hidden rounded-[20px] border"
-                  style={{
-                    borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
-                    background:
-                      'linear-gradient(180deg, color-mix(in srgb, var(--color-background) 97%, transparent) 0%, color-mix(in srgb, var(--color-background-sunken) 48%, transparent) 100%)',
-                  }}
-                >
-                  <ReactFlow
-                    nodes={flowNodes}
-                    edges={flowEdges}
-                    nodeTypes={FLOW_NODE_TYPES}
-                    fitView
-                    fitViewOptions={{ padding: 0.16, minZoom: 0.8, maxZoom: 1.2 }}
-                    minZoom={0.95}
-                    maxZoom={0.95}
-                    nodesDraggable={false}
-                    nodesConnectable={false}
-                    elementsSelectable={false}
-                    panOnDrag={false}
-                    panOnScroll={false}
-                    zoomOnScroll={false}
-                    zoomOnPinch={false}
-                    zoomOnDoubleClick={false}
-                    nodesFocusable={false}
-                    edgesFocusable={false}
-                    autoPanOnNodeFocus={false}
-                    preventScrolling={false}
-                    proOptions={{ hideAttribution: true }}
-                    onInit={(instance) => {
-                      flowApiRef.current = instance
-                      flowViewportReadyRef.current = true
-                      flowInitialFocusDoneRef.current = true
-                      flowLastFocusedStepRef.current = 'start'
-                      const startCenterX = FLOW_NODE_START_X + FLOW_NODE_WIDTH / 2
-                      const startCenterY = FLOW_NODE_START_Y + FLOW_NODE_HEIGHT / 2
-                      void instance.setCenter(startCenterX, startCenterY, {
-                        zoom: 0.95,
-                        duration: 0,
-                      })
+                <div className="space-y-3">
+                  <div
+                    className="relative overflow-hidden rounded-[20px] border"
+                    style={{
+                      height: `${FLOW_CANVAS_HEIGHT}px`,
+                      borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
+                      background:
+                        'linear-gradient(180deg, color-mix(in srgb, var(--color-background) 97%, transparent) 0%, color-mix(in srgb, var(--color-background-sunken) 48%, transparent) 100%)',
                     }}
                   >
-                    <Background
-                      variant={BackgroundVariant.Lines}
-                      gap={24}
-                      size={0.55}
-                      color="color-mix(in srgb, var(--color-border) 80%, transparent)"
-                    />
-                  </ReactFlow>
-                  <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
-                    <p className="text-[11px] font-medium tracking-[0.02em] text-[color:var(--color-muted-foreground)]">
-                      AI Commit Flow
+                    <ReactFlow
+                      nodes={flowNodes}
+                      edges={flowEdges}
+                      nodeTypes={FLOW_NODE_TYPES}
+                      fitView
+                      fitViewOptions={{ padding: 0.16, minZoom: 0.8, maxZoom: 1.2 }}
+                      minZoom={0.95}
+                      maxZoom={0.95}
+                      nodesDraggable={false}
+                      nodesConnectable={false}
+                      elementsSelectable={false}
+                      panOnDrag={false}
+                      panOnScroll={false}
+                      zoomOnScroll={false}
+                      zoomOnPinch={false}
+                      zoomOnDoubleClick={false}
+                      nodesFocusable={false}
+                      edgesFocusable={false}
+                      autoPanOnNodeFocus={false}
+                      preventScrolling={false}
+                      proOptions={{ hideAttribution: true }}
+                      onInit={(instance) => {
+                        flowApiRef.current = instance
+                        flowViewportReadyRef.current = true
+                        flowInitialFocusDoneRef.current = true
+                        flowLastFocusedStepRef.current = 'start'
+                        const startCenterX = FLOW_NODE_START_X + FLOW_NODE_WIDTH / 2
+                        const startCenterY = FLOW_NODE_START_Y + FLOW_NODE_HEIGHT / 2
+                        void instance.setCenter(startCenterX, startCenterY, {
+                          zoom: 0.95,
+                          duration: 0,
+                        })
+                      }}
+                    >
+                      <Background
+                        variant={BackgroundVariant.Lines}
+                        gap={24}
+                        size={0.55}
+                        color="color-mix(in srgb, var(--color-border) 80%, transparent)"
+                      />
+                    </ReactFlow>
+                    <div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
+                      <p className="text-[11px] font-medium tracking-[0.02em] text-[color:var(--color-muted-foreground)]">
+                        AI Commit Flow
+                      </p>
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
+                        {statusText}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    className="rounded-[16px] border px-4 py-3"
+                    style={{
+                      borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)',
+                      background: 'color-mix(in srgb, var(--color-card) 94%, transparent)',
+                    }}
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+                      最近提交
                     </p>
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
-                      {statusText}
-                    </span>
+                    {recentCommits.length > 0 ? (
+                      <div className="relative isolate mt-2 space-y-2">
+                        {recentCommits.map((commit) => (
+                          <div
+                            key={commit.hash}
+                            className="group relative z-0 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 transition-colors duration-200 hover:z-40 hover:border-[color:var(--color-primary)]/35 hover:bg-[color:var(--color-background)]"
+                          >
+                            <p
+                              className="truncate text-sm font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]"
+                            >
+                              {commit.subject}
+                            </p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
+                              <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 font-mono">
+                                {commit.shortHash}
+                              </span>
+                              <span>{formatCommitDate(commit.committedAt)}</span>
+                            </div>
+
+                            <div className="pointer-events-none absolute -top-2 left-3 right-3 z-50 -translate-y-full scale-[0.985] opacity-0 transition-all duration-150 group-hover:scale-100 group-hover:opacity-100">
+                              <div
+                                className="rounded-[14px] border px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
+                                style={{
+                                  borderColor: 'color-mix(in srgb, var(--color-border) 76%, transparent)',
+                                  background: 'color-mix(in srgb, var(--color-card) 82%, transparent)',
+                                }}
+                              >
+                                <p className="text-[12.5px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">
+                                  {commit.subject}
+                                </p>
+                                <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                                  {commit.shortHash} · {formatCommitDate(commit.committedAt)}
+                                </p>
+                                {commit.bullets.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {commit.bullets.map((line, idx) => (
+                                      <div key={`${commit.hash}-b-${idx}`} className="flex items-start gap-1.5 text-[11.5px] leading-5 text-[color:var(--color-foreground)]/90">
+                                        <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--color-muted-foreground)]/70" />
+                                        <span className="min-w-0 break-words">{line.replace(/^-+\s*/, '')}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">暂无提交记录</p>
+                    )}
                   </div>
                 </div>
               ) : (

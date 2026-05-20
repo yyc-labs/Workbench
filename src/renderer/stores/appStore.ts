@@ -103,6 +103,13 @@ declare global {
         projectPath: string,
         override?: { split?: boolean; splitMaxBatches?: number }
       ) => Promise<boolean>
+      getLatestCommit: (projectPath: string) => Promise<{
+        hash: string
+        shortHash: string
+        subject: string
+        committedAt: string
+        bullets: string[]
+      }[]>
       onAiCommitOutput: (
         cb: (d: { projectId: string; data: string }) => void
       ) => () => void
