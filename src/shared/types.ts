@@ -30,6 +30,7 @@ export interface AiCommitConfig {
   apiBaseUrl?: string
   apiKey?: string
   model?: string
+  wslPwshPath?: string
   split?: boolean
   splitMaxBatches?: number
 }
