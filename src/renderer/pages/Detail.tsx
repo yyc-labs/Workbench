@@ -361,6 +361,7 @@ export function DetailPage() {
   const [aiRawLines, setAiRawLines] = useState<string[]>([])
   const [aiRawText, setAiRawText] = useState('')
   const [recentCommits, setRecentCommits] = useState<LatestCommitInfo[]>([])
+  const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
   const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
@@ -369,6 +370,7 @@ export function DetailPage() {
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
+  const recentCommitPanelRef = useRef<HTMLDivElement | null>(null)
   const flowViewportReadyRef = useRef(false)
   const flowInitialFocusDoneRef = useRef(false)
   const flowLastFocusedStepRef = useRef<AiStepKey | null>(null)
@@ -529,6 +531,29 @@ export function DetailPage() {
   }, [quickConfigOpen])
 
   useEffect(() => {
+    if (!activeCommitHash) return
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as globalThis.Node
+      if (recentCommitPanelRef.current?.contains(target)) return
+      setActiveCommitHash(null)
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveCommitHash(null)
+      }
+    }
+
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activeCommitHash])
+
+  useEffect(() => {
     if (rightPaneMode !== 'flow') return
     flowInitialFocusDoneRef.current = false
   }, [rightPaneMode])
@@ -536,6 +561,7 @@ export function DetailPage() {
   useEffect(() => {
     if (!project?.path) {
       setRecentCommits([])
+      setActiveCommitHash(null)
       return
     }
 
@@ -549,6 +575,7 @@ export function DetailPage() {
       const result = await api.getLatestCommit(project.path)
       if (!mounted) return
       setRecentCommits(result || [])
+      setActiveCommitHash((prev) => ((result || []).some((item) => item.hash === prev) ? prev : null))
     }
 
     void loadLatestCommit()
@@ -1064,6 +1091,7 @@ export function DetailPage() {
                   </div>
 
                   <div
+                    ref={recentCommitPanelRef}
                     className="rounded-[16px] border px-4 py-3"
                     style={{
                       borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)',
@@ -1078,7 +1106,22 @@ export function DetailPage() {
                         {recentCommits.map((commit) => (
                           <div
                             key={commit.hash}
-                            className="group relative z-0 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 transition-colors duration-200 hover:z-40 hover:border-[color:var(--color-primary)]/35 hover:bg-[color:var(--color-background)]"
+                            className="group relative z-0 cursor-pointer rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2 transition-colors duration-200 hover:z-40 hover:border-[color:var(--color-primary)]/35 hover:bg-[color:var(--color-background)]"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => {
+                              setActiveCommitHash((prev) => (prev === commit.hash ? null : commit.hash))
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                setActiveCommitHash((prev) => (prev === commit.hash ? null : commit.hash))
+                                return
+                              }
+                              if (event.key === 'Escape') {
+                                setActiveCommitHash(null)
+                              }
+                            }}
                           >
                             <p
                               className="truncate text-sm font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]"
@@ -1092,7 +1135,12 @@ export function DetailPage() {
                               <span>{formatCommitDate(commit.committedAt)}</span>
                             </div>
 
-                            <div className="pointer-events-none absolute -top-2 left-3 right-3 z-50 -translate-y-full scale-[0.985] opacity-0 transition-all duration-150 group-hover:scale-100 group-hover:opacity-100">
+                            <div
+                              className={`absolute -top-2 left-3 right-3 z-50 -translate-y-full transition-all duration-150 ${activeCommitHash === commit.hash
+                                ? 'pointer-events-auto scale-100 opacity-100'
+                                : 'pointer-events-none scale-[0.985] opacity-0'
+                                }`}
+                            >
                               <div
                                 className="rounded-[14px] border px-3 py-2.5 shadow-[0_18px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl"
                                 style={{
@@ -1127,7 +1175,7 @@ export function DetailPage() {
                   </div>
                 </div>
               ) : (
-                <div className="max-h-[560px] overflow-auto rounded-[16px] p-4 quiet-control">
+                <div className="max-h-[500px] overflow-auto rounded-[16px] p-4 quiet-control">
                   <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/85">
                     {aiRawText || '暂无原始日志'}
                   </pre>
