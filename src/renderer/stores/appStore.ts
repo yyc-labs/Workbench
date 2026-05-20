@@ -98,7 +98,11 @@ declare global {
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
-      runAiCommit: (projectId: string, projectPath: string) => Promise<boolean>
+      runAiCommit: (
+        projectId: string,
+        projectPath: string,
+        override?: { split?: boolean; splitMaxBatches?: number }
+      ) => Promise<boolean>
       onAiCommitOutput: (
         cb: (d: { projectId: string; data: string }) => void
       ) => () => void

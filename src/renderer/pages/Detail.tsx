@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowUpRight, Bot, ChevronLeft, Code2, Folder, Package, Play, Square } from 'lucide-react'
 import { Terminal } from '../components/Terminal'
@@ -161,6 +161,11 @@ function statusDot(status: AiStepStatus): string {
   return 'bg-[color:var(--color-muted-foreground)]/40'
 }
 
+function clampSplitMaxBatches(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 4
+  return Math.max(1, Math.min(12, Math.trunc(value)))
+}
+
 export function DetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
@@ -183,12 +188,23 @@ export function DetailPage() {
   const [aiRawText, setAiRawText] = useState('')
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null)
   const [runFinishedAt, setRunFinishedAt] = useState<number | null>(null)
+  const [quickConfigOpen, setQuickConfigOpen] = useState(false)
+  const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
+  const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
+    String(clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches))
+  )
+  const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
+  const quickConfigRef = useRef<HTMLDivElement | null>(null)
+  const quickButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const environment = project ? detectProjectEnvironment(project.path) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
   const isRunning = processStatus === 'running'
   const isActive = isRunning
   const isAiEnabled = aiCommitConfig?.enabled ?? true
+  const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
+  const defaultSplitMaxBatches = clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches)
+  const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
 
   if (!project || !projectId) {
     return (
@@ -298,12 +314,45 @@ export function DetailPage() {
     }
   }, [projectId, toolProcessId])
 
-  const handleAiCommit = async () => {
+  useEffect(() => {
+    setQuickSplit(defaultSplit)
+    setQuickSplitMaxBatches(String(defaultSplitMaxBatches))
+  }, [defaultSplit, defaultSplitMaxBatches, projectId])
+
+  useEffect(() => {
+    if (!quickConfigOpen) return
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (quickConfigRef.current?.contains(target)) return
+      if (quickButtonRef.current?.contains(target)) return
+      setQuickConfigOpen(false)
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setQuickConfigOpen(false)
+      }
+    }
+
+    window.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [quickConfigOpen])
+
+  const handleAiCommit = async (override?: { split?: boolean; splitMaxBatches?: number }) => {
     if (!projectId || !project) return
     if (aiCommitStatus === 'running') return
 
     const api = window.electronAPI as unknown as {
-      runAiCommit?: (projectId: string, projectPath: string) => Promise<boolean>
+      runAiCommit?: (
+        projectId: string,
+        projectPath: string,
+        override?: { split?: boolean; splitMaxBatches?: number }
+      ) => Promise<boolean>
     }
 
     if (typeof api.runAiCommit !== 'function') {
@@ -321,10 +370,35 @@ export function DetailPage() {
       toolProcessId,
       `\r\n[AI Commit] trigger: ${isAiEnabled ? 'AI enabled' : 'AI disabled (fallback local message)'}\r\n`
     )
-    const ok = await api.runAiCommit(projectId, project.path)
+    if (override) {
+      useAppStore.getState().appendOutput(
+        toolProcessId,
+        `[AI Commit] quick override: split=${override.split ? 'on' : 'off'}, maxBatches=${override.splitMaxBatches ?? defaultSplitMaxBatches}\r\n`
+      )
+    }
+    const ok = await api.runAiCommit(projectId, project.path, override)
     if (!ok) {
       setAiCommitStatus('error')
     }
+  }
+
+  const runWithQuickConfig = async () => {
+    const override = {
+      split: quickSplit,
+      splitMaxBatches: quickSplitMaxBatchesNumber,
+    }
+    setQuickConfigOpen(false)
+    await handleAiCommit(override)
+  }
+
+  const saveQuickConfigAsDefault = async () => {
+    const nextConfig = {
+      ...(aiCommitConfig || {}),
+      split: quickSplit,
+      splitMaxBatches: quickSplitMaxBatchesNumber,
+    }
+    await useAppStore.getState().setAiCommitConfig(nextConfig)
+    setQuickConfigOpen(false)
   }
 
   const durationMs = runStartedAt ? (runFinishedAt ?? Date.now()) - runStartedAt : 0
@@ -411,29 +485,107 @@ export function DetailPage() {
             )}
           </button>
 
-          <button
-            className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
-              ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-              : aiCommitStatus === 'error'
-                ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-              }`}
-            style={
-              aiCommitStatus === 'running'
-                ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+          <div className="relative">
+            <button
+              ref={quickButtonRef}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+                ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 : aiCommitStatus === 'error'
-                  ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
-                  : undefined
-            }
-            onClick={() => void handleAiCommit()}
-            disabled={aiCommitStatus === 'running'}
-            title={isAiEnabled ? 'Use AI API to generate commit message and commit' : 'AI disabled in Settings, local commit message only'}
-          >
-            <Bot className="h-3.5 w-3.5" />
-            {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
-          </button>
+                  ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                  : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                }`}
+              style={
+                aiCommitStatus === 'running'
+                  ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                  : aiCommitStatus === 'error'
+                    ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                    : undefined
+              }
+              onClick={() => void handleAiCommit()}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                if (aiCommitStatus === 'running') return
+                const panelWidth = 260
+                const panelHeight = 220
+                const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
+                const y = Math.max(8, Math.min(e.clientY, window.innerHeight - panelHeight - 8))
+                setQuickConfigPos({ x, y })
+                setQuickConfigOpen(true)
+              }}
+              disabled={aiCommitStatus === 'running'}
+              title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
+            </button>
+          </div>
         </div>
       </header>
+
+      {quickConfigOpen && (
+        <div
+          ref={quickConfigRef}
+          className="fixed z-[120] w-[260px] rounded-[16px] border p-3 shadow-xl surface-card"
+          style={{
+            left: `${quickConfigPos.x}px`,
+            top: `${quickConfigPos.y}px`,
+            borderColor: 'var(--color-border)',
+          }}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-xs font-semibold text-[color:var(--color-foreground)]">Quick AI Commit Config</p>
+            <button
+              className="rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={() => setQuickConfigOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+
+          <label className="mb-2 flex items-center gap-2 text-xs text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              checked={quickSplit}
+              onChange={(e) => setQuickSplit(e.target.checked)}
+            />
+            Enable split commit
+          </label>
+
+          <div className="mb-3">
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Split max batches (1-12)</p>
+            <input
+              type="number"
+              min={1}
+              max={12}
+              step={1}
+              value={quickSplitMaxBatches}
+              disabled={!quickSplit}
+              onChange={(e) => setQuickSplitMaxBatches(e.target.value)}
+              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+            />
+          </div>
+
+          <div className="mb-2 text-[10px] text-[color:var(--color-muted-foreground)]">
+            Default: Split {defaultSplit ? 'On' : 'Off'} · {defaultSplitMaxBatches}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              className="flex-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
+              onClick={() => void runWithQuickConfig()}
+              disabled={aiCommitStatus === 'running'}
+            >
+              Run This Time
+            </button>
+            <button
+              className="rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+              onClick={() => void saveQuickConfigAsDefault()}
+            >
+              Save Default
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 overflow-x-auto px-8 pb-8 pt-8">
         <div className="grid h-full min-h-0 min-w-[980px] grid-cols-[minmax(0,1fr)_380px] gap-6">
