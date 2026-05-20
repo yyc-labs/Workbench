@@ -506,7 +506,7 @@ export function RuntimePage() {
                 className="quiet-control h-10 px-4 rounded-full border-0 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <button
-                className="h-10 px-4 rounded-full bg-primary text-white hover:bg-primary-hover text-sm font-medium inline-flex items-center justify-center gap-1.5"
+                className="h-10 px-4 rounded-full bg-primary text-white hover:bg-primary-hover text-sm font-medium inline-flex items-center justify-center gap-1.5 cursor-pointer"
                 onClick={() => {
                   void handleAddDocLink()
                 }}
@@ -524,7 +524,7 @@ export function RuntimePage() {
                   Default: <span className="text-[color:var(--color-foreground)]">{defaultDocLink.title}</span>
                 </span>
                 <button
-                  className="h-7 px-2 rounded-full text-xs text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1"
+                  className="h-7 px-2 rounded-full text-xs text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 cursor-pointer"
                   onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
                 >
                   <ExternalLink className="w-3 h-3" />
@@ -545,21 +545,21 @@ export function RuntimePage() {
                     className="quiet-control flex items-center gap-2 rounded-[16px] px-4 py-3"
                   >
                     <button
-                      className="flex-1 min-w-0 text-left"
+                      className="flex-1 min-w-0 text-left cursor-pointer"
                       onClick={() => window.electronAPI.openExternal(link.url)}
                       title={link.url}
                     >
                       <p className="text-sm text-[color:var(--color-foreground)] truncate">{link.title}</p>
                     </button>
                     <button
-                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-primary hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs cursor-pointer"
                       onClick={() => window.electronAPI.openExternal(link.url)}
                     >
                       <ExternalLink className="w-3 h-3" />
                       Open
                     </button>
                     <button
-                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs"
+                      className="h-8 px-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] inline-flex items-center gap-1 text-xs disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                       onClick={() => {
                         void handleSetDefaultDocLink(link.id)
                       }}
@@ -569,7 +569,7 @@ export function RuntimePage() {
                       {docLinks[0]?.id === link.id ? 'Default' : 'Set Default'}
                     </button>
                     <button
-                      className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] inline-flex items-center justify-center"
+                      className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] inline-flex items-center justify-center cursor-pointer"
                       onClick={() => {
                         void handleRemoveDocLink(link.id)
                       }}

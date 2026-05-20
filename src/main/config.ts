@@ -14,12 +14,16 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'system',
   folders: [],
   tags: [],
+  startupDefaultFilter: undefined,
   runtimeLauncherScript: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
+  runtimeKeepAliveOnQuit: false,
   aiCommit: {
     enabled: true,
     apiBaseUrl: 'https://api.openai.com/v1',
     apiKey: '',
     model: 'gpt-4o-mini',
+    split: false,
+    splitMaxBatches: 4,
   },
 }
 
@@ -31,7 +35,12 @@ export function loadConfig(): AppConfig {
   const configPath = getConfigPath()
   try {
     const raw = readFileSync(configPath, 'utf-8')
-    cachedConfig = { ...DEFAULT_CONFIG, ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw) as AppConfig & { startupDefaultTagId?: string }
+    const legacyStartupDefaultTagId = parsed.startupDefaultTagId
+    cachedConfig = { ...DEFAULT_CONFIG, ...parsed }
+    if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
+      cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
+    }
   } catch {
     cachedConfig = { ...DEFAULT_CONFIG }
   }

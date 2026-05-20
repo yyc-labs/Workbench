@@ -14,6 +14,11 @@ const THEME_OPTIONS = [
 
 type Section = 'general' | 'runtime' | 'ai' | 'rules' | 'about'
 
+function clampSplitMaxBatches(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 4
+  return Math.max(1, Math.min(12, Math.trunc(value)))
+}
+
 // ── Sidebar ──
 
 function Sidebar({
@@ -140,9 +145,13 @@ function RulesPanel() {
 function RuntimePanel({
   runtimeLauncherScript,
   onRuntimeLauncherScriptSave,
+  runtimeKeepAliveOnQuit,
+  onRuntimeKeepAliveToggle,
 }: {
   runtimeLauncherScript: string
   onRuntimeLauncherScriptSave: (v: string) => Promise<void>
+  runtimeKeepAliveOnQuit: boolean
+  onRuntimeKeepAliveToggle: (enabled: boolean) => Promise<void>
 }) {
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
   const [diag, setDiag] = useState<{
@@ -199,6 +208,22 @@ function RuntimePanel({
       </div>
 
       <div>
+        <p className="section-label mb-3">Lifecycle</p>
+        <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">Quit Behavior</h3>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-4">
+          Keep Runtime tmux sessions alive after application exit.
+        </p>
+        <label className="inline-flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
+          <input
+            type="checkbox"
+            checked={runtimeKeepAliveOnQuit}
+            onChange={(e) => void onRuntimeKeepAliveToggle(e.target.checked)}
+          />
+          Keep Runtime sessions on quit
+        </label>
+      </div>
+
+      <div>
         <div className="flex items-center gap-2 mb-3">
           <h3 className="text-sm font-medium text-[color:var(--color-foreground)]">Diagnostics</h3>
           <Button
@@ -237,13 +262,24 @@ function AiCommitPanel({
     apiBaseUrl?: string
     apiKey?: string
     model?: string
+    split?: boolean
+    splitMaxBatches?: number
   }
-  onSave: (v: { enabled?: boolean; apiBaseUrl?: string; apiKey?: string; model?: string }) => Promise<void>
+  onSave: (v: {
+    enabled?: boolean
+    apiBaseUrl?: string
+    apiKey?: string
+    model?: string
+    split?: boolean
+    splitMaxBatches?: number
+  }) => Promise<void>
 }) {
   const [enabled, setEnabled] = useState(Boolean(aiCommit.enabled ?? true))
   const [apiBaseUrl, setApiBaseUrl] = useState(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState(aiCommit.apiKey || '')
   const [model, setModel] = useState(aiCommit.model || 'gpt-4o-mini')
+  const [split, setSplit] = useState(Boolean(aiCommit.split ?? false))
+  const [splitMaxBatches, setSplitMaxBatches] = useState(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -251,17 +287,24 @@ function AiCommitPanel({
     setApiBaseUrl(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
     setApiKey(aiCommit.apiKey || '')
     setModel(aiCommit.model || 'gpt-4o-mini')
-  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model])
+    setSplit(Boolean(aiCommit.split ?? false))
+    setSplitMaxBatches(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
+  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.split, aiCommit.splitMaxBatches])
 
   const handleSave = async () => {
     setSaving(true)
     try {
+      const parsedSplitMaxBatches = Number.parseInt(splitMaxBatches.trim(), 10)
+      const normalizedSplitMaxBatches = clampSplitMaxBatches(parsedSplitMaxBatches)
       await onSave({
         enabled,
         apiBaseUrl: apiBaseUrl.trim(),
         apiKey: apiKey.trim(),
         model: model.trim(),
+        split,
+        splitMaxBatches: normalizedSplitMaxBatches,
       })
+      setSplitMaxBatches(String(normalizedSplitMaxBatches))
     } finally {
       setSaving(false)
     }
@@ -286,6 +329,30 @@ function AiCommitPanel({
           />
           Enable AI commit
         </label>
+
+        <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
+          <input
+            type="checkbox"
+            checked={split}
+            onChange={(e) => setSplit(e.target.checked)}
+          />
+          Enable split commit
+        </label>
+
+        <div className="space-y-1.5">
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">Split max batches (1-12)</p>
+          <Input
+            type="number"
+            min={1}
+            max={12}
+            step={1}
+            value={splitMaxBatches}
+            onChange={(e) => setSplitMaxBatches(e.target.value)}
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+            placeholder="4"
+            disabled={!split}
+          />
+        </div>
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">API Base URL</p>
@@ -370,6 +437,7 @@ export function SettingsPage() {
   const config = useAppStore((s) => s.config)
   const setThemeConfig = useAppStore((s) => s.setTheme)
   const setRuntimeLauncherScript = useAppStore((s) => s.setRuntimeLauncherScript)
+  const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
   const [theme, setTheme] = useState(config.theme)
   const [section, setSection] = useState<Section>('general')
@@ -410,6 +478,8 @@ export function SettingsPage() {
             <RuntimePanel
               runtimeLauncherScript={config.runtimeLauncherScript || '$HOME/tools/claude-code-script/start-claude-with-env.sh'}
               onRuntimeLauncherScriptSave={setRuntimeLauncherScript}
+              runtimeKeepAliveOnQuit={config.runtimeKeepAliveOnQuit ?? false}
+              onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
             />
           )}
           {section === 'ai' && (

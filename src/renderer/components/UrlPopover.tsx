@@ -58,7 +58,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
           className="group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
         >
           <button
-            className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]"
+            className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)] cursor-pointer"
             onClick={() => window.electronAPI.openExternal(entry.url)}
             title={entry.url}
           >
@@ -66,7 +66,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
             <span className="truncate">{entry.label}</span>
           </button>
           <button
-            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100"
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100 cursor-pointer"
             onClick={() => navigator.clipboard.writeText(entry.url)}
           >
             复制

@@ -48,12 +48,26 @@ function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | '
 async function runAiCommit(projectId: string, projectPath: string): Promise<boolean> {
   const config = loadConfig()
   const aiCfg = config.aiCommit || {}
+  const splitEnabled = Boolean(aiCfg.split)
+  const splitMaxBatches = Math.max(
+    1,
+    Math.min(
+      12,
+      Number.isFinite(aiCfg.splitMaxBatches)
+        ? Math.trunc(aiCfg.splitMaxBatches as number)
+        : 4
+    )
+  )
   const scriptPs1Path = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
   const scriptShPath = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.sh')
   const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(projectPath) : null
 
   sendAiCommitStatus(projectId, 'running')
   sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
+  sendAiCommitOutput(
+    projectId,
+    `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}\r\n`
+  )
 
   return new Promise<boolean>((resolve) => {
     const windowsPsArgs = [
@@ -67,6 +81,9 @@ async function runAiCommit(projectId: string, projectPath: string): Promise<bool
 
     if (aiCfg.enabled ?? true) {
       windowsPsArgs.push('-UseAi')
+    }
+    if (splitEnabled) {
+      windowsPsArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
     }
 
     if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
@@ -106,6 +123,9 @@ async function runAiCommit(projectId: string, projectPath: string): Promise<bool
         if (aiCfg.enabled ?? true) {
           pwshParts.push('-UseAi')
         }
+        if (splitEnabled) {
+          pwshParts.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
+        }
         if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
           pwshParts.push('-ApiBaseUrl', quoteBash(aiCfg.apiBaseUrl.trim()))
         }
@@ -116,6 +136,15 @@ async function runAiCommit(projectId: string, projectPath: string): Promise<bool
           pwshParts.push('-Model', quoteBash(aiCfg.model.trim()))
         }
 
+        const fallbackBashParts: string[] = [
+          'bash',
+          quoteBash(scriptShWslPath),
+          '--all',
+        ]
+        if (splitEnabled) {
+          fallbackBashParts.push('--split', '--split-max-batches', String(splitMaxBatches))
+        }
+
         const wslCommand = [
           'set -euo pipefail',
           `cd ${quoteBash(linuxProjectPath)}`,
@@ -124,7 +153,7 @@ async function runAiCommit(projectId: string, projectPath: string): Promise<bool
           `  ${pwshParts.join(' ')}`,
           'else',
           '  echo "[AI Commit] shell: wsl-bash (pwsh not found, fallback without AI generation)"',
-          `  bash ${quoteBash(scriptShWslPath)} --all`,
+          `  ${fallbackBashParts.join(' ')}`,
           'fi',
         ].join('\n')
 
@@ -573,17 +602,7 @@ function registerIpcHandlers(): void {
     IPC.CONFIG_SET,
     (_event, partial: Record<string, unknown>) => {
       const updated = updateConfig(
-        partial as Partial<{
-          projects: never
-          theme: 'system' | 'light' | 'dark'
-          runtimeLauncherScript: string
-          aiCommit: {
-            enabled?: boolean
-            apiBaseUrl?: string
-            apiKey?: string
-            model?: string
-          }
-        }>
+        partial as Partial<AppConfig> & { startupDefaultTagId?: string }
       )
       if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
         applyWindowBackground(updated.theme)
@@ -775,21 +794,25 @@ app.on('before-quit', async (e) => {
   e.preventDefault()
   isQuitting = true
 
-  // Only clean sessions associated with this app registry; avoid touching unrelated tmux sessions.
+  const { runtimeKeepAliveOnQuit = false } = loadConfig()
   const runtimeEntries = listRuntimeEntries()
-  const ownSessionNames = runtimeEntries.map((entry) => entry.sessionName).filter(Boolean)
-  try {
-    await tmuxManager.killSessions(ownSessionNames)
-  } catch (err) {
-    console.error('[before-quit] failed to clean app runtime sessions:', err)
+
+  if (!runtimeKeepAliveOnQuit) {
+    // Only clean sessions associated with this app registry; avoid touching unrelated tmux sessions.
+    const ownSessionNames = runtimeEntries.map((entry) => entry.sessionName).filter(Boolean)
+    try {
+      await tmuxManager.killSessions(ownSessionNames)
+    } catch (err) {
+      console.error('[before-quit] failed to clean app runtime sessions:', err)
+    }
+
+    // Drop registry entries on graceful exit to avoid stale mappings on next boot.
+    for (const entry of runtimeEntries) {
+      removeRuntimeEntry(entry.projectId)
+    }
   }
 
   processManager?.stopAll()
-
-  // Drop registry entries on graceful exit to avoid stale mappings on next boot.
-  for (const entry of runtimeEntries) {
-    removeRuntimeEntry(entry.projectId)
-  }
 
   setTimeout(() => {
     app.quit()
