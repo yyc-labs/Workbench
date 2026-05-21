@@ -1142,9 +1142,9 @@ export function DetailPage() {
                               <div
                                 className="rounded-[14px] border px-3 py-2.5 backdrop-blur-xl"
                                 style={{
-                                  borderColor: 'color-mix(in srgb, var(--color-border) 76%, transparent)',
-                                  background: 'color-mix(in srgb, var(--color-card) 82%, transparent)',
-                                  boxShadow: 'var(--shadow-popover)',
+                                  borderColor: 'color-mix(in srgb, var(--color-border) 92%, transparent)',
+                                  background: 'color-mix(in srgb, var(--color-background) 94%, var(--color-card) 6%)',
+                                  boxShadow: '0 24px 52px rgba(0, 0, 0, 0.24)',
                                 }}
                               >
                                 <p className="text-[12.5px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">
@@ -1156,7 +1156,7 @@ export function DetailPage() {
                                 {commit.bullets.length > 0 && (
                                   <div className="mt-2 space-y-1">
                                     {commit.bullets.map((line, idx) => (
-                                      <div key={`${commit.hash}-b-${idx}`} className="flex items-start gap-1.5 text-[11.5px] leading-5 text-[color:var(--color-foreground)]/90">
+                                      <div key={`${commit.hash}-b-${idx}`} className="flex items-start gap-1.5 text-[11.5px] leading-5 text-[color:var(--color-foreground)]">
                                         <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--color-muted-foreground)]/70" />
                                         <span className="min-w-0 break-words">{line.replace(/^-+\s*/, '')}</span>
                                       </div>
