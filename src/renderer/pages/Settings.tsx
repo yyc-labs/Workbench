@@ -188,8 +188,8 @@ function RuntimePanel({
   )
 
   const classifyManagedProcess = (item: ManagedProcessSnapshot): 'tmux' | 'project' | 'idle' => {
-    if (item.backend === 'tmux') return 'tmux'
     if (item.processId.includes('::toolbox')) return 'idle'
+    if (item.backend === 'tmux') return 'tmux'
     return 'project'
   }
 
