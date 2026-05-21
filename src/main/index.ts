@@ -13,7 +13,13 @@ import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
-import type { Capability, AppConfig, RuntimeDiagnostics } from '../shared/types'
+import type {
+  Capability,
+  AppConfig,
+  RuntimeDiagnostics,
+  TerminalProcessInventory,
+  TerminalStopAllResult,
+} from '../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
@@ -923,6 +929,50 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, sessionName: string) => {
     return tmuxManager.killSession(sessionName)
+  })
+
+  ipcMain.handle(IPC.TERMINAL_LIST_ALL, async (): Promise<TerminalProcessInventory> => {
+    const managedProcesses = processManager?.listManagedProcesses() ?? []
+    const tmuxSessions = bootCapability?.hasTmux
+      ? await tmuxManager.listLauncherSessions()
+      : []
+    return {
+      checkedAt: Date.now(),
+      managedProcesses,
+      tmuxSessions,
+    }
+  })
+
+  ipcMain.handle(IPC.TERMINAL_STOP_ALL, async (): Promise<TerminalStopAllResult> => {
+    const managedStopped = processManager?.stopAllWithCount() ?? 0
+    const allTmuxSessions = bootCapability?.hasTmux
+      ? await tmuxManager.listLauncherSessions()
+      : []
+    const tmuxSessionNames = allTmuxSessions.map((s) => s.sessionName).filter(Boolean)
+
+    if (tmuxSessionNames.length === 0) {
+      return {
+        managedStopped,
+        tmuxKilled: 0,
+        tmuxSkipped: 0,
+      }
+    }
+
+    await tmuxManager.killSessions(tmuxSessionNames)
+    const after = bootCapability?.hasTmux ? await tmuxManager.listLauncherSessions() : []
+    const afterSet = new Set(after.map((s) => s.sessionName))
+    let tmuxKilled = 0
+    let tmuxSkipped = 0
+    for (const name of tmuxSessionNames) {
+      if (afterSet.has(name)) tmuxSkipped += 1
+      else tmuxKilled += 1
+    }
+
+    return {
+      managedStopped,
+      tmuxKilled,
+      tmuxSkipped,
+    }
   })
 
 }

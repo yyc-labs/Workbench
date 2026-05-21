@@ -2,7 +2,7 @@ import { spawn as spawnChild, type ChildProcess } from 'child_process'
 import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
-import type { BackendMode, Capability, PtySize } from '../shared/types'
+import type { BackendMode, Capability, ManagedProcessSnapshot, PtySize } from '../shared/types'
 import { wslBridge } from './wsl-bridge'
 import { tmuxManager, getSessionName } from './tmux-manager'
 import { ResizeController } from './resize-controller'
@@ -108,6 +108,14 @@ class ProcessManager {
     }
   }
 
+  stopAllWithCount(): number {
+    const ids = [...this.processes.keys()]
+    for (const processId of ids) {
+      this.stop(processId)
+    }
+    return ids.length
+  }
+
   sendInput(projectId: string, data: string): void {
     const managed = this.processes.get(projectId)
     if (!managed) return
@@ -128,6 +136,36 @@ class ProcessManager {
 
   isRunning(projectId: string): boolean {
     return this.processes.has(projectId)
+  }
+
+  listManagedProcesses(): ManagedProcessSnapshot[] {
+    const result: ManagedProcessSnapshot[] = []
+
+    for (const [processId, managed] of this.processes.entries()) {
+      if (managed.backend === 'spawn') {
+        const spawnManaged = managed as SpawnManagedProcess
+        result.push({
+          processId,
+          projectId: spawnManaged.projectId,
+          backend: spawnManaged.backend,
+          pid: spawnManaged.child.pid ?? null,
+          startTime: spawnManaged.startTime,
+        })
+        continue
+      }
+
+      const ptyManaged = managed as PtyManagedProcess
+      result.push({
+        processId,
+        projectId: ptyManaged.projectId,
+        backend: ptyManaged.backend,
+        pid: null,
+        startTime: ptyManaged.startTime,
+        sessionName: ptyManaged.sessionName,
+      })
+    }
+
+    return result
   }
 
   // ── PTY helpers ─────────────────────────────────────────
@@ -338,7 +376,7 @@ class ProcessManager {
   }
 
   private stopPty(managed: PtyManagedProcess): boolean {
-    const { pty, projectId, backend } = managed
+    const { pty, projectId } = managed
 
     // Graceful Ctrl+C
     try { pty.write('\x03') } catch { /* dead */ }

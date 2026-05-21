@@ -82,6 +82,12 @@ const api = {
   killTmuxSession: (sessionName: string) =>
     ipcRenderer.invoke(IPC.TMUX_KILL_SESSION, sessionName),
 
+  listTerminalProcesses: () =>
+    ipcRenderer.invoke(IPC.TERMINAL_LIST_ALL),
+
+  stopAllTerminalProcesses: () =>
+    ipcRenderer.invoke(IPC.TERMINAL_STOP_ALL),
+
   startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') =>
     ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, cli),
 

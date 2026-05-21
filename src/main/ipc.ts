@@ -19,6 +19,8 @@ export const IPC = {
   WSL_GET_CAPABILITY: 'wsl:getCapability',
   TMUX_LIST_SESSIONS: 'tmux:list-sessions',
   TMUX_KILL_SESSION: 'tmux:kill-session',
+  TERMINAL_LIST_ALL: 'terminal:list-all',
+  TERMINAL_STOP_ALL: 'terminal:stop-all',
   RUNTIME_START: 'runtime:start',
   RUNTIME_DIAGNOSTICS: 'runtime:diagnostics',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
