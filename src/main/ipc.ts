@@ -23,6 +23,7 @@ export const IPC = {
   RUNTIME_DIAGNOSTICS: 'runtime:diagnostics',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',
+  SHELL_OPEN_PATH_TERMINAL: 'shell:openPathTerminal',
   SHELL_OPEN_FOLDER: 'shell:openFolder',
   SHELL_OPEN_VSCODE: 'shell:openVsCode',
 } as const

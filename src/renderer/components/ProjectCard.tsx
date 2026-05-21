@@ -219,6 +219,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onOpenFolder={() => window.electronAPI.openFolder(project.path)}
+          onOpenPathTerminal={async () => {
+            await window.electronAPI.openPathTerminal(project.path)
+          }}
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={() => removeProject(project.id)}

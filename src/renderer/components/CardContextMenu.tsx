@@ -30,6 +30,7 @@ interface CardContextMenuProps {
   onStartProject: () => void | Promise<void>
   onStopProject: () => void | Promise<void>
   onOpenFolder: () => void | Promise<void>
+  onOpenPathTerminal: () => void | Promise<void>
   onOpenVsCode: () => void | Promise<void>
   onTogglePin?: () => void | Promise<void>
   onEditMetadata?: () => void | Promise<void>
@@ -67,6 +68,7 @@ export function CardContextMenu({
   onStartProject,
   onStopProject,
   onOpenFolder,
+  onOpenPathTerminal,
   onOpenVsCode,
   onTogglePin,
   onEditMetadata,
@@ -157,6 +159,13 @@ export function CardContextMenu({
           icon: <FolderOpen className="w-4 h-4" />,
           show: true,
           action: onOpenFolder,
+          iconColorClass: 'text-[color:var(--color-muted-foreground)]',
+        },
+        {
+          label: '打开当前目录终端',
+          icon: <Terminal className="w-4 h-4" />,
+          show: true,
+          action: onOpenPathTerminal,
           iconColorClass: 'text-[color:var(--color-muted-foreground)]',
         },
         {

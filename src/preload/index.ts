@@ -98,6 +98,9 @@ const api = {
       .catch((e) => { console.error('[preload.openTerminal] IPC rejected', e); throw e })
   },
 
+  openPathTerminal: (folderPath: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_PATH_TERMINAL, folderPath),
+
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {

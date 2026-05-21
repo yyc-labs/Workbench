@@ -96,6 +96,7 @@ declare global {
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
+      openPathTerminal: (folderPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
       runAiCommit: (

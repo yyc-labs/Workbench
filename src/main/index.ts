@@ -474,6 +474,45 @@ function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
   child.unref()
 }
 
+function openTerminalAtPath(folderPath: string): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const wslTarget = resolveWslVsCodeTarget(folderPath)
+    if (process.platform === 'win32' && wslTarget) {
+      const child = spawn(
+        'wt.exe',
+        ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath],
+        {
+          detached: true,
+          stdio: 'ignore',
+        }
+      )
+
+      child.on('error', (err) => {
+        console.error('[path-terminal] spawn wsl terminal failed:', err.message)
+        resolve(false)
+      })
+
+      child.on('spawn', () => resolve(true))
+      child.unref()
+      return
+    }
+
+    const localPath = resolveLocalVsCodePath(folderPath)
+    const child = spawn('wt.exe', ['-d', localPath], {
+      detached: true,
+      stdio: 'ignore',
+    })
+
+    child.on('error', (err) => {
+      console.error('[path-terminal] spawn local terminal failed:', err.message)
+      resolve(false)
+    })
+
+    child.on('spawn', () => resolve(true))
+    child.unref()
+  })
+}
+
 async function diagnoseRuntime(): Promise<RuntimeDiagnostics> {
   const scriptPath = resolvedRuntimeLauncherScript()
   const issues: string[] = []
@@ -858,6 +897,10 @@ function registerIpcHandlers(): void {
 
       child.unref()
     })
+  })
+
+  ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string) => {
+    return openTerminalAtPath(folderPath)
   })
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {

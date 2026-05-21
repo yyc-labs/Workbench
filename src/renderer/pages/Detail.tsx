@@ -408,7 +408,6 @@ export function DetailPage() {
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
-  const recentCommitPanelRef = useRef<HTMLDivElement | null>(null)
   const flowViewportReadyRef = useRef(false)
   const flowInitialFocusDoneRef = useRef(false)
   const flowLastFocusedStepRef = useRef<AiStepKey | null>(null)
@@ -549,9 +548,7 @@ export function DetailPage() {
   useEffect(() => {
     if (!activeCommitHash) return
 
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as globalThis.Node
-      if (recentCommitPanelRef.current?.contains(target)) return
+    const onPointerDown = () => {
       setActiveCommitHash(null)
     }
 
@@ -1092,7 +1089,6 @@ export function DetailPage() {
                   </div>
 
                   <div
-                    ref={recentCommitPanelRef}
                     className="rounded-[16px] border px-4 py-3 surface-card"
                     style={{
                       borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)',
@@ -1187,7 +1183,7 @@ export function DetailPage() {
             </div>
             </div>
           </aside>
-          <section className="min-h-0 min-w-0 overflow-y-auto px-3 pt-1">
+          <section className="min-h-0 min-w-0 overflow-y-auto px-3 pt-1 pb-6">
             <div className="space-y-6">
             <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
               {/* <div
