@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Play,
@@ -92,6 +92,33 @@ function getToneBorderColor(tone: MenuTone = 'default') {
   }
 }
 
+function getClampedMenuPosition({
+  x,
+  y,
+  menuWidth,
+  menuHeight,
+  viewportPadding,
+  pointerGap,
+}: {
+  x: number
+  y: number
+  menuWidth: number
+  menuHeight: number
+  viewportPadding: number
+  pointerGap: number
+}) {
+  const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
+  const menuLeft = Math.min(Math.max(viewportPadding, x), maxLeft)
+  const spaceBelow = window.innerHeight - y - viewportPadding - pointerGap
+  const spaceAbove = y - viewportPadding - pointerGap
+  const opensUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow
+  const preferredTop = opensUpward ? y - menuHeight - pointerGap : y + pointerGap
+  const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
+  const menuTop = Math.min(Math.max(viewportPadding, preferredTop), maxTop)
+
+  return { menuLeft, menuTop, opensUpward }
+}
+
 export function CardContextMenu({
   x,
   y,
@@ -114,6 +141,9 @@ export function CardContextMenu({
   onEditMetadata,
   onRemoveProject,
 }: CardContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [measuredMenuHeight, setMeasuredMenuHeight] = useState<number | null>(null)
+
   const handleClick = useCallback(
     async (action: () => void | Promise<void>) => {
       await action()
@@ -234,19 +264,50 @@ export function CardContextMenu({
   const dangerActions = dangerActionItems.filter((item) => item.show !== false)
 
   const viewportPadding = 10
+  const pointerGap = 8
   const menuWidth = Math.min(372, Math.max(300, window.innerWidth - viewportPadding * 2))
   const estimatedMenuHeight = 218 + (utilityActions.length > 0 ? 44 : 0) + (dangerActions.length > 0 ? 44 : 0)
-  const menuLeft = Math.min(
-    Math.max(viewportPadding, x),
-    Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
-  )
-  const menuTop = Math.min(
-    Math.max(viewportPadding, y),
-    Math.max(viewportPadding, window.innerHeight - estimatedMenuHeight - viewportPadding)
+  const menuHeight = measuredMenuHeight ?? estimatedMenuHeight
+  const { menuLeft, menuTop, opensUpward } = getClampedMenuPosition({
+    x,
+    y,
+    menuWidth,
+    menuHeight,
+    viewportPadding,
+    pointerGap,
+  })
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current
+    if (!menu) return
+
+    const nextHeight = Math.ceil(menu.getBoundingClientRect().height)
+    setMeasuredMenuHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight))
+  }, [dangerActions.length, utilityActions.length, isRuntimeActive, isDevRunning, isOpeningTerminal, currentCli])
+
+  const dangerActionsBlock = dangerActions.length > 0 && (
+    <div
+      className={`grid gap-1.5 border-[color:var(--color-border)] ${
+        opensUpward ? 'border-b pb-2' : 'border-t pt-2'
+      }`}
+      style={{ gridTemplateColumns: `repeat(${dangerActions.length}, minmax(0, 1fr))` }}
+    >
+      {dangerActions.map((item) => (
+        <button
+          key={item.label}
+          className="group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)]"
+          onClick={() => { void handleClick(item.action) }}
+        >
+          <span className="shrink-0">{item.icon}</span>
+          <span className="truncate">{item.label}</span>
+        </button>
+      ))}
+    </div>
   )
 
   return createPortal(
     <div
+      ref={menuRef}
       className="card-enter fixed z-[9998] rounded-[24px] p-2"
       style={{
         top: menuTop,
@@ -263,8 +324,10 @@ export function CardContextMenu({
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {opensUpward && dangerActionsBlock}
+
       <div
-        className="relative overflow-hidden rounded-[18px] border px-3 py-2.5"
+        className={`relative overflow-hidden rounded-[18px] border px-3 py-2.5 ${opensUpward && dangerActions.length > 0 ? 'mt-2' : ''}`}
         style={{
           borderColor: 'color-mix(in srgb, var(--color-border) 84%, transparent)',
           // background:
@@ -374,23 +437,7 @@ export function CardContextMenu({
         </div>
       )}
 
-      {dangerActions.length > 0 && (
-        <div
-          className="mt-2 grid gap-1.5 border-t border-[color:var(--color-border)] pt-2"
-          style={{ gridTemplateColumns: `repeat(${dangerActions.length}, minmax(0, 1fr))` }}
-        >
-          {dangerActions.map((item) => (
-            <button
-              key={item.label}
-              className="group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)]"
-              onClick={() => { void handleClick(item.action) }}
-            >
-              <span className="shrink-0">{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {!opensUpward && dangerActionsBlock && <div className="mt-2">{dangerActionsBlock}</div>}
     </div>,
     document.body
   )
