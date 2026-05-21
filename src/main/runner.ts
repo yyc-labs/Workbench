@@ -77,7 +77,6 @@ class ProcessManager {
 
     switch (this.capability.backend) {
       case 'tmux':
-        return this.startWithTmux(projectId, command, cwd)
       case 'wsl-pty':
       case 'direct-pty':
         return this.startWithPty(projectId, command, cwd)
