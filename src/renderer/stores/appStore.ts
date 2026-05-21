@@ -23,6 +23,7 @@ const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode
 let initAppPromise: Promise<void> | null = null
 const MAX_TERMINAL_OUTPUT_CHARS = 1_000_000
 const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
+const PROCESS_URLS_STORAGE_KEY = 'launcher:process-urls:v1'
 
 function trimTerminalBuffer(text: string): string {
   if (text.length <= MAX_TERMINAL_OUTPUT_CHARS) return text
@@ -33,6 +34,35 @@ function collectUrlsFromText(text: string): string[] {
   const clean = text.replace(/\x1b\[[0-9;]*m/g, '')
   const matches = clean.match(URL_PATTERN)
   return matches ? [...new Set(matches)] : []
+}
+
+function normalizeProcessUrls(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== 'object') return {}
+  const result: Record<string, string[]> = {}
+  for (const [key, urls] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(urls)) continue
+    const normalized = urls.filter((item): item is string => typeof item === 'string').filter(Boolean)
+    if (normalized.length > 0) result[key] = [...new Set(normalized)]
+  }
+  return result
+}
+
+function loadPersistedProcessUrls(): Record<string, string[]> {
+  try {
+    const raw = localStorage.getItem(PROCESS_URLS_STORAGE_KEY)
+    if (!raw) return {}
+    return normalizeProcessUrls(JSON.parse(raw))
+  } catch {
+    return {}
+  }
+}
+
+function persistProcessUrls(urls: Record<string, string[]>): void {
+  try {
+    localStorage.setItem(PROCESS_URLS_STORAGE_KEY, JSON.stringify(urls))
+  } catch {
+    // ignore persistence failures
+  }
 }
 
 function fallbackProjectName(dirPath: string): string {
@@ -161,6 +191,8 @@ interface AppState {
   updateLastOpened: (projectId: string) => void
   clearProcessUrl: (projectId: string) => void
   loadTmuxSessions: () => Promise<void>
+  syncManagedProcesses: () => Promise<void>
+  rehydrateProcessUrlsFromStorage: () => void
   refreshSessions: () => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
@@ -212,7 +244,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tags: [],
   processes: {},
   terminalOutputs: {},
-  processUrls: {},
+  processUrls: loadPersistedProcessUrls(),
   config: { projects: [], theme: initialThemeMode },
   searchQuery: '',
   capability: null,
@@ -266,8 +298,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Load runtime entries (session names computed by main process via MD5)
     await get().loadRuntimeEntries()
 
-    // Initial session refresh (after state is set so projects are available)
+    // Initial runtime/session restore (after state is set so projects are available)
     await get().refreshSessions()
+    await get().syncManagedProcesses()
+    get().rehydrateProcessUrlsFromStorage()
     set({ isAppReady: true })
     })()
 
@@ -363,9 +397,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   removeProject: async (projectId: string) => {
-    set((state) => ({
-      projects: state.projects.filter((p) => p.id !== projectId),
-    }))
+    set((state) => {
+      const nextProcessUrls = { ...state.processUrls }
+      delete nextProcessUrls[projectId]
+      return {
+        projects: state.projects.filter((p) => p.id !== projectId),
+        processUrls: nextProcessUrls,
+      }
+    })
+    persistProcessUrls(get().processUrls)
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
 
@@ -586,7 +626,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }))
 
-    await window.electronAPI.startProcess(pid, command, project.path, resolvedUseWsl)
+    const started = await window.electronAPI.startProcess(pid, command, project.path, resolvedUseWsl)
+    if (!started) {
+      await get().syncManagedProcesses()
+    }
   },
 
   stopProject: async (projectId: string) => {
@@ -626,6 +669,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         processUrls: { ...state.processUrls, [projectId]: uniqueUrls },
       }
     })
+    persistProcessUrls(get().processUrls)
   },
 
   clearOutput: (projectId: string) => {
@@ -694,6 +738,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         [projectId]: [],
       },
     }))
+    persistProcessUrls(get().processUrls)
   },
 
   loadTmuxSessions: async () => {
@@ -701,6 +746,80 @@ export const useAppStore = create<AppState>((set, get) => ({
       const sessions = await window.electronAPI.listTmuxSessions()
       set({ tmuxSessions: sessions })
     } catch { /* tmux not available */ }
+  },
+
+  rehydrateProcessUrlsFromStorage: () => {
+    const validProjectIds = new Set(get().projects.map((p) => p.id))
+    const persisted = loadPersistedProcessUrls()
+    const filtered: Record<string, string[]> = {}
+    for (const [id, urls] of Object.entries(persisted)) {
+      if (!validProjectIds.has(id)) continue
+      if (urls.length === 0) continue
+      filtered[id] = urls
+    }
+    persistProcessUrls(filtered)
+    set((state) => ({
+      processUrls: {
+        ...filtered,
+        ...state.processUrls,
+      },
+    }))
+  },
+
+  syncManagedProcesses: async () => {
+    try {
+      const inventory = await window.electronAPI.listTerminalProcesses()
+      const projects = get().projects
+      if (projects.length === 0) return
+
+      const projectIdSet = new Set(projects.map((p) => p.id))
+      const runningByProject: Record<string, ProcessInfo> = {}
+
+      for (const item of inventory.managedProcesses) {
+        if (item.processId.includes('::toolbox')) continue
+        const resolvedProjectId = projectIdSet.has(item.processId)
+          ? item.processId
+          : (projectIdSet.has(item.projectId) ? item.projectId : null)
+        if (!resolvedProjectId) continue
+        if (item.backend === 'tmux') continue
+        runningByProject[resolvedProjectId] = {
+          pid: item.pid ?? null,
+          status: 'running',
+          startTime: item.startTime,
+          backend: item.backend,
+        }
+      }
+
+      if (Object.keys(runningByProject).length === 0) return
+      set((state) => ({
+        processes: {
+          ...state.processes,
+          ...runningByProject,
+        },
+      }))
+
+      // Recover first available http(s) endpoint from recent terminal buffer
+      // so Home card address survives renderer refresh.
+      set((state) => {
+        let changed = false
+        const nextUrls = { ...state.processUrls }
+        for (const projectId of Object.keys(runningByProject)) {
+          const existing = nextUrls[projectId] || []
+          if (existing.length > 0) continue
+          const output = state.terminalOutputs[projectId] || ''
+          if (!output) continue
+          const inferred = collectUrlsFromText(output)
+          if (inferred.length === 0) continue
+          nextUrls[projectId] = inferred
+          changed = true
+        }
+        if (!changed) return state
+        persistProcessUrls(nextUrls)
+        return { ...state, processUrls: nextUrls }
+      })
+    } catch {
+      // inventory unavailable; keep current local process state
+    }
   },
 
   refreshSessions: async () => {
