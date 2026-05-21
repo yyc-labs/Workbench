@@ -119,13 +119,11 @@ function MouseGestureNavigator() {
   const nextHintRef = useRef(hint)
   const suppressContextMenuRef = useRef(false)
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const cooldownUntilRef = useRef(0)
   const ACTIVATE_DISTANCE = 8
   const SAMPLE_MIN_DISTANCE = 6
   const MAX_POINTS = 96
   const HORIZONTAL_THRESHOLD = 72
   const ANGLE_RATIO = 1.25
-  const COOLDOWN_MS = 360
 
   useEffect(() => {
     const EMPTY_HINT: typeof hint = {
@@ -214,7 +212,6 @@ function MouseGestureNavigator() {
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return
-      if (performance.now() < cooldownUntilRef.current) return
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.startX = e.clientX
@@ -294,7 +291,6 @@ function MouseGestureNavigator() {
 
       if (hadGestureMovement && passed) {
         armSuppressContextMenu()
-        cooldownUntilRef.current = performance.now() + COOLDOWN_MS
         hideHintImmediately()
         if (dx < 0) {
           navigate(-1)

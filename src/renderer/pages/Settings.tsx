@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { RULES } from '../../shared/rules'
+import type {
+  BackendMode,
+  ManagedProcessSnapshot,
+  RuntimeEntry,
+  TerminalProcessInventory,
+  TmuxSessionInfo,
+} from '../../shared/types'
 import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon, Wrench, Bot } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -147,11 +154,15 @@ function RuntimePanel({
   onRuntimeLauncherScriptSave,
   runtimeKeepAliveOnQuit,
   onRuntimeKeepAliveToggle,
+  projects,
+  runtimeEntries,
 }: {
   runtimeLauncherScript: string
   onRuntimeLauncherScriptSave: (v: string) => Promise<void>
   runtimeKeepAliveOnQuit: boolean
   onRuntimeKeepAliveToggle: (enabled: boolean) => Promise<void>
+  projects: { id: string; name: string; path: string }[]
+  runtimeEntries: Record<string, RuntimeEntry>
 }) {
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
   const [diag, setDiag] = useState<{
@@ -162,10 +173,109 @@ function RuntimePanel({
     launcherScriptExecutable: boolean
   } | null>(null)
   const [loading, setLoading] = useState(false)
+  const [inventoryLoading, setInventoryLoading] = useState(false)
+  const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
+  const [stopAllLoading, setStopAllLoading] = useState(false)
+  const [stopSummary, setStopSummary] = useState<string | null>(null)
 
   useEffect(() => {
     setScriptPath(runtimeLauncherScript)
   }, [runtimeLauncherScript])
+
+  const projectNameMap = new Map(projects.map((p) => [p.id, p.name]))
+  const runtimeSessionProjectNameMap = new Map(
+    Object.values(runtimeEntries).map((entry) => [entry.sessionName, projectNameMap.get(entry.projectId) || entry.projectId])
+  )
+
+  const classifyManagedProcess = (item: ManagedProcessSnapshot): 'tmux' | 'project' | 'idle' => {
+    if (item.backend === 'tmux') return 'tmux'
+    if (item.processId.includes('::toolbox')) return 'idle'
+    return 'project'
+  }
+
+  const classifyTmuxSession = (
+    session: TmuxSessionInfo,
+    managedTmuxNames: Set<string>,
+    projectSessionNames: Set<string>
+  ): 'tmux' | 'project' | 'idle' => {
+    if (managedTmuxNames.has(session.sessionName)) return 'tmux'
+    if (projectSessionNames.has(session.sessionName)) return 'project'
+    if (session.sessionName.startsWith('lx_')) return 'project'
+    return 'idle'
+  }
+
+  const projectSessionNameSet = new Set(Object.values(runtimeEntries).map((entry) => entry.sessionName))
+
+  const refreshInventory = async () => {
+    setInventoryLoading(true)
+    try {
+      const data = await window.electronAPI.listTerminalProcesses()
+      setInventory(data)
+    } finally {
+      setInventoryLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshInventory()
+  }, [])
+
+  const managedTmuxNames = new Set(
+    (inventory?.managedProcesses || [])
+      .filter((p) => p.backend === 'tmux' && p.sessionName)
+      .map((p) => p.sessionName as string)
+  )
+
+  const projectManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project')
+  const tmuxManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'tmux')
+  const idleManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'idle')
+
+  const projectTmux = (inventory?.tmuxSessions || []).filter(
+    (s) => classifyTmuxSession(s, managedTmuxNames, projectSessionNameSet) === 'project'
+  )
+  const idleTmux = (inventory?.tmuxSessions || []).filter(
+    (s) => classifyTmuxSession(s, managedTmuxNames, projectSessionNameSet) === 'idle'
+  )
+
+  const closeManagedProcess = async (processId: string) => {
+    await window.electronAPI.stopProcess(processId)
+    await refreshInventory()
+  }
+
+  const closeTmuxSession = async (sessionName: string) => {
+    await window.electronAPI.killTmuxSession(sessionName)
+    await refreshInventory()
+  }
+
+  const closeAllTerminals = async () => {
+    setStopAllLoading(true)
+    setStopSummary(null)
+    try {
+      const result = await window.electronAPI.stopAllTerminalProcesses()
+      setStopSummary(
+        `已关闭普通终端 ${result.managedStopped} 个，tmux ${result.tmuxKilled} 个` +
+        (result.tmuxSkipped > 0 ? `（${result.tmuxSkipped} 个未关闭）` : '')
+      )
+      await refreshInventory()
+    } finally {
+      setStopAllLoading(false)
+    }
+  }
+
+  const backendLabel = (backend: BackendMode): string => {
+    if (backend === 'tmux') return 'tmux'
+    if (backend === 'wsl-pty') return 'wsl-pty'
+    if (backend === 'direct-pty') return 'direct-pty'
+    return 'spawn'
+  }
+
+  const formatSince = (ts: number): string => {
+    if (!ts) return '-'
+    const diff = Date.now() - ts
+    if (diff < 60_000) return `${Math.max(1, Math.floor(diff / 1000))}s`
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`
+    return `${Math.floor(diff / 3_600_000)}h`
+  }
 
   const runDiagnostics = async () => {
     setLoading(true)
@@ -248,6 +358,147 @@ function RuntimePanel({
             )}
           </div>
         )}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-medium text-[color:var(--color-foreground)]">Terminal Processes</h3>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+              onClick={() => void refreshInventory()}
+              disabled={inventoryLoading || stopAllLoading}
+            >
+              {inventoryLoading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-8 rounded-full px-3 text-xs"
+              onClick={() => void closeAllTerminals()}
+              disabled={stopAllLoading}
+            >
+              {stopAllLoading ? 'Stopping...' : 'Close All Terminals'}
+            </Button>
+          </div>
+        </div>
+        {stopSummary && (
+          <p className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">{stopSummary}</p>
+        )}
+        <div className="space-y-3">
+          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-[color:var(--color-foreground)]">项目启动终端</p>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{projectManaged.length + projectTmux.length}</span>
+            </div>
+            {projectManaged.length === 0 && projectTmux.length === 0 ? (
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">无</p>
+            ) : (
+              <div className="space-y-1.5">
+                {projectManaged.map((item) => (
+                  <div key={`m-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                      {projectNameMap.get(item.projectId) || item.projectId} · {backendLabel(item.backend)} · {formatSince(item.startTime)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => void closeManagedProcess(item.processId)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ))}
+                {projectTmux.map((item) => (
+                  <div key={`t-project-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                      {runtimeSessionProjectNameMap.get(item.sessionName) || item.sessionName} · tmux · {item.status}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => void closeTmuxSession(item.sessionName)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-[color:var(--color-foreground)]">tmux 终端</p>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{tmuxManaged.length}</span>
+            </div>
+            {tmuxManaged.length === 0 ? (
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">无</p>
+            ) : (
+              <div className="space-y-1.5">
+                {tmuxManaged.map((item) => (
+                  <div key={`tmux-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                      {item.sessionName || item.processId} · {formatSince(item.startTime)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => void closeManagedProcess(item.processId)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-[color:var(--color-foreground)]">可清理（无用）</p>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{idleManaged.length + idleTmux.length}</span>
+            </div>
+            {idleManaged.length === 0 && idleTmux.length === 0 ? (
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">无</p>
+            ) : (
+              <div className="space-y-1.5">
+                {idleManaged.map((item) => (
+                  <div key={`idle-m-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                      {item.processId} · {backendLabel(item.backend)} · {formatSince(item.startTime)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => void closeManagedProcess(item.processId)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ))}
+                {idleTmux.map((item) => (
+                  <div key={`idle-t-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                      {item.sessionName} · tmux · {item.status}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="h-7 rounded-full px-2 text-[11px]"
+                      onClick={() => void closeTmuxSession(item.sessionName)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            说明：toolbox 会话与未匹配项目的 tmux 会话会归类到“可清理（无用）”。
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -450,6 +701,8 @@ function AboutPanel() {
 export function SettingsPage() {
   const navigate = useNavigate()
   const config = useAppStore((s) => s.config)
+  const projects = useAppStore((s) => s.projects)
+  const runtimeEntries = useAppStore((s) => s.runtimeEntries)
   const setThemeConfig = useAppStore((s) => s.setTheme)
   const setRuntimeLauncherScript = useAppStore((s) => s.setRuntimeLauncherScript)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
@@ -497,6 +750,8 @@ export function SettingsPage() {
                   onRuntimeLauncherScriptSave={setRuntimeLauncherScript}
                   runtimeKeepAliveOnQuit={config.runtimeKeepAliveOnQuit ?? false}
                   onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
+                  projects={projects}
+                  runtimeEntries={runtimeEntries}
                 />
               )}
               {section === 'ai' && (

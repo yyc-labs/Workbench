@@ -83,6 +83,30 @@ export interface ProcessInfo {
   backend?: BackendMode
 }
 
+export interface ManagedProcessSnapshot {
+  /** Internal process key used by renderer store (projectId or projectId::toolbox). */
+  processId: string
+  /** Project id passed from renderer startProcess call. */
+  projectId: string
+  backend: BackendMode
+  pid: number | null
+  startTime: number
+  /** tmux session name when backend is tmux. */
+  sessionName?: string
+}
+
+export interface TerminalProcessInventory {
+  checkedAt: number
+  managedProcesses: ManagedProcessSnapshot[]
+  tmuxSessions: TmuxSessionInfo[]
+}
+
+export interface TerminalStopAllResult {
+  managedStopped: number
+  tmuxKilled: number
+  tmuxSkipped: number
+}
+
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'

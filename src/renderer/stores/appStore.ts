@@ -13,6 +13,8 @@ import type {
   ProjectFolder,
   ProjectTag,
   StartupDefaultFilter,
+  TerminalProcessInventory,
+  TerminalStopAllResult,
 } from '../../shared/types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
@@ -92,6 +94,8 @@ declare global {
       getCapability: () => Promise<Capability>
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
       killTmuxSession: (sessionName: string) => Promise<boolean>
+      listTerminalProcesses: () => Promise<TerminalProcessInventory>
+      stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
       startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
