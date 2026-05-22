@@ -13,7 +13,10 @@ import { capabilityManager } from './capability-manager'
 import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
+import { getAiCommitTask, upsertAiCommitTask, appendAiCommitTaskOutput } from './ai-commit-registry'
 import type {
+  AiCommitTaskSnapshot,
+  AiCommitRunOverride,
   Capability,
   AppConfig,
   RuntimeDiagnostics,
@@ -24,6 +27,7 @@ import type {
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+const activeAiCommitProjects = new Set<string>()
 
 type ThemeMode = AppConfig['theme']
 
@@ -44,17 +48,43 @@ function applyWindowBackground(theme: ThemeMode): void {
 }
 
 function sendAiCommitOutput(projectId: string, data: string): void {
+  appendAiCommitTaskOutput(projectId, data)
   mainWindow?.webContents.send(IPC.AI_COMMIT_OUTPUT, { projectId, data })
 }
 
 function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | 'error'): void {
+  const current = getAiCommitTask(projectId)
+  if (current) {
+    const now = Date.now()
+    upsertAiCommitTask({
+      ...current,
+      status,
+      updatedAt: now,
+      finishedAt: status === 'running' ? undefined : now,
+    })
+  }
   mainWindow?.webContents.send(IPC.AI_COMMIT_STATUS, { projectId, status })
 }
 
-interface AiCommitRunOverride {
-  split?: boolean
-  splitMaxBatches?: number
-  maxBullets?: number
+function markAiCommitInterruptedIfOrphan(projectId: string): AiCommitTaskSnapshot | undefined {
+  const task = getAiCommitTask(projectId)
+  if (!task) return undefined
+  if (task.status !== 'running') return task
+  if (activeAiCommitProjects.has(projectId)) return task
+
+  const now = Date.now()
+  const interruptedLine = '[AI Commit] previous task interrupted: app process exited before completion.\r\n'
+  const next = upsertAiCommitTask({
+    ...task,
+    status: 'error',
+    output: `${task.output || ''}${interruptedLine}`,
+    updatedAt: now,
+    finishedAt: now,
+  })
+
+  mainWindow?.webContents.send(IPC.AI_COMMIT_OUTPUT, { projectId, data: interruptedLine })
+  mainWindow?.webContents.send(IPC.AI_COMMIT_STATUS, { projectId, status: 'error' as const })
+  return next
 }
 
 interface RecentCommitInfo {
@@ -70,6 +100,26 @@ async function runAiCommit(
   projectPath: string,
   override?: AiCommitRunOverride
 ): Promise<boolean> {
+  const existing = markAiCommitInterruptedIfOrphan(projectId)
+  if (existing && existing.status === 'running') {
+    sendAiCommitOutput(projectId, '[AI Commit] skipped: a commit task is already running for this project.\r\n')
+    sendAiCommitStatus(projectId, 'running')
+    return true
+  }
+
+  const now = Date.now()
+  upsertAiCommitTask({
+    projectId,
+    projectPath,
+    runId: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+    status: 'running',
+    output: '',
+    startedAt: now,
+    updatedAt: now,
+    override,
+  })
+  activeAiCommitProjects.add(projectId)
+
   const config = loadConfig()
   const aiCfgRaw = config.aiCommit || {}
   const aiCfg = {
@@ -255,6 +305,7 @@ async function runAiCommit(
         child.on('error', (fallbackErr) => {
           sendAiCommitOutput(projectId, `[AI Commit] process error: ${fallbackErr.message}\r\n`)
           sendAiCommitStatus(projectId, 'error')
+          activeAiCommitProjects.delete(projectId)
           resolve(false)
         })
         child.on('close', (code) => {
@@ -269,12 +320,14 @@ async function runAiCommit(
           const ok = code === 0
           sendAiCommitOutput(projectId, `[AI Commit] finished with code ${code}\r\n`)
           sendAiCommitStatus(projectId, ok ? 'success' : 'error')
+          activeAiCommitProjects.delete(projectId)
           resolve(ok)
         })
         return
       }
       sendAiCommitOutput(projectId, `[AI Commit] process error: ${err.message}\r\n`)
       sendAiCommitStatus(projectId, 'error')
+      activeAiCommitProjects.delete(projectId)
       resolve(false)
     })
 
@@ -290,6 +343,7 @@ async function runAiCommit(
       const ok = code === 0
       sendAiCommitOutput(projectId, `[AI Commit] finished with code ${code}\r\n`)
       sendAiCommitStatus(projectId, ok ? 'success' : 'error')
+      activeAiCommitProjects.delete(projectId)
       resolve(ok)
     })
   })
@@ -780,6 +834,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string, override?: AiCommitRunOverride) => {
     return runAiCommit(projectId, projectPath, override)
+  })
+
+  ipcMain.handle(IPC.AI_COMMIT_GET_STATE, (_event, projectId: string): AiCommitTaskSnapshot | null => {
+    return markAiCommitInterruptedIfOrphan(projectId) ?? null
   })
 
   ipcMain.handle(IPC.GIT_GET_LATEST_COMMIT, async (_event, projectPath: string) => {

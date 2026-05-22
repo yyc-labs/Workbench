@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { arrayMove } from '@dnd-kit/sortable'
 import type {
+  AiCommitTaskSnapshot,
   ProjectInfo,
   ProcessInfo,
   AppConfig,
@@ -142,6 +143,7 @@ declare global {
         projectPath: string,
         override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
+      getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
       getLatestCommit: (projectPath: string) => Promise<{
         hash: string
         shortHash: string

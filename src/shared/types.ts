@@ -36,6 +36,26 @@ export interface AiCommitConfig {
   maxBullets?: number
 }
 
+export type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
+
+export interface AiCommitRunOverride {
+  split?: boolean
+  splitMaxBatches?: number
+  maxBullets?: number
+}
+
+export interface AiCommitTaskSnapshot {
+  projectId: string
+  projectPath: string
+  runId: string
+  status: Exclude<AiCommitStatus, 'idle'>
+  output: string
+  startedAt: number
+  updatedAt: number
+  finishedAt?: number
+  override?: AiCommitRunOverride
+}
+
 export interface ProjectDocLink {
   id: string
   title: string

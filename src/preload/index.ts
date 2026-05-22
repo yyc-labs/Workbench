@@ -84,6 +84,9 @@ const api = {
     override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
   ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath, override),
 
+  getAiCommitState: (projectId: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId),
+
   getLatestCommit: (projectPath: string) =>
     ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, projectPath),
 

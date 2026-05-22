@@ -34,8 +34,9 @@ import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { useAppStore } from '../stores/appStore'
+import type { AiCommitRunOverride, AiCommitStatus as SharedAiCommitStatus, AiCommitTaskSnapshot } from '../../shared/types'
 
-type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
+type AiCommitStatus = SharedAiCommitStatus
 type AiStepStatus = 'pending' | 'running' | 'success' | 'error'
 type RightPaneMode = 'flow' | 'raw'
 type AiStepKey = 'start' | 'stage' | 'ai' | 'message' | 'commit' | 'done'
@@ -54,6 +55,8 @@ interface LatestCommitInfo {
   committedAt: string
   bullets: string[]
 }
+
+type AiCommitRestoreResult = Pick<AiCommitTaskSnapshot, 'status' | 'output'>
 
 type AiFlowNodeData = {
   key: AiStepKey
@@ -384,6 +387,36 @@ function formatCommitDate(value: string): string {
   })
 }
 
+function parseFlowStepsFromOutput(output: string): AiStepState[] {
+  const lines = output
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return BASE_AI_STEPS
+  return lines.reduce((steps, line) => parseAiFlowLine(line, steps), BASE_AI_STEPS)
+}
+
+function restoreAiState(snapshot: AiCommitRestoreResult): {
+  status: AiCommitStatus
+  rawText: string
+  steps: AiStepState[]
+} {
+  const rawText = snapshot.output || ''
+  let steps = parseFlowStepsFromOutput(rawText)
+  if (snapshot.status === 'success') {
+    steps = applyStep(completePreviousSteps(steps, 'done'), 'done', 'success')
+  } else if (snapshot.status === 'error') {
+    const running = [...steps].reverse().find((s) => s.status === 'running')
+    steps = running ? applyStep(steps, running.key, 'error') : applyStep(steps, 'done', 'error')
+  }
+  return {
+    status: snapshot.status,
+    rawText,
+    steps,
+  }
+}
+
 export function DetailPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
@@ -485,6 +518,7 @@ export function DetailPage() {
     const api = window.electronAPI as unknown as {
       onAiCommitOutput?: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onAiCommitStatus?: (cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void) => () => void
+      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
     }
 
     if (typeof api.onAiCommitOutput !== 'function' || typeof api.onAiCommitStatus !== 'function') {
@@ -524,6 +558,26 @@ export function DetailPage() {
         }
       }
     })
+
+    void (async () => {
+      if (typeof api.getAiCommitState !== 'function') return
+      try {
+        const state = await api.getAiCommitState(projectId)
+        if (!state) return
+        const restored = restoreAiState({ status: state.status, output: state.output })
+        setAiCommitStatus(restored.status)
+        setAiRawText(restored.rawText)
+        setFlowSteps(restored.steps)
+        if (restored.rawText) {
+          useAppStore.getState().appendOutput(
+            toolProcessId,
+            `\r\n[AI Commit] restored persisted task (${restored.status})\r\n`
+          )
+        }
+      } catch {
+        // ignore restore failures
+      }
+    })()
 
     return () => {
       cleanupOutput()
@@ -613,7 +667,7 @@ export function DetailPage() {
     }
   }, [project?.path, aiCommitStatus])
 
-  const handleAiCommit = async (override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }) => {
+  const handleAiCommit = async (override?: AiCommitRunOverride) => {
     if (!projectId || !project) return
     if (aiCommitStatus === 'running') return
 
@@ -621,7 +675,7 @@ export function DetailPage() {
       runAiCommit?: (
         projectId: string,
         projectPath: string,
-        override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
+        override?: AiCommitRunOverride
       ) => Promise<boolean>
     }
 

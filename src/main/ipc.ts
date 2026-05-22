@@ -8,6 +8,7 @@ export const IPC = {
   PROCESS_EXIT: 'process:exit',
   PROCESS_RESIZE: 'process:resize',
   AI_COMMIT_RUN: 'ai-commit:run',
+  AI_COMMIT_GET_STATE: 'ai-commit:get-state',
   AI_COMMIT_OUTPUT: 'ai-commit:output',
   AI_COMMIT_STATUS: 'ai-commit:status',
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
