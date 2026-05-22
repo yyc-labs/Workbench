@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { RULES } from '../../shared/rules'
+import { projectDisplayName } from '../lib/projectDisplay'
+import { Terminal as AppTerminal } from '../components/Terminal'
 import type {
   BackendMode,
   ManagedProcessSnapshot,
@@ -9,7 +11,7 @@ import type {
   TerminalProcessInventory,
   TmuxSessionInfo,
 } from '../../shared/types'
-import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon, Wrench, Bot } from 'lucide-react'
+import { Palette, Database, Info, ChevronLeft, Monitor, Sun, Moon, Wrench, Bot, Terminal as TerminalIcon } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 
@@ -19,11 +21,16 @@ const THEME_OPTIONS = [
   { value: 'dark', label: 'Dark', icon: Moon },
 ] as const
 
-type Section = 'general' | 'runtime' | 'ai' | 'rules' | 'about'
+type Section = 'general' | 'runtime' | 'logs' | 'ai' | 'rules' | 'about'
 
 function clampSplitMaxBatches(value: number | undefined): number {
   if (typeof value !== 'number' || Number.isNaN(value)) return 4
   return Math.max(1, Math.min(12, Math.trunc(value)))
+}
+
+function clampMaxBullets(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 8
+  return Math.max(1, Math.min(20, Math.trunc(value)))
 }
 
 // ── Sidebar ──
@@ -38,6 +45,7 @@ function Sidebar({
   const items: { id: Section; label: string; icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }> }[] = [
     { id: 'general', label: 'General', icon: Palette },
     { id: 'runtime', label: 'Runtime', icon: Wrench },
+    { id: 'logs', label: 'Startup Logs', icon: TerminalIcon },
     { id: 'ai', label: 'AI Commit', icon: Bot },
     { id: 'rules', label: 'Rules', icon: Database },
     { id: 'about', label: 'About', icon: Info },
@@ -182,7 +190,7 @@ function RuntimePanel({
     setScriptPath(runtimeLauncherScript)
   }, [runtimeLauncherScript])
 
-  const projectNameMap = new Map(projects.map((p) => [p.id, p.name]))
+  const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
   const runtimeSessionProjectNameMap = new Map(
     Object.values(runtimeEntries).map((entry) => [entry.sessionName, projectNameMap.get(entry.projectId) || entry.projectId])
   )
@@ -206,18 +214,27 @@ function RuntimePanel({
 
   const projectSessionNameSet = new Set(Object.values(runtimeEntries).map((entry) => entry.sessionName))
 
-  const refreshInventory = async () => {
-    setInventoryLoading(true)
+  const refreshInventory = async (silent = false) => {
+    if (!silent) setInventoryLoading(true)
     try {
       const data = await window.electronAPI.listTerminalProcesses()
       setInventory(data)
     } finally {
-      setInventoryLoading(false)
+      if (!silent) setInventoryLoading(false)
     }
   }
 
   useEffect(() => {
     void refreshInventory()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshInventory(true)
+    }, 5000)
+    return () => {
+      window.clearInterval(timer)
+    }
   }, [])
 
   const managedTmuxNames = new Set(
@@ -504,6 +521,146 @@ function RuntimePanel({
   )
 }
 
+function StartupLogsPanel({
+  projects,
+}: {
+  projects: { id: string; name: string; path: string }[]
+}) {
+  const [inventoryLoading, setInventoryLoading] = useState(false)
+  const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
+  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
+
+  const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
+
+  const classifyManagedProcess = (item: ManagedProcessSnapshot): 'project' | 'other' => {
+    if (item.processId.includes('::toolbox')) return 'other'
+    if (item.backend === 'tmux') return 'other'
+    return 'project'
+  }
+
+  const refreshInventory = async (silent = false) => {
+    if (!silent) setInventoryLoading(true)
+    try {
+      const data = await window.electronAPI.listTerminalProcesses()
+      setInventory(data)
+    } finally {
+      if (!silent) setInventoryLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshInventory()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refreshInventory(true)
+    }, 5000)
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  const projectManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project')
+
+  useEffect(() => {
+    if (projectManaged.length === 0) {
+      setSelectedProcessId(null)
+      return
+    }
+    if (selectedProcessId && projectManaged.some((p) => p.processId === selectedProcessId)) return
+    setSelectedProcessId(projectManaged[0].processId)
+  }, [projectManaged, selectedProcessId])
+
+  const selectedManagedProcess = selectedProcessId
+    ? projectManaged.find((p) => p.processId === selectedProcessId) || null
+    : null
+
+  const backendLabel = (backend: BackendMode): string => {
+    if (backend === 'tmux') return 'tmux'
+    if (backend === 'wsl-pty') return 'wsl-pty'
+    if (backend === 'direct-pty') return 'direct-pty'
+    return 'spawn'
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <p className="section-label mb-3">Logs</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Startup Command Logs</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
+          Monitor all running non-tmux startup commands in one place. Useful for multi-service/script bootstrap projects.
+        </p>
+      </div>
+
+      <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="flex items-center justify-between mb-2 gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[color:var(--color-foreground)]">启动命令日志（非 tmux）</p>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+              实时显示当前项目启动命令输出，复用内置终端组件渲染。
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[color:var(--color-muted-foreground)] shrink-0">{projectManaged.length}</span>
+            <Button
+              variant="outline"
+              className="h-7 rounded-full px-2 text-[11px]"
+              onClick={() => void refreshInventory()}
+              disabled={inventoryLoading}
+            >
+              {inventoryLoading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </div>
+        </div>
+        {projectManaged.length === 0 ? (
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">暂无正在运行的非 tmux 项目终端。</p>
+        ) : (
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap gap-1.5">
+              {projectManaged.map((item) => {
+                const selected = selectedProcessId === item.processId
+                const label = `${projectNameMap.get(item.projectId) || item.projectId} · ${backendLabel(item.backend)}`
+                return (
+                  <button
+                    key={`log-tab-${item.processId}`}
+                    className={`px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
+                      selected
+                        ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
+                        : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                    style={{ borderColor: 'var(--color-border)' }}
+                    onClick={() => setSelectedProcessId(item.processId)}
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {selectedManagedProcess ? (
+              <div
+                className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)]"
+                style={{ borderColor: 'var(--color-border)' }}
+              >
+                <AppTerminal projectId={selectedManagedProcess.processId} variant="soft" />
+              </div>
+            ) : (
+              <div
+                className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)]"
+                style={{ borderColor: 'var(--color-border)' }}
+              >
+                请选择一个运行中的进程查看日志
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function AiCommitPanel({
   aiCommit,
   onSave,
@@ -516,6 +673,7 @@ function AiCommitPanel({
     wslPwshPath?: string
     split?: boolean
     splitMaxBatches?: number
+    maxBullets?: number
   }
   onSave: (v: {
     enabled?: boolean
@@ -525,6 +683,7 @@ function AiCommitPanel({
     wslPwshPath?: string
     split?: boolean
     splitMaxBatches?: number
+    maxBullets?: number
   }) => Promise<void>
 }) {
   const [enabled, setEnabled] = useState(Boolean(aiCommit.enabled ?? true))
@@ -534,6 +693,7 @@ function AiCommitPanel({
   const [wslPwshPath, setWslPwshPath] = useState(aiCommit.wslPwshPath || '/snap/bin/pwsh')
   const [split, setSplit] = useState(Boolean(aiCommit.split ?? false))
   const [splitMaxBatches, setSplitMaxBatches] = useState(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
+  const [maxBullets, setMaxBullets] = useState(String(clampMaxBullets(aiCommit.maxBullets)))
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -544,13 +704,16 @@ function AiCommitPanel({
     setWslPwshPath(aiCommit.wslPwshPath || '/snap/bin/pwsh')
     setSplit(Boolean(aiCommit.split ?? false))
     setSplitMaxBatches(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
-  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.wslPwshPath, aiCommit.split, aiCommit.splitMaxBatches])
+    setMaxBullets(String(clampMaxBullets(aiCommit.maxBullets)))
+  }, [aiCommit.enabled, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.wslPwshPath, aiCommit.split, aiCommit.splitMaxBatches, aiCommit.maxBullets])
 
   const handleSave = async () => {
     setSaving(true)
     try {
       const parsedSplitMaxBatches = Number.parseInt(splitMaxBatches.trim(), 10)
       const normalizedSplitMaxBatches = clampSplitMaxBatches(parsedSplitMaxBatches)
+      const parsedMaxBullets = Number.parseInt(maxBullets.trim(), 10)
+      const normalizedMaxBullets = clampMaxBullets(parsedMaxBullets)
       await onSave({
         enabled,
         apiBaseUrl: apiBaseUrl.trim(),
@@ -559,8 +722,10 @@ function AiCommitPanel({
         wslPwshPath: wslPwshPath.trim(),
         split,
         splitMaxBatches: normalizedSplitMaxBatches,
+        maxBullets: normalizedMaxBullets,
       })
       setSplitMaxBatches(String(normalizedSplitMaxBatches))
+      setMaxBullets(String(normalizedMaxBullets))
     } finally {
       setSaving(false)
     }
@@ -607,6 +772,20 @@ function AiCommitPanel({
             className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="4"
             disabled={!split}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">Max bullets per commit (1-20)</p>
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            step={1}
+            value={maxBullets}
+            onChange={(e) => setMaxBullets(e.target.value)}
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+            placeholder="8"
           />
         </div>
 
@@ -720,7 +899,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
       <header className="app-chrome flex min-h-[84px] items-center gap-4 px-8 py-4 shrink-0">
         <button
@@ -752,6 +931,11 @@ export function SettingsPage() {
                   onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
                   projects={projects}
                   runtimeEntries={runtimeEntries}
+                />
+              )}
+              {section === 'logs' && (
+                <StartupLogsPanel
+                  projects={projects}
                 />
               )}
               {section === 'ai' && (

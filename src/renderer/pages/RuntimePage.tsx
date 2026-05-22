@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
+import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import {
   ChevronLeft,
   Play,
@@ -65,6 +66,7 @@ export function RuntimePage() {
   const devStatus = useAppStore((s) => s.processes[projectId!]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[projectId!] || [])
   const isDevRunning = devStatus === 'running'
+  const isDevStopping = devStatus === 'stopping'
 
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
@@ -239,7 +241,7 @@ export function RuntimePage() {
 
   if (!project || !projectId) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center gap-4">
+      <div className="h-full flex flex-col items-center justify-center gap-4">
         <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Project not found</h2>
         <button
           className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary transition-colors"
@@ -253,7 +255,7 @@ export function RuntimePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {/* ── Header ── */}
       <header className="app-chrome flex min-h-[84px] items-center justify-between px-8 py-4 shrink-0">
         <div className="flex items-center gap-4 min-w-0">
@@ -266,9 +268,11 @@ export function RuntimePage() {
 
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] tracking-[-0.03em] truncate">
-              {project.name}
+              {projectDisplayName(project)}
             </h1>
-            <p className="mt-0.5 text-xs text-[color:var(--color-muted-foreground)] truncate">{project.path}</p>
+            <p className="mt-0.5 text-xs text-[color:var(--color-muted-foreground)] truncate" title={project.path}>
+              {middleTruncatePath(project.path)}
+            </p>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]/85 mt-0.5">
               Environment: {environmentLabel}
             </p>
@@ -321,22 +325,25 @@ export function RuntimePage() {
             </UrlPopover>
           )}
           <button
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${isDevRunning
-                ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${(isDevRunning || isDevStopping)
+                ? isDevStopping
+                  ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                  : 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
                 : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]'
               }`}
             style={
-              isDevRunning
+              isDevRunning || isDevStopping
                 ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
                 : undefined
             }
             onClick={() =>
-              isDevRunning ? stopProject(projectId) : startProject(projectId)
+              (isDevRunning || isDevStopping) ? (isDevStopping ? undefined : stopProject(projectId)) : startProject(projectId)
             }
+            disabled={isDevStopping}
           >
-            {isDevRunning ? (
+            {(isDevRunning || isDevStopping) ? (
               <>
-                <Square className="w-3 h-3" /> Stop Dev
+                {isDevStopping ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Square className="w-3 h-3" />} {isDevStopping ? 'Stopping...' : 'Stop Dev'}
               </>
             ) : (
               <>
@@ -614,7 +621,7 @@ export function RuntimePage() {
               </div>
               <div>
                 <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Type</p>
-                <p className="text-[color:var(--color-foreground)]">{project.type}</p>
+                <p className="text-[color:var(--color-foreground)]">{projectDisplayType(project) || 'unknown'}</p>
               </div>
               <div>
                 <p className="text-[11px] text-[color:var(--color-muted-foreground)] mb-0.5">Runtime</p>

@@ -25,11 +25,14 @@ import {
   Package,
   Play,
   Plus,
+  RefreshCw,
   Square,
   Trash2,
 } from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
+import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
+import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { useAppStore } from '../stores/appStore'
 
 type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
@@ -362,6 +365,11 @@ function clampSplitMaxBatches(value: number | undefined): number {
   return Math.max(1, Math.min(12, Math.trunc(value)))
 }
 
+function clampMaxBullets(value: number | undefined): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 8
+  return Math.max(1, Math.min(20, Math.trunc(value)))
+}
+
 function formatCommitDate(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -402,9 +410,13 @@ export function DetailPage() {
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
     String(clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches))
   )
+  const [quickMaxBullets, setQuickMaxBullets] = useState(
+    String(clampMaxBullets(aiCommitConfig?.maxBullets))
+  )
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
   const [docError, setDocError] = useState<string | null>(null)
+  const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -427,17 +439,20 @@ export function DetailPage() {
   const environment = project ? detectProjectEnvironment(project.path) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
   const isRunning = processStatus === 'running'
-  const isActive = isRunning
+  const isStopping = processStatus === 'stopping'
+  const isActive = isRunning || isStopping
   const isAiEnabled = aiCommitConfig?.enabled ?? true
   const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
   const defaultSplitMaxBatches = clampSplitMaxBatches(aiCommitConfig?.splitMaxBatches)
+  const defaultMaxBullets = clampMaxBullets(aiCommitConfig?.maxBullets)
   const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
+  const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
   const docLinks = project?.docLinks ?? []
   const defaultDocLink = docLinks[0]
 
   if (!project || !projectId) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center gap-4">
+      <div className="flex h-full flex-col items-center justify-center gap-4">
         <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Project not found</h2>
         <button
           className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary"
@@ -519,7 +534,8 @@ export function DetailPage() {
   useEffect(() => {
     setQuickSplit(defaultSplit)
     setQuickSplitMaxBatches(String(defaultSplitMaxBatches))
-  }, [defaultSplit, defaultSplitMaxBatches, projectId])
+    setQuickMaxBullets(String(defaultMaxBullets))
+  }, [defaultSplit, defaultSplitMaxBatches, defaultMaxBullets, projectId])
 
   useEffect(() => {
     if (!quickConfigOpen) return
@@ -597,7 +613,7 @@ export function DetailPage() {
     }
   }, [project?.path, aiCommitStatus])
 
-  const handleAiCommit = async (override?: { split?: boolean; splitMaxBatches?: number }) => {
+  const handleAiCommit = async (override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }) => {
     if (!projectId || !project) return
     if (aiCommitStatus === 'running') return
 
@@ -605,7 +621,7 @@ export function DetailPage() {
       runAiCommit?: (
         projectId: string,
         projectPath: string,
-        override?: { split?: boolean; splitMaxBatches?: number }
+        override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
     }
 
@@ -627,7 +643,7 @@ export function DetailPage() {
     if (override) {
       useAppStore.getState().appendOutput(
         toolProcessId,
-        `[AI Commit] quick override: split=${override.split ? 'on' : 'off'}, maxBatches=${override.splitMaxBatches ?? defaultSplitMaxBatches}\r\n`
+        `[AI Commit] quick override: split=${override.split ? 'on' : 'off'}, maxBatches=${override.splitMaxBatches ?? defaultSplitMaxBatches}, maxBullets=${override.maxBullets ?? defaultMaxBullets}\r\n`
       )
     }
     const ok = await api.runAiCommit(projectId, project.path, override)
@@ -640,6 +656,7 @@ export function DetailPage() {
     const override = {
       split: quickSplit,
       splitMaxBatches: quickSplitMaxBatchesNumber,
+      maxBullets: quickMaxBulletsNumber,
     }
     setQuickConfigOpen(false)
     await handleAiCommit(override)
@@ -650,6 +667,7 @@ export function DetailPage() {
       ...(aiCommitConfig || {}),
       split: quickSplit,
       splitMaxBatches: quickSplitMaxBatchesNumber,
+      maxBullets: quickMaxBulletsNumber,
     }
     await useAppStore.getState().setAiCommitConfig(nextConfig)
     setQuickConfigOpen(false)
@@ -817,7 +835,7 @@ export function DetailPage() {
   }, [flowSteps, aiCommitStatus, rightPaneMode])
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <header className="app-chrome flex min-h-[84px] shrink-0 items-center justify-between px-8 py-4">
         <div className="flex min-w-0 items-center gap-4">
           <button
@@ -828,8 +846,10 @@ export function DetailPage() {
           </button>
 
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{project.name}</h1>
-            <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]">{project.path}</p>
+            <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{projectDisplayName(project)}</h1>
+            <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
+              {middleTruncatePath(project.path)}
+            </p>
             <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
           </div>
 
@@ -837,11 +857,17 @@ export function DetailPage() {
             <div
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
                 ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                : isStopping
+                  ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                  : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
-              {isRunning ? 'Running' : 'Session Available'}
+              {isStopping ? (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              ) : (
+                <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
+              )}
+              {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Session Available'}
             </div>
           ) : (
             <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">Stopped</span>
@@ -863,20 +889,30 @@ export function DetailPage() {
 
           <button
             className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
-              ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+              ? isStopping
+                ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                : 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
               : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
               }`}
             style={
               isActive
-                ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
+                ? isStopping
+                  ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                  : { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
                 : undefined
             }
-            onClick={() => (isActive ? stopProject(projectId) : startProject(projectId))}
+            onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              setRunConfigPos({ x: e.clientX, y: e.clientY })
+            }}
+            disabled={isStopping}
+            title="左键执行当前动作，右键配置 Run 命令"
           >
             {isActive ? (
               <>
-                <Square className="h-3.5 w-3.5" />
-                Stop
+                {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+                {isStopping ? 'Stopping...' : 'Stop'}
               </>
             ) : (
               <>
@@ -907,7 +943,7 @@ export function DetailPage() {
                 e.preventDefault()
                 if (aiCommitStatus === 'running') return
                 const panelWidth = 260
-                const panelHeight = 220
+                const panelHeight = 320
                 const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
                 const y = Math.max(8, Math.min(e.clientY, window.innerHeight - panelHeight - 8))
                 setQuickConfigPos({ x, y })
@@ -966,8 +1002,41 @@ export function DetailPage() {
             />
           </div>
 
+          <div className="mb-3">
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Max bullets per commit</p>
+            <div className="mb-2 flex items-center gap-1.5">
+              {[8, 12, 16].map((value) => {
+                const active = quickMaxBulletsNumber === value
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      active
+                        ? 'bg-primary text-white'
+                        : 'border border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                    }`}
+                    onClick={() => setQuickMaxBullets(String(value))}
+                  >
+                    {value}
+                  </button>
+                )
+              })}
+            </div>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              step={1}
+              value={quickMaxBullets}
+              onChange={(e) => setQuickMaxBullets(e.target.value)}
+              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+              placeholder="8"
+            />
+          </div>
+
           <div className="mb-2 text-[10px] text-[color:var(--color-muted-foreground)]">
-            Default: Split {defaultSplit ? 'On' : 'Off'} · {defaultSplitMaxBatches}
+            Default: Split {defaultSplit ? 'On' : 'Off'} · {defaultSplitMaxBatches} · Bullets {defaultMaxBullets}
           </div>
 
           <div className="flex items-center gap-2">
@@ -986,6 +1055,15 @@ export function DetailPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {runConfigPos && (
+        <RunCommandConfigPopover
+          project={project}
+          x={runConfigPos.x}
+          y={runConfigPos.y}
+          onClose={() => setRunConfigPos(null)}
+        />
       )}
 
       <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-8 pt-7 sm:px-8">
@@ -1197,16 +1275,16 @@ export function DetailPage() {
               <div className="relative">
                 <p className="section-label">Workspace Snapshot</p>
                 <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">
-                  {project.name}
+                  {projectDisplayName(project)}
                 </h2>
                 <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
-                  {project.path}
+                  {middleTruncatePath(project.path)}
                 </p>
 
                 <div className="mt-5 space-y-3">
                   {/* <InfoCard label="Path" value={project.path} icon={Folder} /> */}
                   {/* <div className="grid grid-cols-2 gap-3">
-                    <InfoCard label="Type" value={project.type} icon={Code2} />
+                    <InfoCard label="Type" value={projectDisplayType(project) || 'unknown'} icon={Code2} />
                     <InfoCard label="Package Manager" value={project.packageManager || 'npm'} icon={Package} />
                   </div> */}
                   <div className="grid grid-cols-2 gap-3">

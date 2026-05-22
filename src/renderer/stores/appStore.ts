@@ -133,10 +133,14 @@ declare global {
       openPathTerminal: (folderPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
+      minimizeWindow: () => Promise<boolean>
+      toggleMaximizeWindow: () => Promise<boolean>
+      closeWindow: () => Promise<boolean>
+      isWindowMaximized: () => Promise<boolean>
       runAiCommit: (
         projectId: string,
         projectPath: string,
-        override?: { split?: boolean; splitMaxBatches?: number }
+        override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
       getLatestCommit: (projectPath: string) => Promise<{
         hash: string
@@ -150,6 +154,9 @@ declare global {
       ) => () => void
       onAiCommitStatus: (
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
+      ) => () => void
+      onWindowState: (
+        cb: (d: { isMaximized: boolean }) => void
       ) => () => void
     }
   }
@@ -195,6 +202,9 @@ interface AppState {
   rehydrateProcessUrlsFromStorage: () => void
   refreshSessions: () => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
+  setProjectCustomName: (projectId: string, customName?: string) => Promise<void>
+  setProjectCustomType: (projectId: string, customType?: string) => Promise<void>
+  setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setStartupDefaultFilter: (filter?: StartupDefaultFilter) => Promise<void>
   createFolder: (name: string, color?: string) => Promise<void>
@@ -215,6 +225,8 @@ interface AppState {
 function toSavedProjects(projects: ProjectInfo[]): AppConfig['projects'] {
   return projects.map((p) => ({
     path: p.path,
+    customName: p.customName,
+    customType: p.customType,
     customCommand: p.customCommand,
     pinned: p.pinned,
     lastOpened: p.lastOpened,
@@ -269,6 +281,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const ensured = project ?? createFallbackProject(saved.path)
       if (saved.customCommand) ensured.customCommand = saved.customCommand
+      if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
+      if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
       if (saved.pinned) ensured.pinned = saved.pinned
       if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
       if (saved.cli) ensured.cli = saved.cli
@@ -324,6 +338,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const ensured = project ?? createFallbackProject(saved.path)
       if (saved.customCommand) ensured.customCommand = saved.customCommand
+      if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
+      if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
       if (saved.pinned) ensured.pinned = saved.pinned
       if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
       if (saved.cli) ensured.cli = saved.cli
@@ -414,6 +430,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       projects: state.projects.map((p) =>
         p.id === projectId ? { ...p, cli } : p
       ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectCustomName: async (projectId: string, customName?: string) => {
+    const normalized = customName?.trim()
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? { ...project, customName: normalized || undefined }
+          : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectCustomType: async (projectId: string, customType?: string) => {
+    const normalized = customType?.trim()
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? { ...project, customType: normalized || undefined }
+          : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectCustomCommand: async (projectId: string, customCommand?: string) => {
+    set((state) => ({
+      projects: state.projects.map((project) => {
+        if (project.id !== projectId) return project
+        const normalized = customCommand?.trim()
+        const shouldClear = !normalized || normalized === project.command
+        return {
+          ...project,
+          customCommand: shouldClear ? undefined : normalized,
+        }
+      }),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
@@ -633,13 +688,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   stopProject: async (projectId: string) => {
+    set((state) => {
+      const existing = state.processes[projectId]
+      if (!existing) return state
+      return {
+        processes: {
+          ...state.processes,
+          [projectId]: { ...existing, status: 'stopping' },
+        },
+      }
+    })
+
     await window.electronAPI.stopProcess(projectId)
-    set((state) => ({
-      processes: {
-        ...state.processes,
-        [projectId]: { pid: null, status: 'stopped' },
-      },
-    }))
   },
 
   sendInput: (projectId: string, data: string) => {
