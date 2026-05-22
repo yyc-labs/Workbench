@@ -215,13 +215,7 @@ export function CardContextMenu({
       show: Boolean(onAiAutoCommit),
       action: onAiAutoCommit ?? (() => undefined),
       disabled: aiCommitStatus === 'running',
-      tone: aiCommitStatus === 'running'
-        ? 'warning'
-        : aiCommitStatus === 'error'
-          ? 'danger'
-          : aiCommitStatus === 'success'
-            ? 'success'
-            : 'primary',
+      tone: aiCommitStatus === 'error' ? 'danger' : 'default',
     },
   ]
   const primaryActions = primaryActionItems.filter((item) => item.show !== false)
