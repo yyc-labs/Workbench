@@ -9,7 +9,7 @@
   /* Surface */
   --color-card: rgba(255, 255, 255, 0.7);
   --color-card-foreground: #1d1d1f;
-  --color-popover: rgba(255, 255, 255, 0.86);
+  --color-popover: rgba(255, 255, 255, 0.94);
   --color-popover-foreground: #1d1d1f;
 
   /* Brand */
@@ -82,7 +82,7 @@
   /* Surface */
   --color-card: rgba(44, 44, 46, 0.72);
   --color-card-foreground: #f5f8ff;
-  --color-popover: rgba(44, 44, 46, 0.88);
+  --color-popover: rgba(44, 44, 46, 0.95);
   --color-popover-foreground: #f5f8ff;
 
   /* Brand */

@@ -173,7 +173,7 @@ function DetailDocumentationCard({
                   className="quiet-control h-10 min-w-0 flex-1 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <button
-                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-4 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
                   onClick={() => {
                     void onAddDocLink()
                   }}
