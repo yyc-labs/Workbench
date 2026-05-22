@@ -1,10 +1,12 @@
 import { memo, useState, useCallback } from 'react'
 import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen } from 'lucide-react'
+import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
+import { RunCommandConfigPopover } from './RunCommandConfigPopover'
+import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -25,6 +27,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const setProjectCli = useAppStore((s) => s.setProjectCli)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
+  const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
+  const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
 
   const currentCli: CliTool = project.cli || 'claude'
 
@@ -56,6 +60,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const togglePin = useAppStore((s) => s.togglePin)
   const removeProject = useAppStore((s) => s.removeProject)
   const isDevRunning = devStatus === 'running'
+  const isDevStopping = devStatus === 'stopping'
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
   const linkMenuItems = [
@@ -70,6 +75,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
 
@@ -130,7 +136,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
 
       <div className="relative z-10 flex-1 min-w-0">
         <div className="flex min-w-0 items-center gap-2.5">
-          <h3 className="text-[15px] font-medium text-[color:var(--color-foreground)] truncate">{project.name}</h3>
+          <h3 className="text-[15px] font-medium text-[color:var(--color-foreground)] truncate">{projectDisplayName(project)}</h3>
           {project.pinned && (
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-warning)]" title="Pinned" />
           )}
@@ -172,9 +178,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           </div>
         )}
         <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
-          <p className="truncate" title={project.path}>{project.path}</p>
+          <p className="min-w-0 flex-1 truncate" title={project.path}>{middleTruncatePath(project.path)}</p>
           <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
-          <span className="shrink-0 capitalize">{project.type}</span>
+          <span className="shrink-0 capitalize">{projectDisplayType(project) || 'unknown'}</span>
           {project.packageManager && (
             <>
               <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
@@ -209,6 +215,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
           isDevRunning={isDevRunning}
+          isDevStopping={isDevStopping}
           isOpeningTerminal={isOpeningTerminal}
           currentCli={currentCli}
           isPinned={project.pinned}
@@ -226,6 +233,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={() => removeProject(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
+          onConfigureRunCommand={() => setRunConfigPos({ x: menuPos.x, y: menuPos.y })}
         />
       )}
 
@@ -237,6 +245,17 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onClose={() => setMetaDialogOpen(false)}
           onAssignFolder={assignProjectFolder}
           onSetProjectTags={setProjectTags}
+          onSetProjectCustomName={setProjectCustomName}
+          onSetProjectCustomType={setProjectCustomType}
+        />
+      )}
+
+      {runConfigPos && (
+        <RunCommandConfigPopover
+          project={project}
+          x={runConfigPos.x}
+          y={runConfigPos.y}
+          onClose={() => setRunConfigPos(null)}
         />
       )}
 
@@ -264,19 +283,30 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             </button>
           </UrlPopover>
         )}
-        {isDevRunning ? (
+        {isDevRunning || isDevStopping ? (
           <button
-            className="h-8 px-3 text-xs rounded-full border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] flex items-center gap-1 font-medium transition-colors shrink-0"
+            className={`h-8 px-3 text-xs rounded-full border flex items-center gap-1 font-medium transition-colors shrink-0 ${
+              isDevStopping
+                ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                : 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+            }`}
             style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
-            onClick={(e) => { e.stopPropagation(); stopProject(project.id) }}
+            onClick={(e) => { e.stopPropagation(); if (!isDevStopping) stopProject(project.id) }}
+            disabled={isDevStopping}
           >
-            <Square className="h-3 w-3" />
-            <span className="hidden sm:inline">Stop</span>
+            {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
+            <span className="hidden sm:inline">{isDevStopping ? 'Stopping...' : 'Stop'}</span>
           </button>
         ) : (
           <button
             className="h-8 px-3.5 text-xs rounded-full bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
             onClick={(e) => { e.stopPropagation(); startProject(project.id) }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setRunConfigPos({ x: e.clientX, y: e.clientY })
+            }}
+            title="左键启动，右键配置 Run 命令"
           >
             <Play className="h-3 w-3" />
             <span className="hidden sm:inline">Run</span>

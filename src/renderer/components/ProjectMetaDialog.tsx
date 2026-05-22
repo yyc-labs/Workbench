@@ -4,6 +4,7 @@ import { Check, FolderTree, Tag, X } from 'lucide-react'
 import type { ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 
 interface ProjectMetaDialogProps {
   project: ProjectInfo
@@ -12,6 +13,8 @@ interface ProjectMetaDialogProps {
   onClose: () => void
   onAssignFolder: (projectId: string, folderId?: string) => Promise<void>
   onSetProjectTags: (projectId: string, tagIds: string[]) => Promise<void>
+  onSetProjectCustomName: (projectId: string, customName?: string) => Promise<void>
+  onSetProjectCustomType: (projectId: string, customType?: string) => Promise<void>
 }
 
 export function ProjectMetaDialog({
@@ -21,9 +24,13 @@ export function ProjectMetaDialog({
   onClose,
   onAssignFolder,
   onSetProjectTags,
+  onSetProjectCustomName,
+  onSetProjectCustomType,
 }: ProjectMetaDialogProps) {
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(project.folderId)
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(project.tagIds ?? [])
+  const [customName, setCustomName] = useState(project.customName ?? '')
+  const [customType, setCustomType] = useState(project.customType ?? '')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -50,6 +57,8 @@ export function ProjectMetaDialog({
   const handleSave = async () => {
     setSaving(true)
     try {
+      await onSetProjectCustomName(project.id, customName)
+      await onSetProjectCustomType(project.id, customType)
       await onAssignFolder(project.id, selectedFolderId)
       await onSetProjectTags(project.id, selectedTagIds)
       onClose()
@@ -77,7 +86,9 @@ export function ProjectMetaDialog({
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="section-label mb-1">Project Metadata</p>
-            <h2 className="truncate text-lg font-semibold text-[color:var(--color-foreground)]">{project.name}</h2>
+            <h2 className="truncate text-lg font-semibold text-[color:var(--color-foreground)]">
+              {projectDisplayName(project)}
+            </h2>
             <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]">{project.path}</p>
           </div>
           <button
@@ -89,6 +100,51 @@ export function ProjectMetaDialog({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        <section className="mb-5 space-y-3">
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">Title</p>
+              <button
+                type="button"
+                className="text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setCustomName('')}
+              >
+                Use default ({project.name})
+              </button>
+            </div>
+            <Input
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder={project.name}
+              className="h-9 rounded-[12px] px-3 text-sm"
+              disabled={saving}
+            />
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">Project Type</p>
+              <button
+                type="button"
+                className="text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setCustomType('')}
+              >
+                Use default ({project.type || 'unknown'})
+              </button>
+            </div>
+            <Input
+              value={customType}
+              onChange={(e) => setCustomType(e.target.value)}
+              placeholder={projectDisplayType(project) || 'unknown'}
+              className="h-9 rounded-[12px] px-3 text-sm"
+              disabled={saving}
+            />
+            <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
+              Auto-detected type falls back to <span className="font-mono">unknown</span>.
+            </p>
+          </div>
+        </section>
 
         <section className="mb-5">
           <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)]">

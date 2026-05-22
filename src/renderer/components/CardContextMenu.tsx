@@ -10,6 +10,7 @@ import {
   Zap,
   Bot,
   Pin,
+  PlayCircle,
   Trash2,
 } from 'lucide-react'
 import type { CliTool } from '../../shared/types'
@@ -20,6 +21,7 @@ interface CardContextMenuProps {
   onClose: () => void
   isRuntimeActive: boolean
   isDevRunning: boolean
+  isDevStopping: boolean
   isOpeningTerminal: boolean
   currentCli: CliTool
   isPinned?: boolean
@@ -34,6 +36,7 @@ interface CardContextMenuProps {
   onOpenVsCode: () => void | Promise<void>
   onTogglePin?: () => void | Promise<void>
   onEditMetadata?: () => void | Promise<void>
+  onConfigureRunCommand?: () => void | Promise<void>
   onRemoveProject?: () => void | Promise<void>
 }
 
@@ -125,6 +128,7 @@ export function CardContextMenu({
   onClose,
   isRuntimeActive,
   isDevRunning,
+  isDevStopping,
   isOpeningTerminal,
   currentCli,
   isPinned,
@@ -139,6 +143,7 @@ export function CardContextMenu({
   onOpenVsCode,
   onTogglePin,
   onEditMetadata,
+  onConfigureRunCommand,
   onRemoveProject,
 }: CardContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -173,7 +178,7 @@ export function CardContextMenu({
 
   const cliLabel = currentCli === 'codex' ? 'Codex' : 'Claude'
   const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} Runtime 已连接` : 'Runtime 未连接'
-  const devStatusLabel = isDevRunning ? 'Dev running' : 'Dev stopped'
+  const devStatusLabel = isDevStopping ? 'Dev stopping' : isDevRunning ? 'Dev running' : 'Dev stopped'
 
   const primaryActions: MenuAction[] = [
     {
@@ -189,11 +194,16 @@ export function CardContextMenu({
       tone: 'primary',
     },
     {
-      label: isDevRunning ? '停止项目' : '启动项目',
-      caption: isDevRunning ? '结束 dev 进程' : '运行开发服务',
-      icon: isDevRunning ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />,
-      action: isDevRunning ? onStopProject : onStartProject,
-      tone: isDevRunning ? 'danger' : 'success',
+      label: isDevStopping ? '停止中...' : isDevRunning ? '停止项目' : '启动项目',
+      caption: isDevStopping ? '等待进程退出' : isDevRunning ? '结束 dev 进程' : '运行开发服务',
+      icon: isDevStopping
+        ? <RefreshCw className="h-4 w-4 animate-spin" />
+        : isDevRunning
+          ? <Square className="h-4 w-4" />
+          : <Play className="h-4 w-4" />,
+      action: isDevRunning || isDevStopping ? onStopProject : onStartProject,
+      disabled: isDevStopping,
+      tone: isDevRunning || isDevStopping ? 'danger' : 'success',
     },
   ]
 
@@ -242,6 +252,13 @@ export function CardContextMenu({
       action: onEditMetadata ?? (() => undefined),
       tone: 'default',
     },
+    {
+      label: 'Run 命令',
+      icon: <PlayCircle className="h-3.5 w-3.5" />,
+      show: Boolean(onConfigureRunCommand),
+      action: onConfigureRunCommand ?? (() => undefined),
+      tone: 'primary',
+    },
   ]
   const utilityActions = utilityActionItems.filter((item) => item.show !== false)
 
@@ -283,7 +300,7 @@ export function CardContextMenu({
 
     const nextHeight = Math.ceil(menu.getBoundingClientRect().height)
     setMeasuredMenuHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight))
-  }, [dangerActions.length, utilityActions.length, isRuntimeActive, isDevRunning, isOpeningTerminal, currentCli])
+  }, [dangerActions.length, utilityActions.length, isRuntimeActive, isDevRunning, isDevStopping, isOpeningTerminal, currentCli])
 
   const dangerActionsBlock = dangerActions.length > 0 && (
     <div
@@ -358,7 +375,7 @@ export function CardContextMenu({
             </span>
             <span
               className={`rounded-full px-2 py-0.5 text-[10px] ${
-                isDevRunning
+                isDevRunning || isDevStopping
                   ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
                   : 'bg-[color:var(--color-secondary)] text-[color:var(--color-muted-foreground)]'
               }`}
