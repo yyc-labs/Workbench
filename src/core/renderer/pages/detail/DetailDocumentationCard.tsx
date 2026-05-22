@@ -1,4 +1,6 @@
-import { ExternalLink, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ExternalLink, Pencil, Plus, Settings2, Trash2, X } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { ProjectDocLink } from '../../../shared/types'
 
@@ -10,6 +12,7 @@ type DetailDocumentationCardProps = {
   setDocUrlInput: Dispatch<SetStateAction<string>>
   docError: string | null
   onAddDocLink: () => Promise<void>
+  onUpdateDocLink: (linkId: string, title: string, url: string) => Promise<boolean>
   onSetDefaultDocLink: (linkId: string) => Promise<void>
   onRemoveDocLink: (linkId: string) => Promise<void>
 }
@@ -22,12 +25,54 @@ function DetailDocumentationCard({
   setDocUrlInput,
   docError,
   onAddDocLink,
+  onUpdateDocLink,
   onSetDefaultDocLink,
   onRemoveDocLink,
 }: DetailDocumentationCardProps) {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [editingUrl, setEditingUrl] = useState('')
+  const defaultLink = docLinks[0]
+
+  useEffect(() => {
+    if (!settingsOpen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSettingsOpen(false)
+        setEditingLinkId(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [settingsOpen])
+
+  const startEdit = (link: ProjectDocLink) => {
+    setEditingLinkId(link.id)
+    setEditingTitle(link.title)
+    setEditingUrl(link.url)
+  }
+
+  const cancelEdit = () => {
+    setEditingLinkId(null)
+    setEditingTitle('')
+    setEditingUrl('')
+  }
+
+  const saveEdit = async () => {
+    if (!editingLinkId) return
+    const ok = await onUpdateDocLink(editingLinkId, editingTitle, editingUrl)
+    if (ok) {
+      cancelEdit()
+    }
+  }
+
   return (
-    <div className="rounded-[24px] p-6 surface-card">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <div className="rounded-[24px] p-5 surface-card">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="section-label">Documentation</p>
           <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
@@ -39,86 +84,214 @@ function DetailDocumentationCard({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-2">
-        <input
-          type="text"
-          value={docTitleInput}
-          onChange={(e) => setDocTitleInput(e.target.value)}
-          placeholder="Title (optional)"
-          className="quiet-control h-10 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
-        <input
-          type="text"
-          value={docUrlInput}
-          onChange={(e) => setDocUrlInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void onAddDocLink()
-          }}
-          placeholder="docs.example.com / https://..."
-          className="quiet-control h-10 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
+      <div className="space-y-2.5">
+        {defaultLink ? (
+          <button
+            className="quiet-control flex w-full min-w-0 items-center gap-2 rounded-[16px] px-4 py-3 text-left"
+            onClick={() => window.electronAPI.openExternal(defaultLink.url)}
+            title={defaultLink.url}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-[color:var(--color-foreground)]">{defaultLink.title}</p>
+              <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{defaultLink.url}</p>
+            </div>
+            <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+              Default
+            </span>
+            <ExternalLink className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />
+          </button>
+        ) : (
+          <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
+            No default documentation link.
+          </div>
+        )}
         <button
-          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary-hover"
-          onClick={() => {
-            void onAddDocLink()
-          }}
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+          onClick={() => setSettingsOpen(true)}
         >
-          <Plus className="h-3.5 w-3.5" />
-          Add Link
+          <Settings2 className="h-3.5 w-3.5" />
+          Link Settings
         </button>
       </div>
 
-      {docError && (
-        <p className="mt-2 text-xs text-[color:var(--color-destructive)]">
-          {docError}
-        </p>
-      )}
-
-      {docLinks.length === 0 ? (
-        <div className="mt-5 rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
-          No documentation links yet.
-        </div>
-      ) : (
-        <div className="mt-5 space-y-2.5">
-          {docLinks.map((link) => (
-            <div key={link.id} className="quiet-control flex items-center gap-2 rounded-[16px] px-4 py-3">
+      {settingsOpen && createPortal(
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center px-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/25 backdrop-blur-[1px]"
+            onClick={() => {
+              setSettingsOpen(false)
+              cancelEdit()
+            }}
+          />
+          <div
+            className="relative z-[1001] w-full max-w-[760px] rounded-[20px] border p-5"
+            style={{
+              background: 'var(--color-popover)',
+              borderColor: 'var(--color-border)',
+              boxShadow: 'var(--shadow-popover)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <p className="section-label mb-1">Documentation Links</p>
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                  Add, edit and manage default documentation link
+                </p>
+              </div>
               <button
-                className="min-w-0 flex-1 text-left"
-                onClick={() => window.electronAPI.openExternal(link.url)}
-                title={link.url}
-              >
-                <p className="truncate text-sm text-[color:var(--color-foreground)]">{link.title}</p>
-                <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{link.url}</p>
-              </button>
-              <button
-                className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-primary"
-                onClick={() => window.electronAPI.openExternal(link.url)}
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open
-              </button>
-              <button
-                className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                 onClick={() => {
-                  void onSetDefaultDocLink(link.id)
+                  setSettingsOpen(false)
+                  cancelEdit()
                 }}
-                disabled={docLinks[0]?.id === link.id}
-                title={docLinks[0]?.id === link.id ? 'Default link' : 'Set as default'}
+                title="Close"
               >
-                {docLinks[0]?.id === link.id ? 'Default' : 'Set Default'}
-              </button>
-              <button
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
-                onClick={() => {
-                  void onRemoveDocLink(link.id)
-                }}
-                title="Remove"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
-          ))}
-        </div>
+
+            <div className="mb-4 space-y-2">
+              <input
+                type="text"
+                value={docTitleInput}
+                onChange={(e) => setDocTitleInput(e.target.value)}
+                placeholder="Title (optional)"
+                className="quiet-control h-10 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={docUrlInput}
+                  onChange={(e) => setDocUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void onAddDocLink()
+                  }}
+                  placeholder="docs.example.com / https://..."
+                  className="quiet-control h-10 min-w-0 flex-1 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <button
+                  className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-4 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                  onClick={() => {
+                    void onAddDocLink()
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Link
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {docLinks.length === 0 ? (
+                <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
+                  No documentation links yet.
+                </div>
+              ) : (
+                docLinks.map((link) => {
+                  const isDefault = docLinks[0]?.id === link.id
+                  const isEditing = editingLinkId === link.id
+                  return (
+                    <div key={link.id} className="quiet-control rounded-[16px] px-4 py-3">
+                      {isEditing ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            placeholder="Title"
+                            className="quiet-control h-9 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+                          />
+                          <input
+                            type="text"
+                            value={editingUrl}
+                            onChange={(e) => setEditingUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="quiet-control h-9 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void saveEdit()
+                            }}
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-xs font-medium text-white hover:bg-primary-hover"
+                              onClick={() => {
+                                void saveEdit()
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                              onClick={cancelEdit}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => window.electronAPI.openExternal(link.url)}
+                            title={link.url}
+                          >
+                            <p className="truncate text-sm text-[color:var(--color-foreground)]">{link.title}</p>
+                            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{link.url}</p>
+                          </button>
+                          <button
+                            className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-primary"
+                            onClick={() => window.electronAPI.openExternal(link.url)}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                            Open
+                          </button>
+                          <button
+                            className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                            onClick={() => startEdit(link)}
+                            title="Edit"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Edit
+                          </button>
+                          <button
+                            className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => {
+                              void onSetDefaultDocLink(link.id)
+                            }}
+                            disabled={isDefault}
+                            title={isDefault ? 'Default link' : 'Set as default'}
+                          >
+                            {isDefault ? 'Default' : 'Set Default'}
+                          </button>
+                          <button
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
+                            onClick={() => {
+                              if (isEditing) cancelEdit()
+                              void onRemoveDocLink(link.id)
+                            }}
+                            title="Remove"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {docError && (
+              <p className="mt-3 text-xs text-[color:var(--color-destructive)]">
+                {docError}
+              </p>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )

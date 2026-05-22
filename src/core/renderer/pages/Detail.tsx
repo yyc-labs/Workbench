@@ -394,6 +394,43 @@ export function DetailPage() {
     await setProjectDocLinks(project.id, nextLinks)
   }
 
+  const handleUpdateDocLink = async (linkId: string, nextTitleInput: string, nextUrlInput: string): Promise<boolean> => {
+    if (!project) return false
+
+    const normalizedUrl = normalizeDocUrl(nextUrlInput)
+    if (!normalizedUrl) {
+      setDocError('请输入有效的 http/https URL')
+      return false
+    }
+
+    const duplicate = docLinks.some(
+      (link) => link.id !== linkId && link.url.toLowerCase() === normalizedUrl.toLowerCase()
+    )
+    if (duplicate) {
+      setDocError('该文档链接已存在')
+      return false
+    }
+
+    let title = nextTitleInput.trim()
+    if (!title) {
+      try {
+        title = new URL(normalizedUrl).hostname
+      } catch {
+        title = 'Documentation'
+      }
+    }
+
+    const nextLinks = docLinks.map((link) => (
+      link.id === linkId
+        ? { ...link, title, url: normalizedUrl }
+        : link
+    ))
+
+    await setProjectDocLinks(project.id, nextLinks)
+    setDocError(null)
+    return true
+  }
+
   const statusText =
     aiCommitStatus === 'running' ? 'Running' : aiCommitStatus === 'success' ? 'Success' : aiCommitStatus === 'error' ? 'Failed' : 'Idle'
   const statusClass =
@@ -780,6 +817,7 @@ export function DetailPage() {
                 setDocUrlInput={setDocUrlInput}
                 docError={docError}
                 onAddDocLink={handleAddDocLink}
+                onUpdateDocLink={handleUpdateDocLink}
                 onSetDefaultDocLink={handleSetDefaultDocLink}
                 onRemoveDocLink={handleRemoveDocLink}
               />
