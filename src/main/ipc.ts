@@ -28,4 +28,9 @@ export const IPC = {
   SHELL_OPEN_PATH_TERMINAL: 'shell:openPathTerminal',
   SHELL_OPEN_FOLDER: 'shell:openFolder',
   SHELL_OPEN_VSCODE: 'shell:openVsCode',
+  WINDOW_MINIMIZE: 'window:minimize',
+  WINDOW_TOGGLE_MAXIMIZE: 'window:toggle-maximize',
+  WINDOW_CLOSE: 'window:close',
+  WINDOW_IS_MAXIMIZED: 'window:is-maximized',
+  WINDOW_STATE: 'window:state',
 } as const

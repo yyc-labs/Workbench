@@ -26,10 +26,73 @@ interface SpawnManagedProcess {
   projectId: string
   startTime: number
   backend: 'spawn'
+  stdoutDecoder: ProcessOutputDecoder
+  stderrDecoder: ProcessOutputDecoder
+}
+
+class ProcessOutputDecoder {
+  private utf8 = new TextDecoder('utf-8', { fatal: false })
+  private gb18030 = new TextDecoder('gb18030', { fatal: false })
+  private pending: Uint8Array = new Uint8Array(0)
+  private usedGbFallback = false
+
+  decodeChunk(chunk: Buffer): string {
+    const input = this.mergePending(chunk)
+    if (input.length === 0) return ''
+
+    // Keep a short tail to avoid splitting multibyte chars across chunks.
+    const holdSize = Math.min(8, input.length)
+    const payload = input.subarray(0, input.length - holdSize)
+    this.pending = input.subarray(input.length - holdSize)
+
+    return this.decodeBuffer(payload)
+  }
+
+  flush(): string {
+    if (this.pending.length === 0) return ''
+    const tail = this.pending
+    this.pending = new Uint8Array(0)
+    return this.decodeBuffer(tail)
+  }
+
+  private mergePending(chunk: Buffer): Uint8Array {
+    const curr = new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+    if (this.pending.length === 0) return curr
+
+    const merged = new Uint8Array(this.pending.length + curr.length)
+    merged.set(this.pending, 0)
+    merged.set(curr, this.pending.length)
+    return merged
+  }
+
+  private decodeBuffer(bytes: Uint8Array): string {
+    if (bytes.length === 0) return ''
+
+    if (this.usedGbFallback) {
+      return this.gb18030.decode(bytes, { stream: true })
+    }
+
+    const utf8Text = this.utf8.decode(bytes, { stream: true })
+    if (!utf8Text.includes('�')) {
+      return utf8Text
+    }
+
+    const gbText = this.gb18030.decode(bytes, { stream: true })
+    const utf8BadCount = (utf8Text.match(/�/g) || []).length
+    const gbBadCount = (gbText.match(/�/g) || []).length
+
+    if (gbBadCount < utf8BadCount) {
+      this.usedGbFallback = true
+      return gbText
+    }
+
+    return utf8Text
+  }
 }
 
 class ProcessManager {
   private processes = new Map<string, PtyManagedProcess | SpawnManagedProcess>()
+  private stopping = new Set<string>()
   private resizeCtrls = new Map<string, ResizeController>()
   private outputWindow: BrowserWindow | null = null
   private capability: Capability
@@ -86,12 +149,24 @@ class ProcessManager {
   }
 
   stop(projectId: string): boolean {
+    if (this.stopping.has(projectId)) return true
+
     const managed = this.processes.get(projectId)
     if (!managed) return false
 
-    // Clean up resize controller
-    this.resizeCtrls.get(projectId)?.dispose()
-    this.resizeCtrls.delete(projectId)
+    this.stopping.add(projectId)
+
+    // Safety net: if child/pty never emits exit (rare but possible),
+    // unblock restart and sync UI state.
+    setTimeout(() => {
+      if (!this.stopping.has(projectId)) return
+      this.stopping.delete(projectId)
+      this.resizeCtrls.get(projectId)?.dispose()
+      this.resizeCtrls.delete(projectId)
+      this.processes.delete(projectId)
+      this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'stopped' })
+      this.send(IPC_CHANNELS.PROCESS_EXIT, { projectId, code: null })
+    }, 3500)
 
     if (managed.backend === 'spawn') {
       return this.stopSpawn(managed as SpawnManagedProcess)
@@ -299,6 +374,7 @@ class ProcessManager {
     })
 
     pty.onExit(({ exitCode }: { exitCode: number }) => {
+      this.stopping.delete(projectId)
       this.resizeCtrls.get(projectId)?.dispose()
       this.resizeCtrls.delete(projectId)
       this.processes.delete(projectId)
@@ -320,24 +396,38 @@ class ProcessManager {
       env: { ...process.env },
     })
 
-    const managed: SpawnManagedProcess = { child, projectId, startTime: Date.now(), backend: 'spawn' }
+    const stdoutDecoder = new ProcessOutputDecoder()
+    const stderrDecoder = new ProcessOutputDecoder()
+    const managed: SpawnManagedProcess = { child, projectId, startTime: Date.now(), backend: 'spawn', stdoutDecoder, stderrDecoder }
     this.processes.set(projectId, managed)
 
     child.stdout?.on('data', (data: Buffer) => {
-      this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: data.toString() })
+      const text = stdoutDecoder.decodeChunk(data)
+      if (text) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
     })
 
     child.stderr?.on('data', (data: Buffer) => {
-      this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: data.toString() })
+      const text = stderrDecoder.decodeChunk(data)
+      if (text) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
     })
 
     child.on('exit', (code) => {
+      this.stopping.delete(projectId)
+      const stdoutTail = stdoutDecoder.flush()
+      if (stdoutTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stdoutTail })
+      const stderrTail = stderrDecoder.flush()
+      if (stderrTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stderrTail })
       this.processes.delete(projectId)
       this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'stopped' })
       this.send(IPC_CHANNELS.PROCESS_EXIT, { projectId, code })
     })
 
     child.on('error', (err) => {
+      this.stopping.delete(projectId)
+      const stdoutTail = stdoutDecoder.flush()
+      if (stdoutTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stdoutTail })
+      const stderrTail = stderrDecoder.flush()
+      if (stderrTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stderrTail })
       this.processes.delete(projectId)
       this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: `Error: ${err.message}\n` })
       this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'error' })
@@ -352,7 +442,12 @@ class ProcessManager {
   private stopSpawn(managed: SpawnManagedProcess): boolean {
     const pid = managed.child.pid
     if (pid == null) {
+      this.stopping.delete(managed.projectId)
+      this.resizeCtrls.get(managed.projectId)?.dispose()
+      this.resizeCtrls.delete(managed.projectId)
       this.processes.delete(managed.projectId)
+      this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId: managed.projectId, status: 'stopped' })
+      this.send(IPC_CHANNELS.PROCESS_EXIT, { projectId: managed.projectId, code: null })
       return true
     }
 
@@ -375,7 +470,7 @@ class ProcessManager {
   }
 
   private stopPty(managed: PtyManagedProcess): boolean {
-    const { pty, projectId } = managed
+    const { pty } = managed
 
     // Graceful Ctrl+C
     try { pty.write('\x03') } catch { /* dead */ }
@@ -385,7 +480,6 @@ class ProcessManager {
       try { pty.kill('SIGTERM') } catch { /* already dead */ }
     }, 1500)
 
-    this.processes.delete(projectId)
     return true
   }
 

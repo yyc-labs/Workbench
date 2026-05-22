@@ -54,6 +54,7 @@ function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | '
 interface AiCommitRunOverride {
   split?: boolean
   splitMaxBatches?: number
+  maxBullets?: number
 }
 
 interface RecentCommitInfo {
@@ -77,6 +78,9 @@ async function runAiCommit(
     splitMaxBatches: typeof override?.splitMaxBatches === 'number'
       ? override.splitMaxBatches
       : aiCfgRaw.splitMaxBatches,
+    maxBullets: typeof override?.maxBullets === 'number'
+      ? override.maxBullets
+      : aiCfgRaw.maxBullets,
   }
   const wslPwshPath = (aiCfg.wslPwshPath || '').replace(/[\r\n]/g, '').trim() || '/snap/bin/pwsh'
   const splitEnabled = Boolean(aiCfg.split)
@@ -89,6 +93,15 @@ async function runAiCommit(
         : 4
     )
   )
+  const maxBullets = Math.max(
+    1,
+    Math.min(
+      20,
+      Number.isFinite(aiCfg.maxBullets)
+        ? Math.trunc(aiCfg.maxBullets as number)
+        : 8
+    )
+  )
   const scriptPs1Path = join(__dirname, '../../skills/auto-git-commit/scripts/auto_commit.ps1')
   const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
   const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(projectPath) : null
@@ -97,7 +110,7 @@ async function runAiCommit(
   sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
   sendAiCommitOutput(
     projectId,
-    `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}\r\n`
+    `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}, max bullets=${maxBullets}\r\n`
   )
 
   return new Promise<boolean>((resolve) => {
@@ -116,6 +129,7 @@ async function runAiCommit(
     if (splitEnabled) {
       windowsPsArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
     }
+    windowsPsArgs.push('-MaxBullets', String(maxBullets))
 
     if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
       windowsPsArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
@@ -153,6 +167,7 @@ async function runAiCommit(
       if (splitEnabled) {
         wslPwshArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
       }
+      wslPwshArgs.push('-MaxBullets', String(maxBullets))
       if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
         wslPwshArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
       }
@@ -665,6 +680,10 @@ function focusTerminalWindow(sessionName: string): void {
 
 function createWindow(): void {
   const config = loadConfig()
+  const windowIcon =
+    process.platform === 'win32'
+      ? join(__dirname, '../../icon/Y (2).ico')
+      : join(__dirname, '../../icon/Y.png')
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -672,7 +691,9 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: getWindowBackgroundColor(config.theme),
-    icon: join(__dirname, '../../icon/Y.png'),
+    icon: windowIcon,
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -683,6 +704,12 @@ function createWindow(): void {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized: true })
+  })
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized: false })
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -786,6 +813,30 @@ function registerIpcHandlers(): void {
 
     const localPath = resolveLocalVsCodePath(folderPath)
     spawnVsCode([localPath])
+  })
+
+  ipcMain.handle(IPC.WINDOW_MINIMIZE, () => {
+    mainWindow?.minimize()
+    return true
+  })
+
+  ipcMain.handle(IPC.WINDOW_TOGGLE_MAXIMIZE, () => {
+    if (!mainWindow) return false
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow.maximize()
+    }
+    return mainWindow.isMaximized()
+  })
+
+  ipcMain.handle(IPC.WINDOW_CLOSE, () => {
+    mainWindow?.close()
+    return true
+  })
+
+  ipcMain.handle(IPC.WINDOW_IS_MAXIMIZED, () => {
+    return mainWindow?.isMaximized() ?? false
   })
 
   ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async () => {

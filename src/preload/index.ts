@@ -63,13 +63,25 @@ const api = {
   openInVsCode: (folderPath: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_VSCODE, folderPath),
 
+  minimizeWindow: () =>
+    ipcRenderer.invoke(IPC.WINDOW_MINIMIZE),
+
+  toggleMaximizeWindow: () =>
+    ipcRenderer.invoke(IPC.WINDOW_TOGGLE_MAXIMIZE),
+
+  closeWindow: () =>
+    ipcRenderer.invoke(IPC.WINDOW_CLOSE),
+
+  isWindowMaximized: () =>
+    ipcRenderer.invoke(IPC.WINDOW_IS_MAXIMIZED),
+
   resizeTerminal: (projectId: string, cols: number, rows: number) =>
     ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
 
   runAiCommit: (
     projectId: string,
     projectPath: string,
-    override?: { split?: boolean; splitMaxBatches?: number }
+    override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
   ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath, override),
 
   getLatestCommit: (projectPath: string) =>
@@ -160,6 +172,17 @@ const api = {
     ) => cb(d)
     ipcRenderer.on(IPC.AI_COMMIT_STATUS, handler)
     return () => ipcRenderer.removeListener(IPC.AI_COMMIT_STATUS, handler)
+  },
+
+  onWindowState: (
+    cb: (data: { isMaximized: boolean }) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: { isMaximized: boolean }
+    ) => cb(d)
+    ipcRenderer.on(IPC.WINDOW_STATE, handler)
+    return () => ipcRenderer.removeListener(IPC.WINDOW_STATE, handler)
   },
 }
 

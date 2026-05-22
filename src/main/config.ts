@@ -25,6 +25,7 @@ const DEFAULT_CONFIG: AppConfig = {
     wslPwshPath: '/snap/bin/pwsh',
     split: false,
     splitMaxBatches: 4,
+    maxBullets: 8,
   },
 }
 

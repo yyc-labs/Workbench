@@ -14,7 +14,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 
-export type ProcessStatus = 'running' | 'stopped' | 'error'
+export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 
 export type CliTool = 'claude' | 'codex'
 export type StartupDefaultFilter =
@@ -33,6 +33,7 @@ export interface AiCommitConfig {
   wslPwshPath?: string
   split?: boolean
   splitMaxBatches?: number
+  maxBullets?: number
 }
 
 export interface ProjectDocLink {
@@ -59,7 +60,11 @@ export interface ProjectInfo {
   id: string
   path: string
   name: string
+  /** Optional user-defined display title; falls back to `name` when absent. */
+  customName?: string
   type: ProjectType
+  /** Optional user-defined display type; falls back to detected `type` when absent. */
+  customType?: string
   command: string
   customCommand?: string
   packageManager?: PackageManager
@@ -128,6 +133,10 @@ export interface AppConfig {
 
 export interface SavedProject {
   path: string
+  /** Optional user-defined display title; falls back to detected path basename when absent. */
+  customName?: string
+  /** Optional user-defined display type; falls back to detected type when absent. */
+  customType?: string
   customCommand?: string
   pinned?: boolean
   lastOpened?: number
