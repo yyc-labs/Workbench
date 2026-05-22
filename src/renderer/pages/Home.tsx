@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import type { ProjectInfo } from '../../shared/types'
 import { ProjectCard } from '../components/ProjectCard'
@@ -9,6 +9,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ScrollArea } from '../components/ui/scroll-area'
 import { detectProjectEnvironment, projectEnvironmentLabel, type ProjectEnvironment } from '../lib/projectEnvironment'
+import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import {
   FolderPlus,
   Search,
@@ -171,6 +172,7 @@ function DragOverlay() {
 // ── Main page ───────────────────────────────────────────────────
 
 export function HomePage() {
+  const location = useLocation()
   const projects = useAppStore((s) => s.projects)
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
@@ -199,6 +201,7 @@ export function HomePage() {
   const [classifierFilter, setClassifierFilter] = useState<ClassifierFilter>({ type: 'all' })
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
   const defaultFilterAppliedRef = useRef(false)
+  const lastGestureResetAtRef = useRef<number>(0)
   const isDragOverRef = useRef(false)
   const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastDragOverAtRef = useRef(0)
@@ -257,6 +260,35 @@ export function HomePage() {
 
     setClassifierFilter(defaultFilter)
   }, [config.startupDefaultFilter, folders, isAppReady, setStartupDefaultFilter, tags])
+
+  useEffect(() => {
+    const marker = (location.state as { gestureResetToStartupDefault?: number } | null)?.gestureResetToStartupDefault
+    if (!marker || marker === lastGestureResetAtRef.current) return
+    lastGestureResetAtRef.current = marker
+
+    setSearchQuery('')
+    setEnvFilter('all')
+
+    const defaultFilter = config.startupDefaultFilter
+    if (!defaultFilter) {
+      setClassifierFilter({ type: 'all' })
+      return
+    }
+
+    if (defaultFilter.type === 'folder') {
+      const exists = folders.some((folder) => folder.id === defaultFilter.folderId)
+      setClassifierFilter(exists ? defaultFilter : { type: 'all' })
+      return
+    }
+
+    if (defaultFilter.type === 'tag') {
+      const exists = tags.some((tag) => tag.id === defaultFilter.tagId)
+      setClassifierFilter(exists ? defaultFilter : { type: 'all' })
+      return
+    }
+
+    setClassifierFilter(defaultFilter)
+  }, [config.startupDefaultFilter, folders, location.state, setSearchQuery, tags])
 
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {
@@ -335,8 +367,10 @@ export function HomePage() {
     return projects.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
+        projectDisplayName(p).toLowerCase().includes(q) ||
         p.path.toLowerCase().includes(q) ||
-        p.type.toLowerCase().includes(q)
+        p.type.toLowerCase().includes(q) ||
+        projectDisplayType(p).toLowerCase().includes(q)
     )
   }, [projects, searchQuery])
 
@@ -375,7 +409,10 @@ export function HomePage() {
       case 'pinned':
         return envFilteredProjects.filter((p) => Boolean(p.pinned))
       case 'running':
-        return envFilteredProjects.filter((p) => processes[p.id]?.status === 'running')
+        return envFilteredProjects.filter((p) => {
+          const status = processes[p.id]?.status
+          return status === 'running' || status === 'stopping'
+        })
       case 'uncategorized':
         return envFilteredProjects.filter((p) => !p.folderId)
       case 'folder':
@@ -433,7 +470,11 @@ export function HomePage() {
     return {
       all: envFilteredProjects.length,
       pinned: envFilteredProjects.filter((p) => Boolean(p.pinned)).length,
-      running: envFilteredProjects.filter((p) => processes[p.id]?.status === 'running').length,
+      // Count stopping as running-like for UX continuity.
+      running: envFilteredProjects.filter((p) => {
+        const status = processes[p.id]?.status
+        return status === 'running' || status === 'stopping'
+      }).length,
       uncategorized: envFilteredProjects.filter((p) => !p.folderId).length,
       byFolder,
       byTag,
@@ -455,12 +496,12 @@ export function HomePage() {
 
   // ── Empty state ──
   if (!isAppReady) {
-    return <div className="h-screen" />
+    return <div className="h-full" />
   }
 
   if (projects.length === 0) {
     return (
-      <div className="h-screen flex flex-col">
+      <div className="h-full flex flex-col">
         {isDragOver && <DragOverlay />}
         <header
           className="app-chrome min-h-[76px] flex items-center px-8 shrink-0"
@@ -513,7 +554,7 @@ export function HomePage() {
 
   // ── Populated state ──
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-full flex flex-col">
       {isDragOver && <DragOverlay />}
       <Toolbar
         searchQuery={searchQuery}

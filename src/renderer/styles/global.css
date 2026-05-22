@@ -148,6 +148,7 @@
   --shadow-card-hover: 0 1px 1px rgba(29, 29, 31, 0.03), 0 14px 36px rgba(29, 29, 31, 0.07);
   --shadow-popover: 0 18px 52px rgba(29, 29, 31, 0.16);
   --spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --window-titlebar-height: 34px;
 }
 
 [data-theme='dark'] {
@@ -176,6 +177,74 @@ body {
   color: var(--color-foreground);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.nodrag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.window-titlebar {
+  height: var(--window-titlebar-height);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 86%, var(--color-background-sunken));
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+}
+
+.window-titlebar__drag {
+  user-select: none;
+}
+
+.window-titlebar__controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.window-titlebar__button {
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 160ms var(--spring), color 160ms var(--spring);
+}
+
+.window-titlebar__button:hover {
+  color: var(--color-foreground);
+}
+
+.window-titlebar__button--neutral:hover {
+  background: var(--color-accent);
+}
+
+.window-titlebar__button--danger:hover {
+  background: var(--color-destructive);
+  color: #ffffff;
 }
 
 [data-theme='dark'] body {
