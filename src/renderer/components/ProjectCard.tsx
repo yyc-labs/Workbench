@@ -1,5 +1,5 @@
-import { memo, useState, useCallback } from 'react'
-import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag } from '../../shared/types'
+import { memo, useState, useCallback, useEffect } from 'react'
+import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag, AiCommitTaskSnapshot } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
@@ -78,6 +78,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
+  const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
 
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
@@ -88,6 +89,46 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       setTimeout(() => setIsOpeningTerminal(false), 400)
     }
   }, [isOpeningTerminal, openTerminal, project.id, session?.status])
+
+  useEffect(() => {
+    const api = window.electronAPI as unknown as {
+      onAiCommitStatus?: (
+        cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
+      ) => () => void
+      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+    }
+
+    if (typeof api.onAiCommitStatus !== 'function') return
+
+    const cleanup = api.onAiCommitStatus(({ projectId, status }) => {
+      if (projectId !== project.id) return
+      setAiCommitStatus(status)
+    })
+
+    void (async () => {
+      if (typeof api.getAiCommitState !== 'function') return
+      try {
+        const state = await api.getAiCommitState(project.id)
+        setAiCommitStatus(state?.status ?? 'idle')
+      } catch {
+        // ignore
+      }
+    })()
+
+    return cleanup
+  }, [project.id])
+
+  const handleAiAutoCommit = useCallback(async () => {
+    if (aiCommitStatus === 'running') return
+    try {
+      setAiCommitStatus('running')
+      const ok = await window.electronAPI.runAiCommit(project.id, project.path)
+      if (!ok) setAiCommitStatus('error')
+    } catch (err) {
+      console.error('[ProjectCard] ai auto commit failed:', err)
+      setAiCommitStatus('error')
+    }
+  }, [aiCommitStatus, project.id, project.path])
 
   return (
     <div
@@ -225,6 +266,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
+          onAiAutoCommit={handleAiAutoCommit}
+          aiCommitStatus={aiCommitStatus}
           onOpenFolder={() => window.electronAPI.openFolder(project.path)}
           onOpenPathTerminal={async () => {
             await window.electronAPI.openPathTerminal(project.path)
@@ -233,7 +276,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={() => removeProject(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
-          onConfigureRunCommand={() => setRunConfigPos({ x: menuPos.x, y: menuPos.y })}
         />
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../stores/appStore'
 import { runtimeManager } from '../runtime/RuntimeManager'
@@ -11,6 +11,7 @@ import {
   ExternalLink,
   RefreshCw,
   Terminal,
+  Bot,
   Zap,
   Clock,
   FolderOpen,
@@ -19,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
+import type { AiCommitTaskSnapshot } from '../../shared/types'
 
 /** Map tmux status → user-facing label */
 function statusLabel(status: string): string {
@@ -81,6 +83,37 @@ export function RuntimePage() {
   const [docUrlInput, setDocUrlInput] = useState('')
   const [docError, setDocError] = useState<string | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+
+  useEffect(() => {
+    if (!projectId) return
+
+    const api = window.electronAPI as unknown as {
+      onAiCommitStatus?: (
+        cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
+      ) => () => void
+      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+    }
+
+    if (typeof api.onAiCommitStatus !== 'function') return
+
+    const cleanup = api.onAiCommitStatus(({ projectId: pid, status }) => {
+      if (pid !== projectId) return
+      setAiCommitStatus(status)
+    })
+
+    void (async () => {
+      if (typeof api.getAiCommitState !== 'function') return
+      try {
+        const state = await api.getAiCommitState(projectId)
+        setAiCommitStatus(state?.status ?? 'idle')
+      } catch {
+        // ignore
+      }
+    })()
+
+    return cleanup
+  }, [projectId])
 
   const handleStartRuntime = useCallback(async () => {
     if (!projectId || !project) return
@@ -239,6 +272,22 @@ export function RuntimePage() {
   const isAttached = runtimeStatus === 'attached'
   const sessionLabel = statusLabel(runtimeStatus)
 
+  const handleAiCommit = useCallback(async () => {
+    if (!projectId || !project) return
+    if (aiCommitStatus === 'running') return
+
+    setAiCommitStatus('running')
+    try {
+      const ok = await window.electronAPI.runAiCommit(projectId, project.path)
+      if (!ok) {
+        setAiCommitStatus('error')
+      }
+    } catch (err) {
+      console.error('[RuntimePage] ai commit failed:', err)
+      setAiCommitStatus('error')
+    }
+  }, [projectId, project, aiCommitStatus])
+
   if (!project || !projectId) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4">
@@ -324,6 +373,40 @@ export function RuntimePage() {
               </button>
             </UrlPopover>
           )}
+          <button
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${aiCommitStatus === 'running'
+              ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+              : aiCommitStatus === 'error'
+                ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                : aiCommitStatus === 'success'
+                  ? 'border text-[color:var(--color-success)] bg-[color:var(--color-success-background)]'
+                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-[color:var(--color-border)]'
+              }`}
+            style={
+              aiCommitStatus === 'running'
+                ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                : aiCommitStatus === 'error'
+                  ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                  : aiCommitStatus === 'success'
+                    ? { borderColor: 'color-mix(in srgb, var(--color-success) 34%, transparent)' }
+                    : undefined
+            }
+            onClick={() => { void handleAiCommit() }}
+            disabled={aiCommitStatus === 'running'}
+            title="Use default AI commit settings"
+          >
+            {aiCommitStatus === 'running' ? (
+              <>
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                AI Committing...
+              </>
+            ) : (
+              <>
+                <Bot className="w-3 h-3" />
+                AI Auto Commit
+              </>
+            )}
+          </button>
           <button
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${(isDevRunning || isDevStopping)
                 ? isDevStopping

@@ -10,7 +10,6 @@ import {
   Zap,
   Bot,
   Pin,
-  PlayCircle,
   Trash2,
 } from 'lucide-react'
 import type { CliTool } from '../../shared/types'
@@ -31,12 +30,13 @@ interface CardContextMenuProps {
   onSwitchCli: () => void | Promise<void>
   onStartProject: () => void | Promise<void>
   onStopProject: () => void | Promise<void>
+  onAiAutoCommit?: () => void | Promise<void>
+  aiCommitStatus?: 'idle' | 'running' | 'success' | 'error'
   onOpenFolder: () => void | Promise<void>
   onOpenPathTerminal: () => void | Promise<void>
   onOpenVsCode: () => void | Promise<void>
   onTogglePin?: () => void | Promise<void>
   onEditMetadata?: () => void | Promise<void>
-  onConfigureRunCommand?: () => void | Promise<void>
   onRemoveProject?: () => void | Promise<void>
 }
 
@@ -138,12 +138,13 @@ export function CardContextMenu({
   onSwitchCli,
   onStartProject,
   onStopProject,
+  onAiAutoCommit,
+  aiCommitStatus = 'idle',
   onOpenFolder,
   onOpenPathTerminal,
   onOpenVsCode,
   onTogglePin,
   onEditMetadata,
-  onConfigureRunCommand,
   onRemoveProject,
 }: CardContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
@@ -180,7 +181,7 @@ export function CardContextMenu({
   const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} Runtime 已连接` : 'Runtime 未连接'
   const devStatusLabel = isDevStopping ? 'Dev stopping' : isDevRunning ? 'Dev running' : 'Dev stopped'
 
-  const primaryActions: MenuAction[] = [
+  const primaryActionItems: MenuAction[] = [
     {
       label: isRuntimeActive ? 'Runtime 终端' : `启动 ${cliLabel}`,
       caption: isRuntimeActive ? (isOpeningTerminal ? '正在打开...' : '进入会话') : '连接 AI 运行时',
@@ -205,7 +206,25 @@ export function CardContextMenu({
       disabled: isDevStopping,
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
     },
+    {
+      label: aiCommitStatus === 'running' ? 'AI 提交中...' : 'AI 自动提交',
+      caption: '默认参数',
+      icon: aiCommitStatus === 'running'
+        ? <RefreshCw className="h-4 w-4 animate-spin" />
+        : <Bot className="h-4 w-4" />,
+      show: Boolean(onAiAutoCommit),
+      action: onAiAutoCommit ?? (() => undefined),
+      disabled: aiCommitStatus === 'running',
+      tone: aiCommitStatus === 'running'
+        ? 'warning'
+        : aiCommitStatus === 'error'
+          ? 'danger'
+          : aiCommitStatus === 'success'
+            ? 'success'
+            : 'primary',
+    },
   ]
+  const primaryActions = primaryActionItems.filter((item) => item.show !== false)
 
   const openActions: MenuAction[] = [
     {
@@ -251,13 +270,6 @@ export function CardContextMenu({
       show: Boolean(onEditMetadata),
       action: onEditMetadata ?? (() => undefined),
       tone: 'default',
-    },
-    {
-      label: 'Run 命令',
-      icon: <PlayCircle className="h-3.5 w-3.5" />,
-      show: Boolean(onConfigureRunCommand),
-      action: onConfigureRunCommand ?? (() => undefined),
-      tone: 'primary',
     },
   ]
   const utilityActions = utilityActionItems.filter((item) => item.show !== false)
@@ -386,7 +398,10 @@ export function CardContextMenu({
         </div>
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div
+        className="mt-2 grid gap-1.5"
+        style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryActions.length)}, minmax(0, 1fr))` }}
+      >
         {primaryActions.map((item) => (
           <button
             key={item.label}
