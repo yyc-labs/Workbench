@@ -3,10 +3,10 @@
 ## Architecture
 
 - Electron app with React renderer (Zustand + React Router + xterm.js)
-- `src/main/` — Electron main process (runner, capability detection, env capture, WSL bridge)
-- `src/renderer/` — React UI (pages, components, stores)
-- `src/preload/` — contextBridge API between main and renderer
-- `src/shared/` — shared types and detection rules
+- `src/core/electron/main/` — Electron main process (runner, capability detection, env capture, WSL bridge)
+- `src/core/renderer/` — React UI (pages, components, stores)
+- `src/core/electron/preload/` — contextBridge API between main and renderer
+- `src/core/shared/` — shared types and detection rules
 
 ## Environment isolation
 
@@ -39,20 +39,20 @@ Use the repository auto-commit script after AI edits:
 - `npm run ai:commit:dry` -> preview commit message only, no commit
 
 For custom message:
-- `pwsh -File skills/auto-git-commit/scripts/auto_commit.ps1 -All -Type fix -Subject 修复xxx -Bullet 说明1 -Bullet 说明2`
+- `pwsh -File script/auto-git-commit/auto_commit.ps1 -All -Type fix -Subject 修复xxx -Bullet 说明1 -Bullet 说明2`
 
 Notes:
-- Script path: `skills/auto-git-commit/scripts/auto_commit.ps1`
+- Script path: `script/auto-git-commit/auto_commit.ps1`
 - Default `ai:commit` stages all tracked/untracked/deleted changes in repo (`git add -A`).
 
 ## Key files
 
 | File | Role |
 |------|------|
-| `src/main/runner.ts` | ProcessManager — `useWsl:false`→host-native, `useWsl:true`→wsl-pty, legacy tmux/spawn |
-| `src/main/capability-manager.ts` | Boot-time probe for WSL/tmux/node-pty + env capture via `bash -ilc env` |
-| `src/renderer/stores/appStore.ts` | Zustand store — single source of truth for all process state |
-| `src/renderer/lib/projectEnvironment.ts` | Path-based environment detection (Windows vs Ubuntu/WSL) |
-| `src/renderer/pages/RuntimePage.tsx` | Runtime dashboard + dev server Run button |
-| `src/renderer/pages/Detail.tsx` | Project detail + dev server terminal |
-| `src/renderer/pages/Home.tsx` | Project launcher dashboard |
+| `src/core/electron/main/runner.ts` | ProcessManager — `useWsl:false`→host-native, `useWsl:true`→wsl-pty, legacy tmux/spawn |
+| `src/core/electron/main/capability-manager.ts` | Boot-time probe for WSL/tmux/node-pty + env capture via `bash -ilc env` |
+| `src/core/renderer/stores/appStore.ts` | Zustand store — single source of truth for all process state |
+| `src/core/renderer/lib/projectEnvironment.ts` | Path-based environment detection (Windows vs Ubuntu/WSL) |
+| `src/core/renderer/pages/RuntimePage.tsx` | Runtime dashboard + dev server Run button |
+| `src/core/renderer/pages/Detail.tsx` | Project detail + dev server terminal |
+| `src/core/renderer/pages/Home.tsx` | Project launcher dashboard |

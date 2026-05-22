@@ -5,12 +5,12 @@
     "types": [],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/*"]
+      "@/*": ["src/core/renderer/*"]
     }
   },
   "include": [
-    "src/renderer/**/*.ts",
-    "src/renderer/**/*.tsx",
-    "src/shared/**/*.ts"
+    "src/core/renderer/**/*.ts",
+    "src/core/renderer/**/*.tsx",
+    "src/core/shared/**/*.ts"
   ]
 }

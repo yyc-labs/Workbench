@@ -5,9 +5,9 @@
     "types": ["node"]
   },
   "include": [
-    "src/main/**/*.ts",
-    "src/preload/**/*.ts",
-    "src/shared/**/*.ts",
+    "src/core/electron/main/**/*.ts",
+    "src/core/electron/preload/**/*.ts",
+    "src/core/shared/**/*.ts",
     "electron.vite.config.ts"
   ]
 }

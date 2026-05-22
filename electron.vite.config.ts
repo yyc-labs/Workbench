@@ -10,7 +10,7 @@ export default defineConfig({
       rollupOptions: {
         external: ['node-pty'],
         input: {
-          index: resolve(__dirname, 'src/main/index.ts')
+          index: resolve(__dirname, 'src/core/electron/main/index.ts')
         }
       }
     }
@@ -20,24 +20,26 @@ export default defineConfig({
       outDir: 'out/preload',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/preload/index.ts')
+          index: resolve(__dirname, 'src/core/electron/preload/index.ts')
         }
       }
     }
   },
   renderer: {
+    // renderer was moved from src/renderer to src/core/renderer
+    root: resolve(__dirname, 'src/core/renderer'),
     plugins: [react(), tailwindcss()],
     build: {
       outDir: 'out/renderer',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/renderer/index.html')
+          index: resolve(__dirname, 'src/core/renderer/index.html')
         }
       }
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src/renderer')
+        '@': resolve(__dirname, 'src/core/renderer')
       }
     }
   }
