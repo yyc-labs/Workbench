@@ -72,7 +72,19 @@ export function ProjectMetaDialog({
       <button
         type="button"
         className="absolute inset-0 bg-black/25 backdrop-blur-[1px]"
-        onClick={onClose}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onClose()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
       />
       <div
         className="relative z-[1001] w-full max-w-[520px] rounded-[20px] border p-5"
@@ -414,7 +426,19 @@ export function WorkspaceManagerDialog({
       <button
         type="button"
         className="absolute inset-0 bg-black/25 backdrop-blur-[1px]"
-        onClick={onClose}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onClose()
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+        }}
       />
       <div
         className="relative z-[1001] w-full max-w-[720px] rounded-[20px] border p-5"

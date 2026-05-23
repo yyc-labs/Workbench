@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { arrayMove } from '@dnd-kit/sortable'
 import {
   MarkerType,
 } from '@xyflow/react'
@@ -391,6 +392,15 @@ export function DetailPage() {
     const index = docLinks.findIndex((link) => link.id === linkId)
     if (index <= 0) return
     const nextLinks = [docLinks[index], ...docLinks.slice(0, index), ...docLinks.slice(index + 1)]
+    await setProjectDocLinks(project.id, nextLinks)
+  }
+
+  const handleReorderDocLinks = async (activeLinkId: string, overLinkId: string) => {
+    if (!project) return
+    const oldIndex = docLinks.findIndex((link) => link.id === activeLinkId)
+    const newIndex = docLinks.findIndex((link) => link.id === overLinkId)
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
+    const nextLinks = arrayMove(docLinks, oldIndex, newIndex)
     await setProjectDocLinks(project.id, nextLinks)
   }
 
@@ -819,6 +829,7 @@ export function DetailPage() {
                 onAddDocLink={handleAddDocLink}
                 onUpdateDocLink={handleUpdateDocLink}
                 onSetDefaultDocLink={handleSetDefaultDocLink}
+                onReorderDocLinks={handleReorderDocLinks}
                 onRemoveDocLink={handleRemoveDocLink}
               />
             </div>
