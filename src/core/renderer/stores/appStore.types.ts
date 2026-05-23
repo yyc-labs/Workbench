@@ -80,6 +80,9 @@ export interface AppState {
   processUrls: Record<string, string[]>
   config: AppConfig
   searchQuery: string
+  homeEnvFilter: 'all' | 'ubuntu' | 'windows'
+  homeClassifierFilter: StartupDefaultFilter
+  homeDefaultFilterApplied: boolean
   capability: Capability | null
   tmuxSessions: TmuxSessionInfo[]
   sessions: Record<string, SessionRuntime>
@@ -107,6 +110,9 @@ export interface AppState {
   handleProcessExit: (projectId: string, code: number | null) => void
   sendInput: (projectId: string, data: string) => void
   setSearchQuery: (query: string) => void
+  setHomeEnvFilter: (filter: AppState['homeEnvFilter']) => void
+  setHomeClassifierFilter: (filter: StartupDefaultFilter) => void
+  markHomeDefaultFilterApplied: () => void
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
   clearProcessUrl: (projectId: string) => void
@@ -134,4 +140,3 @@ export interface AppState {
   stopRuntime: (projectId: string) => Promise<void>
   openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
 }
-

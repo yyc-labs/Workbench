@@ -17,6 +17,9 @@ export const useAppStore = create<AppState>()((...args) => ({
   processUrls: loadPersistedProcessUrls(),
   config: { projects: [], theme: initialThemeMode },
   searchQuery: '',
+  homeEnvFilter: 'all',
+  homeClassifierFilter: { type: 'all' },
+  homeDefaultFilterApplied: false,
   capability: null,
   tmuxSessions: [],
   sessions: {},
@@ -28,4 +31,3 @@ export const useAppStore = create<AppState>()((...args) => ({
   ...createProcessActionsSlice(...args),
   ...createRuntimeActionsSlice(...args),
 }))
-

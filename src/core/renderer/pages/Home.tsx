@@ -4,12 +4,11 @@ import { useAppStore } from '../stores/appStore'
 import { detectProjectEnvironment, projectEnvironmentLabel, type ProjectEnvironment } from '../lib/projectEnvironment'
 import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { WorkspaceManagerDialog } from '../components/ProjectMetaDialog'
-import type { ClassifierFilter } from '../components/WorkspaceClassifierPanel'
 import { HomeDragOverlay } from './home/HomeDragOverlay'
 import { HomeEmptyState } from './home/HomeEmptyState'
 import { HomeProjectsContent } from './home/HomeProjectsContent'
 import { HomeToolbar } from './home/HomeToolbar'
-import type { EnvFilter, EnvGroup, EnvGroupKey } from './home/home.types'
+import type { EnvGroup, EnvGroupKey } from './home/home.types'
 
 export function HomePage() {
   const location = useLocation()
@@ -21,7 +20,13 @@ export function HomePage() {
   const sessions = useAppStore((s) => s.sessions)
   const processes = useAppStore((s) => s.processes)
   const searchQuery = useAppStore((s) => s.searchQuery)
+  const envFilter = useAppStore((s) => s.homeEnvFilter)
+  const classifierFilter = useAppStore((s) => s.homeClassifierFilter)
+  const homeDefaultFilterApplied = useAppStore((s) => s.homeDefaultFilterApplied)
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
+  const setEnvFilter = useAppStore((s) => s.setHomeEnvFilter)
+  const setClassifierFilter = useAppStore((s) => s.setHomeClassifierFilter)
+  const markHomeDefaultFilterApplied = useAppStore((s) => s.markHomeDefaultFilterApplied)
   const addProject = useAppStore((s) => s.addProject)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const createFolder = useAppStore((s) => s.createFolder)
@@ -37,10 +42,7 @@ export function HomePage() {
 
   const searchRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [envFilter, setEnvFilter] = useState<EnvFilter>('all')
-  const [classifierFilter, setClassifierFilter] = useState<ClassifierFilter>({ type: 'all' })
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
-  const defaultFilterAppliedRef = useRef(false)
   const lastGestureResetAtRef = useRef<number>(0)
   const isDragOverRef = useRef(false)
   const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -72,8 +74,8 @@ export function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (!isAppReady || defaultFilterAppliedRef.current) return
-    defaultFilterAppliedRef.current = true
+    if (!isAppReady || homeDefaultFilterApplied) return
+    markHomeDefaultFilterApplied()
 
     const defaultFilter = config.startupDefaultFilter
     if (!defaultFilter) return
@@ -99,7 +101,16 @@ export function HomePage() {
     }
 
     setClassifierFilter(defaultFilter)
-  }, [config.startupDefaultFilter, folders, isAppReady, setStartupDefaultFilter, tags])
+  }, [
+    config.startupDefaultFilter,
+    folders,
+    homeDefaultFilterApplied,
+    isAppReady,
+    markHomeDefaultFilterApplied,
+    setClassifierFilter,
+    setStartupDefaultFilter,
+    tags,
+  ])
 
   useEffect(() => {
     const marker = (location.state as { gestureResetToStartupDefault?: number } | null)?.gestureResetToStartupDefault
@@ -128,7 +139,7 @@ export function HomePage() {
     }
 
     setClassifierFilter(defaultFilter)
-  }, [config.startupDefaultFilter, folders, location.state, setSearchQuery, tags])
+  }, [config.startupDefaultFilter, folders, location.state, setClassifierFilter, setEnvFilter, setSearchQuery, tags])
 
   useEffect(() => {
     const onDragOver = (e: DragEvent) => {

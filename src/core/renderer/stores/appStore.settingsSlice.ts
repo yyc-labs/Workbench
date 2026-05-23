@@ -9,6 +9,9 @@ export type SettingsActionsSlice = Pick<
   | 'setAiCommitConfig'
   | 'setStartupDefaultFilter'
   | 'setSearchQuery'
+  | 'setHomeEnvFilter'
+  | 'setHomeClassifierFilter'
+  | 'markHomeDefaultFilterApplied'
 >
 
 export const createSettingsActionsSlice: StateCreator<AppState, [], [], SettingsActionsSlice> = (set) => ({
@@ -65,5 +68,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
   setSearchQuery: (query) => {
     set({ searchQuery: query })
   },
-})
 
+  setHomeEnvFilter: (filter) => {
+    set({ homeEnvFilter: filter })
+  },
+
+  setHomeClassifierFilter: (filter) => {
+    set({ homeClassifierFilter: filter })
+  },
+
+  markHomeDefaultFilterApplied: () => {
+    set({ homeDefaultFilterApplied: true })
+  },
+})
