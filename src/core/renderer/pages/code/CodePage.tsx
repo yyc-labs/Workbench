@@ -50,7 +50,7 @@ export function CodePage() {
       </header>
 
       <div className="min-h-0 flex-1 px-6 pb-4 pt-4">
-        <CodeWorkspacePanel projectPath={project.path} themeMode={themeMode} />
+        <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
       </div>
     </div>
   )

@@ -35,6 +35,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         ensured.docLinks = saved.docLinks ?? []
         ensured.folderId = saved.folderId
         ensured.tagIds = saved.tagIds ?? []
+        ensured.lastCodeFile = saved.lastCodeFile
         projects.push(ensured)
       }
 
@@ -87,6 +88,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       ensured.docLinks = saved.docLinks ?? []
       ensured.folderId = saved.folderId
       ensured.tagIds = saved.tagIds ?? []
+      ensured.lastCodeFile = saved.lastCodeFile
       projects.push(ensured)
     }
     set({

@@ -98,6 +98,8 @@ export interface ProjectInfo {
   folderId?: string
   /** User-defined tags */
   tagIds?: string[]
+  /** Last file opened in Code page, stored as project-relative path */
+  lastCodeFile?: string
 }
 
 export interface ProcessInfo {
@@ -168,6 +170,8 @@ export interface SavedProject {
   folderId?: string
   /** User-defined tags */
   tagIds?: string[]
+  /** Last file opened in Code page, stored as project-relative path */
+  lastCodeFile?: string
 }
 
 export interface DetectionRule {

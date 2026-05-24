@@ -863,7 +863,7 @@ export function DetailPage() {
       <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-5 sm:px-8">
         <div className="mx-auto h-full min-h-0 min-w-[1060px] w-full max-w-[1360px]">
           {activeTab === 'code' ? (
-            <CodeWorkspacePanel projectPath={project.path} themeMode={themeMode} />
+            <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
           ) : (
             <DetailAiCommitPanel
               rightPaneMode={rightPaneMode}

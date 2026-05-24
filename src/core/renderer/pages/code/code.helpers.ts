@@ -68,3 +68,62 @@ export function formatFileSize(size: number): string {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
+
+function compactPathToken(value: string): string {
+  return value.toLowerCase().replace(/[\/\\._\-\s]+/g, '')
+}
+
+function isSubsequenceMatch(needle: string, haystack: string): boolean {
+  if (!needle) return true
+  let needleIndex = 0
+  for (let i = 0; i < haystack.length; i += 1) {
+    if (haystack[i] === needle[needleIndex]) {
+      needleIndex += 1
+      if (needleIndex >= needle.length) return true
+    }
+  }
+  return false
+}
+
+export function fuzzyPathMatch(query: string, candidate: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+
+  const normalizedCandidate = candidate.toLowerCase()
+  if (normalizedCandidate.includes(normalizedQuery)) return true
+
+  const compactQuery = compactPathToken(normalizedQuery)
+  const compactCandidate = compactPathToken(normalizedCandidate)
+  if (!compactQuery) return true
+
+  return isSubsequenceMatch(compactQuery, compactCandidate)
+}
+
+export function filterTreeNodesByQuery(nodes: ProjectFileNode[], query: string): ProjectFileNode[] {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) return nodes
+
+  const filtered: ProjectFileNode[] = []
+  for (const node of nodes) {
+    const matchedSelf = fuzzyPathMatch(normalizedQuery, node.relativePath) || fuzzyPathMatch(normalizedQuery, node.name)
+    if (node.kind === 'file') {
+      if (matchedSelf) filtered.push(node)
+      continue
+    }
+
+    if (matchedSelf) {
+      filtered.push(node)
+      continue
+    }
+
+    const matchedChildren = filterTreeNodesByQuery(node.children ?? [], normalizedQuery)
+    if (matchedChildren.length > 0) {
+      filtered.push({
+        ...node,
+        children: matchedChildren,
+      })
+    }
+  }
+
+  return filtered
+}

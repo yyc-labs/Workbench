@@ -138,6 +138,7 @@ export interface AppState {
   setProjectCustomType: (projectId: string, customType?: string) => Promise<void>
   setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
+  setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>
   setStartupDefaultFilter: (filter?: StartupDefaultFilter) => Promise<void>
   createFolder: (name: string, color?: string) => Promise<void>
   renameFolder: (folderId: string, name: string) => Promise<void>

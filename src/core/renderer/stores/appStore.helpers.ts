@@ -96,6 +96,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   docLinks: ProjectInfo['docLinks']
   folderId?: string
   tagIds: string[]
+  lastCodeFile?: string
 }> {
   return projects.map((p) => ({
     path: p.path,
@@ -108,6 +109,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     docLinks: p.docLinks ?? [],
     folderId: p.folderId,
     tagIds: p.tagIds ?? [],
+    lastCodeFile: p.lastCodeFile,
   }))
 }
 
@@ -122,4 +124,3 @@ export async function persistWorkspace(
     tags,
   })
 }
-

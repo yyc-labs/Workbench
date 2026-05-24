@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Code2, RefreshCw, Save } from 'lucide-react'
+import { Code2, RefreshCw, Save, Search } from 'lucide-react'
 import type { ProjectFileReadResult } from '../../../shared/types'
+import { useAppStore } from '../../stores/appStore'
 import { CodeFileTree } from './CodeFileTree'
 import { MonacoCodeEditor } from './MonacoCodeEditor'
 import {
   collectParentDirectories,
   createDefaultExpandedDirectorySet,
+  filterTreeNodesByQuery,
   formatFileSize,
   inferLanguageFromRelativePath,
   sortTreeNodes,
@@ -14,6 +16,7 @@ import type { FileTreeState, SaveStatus } from './code.types'
 
 const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
+const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 
 function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
   if (themeMode === 'dark') return 'vs-dark'
@@ -22,11 +25,16 @@ function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-
 }
 
 type CodeWorkspacePanelProps = {
+  projectId: string
   projectPath: string
   themeMode: 'system' | 'light' | 'dark'
 }
 
-export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePanelProps) {
+export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
+  const persistedLastCodeFile = useAppStore((s) => s.projects.find((p) => p.id === projectId)?.lastCodeFile)
+  const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
+  const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [tree, setTree] = useState<FileTreeState>({
     status: 'idle',
     nodes: [],
@@ -35,6 +43,8 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
     skippedFiles: 0,
   })
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
+  const [searchExpandedDirectories, setSearchExpandedDirectories] = useState<Set<string>>(new Set())
+  const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [activeFile, setActiveFile] = useState<ProjectFileReadResult | null>(null)
   const [editorValue, setEditorValue] = useState('')
   const [lastSavedValue, setLastSavedValue] = useState('')
@@ -45,6 +55,7 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
   const [saveError, setSaveError] = useState<string | null>(null)
   const [hasExternalChange, setHasExternalChange] = useState(false)
   const [isReloadingFromDisk, setIsReloadingFromDisk] = useState(false)
+  const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
@@ -85,6 +96,19 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
   useEffect(() => {
     void loadTree()
   }, [loadTree])
+
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsNarrowViewport(event.matches)
+      if (!event.matches) {
+        setIsExplorerOpen(true)
+      }
+    }
+
+    media.addEventListener('change', handleChange)
+    return () => media.removeEventListener('change', handleChange)
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -132,12 +156,16 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
         }
         return next
       })
+      void setProjectLastCodeFile(projectId, result.relativePath)
     } catch (error) {
       setReadError(error instanceof Error ? error.message : String(error))
+      if (forceReload || persistedLastCodeFile === relativePath) {
+        void setProjectLastCodeFile(projectId, undefined)
+      }
     } finally {
       setIsReading(false)
     }
-  }, [activeRelativePath, isDirty, projectPath])
+  }, [activeRelativePath, isDirty, persistedLastCodeFile, projectId, projectPath, setProjectLastCodeFile])
 
   const handleSave = useCallback(async () => {
     if (!activeRelativePath || !activeFile) return
@@ -232,6 +260,52 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
   }, [activeFile, activeRelativePath, isDirty, openFile, projectPath])
 
   const saveText = saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'
+  const saveIndicatorText = !activeRelativePath
+    ? 'No file selected'
+    : saveStatus === 'saving'
+      ? 'Saving...'
+      : saveStatus === 'saved'
+        ? 'Saved'
+        : isDirty
+          ? 'Unsaved changes'
+          : 'All changes saved'
+  const saveIndicatorToneClass = saveStatus === 'error'
+    ? 'text-[color:var(--color-destructive)]'
+    : saveStatus === 'saving' || isDirty
+      ? 'text-[color:var(--color-warning)]'
+      : 'text-[color:var(--color-muted-foreground)]'
+  const showExplorerPanel = !isNarrowViewport || isExplorerOpen
+  const showEditorPanel = !isNarrowViewport || !isExplorerOpen
+  const hasSearchQuery = fileSearchQuery.trim().length > 0
+  const filteredTreeNodes = useMemo(
+    () => (hasSearchQuery ? filterTreeNodesByQuery(tree.nodes, fileSearchQuery) : tree.nodes),
+    [fileSearchQuery, hasSearchQuery, tree.nodes]
+  )
+  const treeNodesForView = filteredTreeNodes
+  const defaultSearchExpandedDirectories = useMemo(
+    () => createDefaultExpandedDirectorySet(treeNodesForView),
+    [treeNodesForView]
+  )
+  const currentExpandedDirectories = hasSearchQuery
+    ? (searchExpandedDirectories.size > 0 ? searchExpandedDirectories : defaultSearchExpandedDirectories)
+    : expandedDirectories
+
+  useEffect(() => {
+    if (!hasSearchQuery) {
+      setSearchExpandedDirectories(new Set())
+      return
+    }
+    setSearchExpandedDirectories(defaultSearchExpandedDirectories)
+  }, [defaultSearchExpandedDirectories, hasSearchQuery])
+
+  useEffect(() => {
+    if (tree.status !== 'ready') return
+    if (hasAttemptedInitialRestore) return
+    setHasAttemptedInitialRestore(true)
+
+    if (!persistedLastCodeFile) return
+    void openFile(persistedLastCodeFile)
+  }, [hasAttemptedInitialRestore, openFile, persistedLastCodeFile, tree.status])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -243,24 +317,26 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
           <p className="truncate text-xs text-[color:var(--color-muted-foreground)]">
             {activeRelativePath ?? 'Select a file from the tree'}
           </p>
+          <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
+            {activeRelativePath
+              ? `${activeLanguage || 'plaintext'} • ${formatFileSize(activeFileSize)}`
+              : 'Choose a file to start editing'}
+          </p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          {isDirty && (
-            <span className="rounded-full bg-[color:var(--color-warning-background)] px-2.5 py-0.5 text-[11px] font-medium text-[color:var(--color-warning)]">
-              Unsaved
-            </span>
+        <div className="flex shrink-0 items-center gap-3">
+          {isNarrowViewport && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+              onClick={() => setIsExplorerOpen((prev) => !prev)}
+              title={isExplorerOpen ? 'Switch to editor' : 'Open file explorer'}
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              {isExplorerOpen ? 'Editor' : 'Explorer'}
+            </button>
           )}
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onClick={() => void loadTree()}
-            title="Reload file tree"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
-
+          <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
           <button
             type="button"
             className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${saveStatus === 'saving'
@@ -312,80 +388,93 @@ export function CodeWorkspacePanel({ projectPath, themeMode }: CodeWorkspacePane
       )}
 
       <div className="min-h-0 flex-1">
-        <div className="code-layout-grid h-full">
-          <aside className="code-tree-panel surface-card">
-            <div className="code-panel-header">
-              <Code2 className="h-4 w-4 text-[color:var(--color-muted-foreground)]" />
-              <span>Files</span>
-            </div>
-
-            {tree.status === 'loading' ? (
-              <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
-            ) : tree.status === 'error' ? (
-              <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
-            ) : (
-              <CodeFileTree
-                nodes={tree.nodes}
-                activeRelativePath={activeRelativePath}
-                expandedDirectories={expandedDirectories}
-                onToggleDirectory={(relativePath) => {
-                  setExpandedDirectories((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(relativePath)) next.delete(relativePath)
-                    else next.add(relativePath)
-                    return next
-                  })
-                }}
-                onSelectFile={(relativePath) => {
-                  void openFile(relativePath)
-                }}
-              />
-            )}
-          </aside>
-
-          <section className="code-editor-panel surface-card">
-            {activeRelativePath ? (
-              <MonacoCodeEditor
-                filePath={activeRelativePath}
-                value={editorValue}
-                language={activeLanguage || 'plaintext'}
-                theme={monacoTheme}
-                onChange={setEditorValue}
-                onSave={() => {
-                  void handleSave()
-                }}
-              />
-            ) : (
-              <div className="code-panel-empty">
-                <div className="text-sm text-[color:var(--color-muted-foreground)]">
-                  Select a file from the left panel to start editing.
+        <div className="code-layout-grid h-full" style={isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
+          {showExplorerPanel && (
+            <aside className="code-tree-panel surface-card">
+              <div className="code-panel-header">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                  <input
+                    type="text"
+                    value={fileSearchQuery}
+                    onChange={(event) => setFileSearchQuery(event.target.value)}
+                    placeholder="Search files (e.g. abvd)"
+                    className="code-search-input"
+                    spellCheck={false}
+                  />
                 </div>
+                <button
+                  type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => void loadTree()}
+                  title="Reload file tree"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
+                </button>
               </div>
-            )}
-          </section>
+
+              {tree.status === 'loading' ? (
+                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
+              ) : tree.status === 'error' ? (
+                <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
+              ) : hasSearchQuery && treeNodesForView.length === 0 ? (
+                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
+              ) : (
+                <CodeFileTree
+                  nodes={treeNodesForView}
+                  activeRelativePath={activeRelativePath}
+                  expandedDirectories={currentExpandedDirectories}
+                  onToggleDirectory={(relativePath) => {
+                    const update = (prev: Set<string>) => {
+                      const next = new Set(prev)
+                      if (next.has(relativePath)) next.delete(relativePath)
+                      else next.add(relativePath)
+                      return next
+                    }
+
+                    if (hasSearchQuery) {
+                      setSearchExpandedDirectories(update)
+                      return
+                    }
+                    setExpandedDirectories(update)
+                  }}
+                  onSelectFile={(relativePath) => {
+                    void openFile(relativePath)
+                    if (isNarrowViewport) {
+                      setIsExplorerOpen(false)
+                    }
+                  }}
+                />
+              )}
+            </aside>
+          )}
+
+          {showEditorPanel && (
+            <section className="code-editor-panel surface-card">
+              {activeRelativePath ? (
+                <MonacoCodeEditor
+                  filePath={activeRelativePath}
+                  value={editorValue}
+                  language={activeLanguage || 'plaintext'}
+                  theme={monacoTheme}
+                  onChange={setEditorValue}
+                  onSave={() => {
+                    void handleSave()
+                  }}
+                />
+              ) : (
+                <div className="code-panel-empty">
+                  <div className="text-sm text-[color:var(--color-muted-foreground)]">
+                    {isNarrowViewport ? 'Open Explorer to choose a file.' : 'Select a file from the left panel to start editing.'}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
 
-      <footer className="code-statusbar mt-3">
-        <div className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-          {activeRelativePath ? activeRelativePath : projectPath}
-        </div>
-        <div className="flex shrink-0 items-center gap-4 text-[11px] text-[color:var(--color-muted-foreground)]">
-          <span>{activeLanguage || 'plaintext'}</span>
-          <span>{activeRelativePath ? formatFileSize(activeFileSize) : '0 B'}</span>
-          <span>
-            {saveStatus === 'saving'
-              ? 'Saving'
-              : saveStatus === 'saved'
-                ? 'Saved'
-                : isDirty
-                  ? 'Unsaved'
-                  : 'Idle'}
-          </span>
-        </div>
-      </footer>
-
-      {(readError || saveError || isReading || tree.skippedDirectories > 0 || tree.skippedFiles > 0) && (
+      {(readError || saveError || isReading || isReloadingFromDisk || tree.skippedDirectories > 0 || tree.skippedFiles > 0) && (
         <div className="px-1 pb-1 pt-2">
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-muted-foreground)]">
             {isReading && <span>Reading file...</span>}

@@ -12,6 +12,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectCustomType'
   | 'setProjectCustomCommand'
   | 'setProjectDocLinks'
+  | 'setProjectLastCodeFile'
   | 'togglePin'
   | 'updateLastOpened'
   | 'createFolder'
@@ -104,6 +105,16 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectDocLinks: async (projectId, docLinks) => {
     set((state) => ({
       projects: state.projects.map((p) => (p.id === projectId ? { ...p, docLinks } : p)),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectLastCodeFile: async (projectId, relativePath) => {
+    const normalized = relativePath?.trim() || undefined
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId ? { ...project, lastCodeFile: normalized } : project
+      ),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
@@ -289,4 +300,3 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     await persistWorkspace(get().projects, get().folders, get().tags)
   },
 })
-
