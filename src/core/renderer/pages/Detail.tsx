@@ -7,11 +7,13 @@ import {
 import '@xyflow/react/dist/style.css'
 import {
   ArrowUpRight,
+  BookOpen,
   Bot,
   ChevronLeft,
   Code2,
   Play,
   RefreshCw,
+  Settings2,
   Square,
 } from 'lucide-react'
 import { UrlPopover } from '../components/UrlPopover'
@@ -20,9 +22,9 @@ import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projec
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitRunOverride, AiCommitTaskSnapshot } from '../../shared/types'
+import { CodeWorkspacePanel } from './code/CodeWorkspacePanel'
 import { DetailAiCommitPanel } from './detail/DetailAiCommitPanel'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
-import { DetailWorkspaceCard } from './detail/DetailWorkspaceCard'
 import {
   BASE_AI_STEPS,
   FLOW_NODE_GAP_X,
@@ -63,16 +65,19 @@ export function DetailPage() {
     ? useAppStore((s) => s.processes[toolProcessId]?.status ?? 'stopped')
     : 'stopped'
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
+  const themeMode = useAppStore((s) => s.config.theme)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
 
+  const [activeTab, setActiveTab] = useState<'code' | 'ai'>('code')
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
   const [aiRawText, setAiRawText] = useState('')
   const [recentCommits, setRecentCommits] = useState<LatestCommitInfo[]>([])
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
+  const [linkSettingsOpen, setLinkSettingsOpen] = useState(false)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
   const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
@@ -106,6 +111,7 @@ export function DetailPage() {
   const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
   const docLinks = project?.docLinks ?? []
   const defaultDocLink = docLinks[0]
+  const docMenuItems = docLinks.map((link) => ({ url: link.url, label: link.title }))
 
   if (!project || !projectId) {
     return (
@@ -442,6 +448,20 @@ export function DetailPage() {
     return true
   }
 
+  useEffect(() => {
+    if (!linkSettingsOpen) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setLinkSettingsOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [linkSettingsOpen])
+
   const statusText =
     aiCommitStatus === 'running' ? 'Running' : aiCommitStatus === 'success' ? 'Success' : aiCommitStatus === 'error' ? 'Failed' : 'Idle'
   const statusClass =
@@ -599,15 +619,32 @@ export function DetailPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onClick={() => navigate(`/project/${projectId}/code`)}
-            title="Open code editor"
-          >
-            <Code2 className="h-3.5 w-3.5" />
-            Code
-          </button>
+          <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                activeTab === 'code'
+                  ? 'bg-primary text-white'
+                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+              }`}
+              onClick={() => setActiveTab('code')}
+            >
+              <Code2 className="h-3.5 w-3.5" />
+              Code
+            </button>
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                activeTab === 'ai'
+                  ? 'bg-primary text-white'
+                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+              }`}
+              onClick={() => setActiveTab('ai')}
+            >
+              <Bot className="h-3.5 w-3.5" />
+              AI Commit
+            </button>
+          </div>
 
           {isRunning && processUrls.length > 0 && (
             <UrlPopover urls={processUrls}>
@@ -620,6 +657,29 @@ export function DetailPage() {
               </button>
             </UrlPopover>
           )}
+
+          {defaultDocLink && (
+            <UrlPopover items={docMenuItems}>
+              <button
+                type="button"
+                className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                title={defaultDocLink.url}
+              >
+                <BookOpen className="h-3 w-3" />
+                <span className="max-w-[180px] truncate">Docs: {defaultDocLink.title}</span>
+              </button>
+            </UrlPopover>
+          )}
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+            onClick={() => setLinkSettingsOpen(true)}
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            Link Settings
+          </button>
 
           <button
             className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
@@ -800,53 +860,48 @@ export function DetailPage() {
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-8 pt-7 sm:px-8">
-        {/* <div className="mx-auto grid h-full min-h-0 min-w-[1060px] w-full max-w-[1360px] grid-cols-[minmax(420px,0.82fr)_minmax(560px,1.18fr)] gap-6"> */}
-        <div className="mx-auto grid h-full min-h-0 min-w-[1060px] w-full max-w-[1360px] grid-cols-[minmax(490px,1fr)_minmax(490px,1fr)] gap-6">
-                    <DetailAiCommitPanel
-            rightPaneMode={rightPaneMode}
-            setRightPaneMode={setRightPaneMode}
-            flowNodes={flowNodes}
-            flowEdges={flowEdges}
-            aiRawText={aiRawText}
-            statusClass={statusClass}
-            statusText={statusText}
-            recentCommits={recentCommits}
-            activeCommitHash={activeCommitHash}
-            setActiveCommitHash={setActiveCommitHash}
-            flowApiRef={flowApiRef}
-            flowViewportReadyRef={flowViewportReadyRef}
-            flowInitialFocusDoneRef={flowInitialFocusDoneRef}
-            flowLastFocusedStepRef={flowLastFocusedStepRef}
-            aiCommitStatus={aiCommitStatus}
-          />
-          <section className="min-h-0 min-w-0 overflow-y-auto px-3 pt-1 pb-6">
-            <div className="space-y-6">
-              <DetailWorkspaceCard
-                project={project}
-                environmentLabel={environmentLabel}
-                isRunning={isRunning}
-                processUrls={processUrls}
-                docLinks={docLinks}
-                defaultDocLink={defaultDocLink}
-              />
-              <DetailDocumentationCard
-                docLinks={docLinks}
-                docTitleInput={docTitleInput}
-                setDocTitleInput={setDocTitleInput}
-                docUrlInput={docUrlInput}
-                setDocUrlInput={setDocUrlInput}
-                docError={docError}
-                onAddDocLink={handleAddDocLink}
-                onUpdateDocLink={handleUpdateDocLink}
-                onSetDefaultDocLink={handleSetDefaultDocLink}
-                onReorderDocLinks={handleReorderDocLinks}
-                onRemoveDocLink={handleRemoveDocLink}
-              />
-            </div>
-          </section>
+      <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-5 sm:px-8">
+        <div className="mx-auto h-full min-h-0 min-w-[1060px] w-full max-w-[1360px]">
+          {activeTab === 'code' ? (
+            <CodeWorkspacePanel projectPath={project.path} themeMode={themeMode} />
+          ) : (
+            <DetailAiCommitPanel
+              rightPaneMode={rightPaneMode}
+              setRightPaneMode={setRightPaneMode}
+              flowNodes={flowNodes}
+              flowEdges={flowEdges}
+              aiRawText={aiRawText}
+              statusClass={statusClass}
+              statusText={statusText}
+              recentCommits={recentCommits}
+              activeCommitHash={activeCommitHash}
+              setActiveCommitHash={setActiveCommitHash}
+              flowApiRef={flowApiRef}
+              flowViewportReadyRef={flowViewportReadyRef}
+              flowInitialFocusDoneRef={flowInitialFocusDoneRef}
+              flowLastFocusedStepRef={flowLastFocusedStepRef}
+              aiCommitStatus={aiCommitStatus}
+            />
+          )}
         </div>
       </div>
+
+      <DetailDocumentationCard
+        docLinks={docLinks}
+        docTitleInput={docTitleInput}
+        setDocTitleInput={setDocTitleInput}
+        docUrlInput={docUrlInput}
+        setDocUrlInput={setDocUrlInput}
+        docError={docError}
+        onAddDocLink={handleAddDocLink}
+        onUpdateDocLink={handleUpdateDocLink}
+        onSetDefaultDocLink={handleSetDefaultDocLink}
+        onReorderDocLinks={handleReorderDocLinks}
+        onRemoveDocLink={handleRemoveDocLink}
+        settingsOpen={linkSettingsOpen}
+        setSettingsOpen={setLinkSettingsOpen}
+        hideCard
+      />
     </div>
   )
 }

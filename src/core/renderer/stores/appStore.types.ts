@@ -1,6 +1,7 @@
 import type {
   AiCommitTaskSnapshot,
   ProjectFileReadResult,
+  ProjectFileStatResult,
   ProjectFileTreeResult,
   ProjectFileWriteResult,
   ProjectInfo,
@@ -45,6 +46,7 @@ declare global {
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
       readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
+      statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
       writeProjectFile: (
         projectPath: string,
         relativePath: string,

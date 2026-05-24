@@ -30,6 +30,9 @@ type DetailDocumentationCardProps = {
   onSetDefaultDocLink: (linkId: string) => Promise<void>
   onReorderDocLinks: (activeLinkId: string, overLinkId: string) => Promise<void>
   onRemoveDocLink: (linkId: string) => Promise<void>
+  settingsOpen?: boolean
+  setSettingsOpen?: Dispatch<SetStateAction<boolean>>
+  hideCard?: boolean
 }
 
 type SortableDocLinkItemProps = {
@@ -205,8 +208,13 @@ function DetailDocumentationCard({
   onSetDefaultDocLink,
   onReorderDocLinks,
   onRemoveDocLink,
+  settingsOpen: settingsOpenProp,
+  setSettingsOpen: setSettingsOpenProp,
+  hideCard = false,
 }: DetailDocumentationCardProps) {
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsOpenState, setSettingsOpenState] = useState(false)
+  const settingsOpen = settingsOpenProp ?? settingsOpenState
+  const setSettingsOpen = setSettingsOpenProp ?? setSettingsOpenState
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [editingUrl, setEditingUrl] = useState('')
@@ -259,48 +267,52 @@ function DetailDocumentationCard({
   }
 
   return (
-    <div className="rounded-[24px] p-5 surface-card">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <p className="section-label">Documentation</p>
-          <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-            Project links for docs, specs and references
-          </p>
-        </div>
-        <span className="rounded-full px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] quiet-control">
-          {docLinks.length}
-        </span>
-      </div>
-
-      <div className="space-y-2.5">
-        {defaultLink ? (
-          <button
-            className="quiet-control flex w-full min-w-0 items-center gap-2 rounded-[16px] px-4 py-3 text-left"
-            onClick={() => window.electronAPI.openExternal(defaultLink.url)}
-            title={defaultLink.url}
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm text-[color:var(--color-foreground)]">{defaultLink.title}</p>
-              <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{defaultLink.url}</p>
+    <>
+      {!hideCard && (
+        <div className="rounded-[24px] p-5 surface-card">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="section-label">Documentation</p>
+              <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                Project links for docs, specs and references
+              </p>
             </div>
-            <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-              Default
+            <span className="rounded-full px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] quiet-control">
+              {docLinks.length}
             </span>
-            <ExternalLink className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />
-          </button>
-        ) : (
-          <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
-            No default documentation link.
           </div>
-        )}
-        <button
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-          onClick={() => setSettingsOpen(true)}
-        >
-          <Settings2 className="h-3.5 w-3.5" />
-          Link Settings
-        </button>
-      </div>
+
+          <div className="space-y-2.5">
+            {defaultLink ? (
+              <button
+                className="quiet-control flex w-full min-w-0 items-center gap-2 rounded-[16px] px-4 py-3 text-left"
+                onClick={() => window.electronAPI.openExternal(defaultLink.url)}
+                title={defaultLink.url}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-[color:var(--color-foreground)]">{defaultLink.title}</p>
+                  <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{defaultLink.url}</p>
+                </div>
+                <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+                  Default
+                </span>
+                <ExternalLink className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />
+              </button>
+            ) : (
+              <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
+                No default documentation link.
+              </div>
+            )}
+            <button
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              Link Settings
+            </button>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && createPortal(
         <div className="fixed inset-0 z-[1000] flex items-center justify-center px-4">
@@ -415,7 +427,7 @@ function DetailDocumentationCard({
         </div>,
         document.body
       )}
-    </div>
+    </>
   )
 }
 

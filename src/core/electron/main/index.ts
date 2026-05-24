@@ -17,6 +17,7 @@ import { getAiCommitTask, upsertAiCommitTask, appendAiCommitTaskOutput } from '.
 import {
   listProjectFiles,
   readProjectFile,
+  statProjectFile,
   writeProjectFile,
   toProjectFileServiceErrorMessage,
 } from './project-file-service'
@@ -934,6 +935,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PROJECT_FILE_READ, async (_event, projectPath: string, relativePath: string) => {
     try {
       return await readProjectFile(projectPath, relativePath)
+    } catch (error) {
+      throw new Error(toProjectFileServiceErrorMessage(error))
+    }
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_STAT, async (_event, projectPath: string, relativePath: string) => {
+    try {
+      return await statProjectFile(projectPath, relativePath)
     } catch (error) {
       throw new Error(toProjectFileServiceErrorMessage(error))
     }

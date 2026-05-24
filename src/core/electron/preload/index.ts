@@ -118,6 +118,9 @@ const api = {
   readProjectFile: (projectPath: string, relativePath: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_READ, projectPath, relativePath),
 
+  statProjectFile: (projectPath: string, relativePath: string) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_STAT, projectPath, relativePath),
+
   writeProjectFile: (
     projectPath: string,
     relativePath: string,

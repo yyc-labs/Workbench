@@ -277,3 +277,9 @@ export interface ProjectFileWriteResult {
   size: number
   mtimeMs: number
 }
+
+export interface ProjectFileStatResult {
+  relativePath: string
+  size: number
+  mtimeMs: number
+}

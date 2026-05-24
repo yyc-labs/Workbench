@@ -4,6 +4,7 @@ import path from 'node:path'
 import type {
   ProjectFileNode,
   ProjectFileReadResult,
+  ProjectFileStatResult,
   ProjectFileTreeResult,
   ProjectFileWriteResult,
 } from '../../shared/types'
@@ -356,6 +357,21 @@ export async function readProjectFile(projectPath: string, relativePath: string)
       mtimeMs: stat.mtimeMs,
       language: inferLanguageFromPath(normalizedRelativePath),
       encoding: 'utf-8',
+    }
+  } finally {
+    await fileHandle.close().catch(() => undefined)
+  }
+}
+
+export async function statProjectFile(projectPath: string, relativePath: string): Promise<ProjectFileStatResult> {
+  const opened = await openValidatedFileHandle(projectPath, relativePath)
+  const { fileHandle, stat, normalizedRelativePath } = opened
+
+  try {
+    return {
+      relativePath: normalizedRelativePath,
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
     }
   } finally {
     await fileHandle.close().catch(() => undefined)
