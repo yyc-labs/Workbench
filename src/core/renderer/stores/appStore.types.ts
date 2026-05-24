@@ -1,5 +1,8 @@
 import type {
   AiCommitTaskSnapshot,
+  ProjectFileReadResult,
+  ProjectFileTreeResult,
+  ProjectFileWriteResult,
   ProjectInfo,
   ProcessInfo,
   AppConfig,
@@ -40,6 +43,14 @@ declare global {
       startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
+      listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
+      readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
+      writeProjectFile: (
+        projectPath: string,
+        relativePath: string,
+        content: string,
+        expectedMtimeMs?: number
+      ) => Promise<ProjectFileWriteResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>

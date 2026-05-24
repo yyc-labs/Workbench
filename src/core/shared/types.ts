@@ -244,3 +244,36 @@ export interface RuntimeDiagnostics {
   launcherScriptExecutable: boolean
   issues: string[]
 }
+
+export type ProjectFileNodeKind = 'file' | 'directory'
+
+export interface ProjectFileNode {
+  name: string
+  relativePath: string
+  kind: ProjectFileNodeKind
+  children?: ProjectFileNode[]
+}
+
+export interface ProjectFileTreeResult {
+  rootPath: string
+  nodes: ProjectFileNode[]
+  skipped: {
+    directories: number
+    files: number
+  }
+}
+
+export interface ProjectFileReadResult {
+  relativePath: string
+  content: string
+  size: number
+  mtimeMs: number
+  language: string
+  encoding: 'utf-8'
+}
+
+export interface ProjectFileWriteResult {
+  relativePath: string
+  size: number
+  mtimeMs: number
+}

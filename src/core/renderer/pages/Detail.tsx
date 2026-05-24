@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   Bot,
   ChevronLeft,
+  Code2,
   Play,
   RefreshCw,
   Square,
@@ -598,6 +599,16 @@ export function DetailPage() {
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+            onClick={() => navigate(`/project/${projectId}/code`)}
+            title="Open code editor"
+          >
+            <Code2 className="h-3.5 w-3.5" />
+            Code
+          </button>
+
           {isRunning && processUrls.length > 0 && (
             <UrlPopover urls={processUrls}>
               <button

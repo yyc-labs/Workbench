@@ -112,6 +112,19 @@ const api = {
   listRuntimeEntries: () =>
     ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),
 
+  listProjectFiles: (projectPath: string) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath),
+
+  readProjectFile: (projectPath: string, relativePath: string) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_READ, projectPath, relativePath),
+
+  writeProjectFile: (
+    projectPath: string,
+    relativePath: string,
+    content: string,
+    expectedMtimeMs?: number
+  ) => ipcRenderer.invoke(IPC.PROJECT_FILE_WRITE, projectPath, relativePath, content, expectedMtimeMs),
+
   openTerminal: (sessionName: string, statusHint?: string) => {
     console.log('[preload.openTerminal] invoking IPC SHELL_OPEN_TERMINAL sessionName=', sessionName, 'statusHint=', statusHint)
     return ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName, statusHint)

@@ -4,6 +4,7 @@ import { HomePage } from './pages/Home'
 import { DetailPage } from './pages/Detail'
 import { RuntimePage } from './pages/RuntimePage'
 import { SettingsPage } from './pages/Settings'
+import { CodePage } from './pages/code/CodePage'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
@@ -607,6 +608,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/project/:projectId" element={<DetailPage />} />
+            <Route path="/project/:projectId/code" element={<CodePage />} />
             <Route path="/runtime/:projectId" element={<RuntimePage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

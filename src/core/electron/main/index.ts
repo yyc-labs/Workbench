@@ -14,6 +14,12 @@ import { tmuxManager } from './tmux-manager'
 import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
 import { getAiCommitTask, upsertAiCommitTask, appendAiCommitTaskOutput } from './ai-commit-registry'
+import {
+  listProjectFiles,
+  readProjectFile,
+  writeProjectFile,
+  toProjectFileServiceErrorMessage,
+} from './project-file-service'
 import type {
   AiCommitTaskSnapshot,
   AiCommitRunOverride,
@@ -916,6 +922,39 @@ function registerIpcHandlers(): void {
     }
     return null
   })
+
+  ipcMain.handle(IPC.PROJECT_FILE_TREE, async (_event, projectPath: string) => {
+    try {
+      return await listProjectFiles(projectPath)
+    } catch (error) {
+      throw new Error(toProjectFileServiceErrorMessage(error))
+    }
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_READ, async (_event, projectPath: string, relativePath: string) => {
+    try {
+      return await readProjectFile(projectPath, relativePath)
+    } catch (error) {
+      throw new Error(toProjectFileServiceErrorMessage(error))
+    }
+  })
+
+  ipcMain.handle(
+    IPC.PROJECT_FILE_WRITE,
+    async (
+      _event,
+      projectPath: string,
+      relativePath: string,
+      content: string,
+      expectedMtimeMs?: number
+    ) => {
+      try {
+        return await writeProjectFile(projectPath, relativePath, content, expectedMtimeMs)
+      } catch (error) {
+        throw new Error(toProjectFileServiceErrorMessage(error))
+      }
+    }
+  )
 
   // ── Runtime Manager ──────────────────────────────────────
 

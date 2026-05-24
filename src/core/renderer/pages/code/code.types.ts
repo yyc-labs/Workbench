@@ -1,0 +1,16 @@
+import type { ProjectFileNode, ProjectFileReadResult } from '../../../shared/types'
+
+export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+export interface ActiveCodeFile extends ProjectFileReadResult {
+  relativePath: string
+}
+
+export interface FileTreeState {
+  status: LoadStatus
+  nodes: ProjectFileNode[]
+  error: string | null
+  skippedDirectories: number
+  skippedFiles: number
+}
