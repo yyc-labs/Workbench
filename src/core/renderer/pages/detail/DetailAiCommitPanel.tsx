@@ -12,6 +12,7 @@ import {
   GitMerge,
   History,
   RefreshCw,
+  Shuffle,
   X,
 } from 'lucide-react'
 import { formatCommitDate } from './detail.aiFlow'
@@ -78,6 +79,7 @@ const GIT_OPERATION_ITEMS = [
   { key: 'fetch', label: 'Fetch', description: '同步远程引用', icon: CloudDownload },
   { key: 'pull', label: 'Pull', description: '拉取并合并', icon: Download },
   { key: 'push', label: 'Push', description: '推送当前分支', icon: CloudUpload },
+  { key: 'switch', label: 'Switch', description: '切换到目标分支', icon: Shuffle },
   { key: 'merge', label: 'Merge', description: '合并目标分支', icon: GitMerge },
 ] as const
 
@@ -125,6 +127,10 @@ function computeOperationState(
     if (params.hasWorkingTreeChanges) return { disabled: true, hint: '工作区不干净，先提交或暂存' }
     if (!params.mergeTarget) return { disabled: true, hint: '请选择要合并的分支' }
     if (params.mergeTarget === params.currentBranch) return { disabled: true, hint: '不能合并到自己' }
+  }
+  if (operation === 'switch') {
+    if (!params.mergeTarget) return { disabled: true, hint: '请选择要切换的分支' }
+    if (params.mergeTarget === params.currentBranch) return { disabled: true, hint: '已在当前分支' }
   }
   return { disabled: false, hint: '可执行' }
 }
@@ -310,6 +316,16 @@ function DetailAiCommitPanel({
         currentBranch,
         runningOperation,
       }),
+      switch: computeOperationState('switch', {
+        hasConflicts,
+        hasWorkingTreeChanges,
+        branchAhead,
+        branchBehind,
+        hasUpstream,
+        mergeTarget,
+        currentBranch,
+        runningOperation,
+      }),
       merge: computeOperationState('merge', {
         hasConflicts,
         hasWorkingTreeChanges,
@@ -338,7 +354,9 @@ function DetailAiCommitPanel({
 
     const message = operation === 'merge'
       ? `将把 ${mergeTarget} 合并到 ${currentBranch}，继续吗？`
-      : operation === 'pull'
+      : operation === 'switch'
+        ? `将切换到 ${mergeTarget}，继续吗？`
+        : operation === 'pull'
         ? `将拉取并快进合并到 ${currentBranch}，继续吗？`
         : operation === 'push'
           ? `将把 ${currentBranch} 推送到远程，继续吗？`
@@ -357,7 +375,7 @@ function DetailAiCommitPanel({
       const result = await window.electronAPI.runGitOperation({
         projectPath: gitSnapshot.projectPath,
         operation,
-        targetBranch: operation === 'merge' ? mergeTarget : undefined,
+        targetBranch: operation === 'merge' || operation === 'switch' ? mergeTarget : undefined,
       })
       setOperationResult(result)
       await onRefreshGitSnapshot()

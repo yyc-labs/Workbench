@@ -94,7 +94,7 @@ const api = {
     ipcRenderer.invoke(IPC.GIT_GET_WORKSPACE_SNAPSHOT, projectPath),
 
   runGitOperation: (
-    request: { projectPath: string; operation: 'fetch' | 'pull' | 'push' | 'merge'; targetBranch?: string }
+    request: { projectPath: string; operation: 'fetch' | 'pull' | 'push' | 'merge' | 'switch'; targetBranch?: string }
   ) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),

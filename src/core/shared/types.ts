@@ -111,7 +111,7 @@ export interface GitWorkspaceSnapshot {
   error?: string
 }
 
-export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge'
+export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch'
 
 export interface GitOperationRequest {
   projectPath: string

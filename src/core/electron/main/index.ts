@@ -824,6 +824,36 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
       args = ['merge', '--no-edit', targetBranch]
       break
     }
+    case 'switch': {
+      if (hasConflicts) {
+        skipReason = 'Resolve conflicts before switching branch.'
+        break
+      }
+      if (!targetBranch) {
+        skipReason = 'Select a branch to switch to.'
+        break
+      }
+      if (targetBranch === currentBranch) {
+        skipReason = 'Already on the selected branch.'
+        break
+      }
+
+      const localCandidates = new Set(snapshot.branch.localBranches)
+      const remoteCandidates = new Set(snapshot.branch.remoteBranches)
+      if (localCandidates.has(targetBranch)) {
+        args = ['switch', targetBranch]
+        break
+      }
+
+      const remoteMatch = targetBranch.match(/^([^/]+)\/(.+)$/)
+      if (remoteMatch && remoteCandidates.has(targetBranch)) {
+        args = ['switch', '--track', targetBranch]
+        break
+      }
+
+      skipReason = 'Target branch not found in local/remote branch list.'
+      break
+    }
     default: {
       const unreachable: never = operation
       return {
