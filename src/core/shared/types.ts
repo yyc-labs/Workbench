@@ -56,6 +56,81 @@ export interface AiCommitTaskSnapshot {
   override?: AiCommitRunOverride
 }
 
+export type GitChangeKind =
+  | 'added'
+  | 'modified'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'untracked'
+  | 'conflicted'
+  | 'typechanged'
+  | 'unknown'
+
+export type GitChangeScope = 'staged' | 'unstaged' | 'untracked' | 'conflicted'
+
+export interface GitChangedFile {
+  path: string
+  originalPath?: string
+  indexStatus: string
+  worktreeStatus: string
+  kind: GitChangeKind
+  scope: GitChangeScope
+  staged: boolean
+  unstaged: boolean
+}
+
+export interface GitBranchInfo {
+  current: string
+  upstream?: string
+  oid?: string
+  ahead: number
+  behind: number
+  detached: boolean
+  localBranches: string[]
+  remoteBranches: string[]
+}
+
+export interface GitHistoryCommitInfo {
+  hash: string
+  shortHash: string
+  subject: string
+  authorName: string
+  committedAt: string
+  refs: string[]
+  bullets: string[]
+}
+
+export interface GitWorkspaceSnapshot {
+  projectPath: string
+  isGitRepository: boolean
+  branch: GitBranchInfo
+  changedFiles: GitChangedFile[]
+  recentCommits: GitHistoryCommitInfo[]
+  checkedAt: number
+  error?: string
+}
+
+export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge'
+
+export interface GitOperationRequest {
+  projectPath: string
+  operation: GitOperationKind
+  targetBranch?: string
+}
+
+export interface GitOperationResult {
+  operation: GitOperationKind
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
+  skipped?: boolean
+  error?: string
+  targetBranch?: string
+}
+
 export interface ProjectDocLink {
   id: string
   title: string

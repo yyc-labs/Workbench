@@ -90,6 +90,13 @@ const api = {
   getLatestCommit: (projectPath: string) =>
     ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, projectPath),
 
+  getGitWorkspaceSnapshot: (projectPath: string) =>
+    ipcRenderer.invoke(IPC.GIT_GET_WORKSPACE_SNAPSHOT, projectPath),
+
+  runGitOperation: (
+    request: { projectPath: string; operation: 'fetch' | 'pull' | 'push' | 'merge'; targetBranch?: string }
+  ) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
+
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 
   listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),

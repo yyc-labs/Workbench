@@ -18,6 +18,9 @@ import type {
   StartupDefaultFilter,
   TerminalProcessInventory,
   TerminalStopAllResult,
+  GitWorkspaceSnapshot,
+  GitOperationRequest,
+  GitOperationResult,
 } from '../../shared/types'
 
 declare global {
@@ -74,6 +77,8 @@ declare global {
         committedAt: string
         bullets: string[]
       }[]>
+      getGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
+      runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
       onAiCommitOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onAiCommitStatus: (
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { arrayMove } from '@dnd-kit/sortable'
 import {
@@ -49,9 +49,9 @@ import type {
   AiFlowNode,
   AiStepKey,
   AiStepState,
-  LatestCommitInfo,
   RightPaneMode,
   FlowViewportApi,
+  DetailGitSnapshot,
 } from './detail/detail.types'
 
 export function DetailPage() {
@@ -70,12 +70,14 @@ export function DetailPage() {
   const stopProject = useAppStore((s) => s.stopProject)
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
 
-  const activePane = pane === 'git' ? 'git' : 'code'
+  const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
   const [aiRawText, setAiRawText] = useState('')
-  const [recentCommits, setRecentCommits] = useState<LatestCommitInfo[]>([])
+  const [gitSnapshot, setGitSnapshot] = useState<DetailGitSnapshot | null>(null)
+  const [gitSnapshotLoading, setGitSnapshotLoading] = useState(false)
+  const [gitSnapshotError, setGitSnapshotError] = useState<string | null>(null)
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
   const [linkSettingsOpen, setLinkSettingsOpen] = useState(false)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
@@ -115,7 +117,11 @@ export function DetailPage() {
 
   useEffect(() => {
     if (!projectId) return
-    if (pane === 'code' || pane === 'git') return
+    if (pane === 'git') {
+      navigate(`/project/${projectId}/aicommit`, { replace: true })
+      return
+    }
+    if (pane === 'code' || pane === 'aicommit') return
     navigate(`/project/${projectId}/code`, { replace: true })
   }, [projectId, pane, navigate])
 
@@ -254,20 +260,14 @@ export function DetailPage() {
   useEffect(() => {
     if (!activeCommitHash) return
 
-    const onPointerDown = () => {
-      setActiveCommitHash(null)
-    }
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setActiveCommitHash(null)
       }
     }
 
-    window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('keydown', onKeyDown)
     return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [activeCommitHash])
@@ -277,31 +277,42 @@ export function DetailPage() {
     flowInitialFocusDoneRef.current = false
   }, [rightPaneMode])
 
-  useEffect(() => {
+  const refreshGitSnapshot = useCallback(async () => {
     if (!project?.path) {
-      setRecentCommits([])
+      setGitSnapshot(null)
+      setGitSnapshotError(null)
       setActiveCommitHash(null)
       return
     }
 
-    let mounted = true
     const api = window.electronAPI as unknown as {
-      getLatestCommit?: (projectPath: string) => Promise<LatestCommitInfo[]>
+      getGitWorkspaceSnapshot?: (projectPath: string) => Promise<DetailGitSnapshot>
     }
 
-    const loadLatestCommit = async () => {
-      if (typeof api.getLatestCommit !== 'function') return
-      const result = await api.getLatestCommit(project.path)
-      if (!mounted) return
-      setRecentCommits(result || [])
-      setActiveCommitHash((prev) => ((result || []).some((item) => item.hash === prev) ? prev : null))
+    if (typeof api.getGitWorkspaceSnapshot !== 'function') {
+      setGitSnapshotError('Git workspace API is unavailable. Please restart Electron app process.')
+      return
     }
 
-    void loadLatestCommit()
-    return () => {
-      mounted = false
+    setGitSnapshotLoading(true)
+    setGitSnapshotError(null)
+    try {
+      const result = await api.getGitWorkspaceSnapshot(project.path)
+      setGitSnapshot(result)
+      setGitSnapshotError(result.error ?? null)
+      setActiveCommitHash((prev) => (
+        result.recentCommits.some((item) => item.hash === prev) ? prev : null
+      ))
+    } catch (error) {
+      setGitSnapshotError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setGitSnapshotLoading(false)
     }
-  }, [project?.path, aiCommitStatus])
+  }, [project?.path])
+
+  useEffect(() => {
+    void refreshGitSnapshot()
+  }, [refreshGitSnapshot, aiCommitStatus])
 
   const handleAiCommit = async (override?: AiCommitRunOverride) => {
     if (!projectId || !project) return
@@ -644,13 +655,13 @@ export function DetailPage() {
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activePane === 'git'
+                activePane === 'aicommit'
                   ? 'bg-primary text-white'
                   : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
               onClick={() => {
-                if (!projectId || activePane === 'git') return
-                navigate(`/project/${projectId}/git`)
+                if (!projectId || activePane === 'aicommit') return
+                navigate(`/project/${projectId}/aicommit`)
               }}
             >
               <Bot className="h-3.5 w-3.5" />
@@ -873,7 +884,7 @@ export function DetailPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-5 sm:px-8">
-        <div className="mx-auto h-full min-h-0 min-w-[1060px] w-full max-w-[1360px]">
+        <div className={`mx-auto h-full min-h-0 min-w-[1060px] w-full ${activePane === 'aicommit' ? 'max-w-[1640px]' : 'max-w-[1360px]'}`}>
           {activePane === 'code' ? (
             <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
           ) : (
@@ -885,7 +896,10 @@ export function DetailPage() {
               aiRawText={aiRawText}
               statusClass={statusClass}
               statusText={statusText}
-              recentCommits={recentCommits}
+              gitSnapshot={gitSnapshot}
+              gitSnapshotLoading={gitSnapshotLoading}
+              gitSnapshotError={gitSnapshotError}
+              onRefreshGitSnapshot={() => void refreshGitSnapshot()}
               activeCommitHash={activeCommitHash}
               setActiveCommitHash={setActiveCommitHash}
               flowApiRef={flowApiRef}

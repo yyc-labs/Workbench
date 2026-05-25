@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MemoryRouter as Router, Routes, Route, useNavigate } from 'react-router-dom'
+import { MemoryRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { HomePage } from './pages/Home'
 import { DetailPage } from './pages/Detail'
 import { SettingsPage } from './pages/Settings'
@@ -84,6 +84,7 @@ function SessionPoller() {
 }
 
 function MouseGestureNavigator() {
+  const location = useLocation()
   const navigate = useNavigate()
   type GesturePoint = { x: number; y: number }
   const [hint, setHint] = useState<{
@@ -405,7 +406,18 @@ function MouseGestureNavigator() {
 
       if (hadGestureMovement && passed) {
         hideHintImmediately()
-        if (dx < 0) {
+        const segments = location.pathname.split('/').filter(Boolean)
+        const isDetailRoute = segments[0] === 'project' && segments.length >= 2
+        const currentPane = isDetailRoute ? (segments[2] ?? 'code') : null
+        const projectId = isDetailRoute ? segments[1] : null
+        const isBack = dx < 0
+        const isForward = dx > 0
+
+        if (projectId && isForward && currentPane === 'code') {
+          navigate(`/project/${projectId}/aicommit`, { replace: true })
+        } else if (projectId && isBack && currentPane === 'aicommit') {
+          navigate(`/project/${projectId}/code`, { replace: true })
+        } else if (isBack) {
           navigate(-1)
         } else {
           navigate(1)
@@ -454,7 +466,7 @@ function MouseGestureNavigator() {
       nextHintRef.current = EMPTY_HINT
       clearSuppressTimer()
     }
-  }, [navigate])
+  }, [location.pathname, navigate])
 
   if (!hint.visible) return null
 

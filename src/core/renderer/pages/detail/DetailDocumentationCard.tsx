@@ -13,10 +13,10 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { ExternalLink, GripVertical, Pencil, Plus, Settings2, Trash2, X } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { ProjectDocLink } from '../../../shared/types'
+import { ModalShell } from '../../components/ModalShell'
 
 type DetailDocumentationCardProps = {
   docLinks: ProjectDocLink[]
@@ -314,25 +314,16 @@ function DetailDocumentationCard({
         </div>
       )}
 
-      {settingsOpen && createPortal(
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center px-4">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/25 backdrop-blur-[1px]"
-            onClick={() => {
-              setSettingsOpen(false)
-              cancelEdit()
-            }}
-          />
-          <div
-            className="relative z-[1001] w-full max-w-[760px] rounded-[20px] border p-5"
-            style={{
-              background: 'var(--color-popover)',
-              borderColor: 'var(--color-border)',
-              boxShadow: 'var(--shadow-popover)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      <ModalShell
+        open={settingsOpen}
+        baseZIndex={1000}
+        widthClassName="max-w-[760px]"
+        ariaLabel="Documentation Links"
+        onClose={() => {
+          setSettingsOpen(false)
+          cancelEdit()
+        }}
+      >
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <p className="section-label mb-1">Documentation Links</p>
@@ -423,10 +414,7 @@ function DetailDocumentationCard({
                 {docError}
               </p>
             )}
-          </div>
-        </div>,
-        document.body
-      )}
+      </ModalShell>
     </>
   )
 }

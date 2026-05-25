@@ -1,5 +1,12 @@
 import type { Edge as FlowEdge, Node as FlowNode } from '@xyflow/react'
-import type { AiCommitStatus as SharedAiCommitStatus, AiCommitTaskSnapshot } from '../../../shared/types'
+import type {
+  AiCommitStatus as SharedAiCommitStatus,
+  AiCommitTaskSnapshot,
+  GitHistoryCommitInfo,
+  GitOperationKind as SharedGitOperationKind,
+  GitOperationResult as SharedGitOperationResult,
+  GitWorkspaceSnapshot,
+} from '../../../shared/types'
 
 export type AiCommitStatus = SharedAiCommitStatus
 export type AiStepStatus = 'pending' | 'running' | 'success' | 'error'
@@ -13,13 +20,10 @@ export interface AiStepState {
   detail?: string
 }
 
-export interface LatestCommitInfo {
-  hash: string
-  shortHash: string
-  subject: string
-  committedAt: string
-  bullets: string[]
-}
+export type LatestCommitInfo = GitHistoryCommitInfo
+export type DetailGitSnapshot = GitWorkspaceSnapshot
+export type GitOperationKind = SharedGitOperationKind
+export type GitOperationResult = SharedGitOperationResult
 
 export type AiCommitRestoreResult = Pick<AiCommitTaskSnapshot, 'status' | 'output'>
 

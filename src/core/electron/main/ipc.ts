@@ -12,6 +12,8 @@ export const IPC = {
   AI_COMMIT_OUTPUT: 'ai-commit:output',
   AI_COMMIT_STATUS: 'ai-commit:status',
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
+  GIT_GET_WORKSPACE_SNAPSHOT: 'git:getWorkspaceSnapshot',
+  GIT_RUN_OPERATION: 'git:runOperation',
   CONFIG_GET: 'config:get',
   CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',

@@ -26,6 +26,14 @@ import type {
   AiCommitRunOverride,
   Capability,
   AppConfig,
+  GitBranchInfo,
+  GitChangedFile,
+  GitChangeKind,
+  GitChangeScope,
+  GitHistoryCommitInfo,
+  GitOperationRequest,
+  GitOperationResult,
+  GitWorkspaceSnapshot,
   RuntimeDiagnostics,
   TerminalProcessInventory,
   TerminalStopAllResult,
@@ -94,13 +102,7 @@ function markAiCommitInterruptedIfOrphan(projectId: string): AiCommitTaskSnapsho
   return next
 }
 
-interface RecentCommitInfo {
-  hash: string
-  shortHash: string
-  subject: string
-  committedAt: string
-  bullets: string[]
-}
+type RecentCommitInfo = GitHistoryCommitInfo
 
 async function runAiCommit(
   projectId: string,
@@ -418,78 +420,451 @@ function resolveWslVsCodeTarget(pathValue: string): { distro: string; linuxPath:
   return null
 }
 
-function readRecentCommits(cwd: string): Promise<RecentCommitInfo[]> {
-  return new Promise((resolve) => {
-    const child = spawn(
-      'git',
-      ['log', '-5', '--pretty=format:%H%x1f%h%x1f%s%x1f%cI%x1f%B%x1e'],
-      {
-        cwd,
-        shell: false,
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }
-    )
+function emptyGitBranchInfo(): GitBranchInfo {
+  return {
+    current: '',
+    ahead: 0,
+    behind: 0,
+    detached: false,
+    localBranches: [],
+    remoteBranches: [],
+  }
+}
 
-    let out = ''
-    child.stdout?.on('data', (buf: Buffer) => {
-      out += buf.toString('utf8')
+function runGitCommand(cwd: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn('git', args, {
+      cwd,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
     })
 
-    child.on('error', () => resolve([]))
+    let stdout = ''
+    let stderr = ''
+
+    child.stdout?.on('data', (buf: Buffer) => {
+      stdout += buf.toString('utf8')
+    })
+    child.stderr?.on('data', (buf: Buffer) => {
+      stderr += buf.toString('utf8')
+    })
+
+    child.on('error', (err) => {
+      resolve({ code: null, stdout, stderr: stderr || err.message })
+    })
     child.on('close', (code) => {
-      if (code !== 0) {
-        resolve([])
-        return
-      }
-      const records = out
-        .replace(/\r/g, '')
-        .split('\x1e')
-        .map((item) => item.trim())
-        .filter(Boolean)
-
-      const commits: RecentCommitInfo[] = []
-      for (const record of records) {
-        const fields = record.split('\x1f')
-        const hash = fields[0]
-        const shortHash = fields[1]
-        const subject = fields[2]
-        const committedAt = fields[3]
-        const fullMessage = fields.slice(4).join('\x1f')
-        if (!hash || !shortHash || !subject || !committedAt) continue
-        const bullets = fullMessage
-          .replace(/\r/g, '')
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => /^-\s+/.test(line))
-        commits.push({
-          hash,
-          shortHash,
-          subject,
-          committedAt,
-          bullets,
-        })
-      }
-
-      if (commits.length === 0) {
-        resolve([])
-        return
-      }
-
-      const latestTime = new Date(commits[0].committedAt).getTime()
-      if (Number.isNaN(latestTime)) {
-        resolve([commits[0]])
-        return
-      }
-
-      const withinOneMinute = commits.filter((commit) => {
-        const t = new Date(commit.committedAt).getTime()
-        if (Number.isNaN(t)) return false
-        return latestTime - t <= 60_000
-      })
-
-      resolve(withinOneMinute.length > 0 ? withinOneMinute : [commits[0]])
+      resolve({ code, stdout, stderr })
     })
   })
+}
+
+function listGitLines(cwd: string, args: string[]): Promise<string[]> {
+  return runGitCommand(cwd, args).then((result) => {
+    if (result.code !== 0) return []
+    return result.stdout
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+  })
+}
+
+function remainderAfterTokens(record: string, tokenCount: number): string {
+  let cursor = 0
+  for (let index = 0; index < tokenCount; index++) {
+    const nextSpace = record.indexOf(' ', cursor)
+    if (nextSpace < 0) return ''
+    cursor = nextSpace + 1
+  }
+  return record.slice(cursor)
+}
+
+function gitStatusToken(record: string, index: number): string {
+  return record.split(' ')[index] || ''
+}
+
+function classifyGitChangeKind(indexStatus: string, worktreeStatus: string): GitChangeKind {
+  if (indexStatus === '?' || worktreeStatus === '?') return 'untracked'
+  if (indexStatus === 'U' || worktreeStatus === 'U') return 'conflicted'
+
+  const status = [indexStatus, worktreeStatus].find((item) => item && item !== '.')
+  switch (status) {
+    case 'A':
+      return 'added'
+    case 'M':
+      return 'modified'
+    case 'D':
+      return 'deleted'
+    case 'R':
+      return 'renamed'
+    case 'C':
+      return 'copied'
+    case 'T':
+      return 'typechanged'
+    default:
+      return 'unknown'
+  }
+}
+
+function classifyGitChangeScope(indexStatus: string, worktreeStatus: string): GitChangeScope {
+  if (indexStatus === 'U' || worktreeStatus === 'U') return 'conflicted'
+  if (indexStatus === '?' || worktreeStatus === '?') return 'untracked'
+  if (indexStatus !== '.' && worktreeStatus === '.') return 'staged'
+  return 'unstaged'
+}
+
+function createGitChangedFile(
+  pathValue: string,
+  indexStatus: string,
+  worktreeStatus: string,
+  originalPath?: string
+): GitChangedFile | null {
+  const path = pathValue.trim()
+  if (!path) return null
+  const staged = indexStatus !== '.' && indexStatus !== '?'
+  const unstaged = worktreeStatus !== '.' && worktreeStatus !== '?' || indexStatus === '?' || worktreeStatus === '?'
+  return {
+    path,
+    originalPath: originalPath?.trim() || undefined,
+    indexStatus,
+    worktreeStatus,
+    kind: classifyGitChangeKind(indexStatus, worktreeStatus),
+    scope: classifyGitChangeScope(indexStatus, worktreeStatus),
+    staged,
+    unstaged,
+  }
+}
+
+function parseGitStatus(raw: string): { branch: GitBranchInfo; changedFiles: GitChangedFile[] } {
+  const branch = emptyGitBranchInfo()
+  const changedFiles: GitChangedFile[] = []
+  const records = raw.replace(/\r/g, '').split('\x00').filter(Boolean)
+
+  for (let index = 0; index < records.length; index++) {
+    const record = records[index]
+
+    if (record.startsWith('# branch.oid ')) {
+      branch.oid = record.slice('# branch.oid '.length).trim()
+      continue
+    }
+    if (record.startsWith('# branch.head ')) {
+      const head = record.slice('# branch.head '.length).trim()
+      branch.detached = head === '(detached)'
+      branch.current = branch.detached ? 'DETACHED' : head
+      continue
+    }
+    if (record.startsWith('# branch.upstream ')) {
+      branch.upstream = record.slice('# branch.upstream '.length).trim() || undefined
+      continue
+    }
+    if (record.startsWith('# branch.ab ')) {
+      const match = record.match(/\+(-?\d+)\s+-(-?\d+)/)
+      if (match) {
+        branch.ahead = Number.parseInt(match[1], 10) || 0
+        branch.behind = Number.parseInt(match[2], 10) || 0
+      }
+      continue
+    }
+
+    if (record.startsWith('? ')) {
+      const file = createGitChangedFile(record.slice(2), '?', '?')
+      if (file) changedFiles.push(file)
+      continue
+    }
+
+    if (record.startsWith('1 ')) {
+      const xy = gitStatusToken(record, 1)
+      const file = createGitChangedFile(remainderAfterTokens(record, 8), xy[0] || '.', xy[1] || '.')
+      if (file) changedFiles.push(file)
+      continue
+    }
+
+    if (record.startsWith('2 ')) {
+      const xy = gitStatusToken(record, 1)
+      const file = createGitChangedFile(
+        remainderAfterTokens(record, 9),
+        xy[0] || '.',
+        xy[1] || '.',
+        records[index + 1]
+      )
+      if (file) changedFiles.push(file)
+      index += 1
+      continue
+    }
+
+    if (record.startsWith('u ')) {
+      const xy = gitStatusToken(record, 1)
+      const file = createGitChangedFile(remainderAfterTokens(record, 10), xy[0] || 'U', xy[1] || 'U')
+      if (file) changedFiles.push(file)
+    }
+  }
+
+  return { branch, changedFiles }
+}
+
+async function readGitCommitHistory(cwd: string, limit: number): Promise<GitHistoryCommitInfo[]> {
+  const result = await runGitCommand(cwd, [
+    'log',
+    `-${limit}`,
+    '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e',
+  ])
+  if (result.code !== 0) return []
+
+  const records = result.stdout
+    .replace(/\r/g, '')
+    .split('\x1e')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const commits: GitHistoryCommitInfo[] = []
+  for (const record of records) {
+    const fields = record.split('\x1f')
+    const hash = fields[0]
+    const shortHash = fields[1]
+    const subject = fields[2]
+    const authorName = fields[3] || ''
+    const committedAt = fields[4]
+    const refs = (fields[5] || '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const fullMessage = fields.slice(6).join('\x1f')
+    if (!hash || !shortHash || !subject || !committedAt) continue
+    const bullets = fullMessage
+      .replace(/\r/g, '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /^-\s+/.test(line))
+
+    commits.push({
+      hash,
+      shortHash,
+      subject,
+      authorName,
+      committedAt,
+      refs,
+      bullets,
+    })
+  }
+
+  return commits
+}
+
+async function readRecentCommits(cwd: string): Promise<RecentCommitInfo[]> {
+  const commits = await readGitCommitHistory(cwd, 5)
+  if (commits.length === 0) return []
+
+  const latestTime = new Date(commits[0].committedAt).getTime()
+  if (Number.isNaN(latestTime)) {
+    return [commits[0]]
+  }
+
+  const withinOneMinute = commits.filter((commit) => {
+    const t = new Date(commit.committedAt).getTime()
+    if (Number.isNaN(t)) return false
+    return latestTime - t <= 60_000
+  })
+
+  return withinOneMinute.length > 0 ? withinOneMinute : [commits[0]]
+}
+
+async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspaceSnapshot> {
+  const emptyBranch = emptyGitBranchInfo()
+  const statusResult = await runGitCommand(projectPath, ['status', '--porcelain=v2', '--branch', '-uall', '-z'])
+
+  if (statusResult.code !== 0) {
+    return {
+      projectPath,
+      isGitRepository: false,
+      branch: emptyBranch,
+      changedFiles: [],
+      recentCommits: [],
+      checkedAt: Date.now(),
+      error: statusResult.stderr.trim() || 'Not a git repository',
+    }
+  }
+
+  const [localBranches, remoteBranches, recentCommits] = await Promise.all([
+    listGitLines(projectPath, ['branch', '--format=%(refname:short)']),
+    listGitLines(projectPath, ['branch', '--remotes', '--format=%(refname:short)']),
+    readGitCommitHistory(projectPath, 10),
+  ])
+
+  const parsed = parseGitStatus(statusResult.stdout)
+  const branch = {
+    ...parsed.branch,
+    localBranches,
+    remoteBranches: remoteBranches.filter((item) => !/\/HEAD$/.test(item)),
+  }
+
+  return {
+    projectPath,
+    isGitRepository: true,
+    branch,
+    changedFiles: parsed.changedFiles,
+    recentCommits,
+    checkedAt: Date.now(),
+  }
+}
+
+function formatGitCommand(args: string[]): string {
+  const escaped = args.map((arg) => (
+    /\s/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg
+  ))
+  return `git ${escaped.join(' ')}`
+}
+
+function normalizeGitOperationOutput(stdout: string, stderr: string): string {
+  const normalized = [stdout, stderr]
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\r/g, '')
+    .trim()
+  return normalized || '(no output)'
+}
+
+async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
+  const checkedAt = Date.now()
+  const operation = request.operation
+  const projectPath = request.projectPath.trim()
+  const targetBranch = request.targetBranch?.trim()
+
+  if (!projectPath) {
+    return {
+      operation,
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Project path is required.',
+      exitCode: null,
+      error: 'Project path is required.',
+    }
+  }
+
+  const snapshot = await readGitWorkspaceSnapshot(projectPath)
+  if (!snapshot.isGitRepository) {
+    const reason = snapshot.error || 'Not a git repository.'
+    return {
+      operation,
+      ok: false,
+      checkedAt,
+      command: '',
+      output: reason,
+      exitCode: null,
+      error: reason,
+    }
+  }
+
+  const currentBranch = snapshot.branch.current
+  const hasConflicts = snapshot.changedFiles.some((file) => file.scope === 'conflicted')
+  const hasWorkingTreeChanges = snapshot.changedFiles.length > 0
+  let skipReason: string | null = null
+  let args: string[] = []
+
+  switch (operation) {
+    case 'fetch': {
+      args = ['fetch', '--prune', '--tags', '--verbose']
+      break
+    }
+    case 'pull': {
+      if (!snapshot.branch.upstream) {
+        skipReason = 'Current branch has no upstream tracking branch.'
+        break
+      }
+      if (hasConflicts) {
+        skipReason = 'Resolve conflicts before pull.'
+        break
+      }
+      if (hasWorkingTreeChanges) {
+        skipReason = 'Working tree is not clean. Commit, stash, or discard changes before pull.'
+        break
+      }
+      if (snapshot.branch.behind <= 0) {
+        skipReason = 'No incoming commits to pull.'
+        break
+      }
+      args = ['pull', '--ff-only']
+      break
+    }
+    case 'push': {
+      if (hasConflicts) {
+        skipReason = 'Resolve conflicts before push.'
+        break
+      }
+      if (!currentBranch || currentBranch === 'DETACHED') {
+        skipReason = 'Detached HEAD cannot be pushed.'
+        break
+      }
+      if (snapshot.branch.ahead <= 0) {
+        skipReason = 'No outgoing commits to push.'
+        break
+      }
+      args = snapshot.branch.upstream
+        ? ['push']
+        : ['push', '-u', 'origin', currentBranch]
+      break
+    }
+    case 'merge': {
+      if (hasConflicts) {
+        skipReason = 'Resolve conflicts before merge.'
+        break
+      }
+      if (hasWorkingTreeChanges) {
+        skipReason = 'Working tree is not clean. Commit, stash, or discard changes before merge.'
+        break
+      }
+      if (!targetBranch) {
+        skipReason = 'Select a branch to merge from.'
+        break
+      }
+      if (targetBranch === currentBranch) {
+        skipReason = 'Cannot merge current branch into itself.'
+        break
+      }
+      args = ['merge', '--no-edit', targetBranch]
+      break
+    }
+    default: {
+      const unreachable: never = operation
+      return {
+        operation: unreachable,
+        ok: false,
+        checkedAt,
+        command: '',
+        output: `Unsupported git operation: ${String(unreachable)}`,
+        exitCode: null,
+        error: 'Unsupported git operation.',
+      }
+    }
+  }
+
+  if (skipReason) {
+    return {
+      operation,
+      ok: false,
+      checkedAt,
+      command: '',
+      output: skipReason,
+      exitCode: null,
+      skipped: true,
+      error: skipReason,
+      targetBranch,
+    }
+  }
+
+  const execution = await runGitCommand(projectPath, args)
+  const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+  const ok = execution.code === 0
+  return {
+    operation,
+    ok,
+    checkedAt,
+    command: formatGitCommand(args),
+    output,
+    exitCode: execution.code,
+    error: ok ? undefined : output,
+    targetBranch,
+  }
 }
 
 function resolveLocalVsCodePath(pathValue: string): string {
@@ -858,6 +1233,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GIT_GET_LATEST_COMMIT, async (_event, projectPath: string) => {
     return readRecentCommits(projectPath)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_WORKSPACE_SNAPSHOT, async (_event, projectPath: string) => {
+    return readGitWorkspaceSnapshot(projectPath)
+  })
+
+  ipcMain.handle(IPC.GIT_RUN_OPERATION, async (_event, request: GitOperationRequest) => {
+    return runGitOperation(request)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
