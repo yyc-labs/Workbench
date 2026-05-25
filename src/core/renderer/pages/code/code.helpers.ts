@@ -1,4 +1,65 @@
 import type { ProjectFileNode } from '../../../shared/types'
+import type { CodeFileDrawerState } from './code.types'
+
+const MAX_CODE_FILE_RECENTS = 40
+
+function normalizeRelativePathList(value: string[] | undefined): string[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value.map((item) => item.trim()).filter(Boolean)))
+}
+
+function isSamePathList(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
+}
+
+export function normalizeCodeFileDrawerState(value: Partial<CodeFileDrawerState> | null | undefined): CodeFileDrawerState {
+  return {
+    favorites: normalizeRelativePathList(value?.favorites),
+    recents: normalizeRelativePathList(value?.recents).slice(0, MAX_CODE_FILE_RECENTS),
+  }
+}
+
+export function pushRecentCodeFilePath(state: CodeFileDrawerState, relativePath: string): CodeFileDrawerState {
+  const normalizedPath = relativePath.trim()
+  if (!normalizedPath) return state
+  const nextRecents = [normalizedPath, ...state.recents.filter((item) => item !== normalizedPath)].slice(0, MAX_CODE_FILE_RECENTS)
+  return {
+    favorites: state.favorites,
+    recents: nextRecents,
+  }
+}
+
+export function isSameCodeFileDrawerState(left: CodeFileDrawerState, right: CodeFileDrawerState): boolean {
+  return isSamePathList(left.favorites, right.favorites) && isSamePathList(left.recents, right.recents)
+}
+
+export function toggleFavoriteCodeFilePath(state: CodeFileDrawerState, relativePath: string): CodeFileDrawerState {
+  const normalizedPath = relativePath.trim()
+  if (!normalizedPath) return state
+  if (state.favorites.includes(normalizedPath)) {
+    return {
+      favorites: state.favorites.filter((item) => item !== normalizedPath),
+      recents: state.recents,
+    }
+  }
+  return {
+    favorites: [...state.favorites, normalizedPath],
+    recents: state.recents,
+  }
+}
+
+export function removeCodeFilePathFromDrawerState(state: CodeFileDrawerState, relativePath: string): CodeFileDrawerState {
+  const normalizedPath = relativePath.trim()
+  if (!normalizedPath) return state
+  return {
+    favorites: state.favorites.filter((item) => item !== normalizedPath),
+    recents: state.recents.filter((item) => item !== normalizedPath),
+  }
+}
 
 export function inferLanguageFromRelativePath(relativePath: string): string {
   const lower = relativePath.toLowerCase()
@@ -154,4 +215,23 @@ export function collectMatchedFilesByQuery(nodes: ProjectFileNode[], query: stri
 
   walk(nodes)
   return matched.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+}
+
+export function collectAllFileRelativePaths(nodes: ProjectFileNode[]): string[] {
+  const result: string[] = []
+
+  const walk = (items: ProjectFileNode[]) => {
+    for (const node of items) {
+      if (node.kind === 'file') {
+        result.push(node.relativePath)
+        continue
+      }
+      if (node.children && node.children.length > 0) {
+        walk(node.children)
+      }
+    }
+  }
+
+  walk(nodes)
+  return result
 }

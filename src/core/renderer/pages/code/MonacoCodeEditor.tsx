@@ -169,6 +169,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         onSave()
       })
 
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, () => {
+        editor.trigger('keyboard', 'editor.action.copyLinesDownAction', null)
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, () => {
+        editor.trigger('keyboard', 'editor.action.deleteLines', null)
+      })
+
       const refreshFontMetrics = () => {
         monaco.editor.remeasureFonts()
         editor.layout()

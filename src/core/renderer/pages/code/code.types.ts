@@ -14,3 +14,8 @@ export interface FileTreeState {
   skippedDirectories: number
   skippedFiles: number
 }
+
+export interface CodeFileDrawerState {
+  favorites: string[]
+  recents: string[]
+}

@@ -14,6 +14,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectDocLinks'
   | 'setProjectLastCodeFile'
   | 'setProjectLastMarkdownPreviewMode'
+  | 'setProjectCodeFileDrawerState'
   | 'clearAllProjectLastCodeFiles'
   | 'togglePin'
   | 'updateLastOpened'
@@ -126,6 +127,25 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     set((state) => ({
       projects: state.projects.map((project) =>
         project.id === projectId ? { ...project, lastMarkdownPreviewMode: normalized } : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  setProjectCodeFileDrawerState: async (projectId, drawerState) => {
+    const normalizedFavorites = Array.from(new Set((drawerState.favorites ?? []).map((item) => item.trim()).filter(Boolean)))
+    const normalizedRecents = Array.from(new Set((drawerState.recents ?? []).map((item) => item.trim()).filter(Boolean)))
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? {
+            ...project,
+            codeFileDrawerState: {
+              favorites: normalizedFavorites,
+              recents: normalizedRecents,
+            },
+          }
+          : project
       ),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags)

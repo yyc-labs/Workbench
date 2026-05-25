@@ -37,6 +37,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         ensured.tagIds = saved.tagIds ?? []
         ensured.lastCodeFile = saved.lastCodeFile
         ensured.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
+        ensured.codeFileDrawerState = saved.codeFileDrawerState
         projects.push(ensured)
       }
 
@@ -91,6 +92,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       ensured.tagIds = saved.tagIds ?? []
       ensured.lastCodeFile = saved.lastCodeFile
       ensured.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
+      ensured.codeFileDrawerState = saved.codeFileDrawerState
       projects.push(ensured)
     }
     set({

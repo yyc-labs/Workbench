@@ -182,6 +182,13 @@ export interface ProjectTag {
   sortOrder: number
 }
 
+export interface ProjectCodeFileDrawerState {
+  /** User pinned file paths (project-relative) */
+  favorites: string[]
+  /** Recently opened file paths (project-relative, newest first) */
+  recents: string[]
+}
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -208,6 +215,8 @@ export interface ProjectInfo {
   lastCodeFile?: string
   /** Last selected markdown view mode in Code page (edit/preview/split) */
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
+  /** Drawer state for code file quick access */
+  codeFileDrawerState?: ProjectCodeFileDrawerState
 }
 
 export interface ProcessInfo {
@@ -282,6 +291,8 @@ export interface SavedProject {
   lastCodeFile?: string
   /** Last selected markdown view mode in Code page (edit/preview/split) */
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
+  /** Drawer state for code file quick access */
+  codeFileDrawerState?: ProjectCodeFileDrawerState
 }
 
 export interface DetectionRule {

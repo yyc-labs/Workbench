@@ -39,7 +39,27 @@ export function loadConfig(): AppConfig {
     const raw = readFileSync(configPath, 'utf-8')
     const parsed = JSON.parse(raw) as AppConfig & { startupDefaultTagId?: string }
     const legacyStartupDefaultTagId = parsed.startupDefaultTagId
-    cachedConfig = { ...DEFAULT_CONFIG, ...parsed }
+    const normalizedProjects = Array.isArray(parsed.projects)
+      ? parsed.projects.map((project) => {
+        const favorites = Array.isArray(project.codeFileDrawerState?.favorites)
+          ? project.codeFileDrawerState.favorites.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+          : []
+        const recents = Array.isArray(project.codeFileDrawerState?.recents)
+          ? project.codeFileDrawerState.recents.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+          : []
+        const hasDrawerState = favorites.length > 0 || recents.length > 0
+        return {
+          ...project,
+          codeFileDrawerState: hasDrawerState
+            ? {
+              favorites: Array.from(new Set(favorites)),
+              recents: Array.from(new Set(recents)).slice(0, 40),
+            }
+            : undefined,
+        }
+      })
+      : []
+    cachedConfig = { ...DEFAULT_CONFIG, ...parsed, projects: normalizedProjects }
     if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
     }

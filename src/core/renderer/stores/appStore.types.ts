@@ -25,6 +25,7 @@ import type {
   GitSetFileStageResult,
   GitFileDiffRequest,
   GitFileDiffResult,
+  ProjectCodeFileDrawerState,
 } from '../../shared/types'
 
 declare global {
@@ -151,6 +152,7 @@ export interface AppState {
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>
   setProjectLastMarkdownPreviewMode: (projectId: string, mode?: 'edit' | 'preview' | 'split') => Promise<void>
+  setProjectCodeFileDrawerState: (projectId: string, state: ProjectCodeFileDrawerState) => Promise<void>
   clearAllProjectLastCodeFiles: () => Promise<void>
   setStartupDefaultFilter: (filter?: StartupDefaultFilter) => Promise<void>
   createFolder: (name: string, color?: string) => Promise<void>
