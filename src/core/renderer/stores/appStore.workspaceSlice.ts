@@ -13,6 +13,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectCustomCommand'
   | 'setProjectDocLinks'
   | 'setProjectLastCodeFile'
+  | 'clearAllProjectLastCodeFiles'
   | 'togglePin'
   | 'updateLastOpened'
   | 'createFolder'
@@ -115,6 +116,18 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       projects: state.projects.map((project) =>
         project.id === projectId ? { ...project, lastCodeFile: normalized } : project
       ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags)
+  },
+
+  clearAllProjectLastCodeFiles: async () => {
+    const hasAnyLastCodeFile = get().projects.some((project) => Boolean(project.lastCodeFile))
+    if (!hasAnyLastCodeFile) return
+
+    set((state) => ({
+      projects: state.projects.map((project) => (
+        project.lastCodeFile ? { ...project, lastCodeFile: undefined } : project
+      )),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags)
   },

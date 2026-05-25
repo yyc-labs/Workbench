@@ -38,6 +38,7 @@ export function HomePage() {
   const removeTag = useAppStore((s) => s.removeTag)
   const reorderTags = useAppStore((s) => s.reorderTags)
   const setStartupDefaultFilter = useAppStore((s) => s.setStartupDefaultFilter)
+  const clearAllProjectLastCodeFiles = useAppStore((s) => s.clearAllProjectLastCodeFiles)
   const navigate = useNavigate()
 
   const searchRef = useRef<HTMLInputElement>(null)
@@ -61,6 +62,10 @@ export function HomePage() {
     }
     setDragOverlay(false)
   }, [setDragOverlay])
+
+  useEffect(() => {
+    void clearAllProjectLastCodeFiles()
+  }, [clearAllProjectLastCodeFiles])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -324,7 +329,7 @@ export function HomePage() {
   const handleSelect = useCallback(
     (id: string) => {
       updateLastOpened(id)
-      navigate(`/project/${id}`)
+      navigate(`/project/${id}/code`)
     },
     [updateLastOpened, navigate]
   )

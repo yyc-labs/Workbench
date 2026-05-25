@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Code2, RefreshCw, Save, Search } from 'lucide-react'
+import { Code2, RefreshCw, Save, Search, X } from 'lucide-react'
 import type { ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { CodeFileTree } from './CodeFileTree'
 import { MonacoCodeEditor } from './MonacoCodeEditor'
 import {
   collectParentDirectories,
+  collectMatchedFilesByQuery,
   createDefaultExpandedDirectorySet,
-  filterTreeNodesByQuery,
   formatFileSize,
   inferLanguageFromRelativePath,
   sortTreeNodes,
@@ -16,6 +16,7 @@ import type { FileTreeState, SaveStatus } from './code.types'
 
 const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
+const FILE_SEARCH_DEBOUNCE_MS = 180
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 
 function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
@@ -43,7 +44,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     skippedFiles: 0,
   })
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
-  const [searchExpandedDirectories, setSearchExpandedDirectories] = useState<Set<string>>(new Set())
+  const [fileSearchInput, setFileSearchInput] = useState('')
   const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [activeFile, setActiveFile] = useState<ProjectFileReadResult | null>(null)
   const [editorValue, setEditorValue] = useState('')
@@ -274,29 +275,25 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     : saveStatus === 'saving' || isDirty
       ? 'text-[color:var(--color-warning)]'
       : 'text-[color:var(--color-muted-foreground)]'
+
+  useEffect(() => {
+    if (fileSearchInput === fileSearchQuery) return
+    const timer = window.setTimeout(() => {
+      setFileSearchQuery(fileSearchInput)
+    }, FILE_SEARCH_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [fileSearchInput, fileSearchQuery])
+
   const showExplorerPanel = !isNarrowViewport || isExplorerOpen
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
   const hasSearchQuery = fileSearchQuery.trim().length > 0
-  const filteredTreeNodes = useMemo(
-    () => (hasSearchQuery ? filterTreeNodesByQuery(tree.nodes, fileSearchQuery) : tree.nodes),
+  const matchedFileNodes = useMemo(
+    () => (hasSearchQuery ? collectMatchedFilesByQuery(tree.nodes, fileSearchQuery) : []),
     [fileSearchQuery, hasSearchQuery, tree.nodes]
   )
-  const treeNodesForView = filteredTreeNodes
-  const defaultSearchExpandedDirectories = useMemo(
-    () => createDefaultExpandedDirectorySet(treeNodesForView),
-    [treeNodesForView]
-  )
-  const currentExpandedDirectories = hasSearchQuery
-    ? (searchExpandedDirectories.size > 0 ? searchExpandedDirectories : defaultSearchExpandedDirectories)
-    : expandedDirectories
-
-  useEffect(() => {
-    if (!hasSearchQuery) {
-      setSearchExpandedDirectories(new Set())
-      return
-    }
-    setSearchExpandedDirectories(defaultSearchExpandedDirectories)
-  }, [defaultSearchExpandedDirectories, hasSearchQuery])
+  const treeNodesForView = hasSearchQuery ? matchedFileNodes : tree.nodes
 
   useEffect(() => {
     if (tree.status !== 'ready') return
@@ -314,7 +311,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}
       >
         <div className="min-w-0">
-          <p className="truncate text-xs text-[color:var(--color-muted-foreground)]">
+          <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ?? undefined}>
             {activeRelativePath ?? 'Select a file from the tree'}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
@@ -394,14 +391,33 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
               <div className="code-panel-header">
                 <div className="flex min-w-0 flex-1 items-center gap-2">
                   <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                  <input
-                    type="text"
-                    value={fileSearchQuery}
-                    onChange={(event) => setFileSearchQuery(event.target.value)}
-                    placeholder="Search files (e.g. abvd)"
-                    className="code-search-input"
-                    spellCheck={false}
-                  />
+                  <div className="relative min-w-0 flex-1">
+                    <input
+                      type="text"
+                      value={fileSearchInput}
+                      onChange={(event) => setFileSearchInput(event.target.value)}
+                      placeholder="Search files (e.g. abvd)"
+                      className="code-search-input"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+                        fileSearchInput.trim().length > 0
+                          ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                          : 'pointer-events-none opacity-0'
+                      }`}
+                      onClick={() => {
+                        setFileSearchInput('')
+                        setFileSearchQuery('')
+                      }}
+                      title="Clear search"
+                      aria-label="Clear search"
+                      tabIndex={fileSearchInput.trim().length > 0 ? 0 : -1}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -423,18 +439,15 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                 <CodeFileTree
                   nodes={treeNodesForView}
                   activeRelativePath={activeRelativePath}
-                  expandedDirectories={currentExpandedDirectories}
+                  expandedDirectories={expandedDirectories}
+                  flatFileListMode={hasSearchQuery}
                   onToggleDirectory={(relativePath) => {
+                    if (hasSearchQuery) return
                     const update = (prev: Set<string>) => {
                       const next = new Set(prev)
                       if (next.has(relativePath)) next.delete(relativePath)
                       else next.add(relativePath)
                       return next
-                    }
-
-                    if (hasSearchQuery) {
-                      setSearchExpandedDirectories(update)
-                      return
                     }
                     setExpandedDirectories(update)
                   }}

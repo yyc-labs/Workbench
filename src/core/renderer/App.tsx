@@ -606,6 +606,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/project/:projectId" element={<DetailPage />} />
+            <Route path="/project/:projectId/:pane" element={<DetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>

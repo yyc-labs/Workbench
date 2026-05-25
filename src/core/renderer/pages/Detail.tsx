@@ -55,7 +55,7 @@ import type {
 } from './detail/detail.types'
 
 export function DetailPage() {
-  const { projectId } = useParams<{ projectId: string }>()
+  const { projectId, pane } = useParams<{ projectId: string; pane?: string }>()
   const navigate = useNavigate()
   const project = useAppStore((s) => s.projects.find((p) => p.id === projectId))
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
@@ -70,7 +70,7 @@ export function DetailPage() {
   const stopProject = useAppStore((s) => s.stopProject)
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
 
-  const [activeTab, setActiveTab] = useState<'code' | 'ai'>('code')
+  const activePane = pane === 'git' ? 'git' : 'code'
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
@@ -112,6 +112,12 @@ export function DetailPage() {
   const docLinks = project?.docLinks ?? []
   const defaultDocLink = docLinks[0]
   const docMenuItems = docLinks.map((link) => ({ url: link.url, label: link.title }))
+
+  useEffect(() => {
+    if (!projectId) return
+    if (pane === 'code' || pane === 'git') return
+    navigate(`/project/${projectId}/code`, { replace: true })
+  }, [projectId, pane, navigate])
 
   if (!project || !projectId) {
     return (
@@ -623,11 +629,14 @@ export function DetailPage() {
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activeTab === 'code'
+                activePane === 'code'
                   ? 'bg-primary text-white'
                   : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
-              onClick={() => setActiveTab('code')}
+              onClick={() => {
+                if (!projectId || activePane === 'code') return
+                navigate(`/project/${projectId}/code`)
+              }}
             >
               <Code2 className="h-3.5 w-3.5" />
               Code
@@ -635,14 +644,17 @@ export function DetailPage() {
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activeTab === 'ai'
+                activePane === 'git'
                   ? 'bg-primary text-white'
                   : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
-              onClick={() => setActiveTab('ai')}
+              onClick={() => {
+                if (!projectId || activePane === 'git') return
+                navigate(`/project/${projectId}/git`)
+              }}
             >
               <Bot className="h-3.5 w-3.5" />
-              AI Commit
+              Git Commit
             </button>
           </div>
 
@@ -862,7 +874,7 @@ export function DetailPage() {
 
       <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-5 sm:px-8">
         <div className="mx-auto h-full min-h-0 min-w-[1060px] w-full max-w-[1360px]">
-          {activeTab === 'code' ? (
+          {activePane === 'code' ? (
             <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
           ) : (
             <DetailAiCommitPanel

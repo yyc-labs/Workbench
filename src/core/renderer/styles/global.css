@@ -565,7 +565,7 @@ samp {
   color: var(--color-foreground);
   font-size: 12px;
   line-height: 1.2;
-  padding: 6px 10px;
+  padding: 6px 34px 6px 10px;
   outline: none;
 }
 
@@ -590,6 +590,7 @@ samp {
 
 .code-tree-row {
   width: 100%;
+  min-width: 0;
   min-height: 28px;
   border: 0;
   background: transparent;
@@ -600,6 +601,7 @@ samp {
   padding-right: 10px;
   font-size: 12px;
   text-align: left;
+  overflow: hidden;
   transition: background-color 120ms var(--spring), color 120ms var(--spring);
 }
 

@@ -9,6 +9,7 @@ interface CodeFileTreeProps {
   expandedDirectories: Set<string>
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  flatFileListMode?: boolean
 }
 
 interface TreeNodeRowProps {
@@ -72,7 +73,7 @@ function TreeNodeRow({
         ) : (
           <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
         )}
-        <span className="truncate">{node.name}</span>
+        <span className="block w-0 min-w-0 flex-1 truncate">{node.name}</span>
       </button>
 
       {isDirectory && isExpanded && hasChildren && (
@@ -100,6 +101,7 @@ export function CodeFileTree({
   expandedDirectories,
   onToggleDirectory,
   onSelectFile,
+  flatFileListMode = false,
 }: CodeFileTreeProps) {
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
 
@@ -114,17 +116,38 @@ export function CodeFileTree({
   return (
     <ScrollArea className="h-full">
       <div className="py-2">
-        {nodes.map((node) => (
-          <TreeNodeRow
-            key={node.relativePath}
-            node={node}
-            depth={0}
-            activeRelativePath={activeRelativePath}
-            expandedDirectories={expandedDirectories}
-            onToggleDirectory={onToggleDirectory}
-            onSelectFile={onSelectFile}
-          />
-        ))}
+        {flatFileListMode ? (
+          nodes.map((node) => {
+            const isActive = activeRelativePath === node.relativePath
+            const rowLabel = isActive ? node.relativePath : node.name
+            return (
+              <button
+                key={node.relativePath}
+                type="button"
+                className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''}`}
+                style={{ paddingLeft: 10 }}
+                onClick={() => onSelectFile(node.relativePath)}
+                title={node.relativePath}
+              >
+                <span className="inline-block h-3.5 w-3.5 shrink-0" />
+                <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                <span className="block w-0 min-w-0 flex-1 truncate">{rowLabel}</span>
+              </button>
+            )
+          })
+        ) : (
+          nodes.map((node) => (
+            <TreeNodeRow
+              key={node.relativePath}
+              node={node}
+              depth={0}
+              activeRelativePath={activeRelativePath}
+              expandedDirectories={expandedDirectories}
+              onToggleDirectory={onToggleDirectory}
+              onSelectFile={onSelectFile}
+            />
+          ))
+        )}
       </div>
     </ScrollArea>
   )
