@@ -189,34 +189,6 @@ export function filterTreeNodesByQuery(nodes: ProjectFileNode[], query: string):
   return filtered
 }
 
-export function collectMatchedFilesByQuery(nodes: ProjectFileNode[], query: string): ProjectFileNode[] {
-  const normalizedQuery = query.trim()
-  if (!normalizedQuery) return []
-
-  const matched: ProjectFileNode[] = []
-
-  const walk = (items: ProjectFileNode[]) => {
-    for (const node of items) {
-      if (node.kind === 'file') {
-        const matchedFile =
-          fuzzyPathMatch(normalizedQuery, node.relativePath) ||
-          fuzzyPathMatch(normalizedQuery, node.name)
-        if (matchedFile) {
-          matched.push(node)
-        }
-        continue
-      }
-
-      if (node.children && node.children.length > 0) {
-        walk(node.children)
-      }
-    }
-  }
-
-  walk(nodes)
-  return matched.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
-}
-
 export function collectAllFileRelativePaths(nodes: ProjectFileNode[]): string[] {
   const result: string[] = []
 

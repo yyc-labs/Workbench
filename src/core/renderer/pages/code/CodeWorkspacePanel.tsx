@@ -6,7 +6,7 @@ import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFileNode, ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { CodeFileTree } from './CodeFileTree'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
@@ -14,7 +14,6 @@ import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollS
 import {
   collectAllFileRelativePaths,
   collectParentDirectories,
-  collectMatchedFilesByQuery,
   createDefaultExpandedDirectorySet,
   formatFileSize,
   inferLanguageFromRelativePath,
@@ -224,6 +223,9 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const [fileSearchInput, setFileSearchInput] = useState('')
   const [fileSearchQuery, setFileSearchQuery] = useState('')
+  const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
+  const [isSearchingFiles, setIsSearchingFiles] = useState(false)
+  const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const [activeFile, setActiveFile] = useState<ProjectFileReadResult | null>(null)
   const [editorValue, setEditorValue] = useState('')
   const [lastSavedValue, setLastSavedValue] = useState('')
@@ -255,6 +257,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const activeScrollSyncSourceRef = useRef<'editor' | 'preview' | null>(null)
   const scrollSyncReleaseTimerRef = useRef<number | null>(null)
   const splitSyncReadyRef = useRef(false)
+  const searchRequestSeqRef = useRef(0)
 
   const monacoTheme = useMemo(
     () => (effectiveTheme === 'dark' ? 'vs-dark' : resolveMonacoTheme(themeMode)),
@@ -386,6 +389,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
 
   const loadTree = useCallback(async () => {
     setTree((prev) => ({ ...prev, status: 'loading', error: null }))
+    setFileSearchError(null)
 
     try {
       const result = await window.electronAPI.listProjectFiles(projectPath)
@@ -406,6 +410,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         skippedDirectories: 0,
         skippedFiles: 0,
       })
+      setSearchResultNodes([])
     }
   }, [projectPath])
 
@@ -638,6 +643,36 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   }, [fileSearchInput, fileSearchQuery])
 
   useEffect(() => {
+    const normalizedQuery = fileSearchQuery.trim()
+    if (!normalizedQuery) {
+      setIsSearchingFiles(false)
+      setFileSearchError(null)
+      setSearchResultNodes([])
+      return
+    }
+
+    const requestSeq = searchRequestSeqRef.current + 1
+    searchRequestSeqRef.current = requestSeq
+    setIsSearchingFiles(true)
+    setFileSearchError(null)
+
+    void window.electronAPI.searchProjectFiles(projectPath, normalizedQuery)
+      .then((result) => {
+        if (searchRequestSeqRef.current !== requestSeq) return
+        setSearchResultNodes(result)
+      })
+      .catch((error) => {
+        if (searchRequestSeqRef.current !== requestSeq) return
+        setSearchResultNodes([])
+        setFileSearchError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (searchRequestSeqRef.current !== requestSeq) return
+        setIsSearchingFiles(false)
+      })
+  }, [fileSearchQuery, projectPath])
+
+  useEffect(() => {
     const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
       ? persistedLastMarkdownPreviewMode
       : 'edit'
@@ -651,11 +686,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const showExplorerPanel = !isNarrowViewport || isExplorerOpen
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
   const hasSearchQuery = fileSearchQuery.trim().length > 0
-  const matchedFileNodes = useMemo(
-    () => (hasSearchQuery ? collectMatchedFilesByQuery(tree.nodes, fileSearchQuery) : []),
-    [fileSearchQuery, hasSearchQuery, tree.nodes]
-  )
-  const treeNodesForView = hasSearchQuery ? matchedFileNodes : tree.nodes
+  const treeNodesForView = hasSearchQuery ? searchResultNodes : tree.nodes
 
   const setActiveSyncSource = useCallback((source: 'editor' | 'preview') => {
     activeScrollSyncSourceRef.current = source
@@ -1028,6 +1059,8 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                       onClick={() => {
                         setFileSearchInput('')
                         setFileSearchQuery('')
+                        setSearchResultNodes([])
+                        setFileSearchError(null)
                       }}
                       title="Clear search"
                       aria-label="Clear search"
@@ -1063,6 +1096,10 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                 <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
               ) : tree.status === 'error' ? (
                 <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
+              ) : hasSearchQuery && isSearchingFiles ? (
+                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching files...</div>
+              ) : hasSearchQuery && fileSearchError ? (
+                <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{fileSearchError}</div>
               ) : hasSearchQuery && treeNodesForView.length === 0 ? (
                 <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
               ) : (

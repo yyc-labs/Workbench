@@ -1,5 +1,6 @@
 import { Dirent } from 'node:fs'
 import { promises as fs } from 'node:fs'
+import { execFile } from 'node:child_process'
 import path from 'node:path'
 import type {
   ProjectFileNode,
@@ -13,6 +14,10 @@ const MAX_TEXT_FILE_SIZE = 1024 * 1024
 const MAX_TREE_FILES = 5000
 const MAX_TREE_DEPTH = 8
 const MAX_BINARY_PROBE_BYTES = 8 * 1024
+const RG_FILE_LIST_TIMEOUT_MS = 20_000
+const RG_FILE_LIST_MAX_BUFFER = 64 * 1024 * 1024
+const MAX_SEARCH_RESULTS = 500
+const PROJECT_FILE_LIST_CACHE_TTL_MS = 15_000
 
 const EXCLUDED_DIRECTORIES = new Set([
   '.git',
@@ -34,6 +39,19 @@ const EXCLUDED_FILES = new Set([
   '.DS_Store',
   'Thumbs.db',
 ])
+
+const RG_EXCLUDE_GLOBS = (() => {
+  const globs = new Set<string>()
+  for (const directory of EXCLUDED_DIRECTORIES) {
+    globs.add(`!${directory}/**`)
+    globs.add(`!**/${directory}/**`)
+  }
+  for (const file of EXCLUDED_FILES) {
+    globs.add(`!${file}`)
+    globs.add(`!**/${file}`)
+  }
+  return Array.from(globs)
+})()
 
 const BINARY_EXTENSIONS = new Set([
   '.png',
@@ -89,17 +107,29 @@ class ProjectFileServiceError extends Error {
   }
 }
 
-interface ResolvePathsResult {
-  rootRealPath: string
-  targetRealPath: string
-  normalizedRelativePath: string
-}
-
 interface ScanCounters {
   filesScanned: number
   skippedFiles: number
   skippedDirectories: number
 }
+
+interface TreeDirectoryBucket {
+  node: ProjectFileNode
+  directoryChildren: Map<string, TreeDirectoryBucket>
+  fileChildren: Set<string>
+}
+
+interface ProjectFileListCacheEntry {
+  paths: string[]
+  updatedAtMs: number
+}
+
+interface FilterListedPathsResult {
+  acceptedPaths: string[]
+  skippedFiles: number
+}
+
+const projectFileListCache = new Map<string, ProjectFileListCacheEntry>()
 
 function toPosixRelativePath(value: string): string {
   return value.replace(/\\/g, '/')
@@ -147,20 +177,6 @@ async function resolveRoot(projectPath: string): Promise<string> {
     throw new ProjectFileServiceError('Project path is not a directory.')
   }
   return rootRealPath
-}
-
-async function resolveTargetPaths(projectPath: string, relativePath: string): Promise<ResolvePathsResult> {
-  const rootRealPath = await resolveRoot(projectPath)
-  const normalizedRelativePath = normalizeRelativeInput(relativePath)
-  validateRelativePathLooksSafe(normalizedRelativePath)
-  const targetCandidatePath = path.resolve(rootRealPath, normalizedRelativePath)
-  const targetRealPath = await fs.realpath(targetCandidatePath)
-  ensureWithinRoot(rootRealPath, targetRealPath)
-  return {
-    rootRealPath,
-    targetRealPath,
-    normalizedRelativePath: toPosixRelativePath(normalizedRelativePath),
-  }
 }
 
 async function openValidatedFileHandle(projectPath: string, relativePath: string) {
@@ -235,7 +251,226 @@ async function containsBinaryNullByte(fileHandle: fs.FileHandle): Promise<boolea
   return false
 }
 
-async function scanDirectory(
+function normalizeListedRelativePath(rawPath: string): string | null {
+  const normalized = path.posix.normalize(rawPath.trim().replace(/\\/g, '/'))
+  if (!normalized || normalized === '.' || normalized === '..') return null
+  if (normalized.startsWith('../') || path.posix.isAbsolute(normalized)) return null
+  return normalized
+}
+
+function hasExcludedDirectorySegment(relativePath: string): boolean {
+  const segments = relativePath.split('/')
+  if (segments.length <= 1) return false
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    if (isExcludedDirectory(segments[i])) return true
+  }
+  return false
+}
+
+function shouldSkipListedFilePath(relativePath: string): boolean {
+  const segments = relativePath.split('/')
+  const fileName = segments[segments.length - 1]
+  if (!fileName) return true
+  if (isExcludedFile(fileName)) return true
+  if (hasExcludedDirectorySegment(relativePath)) return true
+  return false
+}
+
+function fileDepth(relativePath: string): number {
+  return relativePath.split('/').length - 1
+}
+
+function compactPathToken(value: string): string {
+  return value.toLowerCase().replace(/[\/\\._\-\s]+/g, '')
+}
+
+function isSubsequenceMatch(needle: string, haystack: string): boolean {
+  if (!needle) return true
+  let needleIndex = 0
+  for (let i = 0; i < haystack.length; i += 1) {
+    if (haystack[i] === needle[needleIndex]) {
+      needleIndex += 1
+      if (needleIndex >= needle.length) return true
+    }
+  }
+  return false
+}
+
+function fuzzyPathMatch(query: string, candidate: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+
+  const normalizedCandidate = candidate.toLowerCase()
+  if (normalizedCandidate.includes(normalizedQuery)) return true
+
+  const compactQuery = compactPathToken(normalizedQuery)
+  const compactCandidate = compactPathToken(normalizedCandidate)
+  if (!compactQuery) return true
+
+  return isSubsequenceMatch(compactQuery, compactCandidate)
+}
+
+function fileNameFromRelativePath(relativePath: string): string {
+  const segments = relativePath.split('/')
+  return segments[segments.length - 1] || relativePath
+}
+
+function filterListedFilePaths(listedPaths: string[]): FilterListedPathsResult {
+  let skippedFiles = 0
+  const acceptedPaths: string[] = []
+
+  for (const relativePath of listedPaths) {
+    if (shouldSkipListedFilePath(relativePath)) {
+      skippedFiles += 1
+      continue
+    }
+
+    if (fileDepth(relativePath) > MAX_TREE_DEPTH) {
+      skippedFiles += 1
+      continue
+    }
+
+    if (acceptedPaths.length >= MAX_TREE_FILES) {
+      skippedFiles += 1
+      continue
+    }
+
+    acceptedPaths.push(relativePath)
+  }
+
+  return { acceptedPaths, skippedFiles }
+}
+
+function setProjectFileListCache(rootRealPath: string, paths: string[]): void {
+  projectFileListCache.set(rootRealPath, {
+    paths,
+    updatedAtMs: Date.now(),
+  })
+}
+
+function getProjectFileListFromCache(rootRealPath: string): string[] | null {
+  const cached = projectFileListCache.get(rootRealPath)
+  if (!cached) return null
+  if (Date.now() - cached.updatedAtMs > PROJECT_FILE_LIST_CACHE_TTL_MS) {
+    projectFileListCache.delete(rootRealPath)
+    return null
+  }
+  return cached.paths
+}
+
+function createDirectoryBucket(name: string, relativePath: string): TreeDirectoryBucket {
+  return {
+    node: {
+      name,
+      relativePath,
+      kind: 'directory',
+      children: [],
+    },
+    directoryChildren: new Map(),
+    fileChildren: new Set(),
+  }
+}
+
+function insertFileIntoTree(rootBucket: TreeDirectoryBucket, relativePath: string): void {
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.length === 0) return
+
+  let bucket = rootBucket
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const segment = segments[i]
+    let childDirectory = bucket.directoryChildren.get(segment)
+    if (!childDirectory) {
+      const directoryPath = segments.slice(0, i + 1).join('/')
+      childDirectory = createDirectoryBucket(segment, directoryPath)
+      bucket.directoryChildren.set(segment, childDirectory)
+      ;(bucket.node.children as ProjectFileNode[]).push(childDirectory.node)
+    }
+    bucket = childDirectory
+  }
+
+  const fileName = segments[segments.length - 1]
+  if (!fileName || bucket.fileChildren.has(fileName)) return
+  bucket.fileChildren.add(fileName)
+  ;(bucket.node.children as ProjectFileNode[]).push({
+    name: fileName,
+    relativePath,
+    kind: 'file',
+  })
+}
+
+function buildTreeFromRelativePaths(relativePaths: string[]): ProjectFileNode[] {
+  const rootBucket = createDirectoryBucket('', '')
+  for (const relativePath of relativePaths) {
+    insertFileIntoTree(rootBucket, relativePath)
+  }
+  return rootBucket.node.children ?? []
+}
+
+async function execFileUtf8(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'rg',
+      args,
+      {
+        cwd,
+        encoding: 'utf8',
+        timeout: RG_FILE_LIST_TIMEOUT_MS,
+        maxBuffer: RG_FILE_LIST_MAX_BUFFER,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error) {
+          const next = error as NodeJS.ErrnoException & { stdout?: string }
+          next.stdout = typeof stdout === 'string' ? stdout : ''
+          reject(next)
+          return
+        }
+        resolve(typeof stdout === 'string' ? stdout : '')
+      }
+    )
+  })
+}
+
+async function listProjectFilesByRipgrep(rootRealPath: string): Promise<string[] | null> {
+  const args = [
+    '--files',
+    '--hidden',
+    '--no-ignore',
+    '--null',
+    '--max-depth',
+    String(MAX_TREE_DEPTH),
+    ...RG_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
+    '.',
+  ]
+
+  try {
+    const output = await execFileUtf8(rootRealPath, args)
+    if (!output) return []
+    return output
+      .split('\0')
+      .map(normalizeListedRelativePath)
+      .filter((item): item is string => Boolean(item))
+  } catch (error) {
+    const typedError = error as NodeJS.ErrnoException & { code?: unknown; stdout?: string }
+    const errorCode = typedError.code
+
+    // rg exits with code 1 when there are no files to print.
+    if (String(errorCode) === '1') {
+      const stdout = typedError.stdout ?? ''
+      if (!stdout) return []
+      return stdout
+        .split('\0')
+        .map(normalizeListedRelativePath)
+        .filter((item): item is string => Boolean(item))
+    }
+
+    // ENOENT means rg is not installed; fallback to legacy scanner.
+    if (errorCode === 'ENOENT') return null
+    return null
+  }
+}
+
+async function scanDirectoryFallback(
   rootRealPath: string,
   absoluteDirPath: string,
   depth: number,
@@ -278,7 +513,7 @@ async function scanDirectory(
         continue
       }
 
-      const children = await scanDirectory(rootRealPath, entryAbsolutePath, depth + 1, counters)
+      const children = await scanDirectoryFallback(rootRealPath, entryAbsolutePath, depth + 1, counters)
       directories.push({
         name: entry.name,
         relativePath,
@@ -315,12 +550,31 @@ async function scanDirectory(
 
 export async function listProjectFiles(projectPath: string): Promise<ProjectFileTreeResult> {
   const rootRealPath = await resolveRoot(projectPath)
+
+  const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
+  if (listedPaths) {
+    listedPaths.sort((a, b) => a.localeCompare(b))
+
+    const filtered = filterListedFilePaths(listedPaths)
+    setProjectFileListCache(rootRealPath, filtered.acceptedPaths)
+
+    return {
+      rootPath: rootRealPath,
+      nodes: buildTreeFromRelativePaths(filtered.acceptedPaths),
+      skipped: {
+        files: filtered.skippedFiles,
+        directories: 0,
+      },
+    }
+  }
+
+  // Fallback keeps behavior functional when rg is unavailable.
   const counters: ScanCounters = {
     filesScanned: 0,
     skippedFiles: 0,
     skippedDirectories: 0,
   }
-  const nodes = await scanDirectory(rootRealPath, rootRealPath, 0, counters)
+  const nodes = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters)
   return {
     rootPath: rootRealPath,
     nodes,
@@ -329,6 +583,56 @@ export async function listProjectFiles(projectPath: string): Promise<ProjectFile
       directories: counters.skippedDirectories,
     },
   }
+}
+
+export async function searchProjectFiles(projectPath: string, query: string): Promise<ProjectFileNode[]> {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) return []
+
+  const rootRealPath = await resolveRoot(projectPath)
+
+  let resolvedPaths = getProjectFileListFromCache(rootRealPath)
+  if (!resolvedPaths) {
+    const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
+    if (listedPaths) {
+      listedPaths.sort((a, b) => a.localeCompare(b))
+      const filtered = filterListedFilePaths(listedPaths)
+      resolvedPaths = filtered.acceptedPaths
+    } else {
+      const tree = await listProjectFiles(projectPath)
+      const nextPaths: string[] = []
+      const walk = (nodes: ProjectFileNode[]) => {
+        for (const node of nodes) {
+          if (node.kind === 'file') {
+            nextPaths.push(node.relativePath)
+            continue
+          }
+          if (node.children && node.children.length > 0) {
+            walk(node.children)
+          }
+        }
+      }
+      walk(tree.nodes)
+      resolvedPaths = nextPaths
+    }
+    setProjectFileListCache(rootRealPath, resolvedPaths)
+  }
+
+  const matches: ProjectFileNode[] = []
+  for (const relativePath of resolvedPaths) {
+    if (matches.length >= MAX_SEARCH_RESULTS) break
+    const fileName = fileNameFromRelativePath(relativePath)
+    if (!fuzzyPathMatch(normalizedQuery, relativePath) && !fuzzyPathMatch(normalizedQuery, fileName)) {
+      continue
+    }
+    matches.push({
+      name: fileName,
+      relativePath,
+      kind: 'file',
+    })
+  }
+
+  return matches
 }
 
 export async function readProjectFile(projectPath: string, relativePath: string): Promise<ProjectFileReadResult> {

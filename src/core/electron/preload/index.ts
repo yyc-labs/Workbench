@@ -130,6 +130,9 @@ const api = {
   listProjectFiles: (projectPath: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath),
 
+  searchProjectFiles: (projectPath: string, query: string) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH, projectPath, query),
+
   readProjectFile: (projectPath: string, relativePath: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_READ, projectPath, relativePath),
 

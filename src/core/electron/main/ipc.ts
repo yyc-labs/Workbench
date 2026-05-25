@@ -30,6 +30,7 @@ export const IPC = {
   RUNTIME_DIAGNOSTICS: 'runtime:diagnostics',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   PROJECT_FILE_TREE: 'project-file:tree',
+  PROJECT_FILE_SEARCH: 'project-file:search',
   PROJECT_FILE_READ: 'project-file:read',
   PROJECT_FILE_STAT: 'project-file:stat',
   PROJECT_FILE_WRITE: 'project-file:write',
