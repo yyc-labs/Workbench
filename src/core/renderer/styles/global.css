@@ -978,6 +978,7 @@ samp {
 
 .code-search-input {
   width: 100%;
+  max-width: 260px;
   min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 999px;
@@ -985,7 +986,7 @@ samp {
   color: var(--color-foreground);
   font-size: 12px;
   line-height: 1.2;
-  padding: 6px 34px 6px 10px;
+  padding: 5px 30px 5px 9px;
   outline: none;
 }
 

@@ -6,7 +6,7 @@ import { SettingsPage } from './pages/Settings'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
-import { Minus, Square, X } from 'lucide-react'
+import { Copy, Minus, Square, X } from 'lucide-react'
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
 
@@ -587,7 +587,9 @@ function WindowTitleBar() {
             void window.electronAPI.toggleMaximizeWindow()
           }}
         >
-          <Square className="h-3.5 w-3.5" strokeWidth={1.7} />
+          {isMaximized
+            ? <Copy className="h-3.5 w-3.5" strokeWidth={1.7} />
+            : <Square className="h-3.5 w-3.5" strokeWidth={1.7} />}
         </button>
         <button
           className="window-titlebar__button window-titlebar__button--danger"

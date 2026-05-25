@@ -1,6 +1,6 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, Clock3, Code2, Columns2, Copy, Eye, PanelLeftOpen, RefreshCw, Save, Search, Star, Trash2, X } from 'lucide-react'
+import { Check, Code2, Columns2, Copy, Eye, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -9,6 +9,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import type { ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { CodeFileTree } from './CodeFileTree'
+import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import {
   collectAllFileRelativePaths,
@@ -234,6 +235,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [hasExternalChange, setHasExternalChange] = useState(false)
   const [isReloadingFromDisk, setIsReloadingFromDisk] = useState(false)
   const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
+  const [locateRequestToken, setLocateRequestToken] = useState(0)
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<MarkdownPreviewMode>(
     () => (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
       ? persistedLastMarkdownPreviewMode
@@ -719,30 +721,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }
   }, [])
 
-  useEffect(() => {
-    if (!isQuickDrawerOpen) return
-
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement
-      if (target.closest('[data-code-quick-drawer-root="true"]')) return
-      if (target.closest('[data-code-quick-drawer-trigger="true"]')) return
-      setIsQuickDrawerOpen(false)
-    }
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsQuickDrawerOpen(false)
-      }
-    }
-
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [isQuickDrawerOpen])
-
   useLayoutEffect(() => {
     if (!isMarkdownFile || !activeRelativePath) return
     splitSyncReadyRef.current = false
@@ -940,7 +918,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
           )}
           <button
             type="button"
-            data-code-quick-drawer-trigger="true"
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
               isQuickDrawerOpen
                 ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
@@ -1014,131 +991,16 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         </div>
       )}
 
-      {isQuickDrawerOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-[29] bg-transparent"
-          aria-label="Close file drawer backdrop"
-          onClick={() => setIsQuickDrawerOpen(false)}
-        />
-      )}
-
-      <aside
-        data-code-quick-drawer-root="true"
-        className={`code-file-quick-drawer ${isQuickDrawerOpen ? 'is-open' : ''}`}
-      >
-        <div className="code-file-quick-drawer-header">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-[color:var(--color-foreground)]">File Drawer</p>
-            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">Favorites and recent files</p>
-          </div>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => setIsQuickDrawerOpen(false)}
-            title="Close"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="code-file-quick-drawer-content">
-          <section className="code-file-quick-drawer-section">
-            <div className="code-file-quick-drawer-section-title">
-              <Star className="h-3.5 w-3.5" />
-              Favorites
-            </div>
-            {quickDrawerFavorites.length === 0 ? (
-              <p className="code-file-quick-drawer-empty">No favorites yet.</p>
-            ) : (
-              <div className="code-file-quick-drawer-list">
-                {quickDrawerFavorites.map((relativePath) => {
-                  const isActive = activeRelativePath === relativePath
-                  return (
-                    <div key={`fav-${relativePath}`} className={`code-file-quick-drawer-item ${isActive ? 'is-active' : ''}`}>
-                      <button
-                        type="button"
-                        className="code-file-quick-drawer-open"
-                        onClick={() => openFileFromQuickDrawer(relativePath)}
-                        title={relativePath}
-                      >
-                        <span className="code-file-quick-drawer-path">{relativePath}</span>
-                        <span className="code-file-quick-drawer-meta">{inferLanguageFromRelativePath(relativePath)}</span>
-                      </button>
-                      <div className="code-file-quick-drawer-actions">
-                        <button
-                          type="button"
-                          className="code-file-quick-drawer-action is-starred"
-                          onClick={() => toggleFavoriteForPath(relativePath)}
-                          title="Remove from favorites"
-                        >
-                          <Star className="h-3.5 w-3.5 fill-current" />
-                        </button>
-                        <button
-                          type="button"
-                          className="code-file-quick-drawer-action is-danger"
-                          onClick={() => removePathFromQuickDrawer(relativePath)}
-                          title="Delete from drawer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="code-file-quick-drawer-section">
-            <div className="code-file-quick-drawer-section-title">
-              <Clock3 className="h-3.5 w-3.5" />
-              Recent
-            </div>
-            {quickDrawerRecents.length === 0 ? (
-              <p className="code-file-quick-drawer-empty">No recent files yet.</p>
-            ) : (
-              <div className="code-file-quick-drawer-list">
-                {quickDrawerRecents.map((relativePath) => {
-                  const isActive = activeRelativePath === relativePath
-                  const isFavorite = codeFileDrawerState.favorites.includes(relativePath)
-                  return (
-                    <div key={`recent-${relativePath}`} className={`code-file-quick-drawer-item ${isActive ? 'is-active' : ''}`}>
-                      <button
-                        type="button"
-                        className="code-file-quick-drawer-open"
-                        onClick={() => openFileFromQuickDrawer(relativePath)}
-                        title={relativePath}
-                      >
-                        <span className="code-file-quick-drawer-path">{relativePath}</span>
-                        <span className="code-file-quick-drawer-meta">{inferLanguageFromRelativePath(relativePath)}</span>
-                      </button>
-                      <div className="code-file-quick-drawer-actions">
-                        <button
-                          type="button"
-                          className={`code-file-quick-drawer-action ${isFavorite ? 'is-starred' : ''}`}
-                          onClick={() => toggleFavoriteForPath(relativePath)}
-                          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                        >
-                          <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-current' : ''}`} />
-                        </button>
-                        <button
-                          type="button"
-                          className="code-file-quick-drawer-action is-danger"
-                          onClick={() => removePathFromQuickDrawer(relativePath)}
-                          title="Delete from drawer"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      </aside>
+      <CodeFileQuickDrawer
+        open={isQuickDrawerOpen}
+        activeRelativePath={activeRelativePath}
+        favorites={quickDrawerFavorites}
+        recents={quickDrawerRecents}
+        onClose={() => setIsQuickDrawerOpen(false)}
+        onOpenFile={openFileFromQuickDrawer}
+        onToggleFavorite={toggleFavoriteForPath}
+        onRemovePath={removePathFromQuickDrawer}
+      />
 
       <div className="min-h-0 flex-1">
         <div className="code-layout-grid h-full" style={isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
@@ -1177,6 +1039,18 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                 </div>
                 <button
                   type="button"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
+                  onClick={() => {
+                    if (!activeRelativePath) return
+                    setLocateRequestToken((prev) => prev + 1)
+                  }}
+                  title={activeRelativePath ? 'Locate current file' : 'No active file'}
+                  disabled={!activeRelativePath}
+                >
+                  <LocateFixed className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
                   className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                   onClick={() => void loadTree()}
                   title="Reload file tree"
@@ -1197,6 +1071,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                   activeRelativePath={activeRelativePath}
                   expandedDirectories={expandedDirectories}
                   flatFileListMode={hasSearchQuery}
+                  locateRequestToken={locateRequestToken}
                   onToggleDirectory={(relativePath) => {
                     if (hasSearchQuery) return
                     const update = (prev: Set<string>) => {

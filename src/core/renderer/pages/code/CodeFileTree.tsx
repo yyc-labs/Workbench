@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import type { MutableRefObject } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
 import { ScrollArea } from '../../components/ui/scroll-area'
 import type { ProjectFileNode } from '../../../shared/types'
@@ -10,6 +11,7 @@ interface CodeFileTreeProps {
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
   flatFileListMode?: boolean
+  locateRequestToken?: number
 }
 
 interface TreeNodeRowProps {
@@ -19,6 +21,7 @@ interface TreeNodeRowProps {
   expandedDirectories: Set<string>
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  activePathRowRef: MutableRefObject<HTMLButtonElement | null>
 }
 
 function TreeNodeRow({
@@ -28,6 +31,7 @@ function TreeNodeRow({
   expandedDirectories,
   onToggleDirectory,
   onSelectFile,
+  activePathRowRef,
 }: TreeNodeRowProps) {
   const isDirectory = node.kind === 'directory'
   const isExpanded = isDirectory && expandedDirectories.has(node.relativePath)
@@ -49,6 +53,7 @@ function TreeNodeRow({
           onSelectFile(node.relativePath)
         }}
         title={node.relativePath}
+        ref={!isDirectory && isActive ? activePathRowRef : undefined}
       >
         {isDirectory ? (
           hasChildren ? (
@@ -87,6 +92,7 @@ function TreeNodeRow({
               expandedDirectories={expandedDirectories}
               onToggleDirectory={onToggleDirectory}
               onSelectFile={onSelectFile}
+              activePathRowRef={activePathRowRef}
             />
           ))}
         </div>
@@ -102,8 +108,17 @@ export function CodeFileTree({
   onToggleDirectory,
   onSelectFile,
   flatFileListMode = false,
+  locateRequestToken = 0,
 }: CodeFileTreeProps) {
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
+  const activePathRowRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!locateRequestToken) return
+    const node = activePathRowRef.current
+    if (!node) return
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [locateRequestToken, activeRelativePath, expandedDirectories, flatFileListMode, nodes])
 
   if (!hasNodes) {
     return (
@@ -128,6 +143,7 @@ export function CodeFileTree({
                 style={{ paddingLeft: 10 }}
                 onClick={() => onSelectFile(node.relativePath)}
                 title={node.relativePath}
+                ref={isActive ? activePathRowRef : undefined}
               >
                 <span className="inline-block h-3.5 w-3.5 shrink-0" />
                 <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
@@ -145,6 +161,7 @@ export function CodeFileTree({
               expandedDirectories={expandedDirectories}
               onToggleDirectory={onToggleDirectory}
               onSelectFile={onSelectFile}
+              activePathRowRef={activePathRowRef}
             />
           ))
         )}
