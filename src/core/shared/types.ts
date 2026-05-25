@@ -131,6 +131,37 @@ export interface GitOperationResult {
   targetBranch?: string
 }
 
+export interface GitSetFileStageRequest {
+  projectPath: string
+  filePath: string
+  stage: boolean
+}
+
+export interface GitSetFileStageResult {
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
+  error?: string
+}
+
+export interface GitFileDiffRequest {
+  projectPath: string
+  filePath: string
+  staged: boolean
+}
+
+export interface GitFileDiffResult {
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
+  staged: boolean
+  error?: string
+}
+
 export interface ProjectDocLink {
   id: string
   title: string
@@ -175,6 +206,8 @@ export interface ProjectInfo {
   tagIds?: string[]
   /** Last file opened in Code page, stored as project-relative path */
   lastCodeFile?: string
+  /** Last selected markdown view mode in Code page (edit/preview/split) */
+  lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
 }
 
 export interface ProcessInfo {
@@ -247,6 +280,8 @@ export interface SavedProject {
   tagIds?: string[]
   /** Last file opened in Code page, stored as project-relative path */
   lastCodeFile?: string
+  /** Last selected markdown view mode in Code page (edit/preview/split) */
+  lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
 }
 
 export interface DetectionRule {

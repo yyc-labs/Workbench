@@ -75,6 +75,7 @@ export function DetailPage() {
   const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
   const [aiRawText, setAiRawText] = useState('')
+  const [jumpToAiLogToken, setJumpToAiLogToken] = useState(0)
   const [gitSnapshot, setGitSnapshot] = useState<DetailGitSnapshot | null>(null)
   const [gitSnapshotLoading, setGitSnapshotLoading] = useState(false)
   const [gitSnapshotError, setGitSnapshotError] = useState<string | null>(null)
@@ -337,6 +338,7 @@ export function DetailPage() {
 
     setAiCommitStatus('running')
     setRightPaneMode('flow')
+    setJumpToAiLogToken((prev) => prev + 1)
     useAppStore.getState().appendOutput(
       toolProcessId,
       `\r\n[AI Commit] trigger: ${isAiEnabled ? 'AI enabled' : 'AI disabled (fallback local message)'}\r\n`
@@ -891,6 +893,7 @@ export function DetailPage() {
             <DetailAiCommitPanel
               rightPaneMode={rightPaneMode}
               setRightPaneMode={setRightPaneMode}
+              jumpToAiLogToken={jumpToAiLogToken}
               flowNodes={flowNodes}
               flowEdges={flowEdges}
               aiRawText={aiRawText}
@@ -931,5 +934,4 @@ export function DetailPage() {
     </div>
   )
 }
-
 

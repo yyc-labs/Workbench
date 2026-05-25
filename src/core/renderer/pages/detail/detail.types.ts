@@ -5,6 +5,10 @@ import type {
   GitHistoryCommitInfo,
   GitOperationKind as SharedGitOperationKind,
   GitOperationResult as SharedGitOperationResult,
+  GitSetFileStageRequest as SharedGitSetFileStageRequest,
+  GitSetFileStageResult as SharedGitSetFileStageResult,
+  GitFileDiffRequest as SharedGitFileDiffRequest,
+  GitFileDiffResult as SharedGitFileDiffResult,
   GitWorkspaceSnapshot,
 } from '../../../shared/types'
 
@@ -24,6 +28,11 @@ export type LatestCommitInfo = GitHistoryCommitInfo
 export type DetailGitSnapshot = GitWorkspaceSnapshot
 export type GitOperationKind = SharedGitOperationKind
 export type GitOperationResult = SharedGitOperationResult
+export type GitSetFileStageRequest = SharedGitSetFileStageRequest
+export type GitSetFileStageResult = SharedGitSetFileStageResult
+export type GitFileDiffRequest = SharedGitFileDiffRequest
+export type GitFileDiffResult = SharedGitFileDiffResult
+export type GitDiffViewMode = 'unstaged' | 'staged'
 
 export type AiCommitRestoreResult = Pick<AiCommitTaskSnapshot, 'status' | 'output'>
 

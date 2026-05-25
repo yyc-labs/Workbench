@@ -1,10 +1,21 @@
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+
+export interface MonacoEditorScrollState {
+  scrollTop: number
+  scrollHeight: number
+  viewportHeight: number
+}
+
+export interface MonacoCodeEditorHandle {
+  getScrollState: () => MonacoEditorScrollState | null
+  setScrollTop: (scrollTop: number) => void
+}
 
 interface MonacoCodeEditorProps {
   value: string
@@ -14,6 +25,7 @@ interface MonacoCodeEditorProps {
   isReadOnly?: boolean
   onChange: (value: string) => void
   onSave: () => void
+  onScrollStateChange?: (state: MonacoEditorScrollState) => void
 }
 
 interface MonacoEnvironmentShape {
@@ -53,7 +65,7 @@ function createMonacoModelUri(filePath: string | null): string {
   return `inmemory://model/${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-export function MonacoCodeEditor({
+export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({
   value,
   language,
   theme,
@@ -61,12 +73,36 @@ export function MonacoCodeEditor({
   isReadOnly = false,
   onChange,
   onSave,
-}: MonacoCodeEditorProps) {
+  onScrollStateChange,
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const modelRef = useRef<MonacoEditor.ITextModel | null>(null)
   const syncGuardRef = useRef(false)
+  const onScrollStateChangeRef = useRef(onScrollStateChange)
+
+  useEffect(() => {
+    onScrollStateChangeRef.current = onScrollStateChange
+  }, [onScrollStateChange])
+
+  useImperativeHandle(ref, () => ({
+    getScrollState: () => {
+      const editor = editorRef.current
+      if (!editor) return null
+      const layout = editor.getLayoutInfo()
+      return {
+        scrollTop: editor.getScrollTop(),
+        scrollHeight: editor.getScrollHeight(),
+        viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
+      }
+    },
+    setScrollTop: (scrollTop: number) => {
+      const editor = editorRef.current
+      if (!editor) return
+      editor.setScrollTop(Math.max(0, scrollTop))
+    },
+  }), [])
 
   useEffect(() => {
     let disposed = false
@@ -88,14 +124,25 @@ export function MonacoCodeEditor({
         model,
         automaticLayout: true,
         minimap: { enabled: false },
-        fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+        // Prefer CJK-capable monospace fonts to keep width metrics stable for mixed Chinese + numbers.
+        fontFamily: "'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         fontSize: 13,
         lineHeight: 20,
         tabSize: 2,
         scrollBeyondLastLine: false,
         smoothScrolling: true,
+        disableMonospaceOptimizations: true,
+        allowVariableFonts: false,
+        fontLigatures: false,
+        fontWeight: '400',
         renderWhitespace: 'selection',
         bracketPairColorization: { enabled: true },
+        cursorStyle: 'line',
+        cursorWidth: 2,
+        overtypeCursorStyle: 'line',
+        overtypeOnPaste: false,
+        matchBrackets: 'near',
+        roundedSelection: false,
         padding: { top: 14, bottom: 14 },
         readOnly: isReadOnly,
         theme,
@@ -107,15 +154,69 @@ export function MonacoCodeEditor({
         onChange(editor.getValue())
       })
 
+      editor.onDidScrollChange(() => {
+        const cb = onScrollStateChangeRef.current
+        if (!cb) return
+        const layout = editor.getLayoutInfo()
+        cb({
+          scrollTop: editor.getScrollTop(),
+          scrollHeight: editor.getScrollHeight(),
+          viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
+        })
+      })
+
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         onSave()
       })
+
+      const refreshFontMetrics = () => {
+        monaco.editor.remeasureFonts()
+        editor.layout()
+        editor.render(true)
+      }
+
+      void (async () => {
+        if (typeof document === 'undefined' || !document.fonts) return
+        await document.fonts.ready
+        if (disposed) return
+        refreshFontMetrics()
+      })()
+
+      let removeFontListener: (() => void) | undefined
+      if (typeof document !== 'undefined' && document.fonts && typeof document.fonts.addEventListener === 'function') {
+        const onFontsLoaded = () => {
+          if (disposed) return
+          refreshFontMetrics()
+        }
+        document.fonts.addEventListener('loadingdone', onFontsLoaded)
+        removeFontListener = () => {
+          document.fonts.removeEventListener('loadingdone', onFontsLoaded)
+        }
+      }
+
+      const initialCb = onScrollStateChangeRef.current
+      if (initialCb) {
+        const layout = editor.getLayoutInfo()
+        initialCb({
+          scrollTop: editor.getScrollTop(),
+          scrollHeight: editor.getScrollHeight(),
+          viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
+        })
+      }
+
+      return removeFontListener
     }
 
-    void setup()
+    let cleanupFontListener: (() => void) | undefined
+    void (async () => {
+      cleanupFontListener = await setup()
+    })()
 
     return () => {
       disposed = true
+      if (cleanupFontListener) {
+        cleanupFontListener()
+      }
       const editor = editorRef.current
       if (editor) {
         editor.dispose()
@@ -177,4 +278,4 @@ export function MonacoCodeEditor({
       <div ref={containerRef} className="h-full w-full" />
     </div>
   )
-}
+})

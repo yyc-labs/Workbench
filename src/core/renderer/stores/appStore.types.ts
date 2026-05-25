@@ -21,6 +21,10 @@ import type {
   GitWorkspaceSnapshot,
   GitOperationRequest,
   GitOperationResult,
+  GitSetFileStageRequest,
+  GitSetFileStageResult,
+  GitFileDiffRequest,
+  GitFileDiffResult,
 } from '../../shared/types'
 
 declare global {
@@ -79,6 +83,8 @@ declare global {
       }[]>
       getGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
       runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
+      setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>
+      getGitFileDiff: (request: GitFileDiffRequest) => Promise<GitFileDiffResult>
       onAiCommitOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onAiCommitStatus: (
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
@@ -144,6 +150,7 @@ export interface AppState {
   setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>
+  setProjectLastMarkdownPreviewMode: (projectId: string, mode?: 'edit' | 'preview' | 'split') => Promise<void>
   clearAllProjectLastCodeFiles: () => Promise<void>
   setStartupDefaultFilter: (filter?: StartupDefaultFilter) => Promise<void>
   createFolder: (name: string, color?: string) => Promise<void>

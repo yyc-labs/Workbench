@@ -97,6 +97,14 @@ const api = {
     request: { projectPath: string; operation: 'fetch' | 'pull' | 'push' | 'merge' | 'switch'; targetBranch?: string }
   ) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 
+  setGitFileStage: (
+    request: { projectPath: string; filePath: string; stage: boolean }
+  ) => ipcRenderer.invoke(IPC.GIT_SET_FILE_STAGE, request),
+
+  getGitFileDiff: (
+    request: { projectPath: string; filePath: string; staged: boolean }
+  ) => ipcRenderer.invoke(IPC.GIT_GET_FILE_DIFF, request),
+
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 
   listTmuxSessions: () => ipcRenderer.invoke(IPC.TMUX_LIST_SESSIONS),

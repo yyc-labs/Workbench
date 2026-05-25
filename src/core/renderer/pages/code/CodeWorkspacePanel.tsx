@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Code2, RefreshCw, Save, Search, X } from 'lucide-react'
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Check, Code2, Columns2, Copy, Eye, RefreshCw, Save, Search, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { CodeFileTree } from './CodeFileTree'
-import { MonacoCodeEditor } from './MonacoCodeEditor'
+import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import {
   collectParentDirectories,
   collectMatchedFilesByQuery,
@@ -12,6 +18,7 @@ import {
   inferLanguageFromRelativePath,
   sortTreeNodes,
 } from './code.helpers'
+import { parseMarkdownDocument } from './code.frontmatterParser'
 import type { FileTreeState, SaveStatus } from './code.types'
 
 const SAVE_STATUS_RESET_DELAY_MS = 1600
@@ -25,15 +32,174 @@ function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-
   return 'vs'
 }
 
+function normalizeSyntaxLanguage(value: string | null | undefined): string {
+  const raw = (value ?? '').trim().toLowerCase()
+  if (!raw) return 'text'
+
+  if (raw === 'ts') return 'typescript'
+  if (raw === 'tsx') return 'tsx'
+  if (raw === 'js') return 'javascript'
+  if (raw === 'jsx') return 'jsx'
+  if (raw === 'sh' || raw === 'shell') return 'bash'
+  if (raw === 'yml') return 'yaml'
+  if (raw === 'md') return 'markdown'
+  if (raw === 'py') return 'python'
+  if (raw === 'rb') return 'ruby'
+  if (raw === 'rs') return 'rust'
+  if (raw === 'kt') return 'kotlin'
+  if (raw === 'cs') return 'csharp'
+  if (raw === 'ps1') return 'powershell'
+  return raw
+}
+
+function extractCodeLanguageFromClassName(className?: string): string | null {
+  const match = /language-([A-Za-z0-9_+-]+)/.exec(className ?? '')
+  return match?.[1] ?? null
+}
+
+function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: string; language: string } | null {
+  const childNodes = Children.toArray(children)
+  if (childNodes.length !== 1) return null
+
+  const onlyChild = childNodes[0]
+  if (!isValidElement(onlyChild)) {
+    return null
+  }
+
+  const codeProps = onlyChild.props as {
+    className?: string
+    children?: ReactNode
+    node?: { tagName?: string }
+  }
+  if (codeProps.node?.tagName !== 'code' && onlyChild.type !== 'code') {
+    return null
+  }
+
+  const codeText = String(codeProps.children ?? '').replace(/\n$/, '')
+  const language = normalizeSyntaxLanguage(extractCodeLanguageFromClassName(codeProps.className))
+  return { codeText, language }
+}
+
+function shouldOpenInSystemBrowser(href: string): boolean {
+  const value = href.trim().toLowerCase()
+  return (
+    value.startsWith('http://') ||
+    value.startsWith('https://') ||
+    value.startsWith('mailto:') ||
+    value.startsWith('tel:')
+  )
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      // Fallback below.
+    }
+  }
+
+  if (typeof document === 'undefined') return false
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '-9999px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+
+  textarea.focus()
+  textarea.select()
+
+  let copied = false
+  try {
+    copied = document.execCommand('copy')
+  } catch {
+    copied = false
+  } finally {
+    document.body.removeChild(textarea)
+  }
+
+  return copied
+}
+
+type MarkdownCodeBlockProps = {
+  codeText: string
+  language: string
+  themeMode: 'light' | 'dark'
+}
+
+function MarkdownCodeBlock({ codeText, language, themeMode }: MarkdownCodeBlockProps) {
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
+
+  useEffect(() => {
+    if (copyStatus === 'idle') return
+    const timer = window.setTimeout(() => {
+      setCopyStatus('idle')
+    }, 1500)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [copyStatus])
+
+  const handleCopy = useCallback(async () => {
+    const ok = await copyTextToClipboard(codeText)
+    setCopyStatus(ok ? 'success' : 'error')
+  }, [codeText])
+
+  const copyLabel = copyStatus === 'success' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy'
+
+  return (
+    <div className="code-markdown-syntax-wrap">
+      <button
+        type="button"
+        className={`code-markdown-copy-btn ${
+          copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''
+        }`}
+        onClick={() => {
+          void handleCopy()
+        }}
+        title={copyLabel}
+      >
+        {copyStatus === 'success' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        <span>{copyLabel}</span>
+      </button>
+
+      <SyntaxHighlighter
+        language={language}
+        style={themeMode === 'dark' ? oneDark : oneLight}
+        PreTag="div"
+        className="code-markdown-syntax-block"
+        customStyle={{ margin: 0, borderRadius: 10, paddingTop: 38 }}
+        codeTagProps={{
+          style: {
+            fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+          },
+        }}
+      >
+        {codeText}
+      </SyntaxHighlighter>
+    </div>
+  )
+}
+
 type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
   themeMode: 'system' | 'light' | 'dark'
 }
 
+type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
+type MarkdownScrollModeKey = 'edit' | 'preview' | 'splitEditor' | 'splitPreview'
+
 export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
   const persistedLastCodeFile = useAppStore((s) => s.projects.find((p) => p.id === projectId)?.lastCodeFile)
+  const persistedLastMarkdownPreviewMode = useAppStore((s) => s.projects.find((p) => p.id === projectId)?.lastMarkdownPreviewMode)
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
+  const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [tree, setTree] = useState<FileTreeState>({
@@ -57,9 +223,22 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [hasExternalChange, setHasExternalChange] = useState(false)
   const [isReloadingFromDisk, setIsReloadingFromDisk] = useState(false)
   const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
+  const [markdownPreviewMode, setMarkdownPreviewMode] = useState<MarkdownPreviewMode>(
+    () => (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
+      ? persistedLastMarkdownPreviewMode
+      : 'edit'
+  )
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
+  const editorRef = useRef<MonacoCodeEditorHandle | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const editorScrollStateRef = useRef<MonacoEditorScrollState | null>(null)
+  const previewScrollStateRef = useRef<{ scrollTop: number; scrollHeight: number; viewportHeight: number } | null>(null)
+  const markdownScrollMemoryRef = useRef<Record<string, Partial<Record<MarkdownScrollModeKey, number>>>>({})
+  const activeScrollSyncSourceRef = useRef<'editor' | 'preview' | null>(null)
+  const scrollSyncReleaseTimerRef = useRef<number | null>(null)
+  const splitSyncReadyRef = useRef(false)
 
   const monacoTheme = useMemo(
     () => (effectiveTheme === 'dark' ? 'vs-dark' : resolveMonacoTheme(themeMode)),
@@ -68,6 +247,117 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const isDirty = editorValue !== lastSavedValue
   const activeLanguage = activeFile?.language ?? inferLanguageFromRelativePath(activeRelativePath ?? '')
   const activeFileSize = activeFile?.size ?? 0
+  const isMarkdownFile = useMemo(() => {
+    const normalized = (activeRelativePath ?? '').toLowerCase()
+    return normalized.endsWith('.md') || normalized.endsWith('.markdown') || normalized.endsWith('.mdx') || normalized.endsWith('.mdc')
+  }, [activeRelativePath])
+  const isMdcFile = useMemo(() => {
+    const normalized = (activeRelativePath ?? '').toLowerCase()
+    return normalized.endsWith('.mdc')
+  }, [activeRelativePath])
+  const shouldParseFrontmatter = useMemo(() => {
+    const normalized = (activeRelativePath ?? '').toLowerCase()
+    return (
+      normalized.endsWith('.md') ||
+      normalized.endsWith('.markdown') ||
+      normalized.endsWith('.mdx') ||
+      normalized.endsWith('.mdc')
+    )
+  }, [activeRelativePath])
+  const parsedMarkdownDoc = useMemo(
+    () => (shouldParseFrontmatter ? parseMarkdownDocument(editorValue) : null),
+    [editorValue, shouldParseFrontmatter]
+  )
+  const markdownPreviewContent = useMemo(() => {
+    if (parsedMarkdownDoc?.hasFrontmatter) {
+      return parsedMarkdownDoc.markdownBody
+    }
+    return editorValue
+  }, [editorValue, parsedMarkdownDoc])
+  const effectiveMarkdownPreviewMode = isMarkdownFile
+    ? (markdownPreviewMode === 'split' && isNarrowViewport ? 'preview' : markdownPreviewMode)
+    : 'edit'
+  const isShowingEditor = effectiveMarkdownPreviewMode !== 'preview'
+  const isShowingPreview = effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split'
+  const markdownComponents = useMemo<Components>(() => ({
+    pre({ children }) {
+      const codeBlock = extractCodeBlockFromPreChildren(children)
+      if (!codeBlock) {
+        return <pre>{children}</pre>
+      }
+
+      return (
+        <MarkdownCodeBlock
+          codeText={codeBlock.codeText}
+          language={codeBlock.language}
+          themeMode={effectiveTheme}
+        />
+      )
+    },
+    a({ href, children, ...props }) {
+      const link = typeof href === 'string' ? href.trim() : ''
+      const external = Boolean(link) && shouldOpenInSystemBrowser(link)
+
+      return (
+        <a
+          {...props}
+          href={link || href}
+          target={external ? '_blank' : props.target}
+          rel={external ? 'noopener noreferrer' : props.rel}
+          onClick={(event) => {
+            props.onClick?.(event)
+            if (event.defaultPrevented) return
+            if (!external) return
+            event.preventDefault()
+            void window.electronAPI.openExternal(link)
+          }}
+        >
+          {children}
+        </a>
+      )
+    },
+    code({ className, children, node: _node, ...props }) {
+      const mergedClassName = className ? `code-markdown-inline-code ${className}` : 'code-markdown-inline-code'
+      return <code className={mergedClassName} {...props}>{children}</code>
+    },
+  }), [effectiveTheme])
+
+  const captureCurrentModeScroll = useCallback(() => {
+    if (!isMarkdownFile || !activeRelativePath) return
+
+    if (effectiveMarkdownPreviewMode === 'edit') {
+      const state = editorRef.current?.getScrollState() ?? editorScrollStateRef.current
+      if (state) {
+        const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
+        markdownScrollMemoryRef.current[activeRelativePath] = {
+          ...current,
+          edit: Math.max(0, state.scrollTop),
+        }
+      }
+      return
+    }
+
+    if (effectiveMarkdownPreviewMode === 'preview') {
+      const preview = previewScrollRef.current
+      if (preview) {
+        const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
+        markdownScrollMemoryRef.current[activeRelativePath] = {
+          ...current,
+          preview: Math.max(0, preview.scrollTop),
+        }
+      }
+      return
+    }
+
+    const editorState = editorRef.current?.getScrollState() ?? editorScrollStateRef.current
+    const preview = previewScrollRef.current
+    const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
+    markdownScrollMemoryRef.current[activeRelativePath] = {
+      ...current,
+      splitEditor: editorState ? Math.max(0, editorState.scrollTop) : current.splitEditor,
+      splitPreview: preview ? Math.max(0, preview.scrollTop) : current.splitPreview,
+    }
+  }, [activeRelativePath, effectiveMarkdownPreviewMode, isMarkdownFile])
 
   const loadTree = useCallback(async () => {
     setTree((prev) => ({ ...prev, status: 'loading', error: null }))
@@ -138,6 +428,8 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       if (!proceed) return
     }
 
+    captureCurrentModeScroll()
+
     setIsReading(true)
     setReadError(null)
     setSaveError(null)
@@ -147,6 +439,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
       setActiveFile(result)
       setActiveRelativePath(result.relativePath)
+      splitSyncReadyRef.current = false
       setEditorValue(result.content)
       setLastSavedValue(result.content)
       setHasExternalChange(false)
@@ -166,7 +459,15 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     } finally {
       setIsReading(false)
     }
-  }, [activeRelativePath, isDirty, persistedLastCodeFile, projectId, projectPath, setProjectLastCodeFile])
+  }, [
+    activeRelativePath,
+    captureCurrentModeScroll,
+    isDirty,
+    persistedLastCodeFile,
+    projectId,
+    projectPath,
+    setProjectLastCodeFile,
+  ])
 
   const handleSave = useCallback(async () => {
     if (!activeRelativePath || !activeFile) return
@@ -286,6 +587,17 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }
   }, [fileSearchInput, fileSearchQuery])
 
+  useEffect(() => {
+    const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
+      ? persistedLastMarkdownPreviewMode
+      : 'edit'
+    setMarkdownPreviewMode(normalized)
+  }, [persistedLastMarkdownPreviewMode, projectId])
+
+  useEffect(() => {
+    void setProjectLastMarkdownPreviewMode(projectId, markdownPreviewMode)
+  }, [markdownPreviewMode, projectId, setProjectLastMarkdownPreviewMode])
+
   const showExplorerPanel = !isNarrowViewport || isExplorerOpen
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
   const hasSearchQuery = fileSearchQuery.trim().length > 0
@@ -295,6 +607,52 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   )
   const treeNodesForView = hasSearchQuery ? matchedFileNodes : tree.nodes
 
+  const setActiveSyncSource = useCallback((source: 'editor' | 'preview') => {
+    activeScrollSyncSourceRef.current = source
+    if (scrollSyncReleaseTimerRef.current) {
+      window.clearTimeout(scrollSyncReleaseTimerRef.current)
+    }
+    scrollSyncReleaseTimerRef.current = window.setTimeout(() => {
+      activeScrollSyncSourceRef.current = null
+      scrollSyncReleaseTimerRef.current = null
+    }, 120)
+  }, [])
+
+  const storeScrollTop = useCallback((path: string, key: MarkdownScrollModeKey, scrollTop: number) => {
+    if (!Number.isFinite(scrollTop)) return
+    const current = markdownScrollMemoryRef.current[path] ?? {}
+    markdownScrollMemoryRef.current[path] = {
+      ...current,
+      [key]: Math.max(0, scrollTop),
+    }
+  }, [])
+
+  const mapScrollTopByRatio = useCallback(
+    (
+      source: { scrollTop: number; scrollHeight: number; viewportHeight: number } | null,
+      target: { scrollHeight: number; viewportHeight: number } | null
+    ): number | null => {
+      if (!source || !target) return null
+      const sourceMax = Math.max(0, source.scrollHeight - source.viewportHeight)
+      const targetMax = Math.max(0, target.scrollHeight - target.viewportHeight)
+      if (targetMax <= 0) return 0
+      if (sourceMax <= 0) return 0
+      const ratio = Math.min(1, Math.max(0, source.scrollTop / sourceMax))
+      return ratio * targetMax
+    },
+    []
+  )
+
+  const applyPreviewScrollTop = useCallback((scrollTop: number) => {
+    const preview = previewScrollRef.current
+    if (!preview) return
+    preview.scrollTop = Math.max(0, scrollTop)
+  }, [])
+
+  const applyEditorScrollTop = useCallback((scrollTop: number) => {
+    editorRef.current?.setScrollTop(Math.max(0, scrollTop))
+  }, [])
+
   useEffect(() => {
     if (tree.status !== 'ready') return
     if (hasAttemptedInitialRestore) return
@@ -303,6 +661,169 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     if (!persistedLastCodeFile) return
     void openFile(persistedLastCodeFile)
   }, [hasAttemptedInitialRestore, openFile, persistedLastCodeFile, tree.status])
+
+  useEffect(() => {
+    return () => {
+      if (scrollSyncReleaseTimerRef.current) {
+        window.clearTimeout(scrollSyncReleaseTimerRef.current)
+        scrollSyncReleaseTimerRef.current = null
+      }
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!isMarkdownFile || !activeRelativePath) return
+    splitSyncReadyRef.current = false
+
+    const timer = window.setTimeout(() => {
+      if (effectiveMarkdownPreviewMode === 'edit') {
+        const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
+        const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
+        const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
+        const nextTop = Number.isFinite(storedEdit)
+          ? Number(storedEdit)
+          : (
+            Number.isFinite(storedSplitEditor)
+              ? Number(storedSplitEditor)
+              : (Number.isFinite(storedPreview) ? Number(storedPreview) : 0)
+          )
+        applyEditorScrollTop(nextTop)
+        return
+      }
+
+      if (effectiveMarkdownPreviewMode === 'preview') {
+        const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
+        const storedSplitPreview = markdownScrollMemoryRef.current[activeRelativePath]?.splitPreview
+        const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
+        const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
+        const nextTop = Number.isFinite(storedPreview)
+          ? Number(storedPreview)
+          : (
+            Number.isFinite(storedSplitPreview)
+              ? Number(storedSplitPreview)
+              : (
+                Number.isFinite(storedSplitEditor)
+                  ? Number(storedSplitEditor)
+                  : (Number.isFinite(storedEdit) ? Number(storedEdit) : 0)
+              )
+          )
+        applyPreviewScrollTop(nextTop)
+        return
+      }
+
+      const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
+      const storedSplitPreview = markdownScrollMemoryRef.current[activeRelativePath]?.splitPreview
+      const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
+      const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
+      const fallbackEditor = Number.isFinite(storedEdit)
+        ? Number(storedEdit)
+        : (Number.isFinite(storedPreview) ? Number(storedPreview) : 0)
+      const fallbackPreview = Number.isFinite(storedPreview) ? Number(storedPreview) : fallbackEditor
+      const nextEditorTop = Number.isFinite(storedSplitEditor) ? Number(storedSplitEditor) : fallbackEditor
+      const nextPreviewTop = Number.isFinite(storedSplitPreview)
+        ? Number(storedSplitPreview)
+        : (Number.isFinite(storedSplitEditor) ? nextEditorTop : fallbackPreview || fallbackEditor)
+      applyEditorScrollTop(nextEditorTop)
+      applyPreviewScrollTop(nextPreviewTop)
+      splitSyncReadyRef.current = true
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [
+    activeRelativePath,
+    applyEditorScrollTop,
+    applyPreviewScrollTop,
+    effectiveMarkdownPreviewMode,
+    isMarkdownFile,
+  ])
+
+  const handleEditorScrollStateChange = useCallback((state: MonacoEditorScrollState) => {
+    editorScrollStateRef.current = state
+
+    if (!isMarkdownFile || !activeRelativePath || !isShowingEditor) return
+    const modeKey: MarkdownScrollModeKey = effectiveMarkdownPreviewMode === 'split' ? 'splitEditor' : 'edit'
+    storeScrollTop(activeRelativePath, modeKey, state.scrollTop)
+
+    if (effectiveMarkdownPreviewMode !== 'split' || !isShowingPreview || !splitSyncReadyRef.current) return
+    if (activeScrollSyncSourceRef.current === 'preview') return
+
+    const previewState = previewScrollStateRef.current
+    const targetTop = mapScrollTopByRatio(state, previewState)
+    if (targetTop == null) return
+    setActiveSyncSource('editor')
+    applyPreviewScrollTop(targetTop)
+    storeScrollTop(activeRelativePath, 'splitPreview', targetTop)
+  }, [
+    activeRelativePath,
+    applyPreviewScrollTop,
+    effectiveMarkdownPreviewMode,
+    isMarkdownFile,
+    isShowingEditor,
+    isShowingPreview,
+    mapScrollTopByRatio,
+    setActiveSyncSource,
+    storeScrollTop,
+  ])
+
+  const handlePreviewScroll = useCallback(() => {
+    const preview = previewScrollRef.current
+    if (!preview || !isMarkdownFile || !activeRelativePath || !isShowingPreview) return
+
+    const viewportHeight = preview.clientHeight
+    const scrollHeight = preview.scrollHeight
+    const scrollTop = preview.scrollTop
+    const nextState = { scrollTop, scrollHeight, viewportHeight }
+    previewScrollStateRef.current = nextState
+
+    const modeKey: MarkdownScrollModeKey = effectiveMarkdownPreviewMode === 'split' ? 'splitPreview' : 'preview'
+    storeScrollTop(activeRelativePath, modeKey, scrollTop)
+
+    if (effectiveMarkdownPreviewMode !== 'split' || !isShowingEditor || !splitSyncReadyRef.current) return
+    if (activeScrollSyncSourceRef.current === 'editor') return
+
+    const editorState = editorScrollStateRef.current
+    const targetTop = mapScrollTopByRatio(nextState, editorState)
+    if (targetTop == null) return
+    setActiveSyncSource('preview')
+    applyEditorScrollTop(targetTop)
+    storeScrollTop(activeRelativePath, 'splitEditor', targetTop)
+  }, [
+    activeRelativePath,
+    applyEditorScrollTop,
+    effectiveMarkdownPreviewMode,
+    isMarkdownFile,
+    isShowingEditor,
+    isShowingPreview,
+    mapScrollTopByRatio,
+    setActiveSyncSource,
+    storeScrollTop,
+  ])
+
+  useEffect(() => {
+    if (!isShowingPreview) return
+    const preview = previewScrollRef.current
+    if (!preview) return
+
+    const syncPreviewState = () => {
+      previewScrollStateRef.current = {
+        scrollTop: preview.scrollTop,
+        scrollHeight: preview.scrollHeight,
+        viewportHeight: preview.clientHeight,
+      }
+    }
+
+    syncPreviewState()
+    const resizeObserver = new ResizeObserver(() => {
+      syncPreviewState()
+    })
+    resizeObserver.observe(preview)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isShowingPreview, editorValue, effectiveMarkdownPreviewMode])
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -465,16 +986,137 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
           {showEditorPanel && (
             <section className="code-editor-panel surface-card">
               {activeRelativePath ? (
-                <MonacoCodeEditor
-                  filePath={activeRelativePath}
-                  value={editorValue}
-                  language={activeLanguage || 'plaintext'}
-                  theme={monacoTheme}
-                  onChange={setEditorValue}
-                  onSave={() => {
-                    void handleSave()
-                  }}
-                />
+                <div className="code-editor-shell">
+                  {isMarkdownFile && (
+                    <div className="code-editor-preview-toolbar">
+                      <span className="text-[11px] text-[color:var(--color-muted-foreground)]">Markdown</span>
+                      <div className="code-editor-preview-mode-group">
+                        <button
+                          type="button"
+                          className={`code-editor-preview-mode-btn ${
+                            effectiveMarkdownPreviewMode === 'edit' ? 'is-active' : ''
+                          }`}
+                          onClick={() => {
+                            captureCurrentModeScroll()
+                            setMarkdownPreviewMode('edit')
+                          }}
+                          title="Editor"
+                        >
+                          <Code2 className="h-3.5 w-3.5" />
+                          Editor
+                        </button>
+                        <button
+                          type="button"
+                          className={`code-editor-preview-mode-btn ${
+                            effectiveMarkdownPreviewMode === 'preview' ? 'is-active' : ''
+                          }`}
+                          onClick={() => {
+                            captureCurrentModeScroll()
+                            setMarkdownPreviewMode('preview')
+                          }}
+                          title="Preview"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          className={`code-editor-preview-mode-btn ${
+                            effectiveMarkdownPreviewMode === 'split' ? 'is-active' : ''
+                          }`}
+                          onClick={() => {
+                            captureCurrentModeScroll()
+                            setMarkdownPreviewMode('split')
+                          }}
+                          title={isNarrowViewport ? 'Split is only available on wide layout' : 'Split view'}
+                          disabled={isNarrowViewport}
+                        >
+                          <Columns2 className="h-3.5 w-3.5" />
+                          Split
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div
+                    className={`code-editor-content ${
+                      effectiveMarkdownPreviewMode === 'split'
+                        ? 'code-editor-content--split'
+                        : 'code-editor-content--single'
+                    }`}
+                  >
+                    {effectiveMarkdownPreviewMode !== 'preview' && (
+                      <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`}>
+                        <MonacoCodeEditor
+                          ref={editorRef}
+                          filePath={activeRelativePath}
+                          value={editorValue}
+                          language={activeLanguage || 'plaintext'}
+                          theme={monacoTheme}
+                          onChange={setEditorValue}
+                          onScrollStateChange={handleEditorScrollStateChange}
+                          onSave={() => {
+                            void handleSave()
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {(effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split') && (
+                      <div
+                        ref={previewScrollRef}
+                        className="code-editor-pane code-editor-pane--preview"
+                        onScroll={handlePreviewScroll}
+                      >
+                        <article className="code-markdown-content">
+                          {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
+                            <section className="code-mdc-meta-card">
+                              <h3 className="code-mdc-meta-title">Agent Rule Metadata</h3>
+                              <div className="code-mdc-meta-grid">
+                                <span className="code-mdc-meta-key">Type</span>
+                                <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
+
+                                <span className="code-mdc-meta-key">Always Apply</span>
+                                <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
+
+                                <span className="code-mdc-meta-key">Description</span>
+                                <span className="code-mdc-meta-value">
+                                  {parsedMarkdownDoc.ruleMetadata.description?.trim() || 'N/A'}
+                                </span>
+
+                                <span className="code-mdc-meta-key">Globs</span>
+                                <span className="code-mdc-meta-value">
+                                  {parsedMarkdownDoc.ruleMetadata.globs.length > 0
+                                    ? parsedMarkdownDoc.ruleMetadata.globs.join(', ')
+                                    : 'N/A'}
+                                </span>
+                              </div>
+                            </section>
+                          )}
+                          {!isMdcFile && parsedMarkdownDoc?.markdownMetadata && (
+                            <section className="code-mdc-meta-card">
+                              <h3 className="code-mdc-meta-title">Document Metadata</h3>
+                              <div className="code-mdc-meta-grid">
+                                <span className="code-mdc-meta-key">Title</span>
+                                <span className="code-mdc-meta-value">
+                                  {parsedMarkdownDoc.markdownMetadata.title?.trim() || 'N/A'}
+                                </span>
+
+                                <span className="code-mdc-meta-key">Description</span>
+                                <span className="code-mdc-meta-value">
+                                  {parsedMarkdownDoc.markdownMetadata.description?.trim() || 'N/A'}
+                                </span>
+                              </div>
+                            </section>
+                          )}
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {markdownPreviewContent}
+                          </ReactMarkdown>
+                        </article>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <div className="code-panel-empty">
                   <div className="text-sm text-[color:var(--color-muted-foreground)]">

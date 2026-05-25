@@ -17,20 +17,25 @@ import {
 } from 'lucide-react'
 import { formatCommitDate } from './detail.aiFlow'
 import { ModalShell } from '../../components/ModalShell'
+import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type {
   AiCommitStatus,
   AiFlowEdge,
   AiFlowNode,
   DetailGitSnapshot,
   FlowViewportApi,
+  GitDiffViewMode,
+  GitFileDiffResult,
   GitOperationKind,
   GitOperationResult,
+  GitSetFileStageResult,
   RightPaneMode,
 } from './detail.types'
 
 type DetailAiCommitPanelProps = {
   rightPaneMode: RightPaneMode
   setRightPaneMode: Dispatch<SetStateAction<RightPaneMode>>
+  jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
   flowEdges: AiFlowEdge[]
   aiRawText: string
@@ -63,6 +68,8 @@ type OperationConfirmState = {
   message: string
 } | null
 
+type MiddlePanelMode = 'history' | 'ai-log' | 'git-log'
+
 const CHANGE_META: Record<GitChangedFile['kind'], { label: string; className: string }> = {
   added: { label: '新增', className: 'text-[color:var(--color-success)] bg-[color:var(--color-success-background)]' },
   modified: { label: '修改', className: 'text-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10' },
@@ -83,6 +90,10 @@ const GIT_OPERATION_ITEMS = [
   { key: 'merge', label: 'Merge', description: '合并目标分支', icon: GitMerge },
 ] as const
 
+function formatGitBadgeCount(count: number): string {
+  return count > 99 ? '99+' : String(count)
+}
+
 function getScopeLabel(file: GitChangedFile): string {
   if (file.scope === 'conflicted') return '冲突'
   if (file.scope === 'untracked') return '未跟踪'
@@ -91,8 +102,41 @@ function getScopeLabel(file: GitChangedFile): string {
   return '未暂存'
 }
 
-function formatGitBadgeCount(count: number): string {
-  return count > 99 ? '99+' : String(count)
+function formatLogTime(value: number): string {
+  if (!Number.isFinite(value)) return '-'
+  return new Date(value).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+function pickDefaultDiffViewMode(file: GitChangedFile): GitDiffViewMode {
+  return file.unstaged || file.scope === 'untracked' ? 'unstaged' : 'staged'
+}
+
+function getOperationLabel(operation: GitOperationKind): string {
+  return GIT_OPERATION_ITEMS.find((item) => item.key === operation)?.label ?? operation
+}
+
+function getOperationStatusClass(result: GitOperationResult): string {
+  if (result.ok) {
+    return 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)]'
+  }
+  if (result.skipped) {
+    return 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]'
+  }
+  return 'border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)]'
+}
+
+function getOperationStatusText(result: GitOperationResult): string {
+  if (result.ok) return '成功'
+  if (result.skipped) return '已跳过'
+  return '失败'
 }
 
 function computeOperationState(
@@ -209,6 +253,7 @@ function CommitHistoryItem({
 function DetailAiCommitPanel({
   rightPaneMode,
   setRightPaneMode,
+  jumpToAiLogToken,
   flowNodes,
   aiRawText,
   statusClass,
@@ -220,15 +265,30 @@ function DetailAiCommitPanel({
   activeCommitHash,
   setActiveCommitHash,
 }: DetailAiCommitPanelProps) {
+  const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<GitOperationKind | null>(null)
   const [mergeTarget, setMergeTarget] = useState('')
   const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false)
   const [operationConfirm, setOperationConfirm] = useState<OperationConfirmState>(null)
-  const [operationResult, setOperationResult] = useState<GitOperationResult | null>(null)
+  const [operationLogs, setOperationLogs] = useState<GitOperationResult[]>([])
+  const [stagingFilePath, setStagingFilePath] = useState<string | null>(null)
+  const [fileActionError, setFileActionError] = useState<string | null>(null)
+  const [diffDrawerOpen, setDiffDrawerOpen] = useState(false)
+  const [activeDiffFilePath, setActiveDiffFilePath] = useState<string | null>(null)
+  const [diffViewMode, setDiffViewMode] = useState<GitDiffViewMode>('unstaged')
+  const [diffLoading, setDiffLoading] = useState(false)
+  const [diffContent, setDiffContent] = useState('')
+  const [diffError, setDiffError] = useState<string | null>(null)
   const mergeDropdownRef = useRef<HTMLDivElement | null>(null)
+  const diffRequestSeqRef = useRef(0)
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
+  const changedFilesMap = useMemo(() => {
+    const map = new Map<string, GitChangedFile>()
+    for (const item of changedFiles) map.set(item.path, item)
+    return map
+  }, [changedFiles])
   const recentCommits = gitSnapshot?.recentCommits ?? []
   const currentBranch = branch?.current || 'No branch'
   const upstreamBranch = branch?.upstream || 'No upstream'
@@ -243,6 +303,9 @@ function DetailAiCommitPanel({
   const branchAhead = branch?.ahead ?? 0
   const branchBehind = branch?.behind ?? 0
   const hasUpstream = Boolean(branch?.upstream)
+  const activeDiffFile = activeDiffFilePath ? changedFilesMap.get(activeDiffFilePath) ?? null : null
+  const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
+  const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
 
   const localMergeCandidates = useMemo(
     () => localBranches.filter((name) => name !== currentBranch),
@@ -254,6 +317,29 @@ function DetailAiCommitPanel({
     [remoteBranches, currentBranch]
   )
   const mergeTargetLabel = mergeTarget || '选择分支（本地 / 远程）...'
+  const middlePanelMeta = middlePanelMode === 'history'
+    ? {
+      title: '提交历史',
+      description: '最近 10 次提交，点击可展开说明',
+      icon: History,
+    }
+    : middlePanelMode === 'ai-log'
+      ? {
+        title: 'AI Commit 日志',
+        description: '完整原始输出，便于排查生成过程',
+        icon: GitCommitHorizontal,
+      }
+      : {
+        title: 'Git 操作日志',
+        description: '右侧操作执行记录会累计到这里',
+        icon: GitBranch,
+      }
+  const MiddlePanelIcon = middlePanelMeta.icon
+
+  useEffect(() => {
+    if (jumpToAiLogToken <= 0) return
+    setMiddlePanelMode('ai-log')
+  }, [jumpToAiLogToken])
 
   useEffect(() => {
     if (!mergeDropdownOpen) return
@@ -283,6 +369,60 @@ function DetailAiCommitPanel({
       document.removeEventListener('keydown', handleEscape)
     }
   }, [operationConfirm])
+
+  useEffect(() => {
+    if (!diffDrawerOpen) return
+    if (activeDiffFilePath && changedFilesMap.has(activeDiffFilePath)) return
+    if (changedFiles.length <= 0) {
+      setDiffDrawerOpen(false)
+      setActiveDiffFilePath(null)
+      setDiffContent('')
+      setDiffError(null)
+      return
+    }
+    setActiveDiffFilePath(changedFiles[0].path)
+  }, [changedFiles, changedFilesMap, diffDrawerOpen, activeDiffFilePath])
+
+  useEffect(() => {
+    if (!activeDiffFile) {
+      setDiffViewMode('unstaged')
+      return
+    }
+    if (diffViewMode === 'staged' && !activeDiffSupportsStaged) {
+      setDiffViewMode(activeDiffSupportsUnstaged ? 'unstaged' : 'staged')
+      return
+    }
+    if (diffViewMode === 'unstaged' && !activeDiffSupportsUnstaged && activeDiffSupportsStaged) {
+      setDiffViewMode('staged')
+    }
+  }, [activeDiffFile, diffViewMode, activeDiffSupportsStaged, activeDiffSupportsUnstaged])
+
+  useEffect(() => {
+    if (!diffDrawerOpen) return
+    if (!activeDiffFilePath || !activeDiffFile) return
+    if (diffViewMode === 'staged' && !activeDiffSupportsStaged) return
+    if (diffViewMode === 'unstaged' && !activeDiffSupportsUnstaged) return
+    void loadDiff(activeDiffFilePath, diffViewMode === 'staged')
+  }, [
+    gitSnapshot?.checkedAt,
+    diffDrawerOpen,
+    activeDiffFilePath,
+    activeDiffFile,
+    diffViewMode,
+    activeDiffSupportsStaged,
+    activeDiffSupportsUnstaged,
+  ])
+
+  useEffect(() => {
+    if (diffLoading) return
+    if (diffError || diffContent) return
+    if (!activeDiffFilePath || !changedFilesMap.has(activeDiffFilePath)) return
+    const file = changedFilesMap.get(activeDiffFilePath)
+    if (!file) return
+    if (file.scope === 'untracked' && diffViewMode === 'unstaged') return
+    if (file.kind === 'deleted') return
+    setDiffContent('(no diff output)')
+  }, [diffLoading, diffError, diffContent, activeDiffFilePath, changedFilesMap, diffViewMode])
 
   const operationStates = useMemo<Record<GitOperationKind, OperationCardState>>(() => {
     return {
@@ -348,6 +488,65 @@ function DetailAiCommitPanel({
     runningOperation,
   ])
 
+  const setFileStaged = async (file: GitChangedFile, stage: boolean) => {
+    if (!gitSnapshot || stagingFilePath) return
+    setFileActionError(null)
+    setStagingFilePath(file.path)
+    try {
+      const result: GitSetFileStageResult = await window.electronAPI.setGitFileStage({
+        projectPath: gitSnapshot.projectPath,
+        filePath: file.path,
+        stage,
+      })
+      if (!result.ok) {
+        setFileActionError(result.error || result.output || '文件暂存操作失败')
+      }
+      await onRefreshGitSnapshot()
+    } catch (error) {
+      setFileActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setStagingFilePath(null)
+    }
+  }
+
+  const loadDiff = async (filePath: string, staged: boolean) => {
+    if (!gitSnapshot) return
+    const requestSeq = diffRequestSeqRef.current + 1
+    diffRequestSeqRef.current = requestSeq
+    setDiffLoading(true)
+    setDiffError(null)
+    try {
+      const result: GitFileDiffResult = await window.electronAPI.getGitFileDiff({
+        projectPath: gitSnapshot.projectPath,
+        filePath,
+        staged,
+      })
+      if (requestSeq !== diffRequestSeqRef.current) return
+      if (!result.ok) {
+        setDiffContent('')
+        setDiffError(result.error || result.output || '读取 diff 失败')
+        return
+      }
+      setDiffContent(result.output)
+    } catch (error) {
+      if (requestSeq !== diffRequestSeqRef.current) return
+      setDiffContent('')
+      setDiffError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (requestSeq === diffRequestSeqRef.current) setDiffLoading(false)
+    }
+  }
+
+  const openDiffDrawerForFile = (filePath: string) => {
+    const target = changedFilesMap.get(filePath)
+    if (!target) return
+    setFileActionError(null)
+    setDiffDrawerOpen(true)
+    setActiveDiffFilePath(filePath)
+    const initialMode = pickDefaultDiffViewMode(target)
+    setDiffViewMode(initialMode)
+  }
+
   const requestGitOperation = (operation: GitOperationKind) => {
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
@@ -370,17 +569,19 @@ function DetailAiCommitPanel({
     if (state.disabled || !gitSnapshot) return
 
     setRunningOperation(operation)
-    setOperationResult(null)
     try {
       const result = await window.electronAPI.runGitOperation({
         projectPath: gitSnapshot.projectPath,
         operation,
         targetBranch: operation === 'merge' || operation === 'switch' ? mergeTarget : undefined,
       })
-      setOperationResult(result)
+      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+      if (!result.ok && !result.skipped) {
+        setMiddlePanelMode('git-log')
+      }
       await onRefreshGitSnapshot()
     } catch (error) {
-      setOperationResult({
+      const failedResult: GitOperationResult = {
         operation,
         ok: false,
         checkedAt: Date.now(),
@@ -388,7 +589,9 @@ function DetailAiCommitPanel({
         output: error instanceof Error ? error.message : String(error),
         exitCode: null,
         error: error instanceof Error ? error.message : String(error),
-      })
+      }
+      setOperationLogs((prev) => [failedResult, ...prev].slice(0, 50))
+      setMiddlePanelMode('git-log')
     } finally {
       setRunningOperation(null)
     }
@@ -405,7 +608,7 @@ function DetailAiCommitPanel({
       <aside className="h-full min-h-0 min-w-0 overflow-hidden rounded-[24px] surface-card">
         <div className="flex h-full min-h-0 flex-col gap-4 p-4">
           <section className="shrink-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 p-4">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="section-label">AI Commit</p>
@@ -417,48 +620,19 @@ function DetailAiCommitPanel({
                 </span>
               </div>
 
-              {rightPaneMode === 'flow' ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {flowNodes.map((node, index) => (
-                    <div
-                      key={node.id}
-                      className={`inline-flex max-w-[190px] items-center gap-2 rounded-full border px-3 py-1.5 text-[11.5px] font-medium ${getStepClass(node.data.status)}`}
-                      title={node.data.detail || node.data.label}
-                    >
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getStepDotClass(node.data.status)}`} />
-                      <span className="shrink-0 font-mono text-[10px] opacity-70">{index + 1}</span>
-                      <span className="truncate">{node.data.label}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-3 max-h-[128px] overflow-auto rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/60 p-3">
-                  <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/85">
-                    {aiRawText || '暂无原始日志'}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            <div className="quiet-control flex shrink-0 items-center gap-1 rounded-full border-0 p-1">
-              <button
-                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'flow'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                onClick={() => setRightPaneMode('flow')}
-              >
-                状态
-              </button>
-              <button
-                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${rightPaneMode === 'raw'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                onClick={() => setRightPaneMode('raw')}
-              >
-                日志
-              </button>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {flowNodes.map((node, index) => (
+                  <div
+                    key={node.id}
+                    className={`inline-flex max-w-[190px] items-center gap-2 rounded-full border px-3 py-1.5 text-[11.5px] font-medium ${getStepClass(node.data.status)}`}
+                    title={node.data.detail || node.data.label}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getStepDotClass(node.data.status)}`} />
+                    <span className="shrink-0 font-mono text-[10px] opacity-70">{index + 1}</span>
+                    <span className="truncate">{node.data.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -469,7 +643,7 @@ function DetailAiCommitPanel({
           </div>
         )}
 
-        <section className="grid min-h-0 flex-1 grid-cols-[minmax(300px,1.05fr)_minmax(340px,1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(380px,1.1fr)_minmax(420px,1fr)_340px]">
+        <section className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(360px,1.1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(320px,0.95fr)_minmax(460px,1.2fr)_340px]">
           <div className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="inline-flex min-w-0 items-center gap-2">
@@ -517,23 +691,67 @@ function DetailAiCommitPanel({
               </div>
             )}
 
+            {fileActionError && (
+              <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
+                {fileActionError}
+              </div>
+            )}
+
             {changedFiles.length > 0 ? (
               <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
                 {changedFiles.map((file) => {
                   const meta = CHANGE_META[file.kind]
+                  const isBusy = stagingFilePath === file.path
+                  const canStage = (file.unstaged || file.scope === 'untracked') && file.scope !== 'conflicted'
+                  const canUnstage = file.staged && file.scope !== 'conflicted'
                   return (
-                    <div key={`${file.path}-${file.indexStatus}-${file.worktreeStatus}`} className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 px-3 py-2.5">
+                    <div
+                      key={`${file.path}-${file.indexStatus}-${file.worktreeStatus}`}
+                      className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 px-3 py-2.5"
+                    >
                       <div className="flex items-start gap-2">
-                        <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${meta.className}`}>
-                          {meta.label}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={file.path}>{file.path}</p>
-                          {file.originalPath && (
-                            <p className="mt-0.5 truncate font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]" title={file.originalPath}>
-                              from {file.originalPath}
-                            </p>
-                          )}
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => openDiffDrawerForFile(file.path)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${meta.className}`}>
+                              {meta.label}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={file.path}>{file.path}</p>
+                              {file.originalPath && (
+                                <p className="mt-0.5 truncate font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]" title={file.originalPath}>
+                                  from {file.originalPath}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2.5 py-1 text-[10.5px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => {
+                              void setFileStaged(file, true)
+                            }}
+                            disabled={!canStage || Boolean(stagingFilePath)}
+                            title={canStage ? '将文件加入暂存区' : '当前状态不可暂存'}
+                          >
+                            {isBusy && canStage ? '暂存中...' : '暂存'}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2.5 py-1 text-[10.5px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => {
+                              void setFileStaged(file, false)
+                            }}
+                            disabled={!canUnstage || Boolean(stagingFilePath)}
+                            title={canUnstage ? '将文件移出暂存区' : '当前状态不可取消暂存'}
+                          >
+                            {isBusy && canUnstage ? '取消中...' : '取消暂存'}
+                          </button>
                         </div>
                       </div>
                       <div className="mt-2 flex items-center justify-between text-[10.5px] text-[color:var(--color-muted-foreground)]">
@@ -558,31 +776,125 @@ function DetailAiCommitPanel({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="inline-flex min-w-0 items-center gap-2">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">
-                  <History className="h-4.5 w-4.5" />
+                  <MiddlePanelIcon className="h-4.5 w-4.5" />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">提交历史</p>
-                  <p className="text-xs text-[color:var(--color-muted-foreground)]">最近 10 次提交，点击可展开说明</p>
+                  <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">
+                    {middlePanelMeta.title}
+                  </p>
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">{middlePanelMeta.description}</p>
                 </div>
               </div>
-              <GitCommitHorizontal className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+              <div className="quiet-control flex shrink-0 items-center gap-1 rounded-full border-0 p-1">
+                <button
+                  type="button"
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'history'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                  onClick={() => setMiddlePanelMode('history')}
+                >
+                  历史
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'ai-log'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                  onClick={() => setMiddlePanelMode('ai-log')}
+                >
+                  AI 日志
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'git-log'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                  onClick={() => setMiddlePanelMode('git-log')}
+                >
+                  Git 日志
+                </button>
+              </div>
             </div>
 
-            {recentCommits.length > 0 ? (
-              <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
-                {recentCommits.map((commit) => (
-                  <CommitHistoryItem
-                    key={commit.hash}
-                    commit={commit}
-                    activeCommitHash={activeCommitHash}
-                    setActiveCommitHash={setActiveCommitHash}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">
-                暂无提交记录
-              </p>
+            {middlePanelMode === 'history' && (
+              <>
+                {recentCommits.length > 0 ? (
+                  <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
+                    {recentCommits.map((commit) => (
+                      <CommitHistoryItem
+                        key={commit.hash}
+                        commit={commit}
+                        activeCommitHash={activeCommitHash}
+                        setActiveCommitHash={setActiveCommitHash}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">
+                    暂无提交记录
+                  </p>
+                )}
+              </>
+            )}
+
+            {middlePanelMode === 'ai-log' && (
+              <>
+                {aiRawText.trim() ? (
+                  <div className="min-h-0 flex-1 overflow-auto rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/60 p-3">
+                    <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/88">
+                      {aiRawText}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">
+                    暂无 AI Commit 日志
+                  </p>
+                )}
+              </>
+            )}
+
+            {middlePanelMode === 'git-log' && (
+              <>
+                {operationLogs.length > 0 ? (
+                  <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
+                    {operationLogs.map((result, index) => (
+                      <div
+                        key={`${result.operation}-${result.checkedAt}-${index}`}
+                        className={`rounded-[14px] border px-3 py-2 ${getOperationStatusClass(result)}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[12px] font-semibold text-[color:var(--color-foreground)]">
+                            {getOperationLabel(result.operation)} · {getOperationStatusText(result)}
+                          </p>
+                          <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                            {formatLogTime(result.checkedAt)}
+                          </p>
+                        </div>
+                        {result.targetBranch && (
+                          <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                            目标分支：{result.targetBranch}
+                          </p>
+                        )}
+                        {result.command && (
+                          <p className="mt-1 font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                            {result.command}
+                          </p>
+                        )}
+                        <pre className="mt-1 max-h-[140px] overflow-auto whitespace-pre-wrap break-words text-[10.5px] leading-5 text-[color:var(--color-foreground)]/88">
+                          {result.output}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">
+                    暂无 Git 操作日志，执行右侧操作后会显示在这里
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -747,27 +1059,6 @@ function DetailAiCommitPanel({
               })}
             </div>
 
-            {operationResult && (
-              <div className={`mt-3 rounded-[12px] border px-3 py-2 ${
-                operationResult.ok
-                  ? 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)]'
-                  : operationResult.skipped
-                    ? 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]'
-                    : 'border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)]'
-              }`}>
-                <p className="text-[11px] font-semibold text-[color:var(--color-foreground)]">
-                  {operationResult.ok ? '操作成功' : operationResult.skipped ? '操作已跳过' : '操作失败'}
-                </p>
-                {operationResult.command && (
-                  <p className="mt-1 font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                    {operationResult.command}
-                  </p>
-                )}
-                <pre className="mt-1 max-h-[110px] overflow-auto whitespace-pre-wrap break-words text-[10.5px] leading-5 text-[color:var(--color-foreground)]/88">
-                  {operationResult.output}
-                </pre>
-              </div>
-            )}
           </div>
           </section>
         </div>
@@ -814,6 +1105,7 @@ function DetailAiCommitPanel({
                 className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
                 onClick={() => {
                   if (!pendingOperation) return
+                  setMiddlePanelMode('git-log')
                   setOperationConfirm(null)
                   void runGitOperation(pendingOperation)
                 }}
@@ -822,6 +1114,30 @@ function DetailAiCommitPanel({
               </button>
             </div>
       </ModalShell>
+      <DetailGitDiffDrawer
+        open={diffDrawerOpen}
+        changedFiles={changedFiles}
+        activeFilePath={activeDiffFilePath}
+        activeFile={activeDiffFile}
+        diffViewMode={diffViewMode}
+        diffLoading={diffLoading}
+        diffContent={diffContent}
+        diffError={diffError}
+        canViewUnstaged={activeDiffSupportsUnstaged}
+        canViewStaged={activeDiffSupportsStaged}
+        onClose={() => setDiffDrawerOpen(false)}
+        onSelectFile={(filePath) => {
+          const file = changedFilesMap.get(filePath)
+          if (!file) return
+          setActiveDiffFilePath(filePath)
+          const mode = pickDefaultDiffViewMode(file)
+          setDiffViewMode(mode)
+        }}
+        onChangeDiffViewMode={(mode) => {
+          if (mode === diffViewMode) return
+          setDiffViewMode(mode)
+        }}
+      />
     </>
   )
 }

@@ -9,7 +9,7 @@ export function inferLanguageFromRelativePath(relativePath: string): string {
   if (lower.endsWith('.scss')) return 'scss'
   if (lower.endsWith('.less')) return 'less'
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html'
-  if (lower.endsWith('.md') || lower.endsWith('.mdx')) return 'markdown'
+  if (lower.endsWith('.md') || lower.endsWith('.mdx') || lower.endsWith('.mdc')) return 'markdown'
   if (lower.endsWith('.py')) return 'python'
   if (lower.endsWith('.go')) return 'go'
   if (lower.endsWith('.rs')) return 'rust'

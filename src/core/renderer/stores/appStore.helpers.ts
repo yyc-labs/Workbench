@@ -97,6 +97,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   folderId?: string
   tagIds: string[]
   lastCodeFile?: string
+  lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
 }> {
   return projects.map((p) => ({
     path: p.path,
@@ -110,6 +111,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     folderId: p.folderId,
     tagIds: p.tagIds ?? [],
     lastCodeFile: p.lastCodeFile,
+    lastMarkdownPreviewMode: p.lastMarkdownPreviewMode,
   }))
 }
 

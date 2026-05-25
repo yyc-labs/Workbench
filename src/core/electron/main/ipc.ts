@@ -14,6 +14,8 @@ export const IPC = {
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
   GIT_GET_WORKSPACE_SNAPSHOT: 'git:getWorkspaceSnapshot',
   GIT_RUN_OPERATION: 'git:runOperation',
+  GIT_SET_FILE_STAGE: 'git:setFileStage',
+  GIT_GET_FILE_DIFF: 'git:getFileDiff',
   CONFIG_GET: 'config:get',
   CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',

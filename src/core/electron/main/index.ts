@@ -4,6 +4,8 @@ import { createHash } from 'crypto'
 import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { writeFileSync, unlinkSync } from 'fs'
+import { constants as FsConstants } from 'fs'
+import { access } from 'fs/promises'
 import { StringDecoder } from 'string_decoder'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
@@ -33,6 +35,10 @@ import type {
   GitHistoryCommitInfo,
   GitOperationRequest,
   GitOperationResult,
+  GitSetFileStageRequest,
+  GitSetFileStageResult,
+  GitFileDiffRequest,
+  GitFileDiffResult,
   GitWorkspaceSnapshot,
   RuntimeDiagnostics,
   TerminalProcessInventory,
@@ -723,6 +729,188 @@ function normalizeGitOperationOutput(stdout: string, stderr: string): string {
   return normalized || '(no output)'
 }
 
+function normalizeGitDiffOutput(output: string): string {
+  return output.replace(/\r/g, '').trim()
+}
+
+async function fileExistsAtCwd(cwd: string, relativeFilePath: string): Promise<boolean> {
+  try {
+    const filePath = join(cwd, relativeFilePath)
+    await access(filePath, FsConstants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function setGitFileStage(request: GitSetFileStageRequest): Promise<GitSetFileStageResult> {
+  const checkedAt = Date.now()
+  const projectPath = request.projectPath.trim()
+  const filePath = request.filePath.trim()
+  const stage = request.stage
+
+  if (!projectPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Project path is required.',
+      exitCode: null,
+      error: 'Project path is required.',
+    }
+  }
+  if (!filePath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'File path is required.',
+      exitCode: null,
+      error: 'File path is required.',
+    }
+  }
+
+  const snapshot = await readGitWorkspaceSnapshot(projectPath)
+  if (!snapshot.isGitRepository) {
+    const reason = snapshot.error || 'Not a git repository.'
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: reason,
+      exitCode: null,
+      error: reason,
+    }
+  }
+
+  if (stage) {
+    const args = ['add', '--', filePath]
+    const execution = await runGitCommand(projectPath, args)
+    const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    const ok = execution.code === 0
+    return {
+      ok,
+      checkedAt,
+      command: formatGitCommand(args),
+      output,
+      exitCode: execution.code,
+      error: ok ? undefined : output,
+    }
+  }
+
+  const fallbackArgs: string[][] = [
+    ['restore', '--staged', '--', filePath],
+    ['reset', 'HEAD', '--', filePath],
+    ['rm', '--cached', '--', filePath],
+  ]
+
+  let lastExecution: { code: number | null; stdout: string; stderr: string } | null = null
+  let lastCommand = ''
+  for (const args of fallbackArgs) {
+    const execution = await runGitCommand(projectPath, args)
+    const ok = execution.code === 0
+    if (ok) {
+      return {
+        ok: true,
+        checkedAt,
+        command: formatGitCommand(args),
+        output: normalizeGitOperationOutput(execution.stdout, execution.stderr),
+        exitCode: execution.code,
+      }
+    }
+    lastExecution = execution
+    lastCommand = formatGitCommand(args)
+  }
+
+  const output = lastExecution
+    ? normalizeGitOperationOutput(lastExecution.stdout, lastExecution.stderr)
+    : 'Unstage operation failed.'
+  return {
+    ok: false,
+    checkedAt,
+    command: lastCommand,
+    output,
+    exitCode: lastExecution?.code ?? null,
+    error: output,
+  }
+}
+
+async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffResult> {
+  const checkedAt = Date.now()
+  const projectPath = request.projectPath.trim()
+  const filePath = request.filePath.trim()
+  const staged = Boolean(request.staged)
+
+  if (!projectPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Project path is required.',
+      exitCode: null,
+      staged,
+      error: 'Project path is required.',
+    }
+  }
+  if (!filePath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'File path is required.',
+      exitCode: null,
+      staged,
+      error: 'File path is required.',
+    }
+  }
+
+  const snapshot = await readGitWorkspaceSnapshot(projectPath)
+  if (!snapshot.isGitRepository) {
+    const reason = snapshot.error || 'Not a git repository.'
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: reason,
+      exitCode: null,
+      staged,
+      error: reason,
+    }
+  }
+
+  let args = staged
+    ? ['diff', '--cached', '--', filePath]
+    : ['diff', '--', filePath]
+  let execution = await runGitCommand(projectPath, args)
+  let ok = execution.code === 0
+  let output = normalizeGitDiffOutput(execution.stdout)
+  let errorText = ok ? undefined : execution.stderr.trim() || undefined
+
+  if (!staged && ok && !output) {
+    const existsInWorkingTree = await fileExistsAtCwd(projectPath, filePath)
+    if (existsInWorkingTree) {
+      args = ['diff', '--no-index', '--', '/dev/null', filePath]
+      const untrackedDiff = await runGitCommand(projectPath, args)
+      if (untrackedDiff.code === 0 || untrackedDiff.code === 1) {
+        execution = untrackedDiff
+        ok = true
+        output = normalizeGitDiffOutput(untrackedDiff.stdout)
+        errorText = undefined
+      }
+    }
+  }
+
+  return {
+    ok,
+    checkedAt,
+    command: formatGitCommand(args),
+    output,
+    exitCode: execution.code,
+    staged,
+    error: errorText,
+  }
+}
+
 async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
   const checkedAt = Date.now()
   const operation = request.operation
@@ -1271,6 +1459,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GIT_RUN_OPERATION, async (_event, request: GitOperationRequest) => {
     return runGitOperation(request)
+  })
+
+  ipcMain.handle(IPC.GIT_SET_FILE_STAGE, async (_event, request: GitSetFileStageRequest) => {
+    return setGitFileStage(request)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_FILE_DIFF, async (_event, request: GitFileDiffRequest) => {
+    return getGitFileDiff(request)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
