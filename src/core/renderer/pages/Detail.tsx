@@ -885,8 +885,12 @@ export function DetailPage() {
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-x-auto px-6 pb-6 pt-5 sm:px-8">
-        <div className={`mx-auto h-full min-h-0 min-w-[1060px] w-full ${activePane === 'aicommit' ? 'max-w-[1640px]' : 'max-w-[1360px]'}`}>
+      <div className={`min-h-0 flex-1 px-6 pb-6 pt-5 sm:px-8 ${activePane === 'aicommit' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+        <div className={`mx-auto h-full min-h-0 w-full ${
+          activePane === 'aicommit'
+            ? 'min-w-[1060px] max-w-[1640px]'
+            : 'min-w-0 max-w-[1360px]'
+        }`}>
           {activePane === 'code' ? (
             <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
           ) : (
@@ -934,4 +938,3 @@ export function DetailPage() {
     </div>
   )
 }
-

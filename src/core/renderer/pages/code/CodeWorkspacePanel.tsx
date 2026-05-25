@@ -1,13 +1,14 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, Code2, Columns2, Copy, Eye, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, X } from 'lucide-react'
+import { Check, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { ProjectFileNode, ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
+import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileTree } from './CodeFileTree'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
@@ -31,6 +32,12 @@ const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
 const FILE_SEARCH_DEBOUNCE_MS = 180
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
+const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
+const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
+const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
+const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
+const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
+const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
 
 function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
   if (themeMode === 'dark') return 'vs-dark'
@@ -86,6 +93,57 @@ function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: strin
   return { codeText, language }
 }
 
+function countTextLines(value: string): number {
+  if (!value) return 0
+  let count = 1
+  for (let i = 0; i < value.length; i += 1) {
+    if (value.charCodeAt(i) === 10) count += 1
+  }
+  return count
+}
+
+function shouldDisableMarkdownSyntaxHighlight(markdown: string): boolean {
+  if (markdown.length > MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD) return true
+  return countTextLines(markdown) > MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD
+}
+
+function canHighlightMarkdownCodeBlock(codeText: string): boolean {
+  if (codeText.length > MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD) return false
+  return countTextLines(codeText) <= MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD
+}
+
+function useNearViewport<T extends Element>(rootMargin: string): [React.RefObject<T>, boolean] {
+  const ref = useRef<T | null>(null)
+  const [isNearViewport, setIsNearViewport] = useState(false)
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) return
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsNearViewport(true)
+      return
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0)) {
+        setIsNearViewport(true)
+      }
+    }, {
+      root: null,
+      rootMargin,
+      threshold: 0.01,
+    })
+
+    observer.observe(element)
+    return () => {
+      observer.disconnect()
+    }
+  }, [rootMargin])
+
+  return [ref, isNearViewport]
+}
+
 function shouldOpenInSystemBrowser(href: string): boolean {
   const value = href.trim().toLowerCase()
   return (
@@ -136,10 +194,13 @@ type MarkdownCodeBlockProps = {
   codeText: string
   language: string
   themeMode: 'light' | 'dark'
+  enableSyntaxHighlight: boolean
 }
 
-function MarkdownCodeBlock({ codeText, language, themeMode }: MarkdownCodeBlockProps) {
+function MarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighlight }: MarkdownCodeBlockProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
+  const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText) && isNearViewport
 
   useEffect(() => {
     if (copyStatus === 'idle') return
@@ -159,7 +220,7 @@ function MarkdownCodeBlock({ codeText, language, themeMode }: MarkdownCodeBlockP
   const copyLabel = copyStatus === 'success' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy'
 
   return (
-    <div className="code-markdown-syntax-wrap">
+    <div ref={containerRef} className="code-markdown-syntax-wrap">
       <button
         type="button"
         className={`code-markdown-copy-btn ${
@@ -174,20 +235,26 @@ function MarkdownCodeBlock({ codeText, language, themeMode }: MarkdownCodeBlockP
         <span>{copyLabel}</span>
       </button>
 
-      <SyntaxHighlighter
-        language={language}
-        style={themeMode === 'dark' ? oneDark : oneLight}
-        PreTag="div"
-        className="code-markdown-syntax-block"
-        customStyle={{ margin: 0, borderRadius: 10, paddingTop: 38 }}
-        codeTagProps={{
-          style: {
-            fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
-          },
-        }}
-      >
-        {codeText}
-      </SyntaxHighlighter>
+      {shouldRenderSyntax ? (
+        <SyntaxHighlighter
+          language={language}
+          style={themeMode === 'dark' ? oneDark : oneLight}
+          PreTag="div"
+          className="code-markdown-syntax-block"
+          customStyle={{ margin: 0, borderRadius: 10, paddingTop: 38 }}
+          codeTagProps={{
+            style: {
+              fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+            },
+          }}
+        >
+          {codeText}
+        </SyntaxHighlighter>
+      ) : (
+        <pre className="code-markdown-plain-block">
+          <code className={`language-${language}`}>{codeText}</code>
+        </pre>
+      )}
     </div>
   )
 }
@@ -200,7 +267,87 @@ type CodeWorkspacePanelProps = {
 
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
 type MarkdownScrollModeKey = 'edit' | 'preview' | 'splitEditor' | 'splitPreview'
+type CodeViewMode = 'files' | 'search'
 const CODE_FILE_DRAWER_SECTION_LIMIT = 40
+
+interface DebouncedSearchInputProps {
+  placeholder: string
+  inputClassName?: string
+  debounceMs: number
+  onQueryChange: (value: string) => void
+  leadingIcon: ReactNode
+  trailingAction?: ReactNode
+}
+
+function DebouncedSearchInput({
+  placeholder,
+  inputClassName,
+  debounceMs,
+  onQueryChange,
+  leadingIcon,
+  trailingAction,
+}: DebouncedSearchInputProps) {
+  const [draft, setDraft] = useState('')
+  const lastEmittedRef = useRef('')
+
+  const emitQuery = useCallback((nextValue: string) => {
+    if (lastEmittedRef.current === nextValue) return
+    lastEmittedRef.current = nextValue
+    onQueryChange(nextValue)
+  }, [onQueryChange])
+
+  useEffect(() => {
+    const normalized = draft.trim()
+    if (normalized.length === 0) {
+      emitQuery('')
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      emitQuery(draft)
+    }, debounceMs)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [debounceMs, draft, emitQuery])
+
+  const hasValue = draft.trim().length > 0
+
+  return (
+    <>
+      {leadingIcon}
+      <div className="relative min-w-0 flex-1">
+        <input
+          type="text"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={placeholder}
+          className={inputClassName ?? 'code-search-input'}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+            hasValue
+              ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+              : 'pointer-events-none opacity-0'
+          }`}
+          onClick={() => {
+            setDraft('')
+            emitQuery('')
+          }}
+          title="Clear search"
+          aria-label="Clear search"
+          tabIndex={hasValue ? 0 : -1}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {trailingAction}
+    </>
+  )
+}
 
 export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
   const projectMeta = useAppStore((s) => s.projects.find((p) => p.id === projectId))
@@ -221,11 +368,25 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     skippedFiles: 0,
   })
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
-  const [fileSearchInput, setFileSearchInput] = useState('')
+  const [viewMode, setViewMode] = useState<CodeViewMode>('files')
   const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
+  const [contentSearchQuery, setContentSearchQuery] = useState('')
+  const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
+    files: [],
+    totalMatches: 0,
+    limited: false,
+  })
+  const [isSearchingContent, setIsSearchingContent] = useState(false)
+  const [contentSearchError, setContentSearchError] = useState<string | null>(null)
+  const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
+  const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
+    relativePath: string
+    lineNumber: number
+    column: number
+  } | null>(null)
   const [activeFile, setActiveFile] = useState<ProjectFileReadResult | null>(null)
   const [editorValue, setEditorValue] = useState('')
   const [lastSavedValue, setLastSavedValue] = useState('')
@@ -250,6 +411,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
   const editorRef = useRef<MonacoCodeEditorHandle | null>(null)
+  const contentSearchTreeRef = useRef<CodeContentSearchTreeHandle | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const editorScrollStateRef = useRef<MonacoEditorScrollState | null>(null)
   const previewScrollStateRef = useRef<{ scrollTop: number; scrollHeight: number; viewportHeight: number } | null>(null)
@@ -258,6 +420,8 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const scrollSyncReleaseTimerRef = useRef<number | null>(null)
   const splitSyncReadyRef = useRef(false)
   const searchRequestSeqRef = useRef(0)
+  const contentSearchRequestSeqRef = useRef(0)
+  const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
 
   const monacoTheme = useMemo(
     () => (effectiveTheme === 'dark' ? 'vs-dark' : resolveMonacoTheme(themeMode)),
@@ -293,6 +457,10 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }
     return editorValue
   }, [editorValue, parsedMarkdownDoc])
+  const enableMarkdownSyntaxHighlight = useMemo(
+    () => !shouldDisableMarkdownSyntaxHighlight(markdownPreviewContent),
+    [markdownPreviewContent]
+  )
   const effectiveMarkdownPreviewMode = isMarkdownFile
     ? (markdownPreviewMode === 'split' && isNarrowViewport ? 'preview' : markdownPreviewMode)
     : 'edit'
@@ -319,6 +487,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
           codeText={codeBlock.codeText}
           language={codeBlock.language}
           themeMode={effectiveTheme}
+          enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
         />
       )
     },
@@ -348,7 +517,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       const mergedClassName = className ? `code-markdown-inline-code ${className}` : 'code-markdown-inline-code'
       return <code className={mergedClassName} {...props}>{children}</code>
     },
-  }), [effectiveTheme])
+  }), [effectiveTheme, enableMarkdownSyntaxHighlight])
 
   const captureCurrentModeScroll = useCallback(() => {
     if (!isMarkdownFile || !activeRelativePath) return
@@ -466,11 +635,11 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     return () => observer.disconnect()
   }, [])
 
-  const openFile = useCallback(async (relativePath: string, forceReload = false) => {
-    if (activeRelativePath === relativePath && !forceReload) return
+  const openFile = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
+    if (activeRelativePath === relativePath && !forceReload) return true
     if (isDirty && activeRelativePath && activeRelativePath !== relativePath) {
       const proceed = window.confirm('Current file has unsaved changes. Discard and continue?')
-      if (!proceed) return
+      if (!proceed) return false
     }
 
     captureCurrentModeScroll()
@@ -490,18 +659,23 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       setHasExternalChange(false)
       setExpandedDirectories((prev) => {
         const next = new Set(prev)
+        let changed = false
         for (const parent of collectParentDirectories(result.relativePath)) {
+          if (next.has(parent)) continue
           next.add(parent)
+          changed = true
         }
-        return next
+        return changed ? next : prev
       })
       setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
       void setProjectLastCodeFile(projectId, result.relativePath)
+      return true
     } catch (error) {
       setReadError(error instanceof Error ? error.message : String(error))
       if (forceReload || persistedLastCodeFile === relativePath) {
         void setProjectLastCodeFile(projectId, undefined)
       }
+      return false
     } finally {
       setIsReading(false)
     }
@@ -631,16 +805,16 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       ? 'text-[color:var(--color-warning)]'
       : 'text-[color:var(--color-muted-foreground)]'
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
-
-  useEffect(() => {
-    if (fileSearchInput === fileSearchQuery) return
-    const timer = window.setTimeout(() => {
-      setFileSearchQuery(fileSearchInput)
-    }, FILE_SEARCH_DEBOUNCE_MS)
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [fileSearchInput, fileSearchQuery])
+  const hasContentSearchQuery = contentSearchQuery.trim().length > 0
+  const showContentSearchSummary = hasContentSearchQuery && !isSearchingContent && !contentSearchError
+  const canToggleContentSearchTree = hasContentSearchQuery && !isSearchingContent && contentSearchResult.files.length > 0
+  const contentSearchToggleLabel = isContentSearchAllExpanded ? 'Collapse all' : 'Expand all'
+  const handleFileSearchQueryChange = useCallback((nextValue: string) => {
+    setFileSearchQuery(nextValue)
+  }, [])
+  const handleContentSearchQueryChange = useCallback((nextValue: string) => {
+    setContentSearchQuery(nextValue)
+  }, [])
 
   useEffect(() => {
     const normalizedQuery = fileSearchQuery.trim()
@@ -673,6 +847,48 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   }, [fileSearchQuery, projectPath])
 
   useEffect(() => {
+    const normalizedQuery = contentSearchQuery.trim()
+    if (!normalizedQuery) {
+      setIsSearchingContent(false)
+      setContentSearchError(null)
+      setIsContentSearchAllExpanded(false)
+      setContentSearchResult({
+        files: [],
+        totalMatches: 0,
+        limited: false,
+      })
+      return
+    }
+
+    const requestSeq = contentSearchRequestSeqRef.current + 1
+    contentSearchRequestSeqRef.current = requestSeq
+    setIsSearchingContent(true)
+    setContentSearchError(null)
+    setIsContentSearchAllExpanded(false)
+
+    void window.electronAPI.searchProjectContent(projectPath, normalizedQuery)
+      .then((result) => {
+        if (contentSearchRequestSeqRef.current !== requestSeq) return
+        setContentSearchResult(result)
+        setIsContentSearchAllExpanded(result.files.length > 0)
+      })
+      .catch((error) => {
+        if (contentSearchRequestSeqRef.current !== requestSeq) return
+        setContentSearchResult({
+          files: [],
+          totalMatches: 0,
+          limited: false,
+        })
+        setIsContentSearchAllExpanded(false)
+        setContentSearchError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => {
+        if (contentSearchRequestSeqRef.current !== requestSeq) return
+        setIsSearchingContent(false)
+      })
+  }, [contentSearchQuery, projectPath])
+
+  useEffect(() => {
     const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
       ? persistedLastMarkdownPreviewMode
       : 'edit'
@@ -687,6 +903,23 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
   const hasSearchQuery = fileSearchQuery.trim().length > 0
   const treeNodesForView = hasSearchQuery ? searchResultNodes : tree.nodes
+  const showExplorerPanelForMode = viewMode === 'files' ? showExplorerPanel : true
+  const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
+  const handleToggleTreeDirectory = useCallback((relativePath: string) => {
+    if (hasSearchQuery) return
+    setExpandedDirectories((prev) => {
+      const next = new Set(prev)
+      if (next.has(relativePath)) next.delete(relativePath)
+      else next.add(relativePath)
+      return next
+    })
+  }, [hasSearchQuery])
+  const handleSelectTreeFile = useCallback((relativePath: string) => {
+    void openFile(relativePath)
+    if (isNarrowViewport) {
+      setIsExplorerOpen(false)
+    }
+  }, [isNarrowViewport, openFile])
 
   const setActiveSyncSource = useCallback((source: 'editor' | 'preview') => {
     activeScrollSyncSourceRef.current = source
@@ -914,6 +1147,47 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }
   }, [isShowingPreview, editorValue, effectiveMarkdownPreviewMode])
 
+  const openContentSearchMatch = useCallback(async (relativePath: string, lineNumber: number, column: number) => {
+    const opened = await openFile(relativePath)
+    if (!opened) return
+    setActiveContentSearchLocation({ relativePath, lineNumber, column })
+    pendingRevealRef.current = { relativePath, lineNumber, column }
+    window.setTimeout(() => {
+      if (!pendingRevealRef.current) return
+      const pending = pendingRevealRef.current
+      if (pending.relativePath !== relativePath || pending.lineNumber !== lineNumber || pending.column !== column) return
+      editorRef.current?.revealPosition(lineNumber, column)
+    }, 0)
+  }, [openFile])
+  const handleOpenContentSearchResult = useCallback((relativePath: string, lineNumber: number, column: number) => {
+    void openContentSearchMatch(relativePath, lineNumber, column)
+    if (isNarrowViewport) {
+      setIsExplorerOpen(false)
+    }
+  }, [isNarrowViewport, openContentSearchMatch])
+
+  const handleToggleContentSearchTree = useCallback(() => {
+    const tree = contentSearchTreeRef.current
+    if (!tree) return
+
+    if (isContentSearchAllExpanded) {
+      tree.collapseAll()
+      setIsContentSearchAllExpanded(false)
+      return
+    }
+
+    tree.expandAll()
+    setIsContentSearchAllExpanded(true)
+  }, [isContentSearchAllExpanded])
+
+  useEffect(() => {
+    const pending = pendingRevealRef.current
+    if (!pending) return
+    if (pending.relativePath !== activeRelativePath) return
+    editorRef.current?.revealPosition(pending.lineNumber, pending.column)
+    pendingRevealRef.current = null
+  }, [activeRelativePath, editorValue])
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       <div
@@ -932,7 +1206,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          {activeRelativePath && (
+          {viewMode === 'files' && activeRelativePath && (
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs transition-colors ${
@@ -960,15 +1234,39 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
             <PanelLeftOpen className="h-3.5 w-3.5" />
             Files
           </button>
+          <div className="code-view-mode-switch" role="tablist" aria-label="Code workspace mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'files'}
+              className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('files')}
+              title="File explorer and editor"
+            >
+              <Files className="h-3.5 w-3.5" />
+              Files
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'search'}
+              className={`code-view-mode-btn ${viewMode === 'search' ? 'is-active' : ''}`}
+              onClick={() => setViewMode('search')}
+              title="Global content search"
+            >
+              <TextSearch className="h-3.5 w-3.5" />
+              Search
+            </button>
+          </div>
           {isNarrowViewport && (
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
               onClick={() => setIsExplorerOpen((prev) => !prev)}
-              title={isExplorerOpen ? 'Switch to editor' : 'Open file explorer'}
+              title={isExplorerOpen ? 'Switch to editor' : (viewMode === 'search' ? 'Open search panel' : 'Open file explorer')}
             >
               <Code2 className="h-3.5 w-3.5" />
-              {isExplorerOpen ? 'Editor' : 'Explorer'}
+              {isExplorerOpen ? 'Editor' : (viewMode === 'search' ? 'Search' : 'Explorer')}
             </button>
           )}
           <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
@@ -1035,102 +1333,130 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
 
       <div className="min-h-0 flex-1">
         <div className="code-layout-grid h-full" style={isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
-          {showExplorerPanel && (
+          {showExplorerPanelForMode && (
             <aside className="code-tree-panel surface-card">
-              <div className="code-panel-header">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                  <div className="relative min-w-0 flex-1">
-                    <input
-                      type="text"
-                      value={fileSearchInput}
-                      onChange={(event) => setFileSearchInput(event.target.value)}
-                      placeholder="Search files (e.g. abvd)"
-                      className="code-search-input"
-                      spellCheck={false}
-                    />
+              {viewMode === 'files' ? (
+                <>
+                  <div className="code-panel-header">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <DebouncedSearchInput
+                        leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                        placeholder="Search files (e.g. abvd)"
+                        inputClassName="code-search-input code-search-input--compact"
+                        debounceMs={FILE_SEARCH_DEBOUNCE_MS}
+                        onQueryChange={handleFileSearchQueryChange}
+                      />
+                    </div>
                     <button
                       type="button"
-                      className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
-                        fileSearchInput.trim().length > 0
-                          ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                          : 'pointer-events-none opacity-0'
-                      }`}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
                       onClick={() => {
-                        setFileSearchInput('')
-                        setFileSearchQuery('')
-                        setSearchResultNodes([])
-                        setFileSearchError(null)
+                        if (!activeRelativePath) return
+                        setLocateRequestToken((prev) => prev + 1)
                       }}
-                      title="Clear search"
-                      aria-label="Clear search"
-                      tabIndex={fileSearchInput.trim().length > 0 ? 0 : -1}
+                      title={activeRelativePath ? 'Locate current file' : 'No active file'}
+                      disabled={!activeRelativePath}
                     >
-                      <X className="h-3 w-3" />
+                      <LocateFixed className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                      onClick={() => void loadTree()}
+                      title="Reload file tree"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
-                  onClick={() => {
-                    if (!activeRelativePath) return
-                    setLocateRequestToken((prev) => prev + 1)
-                  }}
-                  title={activeRelativePath ? 'Locate current file' : 'No active file'}
-                  disabled={!activeRelativePath}
-                >
-                  <LocateFixed className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => void loadTree()}
-                  title="Reload file tree"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
 
-              {tree.status === 'loading' ? (
-                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
-              ) : tree.status === 'error' ? (
-                <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
-              ) : hasSearchQuery && isSearchingFiles ? (
-                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching files...</div>
-              ) : hasSearchQuery && fileSearchError ? (
-                <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{fileSearchError}</div>
-              ) : hasSearchQuery && treeNodesForView.length === 0 ? (
-                <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
+                  {tree.status === 'loading' ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
+                  ) : tree.status === 'error' ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
+                  ) : hasSearchQuery && isSearchingFiles ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching files...</div>
+                  ) : hasSearchQuery && fileSearchError ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{fileSearchError}</div>
+                  ) : hasSearchQuery && treeNodesForView.length === 0 ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
+                  ) : (
+                    <CodeFileTree
+                      nodes={treeNodesForView}
+                      activeRelativePath={activeRelativePath}
+                      expandedDirectories={expandedDirectories}
+                      flatFileListMode={hasSearchQuery}
+                      locateRequestToken={locateRequestToken}
+                      onToggleDirectory={handleToggleTreeDirectory}
+                      onSelectFile={handleSelectTreeFile}
+                    />
+                  )}
+                </>
               ) : (
-                <CodeFileTree
-                  nodes={treeNodesForView}
-                  activeRelativePath={activeRelativePath}
-                  expandedDirectories={expandedDirectories}
-                  flatFileListMode={hasSearchQuery}
-                  locateRequestToken={locateRequestToken}
-                  onToggleDirectory={(relativePath) => {
-                    if (hasSearchQuery) return
-                    const update = (prev: Set<string>) => {
-                      const next = new Set(prev)
-                      if (next.has(relativePath)) next.delete(relativePath)
-                      else next.add(relativePath)
-                      return next
-                    }
-                    setExpandedDirectories(update)
-                  }}
-                  onSelectFile={(relativePath) => {
-                    void openFile(relativePath)
-                    if (isNarrowViewport) {
-                      setIsExplorerOpen(false)
-                    }
-                  }}
-                />
+                <>
+                  <div className="code-panel-header code-search-main-header">
+                    <div className="code-search-main-query">
+                      <DebouncedSearchInput
+                        leadingIcon={<FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                        placeholder="Search text across files (rg)"
+                        inputClassName="code-search-input"
+                        debounceMs={FILE_SEARCH_DEBOUNCE_MS}
+                        onQueryChange={handleContentSearchQueryChange}
+                        trailingAction={(
+                          <button
+                            type="button"
+                            className="code-search-meta-action code-search-toggle-action"
+                            onClick={handleToggleContentSearchTree}
+                            disabled={!canToggleContentSearchTree}
+                            aria-disabled={!canToggleContentSearchTree}
+                          >
+                            {contentSearchToggleLabel}
+                          </button>
+                        )}
+                      />
+                    </div>
+                    {showContentSearchSummary && (
+                      <div className="code-search-main-toolbar">
+                        <div className="code-search-main-meta">
+                          <span className="code-search-main-meta-text">
+                            <span className="code-search-main-stat">{contentSearchResult.files.length} files</span>
+                            <span className="code-search-main-meta-sep">•</span>
+                            <span className="code-search-main-stat">{contentSearchResult.totalMatches} matches</span>
+                            {contentSearchResult.limited && (
+                              <span className="code-search-main-limited">limited</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {contentSearchQuery.trim().length === 0 ? (
+                    <div className="code-panel-empty">
+                      <div className="text-sm text-[color:var(--color-muted-foreground)]">
+                        Enter keywords to run global content search.
+                      </div>
+                    </div>
+                  ) : isSearchingContent ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching content...</div>
+                  ) : contentSearchError ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{contentSearchError}</div>
+                  ) : contentSearchResult.files.length === 0 ? (
+                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching text found.</div>
+                  ) : (
+                    <CodeContentSearchTree
+                      ref={contentSearchTreeRef}
+                      files={contentSearchResult.files}
+                      activeLocation={activeContentSearchLocation}
+                      autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
+                      onOpenMatch={handleOpenContentSearchResult}
+                    />
+                  )}
+                </>
               )}
             </aside>
           )}
 
-          {showEditorPanel && (
+          {showEditorPanelForMode && (
             <section className="code-editor-panel surface-card">
               {activeRelativePath ? (
                 <div className="code-editor-shell">
@@ -1267,7 +1593,11 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
               ) : (
                 <div className="code-panel-empty">
                   <div className="text-sm text-[color:var(--color-muted-foreground)]">
-                    {isNarrowViewport ? 'Open Explorer to choose a file.' : 'Select a file from the left panel to start editing.'}
+                    {isNarrowViewport
+                      ? (viewMode === 'search' ? 'Open Search to choose a match.' : 'Open Explorer to choose a file.')
+                      : (viewMode === 'search'
+                        ? 'Select a search result from the left panel to open and edit.'
+                        : 'Select a file from the left panel to start editing.')}
                   </div>
                 </div>
               )}

@@ -15,6 +15,7 @@ export interface MonacoEditorScrollState {
 export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
   setScrollTop: (scrollTop: number) => void
+  revealPosition: (lineNumber: number, column?: number) => void
 }
 
 interface MonacoCodeEditorProps {
@@ -101,6 +102,15 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       const editor = editorRef.current
       if (!editor) return
       editor.setScrollTop(Math.max(0, scrollTop))
+    },
+    revealPosition: (lineNumber: number, column = 1) => {
+      const editor = editorRef.current
+      if (!editor) return
+      const safeLine = Math.max(1, Math.floor(lineNumber))
+      const safeColumn = Math.max(1, Math.floor(column))
+      editor.setPosition({ lineNumber: safeLine, column: safeColumn })
+      editor.revealPositionInCenter({ lineNumber: safeLine, column: safeColumn })
+      editor.focus()
     },
   }), [])
 

@@ -19,6 +19,7 @@ import { getAiCommitTask, upsertAiCommitTask, appendAiCommitTaskOutput } from '.
 import {
   listProjectFiles,
   searchProjectFiles,
+  searchProjectContent,
   readProjectFile,
   statProjectFile,
   writeProjectFile,
@@ -1545,6 +1546,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.PROJECT_FILE_SEARCH, async (_event, projectPath: string, query: string) => {
     try {
       return await searchProjectFiles(projectPath, query)
+    } catch (error) {
+      throw new Error(toProjectFileServiceErrorMessage(error))
+    }
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_CONTENT_SEARCH, async (_event, projectPath: string, query: string) => {
+    try {
+      return await searchProjectContent(projectPath, query)
     } catch (error) {
       throw new Error(toProjectFileServiceErrorMessage(error))
     }

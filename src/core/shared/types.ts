@@ -408,3 +408,23 @@ export interface ProjectFileStatResult {
   size: number
   mtimeMs: number
 }
+
+export interface ProjectFileContentMatch {
+  lineNumber: number
+  column: number
+  endColumn: number
+  lineText: string
+}
+
+export interface ProjectFileContentSearchResult {
+  relativePath: string
+  name: string
+  matchCount: number
+  matches: ProjectFileContentMatch[]
+}
+
+export interface ProjectFileContentSearchResponse {
+  files: ProjectFileContentSearchResult[]
+  totalMatches: number
+  limited: boolean
+}

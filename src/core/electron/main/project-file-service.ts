@@ -3,6 +3,9 @@ import { promises as fs } from 'node:fs'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import type {
+  ProjectFileContentSearchResponse,
+  ProjectFileContentSearchResult,
+  ProjectFileContentMatch,
   ProjectFileNode,
   ProjectFileReadResult,
   ProjectFileStatResult,
@@ -18,6 +21,12 @@ const RG_FILE_LIST_TIMEOUT_MS = 20_000
 const RG_FILE_LIST_MAX_BUFFER = 64 * 1024 * 1024
 const MAX_SEARCH_RESULTS = 500
 const PROJECT_FILE_LIST_CACHE_TTL_MS = 15_000
+const MAX_CONTENT_SEARCH_FILES = 200
+const MAX_CONTENT_SEARCH_TOTAL_MATCHES = 2000
+const MAX_CONTENT_SEARCH_MATCHES_PER_FILE = 40
+const RG_CONTENT_SEARCH_TIMEOUT_MS = 25_000
+const RG_CONTENT_SEARCH_MAX_BUFFER = 128 * 1024 * 1024
+const RG_CONTENT_SEARCH_MAX_COLUMNS = 500
 
 const EXCLUDED_DIRECTORIES = new Set([
   '.git',
@@ -127,6 +136,26 @@ interface ProjectFileListCacheEntry {
 interface FilterListedPathsResult {
   acceptedPaths: string[]
   skippedFiles: number
+}
+
+interface RgOutputData {
+  text?: string
+  bytes?: string
+}
+
+interface RgOutputSubmatch {
+  start?: number
+  end?: number
+}
+
+interface RgJsonMatchMessage {
+  type?: string
+  data?: {
+    path?: RgOutputData
+    lines?: RgOutputData
+    line_number?: number
+    submatches?: RgOutputSubmatch[]
+  }
 }
 
 const projectFileListCache = new Map<string, ProjectFileListCacheEntry>()
@@ -315,6 +344,46 @@ function fileNameFromRelativePath(relativePath: string): string {
   return segments[segments.length - 1] || relativePath
 }
 
+function decodeRgOutputData(data: RgOutputData | undefined): string {
+  if (!data) return ''
+  if (typeof data.text === 'string') return data.text
+  if (typeof data.bytes === 'string') {
+    try {
+      return Buffer.from(data.bytes, 'base64').toString('utf8')
+    } catch {
+      return ''
+    }
+  }
+  return ''
+}
+
+function normalizeSearchLineText(lineText: string): string {
+  return lineText.replace(/\r?\n$/, '')
+}
+
+function parseSearchMatchLine(rawLine: string): RgJsonMatchMessage | null {
+  const trimmed = rawLine.trim()
+  if (!trimmed) return null
+  try {
+    return JSON.parse(trimmed) as RgJsonMatchMessage
+  } catch {
+    return null
+  }
+}
+
+function toContentSearchResultRecord(results: Map<string, ProjectFileContentSearchResult>, relativePath: string) {
+  const existing = results.get(relativePath)
+  if (existing) return existing
+  const next: ProjectFileContentSearchResult = {
+    relativePath,
+    name: fileNameFromRelativePath(relativePath),
+    matchCount: 0,
+    matches: [],
+  }
+  results.set(relativePath, next)
+  return next
+}
+
 function filterListedFilePaths(listedPaths: string[]): FilterListedPathsResult {
   let skippedFiles = 0
   const acceptedPaths: string[] = []
@@ -416,6 +485,36 @@ async function execFileUtf8(cwd: string, args: string[]): Promise<string> {
         encoding: 'utf8',
         timeout: RG_FILE_LIST_TIMEOUT_MS,
         maxBuffer: RG_FILE_LIST_MAX_BUFFER,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error) {
+          const next = error as NodeJS.ErrnoException & { stdout?: string }
+          next.stdout = typeof stdout === 'string' ? stdout : ''
+          reject(next)
+          return
+        }
+        resolve(typeof stdout === 'string' ? stdout : '')
+      }
+    )
+  })
+}
+
+async function execFileUtf8WithLimits(
+  cwd: string,
+  args: string[],
+  timeoutMs: number,
+  maxBufferBytes: number
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'rg',
+      args,
+      {
+        cwd,
+        encoding: 'utf8',
+        timeout: timeoutMs,
+        maxBuffer: maxBufferBytes,
         windowsHide: true,
       },
       (error, stdout) => {
@@ -633,6 +732,121 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
   }
 
   return matches
+}
+
+export async function searchProjectContent(projectPath: string, query: string): Promise<ProjectFileContentSearchResponse> {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) {
+    return {
+      files: [],
+      totalMatches: 0,
+      limited: false,
+    }
+  }
+
+  const rootRealPath = await resolveRoot(projectPath)
+  const args = [
+    '--json',
+    '--hidden',
+    '--no-ignore',
+    '--line-number',
+    '--column',
+    '--max-columns',
+    String(RG_CONTENT_SEARCH_MAX_COLUMNS),
+    '--max-count',
+    String(MAX_CONTENT_SEARCH_MATCHES_PER_FILE),
+    ...RG_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
+    normalizedQuery,
+    '.',
+  ]
+
+  let output = ''
+  try {
+    output = await execFileUtf8WithLimits(
+      rootRealPath,
+      args,
+      RG_CONTENT_SEARCH_TIMEOUT_MS,
+      RG_CONTENT_SEARCH_MAX_BUFFER
+    )
+  } catch (error) {
+    const typedError = error as NodeJS.ErrnoException & { code?: unknown; stdout?: string }
+    const errorCode = String(typedError.code ?? '')
+    if (errorCode === '1') {
+      return {
+        files: [],
+        totalMatches: 0,
+        limited: false,
+      }
+    }
+    if (typedError.code === 'ENOENT') {
+      throw new ProjectFileServiceError('rg is not installed. Install ripgrep to enable content search.')
+    }
+    if (typedError.code === 'ETIMEDOUT') {
+      throw new ProjectFileServiceError('Content search timed out. Please refine your query.')
+    }
+    throw error
+  }
+
+  const resultMap = new Map<string, ProjectFileContentSearchResult>()
+  let totalMatches = 0
+  let limited = false
+  const lines = output.split(/\r?\n/)
+
+  for (const rawLine of lines) {
+    const parsed = parseSearchMatchLine(rawLine)
+    if (!parsed || parsed.type !== 'match') continue
+
+    const relativePath = normalizeListedRelativePath(decodeRgOutputData(parsed.data?.path))
+    if (!relativePath) continue
+    if (shouldSkipListedFilePath(relativePath)) continue
+    if (fileDepth(relativePath) > MAX_TREE_DEPTH) continue
+
+    const matchLineNumber = parsed.data?.line_number
+    if (typeof matchLineNumber !== 'number' || !Number.isFinite(matchLineNumber) || matchLineNumber <= 0) continue
+
+    const lineTextRaw = decodeRgOutputData(parsed.data?.lines)
+    const lineText = normalizeSearchLineText(lineTextRaw)
+    const submatch = parsed.data?.submatches?.[0]
+    const start = typeof submatch?.start === 'number' ? submatch.start : 0
+    const end = typeof submatch?.end === 'number' ? submatch.end : start + normalizedQuery.length
+    const column = Math.max(1, start + 1)
+    const endColumn = Math.max(column, end + 1)
+
+    const perFile = toContentSearchResultRecord(resultMap, relativePath)
+    if (perFile.matches.length < MAX_CONTENT_SEARCH_MATCHES_PER_FILE) {
+      const nextMatch: ProjectFileContentMatch = {
+        lineNumber: matchLineNumber,
+        column,
+        endColumn,
+        lineText,
+      }
+      perFile.matches.push(nextMatch)
+    } else {
+      limited = true
+    }
+
+    perFile.matchCount += 1
+    totalMatches += 1
+
+    if (resultMap.size > MAX_CONTENT_SEARCH_FILES || totalMatches >= MAX_CONTENT_SEARCH_TOTAL_MATCHES) {
+      limited = true
+      break
+    }
+  }
+
+  const orderedFiles = Array.from(resultMap.values())
+    .sort((a, b) => b.matchCount - a.matchCount || a.relativePath.localeCompare(b.relativePath))
+    .slice(0, MAX_CONTENT_SEARCH_FILES)
+
+  if (orderedFiles.length < resultMap.size) {
+    limited = true
+  }
+
+  return {
+    files: orderedFiles,
+    totalMatches,
+    limited,
+  }
 }
 
 export async function readProjectFile(projectPath: string, relativePath: string): Promise<ProjectFileReadResult> {

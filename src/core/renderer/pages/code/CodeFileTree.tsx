@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react'
-import type { MutableRefObject } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
-import { ScrollArea } from '../../components/ui/scroll-area'
+import { Tree } from 'react-arborist'
+import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode } from '../../../shared/types'
 
 interface CodeFileTreeProps {
@@ -14,46 +14,97 @@ interface CodeFileTreeProps {
   locateRequestToken?: number
 }
 
-interface TreeNodeRowProps {
-  node: ProjectFileNode
-  depth: number
+interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   activeRelativePath: string | null
-  expandedDirectories: Set<string>
+  flatFileListMode: boolean
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
-  activePathRowRef: MutableRefObject<HTMLButtonElement | null>
 }
 
-function TreeNodeRow({
+interface TreeSize {
+  width: number
+  height: number
+}
+
+function useContainerSize() {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [size, setSize] = useState<TreeSize>({ width: 0, height: 0 })
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const updateSize = () => {
+      const rect = container.getBoundingClientRect()
+      const nextWidth = Math.max(0, Math.floor(rect.width))
+      const nextHeight = Math.max(0, Math.floor(rect.height))
+      setSize((prev) => (
+        prev.width === nextWidth && prev.height === nextHeight
+          ? prev
+          : { width: nextWidth, height: nextHeight }
+      ))
+    }
+
+    updateSize()
+    const observer = new ResizeObserver(() => {
+      updateSize()
+    })
+    observer.observe(container)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
+  return { containerRef, size }
+}
+
+function collectDirectoryPaths(nodes: ProjectFileNode[]): string[] {
+  const result: string[] = []
+  const walk = (items: ProjectFileNode[]) => {
+    for (const item of items) {
+      if (item.kind !== 'directory') continue
+      result.push(item.relativePath)
+      if (item.children && item.children.length > 0) {
+        walk(item.children)
+      }
+    }
+  }
+  walk(nodes)
+  return result
+}
+
+function FileTreeNodeRenderer({
   node,
-  depth,
+  style,
+  dragHandle,
   activeRelativePath,
-  expandedDirectories,
+  flatFileListMode,
   onToggleDirectory,
   onSelectFile,
-  activePathRowRef,
-}: TreeNodeRowProps) {
-  const isDirectory = node.kind === 'directory'
-  const isExpanded = isDirectory && expandedDirectories.has(node.relativePath)
-  const isActive = !isDirectory && activeRelativePath === node.relativePath
-  const hasChildren = isDirectory && (node.children?.length ?? 0) > 0
-  const paddingLeft = 10 + depth * 14
+}: FileTreeNodeRendererProps) {
+  const data = node.data
+  const isDirectory = !flatFileListMode && data.kind === 'directory'
+  const isExpanded = isDirectory && node.isOpen
+  const isActive = data.kind === 'file' && activeRelativePath === data.relativePath
+  const hasChildren = isDirectory && (data.children?.length ?? 0) > 0
+  const rowLabel = flatFileListMode && isActive ? data.relativePath : data.name
 
   return (
-    <div>
+    <div ref={dragHandle} style={style}>
       <button
         type="button"
         className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''}`}
-        style={{ paddingLeft }}
-        onClick={() => {
+        style={{ paddingLeft: 10 }}
+        onClick={(event) => {
+          event.stopPropagation()
           if (isDirectory) {
-            onToggleDirectory(node.relativePath)
+            onToggleDirectory(data.relativePath)
             return
           }
-          onSelectFile(node.relativePath)
+          onSelectFile(data.relativePath)
         }}
-        title={node.relativePath}
-        ref={!isDirectory && isActive ? activePathRowRef : undefined}
+        title={data.relativePath}
       >
         {isDirectory ? (
           hasChildren ? (
@@ -78,30 +129,13 @@ function TreeNodeRow({
         ) : (
           <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
         )}
-        <span className="block w-0 min-w-0 flex-1 truncate">{node.name}</span>
+        <span className="block w-0 min-w-0 flex-1 truncate">{rowLabel}</span>
       </button>
-
-      {isDirectory && isExpanded && hasChildren && (
-        <div>
-          {node.children?.map((child) => (
-            <TreeNodeRow
-              key={child.relativePath}
-              node={child}
-              depth={depth + 1}
-              activeRelativePath={activeRelativePath}
-              expandedDirectories={expandedDirectories}
-              onToggleDirectory={onToggleDirectory}
-              onSelectFile={onSelectFile}
-              activePathRowRef={activePathRowRef}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
 
-export function CodeFileTree({
+export const CodeFileTree = memo(function CodeFileTree({
   nodes,
   activeRelativePath,
   expandedDirectories,
@@ -111,14 +145,48 @@ export function CodeFileTree({
   locateRequestToken = 0,
 }: CodeFileTreeProps) {
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
-  const activePathRowRef = useRef<HTMLButtonElement | null>(null)
+  const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
+  const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
+  const { containerRef, size } = useContainerSize()
+  const directoryPaths = useMemo(() => collectDirectoryPaths(nodes), [nodes])
+  const initialOpenState = useMemo(() => {
+    if (flatFileListMode) return {}
+    const state: Record<string, boolean> = {}
+    for (const path of directoryPaths) {
+      state[path] = expandedDirectories.has(path)
+    }
+    return state
+  }, [directoryPaths, expandedDirectories, flatFileListMode])
 
   useEffect(() => {
     if (!locateRequestToken) return
-    const node = activePathRowRef.current
-    if (!node) return
-    node.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [locateRequestToken, activeRelativePath, expandedDirectories, flatFileListMode, nodes])
+    if (!activeRelativePath) return
+    void treeRef.current?.scrollTo(activeRelativePath, 'center')
+  }, [locateRequestToken, activeRelativePath, flatFileListMode, nodes])
+
+  useEffect(() => {
+    if (flatFileListMode) {
+      previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+      return
+    }
+
+    const tree = treeRef.current
+    if (!tree) {
+      previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+      return
+    }
+
+    const previous = previousExpandedDirectoriesRef.current
+    for (const path of directoryPaths) {
+      const shouldOpen = expandedDirectories.has(path)
+      const wasOpen = previous.has(path)
+      if (shouldOpen === wasOpen) continue
+      if (shouldOpen) tree.open(path)
+      else tree.close(path)
+    }
+
+    previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+  }, [directoryPaths, expandedDirectories, flatFileListMode])
 
   if (!hasNodes) {
     return (
@@ -129,43 +197,37 @@ export function CodeFileTree({
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="py-2">
-        {flatFileListMode ? (
-          nodes.map((node) => {
-            const isActive = activeRelativePath === node.relativePath
-            const rowLabel = isActive ? node.relativePath : node.name
-            return (
-              <button
-                key={node.relativePath}
-                type="button"
-                className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''}`}
-                style={{ paddingLeft: 10 }}
-                onClick={() => onSelectFile(node.relativePath)}
-                title={node.relativePath}
-                ref={isActive ? activePathRowRef : undefined}
-              >
-                <span className="inline-block h-3.5 w-3.5 shrink-0" />
-                <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                <span className="block w-0 min-w-0 flex-1 truncate">{rowLabel}</span>
-              </button>
-            )
-          })
-        ) : (
-          nodes.map((node) => (
-            <TreeNodeRow
-              key={node.relativePath}
-              node={node}
-              depth={0}
+    <div ref={containerRef} className="code-tree-virtual-wrap">
+      {size.width > 0 && size.height > 0 && (
+        <Tree<ProjectFileNode>
+          ref={treeRef}
+          data={nodes}
+          idAccessor={(item) => item.relativePath}
+          childrenAccessor={flatFileListMode ? (() => null) : ((item) => (item.kind === 'directory' ? (item.children ?? []) : null))}
+          width={size.width}
+          height={size.height}
+          rowHeight={28}
+          indent={14}
+          overscanCount={10}
+          className="code-tree-virtual-list"
+          selection={activeRelativePath ?? undefined}
+          initialOpenState={initialOpenState}
+          disableDrag
+          disableDrop
+          disableEdit
+          disableMultiSelection
+        >
+          {(props) => (
+            <FileTreeNodeRenderer
+              {...props}
               activeRelativePath={activeRelativePath}
-              expandedDirectories={expandedDirectories}
+              flatFileListMode={flatFileListMode}
               onToggleDirectory={onToggleDirectory}
               onSelectFile={onSelectFile}
-              activePathRowRef={activePathRowRef}
             />
-          ))
-        )}
-      </div>
-    </ScrollArea>
+          )}
+        </Tree>
+      )}
+    </div>
   )
-}
+})

@@ -40,7 +40,8 @@ const CHANGE_META: Record<GitChangedFile['kind'], { label: string; className: st
   unknown: { label: '变更', className: 'text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)]' },
 }
 
-const DRAWER_TRANSITION_MS = 320
+const DRAWER_TRANSITION_MS = 240
+const DRAWER_CONTENT_REVEAL_MS = 90
 const DIFF_MONACO_LANGUAGE_ID = 'git-patch-diff'
 
 interface MonacoEnvironmentShape {
@@ -234,17 +235,25 @@ function DetailGitDiffDrawer({
 }: DetailGitDiffDrawerProps) {
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
+  const [contentVisible, setContentVisible] = useState(open)
   const languageHint = useMemo(
     () => inferLanguageFromRelativePath(activeFile?.path ?? ''),
     [activeFile?.path]
   )
+  const shouldShowDiffViewer = open && visible && contentVisible
 
   useEffect(() => {
     if (open) {
       setShouldRender(true)
-      const timer = window.setTimeout(() => setVisible(true), 16)
-      return () => window.clearTimeout(timer)
+      setContentVisible(false)
+      const enterTimer = window.setTimeout(() => setVisible(true), 16)
+      const revealTimer = window.setTimeout(() => setContentVisible(true), DRAWER_CONTENT_REVEAL_MS)
+      return () => {
+        window.clearTimeout(enterTimer)
+        window.clearTimeout(revealTimer)
+      }
     }
+    setContentVisible(false)
     setVisible(false)
     const timer = window.setTimeout(() => setShouldRender(false), DRAWER_TRANSITION_MS)
     return () => window.clearTimeout(timer)
@@ -265,28 +274,28 @@ function DetailGitDiffDrawer({
     <div className="fixed inset-0 z-[1200] overflow-hidden">
       <button
         type="button"
-        className={`absolute inset-0 bg-black/25 backdrop-blur-[1px] transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute inset-0 bg-[color:var(--color-background-sunken)]/72 backdrop-blur-[7px] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
         aria-label="关闭改动详情"
       />
       <aside
-        className={`absolute inset-0 h-full w-full border-l border-[color:var(--color-border)] bg-[color:var(--color-popover)] transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`absolute inset-y-3 right-3 w-[min(1480px,calc(100%-1.5rem))] overflow-hidden rounded-[26px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 shadow-[0_28px_84px_rgba(15,15,20,0.34)] backdrop-blur-[26px] transition-[transform,opacity] duration-240 ease-out will-change-transform ${visible ? 'translate-x-0 opacity-100' : 'translate-x-[36px] opacity-0'}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="文件改动详情"
       >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--color-border)] px-4 py-3">
+        <div className={`flex h-full min-h-0 flex-col transition-opacity duration-120 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
+          <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-card)]/62 px-5 py-4 backdrop-blur-[14px]">
             <div className="min-w-0">
               <p className="section-label">Changed Files</p>
-              <p className="truncate text-xs text-[color:var(--color-muted-foreground)]">
+              <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
                 左侧选文件，右侧查看改动内容（Monaco 只读高亮）
               </p>
             </div>
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/80 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
               title="Close"
             >
@@ -294,8 +303,8 @@ function DetailGitDiffDrawer({
             </button>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[360px_minmax(0,1fr)]">
-            <div className="min-h-0 overflow-auto border-r border-[color:var(--color-border)] p-3">
+          <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)] max-[980px]:grid-cols-1 max-[980px]:grid-rows-[minmax(220px,35%)_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-auto border-r border-[color:var(--color-border)]/85 bg-[color:var(--color-background-sunken)]/46 p-3 max-[980px]:border-r-0 max-[980px]:border-b">
               <div className="space-y-2">
                 {changedFiles.map((file) => {
                   const itemActive = activeFilePath === file.path
@@ -304,10 +313,10 @@ function DetailGitDiffDrawer({
                     <button
                       key={`drawer-${file.path}-${file.indexStatus}-${file.worktreeStatus}`}
                       type="button"
-                      className={`w-full rounded-[12px] border px-2.5 py-2 text-left transition-colors ${
+                      className={`w-full rounded-[14px] border px-2.5 py-2.5 text-left backdrop-blur-[8px] transition-colors ${
                         itemActive
-                          ? 'border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10'
-                          : 'border-[color:var(--color-border)] bg-[color:var(--color-background)] hover:bg-[color:var(--color-accent)]'
+                          ? 'border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/10 shadow-[0_8px_18px_rgba(10,132,255,0.12)]'
+                          : 'border-[color:var(--color-border)]/90 bg-[color:var(--color-card)]/86 hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background)]/90'
                       }`}
                       onClick={() => onSelectFile(file.path)}
                     >
@@ -333,23 +342,23 @@ function DetailGitDiffDrawer({
               </div>
             </div>
 
-            <div className="min-h-0 p-3">
+            <div className="min-h-0 p-3 sm:p-4">
               {activeFile ? (
-                <div className="flex h-full min-h-0 flex-col rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/70">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)] px-3 py-2">
+                <div className="flex h-full min-h-0 flex-col rounded-[18px] border border-[color:var(--color-border)]/90 bg-[color:var(--color-background)]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.3)]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-card)]/54 px-3.5 py-2.5">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]">{activeFile.path}</p>
                       <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">
                         {diffViewMode === 'staged' ? '暂存区变更' : '工作区变更'} · {languageHint}
                       </p>
                     </div>
-                    <div className="quiet-control flex items-center gap-1 rounded-full border-0 p-1">
+                    <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
                       <button
                         type="button"
-                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors ${
+                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                           diffViewMode === 'unstaged'
-                            ? 'bg-primary text-white'
-                            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                            ? 'bg-primary text-white shadow-[0_6px_14px_rgba(10,132,255,0.3)]'
+                            : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                         }`}
                         disabled={!canViewUnstaged || diffLoading}
                         onClick={() => onChangeDiffViewMode('unstaged')}
@@ -358,10 +367,10 @@ function DetailGitDiffDrawer({
                       </button>
                       <button
                         type="button"
-                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors ${
+                        className={`rounded-full px-2.5 py-1 text-[10.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                           diffViewMode === 'staged'
-                            ? 'bg-primary text-white'
-                            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                            ? 'bg-primary text-white shadow-[0_6px_14px_rgba(10,132,255,0.3)]'
+                            : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                         }`}
                         disabled={!canViewStaged || diffLoading}
                         onClick={() => onChangeDiffViewMode('staged')}
@@ -380,13 +389,15 @@ function DetailGitDiffDrawer({
                       <div className="flex h-full items-center justify-center px-4 text-[11px] text-[color:var(--color-destructive)]">
                         {diffError}
                       </div>
-                    ) : (
+                    ) : shouldShowDiffViewer ? (
                       <DiffMonacoViewer value={diffContent || ''} filePath={activeFile.path} />
+                    ) : (
+                      <div className="h-full w-full" aria-hidden="true" />
                     )}
                   </div>
                 </div>
               ) : (
-                <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[color:var(--color-border)] text-xs text-[color:var(--color-muted-foreground)]">
+                <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-background)]/55 text-xs text-[color:var(--color-muted-foreground)]">
                   请选择文件查看改动
                 </div>
               )}
