@@ -99,6 +99,7 @@ export interface GitHistoryCommitInfo {
   committedAt: string
   refs: string[]
   bullets: string[]
+  filesChanged: number
 }
 
 export interface GitWorkspaceSnapshot {

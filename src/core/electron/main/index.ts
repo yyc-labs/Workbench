@@ -653,10 +653,50 @@ async function readGitCommitHistory(cwd: string, limit: number): Promise<GitHist
       committedAt,
       refs,
       bullets,
+      filesChanged: 0,
     })
   }
 
+  const filesChangedByHash = await readGitCommitFilesChangedMap(cwd, limit)
+  for (const commit of commits) {
+    commit.filesChanged = filesChangedByHash.get(commit.hash.toLowerCase()) ?? 0
+  }
+
   return commits
+}
+
+async function readGitCommitFilesChangedMap(cwd: string, limit: number): Promise<Map<string, number>> {
+  const result = await runGitCommand(cwd, [
+    'log',
+    `-${limit}`,
+    '--pretty=format:%H',
+    '--numstat',
+  ])
+  if (result.code !== 0) return new Map()
+
+  const lines = result.stdout.replace(/\r/g, '').split('\n')
+  const countsByHash = new Map<string, number>()
+  let currentHash = ''
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    if (/^[0-9a-f]{40}$/i.test(line)) {
+      currentHash = line.toLowerCase()
+      if (!countsByHash.has(currentHash)) {
+        countsByHash.set(currentHash, 0)
+      }
+      continue
+    }
+
+    if (!currentHash) continue
+    const fields = line.split('\t')
+    if (fields.length < 3) continue
+    countsByHash.set(currentHash, (countsByHash.get(currentHash) ?? 0) + 1)
+  }
+
+  return countsByHash
 }
 
 async function readRecentCommits(cwd: string): Promise<RecentCommitInfo[]> {

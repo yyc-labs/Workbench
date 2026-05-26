@@ -171,7 +171,7 @@ function Normalize-Bullets([object[]]$Items, [int]$Limit) {
 function Compress-Batches([object[]]$Batches, [int]$Limit, [int]$BulletLimit) {
   $list = New-Object System.Collections.Generic.List[object]
   foreach ($b in $Batches) { $null = $list.Add($b) }
-  if ($list.Count -le $Limit) { return @($list.ToArray()) }
+  if ($list.Count -le $Limit) { return ,@($list.ToArray()) }
 
   while ($list.Count -gt $Limit) {
     $tail = $list[$list.Count - 1]
@@ -182,7 +182,7 @@ function Compress-Batches([object[]]$Batches, [int]$Limit, [int]$BulletLimit) {
       $last.bullets = Normalize-Bullets -Items (@($last.bullets) + @('合并批次: ' + [string]$tail.subject)) -Limit $BulletLimit
     }
   }
-  return @($list.ToArray())
+  return ,@($list.ToArray())
 }
 
 function Get-ParentDir([string]$PathValue) {
@@ -201,7 +201,7 @@ function Join-RepoPath([string]$Dir, [string]$FileName) {
 }
 
 function Enforce-PackageLockPairing([object[]]$Batches) {
-  if (-not $Batches -or $Batches.Count -eq 0) { return @() }
+  if (-not $Batches -or $Batches.Count -eq 0) { return ,@() }
 
   $location = @{}
   for ($i = 0; $i -lt $Batches.Count; $i++) {
@@ -246,7 +246,7 @@ function Enforce-PackageLockPairing([object[]]$Batches) {
     $batch.files = $files
     $result += $batch
   }
-  return @($result)
+  return ,@($result)
 }
 
 function New-LocalPlan([string[]]$Files, [int]$BatchLimit) {
