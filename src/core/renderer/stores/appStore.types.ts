@@ -28,6 +28,10 @@ import type {
   GitSetFileStageResult,
   GitFileDiffRequest,
   GitFileDiffResult,
+  GitConflictFileRequest,
+  GitConflictFileResult,
+  GitResolveConflictRequest,
+  GitResolveConflictResult,
   ProjectCodeFileDrawerState,
 } from '../../shared/types'
 
@@ -96,6 +100,8 @@ declare global {
       runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
       setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>
       getGitFileDiff: (request: GitFileDiffRequest) => Promise<GitFileDiffResult>
+      getGitConflictFile: (request: GitConflictFileRequest) => Promise<GitConflictFileResult>
+      resolveGitConflictFile: (request: GitResolveConflictRequest) => Promise<GitResolveConflictResult>
       onAiCommitOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onAiCommitStatus: (
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void

@@ -94,7 +94,21 @@ const api = {
     ipcRenderer.invoke(IPC.GIT_GET_WORKSPACE_SNAPSHOT, projectPath),
 
   runGitOperation: (
-    request: { projectPath: string; operation: 'fetch' | 'pull' | 'push' | 'merge' | 'switch'; targetBranch?: string }
+    request: {
+      projectPath: string
+      operation:
+        | 'fetch'
+        | 'pull'
+        | 'push'
+        | 'merge'
+        | 'switch'
+        | 'create-remote-branch'
+        | 'create-local-branch'
+        | 'delete-local-branch'
+        | 'set-upstream'
+      targetBranch?: string
+      remoteName?: string
+    }
   ) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 
   setGitFileStage: (
@@ -104,6 +118,14 @@ const api = {
   getGitFileDiff: (
     request: { projectPath: string; filePath: string; staged: boolean }
   ) => ipcRenderer.invoke(IPC.GIT_GET_FILE_DIFF, request),
+
+  getGitConflictFile: (
+    request: { projectPath: string; filePath: string }
+  ) => ipcRenderer.invoke(IPC.GIT_GET_CONFLICT_FILE, request),
+
+  resolveGitConflictFile: (
+    request: { projectPath: string; filePath: string; content: string; markResolved?: boolean }
+  ) => ipcRenderer.invoke(IPC.GIT_RESOLVE_CONFLICT_FILE, request),
 
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),
 

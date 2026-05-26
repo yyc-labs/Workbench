@@ -83,6 +83,7 @@ export interface GitChangedFile {
 export interface GitBranchInfo {
   current: string
   upstream?: string
+  upstreamGone: boolean
   oid?: string
   ahead: number
   behind: number
@@ -112,12 +113,22 @@ export interface GitWorkspaceSnapshot {
   error?: string
 }
 
-export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch'
+export type GitOperationKind =
+  | 'fetch'
+  | 'pull'
+  | 'push'
+  | 'merge'
+  | 'switch'
+  | 'create-remote-branch'
+  | 'create-local-branch'
+  | 'delete-local-branch'
+  | 'set-upstream'
 
 export interface GitOperationRequest {
   projectPath: string
   operation: GitOperationKind
   targetBranch?: string
+  remoteName?: string
 }
 
 export interface GitOperationResult {
@@ -160,6 +171,48 @@ export interface GitFileDiffResult {
   output: string
   exitCode: number | null
   staged: boolean
+  error?: string
+}
+
+export interface GitConflictFileRequest {
+  projectPath: string
+  filePath: string
+}
+
+export interface GitConflictStageContent {
+  stage: 1 | 2 | 3
+  label: 'base' | 'ours' | 'theirs'
+  exists: boolean
+  output: string
+  error?: string
+}
+
+export interface GitConflictFileResult {
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
+  filePath: string
+  workingTreeContent: string
+  hasConflictMarkers: boolean
+  stageContents: GitConflictStageContent[]
+  error?: string
+}
+
+export interface GitResolveConflictRequest {
+  projectPath: string
+  filePath: string
+  content: string
+  markResolved?: boolean
+}
+
+export interface GitResolveConflictResult {
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
   error?: string
 }
 

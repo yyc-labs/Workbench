@@ -9,6 +9,10 @@ import type {
   GitSetFileStageResult as SharedGitSetFileStageResult,
   GitFileDiffRequest as SharedGitFileDiffRequest,
   GitFileDiffResult as SharedGitFileDiffResult,
+  GitConflictFileRequest as SharedGitConflictFileRequest,
+  GitConflictFileResult as SharedGitConflictFileResult,
+  GitResolveConflictRequest as SharedGitResolveConflictRequest,
+  GitResolveConflictResult as SharedGitResolveConflictResult,
   GitWorkspaceSnapshot,
 } from '../../../shared/types'
 
@@ -32,6 +36,10 @@ export type GitSetFileStageRequest = SharedGitSetFileStageRequest
 export type GitSetFileStageResult = SharedGitSetFileStageResult
 export type GitFileDiffRequest = SharedGitFileDiffRequest
 export type GitFileDiffResult = SharedGitFileDiffResult
+export type GitConflictFileRequest = SharedGitConflictFileRequest
+export type GitConflictFileResult = SharedGitConflictFileResult
+export type GitResolveConflictRequest = SharedGitResolveConflictRequest
+export type GitResolveConflictResult = SharedGitResolveConflictResult
 export type GitDiffViewMode = 'unstaged' | 'staged'
 
 export type AiCommitRestoreResult = Pick<AiCommitTaskSnapshot, 'status' | 'output'>

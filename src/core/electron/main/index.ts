@@ -5,7 +5,7 @@ import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { writeFileSync, unlinkSync } from 'fs'
 import { constants as FsConstants } from 'fs'
-import { access } from 'fs/promises'
+import { access, readFile, writeFile, realpath } from 'fs/promises'
 import { StringDecoder } from 'string_decoder'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
@@ -41,6 +41,11 @@ import type {
   GitSetFileStageResult,
   GitFileDiffRequest,
   GitFileDiffResult,
+  GitConflictFileRequest,
+  GitConflictFileResult,
+  GitConflictStageContent,
+  GitResolveConflictRequest,
+  GitResolveConflictResult,
   GitWorkspaceSnapshot,
   ProjectFileContentSearchOptions,
   RuntimeDiagnostics,
@@ -434,6 +439,7 @@ function emptyGitBranchInfo(): GitBranchInfo {
     current: '',
     ahead: 0,
     behind: 0,
+    upstreamGone: false,
     detached: false,
     localBranches: [],
     remoteBranches: [],
@@ -740,10 +746,14 @@ async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspa
   ])
 
   const parsed = parseGitStatus(statusResult.stdout)
+  const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
+  const remoteBranchSet = new Set(filteredRemoteBranches)
+  const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
   const branch = {
     ...parsed.branch,
+    upstreamGone,
     localBranches,
-    remoteBranches: remoteBranches.filter((item) => !/\/HEAD$/.test(item)),
+    remoteBranches: filteredRemoteBranches,
   }
 
   return {
@@ -776,6 +786,25 @@ function normalizeGitDiffOutput(output: string): string {
   return output.replace(/\r/g, '').trim()
 }
 
+function normalizeRemoteName(input: string | undefined): string {
+  const normalized = (input || '').trim()
+  return normalized || 'origin'
+}
+
+function isValidGitBranchName(name: string): boolean {
+  if (!name || name.length > 255) return false
+  if (name.startsWith('/') || name.endsWith('/')) return false
+  if (name.includes('//')) return false
+  if (name.includes('\\')) return false
+  if (name.includes('..')) return false
+  if (name.includes('@{')) return false
+  if (name.endsWith('.')) return false
+  if (name.endsWith('.lock')) return false
+  if (/[\x00-\x20\x7f~^:?*\[]/.test(name)) return false
+  if (name.split('/').some((part) => part.length === 0 || part.startsWith('.') || part.endsWith('.'))) return false
+  return true
+}
+
 async function fileExistsAtCwd(cwd: string, relativeFilePath: string): Promise<boolean> {
   try {
     const filePath = join(cwd, relativeFilePath)
@@ -783,6 +812,290 @@ async function fileExistsAtCwd(cwd: string, relativeFilePath: string): Promise<b
     return true
   } catch {
     return false
+  }
+}
+
+function normalizeGitRelativePath(input: string): string | null {
+  const trimmed = input.trim().replace(/\\/g, '/')
+  if (!trimmed) return null
+  if (trimmed === '.' || trimmed === '..') return null
+  if (trimmed.includes('\0')) return null
+  if (trimmed.startsWith('../') || trimmed.includes('/../')) return null
+  if (/^[A-Za-z]:\//.test(trimmed)) return null
+  if (trimmed.startsWith('/')) return null
+  return trimmed
+}
+
+async function resolveGitFilePath(projectPath: string, filePath: string): Promise<string | null> {
+  const normalized = normalizeGitRelativePath(filePath)
+  if (!normalized) return null
+  try {
+    const rootRealPath = await realpath(projectPath)
+    const candidatePath = join(rootRealPath, normalized)
+    const candidateRealPath = await realpath(candidatePath)
+    if (candidateRealPath === rootRealPath || candidateRealPath.startsWith(`${rootRealPath}\\`) || candidateRealPath.startsWith(`${rootRealPath}/`)) {
+      return candidateRealPath
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+async function readGitShowStageContent(projectPath: string, filePath: string, stage: 1 | 2 | 3): Promise<GitConflictStageContent> {
+  const spec = `:${stage}:${filePath}`
+  const args = ['show', '--textconv', spec]
+  const execution = await runGitCommand(projectPath, args)
+  const normalizedOutput = execution.stdout.replace(/\r/g, '')
+  if (execution.code === 0) {
+    return {
+      stage,
+      label: stage === 1 ? 'base' : stage === 2 ? 'ours' : 'theirs',
+      exists: true,
+      output: normalizedOutput,
+    }
+  }
+
+  const stderr = execution.stderr.replace(/\r/g, '').trim()
+  const stdout = execution.stdout.replace(/\r/g, '').trim()
+  const combined = [stderr, stdout].filter(Boolean).join('\n')
+  const missing = /path '.*' is in the index, but not at stage/i.test(combined)
+    || /exists on disk, but not in '.*'/i.test(combined)
+    || /fatal: bad object/i.test(combined)
+
+  return {
+    stage,
+    label: stage === 1 ? 'base' : stage === 2 ? 'ours' : 'theirs',
+    exists: !missing,
+    output: missing ? '' : normalizedOutput,
+    error: missing ? undefined : (combined || `git show exited with code ${execution.code ?? 'unknown'}`),
+  }
+}
+
+function hasConflictMarker(content: string): boolean {
+  const normalized = content.replace(/\r/g, '')
+  return normalized.includes('\n<<<<<<< ') || normalized.startsWith('<<<<<<< ')
+}
+
+async function getGitConflictFile(request: GitConflictFileRequest): Promise<GitConflictFileResult> {
+  const checkedAt = Date.now()
+  const projectPath = request.projectPath.trim()
+  const normalizedFilePath = normalizeGitRelativePath(request.filePath)
+  const filePath = normalizedFilePath ?? ''
+
+  if (!projectPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Project path is required.',
+      exitCode: null,
+      filePath,
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: 'Project path is required.',
+    }
+  }
+  if (!normalizedFilePath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'File path is invalid.',
+      exitCode: null,
+      filePath: request.filePath.trim(),
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: 'File path is invalid.',
+    }
+  }
+
+  const snapshot = await readGitWorkspaceSnapshot(projectPath)
+  if (!snapshot.isGitRepository) {
+    const reason = snapshot.error || 'Not a git repository.'
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: reason,
+      exitCode: null,
+      filePath: normalizedFilePath,
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: reason,
+    }
+  }
+
+  const conflictFile = snapshot.changedFiles.find((file) => file.path === normalizedFilePath && file.scope === 'conflicted')
+  if (!conflictFile) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Target file is not in conflicted state.',
+      exitCode: null,
+      filePath: normalizedFilePath,
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: 'Target file is not in conflicted state.',
+    }
+  }
+
+  const resolvedPath = await resolveGitFilePath(projectPath, normalizedFilePath)
+  if (!resolvedPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Failed to resolve conflicted file path safely.',
+      exitCode: null,
+      filePath: normalizedFilePath,
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: 'Failed to resolve conflicted file path safely.',
+    }
+  }
+
+  let workingTreeContent = ''
+  try {
+    workingTreeContent = (await readFile(resolvedPath, { encoding: 'utf-8' })).replace(/\r/g, '')
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: message,
+      exitCode: null,
+      filePath: normalizedFilePath,
+      workingTreeContent: '',
+      hasConflictMarkers: false,
+      stageContents: [],
+      error: message,
+    }
+  }
+
+  const stageContents = await Promise.all([
+    readGitShowStageContent(projectPath, normalizedFilePath, 1),
+    readGitShowStageContent(projectPath, normalizedFilePath, 2),
+    readGitShowStageContent(projectPath, normalizedFilePath, 3),
+  ])
+
+  const errors = stageContents
+    .map((item) => item.error)
+    .filter((item): item is string => Boolean(item))
+
+  const outputParts = [
+    `Loaded conflict for ${normalizedFilePath}.`,
+    errors.length > 0 ? `Some stages failed to load:\n${errors.join('\n')}` : '',
+  ].filter(Boolean)
+
+  return {
+    ok: true,
+    checkedAt,
+    command: `git show --textconv :1:${normalizedFilePath}; git show --textconv :2:${normalizedFilePath}; git show --textconv :3:${normalizedFilePath}`,
+    output: outputParts.join('\n'),
+    exitCode: 0,
+    filePath: normalizedFilePath,
+    workingTreeContent,
+    hasConflictMarkers: hasConflictMarker(workingTreeContent),
+    stageContents,
+  }
+}
+
+async function resolveGitConflictFile(request: GitResolveConflictRequest): Promise<GitResolveConflictResult> {
+  const checkedAt = Date.now()
+  const projectPath = request.projectPath.trim()
+  const normalizedFilePath = normalizeGitRelativePath(request.filePath)
+  const content = request.content ?? ''
+  const markResolved = request.markResolved !== false
+
+  if (!projectPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Project path is required.',
+      exitCode: null,
+      error: 'Project path is required.',
+    }
+  }
+  if (!normalizedFilePath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'File path is invalid.',
+      exitCode: null,
+      error: 'File path is invalid.',
+    }
+  }
+
+  const snapshot = await readGitWorkspaceSnapshot(projectPath)
+  if (!snapshot.isGitRepository) {
+    const reason = snapshot.error || 'Not a git repository.'
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: reason,
+      exitCode: null,
+      error: reason,
+    }
+  }
+
+  const resolvedPath = await resolveGitFilePath(projectPath, normalizedFilePath)
+  if (!resolvedPath) {
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: 'Failed to resolve conflicted file path safely.',
+      exitCode: null,
+      error: 'Failed to resolve conflicted file path safely.',
+    }
+  }
+
+  try {
+    await writeFile(resolvedPath, content, { encoding: 'utf-8' })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return {
+      ok: false,
+      checkedAt,
+      command: '',
+      output: message,
+      exitCode: null,
+      error: message,
+    }
+  }
+
+  if (!markResolved) {
+    return {
+      ok: true,
+      checkedAt,
+      command: `write ${normalizedFilePath}`,
+      output: 'Conflict content saved to working tree.',
+      exitCode: 0,
+    }
+  }
+
+  const args = ['add', '--', normalizedFilePath]
+  const execution = await runGitCommand(projectPath, args)
+  const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+  const ok = execution.code === 0
+  return {
+    ok,
+    checkedAt,
+    command: formatGitCommand(args),
+    output: ok ? 'Conflict content saved and staged as resolved.' : output,
+    exitCode: execution.code,
+    error: ok ? undefined : output,
   }
 }
 
@@ -959,6 +1272,7 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
   const operation = request.operation
   const projectPath = request.projectPath.trim()
   const targetBranch = request.targetBranch?.trim()
+  const remoteName = normalizeRemoteName(request.remoteName)
 
   if (!projectPath) {
     return {
@@ -989,6 +1303,9 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
   const currentBranch = snapshot.branch.current
   const hasConflicts = snapshot.changedFiles.some((file) => file.scope === 'conflicted')
   const hasWorkingTreeChanges = snapshot.changedFiles.length > 0
+  const branchUpstream = snapshot.branch.upstream
+  const hasUpstream = Boolean(branchUpstream)
+  const upstreamGone = snapshot.branch.upstreamGone
   let skipReason: string | null = null
   let args: string[] = []
 
@@ -998,8 +1315,12 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
       break
     }
     case 'pull': {
-      if (!snapshot.branch.upstream) {
+      if (!hasUpstream) {
         skipReason = 'Current branch has no upstream tracking branch.'
+        break
+      }
+      if (upstreamGone) {
+        skipReason = `Upstream branch ${branchUpstream} is gone. Push with -u to recreate tracking.`
         break
       }
       if (hasConflicts) {
@@ -1026,11 +1347,11 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
         skipReason = 'Detached HEAD cannot be pushed.'
         break
       }
-      if (snapshot.branch.ahead <= 0) {
+      if (hasUpstream && !upstreamGone && snapshot.branch.ahead <= 0) {
         skipReason = 'No outgoing commits to push.'
         break
       }
-      args = snapshot.branch.upstream
+      args = hasUpstream && !upstreamGone
         ? ['push']
         : ['push', '-u', 'origin', currentBranch]
       break
@@ -1078,11 +1399,94 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
 
       const remoteMatch = targetBranch.match(/^([^/]+)\/(.+)$/)
       if (remoteMatch && remoteCandidates.has(targetBranch)) {
+        const localBranchName = remoteMatch[2]
+        if (localCandidates.has(localBranchName)) {
+          args = ['switch', localBranchName]
+          break
+        }
         args = ['switch', '--track', targetBranch]
         break
       }
 
       skipReason = 'Target branch not found in local/remote branch list.'
+      break
+    }
+    case 'create-remote-branch': {
+      if (!currentBranch || currentBranch === 'DETACHED') {
+        skipReason = 'Detached HEAD cannot create remote branch.'
+        break
+      }
+      if (!targetBranch) {
+        skipReason = 'Enter branch name to create on remote.'
+        break
+      }
+      if (!isValidGitBranchName(targetBranch)) {
+        skipReason = 'Invalid branch name.'
+        break
+      }
+
+      const remoteCandidates = new Set(snapshot.branch.remoteBranches)
+      const remoteRef = `${remoteName}/${targetBranch}`
+      if (remoteCandidates.has(remoteRef)) {
+        skipReason = 'Remote branch already exists.'
+        break
+      }
+
+      args = ['push', '--set-upstream', remoteName, `${currentBranch}:${targetBranch}`]
+      break
+    }
+    case 'create-local-branch': {
+      if (!targetBranch) {
+        skipReason = 'Enter local branch name to create.'
+        break
+      }
+      if (!isValidGitBranchName(targetBranch)) {
+        skipReason = 'Invalid branch name.'
+        break
+      }
+      if (snapshot.branch.localBranches.includes(targetBranch)) {
+        skipReason = 'Local branch already exists.'
+        break
+      }
+      const remoteRef = `${remoteName}/${targetBranch}`
+      if (snapshot.branch.remoteBranches.includes(remoteRef)) {
+        args = ['branch', '--track', targetBranch, remoteRef]
+        break
+      }
+      args = ['branch', targetBranch]
+      break
+    }
+    case 'delete-local-branch': {
+      if (!targetBranch) {
+        skipReason = 'Select local branch to delete.'
+        break
+      }
+      if (targetBranch === currentBranch) {
+        skipReason = 'Cannot delete current branch.'
+        break
+      }
+      if (!snapshot.branch.localBranches.includes(targetBranch)) {
+        skipReason = 'Local branch not found.'
+        break
+      }
+      args = ['branch', '-d', targetBranch]
+      break
+    }
+    case 'set-upstream': {
+      if (!currentBranch || currentBranch === 'DETACHED') {
+        skipReason = 'Detached HEAD cannot set upstream.'
+        break
+      }
+      if (!targetBranch) {
+        skipReason = 'Select upstream branch to set.'
+        break
+      }
+      const remoteRef = targetBranch.includes('/') ? targetBranch : `${remoteName}/${targetBranch}`
+      if (!snapshot.branch.remoteBranches.includes(remoteRef)) {
+        skipReason = `Remote branch ${remoteRef} not found.`
+        break
+      }
+      args = ['branch', `--set-upstream-to=${remoteRef}`, currentBranch]
       break
     }
     default: {
@@ -1527,6 +1931,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC.GIT_GET_FILE_DIFF, async (_event, request: GitFileDiffRequest) => {
     return getGitFileDiff(request)
+  })
+
+  ipcMain.handle(IPC.GIT_GET_CONFLICT_FILE, async (_event, request: GitConflictFileRequest) => {
+    return getGitConflictFile(request)
+  })
+
+  ipcMain.handle(IPC.GIT_RESOLVE_CONFLICT_FILE, async (_event, request: GitResolveConflictRequest) => {
+    return resolveGitConflictFile(request)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {

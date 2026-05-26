@@ -16,6 +16,8 @@ export const IPC = {
   GIT_RUN_OPERATION: 'git:runOperation',
   GIT_SET_FILE_STAGE: 'git:setFileStage',
   GIT_GET_FILE_DIFF: 'git:getFileDiff',
+  GIT_GET_CONFLICT_FILE: 'git:getConflictFile',
+  GIT_RESOLVE_CONFLICT_FILE: 'git:resolveConflictFile',
   CONFIG_GET: 'config:get',
   CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',

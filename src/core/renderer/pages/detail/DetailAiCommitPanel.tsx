@@ -1,6 +1,7 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   CloudDownload,
@@ -17,6 +18,7 @@ import {
   X,
 } from 'lucide-react'
 import { formatCommitDate } from './detail.aiFlow'
+import { GIT_GUIDE_SECTIONS, GIT_GUIDE_TITLE } from './gitGuideContent'
 import { ModalShell } from '../../components/ModalShell'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type {
@@ -26,9 +28,11 @@ import type {
   DetailGitSnapshot,
   FlowViewportApi,
   GitDiffViewMode,
+  GitConflictFileResult,
   GitFileDiffResult,
   GitOperationKind,
   GitOperationResult,
+  GitResolveConflictResult,
   GitSetFileStageResult,
   RightPaneMode,
 } from './detail.types'
@@ -64,16 +68,41 @@ type OperationCardState = {
   hint: string
 }
 
+type BranchOperationStateParams = {
+  hasConflicts: boolean
+  hasWorkingTreeChanges: boolean
+  branchAhead: number
+  branchBehind: number
+  hasUpstream: boolean
+  upstreamGone: boolean
+  mergeTarget: string
+  currentBranch: string
+  localBranches: string[]
+  remoteBranches: string[]
+  runningOperation: GitOperationKind | null
+}
+
 type OperationConfirmState = {
-  operation: GitOperationKind
+  operation: PanelGitOperationKind
   message: string
+  riskLevel?: 'normal' | 'high'
+  requireExactMatch?: string
 } | null
+
+type BranchManagerMode = 'current' | 'upstream'
 
 type MiddlePanelMode = 'history' | 'ai-log' | 'git-log'
 type CopyStatus = 'idle' | 'success' | 'error'
 type CommitHistoryDisplayItem = GitHistoryCommit & {
   withinRecentBatch: boolean
 }
+type IndexedBranchCandidate = {
+  name: string
+  searchText: string
+}
+type PanelGitOperationKind = (typeof GIT_OPERATION_ITEMS)[number]['key']
+
+const BRANCH_SEARCH_DEBOUNCE_MS = 140
 
 const CHANGE_META: Record<GitChangedFile['kind'], { label: string; className: string }> = {
   added: { label: '新增', className: 'text-[color:var(--color-success)] bg-[color:var(--color-success-background)]' },
@@ -94,6 +123,18 @@ const GIT_OPERATION_ITEMS = [
   { key: 'switch', label: 'Switch', description: '切换到目标分支', icon: Shuffle },
   { key: 'merge', label: 'Merge', description: '合并目标分支', icon: GitMerge },
 ] as const
+
+const GIT_OPERATION_LABELS: Partial<Record<GitOperationKind, string>> = {
+  fetch: 'Fetch',
+  pull: 'Pull',
+  push: 'Push',
+  switch: 'Switch',
+  merge: 'Merge',
+  'create-remote-branch': 'Create Remote',
+  'create-local-branch': 'Create Local',
+  'delete-local-branch': 'Delete Local',
+  'set-upstream': 'Set Upstream',
+}
 
 function formatGitBadgeCount(count: number): string {
   return count > 99 ? '99+' : String(count)
@@ -125,7 +166,7 @@ function pickDefaultDiffViewMode(file: GitChangedFile): GitDiffViewMode {
 }
 
 function getOperationLabel(operation: GitOperationKind): string {
-  return GIT_OPERATION_ITEMS.find((item) => item.key === operation)?.label ?? operation
+  return GIT_OPERATION_LABELS[operation] ?? operation
 }
 
 function getOperationStatusClass(result: GitOperationResult): string {
@@ -146,16 +187,7 @@ function getOperationStatusText(result: GitOperationResult): string {
 
 function computeOperationState(
   operation: GitOperationKind,
-  params: {
-    hasConflicts: boolean
-    hasWorkingTreeChanges: boolean
-    branchAhead: number
-    branchBehind: number
-    hasUpstream: boolean
-    mergeTarget: string
-    currentBranch: string
-    runningOperation: GitOperationKind | null
-  }
+  params: BranchOperationStateParams
 ): OperationCardState {
   if (params.runningOperation && params.runningOperation !== operation) {
     return { disabled: true, hint: '另一个 Git 操作执行中' }
@@ -165,12 +197,13 @@ function computeOperationState(
   }
   if (operation === 'pull') {
     if (!params.hasUpstream) return { disabled: true, hint: '当前分支无 upstream' }
+    if (params.upstreamGone) return { disabled: true, hint: 'upstream 已丢失，先 push -u 重建远程分支' }
     if (params.hasWorkingTreeChanges) return { disabled: true, hint: '工作区不干净，先提交或暂存' }
     if (params.branchBehind <= 0) return { disabled: true, hint: '没有可拉取提交' }
   }
   if (operation === 'push') {
     if (!params.currentBranch || params.currentBranch === 'DETACHED') return { disabled: true, hint: 'Detached HEAD 不能推送' }
-    if (params.branchAhead <= 0) return { disabled: true, hint: '没有可推送提交' }
+    if (params.hasUpstream && !params.upstreamGone && params.branchAhead <= 0) return { disabled: true, hint: '没有可推送提交' }
   }
   if (operation === 'merge') {
     if (params.hasWorkingTreeChanges) return { disabled: true, hint: '工作区不干净，先提交或暂存' }
@@ -179,7 +212,20 @@ function computeOperationState(
   }
   if (operation === 'switch') {
     if (!params.mergeTarget) return { disabled: true, hint: '请选择要切换的分支' }
-    if (params.mergeTarget === params.currentBranch) return { disabled: true, hint: '已在当前分支' }
+    const normalizedTarget = params.mergeTarget.trim()
+    if (normalizedTarget === params.currentBranch) return { disabled: true, hint: '已在当前分支' }
+    const localCandidates = new Set(params.localBranches)
+    const remoteCandidates = new Set(params.remoteBranches)
+    if (localCandidates.has(normalizedTarget)) return { disabled: false, hint: '将切换本地分支' }
+    const remoteMatch = normalizedTarget.match(/^([^/]+)\/(.+)$/)
+    if (remoteMatch && remoteCandidates.has(normalizedTarget)) {
+      const localName = remoteMatch[2]
+      if (localCandidates.has(localName)) {
+        return { disabled: false, hint: `本地已存在 ${localName}，将直接切换` }
+      }
+      return { disabled: false, hint: '将创建并跟踪本地分支' }
+    }
+    return { disabled: true, hint: '目标分支不存在（本地/远程）' }
   }
   return { disabled: false, hint: '可执行' }
 }
@@ -373,11 +419,24 @@ function DetailAiCommitPanel({
   setActiveCommitHash,
 }: DetailAiCommitPanelProps) {
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
-  const [runningOperation, setRunningOperation] = useState<GitOperationKind | null>(null)
+  const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
   const [mergeTarget, setMergeTarget] = useState('')
   const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false)
+  const [createRemoteRemoteName, setCreateRemoteRemoteName] = useState('origin')
+  const [operationConfirmInput, setOperationConfirmInput] = useState('')
+  const [mergeSearchDraft, setMergeSearchDraft] = useState('')
+  const [mergeSearchQuery, setMergeSearchQuery] = useState('')
   const [operationConfirm, setOperationConfirm] = useState<OperationConfirmState>(null)
   const [operationLogs, setOperationLogs] = useState<GitOperationResult[]>([])
+  const [branchManagerMode, setBranchManagerMode] = useState<BranchManagerMode | null>(null)
+  const [gitGuideOpen, setGitGuideOpen] = useState(false)
+  const [currentManagerInput, setCurrentManagerInput] = useState('')
+  const [currentManagerDeleteTarget, setCurrentManagerDeleteTarget] = useState('')
+  const [upstreamManagerRemoteName, setUpstreamManagerRemoteName] = useState('origin')
+  const [upstreamManagerBranchName, setUpstreamManagerBranchName] = useState('')
+  const [upstreamManagerDangerInput, setUpstreamManagerDangerInput] = useState('')
+  const [branchManagerLoading, setBranchManagerLoading] = useState(false)
+  const [branchManagerError, setBranchManagerError] = useState<string | null>(null)
   const [stagingFilePath, setStagingFilePath] = useState<string | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
   const [diffDrawerOpen, setDiffDrawerOpen] = useState(false)
@@ -386,8 +445,13 @@ function DetailAiCommitPanel({
   const [diffLoading, setDiffLoading] = useState(false)
   const [diffContent, setDiffContent] = useState('')
   const [diffError, setDiffError] = useState<string | null>(null)
+  const [conflictLoading, setConflictLoading] = useState(false)
+  const [conflictData, setConflictData] = useState<GitConflictFileResult | null>(null)
+  const [conflictError, setConflictError] = useState<string | null>(null)
+  const [conflictSaving, setConflictSaving] = useState(false)
   const mergeDropdownRef = useRef<HTMLDivElement | null>(null)
   const diffRequestSeqRef = useRef(0)
+  const conflictRequestSeqRef = useRef(0)
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
@@ -411,19 +475,45 @@ function DetailAiCommitPanel({
   const branchAhead = branch?.ahead ?? 0
   const branchBehind = branch?.behind ?? 0
   const hasUpstream = Boolean(branch?.upstream)
+  const upstreamGone = branch?.upstreamGone ?? false
   const activeDiffFile = activeDiffFilePath ? changedFilesMap.get(activeDiffFilePath) ?? null : null
   const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
   const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
 
-  const localMergeCandidates = useMemo(
-    () => localBranches.filter((name) => name !== currentBranch),
+  const localMergeCandidates = useMemo<IndexedBranchCandidate[]>(
+    () =>
+      localBranches
+        .filter((name) => name !== currentBranch)
+        .map((name) => ({
+          name,
+          searchText: name.toLowerCase(),
+        })),
     [localBranches, currentBranch]
   )
 
-  const remoteMergeCandidates = useMemo(
-    () => remoteBranches.filter((name) => name !== currentBranch),
+  const remoteMergeCandidates = useMemo<IndexedBranchCandidate[]>(
+    () =>
+      remoteBranches
+        .filter((name) => name !== currentBranch)
+        .map((name) => ({
+          name,
+          searchText: name.toLowerCase(),
+        })),
     [remoteBranches, currentBranch]
   )
+
+  const filteredLocalMergeCandidates = useMemo(() => {
+    if (!mergeSearchQuery) return localMergeCandidates
+    return localMergeCandidates.filter((candidate) => candidate.searchText.includes(mergeSearchQuery))
+  }, [localMergeCandidates, mergeSearchQuery])
+
+  const filteredRemoteMergeCandidates = useMemo(() => {
+    if (!mergeSearchQuery) return remoteMergeCandidates
+    return remoteMergeCandidates.filter((candidate) => candidate.searchText.includes(mergeSearchQuery))
+  }, [remoteMergeCandidates, mergeSearchQuery])
+
+  const mergeSearchResultCount = filteredLocalMergeCandidates.length + filteredRemoteMergeCandidates.length
+  const branchManagerDangerText = `${(upstreamManagerRemoteName.trim() || 'origin')}/${upstreamManagerBranchName.trim()}`
   const mergeTargetLabel = mergeTarget || '选择分支（本地 / 远程）...'
   const middlePanelMeta = middlePanelMode === 'history'
     ? {
@@ -443,6 +533,11 @@ function DetailAiCommitPanel({
         icon: GitBranch,
       }
   const MiddlePanelIcon = middlePanelMeta.icon
+  const conflictSavingRef = useRef(conflictSaving)
+
+  useEffect(() => {
+    conflictSavingRef.current = conflictSaving
+  }, [conflictSaving])
 
   useEffect(() => {
     if (jumpToAiLogToken <= 0) return
@@ -468,7 +563,32 @@ function DetailAiCommitPanel({
   }, [mergeDropdownOpen])
 
   useEffect(() => {
+    const normalizedDraft = mergeSearchDraft.trim().toLowerCase()
+    if (!normalizedDraft) {
+      if (mergeSearchQuery) setMergeSearchQuery('')
+      return
+    }
+    if (normalizedDraft === mergeSearchQuery) return
+
+    const timer = window.setTimeout(() => {
+      setMergeSearchQuery(normalizedDraft)
+    }, BRANCH_SEARCH_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [mergeSearchDraft, mergeSearchQuery])
+
+  useEffect(() => {
+    if (mergeDropdownOpen) return
+    if (!mergeSearchDraft && !mergeSearchQuery) return
+    setMergeSearchDraft('')
+    setMergeSearchQuery('')
+  }, [mergeDropdownOpen, mergeSearchDraft, mergeSearchQuery])
+
+  useEffect(() => {
     if (!operationConfirm) return
+    setOperationConfirmInput('')
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOperationConfirm(null)
     }
@@ -479,6 +599,26 @@ function DetailAiCommitPanel({
   }, [operationConfirm])
 
   useEffect(() => {
+    if (!branchManagerMode) return
+    setBranchManagerError(null)
+    if (branchManagerMode === 'current') {
+      setCurrentManagerDeleteTarget('')
+      setCurrentManagerInput('')
+      return
+    }
+    const upstream = branch?.upstream || ''
+    const match = upstream.match(/^([^/]+)\/(.+)$/)
+    if (match) {
+      setUpstreamManagerRemoteName(match[1])
+      setUpstreamManagerBranchName(match[2])
+    } else {
+      setUpstreamManagerRemoteName('origin')
+      setUpstreamManagerBranchName('')
+    }
+    setUpstreamManagerDangerInput('')
+  }, [branchManagerMode, branch?.upstream])
+
+  useEffect(() => {
     if (!diffDrawerOpen) return
     if (activeDiffFilePath && changedFilesMap.has(activeDiffFilePath)) return
     if (changedFiles.length <= 0) {
@@ -486,6 +626,8 @@ function DetailAiCommitPanel({
       setActiveDiffFilePath(null)
       setDiffContent('')
       setDiffError(null)
+      setConflictData(null)
+      setConflictError(null)
       return
     }
     setActiveDiffFilePath(changedFiles[0].path)
@@ -508,6 +650,7 @@ function DetailAiCommitPanel({
   useEffect(() => {
     if (!diffDrawerOpen) return
     if (!activeDiffFilePath || !activeDiffFile) return
+    if (activeDiffFile.scope === 'conflicted') return
     if (diffViewMode === 'staged' && !activeDiffSupportsStaged) return
     if (diffViewMode === 'unstaged' && !activeDiffSupportsUnstaged) return
     void loadDiff(activeDiffFilePath, diffViewMode === 'staged')
@@ -527,12 +670,20 @@ function DetailAiCommitPanel({
     if (!activeDiffFilePath || !changedFilesMap.has(activeDiffFilePath)) return
     const file = changedFilesMap.get(activeDiffFilePath)
     if (!file) return
+    if (file.scope === 'conflicted') return
     if (file.scope === 'untracked' && diffViewMode === 'unstaged') return
     if (file.kind === 'deleted') return
     setDiffContent('(no diff output)')
   }, [diffLoading, diffError, diffContent, activeDiffFilePath, changedFilesMap, diffViewMode])
 
-  const operationStates = useMemo<Record<GitOperationKind, OperationCardState>>(() => {
+  useEffect(() => {
+    if (!diffDrawerOpen) return
+    if (!activeDiffFilePath || !activeDiffFile) return
+    if (activeDiffFile.scope !== 'conflicted') return
+    void loadConflict(activeDiffFilePath)
+  }, [diffDrawerOpen, activeDiffFilePath, activeDiffFile, gitSnapshot?.checkedAt])
+
+  const operationStates = useMemo<Record<PanelGitOperationKind, OperationCardState>>(() => {
     return {
       fetch: computeOperationState('fetch', {
         hasConflicts,
@@ -540,8 +691,11 @@ function DetailAiCommitPanel({
         branchAhead,
         branchBehind,
         hasUpstream,
+        upstreamGone,
         mergeTarget,
         currentBranch,
+        localBranches,
+        remoteBranches,
         runningOperation,
       }),
       pull: computeOperationState('pull', {
@@ -550,8 +704,11 @@ function DetailAiCommitPanel({
         branchAhead,
         branchBehind,
         hasUpstream,
+        upstreamGone,
         mergeTarget,
         currentBranch,
+        localBranches,
+        remoteBranches,
         runningOperation,
       }),
       push: computeOperationState('push', {
@@ -560,8 +717,11 @@ function DetailAiCommitPanel({
         branchAhead,
         branchBehind,
         hasUpstream,
+        upstreamGone,
         mergeTarget,
         currentBranch,
+        localBranches,
+        remoteBranches,
         runningOperation,
       }),
       switch: computeOperationState('switch', {
@@ -570,8 +730,11 @@ function DetailAiCommitPanel({
         branchAhead,
         branchBehind,
         hasUpstream,
+        upstreamGone,
         mergeTarget,
         currentBranch,
+        localBranches,
+        remoteBranches,
         runningOperation,
       }),
       merge: computeOperationState('merge', {
@@ -580,8 +743,11 @@ function DetailAiCommitPanel({
         branchAhead,
         branchBehind,
         hasUpstream,
+        upstreamGone,
         mergeTarget,
         currentBranch,
+        localBranches,
+        remoteBranches,
         runningOperation,
       }),
     }
@@ -591,8 +757,11 @@ function DetailAiCommitPanel({
     branchAhead,
     branchBehind,
     hasUpstream,
+    upstreamGone,
     mergeTarget,
     currentBranch,
+    localBranches,
+    remoteBranches,
     runningOperation,
   ])
 
@@ -617,7 +786,7 @@ function DetailAiCommitPanel({
     }
   }
 
-  const loadDiff = async (filePath: string, staged: boolean) => {
+  const loadDiff = useCallback(async (filePath: string, staged: boolean) => {
     if (!gitSnapshot) return
     const requestSeq = diffRequestSeqRef.current + 1
     diffRequestSeqRef.current = requestSeq
@@ -643,19 +812,84 @@ function DetailAiCommitPanel({
     } finally {
       if (requestSeq === diffRequestSeqRef.current) setDiffLoading(false)
     }
-  }
+  }, [gitSnapshot])
 
-  const openDiffDrawerForFile = (filePath: string) => {
+  const loadConflict = useCallback(async (filePath: string) => {
+    if (!gitSnapshot) return
+    const requestSeq = conflictRequestSeqRef.current + 1
+    conflictRequestSeqRef.current = requestSeq
+    setConflictLoading(true)
+    setConflictError(null)
+    try {
+      const result: GitConflictFileResult = await window.electronAPI.getGitConflictFile({
+        projectPath: gitSnapshot.projectPath,
+        filePath,
+      })
+      if (requestSeq !== conflictRequestSeqRef.current) return
+      if (!result.ok) {
+        setConflictData(null)
+        setConflictError(result.error || result.output || '读取冲突详情失败')
+        return
+      }
+      setConflictData(result)
+    } catch (error) {
+      if (requestSeq !== conflictRequestSeqRef.current) return
+      setConflictData(null)
+      setConflictError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (requestSeq === conflictRequestSeqRef.current) setConflictLoading(false)
+    }
+  }, [gitSnapshot])
+
+  const saveConflict = useCallback(async (payload: { filePath: string; content: string; markResolved: boolean }) => {
+    if (!gitSnapshot) return
+    if (conflictSavingRef.current) return
+    setConflictSaving(true)
+    setConflictError(null)
+    setFileActionError(null)
+    try {
+      const result: GitResolveConflictResult = await window.electronAPI.resolveGitConflictFile({
+        projectPath: gitSnapshot.projectPath,
+        filePath: payload.filePath,
+        content: payload.content,
+        markResolved: payload.markResolved,
+      })
+      if (!result.ok) {
+        const msg = result.error || result.output || '保存冲突内容失败'
+        setConflictError(msg)
+        setFileActionError(msg)
+        return
+      }
+      if (!payload.markResolved) {
+        await loadConflict(payload.filePath)
+      }
+      await onRefreshGitSnapshot()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setConflictError(message)
+      setFileActionError(message)
+    } finally {
+      setConflictSaving(false)
+    }
+  }, [gitSnapshot, loadConflict, onRefreshGitSnapshot])
+
+  const openDiffDrawerForFile = useCallback((filePath: string) => {
     const target = changedFilesMap.get(filePath)
     if (!target) return
     setFileActionError(null)
+    setConflictError(null)
     setDiffDrawerOpen(true)
     setActiveDiffFilePath(filePath)
     const initialMode = pickDefaultDiffViewMode(target)
     setDiffViewMode(initialMode)
-  }
+    if (target.scope !== 'conflicted') {
+      setConflictData(null)
+      return
+    }
+    void loadConflict(filePath)
+  }, [changedFilesMap, loadConflict])
 
-  const requestGitOperation = (operation: GitOperationKind) => {
+  const requestGitOperation = (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
 
@@ -669,10 +903,15 @@ function DetailAiCommitPanel({
           ? `将把 ${currentBranch} 推送到远程，继续吗？`
           : '将执行 fetch 更新远程引用，继续吗？'
 
-    setOperationConfirm({ operation, message })
+    setOperationConfirm({
+      operation,
+      message,
+      riskLevel: operation === 'switch' ? 'high' : 'normal',
+      requireExactMatch: operation === 'switch' ? mergeTarget : undefined,
+    })
   }
 
-  const runGitOperation = async (operation: GitOperationKind) => {
+  const runGitOperation = async (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
 
@@ -705,11 +944,185 @@ function DetailAiCommitPanel({
     }
   }
 
+  const runBranchManagerOperation = useCallback(async (request: {
+    operation: GitOperationKind
+    targetBranch?: string
+    remoteName?: string
+  }): Promise<GitOperationResult> => {
+    if (!gitSnapshot) {
+      return {
+        operation: request.operation,
+        ok: false,
+        checkedAt: Date.now(),
+        command: '',
+        output: 'Git snapshot is unavailable.',
+        exitCode: null,
+        error: 'Git snapshot is unavailable.',
+      }
+    }
+    return window.electronAPI.runGitOperation({
+      projectPath: gitSnapshot.projectPath,
+      operation: request.operation,
+      targetBranch: request.targetBranch,
+      remoteName: request.remoteName,
+    })
+  }, [gitSnapshot])
+
+  const handleCreateLocalBranch = useCallback(async () => {
+    const branchName = currentManagerInput.trim()
+    if (!branchName || branchManagerLoading) return
+    setBranchManagerLoading(true)
+    setBranchManagerError(null)
+    try {
+      const result = await runBranchManagerOperation({
+        operation: 'create-local-branch',
+        targetBranch: branchName,
+      })
+      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+      if (!result.ok) {
+        setBranchManagerError(result.error || result.output || '本地分支创建失败')
+        return
+      }
+      setCurrentManagerInput('')
+      await onRefreshGitSnapshot()
+    } catch (error) {
+      setBranchManagerError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBranchManagerLoading(false)
+    }
+  }, [branchManagerLoading, currentManagerInput, onRefreshGitSnapshot, runBranchManagerOperation])
+
+  const handleDeleteLocalBranch = useCallback(async () => {
+    const branchName = currentManagerDeleteTarget.trim()
+    if (!branchName || branchManagerLoading) return
+    setBranchManagerLoading(true)
+    setBranchManagerError(null)
+    try {
+      const result = await runBranchManagerOperation({
+        operation: 'delete-local-branch',
+        targetBranch: branchName,
+      })
+      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+      if (!result.ok) {
+        setBranchManagerError(result.error || result.output || '本地分支删除失败')
+        return
+      }
+      setCurrentManagerDeleteTarget('')
+      await onRefreshGitSnapshot()
+    } catch (error) {
+      setBranchManagerError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBranchManagerLoading(false)
+    }
+  }, [branchManagerLoading, currentManagerDeleteTarget, onRefreshGitSnapshot, runBranchManagerOperation])
+
+  const handleSetUpstream = useCallback(async () => {
+    const remoteName = upstreamManagerRemoteName.trim() || 'origin'
+    const branchName = upstreamManagerBranchName.trim()
+    if (!branchName || branchManagerLoading) return
+    if (upstreamManagerDangerInput.trim() !== branchManagerDangerText) return
+    setBranchManagerLoading(true)
+    setBranchManagerError(null)
+    try {
+      const result = await runBranchManagerOperation({
+        operation: 'set-upstream',
+        targetBranch: branchName,
+        remoteName,
+      })
+      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+      if (!result.ok) {
+        setBranchManagerError(result.error || result.output || 'upstream 绑定失败')
+        return
+      }
+      setUpstreamManagerDangerInput('')
+      await onRefreshGitSnapshot()
+      setBranchManagerMode(null)
+    } catch (error) {
+      setBranchManagerError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBranchManagerLoading(false)
+    }
+  }, [
+    branchManagerDangerText,
+    branchManagerLoading,
+    onRefreshGitSnapshot,
+    runBranchManagerOperation,
+    upstreamManagerBranchName,
+    upstreamManagerDangerInput,
+    upstreamManagerRemoteName,
+  ])
+
+  const handleCreateRemoteBranchFromUpstream = useCallback(async () => {
+    const remoteName = upstreamManagerRemoteName.trim() || 'origin'
+    const branchName = upstreamManagerBranchName.trim()
+    if (!branchName || branchManagerLoading) return
+    if (upstreamManagerDangerInput.trim() !== branchManagerDangerText) return
+    setBranchManagerLoading(true)
+    setBranchManagerError(null)
+    try {
+      const result = await runBranchManagerOperation({
+        operation: 'create-remote-branch',
+        targetBranch: branchName,
+        remoteName,
+      })
+      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+      if (!result.ok) {
+        setBranchManagerError(result.error || result.output || '远程分支创建失败')
+        return
+      }
+      setCreateRemoteRemoteName(remoteName)
+      setUpstreamManagerDangerInput('')
+      await onRefreshGitSnapshot()
+      setBranchManagerMode(null)
+    } catch (error) {
+      setBranchManagerError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBranchManagerLoading(false)
+    }
+  }, [
+    branchManagerDangerText,
+    branchManagerLoading,
+    onRefreshGitSnapshot,
+    runBranchManagerOperation,
+    upstreamManagerBranchName,
+    upstreamManagerDangerInput,
+    upstreamManagerRemoteName,
+  ])
+
   const pendingOperationLabel = operationConfirm
     ? GIT_OPERATION_ITEMS.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
     : 'Git'
   const pendingOperation = operationConfirm?.operation ?? null
   const pendingOperationMessage = operationConfirm?.message ?? ''
+  const confirmExactMatch = operationConfirm?.requireExactMatch ?? ''
+  const confirmNeedsTypedMatch = Boolean(confirmExactMatch)
+  const confirmTypedMatchPassed = !confirmNeedsTypedMatch || operationConfirmInput.trim() === confirmExactMatch
+  const handleDiffDrawerClose = useCallback(() => {
+    setDiffDrawerOpen(false)
+  }, [])
+  const handleDiffDrawerSelectFile = useCallback((filePath: string) => {
+    const file = changedFilesMap.get(filePath)
+    if (!file) return
+    setActiveDiffFilePath(filePath)
+    const mode = pickDefaultDiffViewMode(file)
+    setDiffViewMode(mode)
+    if (file.scope === 'conflicted') {
+      void loadConflict(filePath)
+    } else {
+      setConflictData(null)
+      setConflictError(null)
+    }
+  }, [changedFilesMap, loadConflict])
+  const handleDiffViewModeChange = useCallback((mode: GitDiffViewMode) => {
+    if (mode === diffViewMode) return
+    setDiffViewMode(mode)
+  }, [diffViewMode])
+  const handleLoadConflict = useCallback((filePath: string) => {
+    void loadConflict(filePath)
+  }, [loadConflict])
+  const handleSaveConflict = useCallback((payload: { filePath: string; content: string; markResolved: boolean }) => {
+    void saveConflict(payload)
+  }, [saveConflict])
 
   return (
     <>
@@ -1009,12 +1422,17 @@ function DetailAiCommitPanel({
           <div className="min-h-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
             <div className="mb-3 flex items-center justify-between">
               <div className="inline-flex min-w-0 items-center gap-2">
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18"
+                  onClick={() => setGitGuideOpen(true)}
+                  title="打开 Git 操作指南"
+                >
                   <GitBranch className="h-4.5 w-4.5" />
-                </span>
+                </button>
                 <div className="min-w-0">
                   <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">分支与远程</p>
-                  <p className="text-xs text-[color:var(--color-muted-foreground)]">状态摘要与常用远程操作</p>
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">状态摘要与常用远程操作（点左侧图标看指南）</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -1028,14 +1446,24 @@ function DetailAiCommitPanel({
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+              <button
+                type="button"
+                className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
+                onClick={() => setBranchManagerMode('current')}
+                title="管理本地分支（新增/删除）"
+              >
                 <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Current</p>
                 <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={currentBranch}>{currentBranch}</p>
-              </div>
-              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+              </button>
+              <button
+                type="button"
+                className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
+                onClick={() => setBranchManagerMode('upstream')}
+                title="管理 upstream（仅新增绑定，高危）"
+              >
                 <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Upstream</p>
                 <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={upstreamBranch}>{upstreamBranch}</p>
-              </div>
+              </button>
             </div>
 
             <div className="mt-3">
@@ -1068,16 +1496,28 @@ function DetailAiCommitPanel({
                       aria-label="Merge target branches"
                     >
                       <div className="max-h-[240px] overflow-auto p-1">
-                        {localMergeCandidates.length > 0 && (
+                        <div className="sticky top-0 z-10 px-1 pb-2 pt-1">
+                          <div className="surface-card rounded-[10px] border border-[color:var(--color-border)] px-2">
+                            <input
+                              type="text"
+                              value={mergeSearchDraft}
+                              onChange={(event) => setMergeSearchDraft(event.target.value)}
+                              placeholder="搜索分支..."
+                              className="h-8 w-full bg-transparent text-[11.5px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                              spellCheck={false}
+                            />
+                          </div>
+                        </div>
+                        {filteredLocalMergeCandidates.length > 0 && (
                           <div className="mb-1">
                             <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
                               本地分支
                             </p>
-                            {localMergeCandidates.map((name) => {
-                              const active = mergeTarget === name
+                            {filteredLocalMergeCandidates.map((candidate) => {
+                              const active = mergeTarget === candidate.name
                               return (
                                 <button
-                                  key={`local-${name}`}
+                                  key={`local-${candidate.name}`}
                                   type="button"
                                   className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
                                     active
@@ -1085,27 +1525,27 @@ function DetailAiCommitPanel({
                                       : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
                                   }`}
                                   onClick={() => {
-                                    setMergeTarget(name)
+                                    setMergeTarget(candidate.name)
                                     setMergeDropdownOpen(false)
                                   }}
                                 >
-                                  <span className="truncate font-mono">{name}</span>
+                                  <span className="truncate font-mono">{candidate.name}</span>
                                   {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
                                 </button>
                               )
                             })}
                           </div>
                         )}
-                        {remoteMergeCandidates.length > 0 && (
+                        {filteredRemoteMergeCandidates.length > 0 && (
                           <div>
                             <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
                               远程分支
                             </p>
-                            {remoteMergeCandidates.map((name) => {
-                              const active = mergeTarget === name
+                            {filteredRemoteMergeCandidates.map((candidate) => {
+                              const active = mergeTarget === candidate.name
                               return (
                                 <button
-                                  key={`remote-${name}`}
+                                  key={`remote-${candidate.name}`}
                                   type="button"
                                   className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
                                     active
@@ -1113,20 +1553,20 @@ function DetailAiCommitPanel({
                                       : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
                                   }`}
                                   onClick={() => {
-                                    setMergeTarget(name)
+                                    setMergeTarget(candidate.name)
                                     setMergeDropdownOpen(false)
                                   }}
                                 >
-                                  <span className="truncate font-mono">{name}</span>
+                                  <span className="truncate font-mono">{candidate.name}</span>
                                   {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
                                 </button>
                               )
                             })}
                           </div>
                         )}
-                        {localMergeCandidates.length === 0 && remoteMergeCandidates.length === 0 && (
+                        {filteredLocalMergeCandidates.length === 0 && filteredRemoteMergeCandidates.length === 0 && (
                           <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            暂无可选分支
+                            {mergeSearchQuery ? '未找到匹配分支' : '暂无可选分支'}
                           </p>
                         )}
                       </div>
@@ -1134,7 +1574,7 @@ function DetailAiCommitPanel({
                   )}
                 </div>
                 <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                  本地 {localMergeCandidates.length} 个 · 远程 {remoteMergeCandidates.length} 个
+                  本地 {localMergeCandidates.length} 个 · 远程 {remoteMergeCandidates.length} 个{mergeSearchQuery ? ` · 匹配 ${mergeSearchResultCount} 个` : ''}
                 </p>
               </label>
             </div>
@@ -1197,6 +1637,29 @@ function DetailAiCommitPanel({
             <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
               {pendingOperationMessage}
             </p>
+            {operationConfirm?.riskLevel === 'high' && (
+              <div className="mt-2 rounded-[14px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-destructive-background)] px-3 py-2">
+                <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  高危操作：切换分支会改变当前工作目录视图与上下文
+                </p>
+                {confirmNeedsTypedMatch && (
+                  <>
+                    <p className="mt-1 text-[10.5px] text-[color:var(--color-destructive)]/90">
+                      请输入目标分支名以确认：<span className="font-mono">{confirmExactMatch}</span>
+                    </p>
+                    <input
+                      type="text"
+                      value={operationConfirmInput}
+                      onChange={(event) => setOperationConfirmInput(event.target.value)}
+                      className="mt-2 h-8 w-full rounded-[10px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-background)] px-2.5 font-mono text-[11.5px] text-[color:var(--color-foreground)] outline-none ring-[color:var(--color-ring)] focus:ring-2"
+                      placeholder={confirmExactMatch}
+                      spellCheck={false}
+                    />
+                  </>
+                )}
+              </div>
+            )}
             <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
               将执行真实 git 命令并刷新状态快照。
             </p>
@@ -1210,7 +1673,12 @@ function DetailAiCommitPanel({
               </button>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
+                className={`inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-medium text-white transition-colors ${
+                  operationConfirm?.riskLevel === 'high'
+                    ? 'bg-[color:var(--color-destructive)] hover:opacity-90'
+                    : 'bg-primary hover:bg-primary-hover'
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+                disabled={!confirmTypedMatchPassed}
                 onClick={() => {
                   if (!pendingOperation) return
                   setMiddlePanelMode('git-log')
@@ -1221,6 +1689,210 @@ function DetailAiCommitPanel({
                 确认执行
               </button>
             </div>
+      </ModalShell>
+      <ModalShell
+        open={Boolean(branchManagerMode)}
+        onClose={() => setBranchManagerMode(null)}
+        widthClassName="max-w-[460px]"
+        baseZIndex={1120}
+        ariaLabel={branchManagerMode === 'current' ? 'Current Branch 管理' : 'Upstream 管理'}
+      >
+        {branchManagerMode === 'current' ? (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="section-label mb-1">Current Branch</p>
+                <p className="text-sm font-semibold text-[color:var(--color-foreground)]">本地分支管理</p>
+              </div>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setBranchManagerMode(null)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">新增本地分支</p>
+                <input
+                  type="text"
+                  value={currentManagerInput}
+                  onChange={(event) => setCurrentManagerInput(event.target.value)}
+                  placeholder="feature/new-branch"
+                  className="h-8 w-full bg-transparent font-mono text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className="mt-2 inline-flex h-8 items-center justify-center rounded-full bg-primary px-3 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!currentManagerInput.trim() || branchManagerLoading}
+                  onClick={() => { void handleCreateLocalBranch() }}
+                >
+                  {branchManagerLoading ? '执行中...' : '新增'}
+                </button>
+              </div>
+
+              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">删除本地分支</p>
+                <select
+                  value={currentManagerDeleteTarget}
+                  onChange={(event) => setCurrentManagerDeleteTarget(event.target.value)}
+                  className="h-8 w-full rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2 font-mono text-[11.5px] text-[color:var(--color-foreground)] outline-none ring-[color:var(--color-ring)] focus:ring-2"
+                >
+                  <option value="">选择分支（不含当前分支）</option>
+                  {localBranches
+                    .filter((name) => name !== currentBranch)
+                    .map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  className="mt-2 inline-flex h-8 items-center justify-center rounded-full bg-[color:var(--color-destructive)] px-3 text-[11px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={!currentManagerDeleteTarget || branchManagerLoading}
+                  onClick={() => { void handleDeleteLocalBranch() }}
+                >
+                  {branchManagerLoading ? '执行中...' : '删除'}
+                </button>
+              </div>
+            </div>
+            {branchManagerError && (
+              <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">
+                {branchManagerError}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="section-label mb-1">Upstream</p>
+                <p className="text-sm font-semibold text-[color:var(--color-foreground)]">远程绑定管理（仅新增）</p>
+              </div>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setBranchManagerMode(null)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="rounded-[14px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2">
+              <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                高危操作：会修改当前分支的 upstream 绑定
+              </p>
+            </div>
+            <div className="mt-2 space-y-2">
+              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Remote</p>
+                <input
+                  type="text"
+                  value={upstreamManagerRemoteName}
+                  onChange={(event) => setUpstreamManagerRemoteName(event.target.value)}
+                  placeholder="origin"
+                  className="h-8 w-full bg-transparent font-mono text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Branch</p>
+                <input
+                  type="text"
+                  value={upstreamManagerBranchName}
+                  onChange={(event) => setUpstreamManagerBranchName(event.target.value)}
+                  placeholder="feature/new-branch"
+                  className="h-8 w-full bg-transparent font-mono text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                  spellCheck={false}
+                />
+              </div>
+              <div className="rounded-[14px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-destructive-background)]/55 px-3 py-2">
+                <p className="text-[10.5px] text-[color:var(--color-destructive)]/92">
+                  请输入以下目标以确认：
+                  <span className="ml-1 font-mono">{branchManagerDangerText}</span>
+                </p>
+                <input
+                  type="text"
+                  value={upstreamManagerDangerInput}
+                  onChange={(event) => setUpstreamManagerDangerInput(event.target.value)}
+                  placeholder={branchManagerDangerText}
+                  className="mt-2 h-8 w-full rounded-[10px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-background)] px-2 font-mono text-[11.5px] text-[color:var(--color-foreground)] outline-none ring-[color:var(--color-ring)] focus:ring-2"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+            {branchManagerError && (
+              <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">
+                {branchManagerError}
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  branchManagerLoading
+                  || !upstreamManagerBranchName.trim()
+                  || upstreamManagerDangerInput.trim() !== branchManagerDangerText
+                }
+                onClick={() => { void handleCreateRemoteBranchFromUpstream() }}
+              >
+                {branchManagerLoading ? '执行中...' : '创建远程分支'}
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-full bg-[color:var(--color-destructive)] px-4 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={
+                  branchManagerLoading
+                  || !upstreamManagerBranchName.trim()
+                  || upstreamManagerDangerInput.trim() !== branchManagerDangerText
+                }
+                onClick={() => { void handleSetUpstream() }}
+              >
+                {branchManagerLoading ? '执行中...' : '仅绑定 upstream'}
+              </button>
+            </div>
+          </>
+        )}
+      </ModalShell>
+      <ModalShell
+        open={gitGuideOpen}
+        onClose={() => setGitGuideOpen(false)}
+        widthClassName="max-w-[520px]"
+        baseZIndex={1130}
+        ariaLabel="Git 操作指南"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="section-label mb-1">Git Guide</p>
+            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{GIT_GUIDE_TITLE}</p>
+          </div>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+            onClick={() => setGitGuideOpen(false)}
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-2 text-[12px] leading-5 text-[color:var(--color-foreground)]">
+          {GIT_GUIDE_SECTIONS.map((section) => (
+            <div
+              key={section.title}
+              className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2"
+            >
+              <p className="font-semibold">{section.title}</p>
+              {section.lines.map((line, index) => (
+                <p key={`${section.title}-${index}`} className={index === 0 ? 'mt-1' : ''}>{line}</p>
+              ))}
+            </div>
+          ))}
+        </div>
       </ModalShell>
       <DetailGitDiffDrawer
         open={diffDrawerOpen}
@@ -1233,18 +1905,15 @@ function DetailAiCommitPanel({
         diffError={diffError}
         canViewUnstaged={activeDiffSupportsUnstaged}
         canViewStaged={activeDiffSupportsStaged}
-        onClose={() => setDiffDrawerOpen(false)}
-        onSelectFile={(filePath) => {
-          const file = changedFilesMap.get(filePath)
-          if (!file) return
-          setActiveDiffFilePath(filePath)
-          const mode = pickDefaultDiffViewMode(file)
-          setDiffViewMode(mode)
-        }}
-        onChangeDiffViewMode={(mode) => {
-          if (mode === diffViewMode) return
-          setDiffViewMode(mode)
-        }}
+        conflictLoading={conflictLoading}
+        conflictData={conflictData}
+        conflictError={conflictError}
+        conflictSaving={conflictSaving}
+        onClose={handleDiffDrawerClose}
+        onSelectFile={handleDiffDrawerSelectFile}
+        onChangeDiffViewMode={handleDiffViewModeChange}
+        onLoadConflict={handleLoadConflict}
+        onSaveConflict={handleSaveConflict}
       />
     </>
   )
