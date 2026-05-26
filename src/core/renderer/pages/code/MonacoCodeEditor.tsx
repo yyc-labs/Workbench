@@ -5,6 +5,7 @@ import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 
 export interface MonacoEditorScrollState {
   scrollTop: number
@@ -138,6 +139,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       if (disposed) return
 
       monacoRef.current = monaco
+      syncTextmateTheme(theme)
+      await ensureTextmateForLanguage(monaco, language)
+      if (disposed) return
+
       const uri = monaco.Uri.parse(createMonacoModelUri(filePath))
       const model = monaco.editor.createModel(value, language, uri)
       modelRef.current = model
@@ -296,6 +301,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const monaco = monacoRef.current
     if (!monaco) return
     monaco.editor.setTheme(theme)
+    syncTextmateTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -312,6 +318,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const nextUri = monaco.Uri.parse(createMonacoModelUri(filePath))
     const sameModelPath = model.uri.toString() === nextUri.toString()
     if (!sameModelPath) {
+      void ensureTextmateForLanguage(monaco, language)
       model.dispose()
       const nextModel = monaco.editor.createModel(value, language, nextUri)
       modelRef.current = nextModel
@@ -320,6 +327,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     }
 
     if (model.getLanguageId() !== language) {
+      void ensureTextmateForLanguage(monaco, language)
       monaco.editor.setModelLanguage(model, language)
     }
 

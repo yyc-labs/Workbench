@@ -249,6 +249,7 @@ function inferLanguageFromPath(relativePath: string): string {
   if (lower.endsWith('.css')) return 'css'
   if (lower.endsWith('.scss')) return 'scss'
   if (lower.endsWith('.less')) return 'less'
+  if (lower.endsWith('.vue')) return 'vue'
   if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html'
   if (lower.endsWith('.md') || lower.endsWith('.mdx') || lower.endsWith('.mdc')) return 'markdown'
   if (lower.endsWith('.py')) return 'python'
