@@ -90,6 +90,7 @@ declare global {
         subject: string
         committedAt: string
         bullets: string[]
+        filesChanged: number
       }[]>
       getGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
       runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
