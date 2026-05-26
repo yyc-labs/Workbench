@@ -63,6 +63,11 @@ export function removeCodeFilePathFromDrawerState(state: CodeFileDrawerState, re
 
 export function inferLanguageFromRelativePath(relativePath: string): string {
   const lower = relativePath.toLowerCase()
+  const fileName = lower.split('/').pop() ?? lower
+
+  if (fileName === '.env' || fileName.startsWith('.env.')) return 'ini'
+  if (fileName === '.envrc') return 'shell'
+
   if (lower.endsWith('.d.ts') || lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript'
   if (lower.endsWith('.mjs') || lower.endsWith('.cjs') || lower.endsWith('.js') || lower.endsWith('.jsx')) return 'javascript'
   if (lower.endsWith('.json')) return 'json'

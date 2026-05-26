@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-
 import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode } from '../../../shared/types'
+import { Tooltip } from '../../components/ui/tooltip'
 
 interface CodeFileTreeProps {
   nodes: ProjectFileNode[]
@@ -104,7 +105,6 @@ function FileTreeNodeRenderer({
           }
           onSelectFile(data.relativePath)
         }}
-        title={data.relativePath}
       >
         {isDirectory ? (
           hasChildren ? (
@@ -129,7 +129,14 @@ function FileTreeNodeRenderer({
         ) : (
           <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
         )}
-        <span className="block w-0 min-w-0 flex-1 truncate">{rowLabel}</span>
+        <Tooltip
+          content={data.relativePath}
+          align="start"
+          className="w-0 min-w-0 flex-1"
+          contentClassName="font-mono text-[10.5px] leading-[1.4]"
+        >
+          <span className="block min-w-0 truncate">{rowLabel}</span>
+        </Tooltip>
       </button>
     </div>
   )

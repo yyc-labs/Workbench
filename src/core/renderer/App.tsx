@@ -7,6 +7,7 @@ import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
 import { Copy, Minus, Square, X } from 'lucide-react'
+import { GlobalTitleTooltipBridge } from './components/GlobalTitleTooltipBridge'
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
 
@@ -614,6 +615,7 @@ export function App() {
       <ProcessOutputListener />
       <SessionPoller />
       <MouseGestureNavigator />
+      <GlobalTitleTooltipBridge />
       <div className="app-shell">
         <WindowTitleBar />
         <div className="app-content">

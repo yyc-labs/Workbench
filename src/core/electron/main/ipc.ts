@@ -44,4 +44,6 @@ export const IPC = {
   WINDOW_CLOSE: 'window:close',
   WINDOW_IS_MAXIMIZED: 'window:is-maximized',
   WINDOW_STATE: 'window:state',
+  CODE_FOCUS_SEARCH: 'code:focus-search',
+  CODE_TOGGLE_VIEW_MODE: 'code:toggle-view-mode',
 } as const

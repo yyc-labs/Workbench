@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, FileSearch } from 'lucide-react'
 import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileContentSearchResult } from '../../../shared/types'
+import { Tooltip } from '../../components/ui/tooltip'
 
 interface ActiveContentSearchLocation {
   relativePath: string
@@ -147,7 +148,6 @@ function ContentSearchNodeRenderer({
             event.stopPropagation()
             node.toggle()
           }}
-          title={data.relativePath}
         >
           {node.isOpen ? (
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
@@ -155,7 +155,14 @@ function ContentSearchNodeRenderer({
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
           )}
           <FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          <div className="code-content-search-file-path">{data.name}</div>
+          <Tooltip
+            content={data.relativePath}
+            align="start"
+            className="min-w-0 flex-1"
+            contentClassName="font-mono text-[10.5px] leading-[1.4]"
+          >
+            <span className="code-content-search-file-path">{data.name}</span>
+          </Tooltip>
           <div className="code-content-search-file-count">{data.matchCount}</div>
         </button>
       </div>

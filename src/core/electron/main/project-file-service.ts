@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import type {
+  ProjectFileContentSearchOptions,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchResult,
   ProjectFileContentMatch,
@@ -237,6 +238,10 @@ async function openValidatedFileHandle(projectPath: string, relativePath: string
 
 function inferLanguageFromPath(relativePath: string): string {
   const lower = relativePath.toLowerCase()
+  const fileName = lower.split('/').pop() ?? lower
+
+  if (fileName === '.env' || fileName.startsWith('.env.')) return 'ini'
+  if (fileName === '.envrc') return 'shell'
 
   if (lower.endsWith('.d.ts') || lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript'
   if (lower.endsWith('.mjs') || lower.endsWith('.cjs') || lower.endsWith('.js') || lower.endsWith('.jsx')) return 'javascript'
@@ -734,7 +739,11 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
   return matches
 }
 
-export async function searchProjectContent(projectPath: string, query: string): Promise<ProjectFileContentSearchResponse> {
+export async function searchProjectContent(
+  projectPath: string,
+  query: string,
+  options?: ProjectFileContentSearchOptions
+): Promise<ProjectFileContentSearchResponse> {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) {
     return {
@@ -745,10 +754,13 @@ export async function searchProjectContent(projectPath: string, query: string): 
   }
 
   const rootRealPath = await resolveRoot(projectPath)
+  const caseSensitive = options?.caseSensitive === true
   const args = [
     '--json',
     '--hidden',
     '--no-ignore',
+    '--fixed-strings',
+    ...(caseSensitive ? ['--case-sensitive'] : ['--ignore-case']),
     '--line-number',
     '--column',
     '--max-columns',
@@ -756,6 +768,7 @@ export async function searchProjectContent(projectPath: string, query: string): 
     '--max-count',
     String(MAX_CONTENT_SEARCH_MATCHES_PER_FILE),
     ...RG_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
+    '-e',
     normalizedQuery,
     '.',
   ]

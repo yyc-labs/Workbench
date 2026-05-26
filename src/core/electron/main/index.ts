@@ -42,6 +42,7 @@ import type {
   GitFileDiffRequest,
   GitFileDiffResult,
   GitWorkspaceSnapshot,
+  ProjectFileContentSearchOptions,
   RuntimeDiagnostics,
   TerminalProcessInventory,
   TerminalStopAllResult,
@@ -1369,6 +1370,23 @@ function createWindow(): void {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' && input.type !== 'rawKeyDown') return
+    const key = input.key.toLowerCase()
+    const hasPrimaryModifier = input.control || input.meta
+    const isCtrlTab = key === 'tab' && hasPrimaryModifier && !input.shift && !input.alt
+    const isCtrlShiftF = key === 'f' && hasPrimaryModifier && input.shift && !input.alt
+    const isCtrlAltF = key === 'f' && hasPrimaryModifier && input.alt && !input.shift
+    if (isCtrlTab) {
+      event.preventDefault()
+      mainWindow?.webContents.send(IPC.CODE_TOGGLE_VIEW_MODE)
+      return
+    }
+    const isSearchShortcut = isCtrlShiftF || isCtrlAltF
+    if (!isSearchShortcut) return
+    event.preventDefault()
+    mainWindow?.webContents.send(IPC.CODE_FOCUS_SEARCH)
+  })
   mainWindow.on('maximize', () => {
     mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized: true })
   })
@@ -1551,13 +1569,16 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC.PROJECT_FILE_CONTENT_SEARCH, async (_event, projectPath: string, query: string) => {
+  ipcMain.handle(
+    IPC.PROJECT_FILE_CONTENT_SEARCH,
+    async (_event, projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => {
     try {
-      return await searchProjectContent(projectPath, query)
+        return await searchProjectContent(projectPath, query, options)
     } catch (error) {
       throw new Error(toProjectFileServiceErrorMessage(error))
     }
-  })
+    }
+  )
 
   ipcMain.handle(IPC.PROJECT_FILE_READ, async (_event, projectPath: string, relativePath: string) => {
     try {

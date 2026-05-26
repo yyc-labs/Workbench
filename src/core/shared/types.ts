@@ -428,3 +428,7 @@ export interface ProjectFileContentSearchResponse {
   totalMatches: number
   limited: boolean
 }
+
+export interface ProjectFileContentSearchOptions {
+  caseSensitive?: boolean
+}

@@ -1,6 +1,7 @@
 import type {
   AiCommitTaskSnapshot,
   ProjectFileContentSearchResponse,
+  ProjectFileContentSearchOptions,
   ProjectFileNode,
   ProjectFileReadResult,
   ProjectFileStatResult,
@@ -56,7 +57,11 @@ declare global {
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
       searchProjectFiles: (projectPath: string, query: string) => Promise<ProjectFileNode[]>
-      searchProjectContent: (projectPath: string, query: string) => Promise<ProjectFileContentSearchResponse>
+      searchProjectContent: (
+        projectPath: string,
+        query: string,
+        options?: ProjectFileContentSearchOptions
+      ) => Promise<ProjectFileContentSearchResponse>
       readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
       statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
       writeProjectFile: (
@@ -95,6 +100,8 @@ declare global {
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
       ) => () => void
       onWindowState: (cb: (d: { isMaximized: boolean }) => void) => () => void
+      onCodeFocusSearch: (cb: () => void) => () => void
+      onCodeToggleViewMode: (cb: () => void) => () => void
     }
   }
 }

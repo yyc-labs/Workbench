@@ -26,6 +26,7 @@ interface MonacoCodeEditorProps {
   isReadOnly?: boolean
   onChange: (value: string) => void
   onSave: () => void
+  onFocusSearch?: () => void
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
 }
 
@@ -74,6 +75,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   isReadOnly = false,
   onChange,
   onSave,
+  onFocusSearch,
   onScrollStateChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -81,7 +83,17 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const modelRef = useRef<MonacoEditor.ITextModel | null>(null)
   const syncGuardRef = useRef(false)
+  const onSaveRef = useRef(onSave)
+  const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
+
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+
+  useEffect(() => {
+    onFocusSearchRef.current = onFocusSearch
+  }, [onFocusSearch])
 
   useEffect(() => {
     onScrollStateChangeRef.current = onScrollStateChange
@@ -159,6 +171,20 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       })
       editorRef.current = editor
 
+      const handleCaptureKeyDown = (event: KeyboardEvent) => {
+        const hasPrimaryModifier = event.ctrlKey || event.metaKey
+        if (!hasPrimaryModifier || !event.shiftKey) return
+        const key = event.key.toLowerCase()
+        const isSearchShortcut = key === 'f' || event.code === 'KeyF'
+        if (!isSearchShortcut) return
+
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+        onFocusSearchRef.current?.()
+      }
+      container.addEventListener('keydown', handleCaptureKeyDown, true)
+
       editor.onDidChangeModelContent(() => {
         if (syncGuardRef.current) return
         onChange(editor.getValue())
@@ -176,7 +202,21 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       })
 
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        onSave()
+        onSaveRef.current()
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, () => {
+        onFocusSearchRef.current?.()
+      })
+
+      editor.onKeyDown((event) => {
+        const isSearchShortcut = (event.ctrlKey || event.metaKey)
+          && event.shiftKey
+          && event.keyCode === monaco.KeyCode.KeyF
+        if (!isSearchShortcut) return
+        event.preventDefault()
+        event.stopPropagation()
+        onFocusSearchRef.current?.()
       })
 
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, () => {
@@ -222,7 +262,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         })
       }
 
-      return removeFontListener
+      return () => {
+        container.removeEventListener('keydown', handleCaptureKeyDown, true)
+        removeFontListener?.()
+      }
     }
 
     let cleanupFontListener: (() => void) | undefined

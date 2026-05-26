@@ -1,5 +1,5 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { Check, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileReadResult } from '../../../shared/types'
+import { ModalShell } from '../../components/ModalShell'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileTree } from './CodeFileTree'
@@ -268,7 +269,20 @@ type CodeWorkspacePanelProps = {
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
 type MarkdownScrollModeKey = 'edit' | 'preview' | 'splitEditor' | 'splitPreview'
 type CodeViewMode = 'files' | 'search'
+type DiscardUnsavedConfirmState = {
+  nextRelativePath: string
+  forceReload: boolean
+} | null
 const CODE_FILE_DRAWER_SECTION_LIMIT = 40
+
+function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number {
+  for (const value of values) {
+    if (Number.isFinite(value)) {
+      return Math.max(0, Number(value))
+    }
+  }
+  return 0
+}
 
 interface DebouncedSearchInputProps {
   placeholder: string
@@ -277,6 +291,7 @@ interface DebouncedSearchInputProps {
   onQueryChange: (value: string) => void
   leadingIcon: ReactNode
   trailingAction?: ReactNode
+  inputRef?: Ref<HTMLInputElement>
 }
 
 function DebouncedSearchInput({
@@ -286,6 +301,7 @@ function DebouncedSearchInput({
   onQueryChange,
   leadingIcon,
   trailingAction,
+  inputRef,
 }: DebouncedSearchInputProps) {
   const [draft, setDraft] = useState('')
   const lastEmittedRef = useRef('')
@@ -319,6 +335,7 @@ function DebouncedSearchInput({
       {leadingIcon}
       <div className="relative min-w-0 flex-1">
         <input
+          ref={inputRef}
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -374,6 +391,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const [contentSearchQuery, setContentSearchQuery] = useState('')
+  const [contentSearchCaseSensitive, setContentSearchCaseSensitive] = useState(false)
   const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
     files: [],
     totalMatches: 0,
@@ -407,6 +425,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [codeFileDrawerState, setCodeFileDrawerState] = useState<CodeFileDrawerState>(() => (
     normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
   ))
+  const [discardUnsavedConfirm, setDiscardUnsavedConfirm] = useState<DiscardUnsavedConfirmState>(null)
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
@@ -418,10 +437,15 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const markdownScrollMemoryRef = useRef<Record<string, Partial<Record<MarkdownScrollModeKey, number>>>>({})
   const activeScrollSyncSourceRef = useRef<'editor' | 'preview' | null>(null)
   const scrollSyncReleaseTimerRef = useRef<number | null>(null)
+  const pendingModeSwitchRef = useRef<{ from: MarkdownPreviewMode; to: MarkdownPreviewMode } | null>(null)
+  const pendingEditorRestoreTopRef = useRef<number | null>(null)
   const splitSyncReadyRef = useRef(false)
+  const discardUnsavedResolverRef = useRef<((proceed: boolean) => void) | null>(null)
   const searchRequestSeqRef = useRef(0)
   const contentSearchRequestSeqRef = useRef(0)
   const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
+  const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
 
   const monacoTheme = useMemo(
     () => (effectiveTheme === 'dark' ? 'vs-dark' : resolveMonacoTheme(themeMode)),
@@ -464,6 +488,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const effectiveMarkdownPreviewMode = isMarkdownFile
     ? (markdownPreviewMode === 'split' && isNarrowViewport ? 'preview' : markdownPreviewMode)
     : 'edit'
+  const previousEffectiveMarkdownModeRef = useRef<MarkdownPreviewMode>(effectiveMarkdownPreviewMode)
   const isShowingEditor = effectiveMarkdownPreviewMode !== 'preview'
   const isShowingPreview = effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split'
   const allProjectFilePathSet = useMemo(() => new Set(collectAllFileRelativePaths(tree.nodes)), [tree.nodes])
@@ -635,10 +660,36 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     return () => observer.disconnect()
   }, [])
 
+  const resolveDiscardUnsavedConfirm = useCallback((proceed: boolean) => {
+    const resolve = discardUnsavedResolverRef.current
+    discardUnsavedResolverRef.current = null
+    setDiscardUnsavedConfirm(null)
+    resolve?.(proceed)
+  }, [])
+
+  const requestDiscardUnsavedConfirm = useCallback((nextRelativePath: string, forceReload: boolean): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const previousResolve = discardUnsavedResolverRef.current
+      if (previousResolve) {
+        previousResolve(false)
+      }
+      discardUnsavedResolverRef.current = resolve
+      setDiscardUnsavedConfirm({ nextRelativePath, forceReload })
+    })
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      const resolve = discardUnsavedResolverRef.current
+      discardUnsavedResolverRef.current = null
+      resolve?.(false)
+    }
+  }, [])
+
   const openFile = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
     if (activeRelativePath === relativePath && !forceReload) return true
     if (isDirty && activeRelativePath && activeRelativePath !== relativePath) {
-      const proceed = window.confirm('Current file has unsaved changes. Discard and continue?')
+      const proceed = await requestDiscardUnsavedConfirm(relativePath, forceReload)
       if (!proceed) return false
     }
 
@@ -686,6 +737,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     persistedLastCodeFile,
     projectId,
     projectPath,
+    requestDiscardUnsavedConfirm,
     setProjectLastCodeFile,
   ])
 
@@ -732,17 +784,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       setSaveError(error instanceof Error ? error.message : String(error))
     }
   }, [activeFile, activeRelativePath, editorValue, isDirty, projectPath])
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return
-      if (event.key.toLowerCase() !== 's') return
-      event.preventDefault()
-      void handleSave()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleSave])
 
   useEffect(() => {
     if (!activeRelativePath || !activeFile) {
@@ -815,6 +856,73 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const handleContentSearchQueryChange = useCallback((nextValue: string) => {
     setContentSearchQuery(nextValue)
   }, [])
+  const focusSearchInputByMode = useCallback(() => {
+    const focusTarget = () => {
+      const target = viewMode === 'search' ? contentSearchInputRef.current : fileSearchInputRef.current
+      if (!target) return
+      target.focus()
+      target.select()
+    }
+
+    if (isNarrowViewport && !isExplorerOpen) {
+      setIsExplorerOpen(true)
+      window.setTimeout(() => {
+        focusTarget()
+      }, 0)
+      return
+    }
+
+    focusTarget()
+  }, [isExplorerOpen, isNarrowViewport, viewMode])
+
+  const toggleCodeViewMode = useCallback(() => {
+    setViewMode((prev) => (prev === 'files' ? 'search' : 'files'))
+    if (isNarrowViewport && !isExplorerOpen) {
+      setIsExplorerOpen(true)
+    }
+  }, [isExplorerOpen, isNarrowViewport])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return
+      const key = event.key.toLowerCase()
+      if (event.shiftKey && key === 'f') {
+        event.preventDefault()
+        focusSearchInputByMode()
+        return
+      }
+      if (key !== 's') return
+      event.preventDefault()
+      void handleSave()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [focusSearchInputByMode, handleSave])
+
+  useEffect(() => {
+    let timer: number | null = null
+    const off = window.electronAPI.onCodeFocusSearch(() => {
+      if (timer != null) {
+        window.clearTimeout(timer)
+      }
+      timer = window.setTimeout(() => {
+        focusSearchInputByMode()
+        timer = null
+      }, 16)
+    })
+    return () => {
+      off()
+      if (timer != null) {
+        window.clearTimeout(timer)
+      }
+    }
+  }, [focusSearchInputByMode])
+
+  useEffect(() => {
+    return window.electronAPI.onCodeToggleViewMode(() => {
+      toggleCodeViewMode()
+    })
+  }, [toggleCodeViewMode])
 
   useEffect(() => {
     const normalizedQuery = fileSearchQuery.trim()
@@ -866,7 +974,9 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     setContentSearchError(null)
     setIsContentSearchAllExpanded(false)
 
-    void window.electronAPI.searchProjectContent(projectPath, normalizedQuery)
+    void window.electronAPI.searchProjectContent(projectPath, normalizedQuery, {
+      caseSensitive: contentSearchCaseSensitive,
+    })
       .then((result) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setContentSearchResult(result)
@@ -886,7 +996,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setIsSearchingContent(false)
       })
-  }, [contentSearchQuery, projectPath])
+  }, [contentSearchCaseSensitive, contentSearchQuery, projectPath])
 
   useEffect(() => {
     const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
@@ -967,6 +1077,19 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     editorRef.current?.setScrollTop(Math.max(0, scrollTop))
   }, [])
 
+  const restoreEditorScrollTop = useCallback((scrollTop: number) => {
+    const normalized = Math.max(0, scrollTop)
+    pendingEditorRestoreTopRef.current = normalized
+    editorRef.current?.setScrollTop(normalized)
+  }, [])
+
+  useLayoutEffect(() => {
+    const previous = previousEffectiveMarkdownModeRef.current
+    if (previous === effectiveMarkdownPreviewMode) return
+    pendingModeSwitchRef.current = { from: previous, to: effectiveMarkdownPreviewMode }
+    previousEffectiveMarkdownModeRef.current = effectiveMarkdownPreviewMode
+  }, [effectiveMarkdownPreviewMode])
+
   useEffect(() => {
     if (tree.status !== 'ready') return
     if (hasAttemptedInitialRestore) return
@@ -988,58 +1111,49 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   useLayoutEffect(() => {
     if (!isMarkdownFile || !activeRelativePath) return
     splitSyncReadyRef.current = false
+    const switchContext = pendingModeSwitchRef.current
+    if (switchContext?.to !== effectiveMarkdownPreviewMode) {
+      pendingModeSwitchRef.current = null
+    }
 
     const timer = window.setTimeout(() => {
+      const stored = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
+      const switchFrom = pendingModeSwitchRef.current?.to === effectiveMarkdownPreviewMode
+        ? pendingModeSwitchRef.current.from
+        : null
+
       if (effectiveMarkdownPreviewMode === 'edit') {
-        const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
-        const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
-        const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
-        const nextTop = Number.isFinite(storedEdit)
-          ? Number(storedEdit)
-          : (
-            Number.isFinite(storedSplitEditor)
-              ? Number(storedSplitEditor)
-              : (Number.isFinite(storedPreview) ? Number(storedPreview) : 0)
-          )
-        applyEditorScrollTop(nextTop)
+        const nextTop = switchFrom === 'preview'
+          ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
+          : switchFrom === 'split'
+            ? pickFirstFiniteScrollTop(stored.splitEditor, stored.splitPreview, stored.edit, stored.preview)
+            : pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.preview, stored.splitPreview)
+        restoreEditorScrollTop(nextTop)
+        pendingModeSwitchRef.current = null
         return
       }
 
       if (effectiveMarkdownPreviewMode === 'preview') {
-        const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
-        const storedSplitPreview = markdownScrollMemoryRef.current[activeRelativePath]?.splitPreview
-        const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
-        const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
-        const nextTop = Number.isFinite(storedPreview)
-          ? Number(storedPreview)
-          : (
-            Number.isFinite(storedSplitPreview)
-              ? Number(storedSplitPreview)
-              : (
-                Number.isFinite(storedSplitEditor)
-                  ? Number(storedSplitEditor)
-                  : (Number.isFinite(storedEdit) ? Number(storedEdit) : 0)
-              )
-          )
+        const nextTop = switchFrom === 'edit'
+          ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview)
+          : switchFrom === 'split'
+            ? pickFirstFiniteScrollTop(stored.splitPreview, stored.splitEditor, stored.preview, stored.edit)
+            : pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
         applyPreviewScrollTop(nextTop)
+        pendingModeSwitchRef.current = null
         return
       }
 
-      const storedSplitEditor = markdownScrollMemoryRef.current[activeRelativePath]?.splitEditor
-      const storedSplitPreview = markdownScrollMemoryRef.current[activeRelativePath]?.splitPreview
-      const storedEdit = markdownScrollMemoryRef.current[activeRelativePath]?.edit
-      const storedPreview = markdownScrollMemoryRef.current[activeRelativePath]?.preview
-      const fallbackEditor = Number.isFinite(storedEdit)
-        ? Number(storedEdit)
-        : (Number.isFinite(storedPreview) ? Number(storedPreview) : 0)
-      const fallbackPreview = Number.isFinite(storedPreview) ? Number(storedPreview) : fallbackEditor
-      const nextEditorTop = Number.isFinite(storedSplitEditor) ? Number(storedSplitEditor) : fallbackEditor
-      const nextPreviewTop = Number.isFinite(storedSplitPreview)
-        ? Number(storedSplitPreview)
-        : (Number.isFinite(storedSplitEditor) ? nextEditorTop : fallbackPreview || fallbackEditor)
-      applyEditorScrollTop(nextEditorTop)
+      const nextEditorTop = switchFrom === 'preview'
+        ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
+        : pickFirstFiniteScrollTop(stored.splitEditor, stored.edit, stored.preview, stored.splitPreview)
+      const nextPreviewTop = switchFrom === 'edit'
+        ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview)
+        : pickFirstFiniteScrollTop(stored.splitPreview, stored.preview, stored.splitEditor, stored.edit)
+      restoreEditorScrollTop(nextEditorTop)
       applyPreviewScrollTop(nextPreviewTop)
       splitSyncReadyRef.current = true
+      pendingModeSwitchRef.current = null
     }, 0)
 
     return () => {
@@ -1047,7 +1161,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }
   }, [
     activeRelativePath,
-    applyEditorScrollTop,
+    restoreEditorScrollTop,
     applyPreviewScrollTop,
     effectiveMarkdownPreviewMode,
     isMarkdownFile,
@@ -1055,6 +1169,15 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
 
   const handleEditorScrollStateChange = useCallback((state: MonacoEditorScrollState) => {
     editorScrollStateRef.current = state
+    if (isMarkdownFile && isShowingEditor && pendingEditorRestoreTopRef.current != null) {
+      const maxTop = Math.max(0, state.scrollHeight - state.viewportHeight)
+      const pendingTop = Math.min(Math.max(0, pendingEditorRestoreTopRef.current), maxTop)
+      if (Math.abs(state.scrollTop - pendingTop) > 1) {
+        editorRef.current?.setScrollTop(pendingTop)
+        return
+      }
+      pendingEditorRestoreTopRef.current = null
+    }
 
     if (!isMarkdownFile || !activeRelativePath || !isShowingEditor) return
     const modeKey: MarkdownScrollModeKey = effectiveMarkdownPreviewMode === 'split' ? 'splitEditor' : 'edit'
@@ -1320,6 +1443,55 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         </div>
       )}
 
+      <ModalShell
+        open={Boolean(discardUnsavedConfirm)}
+        onClose={() => resolveDiscardUnsavedConfirm(false)}
+        widthClassName="max-w-[440px]"
+        baseZIndex={1100}
+        ariaLabel="Unsaved changes confirmation"
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <p className="section-label mb-1">Unsaved Changes</p>
+            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
+              当前文件有未保存修改
+            </p>
+          </div>
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+            onClick={() => resolveDiscardUnsavedConfirm(false)}
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
+          {discardUnsavedConfirm?.forceReload
+            ? '重新加载后将丢弃当前未保存内容，是否继续？'
+            : `切换到 ${discardUnsavedConfirm?.nextRelativePath ?? '目标文件'} 后将丢弃当前未保存内容，是否继续？`}
+        </p>
+        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
+          你也可以先保存当前文件，再执行切换或重载。
+        </p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+            onClick={() => resolveDiscardUnsavedConfirm(false)}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
+            onClick={() => resolveDiscardUnsavedConfirm(true)}
+          >
+            丢弃并继续
+          </button>
+        </div>
+      </ModalShell>
+
       <CodeFileQuickDrawer
         open={isQuickDrawerOpen}
         activeRelativePath={activeRelativePath}
@@ -1340,9 +1512,10 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                   <div className="code-panel-header">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <DebouncedSearchInput
+                        inputRef={fileSearchInputRef}
                         leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
                         placeholder="Search files (e.g. abvd)"
-                        inputClassName="code-search-input code-search-input--compact"
+                        inputClassName="code-search-input"
                         debounceMs={FILE_SEARCH_DEBOUNCE_MS}
                         onQueryChange={handleFileSearchQueryChange}
                       />
@@ -1396,21 +1569,33 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                   <div className="code-panel-header code-search-main-header">
                     <div className="code-search-main-query">
                       <DebouncedSearchInput
+                        inputRef={contentSearchInputRef}
                         leadingIcon={<FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
                         placeholder="Search text across files (rg)"
                         inputClassName="code-search-input"
                         debounceMs={FILE_SEARCH_DEBOUNCE_MS}
                         onQueryChange={handleContentSearchQueryChange}
                         trailingAction={(
-                          <button
-                            type="button"
-                            className="code-search-meta-action code-search-toggle-action"
-                            onClick={handleToggleContentSearchTree}
-                            disabled={!canToggleContentSearchTree}
-                            aria-disabled={!canToggleContentSearchTree}
-                          >
-                            {contentSearchToggleLabel}
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              className={`code-search-meta-action ${contentSearchCaseSensitive ? 'is-active' : ''}`}
+                              onClick={() => setContentSearchCaseSensitive((prev) => !prev)}
+                              title={contentSearchCaseSensitive ? 'Case sensitive search: on' : 'Case sensitive search: off'}
+                              aria-pressed={contentSearchCaseSensitive}
+                            >
+                              Aa
+                            </button>
+                            <button
+                              type="button"
+                              className="code-search-meta-action code-search-toggle-action"
+                              onClick={handleToggleContentSearchTree}
+                              disabled={!canToggleContentSearchTree}
+                              aria-disabled={!canToggleContentSearchTree}
+                            >
+                              {contentSearchToggleLabel}
+                            </button>
+                          </div>
                         )}
                       />
                     </div>
@@ -1528,6 +1713,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                           theme={monacoTheme}
                           onChange={setEditorValue}
                           onScrollStateChange={handleEditorScrollStateChange}
+                          onFocusSearch={focusSearchInputByMode}
                           onSave={() => {
                             void handleSave()
                           }}

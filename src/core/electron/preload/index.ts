@@ -133,8 +133,8 @@ const api = {
   searchProjectFiles: (projectPath: string, query: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH, projectPath, query),
 
-  searchProjectContent: (projectPath: string, query: string) =>
-    ipcRenderer.invoke(IPC.PROJECT_FILE_CONTENT_SEARCH, projectPath, query),
+  searchProjectContent: (projectPath: string, query: string, options?: { caseSensitive?: boolean }) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_CONTENT_SEARCH, projectPath, query, options),
 
   readProjectFile: (projectPath: string, relativePath: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_READ, projectPath, relativePath),
@@ -223,6 +223,18 @@ const api = {
     ) => cb(d)
     ipcRenderer.on(IPC.WINDOW_STATE, handler)
     return () => ipcRenderer.removeListener(IPC.WINDOW_STATE, handler)
+  },
+
+  onCodeFocusSearch: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on(IPC.CODE_FOCUS_SEARCH, handler)
+    return () => ipcRenderer.removeListener(IPC.CODE_FOCUS_SEARCH, handler)
+  },
+
+  onCodeToggleViewMode: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on(IPC.CODE_TOGGLE_VIEW_MODE, handler)
+    return () => ipcRenderer.removeListener(IPC.CODE_TOGGLE_VIEW_MODE, handler)
   },
 }
 
