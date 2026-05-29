@@ -25,6 +25,11 @@ import {
   writeProjectFile,
   toProjectFileServiceErrorMessage,
 } from './project-file-service'
+import {
+  deleteDocLinkSecret,
+  getDocLinkSecret,
+  setDocLinkSecret,
+} from './doc-link-secret-store'
 import type {
   AiCommitTaskSnapshot,
   AiCommitRunOverride,
@@ -448,11 +453,18 @@ function emptyGitBranchInfo(): GitBranchInfo {
 
 function runGitCommand(cwd: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const child = spawn('git', args, {
-      cwd,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
+    const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(cwd) : null
+    const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
+    const child = useWslGit
+      ? spawn('wsl.exe', ['-d', wslTarget!.distro, '--cd', wslTarget!.linuxPath, 'git', ...args], {
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      : spawn('git', args, {
+        cwd,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
 
     let stdout = ''
     let stderr = ''
@@ -482,6 +494,44 @@ function listGitLines(cwd: string, args: string[]): Promise<string[]> {
       .map((line) => line.trim())
       .filter(Boolean)
   })
+}
+
+type GitCommandSequenceResult = {
+  ok: boolean
+  command: string
+  output: string
+  exitCode: number | null
+  error?: string
+}
+
+async function runGitCommandSequence(cwd: string, commandArgsList: string[][]): Promise<GitCommandSequenceResult> {
+  const command = commandArgsList.map((args) => formatGitCommand(args)).join(' && ')
+  const outputChunks: string[] = []
+
+  for (const args of commandArgsList) {
+    const execution = await runGitCommand(cwd, args)
+    const stepOutput = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    outputChunks.push(`$ ${formatGitCommand(args)}`)
+    if (stepOutput !== '(no output)') {
+      outputChunks.push(stepOutput)
+    }
+    if (execution.code !== 0) {
+      return {
+        ok: false,
+        command,
+        output: outputChunks.join('\n'),
+        exitCode: execution.code,
+        error: stepOutput,
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    command,
+    output: outputChunks.length > 0 ? outputChunks.join('\n') : '(no output)',
+    exitCode: 0,
+  }
 }
 
 function remainderAfterTokens(record: string, tokenCount: number): string {
@@ -749,9 +799,13 @@ async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspa
   const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
   const remoteBranchSet = new Set(filteredRemoteBranches)
   const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
+  const upstreamOid = parsed.branch.upstream && !upstreamGone
+    ? await readGitRefOid(projectPath, parsed.branch.upstream)
+    : undefined
   const branch = {
     ...parsed.branch,
     upstreamGone,
+    upstreamOid,
     localBranches,
     remoteBranches: filteredRemoteBranches,
   }
@@ -784,6 +838,48 @@ function normalizeGitOperationOutput(stdout: string, stderr: string): string {
 
 function normalizeGitDiffOutput(output: string): string {
   return output.replace(/\r/g, '').trim()
+}
+
+function firstNonEmptyLine(input: string): string | undefined {
+  const lines = input
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+  return lines.find(Boolean)
+}
+
+async function readGitFileEolInfo(cwd: string, filePath: string): Promise<string | undefined> {
+  const result = await runGitCommand(cwd, ['ls-files', '--eol', '--', filePath])
+  if (result.code !== 0) return undefined
+  return firstNonEmptyLine(result.stdout)
+}
+
+function buildEmptyGitDiffHint(filePath: string, file?: GitChangedFile, eolInfo?: string): string {
+  const lines = [
+    '(no textual patch output)',
+    'Git 状态显示该文件存在变更，但当前 diff 为空。',
+    '这通常是 CRLF/LF 行尾规范化导致的显示差异。',
+    `文件: ${filePath}`,
+  ]
+
+  if (file) {
+    lines.push(`状态: scope=${file.scope}, index=${file.indexStatus}, worktree=${file.worktreeStatus}`)
+  }
+  if (eolInfo) {
+    lines.push(`EOL: ${eolInfo}`)
+  }
+
+  lines.push('可执行: git ls-files --eol -- "<file>" 进一步确认。')
+  return lines.join('\n')
+}
+
+async function readGitRefOid(cwd: string, ref: string): Promise<string | undefined> {
+  const normalizedRef = ref.trim()
+  if (!normalizedRef) return undefined
+  const result = await runGitCommand(cwd, ['rev-parse', '--verify', normalizedRef])
+  if (result.code !== 0) return undefined
+  const oid = result.stdout.replace(/\r/g, '').trim()
+  return /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined
 }
 
 function normalizeRemoteName(input: string | undefined): string {
@@ -1234,6 +1330,9 @@ async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffR
     }
   }
 
+  const changedFile = snapshot.changedFiles.find((file) => file.path === filePath)
+  const shouldTryUntrackedFallback = !staged && changedFile?.scope === 'untracked'
+
   let args = staged
     ? ['diff', '--cached', '--', filePath]
     : ['diff', '--', filePath]
@@ -1242,10 +1341,11 @@ async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffR
   let output = normalizeGitDiffOutput(execution.stdout)
   let errorText = ok ? undefined : execution.stderr.trim() || undefined
 
-  if (!staged && ok && !output) {
+  if (shouldTryUntrackedFallback && ok && !output) {
     const existsInWorkingTree = await fileExistsAtCwd(projectPath, filePath)
     if (existsInWorkingTree) {
-      args = ['diff', '--no-index', '--', '/dev/null', filePath]
+      const nullDevicePath = process.platform === 'win32' ? 'NUL' : '/dev/null'
+      args = ['diff', '--no-index', '--', nullDevicePath, filePath]
       const untrackedDiff = await runGitCommand(projectPath, args)
       if (untrackedDiff.code === 0 || untrackedDiff.code === 1) {
         execution = untrackedDiff
@@ -1254,6 +1354,11 @@ async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffR
         errorText = undefined
       }
     }
+  }
+
+  if (ok && !output && changedFile && changedFile.scope !== 'conflicted') {
+    const eolInfo = await readGitFileEolInfo(projectPath, filePath)
+    output = buildEmptyGitDiffHint(filePath, changedFile, eolInfo)
   }
 
   return {
@@ -1306,8 +1411,13 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
   const branchUpstream = snapshot.branch.upstream
   const hasUpstream = Boolean(branchUpstream)
   const upstreamGone = snapshot.branch.upstreamGone
+  const localBranchSet = new Set(snapshot.branch.localBranches)
+  const remoteBranchSet = new Set(snapshot.branch.remoteBranches)
   let skipReason: string | null = null
   let args: string[] = []
+  let commandSequence: string[][] | null = null
+  let resolvedTargetBranch = targetBranch
+  let skipAsError = false
 
   switch (operation) {
     case 'fetch': {
@@ -1390,25 +1500,45 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
         break
       }
 
-      const localCandidates = new Set(snapshot.branch.localBranches)
-      const remoteCandidates = new Set(snapshot.branch.remoteBranches)
-      if (localCandidates.has(targetBranch)) {
+      if (localBranchSet.has(targetBranch)) {
         args = ['switch', targetBranch]
         break
       }
 
       const remoteMatch = targetBranch.match(/^([^/]+)\/(.+)$/)
-      if (remoteMatch && remoteCandidates.has(targetBranch)) {
-        const localBranchName = remoteMatch[2]
-        if (localCandidates.has(localBranchName)) {
-          args = ['switch', localBranchName]
-          break
-        }
-        args = ['switch', '--track', targetBranch]
+      if (!remoteMatch) {
+        skipReason = 'Target branch must be a local branch name or a remote-qualified branch like origin/feature/x.'
         break
       }
 
-      skipReason = 'Target branch not found in local/remote branch list.'
+      const remoteRef = targetBranch
+      const localBranchName = remoteMatch[2]
+      resolvedTargetBranch = localBranchName
+
+      if (!isValidGitBranchName(localBranchName)) {
+        skipReason = `Invalid local branch name derived from remote ref: ${localBranchName}.`
+        break
+      }
+
+      if (!remoteBranchSet.has(remoteRef)) {
+        if (localBranchSet.has(localBranchName)) {
+          skipReason = `Remote branch ${remoteRef} not found, cannot rebind upstream for existing local branch ${localBranchName}.`
+          skipAsError = true
+          break
+        }
+        skipReason = `Remote branch ${remoteRef} not found.`
+        break
+      }
+
+      if (localBranchSet.has(localBranchName)) {
+        commandSequence = [
+          ['switch', localBranchName],
+          ['branch', `--set-upstream-to=${remoteRef}`, localBranchName],
+        ]
+        break
+      }
+
+      args = ['switch', '--track', targetBranch]
       break
     }
     case 'create-remote-branch': {
@@ -1482,8 +1612,8 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
         break
       }
       const remoteRef = targetBranch.includes('/') ? targetBranch : `${remoteName}/${targetBranch}`
-      if (!snapshot.branch.remoteBranches.includes(remoteRef)) {
-        skipReason = `Remote branch ${remoteRef} not found.`
+      if (!remoteBranchSet.has(remoteRef)) {
+        skipReason = `Remote branch ${remoteRef} not found. Run fetch first or verify remote name.`
         break
       }
       args = ['branch', `--set-upstream-to=${remoteRef}`, currentBranch]
@@ -1511,24 +1641,43 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
       command: '',
       output: skipReason,
       exitCode: null,
-      skipped: true,
+      skipped: skipAsError ? undefined : true,
       error: skipReason,
-      targetBranch,
+      targetBranch: resolvedTargetBranch,
     }
   }
 
-  const execution = await runGitCommand(projectPath, args)
-  const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
-  const ok = execution.code === 0
+  let ok: boolean
+  let output: string
+  let exitCode: number | null
+  let command: string
+  let error: string | undefined
+
+  if (commandSequence && commandSequence.length > 0) {
+    const sequenceResult = await runGitCommandSequence(projectPath, commandSequence)
+    ok = sequenceResult.ok
+    output = sequenceResult.output
+    exitCode = sequenceResult.exitCode
+    command = sequenceResult.command
+    error = sequenceResult.error
+  } else {
+    const execution = await runGitCommand(projectPath, args)
+    output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    ok = execution.code === 0
+    exitCode = execution.code
+    command = formatGitCommand(args)
+    error = ok ? undefined : output
+  }
+
   return {
     operation,
     ok,
     checkedAt,
-    command: formatGitCommand(args),
+    command,
     output,
-    exitCode: execution.code,
-    error: ok ? undefined : output,
-    targetBranch,
+    exitCode,
+    error,
+    targetBranch: resolvedTargetBranch,
   }
 }
 
@@ -1596,13 +1745,27 @@ function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
   child.unref()
 }
 
-function openTerminalAtPath(folderPath: string): Promise<boolean> {
+function openTerminalAtPath(folderPath: string, command?: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
+    const trimmedCommand = command?.trim()
     const wslTarget = resolveWslVsCodeTarget(folderPath)
     if (process.platform === 'win32' && wslTarget) {
+      const wslArgs = trimmedCommand
+        ? [
+          'wsl',
+          '-d',
+          wslTarget.distro,
+          '--cd',
+          wslTarget.linuxPath,
+          '--',
+          'bash',
+          '-lc',
+          `${trimmedCommand}; exec bash -i`,
+        ]
+        : ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath]
       const child = spawn(
         'wt.exe',
-        ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath],
+        wslArgs,
         {
           detached: true,
           stdio: 'ignore',
@@ -1620,7 +1783,10 @@ function openTerminalAtPath(folderPath: string): Promise<boolean> {
     }
 
     const localPath = resolveLocalVsCodePath(folderPath)
-    const child = spawn('wt.exe', ['-d', localPath], {
+    const localArgs = trimmedCommand
+      ? ['-d', localPath, 'cmd.exe', '/k', trimmedCommand]
+      : ['-d', localPath]
+    const child = spawn('wt.exe', localArgs, {
       detached: true,
       stdio: 'ignore',
     })
@@ -1846,6 +2012,13 @@ function createWindow(): void {
     processManager.setOutputWindow(mainWindow)
   }
 
+  mainWindow.on('closed', () => {
+    if (processManager) {
+      processManager.setOutputWindow(null)
+    }
+    mainWindow = null
+  })
+
   registerIpcHandlers()
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -1904,6 +2077,21 @@ function registerIpcHandlers(): void {
       return updated
     }
   )
+
+  ipcMain.handle(IPC.DOC_LINK_SECRET_SET, (_event, projectId: string, linkId: string, secret: string) => {
+    setDocLinkSecret(projectId, linkId, secret)
+    return true
+  })
+
+  ipcMain.handle(IPC.DOC_LINK_SECRET_GET, (_event, projectId: string, linkId: string) => {
+    const secret = getDocLinkSecret(projectId, linkId)
+    return { secret }
+  })
+
+  ipcMain.handle(IPC.DOC_LINK_SECRET_DELETE, (_event, projectId: string, linkId: string) => {
+    deleteDocLinkSecret(projectId, linkId)
+    return true
+  })
 
   ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, projectPath: string, override?: AiCommitRunOverride) => {
     return runAiCommit(projectId, projectPath, override)
@@ -2171,8 +2359,8 @@ function registerIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string) => {
-    return openTerminalAtPath(folderPath)
+  ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string, command?: string) => {
+    return openTerminalAtPath(folderPath, command)
   })
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {

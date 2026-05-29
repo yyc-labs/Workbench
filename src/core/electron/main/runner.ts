@@ -105,7 +105,7 @@ class ProcessManager {
     return this.capability.backend
   }
 
-  setOutputWindow(win: BrowserWindow): void {
+  setOutputWindow(win: BrowserWindow | null): void {
     this.outputWindow = win
   }
 
@@ -486,7 +486,19 @@ class ProcessManager {
   // ── IPC ─────────────────────────────────────────────────
 
   private send(channel: string, data: unknown): void {
-    this.outputWindow?.webContents.send(channel, data)
+    const win = this.outputWindow
+    if (!win || win.isDestroyed()) {
+      this.outputWindow = null
+      return
+    }
+
+    const { webContents } = win
+    if (webContents.isDestroyed()) {
+      this.outputWindow = null
+      return
+    }
+
+    webContents.send(channel, data)
   }
 }
 

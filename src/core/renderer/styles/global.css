@@ -50,6 +50,7 @@
 
   /* Scrollbar */
   --scrollbar-size: 10px;
+  --scrollbar-edge-gap: 6px;
   --scrollbar-track: rgba(29, 29, 31, 0.08);
   --scrollbar-thumb: rgba(29, 29, 31, 0.28);
   --scrollbar-thumb-hover: rgba(29, 29, 31, 0.38);
@@ -123,6 +124,7 @@
 
   /* Scrollbar */
   --scrollbar-size: 10px;
+  --scrollbar-edge-gap: 6px;
   --scrollbar-track: rgba(245, 245, 247, 0.1);
   --scrollbar-thumb: rgba(245, 245, 247, 0.26);
   --scrollbar-thumb-hover: rgba(245, 245, 247, 0.36);
@@ -177,6 +179,45 @@ body {
   color: var(--color-foreground);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+.git-panel-loading-surface {
+  overflow: hidden;
+}
+
+.git-panel-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-muted) 86%, transparent);
+}
+
+.git-panel-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 48%, transparent) 50%,
+    transparent 100%
+  );
+  animation: git-panel-shimmer 1.2s ease-in-out infinite;
+}
+
+[data-theme='dark'] .git-panel-skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 18%, transparent) 50%,
+    transparent 100%
+  );
+}
+
+@keyframes git-panel-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .app-shell {
@@ -254,7 +295,7 @@ body {
 
 .app-tooltip-content {
   position: fixed;
-  z-index: 1200;
+  z-index: 10050;
   padding: 6px 10px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
@@ -268,6 +309,16 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   pointer-events: auto;
+}
+
+/* Bridge tooltips mirror native `title`; they should never steal hover from the target. */
+.app-title-tooltip-content {
+  pointer-events: none;
+}
+
+/* Monaco find-widget control hovers can overlap controls and cause hover flicker; suppress while hovering those controls. */
+body.monaco-find-widget-control-hover .workbench-hover-container {
+  display: none !important;
 }
 
 [data-theme='dark'] body {
@@ -286,6 +337,14 @@ body {
 *::-webkit-scrollbar-track {
   background: var(--scrollbar-track);
   border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track:vertical {
+  margin-block: var(--scrollbar-edge-gap);
+}
+
+*::-webkit-scrollbar-track:horizontal {
+  margin-inline: var(--scrollbar-edge-gap);
 }
 
 *::-webkit-scrollbar-thumb {
@@ -808,6 +867,141 @@ samp {
   height: 100%;
 }
 
+/* Keep Monaco find widget away from the panel edge so its content isn't clipped. */
+.code-editor-pane .monaco-editor .find-widget {
+  top: 0px !important;
+}
+
+/* We render a wrapped custom find/replace bar in the React layer. */
+.code-editor-pane .monaco-editor .find-widget {
+  display: none !important;
+}
+
+.code-editor-findbar {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 35;
+  width: min(620px, calc(100% - 28px));
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: saturate(145%) blur(18px);
+  -webkit-backdrop-filter: saturate(145%) blur(18px);
+  padding: 8px;
+}
+
+.code-editor-findbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-editor-findbar-row + .code-editor-findbar-row {
+  margin-top: 6px;
+}
+
+.code-editor-findbar-input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-size: 13px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.code-editor-findbar-input:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.code-editor-findbar-count {
+  min-width: 86px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+}
+
+.code-editor-findbar-toggle {
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-toggle:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-toggle.is-active {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-editor-findbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-icon-btn:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-icon-btn.is-active {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-editor-findbar-action-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-foreground);
+  font-size: 12px;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-action-btn:hover {
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.code-editor-findbar--preview {
+  position: sticky;
+  top: 10px;
+  right: 0;
+  margin: 10px 14px 10px auto;
+}
+
 .code-editor-pane--split {
   border-right: 1px solid var(--color-border);
 }
@@ -980,6 +1174,18 @@ samp {
 .code-markdown-content img {
   max-width: 100%;
   height: auto;
+}
+
+.code-markdown-search-highlight {
+  border-radius: 4px;
+  padding: 0 1px;
+  background: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  color: inherit;
+}
+
+.code-markdown-search-highlight.is-active {
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
 }
 
 .code-mdc-meta-card {
@@ -1303,6 +1509,7 @@ samp {
   flex: 1;
   min-height: 0;
   min-width: 0;
+  --scrollbar-edge-gap: 0px;
 }
 
 .code-tree-virtual-list {

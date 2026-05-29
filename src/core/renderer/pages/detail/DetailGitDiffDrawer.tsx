@@ -50,6 +50,8 @@ const CHANGE_META: Record<GitChangedFile['kind'], { label: string; className: st
 const DRAWER_TRANSITION_MS = 240
 const DRAWER_CONTENT_REVEAL_MS = 90
 const DIFF_MONACO_LANGUAGE_ID = 'git-patch-diff'
+const FIND_WIDGET_HOVER_GUARD_CLASS = 'monaco-find-widget-control-hover'
+const FIND_WIDGET_CONTROL_SELECTOR = '.find-widget .button, .find-widget .monaco-custom-toggle, .findOptionsWidget .button, .findOptionsWidget .monaco-custom-toggle'
 
 interface MonacoEnvironmentShape {
   getWorker: (_workerId: string, label: string) => Worker
@@ -292,6 +294,27 @@ const MonacoTextViewer = memo(function MonacoTextViewer({
     if (!container) return
     let disposed = false
 
+    const handleCaptureMouseOver = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const findWidgetControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
+      if (!findWidgetControl) return
+      // Prevent Monaco's delayed hover from stealing hover state on find-widget controls.
+      document.body.classList.add(FIND_WIDGET_HOVER_GUARD_CLASS)
+      event.stopPropagation()
+    }
+    const handleCaptureMouseOut = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const fromControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
+      if (!fromControl) return
+      const related = event.relatedTarget
+      if (related instanceof Element && related.closest(FIND_WIDGET_CONTROL_SELECTOR)) return
+      document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
+    }
+    container.addEventListener('mouseover', handleCaptureMouseOver, true)
+    container.addEventListener('mouseout', handleCaptureMouseOut, true)
+
     const setup = async () => {
       ensureMonacoEnvironmentConfigured()
       const monaco = await import('monaco-editor')
@@ -338,6 +361,9 @@ const MonacoTextViewer = memo(function MonacoTextViewer({
 
     return () => {
       disposed = true
+      container.removeEventListener('mouseover', handleCaptureMouseOver, true)
+      container.removeEventListener('mouseout', handleCaptureMouseOut, true)
+      document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
       editorRuntime.subscription?.dispose()
       editorRuntime.editor?.dispose()
       editorRuntime.model?.dispose()

@@ -1,0 +1,85 @@
+import { useCallback, useEffect, useRef } from 'react'
+import { useState, type ReactNode, type Ref } from 'react'
+import { X } from 'lucide-react'
+
+interface DebouncedSearchInputProps {
+  placeholder: string
+  inputClassName?: string
+  debounceMs: number
+  onQueryChange: (value: string) => void
+  leadingIcon: ReactNode
+  trailingAction?: ReactNode
+  inputRef?: Ref<HTMLInputElement>
+}
+
+export function DebouncedSearchInput({
+  placeholder,
+  inputClassName,
+  debounceMs,
+  onQueryChange,
+  leadingIcon,
+  trailingAction,
+  inputRef,
+}: DebouncedSearchInputProps) {
+  const [draft, setDraft] = useState('')
+  const lastEmittedRef = useRef('')
+
+  const emitQuery = useCallback((nextValue: string) => {
+    if (lastEmittedRef.current === nextValue) return
+    lastEmittedRef.current = nextValue
+    onQueryChange(nextValue)
+  }, [onQueryChange])
+
+  useEffect(() => {
+    const normalized = draft.trim()
+    if (normalized.length === 0) {
+      emitQuery('')
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      emitQuery(draft)
+    }, debounceMs)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [debounceMs, draft, emitQuery])
+
+  const hasValue = draft.trim().length > 0
+
+  return (
+    <>
+      {leadingIcon}
+      <div className="relative min-w-0 flex-1">
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={placeholder}
+          className={inputClassName ?? 'code-search-input'}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+            hasValue
+              ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+              : 'pointer-events-none opacity-0'
+          }`}
+          onClick={() => {
+            setDraft('')
+            emitQuery('')
+          }}
+          title="Clear search"
+          aria-label="Clear search"
+          tabIndex={hasValue ? 0 : -1}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {trailingAction}
+    </>
+  )
+}

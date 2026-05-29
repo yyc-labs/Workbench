@@ -95,6 +95,9 @@ type MiddlePanelMode = 'history' | 'ai-log' | 'git-log'
 type CopyStatus = 'idle' | 'success' | 'error'
 type CommitHistoryDisplayItem = GitHistoryCommit & {
   withinRecentBatch: boolean
+  isLocalHead: boolean
+  isUpstreamHead: boolean
+  relationLabel: string
 }
 type IndexedBranchCandidate = {
   name: string
@@ -218,12 +221,18 @@ function computeOperationState(
     const remoteCandidates = new Set(params.remoteBranches)
     if (localCandidates.has(normalizedTarget)) return { disabled: false, hint: '将切换本地分支' }
     const remoteMatch = normalizedTarget.match(/^([^/]+)\/(.+)$/)
-    if (remoteMatch && remoteCandidates.has(normalizedTarget)) {
-      const localName = remoteMatch[2]
+    if (!remoteMatch) {
+      return { disabled: true, hint: '远程分支请使用 remote/branch 格式（如 origin/feature/x）' }
+    }
+    const localName = remoteMatch[2]
+    if (remoteCandidates.has(normalizedTarget)) {
       if (localCandidates.has(localName)) {
-        return { disabled: false, hint: `本地已存在 ${localName}，将直接切换` }
+        return { disabled: false, hint: `本地已存在 ${localName}，将切换并重绑 upstream` }
       }
-      return { disabled: false, hint: '将创建并跟踪本地分支' }
+      return { disabled: false, hint: '将创建本地分支并跟踪远程分支' }
+    }
+    if (localCandidates.has(localName)) {
+      return { disabled: false, hint: `本地已存在 ${localName}，将尝试切换并在执行时校验远程后重绑 upstream` }
     }
     return { disabled: true, hint: '目标分支不存在（本地/远程）' }
   }
@@ -249,14 +258,48 @@ function formatFilesChangedLabel(count: number): string {
   return `${count} 文件`
 }
 
-function buildCommitHistoryDisplayItems(commits: GitHistoryCommit[]): CommitHistoryDisplayItem[] {
+function buildCommitHistoryDisplayItems(
+  commits: GitHistoryCommit[],
+  options: {
+    localHead?: string
+    upstreamHead?: string
+    hasUpstream: boolean
+    upstreamGone: boolean
+    branchAhead: number
+    branchBehind: number
+  }
+): CommitHistoryDisplayItem[] {
   const COMMIT_BATCH_WINDOW_MS = 15_000
   const commitTimes = commits.map((commit) => new Date(commit.committedAt).getTime())
+  const localHeadLower = options.localHead?.toLowerCase()
+  const upstreamHeadLower = options.upstreamHead?.toLowerCase()
+  const relationLabel = !options.hasUpstream
+    ? 'NO UPSTREAM'
+    : options.upstreamGone
+      ? 'UPSTREAM GONE'
+      : options.branchAhead === 0 && options.branchBehind === 0
+        ? 'SYNCED'
+        : options.branchAhead > 0 && options.branchBehind > 0
+          ? `AHEAD ${options.branchAhead} / BEHIND ${options.branchBehind}`
+          : options.branchAhead > 0
+            ? `AHEAD ${options.branchAhead}`
+            : options.branchBehind > 0
+              ? `BEHIND ${options.branchBehind}`
+              : 'UNKNOWN'
 
   return commits.map((commit, index) => {
     const currentTime = commitTimes[index]
+    const commitHashLower = commit.hash.toLowerCase()
+    const isLocalHead = Boolean(localHeadLower && commitHashLower === localHeadLower)
+    const isUpstreamHead = Boolean(upstreamHeadLower && commitHashLower === upstreamHeadLower)
     if (!Number.isFinite(currentTime)) {
-      return { ...commit, withinRecentBatch: false }
+      return {
+        ...commit,
+        withinRecentBatch: false,
+        isLocalHead,
+        isUpstreamHead,
+        relationLabel,
+      }
     }
 
     const prevTime = index > 0 ? commitTimes[index - 1] : Number.NaN
@@ -265,7 +308,13 @@ function buildCommitHistoryDisplayItems(commits: GitHistoryCommit[]): CommitHist
     const nearNext = Number.isFinite(nextTime) && Math.abs(nextTime - currentTime) <= COMMIT_BATCH_WINDOW_MS
     const withinRecentBatch = nearPrev || nearNext
 
-    return { ...commit, withinRecentBatch }
+    return {
+      ...commit,
+      withinRecentBatch,
+      isLocalHead,
+      isUpstreamHead,
+      relationLabel,
+    }
   })
 }
 
@@ -317,6 +366,7 @@ function CommitHistoryItem({
   const active = activeCommitHash === commit.hash
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle')
   const hashLabel = copyStatus === 'success' ? '已复制' : copyStatus === 'error' ? '复制失败' : commit.shortHash
+  const showRelationBadge = commit.isLocalHead || commit.isUpstreamHead
 
   useEffect(() => {
     if (copyStatus === 'idle') return
@@ -369,6 +419,23 @@ function CommitHistoryItem({
             <Copy className="h-3 w-3" />
             {hashLabel}
           </span>
+          {showRelationBadge && (
+            <>
+              {commit.isLocalHead && (
+                <span className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/12 px-2 py-0.5 text-[color:var(--color-primary)]">
+                  LOCAL HEAD
+                </span>
+              )}
+              {commit.isUpstreamHead && (
+                <span className="rounded-full border border-[color:var(--color-success)]/45 bg-[color:var(--color-success-background)] px-2 py-0.5 text-[color:var(--color-success)]">
+                  UPSTREAM
+                </span>
+              )}
+              <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]/80">
+                {commit.relationLabel}
+              </span>
+            </>
+          )}
           <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5">
             {formatFilesChangedLabel(commit.filesChanged)}
           </span>
@@ -461,17 +528,30 @@ function DetailAiCommitPanel({
     return map
   }, [changedFiles])
   const recentCommits = gitSnapshot?.recentCommits ?? []
-  const commitHistoryItems = useMemo(() => buildCommitHistoryDisplayItems(recentCommits), [recentCommits])
+  const commitHistoryItems = useMemo(
+    () => buildCommitHistoryDisplayItems(recentCommits, {
+      localHead: branch?.oid,
+      upstreamHead: branch?.upstreamOid,
+      hasUpstream: Boolean(branch?.upstream),
+      upstreamGone: branch?.upstreamGone ?? false,
+      branchAhead: branch?.ahead ?? 0,
+      branchBehind: branch?.behind ?? 0,
+    }),
+    [recentCommits, branch?.oid, branch?.upstreamOid, branch?.upstream, branch?.upstreamGone, branch?.ahead, branch?.behind]
+  )
   const currentBranch = branch?.current || 'No branch'
   const upstreamBranch = branch?.upstream || 'No upstream'
   const remoteBranches = branch?.remoteBranches ?? []
   const localBranches = branch?.localBranches ?? []
   const stagedCount = changedFiles.filter((file) => file.staged).length
-  const unstagedCount = changedFiles.filter((file) => file.unstaged && file.scope !== 'untracked').length
+  const unstagedCount = changedFiles.filter((file) => file.unstaged).length
   const untrackedCount = changedFiles.filter((file) => file.scope === 'untracked').length
   const conflictedCount = changedFiles.filter((file) => file.scope === 'conflicted').length
   const hasWorkingTreeChanges = changedFiles.length > 0
   const hasConflicts = conflictedCount > 0
+  const showWorkingTreeLoading = gitSnapshotLoading
+  const showBranchRemoteLoading = gitSnapshotLoading || runningOperation === 'switch'
+  const showCommitHistoryLoading = gitSnapshotLoading
   const branchAhead = branch?.ahead ?? 0
   const branchBehind = branch?.behind ?? 0
   const hasUpstream = Boolean(branch?.upstream)
@@ -778,10 +858,10 @@ function DetailAiCommitPanel({
       if (!result.ok) {
         setFileActionError(result.error || result.output || '文件暂存操作失败')
       }
-      await onRefreshGitSnapshot()
     } catch (error) {
       setFileActionError(error instanceof Error ? error.message : String(error))
     } finally {
+      await onRefreshGitSnapshot()
       setStagingFilePath(null)
     }
   }
@@ -863,12 +943,12 @@ function DetailAiCommitPanel({
       if (!payload.markResolved) {
         await loadConflict(payload.filePath)
       }
-      await onRefreshGitSnapshot()
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setConflictError(message)
       setFileActionError(message)
     } finally {
+      await onRefreshGitSnapshot()
       setConflictSaving(false)
     }
   }, [gitSnapshot, loadConflict, onRefreshGitSnapshot])
@@ -926,7 +1006,6 @@ function DetailAiCommitPanel({
       if (!result.ok && !result.skipped) {
         setMiddlePanelMode('git-log')
       }
-      await onRefreshGitSnapshot()
     } catch (error) {
       const failedResult: GitOperationResult = {
         operation,
@@ -940,6 +1019,7 @@ function DetailAiCommitPanel({
       setOperationLogs((prev) => [failedResult, ...prev].slice(0, 50))
       setMiddlePanelMode('git-log')
     } finally {
+      await onRefreshGitSnapshot()
       setRunningOperation(null)
     }
   }
@@ -984,10 +1064,10 @@ function DetailAiCommitPanel({
         return
       }
       setCurrentManagerInput('')
-      await onRefreshGitSnapshot()
     } catch (error) {
       setBranchManagerError(error instanceof Error ? error.message : String(error))
     } finally {
+      await onRefreshGitSnapshot()
       setBranchManagerLoading(false)
     }
   }, [branchManagerLoading, currentManagerInput, onRefreshGitSnapshot, runBranchManagerOperation])
@@ -1008,10 +1088,10 @@ function DetailAiCommitPanel({
         return
       }
       setCurrentManagerDeleteTarget('')
-      await onRefreshGitSnapshot()
     } catch (error) {
       setBranchManagerError(error instanceof Error ? error.message : String(error))
     } finally {
+      await onRefreshGitSnapshot()
       setBranchManagerLoading(false)
     }
   }, [branchManagerLoading, currentManagerDeleteTarget, onRefreshGitSnapshot, runBranchManagerOperation])
@@ -1035,11 +1115,11 @@ function DetailAiCommitPanel({
         return
       }
       setUpstreamManagerDangerInput('')
-      await onRefreshGitSnapshot()
       setBranchManagerMode(null)
     } catch (error) {
       setBranchManagerError(error instanceof Error ? error.message : String(error))
     } finally {
+      await onRefreshGitSnapshot()
       setBranchManagerLoading(false)
     }
   }, [
@@ -1072,11 +1152,11 @@ function DetailAiCommitPanel({
       }
       setCreateRemoteRemoteName(remoteName)
       setUpstreamManagerDangerInput('')
-      await onRefreshGitSnapshot()
       setBranchManagerMode(null)
     } catch (error) {
       setBranchManagerError(error instanceof Error ? error.message : String(error))
     } finally {
+      await onRefreshGitSnapshot()
       setBranchManagerLoading(false)
     }
   }, [
@@ -1189,24 +1269,60 @@ function DetailAiCommitPanel({
 
             <div className="mb-3 grid grid-cols-4 gap-2">
               <div className="rounded-[13px] bg-[color:var(--color-background-sunken)]/60 px-2.5 py-2">
-                <p className="font-mono text-sm font-semibold text-[color:var(--color-foreground)]">{formatGitBadgeCount(changedFiles.length)}</p>
-                <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">全部</p>
+                {showWorkingTreeLoading ? (
+                  <>
+                    <div className="git-panel-skeleton h-5 w-8 rounded-md" />
+                    <div className="git-panel-skeleton mt-1.5 h-3 w-9 rounded-md" />
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--color-foreground)]">{formatGitBadgeCount(changedFiles.length)}</p>
+                    <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">全部</p>
+                  </>
+                )}
               </div>
               <div className="rounded-[13px] bg-[color:var(--color-success-background)] px-2.5 py-2">
-                <p className="font-mono text-sm font-semibold text-[color:var(--color-success)]">{formatGitBadgeCount(stagedCount)}</p>
-                <p className="text-[10.5px] text-[color:var(--color-success)]/80">已暂存</p>
+                {showWorkingTreeLoading ? (
+                  <>
+                    <div className="git-panel-skeleton h-5 w-8 rounded-md" />
+                    <div className="git-panel-skeleton mt-1.5 h-3 w-11 rounded-md" />
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--color-success)]">{formatGitBadgeCount(stagedCount)}</p>
+                    <p className="text-[10.5px] text-[color:var(--color-success)]/80">已暂存</p>
+                  </>
+                )}
               </div>
               <div className="rounded-[13px] bg-[color:var(--color-warning-background)] px-2.5 py-2">
-                <p className="font-mono text-sm font-semibold text-[color:var(--color-warning)]">{formatGitBadgeCount(unstagedCount)}</p>
-                <p className="text-[10.5px] text-[color:var(--color-warning)]/80">未暂存</p>
+                {showWorkingTreeLoading ? (
+                  <>
+                    <div className="git-panel-skeleton h-5 w-8 rounded-md" />
+                    <div className="git-panel-skeleton mt-1.5 h-3 w-11 rounded-md" />
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--color-warning)]">{formatGitBadgeCount(unstagedCount)}</p>
+                    <p className="text-[10.5px] text-[color:var(--color-warning)]/80">未暂存</p>
+                  </>
+                )}
               </div>
               <div className="rounded-[13px] bg-[color:var(--color-background-sunken)]/60 px-2.5 py-2">
-                <p className="font-mono text-sm font-semibold text-[color:var(--color-foreground)]">{formatGitBadgeCount(untrackedCount)}</p>
-                <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">未跟踪</p>
+                {showWorkingTreeLoading ? (
+                  <>
+                    <div className="git-panel-skeleton h-5 w-8 rounded-md" />
+                    <div className="git-panel-skeleton mt-1.5 h-3 w-11 rounded-md" />
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-sm font-semibold text-[color:var(--color-foreground)]">{formatGitBadgeCount(untrackedCount)}</p>
+                    <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">未跟踪</p>
+                  </>
+                )}
               </div>
             </div>
 
-            {conflictedCount > 0 && (
+            {!showWorkingTreeLoading && conflictedCount > 0 && (
               <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
                 当前有 {conflictedCount} 个冲突文件，建议先解决后再提交。
               </div>
@@ -1218,7 +1334,14 @@ function DetailAiCommitPanel({
               </div>
             )}
 
-            {changedFiles.length > 0 ? (
+            {showWorkingTreeLoading ? (
+              <div className="git-panel-loading-surface flex min-h-0 flex-1 flex-col gap-2 rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/45 px-3 py-3">
+                <div className="git-panel-skeleton h-4 w-24 rounded-md" />
+                <div className="git-panel-skeleton h-[68px] w-full rounded-[12px]" />
+                <div className="git-panel-skeleton h-[68px] w-full rounded-[12px]" />
+                <div className="git-panel-skeleton h-[68px] w-[86%] rounded-[12px]" />
+              </div>
+            ) : changedFiles.length > 0 ? (
               <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
                 {changedFiles.map((file) => {
                   const meta = CHANGE_META[file.kind]
@@ -1342,7 +1465,34 @@ function DetailAiCommitPanel({
 
             {middlePanelMode === 'history' && (
               <>
-                {recentCommits.length > 0 ? (
+                {showCommitHistoryLoading ? (
+                  <div className="git-panel-loading-surface min-h-0 flex-1 space-y-2 overflow-hidden pr-1">
+                    <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2.5">
+                      <div className="git-panel-skeleton h-4 w-[76%] rounded-md" />
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="git-panel-skeleton h-5 w-20 rounded-full" />
+                        <div className="git-panel-skeleton h-5 w-14 rounded-full" />
+                        <div className="git-panel-skeleton h-4 w-24 rounded-md" />
+                      </div>
+                    </div>
+                    <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2.5">
+                      <div className="git-panel-skeleton h-4 w-[62%] rounded-md" />
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="git-panel-skeleton h-5 w-20 rounded-full" />
+                        <div className="git-panel-skeleton h-5 w-14 rounded-full" />
+                        <div className="git-panel-skeleton h-4 w-24 rounded-md" />
+                      </div>
+                    </div>
+                    <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] px-3 py-2.5">
+                      <div className="git-panel-skeleton h-4 w-[70%] rounded-md" />
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="git-panel-skeleton h-5 w-20 rounded-full" />
+                        <div className="git-panel-skeleton h-5 w-14 rounded-full" />
+                        <div className="git-panel-skeleton h-4 w-24 rounded-md" />
+                      </div>
+                    </div>
+                  </div>
+                ) : recentCommits.length > 0 ? (
                   <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
                     {commitHistoryItems.map((commit) => (
                       <CommitHistoryItem
@@ -1420,192 +1570,234 @@ function DetailAiCommitPanel({
           </div>
 
           <div className="min-h-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="inline-flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18"
-                  onClick={() => setGitGuideOpen(true)}
-                  title="打开 Git 操作指南"
-                >
-                  <GitBranch className="h-4.5 w-4.5" />
-                </button>
-                <div className="min-w-0">
-                  <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">分支与远程</p>
-                  <p className="text-xs text-[color:var(--color-muted-foreground)]">状态摘要与常用远程操作（点左侧图标看指南）</p>
+            {showBranchRemoteLoading ? (
+              <div className="git-panel-loading-surface">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="inline-flex min-w-0 items-center gap-2">
+                    <div className="git-panel-skeleton h-9 w-9 rounded-full" />
+                    <div className="min-w-0">
+                      <div className="git-panel-skeleton h-5 w-24 rounded-md" />
+                      <div className="git-panel-skeleton mt-1.5 h-3.5 w-52 rounded-md" />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <div className="git-panel-skeleton h-6 w-12 rounded-full" />
+                    <div className="git-panel-skeleton h-6 w-12 rounded-full" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                    <div className="git-panel-skeleton h-3 w-16 rounded-md" />
+                    <div className="git-panel-skeleton mt-2 h-4 w-28 rounded-md" />
+                  </div>
+                  <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
+                    <div className="git-panel-skeleton h-3 w-16 rounded-md" />
+                    <div className="git-panel-skeleton mt-2 h-4 w-32 rounded-md" />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="git-panel-skeleton h-3 w-24 rounded-md" />
+                  <div className="git-panel-skeleton mt-1.5 h-10 w-full rounded-[14px]" />
+                  <div className="git-panel-skeleton mt-1.5 h-3 w-36 rounded-md" />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
+                  <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
+                  <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
+                  <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
+                  <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <span className="rounded-full bg-[color:var(--color-success-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-success)]">
-                  ↑ {branch?.ahead ?? 0}
-                </span>
-                <span className="rounded-full bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-warning)]">
-                  ↓ {branch?.behind ?? 0}
-                </span>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="inline-flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18"
+                      onClick={() => setGitGuideOpen(true)}
+                      title="打开 Git 操作指南"
+                    >
+                      <GitBranch className="h-4.5 w-4.5" />
+                    </button>
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">分支与远程</p>
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">状态摘要与常用远程操作（点左侧图标看指南）</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <span className="rounded-full bg-[color:var(--color-success-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-success)]">
+                      ↑ {branch?.ahead ?? 0}
+                    </span>
+                    <span className="rounded-full bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-warning)]">
+                      ↓ {branch?.behind ?? 0}
+                    </span>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
-                onClick={() => setBranchManagerMode('current')}
-                title="管理本地分支（新增/删除）"
-              >
-                <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Current</p>
-                <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={currentBranch}>{currentBranch}</p>
-              </button>
-              <button
-                type="button"
-                className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
-                onClick={() => setBranchManagerMode('upstream')}
-                title="管理 upstream（仅新增绑定，高危）"
-              >
-                <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Upstream</p>
-                <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={upstreamBranch}>{upstreamBranch}</p>
-              </button>
-            </div>
-
-            <div className="mt-3">
-              <label className="block">
-                <p className="mb-1 text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                  Merge Target
-                </p>
-                <div ref={mergeDropdownRef} className="relative">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <button
                     type="button"
-                    className={`quiet-control flex h-10 w-full items-center justify-between rounded-[14px] px-3 text-left text-[12px] transition-colors ${
-                      mergeDropdownOpen
-                        ? 'border-[color:var(--color-ring)]/65 ring-2 ring-[color:var(--color-ring)]/22'
-                        : 'hover:border-[color:var(--color-border-hover)]'
-                    }`}
-                    aria-haspopup="listbox"
-                    aria-expanded={mergeDropdownOpen}
-                    onClick={() => setMergeDropdownOpen((prev) => !prev)}
+                    className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
+                    onClick={() => setBranchManagerMode('current')}
+                    title="管理本地分支（新增/删除）"
                   >
-                    <span className={mergeTarget ? 'font-mono text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}>
-                      {mergeTargetLabel}
-                    </span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${mergeDropdownOpen ? 'rotate-180' : ''}`} />
+                    <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Current</p>
+                    <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={currentBranch}>{currentBranch}</p>
                   </button>
+                  <button
+                    type="button"
+                    className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2 text-left transition-colors hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background-sunken)]"
+                    onClick={() => setBranchManagerMode('upstream')}
+                    title="管理 upstream（仅新增绑定，高危）"
+                  >
+                    <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Upstream</p>
+                    <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={upstreamBranch}>{upstreamBranch}</p>
+                  </button>
+                </div>
 
-                  {mergeDropdownOpen && (
-                    <div
-                      className="surface-card absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px]"
-                      role="listbox"
-                      aria-label="Merge target branches"
-                    >
-                      <div className="max-h-[240px] overflow-auto p-1">
-                        <div className="sticky top-0 z-10 px-1 pb-2 pt-1">
-                          <div className="surface-card rounded-[10px] border border-[color:var(--color-border)] px-2">
-                            <input
-                              type="text"
-                              value={mergeSearchDraft}
-                              onChange={(event) => setMergeSearchDraft(event.target.value)}
-                              placeholder="搜索分支..."
-                              className="h-8 w-full bg-transparent text-[11.5px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
-                              spellCheck={false}
-                            />
+                <div className="mt-3">
+                  <label className="block">
+                    <p className="mb-1 text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+                      Merge Target
+                    </p>
+                    <div ref={mergeDropdownRef} className="relative">
+                      <button
+                        type="button"
+                        className={`quiet-control flex h-10 w-full items-center justify-between rounded-[14px] px-3 text-left text-[12px] transition-colors ${
+                          mergeDropdownOpen
+                            ? 'border-[color:var(--color-ring)]/65 ring-2 ring-[color:var(--color-ring)]/22'
+                            : 'hover:border-[color:var(--color-border-hover)]'
+                        }`}
+                        aria-haspopup="listbox"
+                        aria-expanded={mergeDropdownOpen}
+                        onClick={() => setMergeDropdownOpen((prev) => !prev)}
+                      >
+                        <span className={mergeTarget ? 'font-mono text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}>
+                          {mergeTargetLabel}
+                        </span>
+                        <ChevronDown className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${mergeDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {mergeDropdownOpen && (
+                        <div
+                          className="surface-card absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px]"
+                          role="listbox"
+                          aria-label="Merge target branches"
+                        >
+                          <div className="max-h-[240px] overflow-auto p-1">
+                            <div className="sticky top-0 z-10 px-1 pb-2 pt-1">
+                              <div className="surface-card rounded-[10px] border border-[color:var(--color-border)] px-2">
+                                <input
+                                  type="text"
+                                  value={mergeSearchDraft}
+                                  onChange={(event) => setMergeSearchDraft(event.target.value)}
+                                  placeholder="搜索分支..."
+                                  className="h-8 w-full bg-transparent text-[11.5px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                                  spellCheck={false}
+                                />
+                              </div>
+                            </div>
+                            {filteredLocalMergeCandidates.length > 0 && (
+                              <div className="mb-1">
+                                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+                                  本地分支
+                                </p>
+                                {filteredLocalMergeCandidates.map((candidate) => {
+                                  const active = mergeTarget === candidate.name
+                                  return (
+                                    <button
+                                      key={`local-${candidate.name}`}
+                                      type="button"
+                                      className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
+                                        active
+                                          ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
+                                          : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                                      }`}
+                                      onClick={() => {
+                                        setMergeTarget(candidate.name)
+                                        setMergeDropdownOpen(false)
+                                      }}
+                                    >
+                                      <span className="truncate font-mono">{candidate.name}</span>
+                                      {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            {filteredRemoteMergeCandidates.length > 0 && (
+                              <div>
+                                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+                                  远程分支
+                                </p>
+                                {filteredRemoteMergeCandidates.map((candidate) => {
+                                  const active = mergeTarget === candidate.name
+                                  return (
+                                    <button
+                                      key={`remote-${candidate.name}`}
+                                      type="button"
+                                      className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
+                                        active
+                                          ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
+                                          : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                                      }`}
+                                      onClick={() => {
+                                        setMergeTarget(candidate.name)
+                                        setMergeDropdownOpen(false)
+                                      }}
+                                    >
+                                      <span className="truncate font-mono">{candidate.name}</span>
+                                      {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            {filteredLocalMergeCandidates.length === 0 && filteredRemoteMergeCandidates.length === 0 && (
+                              <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">
+                                {mergeSearchQuery ? '未找到匹配分支' : '暂无可选分支'}
+                              </p>
+                            )}
                           </div>
                         </div>
-                        {filteredLocalMergeCandidates.length > 0 && (
-                          <div className="mb-1">
-                            <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                              本地分支
-                            </p>
-                            {filteredLocalMergeCandidates.map((candidate) => {
-                              const active = mergeTarget === candidate.name
-                              return (
-                                <button
-                                  key={`local-${candidate.name}`}
-                                  type="button"
-                                  className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
-                                    active
-                                      ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                                  }`}
-                                  onClick={() => {
-                                    setMergeTarget(candidate.name)
-                                    setMergeDropdownOpen(false)
-                                  }}
-                                >
-                                  <span className="truncate font-mono">{candidate.name}</span>
-                                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                        {filteredRemoteMergeCandidates.length > 0 && (
-                          <div>
-                            <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                              远程分支
-                            </p>
-                            {filteredRemoteMergeCandidates.map((candidate) => {
-                              const active = mergeTarget === candidate.name
-                              return (
-                                <button
-                                  key={`remote-${candidate.name}`}
-                                  type="button"
-                                  className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
-                                    active
-                                      ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                                  }`}
-                                  onClick={() => {
-                                    setMergeTarget(candidate.name)
-                                    setMergeDropdownOpen(false)
-                                  }}
-                                >
-                                  <span className="truncate font-mono">{candidate.name}</span>
-                                  {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                        {filteredLocalMergeCandidates.length === 0 && filteredRemoteMergeCandidates.length === 0 && (
-                          <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            {mergeSearchQuery ? '未找到匹配分支' : '暂无可选分支'}
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  )}
+                    <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                      本地 {localMergeCandidates.length} 个 · 远程 {remoteMergeCandidates.length} 个{mergeSearchQuery ? ` · 匹配 ${mergeSearchResultCount} 个` : ''}
+                    </p>
+                  </label>
                 </div>
-                <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                  本地 {localMergeCandidates.length} 个 · 远程 {remoteMergeCandidates.length} 个{mergeSearchQuery ? ` · 匹配 ${mergeSearchResultCount} 个` : ''}
-                </p>
-              </label>
-            </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {GIT_OPERATION_ITEMS.map((item) => {
-                const Icon = item.icon
-                const opState = operationStates[item.key]
-                const running = runningOperation === item.key
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${
-                      opState.disabled
-                        ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55'
-                        : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'
-                    }`}
-                    title={`${item.description} · ${opState.hint}`}
-                    disabled={opState.disabled}
-                    onClick={() => requestGitOperation(item.key)}
-                  >
-                    <div className="flex items-center gap-2 text-[12px] font-semibold text-[color:var(--color-foreground)]">
-                      <Icon className={`h-3.5 w-3.5 ${running ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-primary)]'}`} />
-                      {running ? `${item.label}...` : item.label}
-                    </div>
-                    <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]/85">{opState.hint}</p>
-                  </button>
-                )
-              })}
-            </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {GIT_OPERATION_ITEMS.map((item) => {
+                    const Icon = item.icon
+                    const opState = operationStates[item.key]
+                    const running = runningOperation === item.key
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${
+                          opState.disabled
+                            ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55'
+                            : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'
+                        }`}
+                        title={`${item.description} · ${opState.hint}`}
+                        disabled={opState.disabled}
+                        onClick={() => requestGitOperation(item.key)}
+                      >
+                        <div className="flex items-center gap-2 text-[12px] font-semibold text-[color:var(--color-foreground)]">
+                          <Icon className={`h-3.5 w-3.5 ${running ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-primary)]'}`} />
+                          {running ? `${item.label}...` : item.label}
+                        </div>
+                        <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]/85">{opState.hint}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
 
           </div>
           </section>

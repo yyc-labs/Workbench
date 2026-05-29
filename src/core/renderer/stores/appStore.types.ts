@@ -44,6 +44,9 @@ declare global {
       sendInput: (id: string, data: string) => Promise<boolean>
       getConfig: () => Promise<AppConfig>
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
+      setDocLinkSecret: (projectId: string, linkId: string, secret: string) => Promise<boolean>
+      getDocLinkSecret: (projectId: string, linkId: string) => Promise<{ secret: string | null }>
+      deleteDocLinkSecret: (projectId: string, linkId: string) => Promise<boolean>
       selectDirectory: () => Promise<string | null>
       getPathForFile: (file: File) => string
       onProcessOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
@@ -75,7 +78,7 @@ declare global {
         expectedMtimeMs?: number
       ) => Promise<ProjectFileWriteResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
-      openPathTerminal: (folderPath: string) => Promise<boolean>
+      openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
       openFolder: (folderPath: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
       minimizeWindow: () => Promise<boolean>
@@ -167,6 +170,7 @@ export interface AppState {
   setProjectCustomName: (projectId: string, customName?: string) => Promise<void>
   setProjectCustomType: (projectId: string, customType?: string) => Promise<void>
   setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>
+  setProjectRunStartupMode: (projectId: string, mode: 'silent' | 'terminal') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>
   setProjectLastMarkdownPreviewMode: (projectId: string, mode?: 'edit' | 'preview' | 'split') => Promise<void>

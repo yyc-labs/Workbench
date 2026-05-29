@@ -1,9 +1,18 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ChevronDown, ChevronRight, Copy, FileText, Folder, FolderOpen } from 'lucide-react'
 import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
-import type { ProjectFileNode } from '../../../shared/types'
+import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
+
+interface FileTreeContextMenuPayload {
+  x: number
+  y: number
+  relativePath: string
+  nodeName: string
+  nodeKind: ProjectFileNodeKind
+}
 
 interface CodeFileTreeProps {
   nodes: ProjectFileNode[]
@@ -11,6 +20,8 @@ interface CodeFileTreeProps {
   expandedDirectories: Set<string>
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   flatFileListMode?: boolean
   locateRequestToken?: number
 }
@@ -20,11 +31,22 @@ interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   flatFileListMode: boolean
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  onOpenFileContextMenu: (payload: FileTreeContextMenuPayload) => void
 }
 
 interface TreeSize {
   width: number
   height: number
+}
+
+interface FileTreeContextMenuProps {
+  x: number
+  y: number
+  nodeName: string
+  nodeKind: ProjectFileNodeKind
+  onOpenFolder: () => void | Promise<void>
+  onCopyName: () => void | Promise<void>
+  onClose: () => void
 }
 
 function useContainerSize() {
@@ -75,6 +97,90 @@ function collectDirectoryPaths(nodes: ProjectFileNode[]): string[] {
   return result
 }
 
+function FileTreeContextMenu({
+  x,
+  y,
+  nodeName,
+  nodeKind,
+  onOpenFolder,
+  onCopyName,
+  onClose,
+}: FileTreeContextMenuProps) {
+  const width = 210
+  const height = 108
+  const padding = 8
+  const left = Math.min(Math.max(padding, x), window.innerWidth - width - padding)
+  const top = Math.min(Math.max(padding, y), window.innerHeight - height - padding)
+
+  const handleAction = useCallback(
+    async (action: () => void | Promise<void>) => {
+      await action()
+      onClose()
+    },
+    [onClose]
+  )
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  useEffect(() => {
+    const onPointerDown = () => onClose()
+    const timer = window.setTimeout(() => {
+      document.addEventListener('pointerdown', onPointerDown)
+    }, 0)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [onClose])
+
+  const itemTypeLabel = nodeKind === 'directory' ? '目录' : '文件'
+  const openFolderLabel = nodeKind === 'directory' ? '打开该目录' : '打开当前文件夹'
+  const copyNameLabel = nodeKind === 'directory' ? '复制目录名' : '复制文件名'
+
+  return createPortal(
+    <div
+      className="fixed z-[9998] min-w-[210px] rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)] p-1.5 shadow-[var(--shadow-popover)]"
+      style={{ top, left }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div className="px-2.5 py-1.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+        <span className="inline-flex items-center gap-1">
+          {nodeKind === 'directory'
+            ? <Folder className="h-3.5 w-3.5 text-[color:var(--color-warning)]" />
+            : <FileText className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />}
+          <span>{itemTypeLabel}:</span>
+        </span>{' '}
+        <span className="font-medium text-[color:var(--color-foreground)]">{nodeName}</span>
+      </div>
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+        onClick={() => { void handleAction(onOpenFolder) }}
+      >
+        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-warning)]" />
+        {openFolderLabel}
+      </button>
+      <button
+        type="button"
+        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+        onClick={() => { void handleAction(onCopyName) }}
+      >
+        <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+        {copyNameLabel}
+      </button>
+    </div>,
+    document.body
+  )
+}
+
 function FileTreeNodeRenderer({
   node,
   style,
@@ -83,6 +189,7 @@ function FileTreeNodeRenderer({
   flatFileListMode,
   onToggleDirectory,
   onSelectFile,
+  onOpenFileContextMenu,
 }: FileTreeNodeRendererProps) {
   const data = node.data
   const isDirectory = !flatFileListMode && data.kind === 'directory'
@@ -104,6 +211,17 @@ function FileTreeNodeRenderer({
             return
           }
           onSelectFile(data.relativePath)
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          onOpenFileContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            relativePath: data.relativePath,
+            nodeName: data.name,
+            nodeKind: data.kind,
+          })
         }}
       >
         {isDirectory ? (
@@ -148,6 +266,8 @@ export const CodeFileTree = memo(function CodeFileTree({
   expandedDirectories,
   onToggleDirectory,
   onSelectFile,
+  onOpenNodeFolder,
+  onCopyNodeName,
   flatFileListMode = false,
   locateRequestToken = 0,
 }: CodeFileTreeProps) {
@@ -155,6 +275,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
   const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
   const { containerRef, size } = useContainerSize()
+  const [contextMenu, setContextMenu] = useState<FileTreeContextMenuPayload | null>(null)
   const directoryPaths = useMemo(() => collectDirectoryPaths(nodes), [nodes])
   const initialOpenState = useMemo(() => {
     if (flatFileListMode) return {}
@@ -195,6 +316,14 @@ export const CodeFileTree = memo(function CodeFileTree({
     previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
   }, [directoryPaths, expandedDirectories, flatFileListMode])
 
+  const handleOpenFileContextMenu = useCallback((payload: FileTreeContextMenuPayload) => {
+    setContextMenu(payload)
+  }, [])
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
   if (!hasNodes) {
     return (
       <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
@@ -231,9 +360,21 @@ export const CodeFileTree = memo(function CodeFileTree({
               flatFileListMode={flatFileListMode}
               onToggleDirectory={onToggleDirectory}
               onSelectFile={onSelectFile}
+              onOpenFileContextMenu={handleOpenFileContextMenu}
             />
           )}
         </Tree>
+      )}
+      {contextMenu && (
+        <FileTreeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeName={contextMenu.nodeName}
+          nodeKind={contextMenu.nodeKind}
+          onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
+          onClose={closeContextMenu}
+        />
       )}
     </div>
   )

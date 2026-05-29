@@ -27,6 +27,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         }
         const ensured = project ?? createFallbackProject(saved.path)
         if (saved.customCommand) ensured.customCommand = saved.customCommand
+        if (saved.runStartupMode) ensured.runStartupMode = saved.runStartupMode
         if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
         if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
         if (saved.pinned) ensured.pinned = saved.pinned
@@ -82,6 +83,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       }
       const ensured = project ?? createFallbackProject(saved.path)
       if (saved.customCommand) ensured.customCommand = saved.customCommand
+      if (saved.runStartupMode) ensured.runStartupMode = saved.runStartupMode
       if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
       if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
       if (saved.pinned) ensured.pinned = saved.pinned

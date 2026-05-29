@@ -1,10 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { ChevronDown, ChevronUp, Replace, X } from 'lucide-react'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 
 export interface MonacoEditorScrollState {
@@ -17,7 +18,10 @@ export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
   setScrollTop: (scrollTop: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
+  openSearch: (mode?: 'find' | 'replace') => void
 }
+
+type EditorSearchMode = 'find' | 'replace'
 
 interface MonacoCodeEditorProps {
   value: string
@@ -34,6 +38,9 @@ interface MonacoCodeEditorProps {
 interface MonacoEnvironmentShape {
   getWorker: (_workerId: string, label: string) => Worker
 }
+
+const FIND_WIDGET_HOVER_GUARD_CLASS = 'monaco-find-widget-control-hover'
+const FIND_WIDGET_CONTROL_SELECTOR = '.find-widget .button, .find-widget .monaco-custom-toggle, .findOptionsWidget .button, .findOptionsWidget .monaco-custom-toggle'
 
 declare global {
   interface Window {
@@ -87,6 +94,199 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const onSaveRef = useRef(onSave)
   const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
+  const [searchVisible, setSearchVisible] = useState(false)
+  const [searchMode, setSearchMode] = useState<EditorSearchMode>('find')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [searchMatchCount, setSearchMatchCount] = useState(0)
+  const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(0)
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false)
+  const [searchWholeWord, setSearchWholeWord] = useState(false)
+  const [searchRegex, setSearchRegex] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const searchVisibleRef = useRef(false)
+  const searchQueryRef = useRef('')
+  const activeSearchMatchIndexRef = useRef(0)
+  const searchCaseSensitiveRef = useRef(false)
+  const searchWholeWordRef = useRef(false)
+  const searchRegexRef = useRef(false)
+
+  useEffect(() => {
+    searchVisibleRef.current = searchVisible
+  }, [searchVisible])
+
+  useEffect(() => {
+    searchQueryRef.current = searchQuery
+  }, [searchQuery])
+
+  useEffect(() => {
+    activeSearchMatchIndexRef.current = activeSearchMatchIndex
+  }, [activeSearchMatchIndex])
+
+  useEffect(() => {
+    searchCaseSensitiveRef.current = searchCaseSensitive
+  }, [searchCaseSensitive])
+
+  useEffect(() => {
+    searchWholeWordRef.current = searchWholeWord
+  }, [searchWholeWord])
+
+  useEffect(() => {
+    searchRegexRef.current = searchRegex
+  }, [searchRegex])
+
+  const computeSearchMatches = (
+    model: MonacoEditor.ITextModel,
+    query: string
+  ): MonacoEditor.FindMatch[] => {
+    if (!query) return []
+    return model.findMatches(
+      query,
+      false,
+      searchRegexRef.current,
+      searchCaseSensitiveRef.current,
+      searchWholeWordRef.current ? ' \t\n\r`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?' : null,
+      true,
+      5000
+    )
+  }
+
+  const selectSearchMatch = (
+    editor: MonacoEditor.IStandaloneCodeEditor,
+    matches: MonacoEditor.FindMatch[],
+    index: number
+  ) => {
+    if (matches.length <= 0) {
+      setActiveSearchMatchIndex(0)
+      return
+    }
+    const normalizedIndex = ((index % matches.length) + matches.length) % matches.length
+    const match = matches[normalizedIndex]
+    editor.setSelection(match.range)
+    editor.revealRangeInCenter(match.range)
+    setActiveSearchMatchIndex(normalizedIndex + 1)
+  }
+
+  const refreshSearchResult = (
+    editor: MonacoEditor.IStandaloneCodeEditor,
+    mode: 'keep' | 'reset-to-first' = 'keep'
+  ) => {
+    const model = editor.getModel()
+    if (!model) return
+    const matches = computeSearchMatches(model, searchQueryRef.current)
+    setSearchMatchCount(matches.length)
+    if (matches.length <= 0) {
+      setActiveSearchMatchIndex(0)
+      return
+    }
+    if (mode === 'reset-to-first') {
+      selectSearchMatch(editor, matches, 0)
+      return
+    }
+    const current = activeSearchMatchIndexRef.current > 0 ? activeSearchMatchIndexRef.current - 1 : 0
+    selectSearchMatch(editor, matches, current)
+  }
+
+  const getSelectedTextForSearch = (editor: MonacoEditor.IStandaloneCodeEditor): string => {
+    const model = editor.getModel()
+    const selection = editor.getSelection()
+    if (!model || !selection || selection.isEmpty()) return ''
+    const selectedText = model.getValueInRange(selection)
+    return selectedText.replace(/\r?\n/g, ' ')
+  }
+
+  const openSearchPanel = (
+    mode: EditorSearchMode,
+    options?: { prefillFromSelection?: boolean }
+  ) => {
+    const editor = editorRef.current
+    if (!editor) return
+    const selectedQuery = options?.prefillFromSelection ? getSelectedTextForSearch(editor) : ''
+    if (selectedQuery) {
+      searchQueryRef.current = selectedQuery
+      setSearchQuery(selectedQuery)
+    }
+    setSearchMode(mode)
+    setSearchVisible(true)
+    // Hide Monaco built-in find UI so only our wrapped UI is shown.
+    editor.getAction('closeFindWidget')?.run()
+    window.setTimeout(() => {
+      searchInputRef.current?.focus()
+      searchInputRef.current?.select()
+      refreshSearchResult(editor)
+    }, 0)
+  }
+
+  const closeSearchPanel = () => {
+    setSearchVisible(false)
+    const editor = editorRef.current
+    editor?.focus()
+    editor?.getAction('closeFindWidget')?.run()
+  }
+
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.getAction('closeFindWidget')?.run()
+  }, [searchVisible])
+
+  const goToNextMatch = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    const model = editor.getModel()
+    if (!model) return
+    const matches = computeSearchMatches(model, searchQuery)
+    setSearchMatchCount(matches.length)
+    if (matches.length <= 0) {
+      setActiveSearchMatchIndex(0)
+      return
+    }
+    const current = activeSearchMatchIndex > 0 ? activeSearchMatchIndex - 1 : -1
+    const nextIndex = (current + 1) % matches.length
+    selectSearchMatch(editor, matches, nextIndex)
+  }
+
+  const goToPreviousMatch = () => {
+    const editor = editorRef.current
+    if (!editor) return
+    const model = editor.getModel()
+    if (!model) return
+    const matches = computeSearchMatches(model, searchQuery)
+    setSearchMatchCount(matches.length)
+    if (matches.length <= 0) {
+      setActiveSearchMatchIndex(0)
+      return
+    }
+    const current = activeSearchMatchIndex > 0 ? activeSearchMatchIndex - 1 : 0
+    const prevIndex = (current - 1 + matches.length) % matches.length
+    selectSearchMatch(editor, matches, prevIndex)
+  }
+
+  const replaceCurrentMatch = () => {
+    const editor = editorRef.current
+    if (!editor || !searchQuery) return
+    const model = editor.getModel()
+    if (!model) return
+    const matches = computeSearchMatches(model, searchQuery)
+    if (matches.length <= 0) return
+    const current = activeSearchMatchIndex > 0 ? activeSearchMatchIndex - 1 : 0
+    const normalizedIndex = ((current % matches.length) + matches.length) % matches.length
+    const targetRange = matches[normalizedIndex].range
+    editor.executeEdits('custom-find-replace', [{ range: targetRange, text: replaceQuery }])
+    refreshSearchResult(editor, 'keep')
+  }
+
+  const replaceAllMatches = () => {
+    const editor = editorRef.current
+    if (!editor || !searchQuery) return
+    const model = editor.getModel()
+    if (!model) return
+    const matches = computeSearchMatches(model, searchQuery)
+    if (matches.length <= 0) return
+    const edits = matches.map((match) => ({ range: match.range, text: replaceQuery }))
+    editor.executeEdits('custom-find-replace-all', edits)
+    refreshSearchResult(editor, 'reset-to-first')
+  }
 
   useEffect(() => {
     onSaveRef.current = onSave
@@ -124,6 +324,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       editor.setPosition({ lineNumber: safeLine, column: safeColumn })
       editor.revealPositionInCenter({ lineNumber: safeLine, column: safeColumn })
       editor.focus()
+    },
+    openSearch: (mode = 'find') => {
+      openSearchPanel(mode)
     },
   }), [])
 
@@ -178,17 +381,55 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
       const handleCaptureKeyDown = (event: KeyboardEvent) => {
         const hasPrimaryModifier = event.ctrlKey || event.metaKey
-        if (!hasPrimaryModifier || !event.shiftKey) return
+        if (!hasPrimaryModifier) return
         const key = event.key.toLowerCase()
         const isSearchShortcut = key === 'f' || event.code === 'KeyF'
-        if (!isSearchShortcut) return
+        if (!isSearchShortcut) {
+          const isReplaceShortcut = (key === 'h' || event.code === 'KeyH') && !event.shiftKey && !event.altKey
+          if (!isReplaceShortcut) return
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation()
+        openSearchPanel('replace')
+        return
+      }
+
+        const isWorkspaceSearchShortcut = event.shiftKey || event.altKey
+        if (isWorkspaceSearchShortcut) {
+          event.preventDefault()
+          event.stopPropagation()
+          event.stopImmediatePropagation()
+          onFocusSearchRef.current?.()
+          return
+        }
 
         event.preventDefault()
         event.stopPropagation()
         event.stopImmediatePropagation()
-        onFocusSearchRef.current?.()
+        openSearchPanel('find', { prefillFromSelection: true })
       }
       container.addEventListener('keydown', handleCaptureKeyDown, true)
+
+      const handleCaptureMouseOver = (event: MouseEvent) => {
+        const target = event.target
+        if (!(target instanceof Element)) return
+        const findWidgetControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
+        if (!findWidgetControl) return
+        // Prevent Monaco's delayed hover from stealing hover state on find-widget controls.
+        document.body.classList.add(FIND_WIDGET_HOVER_GUARD_CLASS)
+        event.stopPropagation()
+      }
+      const handleCaptureMouseOut = (event: MouseEvent) => {
+        const target = event.target
+        if (!(target instanceof Element)) return
+        const fromControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
+        if (!fromControl) return
+        const related = event.relatedTarget
+        if (related instanceof Element && related.closest(FIND_WIDGET_CONTROL_SELECTOR)) return
+        document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
+      }
+      container.addEventListener('mouseover', handleCaptureMouseOver, true)
+      container.addEventListener('mouseout', handleCaptureMouseOut, true)
 
       editor.onDidChangeModelContent(() => {
         if (syncGuardRef.current) return
@@ -214,6 +455,18 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         onFocusSearchRef.current?.()
       })
 
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyF, () => {
+        onFocusSearchRef.current?.()
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
+        openSearchPanel('find', { prefillFromSelection: true })
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyH, () => {
+        openSearchPanel('replace')
+      })
+
       editor.onKeyDown((event) => {
         const isSearchShortcut = (event.ctrlKey || event.metaKey)
           && event.shiftKey
@@ -222,6 +475,11 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         event.preventDefault()
         event.stopPropagation()
         onFocusSearchRef.current?.()
+      })
+
+      editor.onDidChangeCursorSelection(() => {
+        if (!searchVisibleRef.current) return
+        refreshSearchResult(editor)
       })
 
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyD, () => {
@@ -269,6 +527,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
       return () => {
         container.removeEventListener('keydown', handleCaptureKeyDown, true)
+        container.removeEventListener('mouseover', handleCaptureMouseOver, true)
+        container.removeEventListener('mouseout', handleCaptureMouseOut, true)
+        document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
         removeFontListener?.()
       }
     }
@@ -296,6 +557,13 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       monacoRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!searchVisible) return
+    const editor = editorRef.current
+    if (!editor) return
+    refreshSearchResult(editor, 'reset-to-first')
+  }, [searchCaseSensitive, searchQuery, searchRegex, searchWholeWord, searchVisible])
 
   useEffect(() => {
     const monaco = monacoRef.current
@@ -344,6 +612,145 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
   return (
     <div className="h-full w-full">
+      {searchVisible && (
+        <div className="code-editor-findbar">
+          <div className="code-editor-findbar-row">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value)
+              }}
+              placeholder="Find"
+              className="code-editor-findbar-input"
+              spellCheck={false}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && event.shiftKey) {
+                  event.preventDefault()
+                  goToPreviousMatch()
+                  return
+                }
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  goToNextMatch()
+                  return
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  closeSearchPanel()
+                }
+              }}
+            />
+            <span className="code-editor-findbar-count">
+              {searchMatchCount > 0 ? `${activeSearchMatchIndex}/${searchMatchCount}` : 'No results'}
+            </span>
+            <button
+              type="button"
+              className={`code-editor-findbar-toggle ${searchCaseSensitive ? 'is-active' : ''}`}
+              onClick={() => setSearchCaseSensitive((prev) => !prev)}
+              title="Match Case"
+              aria-pressed={searchCaseSensitive}
+            >
+              Aa
+            </button>
+            <button
+              type="button"
+              className={`code-editor-findbar-toggle ${searchWholeWord ? 'is-active' : ''}`}
+              onClick={() => setSearchWholeWord((prev) => !prev)}
+              title="Match Whole Word"
+              aria-pressed={searchWholeWord}
+            >
+              ab
+            </button>
+            <button
+              type="button"
+              className={`code-editor-findbar-toggle ${searchRegex ? 'is-active' : ''}`}
+              onClick={() => setSearchRegex((prev) => !prev)}
+              title="Use Regular Expression"
+              aria-pressed={searchRegex}
+            >
+              .*
+            </button>
+            <button
+              type="button"
+              className="code-editor-findbar-icon-btn"
+              onClick={goToPreviousMatch}
+              title="Previous Match"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="code-editor-findbar-icon-btn"
+              onClick={goToNextMatch}
+              title="Next Match"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={`code-editor-findbar-icon-btn ${searchMode === 'replace' ? 'is-active' : ''}`}
+              onClick={() => setSearchMode((prev) => (prev === 'replace' ? 'find' : 'replace'))}
+              title={searchMode === 'replace' ? 'Hide Replace' : 'Show Replace'}
+            >
+              <Replace className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="code-editor-findbar-icon-btn"
+              onClick={closeSearchPanel}
+              title="Close"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          {searchMode === 'replace' && (
+            <div className="code-editor-findbar-row">
+              <input
+                type="text"
+                value={replaceQuery}
+                onChange={(event) => setReplaceQuery(event.target.value)}
+                placeholder="Replace"
+                className="code-editor-findbar-input"
+                spellCheck={false}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && event.shiftKey) {
+                    event.preventDefault()
+                    replaceAllMatches()
+                    return
+                  }
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    replaceCurrentMatch()
+                    return
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    closeSearchPanel()
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="code-editor-findbar-action-btn"
+                onClick={replaceCurrentMatch}
+                disabled={searchMatchCount <= 0}
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                className="code-editor-findbar-action-btn"
+                onClick={replaceAllMatches}
+                disabled={searchMatchCount <= 0}
+              >
+                Replace All
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       <div ref={containerRef} className="h-full w-full" />
     </div>
   )

@@ -2,6 +2,7 @@ import type {
   ProjectInfo,
   ProjectFolder,
   ProjectTag,
+  RunStartupMode,
 } from '../../shared/types'
 
 const MAX_TERMINAL_OUTPUT_CHARS = 1_000_000
@@ -90,6 +91,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   customName?: string
   customType?: string
   customCommand?: string
+  runStartupMode?: RunStartupMode
   pinned?: boolean
   lastOpened?: number
   cli?: 'claude' | 'codex'
@@ -105,6 +107,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     customName: p.customName,
     customType: p.customType,
     customCommand: p.customCommand,
+    runStartupMode: p.runStartupMode,
     pinned: p.pinned,
     lastOpened: p.lastOpened,
     cli: p.cli,

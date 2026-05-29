@@ -29,9 +29,19 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
     const command = commandOverride || project.customCommand || project.command
     const pid = processId || projectId
+    const isPrimaryProjectRun = pid === projectId
+    const runStartupMode = project.runStartupMode || 'silent'
     const projectEnv = detectProjectEnvironment(project.path)
     const resolvedUseWsl =
       useWsl ?? (projectEnv === 'ubuntu' ? true : projectEnv === 'windows' ? false : undefined)
+
+    if (isPrimaryProjectRun && runStartupMode === 'terminal') {
+      const opened = await window.electronAPI.openPathTerminal(project.path, command)
+      if (opened) {
+        return
+      }
+      // Fall back to managed/background mode if external terminal launch fails.
+    }
 
     set((state) => ({
       processes: {
@@ -51,6 +61,7 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
     const started = await window.electronAPI.startProcess(pid, command, project.path, resolvedUseWsl)
     if (!started) {
       await get().syncManagedProcesses()
+      return
     }
   },
 
@@ -215,4 +226,3 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
     }
   },
 })
-

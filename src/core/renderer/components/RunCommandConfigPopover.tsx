@@ -35,8 +35,10 @@ export function RunCommandConfigPopover({
   onClose,
 }: RunCommandConfigPopoverProps) {
   const setProjectCustomCommand = useAppStore((s) => s.setProjectCustomCommand)
+  const setProjectRunStartupMode = useAppStore((s) => s.setProjectRunStartupMode)
   const startProject = useAppStore((s) => s.startProject)
   const [draftCommand, setDraftCommand] = useState(project.customCommand ?? project.command)
+  const [runStartupMode, setRunStartupMode] = useState<'silent' | 'terminal'>(project.runStartupMode || 'silent')
   const [activeTab, setActiveTab] = useState<ConfigTab>('command')
   const [saving, setSaving] = useState(false)
   const [position, setPosition] = useState({ left: x, top: y })
@@ -54,8 +56,9 @@ export function RunCommandConfigPopover({
 
   const hasChanges = useMemo(() => {
     const original = (project.customCommand ?? project.command).trim()
-    return draftCommand.trim() !== original
-  }, [draftCommand, project.command, project.customCommand])
+    const originalMode = project.runStartupMode || 'silent'
+    return draftCommand.trim() !== original || runStartupMode !== originalMode
+  }, [draftCommand, project.command, project.customCommand, project.runStartupMode, runStartupMode])
 
   const templates = useMemo<RunCommandTemplate[]>(() => {
     const pm = project.packageManager || 'npm'
@@ -69,10 +72,22 @@ export function RunCommandConfigPopover({
         hint: '使用项目包管理器启动 dev',
       },
       {
+        id: 'cmd',
+        label: 'CMD 脚本',
+        command: '.\\start.cmd',
+        hint: '执行项目目录下 start.cmd',
+      },
+      {
         id: 'ps1',
         label: 'PowerShell 脚本',
         command: 'pwsh -File .\\start.ps1',
         hint: '执行项目目录下 start.ps1',
+      },
+      {
+        id: 'bat',
+        label: 'Batch 脚本',
+        command: '.\\start.bat',
+        hint: '执行项目目录下 start.bat',
       },
       {
         id: 'bash',
@@ -89,18 +104,19 @@ export function RunCommandConfigPopover({
     ]
 
     if (environment === 'windows') {
-      return [list[1], list[0], list[3], list[2]]
+      return [list[1], list[2], list[3], list[0], list[5], list[4]]
     }
     if (environment === 'ubuntu') {
-      return [list[2], list[0], list[3], list[1]]
+      return [list[4], list[0], list[5], list[2], list[1], list[3]]
     }
     return list
   }, [environment, project.packageManager])
 
   useEffect(() => {
     setDraftCommand(project.customCommand ?? project.command)
+    setRunStartupMode(project.runStartupMode || 'silent')
     setActiveTab('command')
-  }, [project.command, project.customCommand, project.id])
+  }, [project.command, project.customCommand, project.id, project.runStartupMode])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -140,6 +156,7 @@ export function RunCommandConfigPopover({
     setSaving(true)
     try {
       await setProjectCustomCommand(project.id, draftCommand)
+      await setProjectRunStartupMode(project.id, runStartupMode)
       onClose()
     } finally {
       setSaving(false)
@@ -151,6 +168,7 @@ export function RunCommandConfigPopover({
     setSaving(true)
     try {
       await setProjectCustomCommand(project.id, draftCommand)
+      await setProjectRunStartupMode(project.id, runStartupMode)
       await startProject(project.id)
       onClose()
     } finally {
@@ -236,6 +254,33 @@ export function RunCommandConfigPopover({
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
             {environmentHint}
           </p>
+          <div className="pt-1">
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">启动方式</p>
+            <div className="inline-flex rounded-full p-1 quiet-control">
+              <button
+                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                  runStartupMode === 'silent'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => setRunStartupMode('silent')}
+                disabled={saving}
+              >
+                静默（后台）
+              </button>
+              <button
+                className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                  runStartupMode === 'terminal'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => setRunStartupMode('terminal')}
+                disabled={saving}
+              >
+                非静默（终端执行）
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-2">

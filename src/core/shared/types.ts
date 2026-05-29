@@ -15,6 +15,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
+export type RunStartupMode = 'silent' | 'terminal'
 
 export type CliTool = 'claude' | 'codex'
 export type StartupDefaultFilter =
@@ -85,6 +86,7 @@ export interface GitBranchInfo {
   upstream?: string
   upstreamGone: boolean
   oid?: string
+  upstreamOid?: string
   ahead: number
   behind: number
   detached: boolean
@@ -220,6 +222,12 @@ export interface ProjectDocLink {
   id: string
   title: string
   url: string
+  /** Optional plain-text note for this documentation link. */
+  note?: string
+  /** Optional account/username hint associated with this link. */
+  account?: string
+  /** True when a password/secret is saved in OS secure storage for this link. */
+  hasSecret?: boolean
 }
 
 export interface ProjectFolder {
@@ -254,6 +262,8 @@ export interface ProjectInfo {
   customType?: string
   command: string
   customCommand?: string
+  /** Run button startup behavior — defaults to 'silent' when absent. */
+  runStartupMode?: RunStartupMode
   packageManager?: PackageManager
   pinned?: boolean
   lastOpened?: number
@@ -331,6 +341,8 @@ export interface SavedProject {
   /** Optional user-defined display type; falls back to detected type when absent. */
   customType?: string
   customCommand?: string
+  /** Run button startup behavior — defaults to 'silent' when absent. */
+  runStartupMode?: RunStartupMode
   pinned?: boolean
   lastOpened?: number
   /** AI coding CLI tool preference — defaults to 'claude' when absent */

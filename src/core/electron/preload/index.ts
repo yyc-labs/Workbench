@@ -44,6 +44,15 @@ const api = {
   setConfig: (partial: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC.CONFIG_SET, partial),
 
+  setDocLinkSecret: (projectId: string, linkId: string, secret: string) =>
+    ipcRenderer.invoke(IPC.DOC_LINK_SECRET_SET, projectId, linkId, secret),
+
+  getDocLinkSecret: (projectId: string, linkId: string) =>
+    ipcRenderer.invoke(IPC.DOC_LINK_SECRET_GET, projectId, linkId) as Promise<{ secret: string | null }>,
+
+  deleteDocLinkSecret: (projectId: string, linkId: string) =>
+    ipcRenderer.invoke(IPC.DOC_LINK_SECRET_DELETE, projectId, linkId),
+
   selectDirectory: () => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY),
 
   getPathForFile: (file: File) => {
@@ -178,8 +187,8 @@ const api = {
       .catch((e) => { console.error('[preload.openTerminal] IPC rejected', e); throw e })
   },
 
-  openPathTerminal: (folderPath: string) =>
-    ipcRenderer.invoke(IPC.SHELL_OPEN_PATH_TERMINAL, folderPath),
+  openPathTerminal: (folderPath: string, command?: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_PATH_TERMINAL, folderPath, command),
 
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
