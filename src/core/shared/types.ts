@@ -218,16 +218,26 @@ export interface GitResolveConflictResult {
   error?: string
 }
 
+export type ProjectDocLinkTag = string
+
 export interface ProjectDocLink {
   id: string
   title: string
   url: string
+  /** Resource type tag for this project material link. */
+  tag?: ProjectDocLinkTag
   /** Optional plain-text note for this documentation link. */
   note?: string
   /** Optional account/username hint associated with this link. */
   account?: string
   /** True when a password/secret is saved in OS secure storage for this link. */
   hasSecret?: boolean
+}
+
+export interface ProjectDocTagOption {
+  value: ProjectDocLinkTag
+  label: string
+  sortOrder: number
 }
 
 export interface ProjectFolder {
@@ -318,10 +328,14 @@ export interface TerminalStopAllResult {
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
+  /** Removed project metadata snapshots kept for same-path restore on re-add. */
+  removedProjects?: RemovedProjectSnapshot[]
   /** User-defined project folders */
   folders?: ProjectFolder[]
   /** User-defined project tags */
   tags?: ProjectTag[]
+  /** Global project material categories (tabs) shared by all projects */
+  docLinkTags?: ProjectDocTagOption[]
   /** Sidebar filter selected by default when Home opens */
   startupDefaultFilter?: StartupDefaultFilter
   /** WSL-side launcher script path for runtime boot */
@@ -359,6 +373,10 @@ export interface SavedProject {
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
   /** Drawer state for code file quick access */
   codeFileDrawerState?: ProjectCodeFileDrawerState
+}
+
+export interface RemovedProjectSnapshot extends SavedProject {
+  removedAt: number
 }
 
 export interface DetectionRule {

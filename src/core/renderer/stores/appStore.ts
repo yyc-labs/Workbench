@@ -6,6 +6,7 @@ import { createSettingsActionsSlice } from './appStore.settingsSlice'
 import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../lib/projectDocLinks'
 
 export const useAppStore = create<AppState>()((...args) => ({
   isAppReady: false,
@@ -15,7 +16,12 @@ export const useAppStore = create<AppState>()((...args) => ({
   processes: {},
   terminalOutputs: {},
   processUrls: loadPersistedProcessUrls(),
-  config: { projects: [], theme: initialThemeMode },
+  config: {
+    projects: [],
+    removedProjects: [],
+    theme: initialThemeMode,
+    docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
+  },
   searchQuery: '',
   homeEnvFilter: 'all',
   homeClassifierFilter: { type: 'all' },

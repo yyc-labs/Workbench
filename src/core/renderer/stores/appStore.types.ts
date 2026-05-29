@@ -18,6 +18,7 @@ import type {
   RuntimeDiagnostics,
   ProjectFolder,
   ProjectTag,
+  ProjectDocTagOption,
   StartupDefaultFilter,
   TerminalProcessInventory,
   TerminalStopAllResult,
@@ -139,6 +140,7 @@ export interface AppState {
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
+  setDocLinkTags: (tags: ProjectDocTagOption[]) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>

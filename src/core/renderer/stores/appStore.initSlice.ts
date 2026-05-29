@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import { createFallbackProject } from './appStore.helpers'
+import { applySavedProjectSnapshot, createFallbackProject } from './appStore.helpers'
 import type { TmuxSessionInfo } from '../../shared/types'
 
 let initAppPromise: Promise<void> | null = null
@@ -26,20 +26,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
           console.warn('[appStore.initApp] detectProjects failed, fallback to unknown:', saved.path, err)
         }
         const ensured = project ?? createFallbackProject(saved.path)
-        if (saved.customCommand) ensured.customCommand = saved.customCommand
-        if (saved.runStartupMode) ensured.runStartupMode = saved.runStartupMode
-        if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
-        if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
-        if (saved.pinned) ensured.pinned = saved.pinned
-        if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
-        if (saved.cli) ensured.cli = saved.cli
-        ensured.docLinks = saved.docLinks ?? []
-        ensured.folderId = saved.folderId
-        ensured.tagIds = saved.tagIds ?? []
-        ensured.lastCodeFile = saved.lastCodeFile
-        ensured.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
-        ensured.codeFileDrawerState = saved.codeFileDrawerState
-        projects.push(ensured)
+        projects.push(applySavedProjectSnapshot(ensured, saved))
       }
 
       const capability = await window.electronAPI.getCapability()
@@ -82,20 +69,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         console.warn('[appStore.loadConfig] detectProjects failed, fallback to unknown:', saved.path, err)
       }
       const ensured = project ?? createFallbackProject(saved.path)
-      if (saved.customCommand) ensured.customCommand = saved.customCommand
-      if (saved.runStartupMode) ensured.runStartupMode = saved.runStartupMode
-      if (saved.customName?.trim()) ensured.customName = saved.customName.trim()
-      if (saved.customType?.trim()) ensured.customType = saved.customType.trim()
-      if (saved.pinned) ensured.pinned = saved.pinned
-      if (saved.lastOpened) ensured.lastOpened = saved.lastOpened
-      if (saved.cli) ensured.cli = saved.cli
-      ensured.docLinks = saved.docLinks ?? []
-      ensured.folderId = saved.folderId
-      ensured.tagIds = saved.tagIds ?? []
-      ensured.lastCodeFile = saved.lastCodeFile
-      ensured.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
-      ensured.codeFileDrawerState = saved.codeFileDrawerState
-      projects.push(ensured)
+      projects.push(applySavedProjectSnapshot(ensured, saved))
     }
     set({
       config,

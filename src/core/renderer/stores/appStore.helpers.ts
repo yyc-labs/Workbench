@@ -1,5 +1,6 @@
 import type {
   ProjectInfo,
+  RemovedProjectSnapshot,
   ProjectFolder,
   ProjectTag,
   RunStartupMode,
@@ -120,14 +121,73 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   }))
 }
 
+export function toRemovedProjectSnapshot(project: ProjectInfo): RemovedProjectSnapshot {
+  return {
+    path: project.path,
+    customName: project.customName,
+    customType: project.customType,
+    customCommand: project.customCommand,
+    runStartupMode: project.runStartupMode,
+    pinned: project.pinned,
+    lastOpened: project.lastOpened,
+    cli: project.cli,
+    docLinks: project.docLinks ?? [],
+    folderId: project.folderId,
+    tagIds: project.tagIds ?? [],
+    lastCodeFile: project.lastCodeFile,
+    lastMarkdownPreviewMode: project.lastMarkdownPreviewMode,
+    codeFileDrawerState: project.codeFileDrawerState,
+    removedAt: Date.now(),
+  }
+}
+
+export function applySavedProjectSnapshot(
+  project: ProjectInfo,
+  saved: {
+    customName?: string
+    customType?: string
+    customCommand?: string
+    runStartupMode?: RunStartupMode
+    pinned?: boolean
+    lastOpened?: number
+    cli?: 'claude' | 'codex'
+    docLinks?: ProjectInfo['docLinks']
+    folderId?: string
+    tagIds?: string[]
+    lastCodeFile?: string
+    lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
+    codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
+  }
+): ProjectInfo {
+  if (saved.customCommand) project.customCommand = saved.customCommand
+  if (saved.runStartupMode) project.runStartupMode = saved.runStartupMode
+  if (saved.customName?.trim()) project.customName = saved.customName.trim()
+  if (saved.customType?.trim()) project.customType = saved.customType.trim()
+  if (saved.pinned) project.pinned = saved.pinned
+  if (saved.lastOpened) project.lastOpened = saved.lastOpened
+  if (saved.cli) project.cli = saved.cli
+  project.docLinks = saved.docLinks ?? []
+  project.folderId = saved.folderId
+  project.tagIds = saved.tagIds ?? []
+  project.lastCodeFile = saved.lastCodeFile
+  project.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
+  project.codeFileDrawerState = saved.codeFileDrawerState
+  return project
+}
+
 export async function persistWorkspace(
   projects: ProjectInfo[],
   folders: ProjectFolder[],
   tags: ProjectTag[],
+  removedProjects?: RemovedProjectSnapshot[],
 ): Promise<void> {
-  await window.electronAPI.setConfig({
+  const payload: Record<string, unknown> = {
     projects: toSavedProjects(projects),
     folders,
     tags,
-  })
+  }
+  if (removedProjects) {
+    payload.removedProjects = removedProjects
+  }
+  await window.electronAPI.setConfig(payload)
 }

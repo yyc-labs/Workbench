@@ -7,6 +7,8 @@ import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { RunCommandConfigPopover } from './RunCommandConfigPopover'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
+import { normalizeProjectDocLinkTag } from '../lib/projectDocLinks'
+import { projectDocLinkTagLabel } from '../lib/projectDocLinks'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -29,6 +31,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const setProjectTags = useAppStore((s) => s.setProjectTags)
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
+  const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
 
   const currentCli: CliTool = project.cli || 'claude'
 
@@ -65,16 +68,25 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const defaultDocLink = docLinks[0]
   const linkMenuItems = [
     ...(isDevRunning ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
-    ...docLinks.map((link) => ({ url: link.url, label: `Docs: ${link.title}` })),
+    ...docLinks.map((link) => ({
+      url: link.url,
+      label: `资料 · ${link.title}`,
+      tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+      tagLabel: projectDocLinkTagLabel(
+        normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+        docLinkTagOptions
+      ),
+    })),
   ]
   const firstLinkMenuItem = linkMenuItems[0]
   const hoverDocLabel = defaultDocLink
-    ? `Docs: ${defaultDocLink.title}`
+    ? `资料: ${defaultDocLink.title}`
     : docLinks.length > 0
-      ? `${docLinks.length} docs`
+      ? `${docLinks.length} 项资料`
       : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [menuAllowRemove, setMenuAllowRemove] = useState(false)
   const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
@@ -154,7 +166,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         e.currentTarget.style.boxShadow = 'var(--shadow-card)'
       }}
       onClick={() => onSelect(project.id)}
-      onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: e.clientX, y: e.clientY }) }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setMenuAllowRemove(false)
+        setMenuPos({ x: e.clientX, y: e.clientY })
+      }}
     >
       <div
         className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
@@ -274,7 +290,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           }}
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
-          onRemoveProject={() => removeProject(project.id)}
+          onRemoveProject={menuAllowRemove ? () => removeProject(project.id) : undefined}
           onEditMetadata={() => setMetaDialogOpen(true)}
         />
       )}
@@ -357,7 +373,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         <button
           className="h-8 w-8 rounded-full flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
           title="More actions"
-          onClick={(e) => { e.stopPropagation(); setMenuPos({ x: e.clientX, y: e.clientY }) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setMenuAllowRemove(true)
+            setMenuPos({ x: e.clientX, y: e.clientY })
+          }}
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>

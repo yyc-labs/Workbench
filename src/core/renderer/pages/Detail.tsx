@@ -18,6 +18,7 @@ import { UrlPopover } from '../components/UrlPopover'
 import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
+import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../lib/projectDocLinks'
 import { useAppStore } from '../stores/appStore'
 import type { CliTool } from '../../shared/types'
 import { CodeWorkspacePanel } from './code/CodeWorkspacePanel'
@@ -39,7 +40,7 @@ const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
 ].join(', ')
 
 function shouldSkipProjectPageContextMenu(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
+  return target instanceof Element && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
 }
 
 export function DetailPage() {
@@ -68,7 +69,7 @@ export function DetailPage() {
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
   const togglePin = useAppStore((s) => s.togglePin)
-  const removeProject = useAppStore((s) => s.removeProject)
+  const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? [])
 
   const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -144,6 +145,9 @@ export function DetailPage() {
     setDocTitleInput,
     docUrlInput,
     setDocUrlInput,
+    docTagInput,
+    setDocTagInput,
+    docLinkTagOptions: docLinkTagOptionsFromHook,
     docNoteInput,
     setDocNoteInput,
     docAccountInput,
@@ -151,7 +155,11 @@ export function DetailPage() {
     docSecretInput,
     setDocSecretInput,
     docError,
+    setDocError,
     handleAddDocLink,
+    handleAddDocTag,
+    handleRenameDocTag,
+    handleRemoveDocTag,
     handleUpdateDocLink,
     handleSetDefaultDocLink,
     handleReorderDocLinks,
@@ -318,7 +326,12 @@ export function DetailPage() {
                 title={defaultDocLink.url}
               >
                 <BookOpen className="h-3 w-3" />
-                <span className="max-w-[180px] truncate">Docs: {defaultDocLink.title}</span>
+                <span className="max-w-[200px] truncate">
+                  资料 · {projectDocLinkTagLabel(
+                    normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
+                    docLinkTagOptions
+                  )}: {defaultDocLink.title}
+                </span>
               </button>
             </UrlPopover>
           )}
@@ -329,7 +342,7 @@ export function DetailPage() {
             onClick={() => setLinkSettingsOpen(true)}
           >
             <Settings2 className="h-3.5 w-3.5" />
-            Link Settings
+            资料设置
           </button>
 
           <button
@@ -349,6 +362,8 @@ export function DetailPage() {
             onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
             onContextMenu={(e) => {
               e.preventDefault()
+              e.stopPropagation()
+              setMenuPos(null)
               setRunConfigPos({ x: e.clientX, y: e.clientY })
             }}
             disabled={isStopping}
@@ -386,7 +401,9 @@ export function DetailPage() {
               onClick={() => void handleAiCommit()}
               onContextMenu={(e) => {
                 e.preventDefault()
+                e.stopPropagation()
                 if (aiCommitStatus === 'running') return
+                setMenuPos(null)
                 const panelWidth = 260
                 const panelHeight = 320
                 const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
@@ -412,6 +429,10 @@ export function DetailPage() {
             left: `${quickConfigPos.x}px`,
             top: `${quickConfigPos.y}px`,
             borderColor: 'var(--color-border)',
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
           }}
         >
           <div className="mb-3 flex items-center justify-between">
@@ -529,10 +550,6 @@ export function DetailPage() {
           }}
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
-          onRemoveProject={async () => {
-            await removeProject(project.id)
-            navigate('/')
-          }}
           onEditMetadata={() => setMetaDialogOpen(true)}
         />
       )}
@@ -599,6 +616,9 @@ export function DetailPage() {
         setDocTitleInput={setDocTitleInput}
         docUrlInput={docUrlInput}
         setDocUrlInput={setDocUrlInput}
+        docTagInput={docTagInput}
+        setDocTagInput={setDocTagInput}
+        docTagOptions={docLinkTagOptionsFromHook}
         docNoteInput={docNoteInput}
         setDocNoteInput={setDocNoteInput}
         docAccountInput={docAccountInput}
@@ -606,7 +626,11 @@ export function DetailPage() {
         docSecretInput={docSecretInput}
         setDocSecretInput={setDocSecretInput}
         docError={docError}
+        setDocError={setDocError}
         onAddDocLink={handleAddDocLink}
+        onAddDocTag={handleAddDocTag}
+        onRenameDocTag={handleRenameDocTag}
+        onRemoveDocTag={handleRemoveDocTag}
         onUpdateDocLink={handleUpdateDocLink}
         onSetDefaultDocLink={handleSetDefaultDocLink}
         onReorderDocLinks={handleReorderDocLinks}

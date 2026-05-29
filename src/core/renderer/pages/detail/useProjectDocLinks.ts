@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
-import type { ProjectDocLink, ProjectInfo } from '../../../shared/types'
+import type { ProjectDocLink, ProjectDocLinkTag, ProjectDocTagOption, ProjectInfo } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { createDocLinkId, normalizeDocUrl } from './detail.aiFlow'
+import {
+  PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
+  PROJECT_DOC_LINK_DEFAULT_TAG,
+  PROJECT_DOC_LINK_FALLBACK_TAG,
+  normalizeProjectDocLinkTag,
+  projectDocLinkTagLabel,
+} from '../../lib/projectDocLinks'
 
 type UseProjectDocLinksOptions = {
   project: ProjectInfo | undefined
@@ -10,20 +17,129 @@ type UseProjectDocLinksOptions = {
 
 export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
+  const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS)
+  const setDocLinkTags = useAppStore((s) => s.setDocLinkTags)
   const [linkSettingsOpen, setLinkSettingsOpen] = useState(false)
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
+  const [docTagInput, setDocTagInput] = useState<ProjectDocLinkTag>(PROJECT_DOC_LINK_DEFAULT_TAG)
   const [docNoteInput, setDocNoteInput] = useState('')
   const [docAccountInput, setDocAccountInput] = useState('')
   const [docSecretInput, setDocSecretInput] = useState('')
   const [docError, setDocError] = useState<string | null>(null)
 
-  const docLinks = useMemo(() => project?.docLinks ?? [], [project?.docLinks])
+  const docLinks = useMemo(
+    () => (project?.docLinks ?? []).map((link) => ({ ...link, tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) })),
+    [docLinkTagOptions, project?.docLinks]
+  )
   const defaultDocLink = docLinks[0]
   const docMenuItems = useMemo(
-    () => docLinks.map((link) => ({ url: link.url, label: link.title })),
-    [docLinks]
+    () => docLinks.map((link) => {
+      const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+      return {
+        url: link.url,
+        label: link.title,
+        tag: normalizedTag,
+        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+      }
+    }),
+    [docLinkTagOptions, docLinks]
   )
+
+  const normalizeDocTagOptions = useCallback((input: ProjectDocTagOption[]): ProjectDocTagOption[] => {
+    const deduped: ProjectDocTagOption[] = []
+    const used = new Set<string>()
+    for (const item of input) {
+      const value = item.value.trim()
+      const label = item.label.trim()
+      if (!value || !label || used.has(value)) continue
+      used.add(value)
+      deduped.push({
+        value,
+        label,
+        sortOrder: deduped.length,
+      })
+    }
+    if (!used.has(PROJECT_DOC_LINK_FALLBACK_TAG)) {
+      deduped.push({
+        value: PROJECT_DOC_LINK_FALLBACK_TAG,
+        label: '其他资料',
+        sortOrder: deduped.length,
+      })
+    }
+    return deduped
+  }, [])
+
+  const handleAddDocTag = useCallback(async (labelInput: string): Promise<{ ok: boolean; message?: string }> => {
+    const label = labelInput.trim()
+    if (!label) return { ok: false, message: '请输入分类名称' }
+    const duplicateLabel = docLinkTagOptions.some((item) => item.label.toLowerCase() === label.toLowerCase())
+    if (duplicateLabel) return { ok: false, message: '分类名称已存在' }
+
+    const base = label
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'tag'
+    let value = `custom-${base}`
+    let serial = 2
+    const used = new Set(docLinkTagOptions.map((item) => item.value))
+    while (used.has(value)) {
+      value = `custom-${base}-${serial}`
+      serial += 1
+    }
+
+    const next = normalizeDocTagOptions([
+      ...docLinkTagOptions,
+      { value, label, sortOrder: docLinkTagOptions.length },
+    ])
+    await setDocLinkTags(next)
+    return { ok: true }
+  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags])
+
+  const handleRenameDocTag = useCallback(async (
+    value: string,
+    labelInput: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    const label = labelInput.trim()
+    if (!label) return { ok: false, message: '请输入分类名称' }
+    const target = docLinkTagOptions.find((item) => item.value === value)
+    if (!target) return { ok: false, message: '分类不存在' }
+    const duplicateLabel = docLinkTagOptions.some(
+      (item) => item.value !== value && item.label.toLowerCase() === label.toLowerCase()
+    )
+    if (duplicateLabel) return { ok: false, message: '分类名称已存在' }
+
+    const next = normalizeDocTagOptions(
+      docLinkTagOptions.map((item) => (item.value === value ? { ...item, label } : item))
+    )
+    await setDocLinkTags(next)
+    return { ok: true }
+  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags])
+
+  const handleRemoveDocTag = useCallback(async (
+    value: string
+  ): Promise<{ ok: boolean; message?: string }> => {
+    if (value === PROJECT_DOC_LINK_FALLBACK_TAG) {
+      return { ok: false, message: '“其他资料”是兜底分类，不能删除' }
+    }
+    if (!docLinkTagOptions.some((item) => item.value === value)) {
+      return { ok: false, message: '分类不存在' }
+    }
+    if (project) {
+      const hasTagInProject = docLinks.some((link) => normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value)
+      if (hasTagInProject) {
+        const migrated = docLinks.map((link) => (
+          normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value
+            ? { ...link, tag: PROJECT_DOC_LINK_FALLBACK_TAG }
+            : link
+        ))
+        await setProjectDocLinks(project.id, migrated)
+      }
+    }
+    const next = normalizeDocTagOptions(docLinkTagOptions.filter((item) => item.value !== value))
+    await setDocLinkTags(next)
+    return { ok: true }
+  }, [docLinkTagOptions, docLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks])
 
   const handleAddDocLink = useCallback(async () => {
     if (!project) return
@@ -57,6 +173,7 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
       id: linkId,
       title,
       url: normalizedUrl,
+      tag: normalizeProjectDocLinkTag(docTagInput, docLinkTagOptions),
       ...(note ? { note } : {}),
       ...(account ? { account } : {}),
       ...(secret ? { hasSecret: true } : {}),
@@ -73,11 +190,13 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     }
     setDocTitleInput('')
     setDocUrlInput('')
+    setDocTagInput(normalizeProjectDocLinkTag(PROJECT_DOC_LINK_DEFAULT_TAG, docLinkTagOptions))
     setDocNoteInput('')
     setDocAccountInput('')
     setDocSecretInput('')
     setDocError(null)
   }, [
+    docTagInput,
     docAccountInput,
     docLinks,
     docNoteInput,
@@ -86,6 +205,7 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     docUrlInput,
     project,
     setProjectDocLinks,
+    docLinkTagOptions,
   ])
 
   const handleRemoveDocLink = useCallback(async (linkId: string) => {
@@ -120,6 +240,7 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     linkId: string,
     nextTitleInput: string,
     nextUrlInput: string,
+    nextTagInput: ProjectDocLinkTag,
     nextNoteInput: string,
     nextAccountInput: string,
     nextSecretInput: string,
@@ -184,6 +305,7 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
           ...link,
           title,
           url: normalizedUrl,
+          tag: normalizeProjectDocLinkTag(nextTagInput, docLinkTagOptions),
           ...(note ? { note } : { note: undefined }),
           ...(account ? { account } : { account: undefined }),
           ...(hasSecret ? { hasSecret: true } : { hasSecret: undefined }),
@@ -194,7 +316,11 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     await setProjectDocLinks(project.id, nextLinks)
     setDocError(null)
     return true
-  }, [docLinks, project, setProjectDocLinks])
+  }, [docLinks, project, setProjectDocLinks, docLinkTagOptions])
+
+  useEffect(() => {
+    setDocTagInput((current) => normalizeProjectDocLinkTag(current, docLinkTagOptions))
+  }, [docLinkTagOptions])
 
   const handleCopyDocLinkAccount = useCallback(async (linkId: string): Promise<boolean> => {
     const link = docLinks.find((item) => item.id === linkId)
@@ -250,12 +376,15 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     docLinks,
     defaultDocLink,
     docMenuItems,
+    docLinkTagOptions,
     linkSettingsOpen,
     setLinkSettingsOpen,
     docTitleInput,
     setDocTitleInput,
     docUrlInput,
     setDocUrlInput,
+    docTagInput,
+    setDocTagInput,
     docNoteInput,
     setDocNoteInput,
     docAccountInput,
@@ -263,7 +392,11 @@ export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
     docSecretInput,
     setDocSecretInput,
     docError,
+    setDocError,
     handleAddDocLink,
+    handleAddDocTag,
+    handleRenameDocTag,
+    handleRemoveDocTag,
     handleUpdateDocLink,
     handleSetDefaultDocLink,
     handleReorderDocLinks,

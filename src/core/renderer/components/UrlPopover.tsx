@@ -4,9 +4,11 @@ import { ExternalLink } from 'lucide-react'
 
 interface UrlPopoverProps {
   urls?: string[]
-  items?: { url: string; label: string }[]
+  items?: { url: string; label: string; tag?: string; tagLabel?: string }[]
   children: React.ReactNode
 }
+
+type UrlPopoverEntry = { url: string; label: string; tag?: string; tagLabel?: string }
 
 function isFuzzySubsequence(query: string, candidate: string): boolean {
   if (!query) return true
@@ -25,9 +27,13 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const triggerRef = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const entries = useMemo(
+  const hoverStateRef = useRef({ trigger: false, popover: false })
+  const focusWithinRef = useRef(false)
+  const entries = useMemo<UrlPopoverEntry[]>(
     () => (
       items && items.length > 0
         ? items
@@ -43,11 +49,15 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     return entries.filter((entry) => {
       const label = entry.label.toLowerCase()
       const url = entry.url.toLowerCase()
-      const text = `${label} ${url}`
+      const tag = (entry.tag ?? '').toLowerCase()
+      const tagLabel = (entry.tagLabel ?? '').toLowerCase()
+      const text = `${label} ${url} ${tag} ${tagLabel}`
       if (text.includes(normalizedQuery)) return true
       return (
         isFuzzySubsequence(normalizedQuery, label)
         || isFuzzySubsequence(normalizedQuery, url)
+        || isFuzzySubsequence(normalizedQuery, tag)
+        || isFuzzySubsequence(normalizedQuery, tagLabel)
       )
     })
   }, [entries, normalizedQuery])
@@ -75,19 +85,42 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     }
   }
 
-  const handleEnter = () => {
+  const clearHideTimer = () => {
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
+  }
+
+  const scheduleHide = () => {
+    clearHideTimer()
+    timerRef.current = setTimeout(() => {
+      if (focusWithinRef.current) return
+      if (hoverStateRef.current.trigger || hoverStateRef.current.popover) return
+      setShow(false)
+    }, 150)
+  }
+
+  const handleTriggerEnter = () => {
+    hoverStateRef.current.trigger = true
+    clearHideTimer()
     updatePos()
     setShow(true)
   }
 
-  const handleLeave = () => {
-    timerRef.current = setTimeout(() => {
-      setShow(false)
-    }, 150)
+  const handleTriggerLeave = () => {
+    hoverStateRef.current.trigger = false
+    scheduleHide()
+  }
+
+  const handlePopoverEnter = () => {
+    hoverStateRef.current.popover = true
+    clearHideTimer()
+  }
+
+  const handlePopoverLeave = () => {
+    hoverStateRef.current.popover = false
+    scheduleHide()
   }
 
   const handleCopy = (key: string, url: string) => {
@@ -113,6 +146,13 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     if (!show) {
       setQuery('')
       setCopiedKey(null)
+      return
+    }
+    const rafId = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+    })
+    return () => {
+      window.cancelAnimationFrame(rafId)
     }
   }, [show])
 
@@ -120,6 +160,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
 
   const popover = show && (
     <div
+      ref={popoverRef}
       className="fixed z-[9999] min-w-[220px] overflow-y-auto rounded-[20px] px-1.5 py-2"
       style={{
         top: layout.top,
@@ -132,15 +173,34 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         WebkitBackdropFilter: 'saturate(165%) blur(22px)',
         overscrollBehavior: 'contain',
       }}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
+      onMouseEnter={handlePopoverEnter}
+      onMouseLeave={handlePopoverLeave}
+      onFocusCapture={() => {
+        focusWithinRef.current = true
+        clearHideTimer()
+      }}
+      onBlurCapture={() => {
+        window.setTimeout(() => {
+          const activeEl = document.activeElement
+          const stillWithinPopover = activeEl instanceof Node && popoverRef.current?.contains(activeEl)
+          focusWithinRef.current = Boolean(stillWithinPopover)
+          if (!focusWithinRef.current) {
+            scheduleHide()
+          }
+        }, 0)
+      }}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="sticky top-0 z-[1] px-1.5 pb-2">
         <input
+          ref={searchInputRef}
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => {
+            focusWithinRef.current = true
+            clearHideTimer()
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault()
@@ -203,8 +263,8 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     <div
       ref={triggerRef}
       className="relative inline-flex"
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
+      onMouseEnter={handleTriggerEnter}
+      onMouseLeave={handleTriggerLeave}
     >
       {children}
       {createPortal(popover, document.body)}

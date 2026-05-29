@@ -1,7 +1,7 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import { createEntityId, createFallbackProject, persistWorkspace } from './appStore.helpers'
+import { applySavedProjectSnapshot, createEntityId, createFallbackProject, persistWorkspace, toRemovedProjectSnapshot } from './appStore.helpers'
 
 export type WorkspaceActionsSlice = Pick<
   AppState,
@@ -43,28 +43,57 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       console.warn('[appStore.addProject] detectProjects failed, fallback to unknown:', dirPath, err)
     }
     const project = detected ?? createFallbackProject(dirPath)
+    const removedProjects = get().config.removedProjects ?? []
+    const reuseIndex = removedProjects.findIndex((item) => item.path === dirPath)
+    const reusedSnapshot = reuseIndex >= 0 ? removedProjects[reuseIndex] : undefined
+    if (reusedSnapshot) {
+      applySavedProjectSnapshot(project, reusedSnapshot)
+    }
 
-    set((state) => ({ projects: [...state.projects, project] }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    set((state) => {
+      const nextRemovedProjects = reusedSnapshot
+        ? state.config.removedProjects?.filter((item) => item.path !== dirPath) ?? []
+        : state.config.removedProjects ?? []
+      return {
+        projects: [...state.projects, project],
+        config: {
+          ...state.config,
+          removedProjects: nextRemovedProjects,
+        },
+      }
+    })
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   removeProject: async (projectId) => {
     set((state) => {
       const nextProcessUrls = { ...state.processUrls }
       delete nextProcessUrls[projectId]
+      const removedProject = state.projects.find((p) => p.id === projectId)
+      const existingSnapshots = state.config.removedProjects ?? []
+      const dedupedSnapshots = removedProject
+        ? existingSnapshots.filter((item) => item.path !== removedProject.path)
+        : existingSnapshots
+      const nextRemovedProjects = removedProject
+        ? [toRemovedProjectSnapshot(removedProject), ...dedupedSnapshots].slice(0, 200)
+        : dedupedSnapshots
       return {
         projects: state.projects.filter((p) => p.id !== projectId),
         processUrls: nextProcessUrls,
+        config: {
+          ...state.config,
+          removedProjects: nextRemovedProjects,
+        },
       }
     })
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCli: async (projectId, cli) => {
     set((state) => ({
       projects: state.projects.map((p) => (p.id === projectId ? { ...p, cli } : p)),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCustomName: async (projectId, customName) => {
@@ -76,7 +105,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
           : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCustomType: async (projectId, customType) => {
@@ -88,7 +117,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
           : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCustomCommand: async (projectId, customCommand) => {
@@ -103,7 +132,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         }
       }),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectRunStartupMode: async (projectId, mode) => {
@@ -114,14 +143,14 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
           : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectDocLinks: async (projectId, docLinks) => {
     set((state) => ({
       projects: state.projects.map((p) => (p.id === projectId ? { ...p, docLinks } : p)),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectLastCodeFile: async (projectId, relativePath) => {
@@ -131,7 +160,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.id === projectId ? { ...project, lastCodeFile: normalized } : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectLastMarkdownPreviewMode: async (projectId, mode) => {
@@ -141,7 +170,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.id === projectId ? { ...project, lastMarkdownPreviewMode: normalized } : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCodeFileDrawerState: async (projectId, drawerState) => {
@@ -160,7 +189,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
           : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   clearAllProjectLastCodeFiles: async () => {
@@ -172,7 +201,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.lastCodeFile ? { ...project, lastCodeFile: undefined } : project
       )),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   togglePin: async (projectId) => {
@@ -181,7 +210,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         p.id === projectId ? { ...p, pinned: !p.pinned } : p
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   updateLastOpened: (projectId) => {
@@ -208,7 +237,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     set((state) => ({
       folders: [...state.folders, nextFolder],
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   renameFolder: async (folderId, name) => {
@@ -225,7 +254,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         folder.id === folderId ? { ...folder, name: trimmed } : folder
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   removeFolder: async (folderId) => {
@@ -246,7 +275,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.folderId === folderId ? { ...project, folderId: undefined } : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   reorderFolders: async (activeFolderId, overFolderId) => {
@@ -261,7 +290,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       sortOrder: index,
     }))
     set({ folders: reordered })
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   assignProjectFolder: async (projectId, folderId) => {
@@ -270,7 +299,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.id === projectId ? { ...project, folderId } : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   createTag: async (name, color) => {
@@ -289,7 +318,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     set((state) => ({
       tags: [...state.tags, nextTag],
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   renameTag: async (tagId, name) => {
@@ -306,7 +335,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         tag.id === tagId ? { ...tag, name: trimmed } : tag
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   removeTag: async (tagId) => {
@@ -328,7 +357,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         tagIds: (project.tagIds ?? []).filter((id) => id !== tagId),
       })),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   reorderTags: async (activeTagId, overTagId) => {
@@ -343,7 +372,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       sortOrder: index,
     }))
     set({ tags: reordered })
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectTags: async (projectId, tagIds) => {
@@ -353,6 +382,6 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         project.id === projectId ? { ...project, tagIds: uniq } : project
       ),
     }))
-    await persistWorkspace(get().projects, get().folders, get().tags)
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 })

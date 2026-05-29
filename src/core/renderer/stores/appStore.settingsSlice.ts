@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
+import type { ProjectDocTagOption } from '../../shared/types'
 
 export type SettingsActionsSlice = Pick<
   AppState,
@@ -7,6 +8,7 @@ export type SettingsActionsSlice = Pick<
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
+  | 'setDocLinkTags'
   | 'setStartupDefaultFilter'
   | 'setSearchQuery'
   | 'setHomeEnvFilter'
@@ -51,6 +53,23 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         aiCommit: updated.aiCommit,
+      },
+    }))
+  },
+
+  setDocLinkTags: async (tags: ProjectDocTagOption[]) => {
+    const normalized = tags
+      .filter((item) => item.value.trim() && item.label.trim())
+      .map((item, index) => ({
+        value: item.value.trim(),
+        label: item.label.trim(),
+        sortOrder: index,
+      }))
+    const updated = await window.electronAPI.setConfig({ docLinkTags: normalized })
+    set((state) => ({
+      config: {
+        ...state.config,
+        docLinkTags: updated.docLinkTags,
       },
     }))
   },

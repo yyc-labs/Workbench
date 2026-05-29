@@ -3,6 +3,8 @@ import type { ProjectDocLink, ProjectInfo } from '../../../shared/types'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { UrlPopover } from '../../components/UrlPopover'
 import { InfoCard } from './DetailInfoCard'
+import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
+import { useAppStore } from '../../stores/appStore'
 
 type DetailWorkspaceCardProps = {
   project: ProjectInfo
@@ -21,6 +23,7 @@ function DetailWorkspaceCard({
   docLinks,
   defaultDocLink,
 }: DetailWorkspaceCardProps) {
+  const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
   return (
     <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
       <div className="relative">
@@ -53,13 +56,29 @@ function DetailWorkspaceCard({
               </UrlPopover>
             )}
             {defaultDocLink && (
-              <UrlPopover items={docLinks.map((link) => ({ url: link.url, label: link.title }))}>
+              <UrlPopover items={docLinks.map((link) => ({
+                url: link.url,
+                label: `${projectDocLinkTagLabel(
+                  normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+                  docLinkTagOptions
+                )}: ${link.title}`,
+                tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+                tagLabel: projectDocLinkTagLabel(
+                  normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+                  docLinkTagOptions
+                ),
+              }))}>
                 <button
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                   onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
                 >
                   <BookOpen className="h-3 w-3" />
-                  <span className="max-w-[220px] truncate">Docs: {defaultDocLink.title}</span>
+                  <span className="max-w-[240px] truncate">
+                    资料 · {projectDocLinkTagLabel(
+                      normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
+                      docLinkTagOptions
+                    )}: {defaultDocLink.title}
+                  </span>
                 </button>
               </UrlPopover>
             )}

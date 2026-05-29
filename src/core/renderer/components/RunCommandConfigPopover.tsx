@@ -199,7 +199,10 @@ export function RunCommandConfigPopover({
       }}
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="min-w-0">
