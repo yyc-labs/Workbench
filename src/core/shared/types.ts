@@ -261,6 +261,24 @@ export interface ProjectCodeFileDrawerState {
   recents: string[]
 }
 
+export interface ProjectCodeCursorPosition {
+  lineNumber: number
+  column: number
+}
+
+export interface ProjectCodeSession {
+  /** Recently opened file tabs in Code page, newest first */
+  tabs: string[]
+  /** Active tab path when session snapshot was saved */
+  activePath?: string
+  /** Last known cursor positions by project-relative file path */
+  cursorPositions?: Record<string, ProjectCodeCursorPosition>
+  /** Recent content search queries in Code page (newest first) */
+  contentSearchHistory?: string[]
+  /** Scope globs used by content search in Code page */
+  contentSearchScope?: string
+}
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -291,6 +309,8 @@ export interface ProjectInfo {
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
   /** Drawer state for code file quick access */
   codeFileDrawerState?: ProjectCodeFileDrawerState
+  /** Per-project Code page session snapshot (recent tabs + cursor positions) */
+  codeSession?: ProjectCodeSession
 }
 
 export interface ProcessInfo {
@@ -373,6 +393,8 @@ export interface SavedProject {
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
   /** Drawer state for code file quick access */
   codeFileDrawerState?: ProjectCodeFileDrawerState
+  /** Per-project Code page session snapshot (recent tabs + cursor positions) */
+  codeSession?: ProjectCodeSession
 }
 
 export interface RemovedProjectSnapshot extends SavedProject {
@@ -515,4 +537,5 @@ export interface ProjectFileContentSearchResponse {
 
 export interface ProjectFileContentSearchOptions {
   caseSensitive?: boolean
+  includeGlobs?: string[]
 }

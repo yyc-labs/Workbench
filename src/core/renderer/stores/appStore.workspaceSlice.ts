@@ -14,11 +14,13 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectRunStartupMode'
   | 'setProjectDocLinks'
   | 'setProjectLastCodeFile'
+  | 'setProjectCodeSession'
   | 'setProjectLastMarkdownPreviewMode'
   | 'setProjectCodeFileDrawerState'
   | 'clearAllProjectLastCodeFiles'
   | 'togglePin'
   | 'updateLastOpened'
+  | 'clearProjectLastOpened'
   | 'createFolder'
   | 'renameFolder'
   | 'removeFolder'
@@ -163,6 +165,74 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
+  setProjectCodeSession: async (projectId, session) => {
+    const normalizePath = (value: unknown): string => (
+      typeof value === 'string' ? value.trim() : ''
+    )
+    const normalizeContentSearchHistory = (value: unknown): string[] | undefined => {
+      if (!Array.isArray(value)) return undefined
+      const normalized = Array.from(new Set(
+        value
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item) => item.length > 0)
+      )).slice(0, 12)
+      return normalized.length > 0 ? normalized : undefined
+    }
+    const normalizeContentSearchScope = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') return undefined
+      const normalized = value.trim()
+      return normalized || undefined
+    }
+    const normalizePosition = (position: unknown): { lineNumber: number; column: number } | null => {
+      if (!position || typeof position !== 'object') return null
+      const lineNumber = Math.max(1, Math.floor(Number((position as { lineNumber?: unknown }).lineNumber)))
+      const column = Math.max(1, Math.floor(Number((position as { column?: unknown }).column)))
+      if (!Number.isFinite(lineNumber) || !Number.isFinite(column)) return null
+      return { lineNumber, column }
+    }
+
+    const normalizedTabs = Array.isArray(session?.tabs)
+      ? Array.from(new Set(session.tabs.map((item) => normalizePath(item)).filter(Boolean))).slice(0, 5)
+      : []
+    const normalizedActivePathRaw = normalizePath(session?.activePath)
+    const normalizedActivePath = normalizedActivePathRaw && normalizedTabs.includes(normalizedActivePathRaw)
+      ? normalizedActivePathRaw
+      : normalizedTabs[0]
+
+    const cursorEntries: Array<[string, { lineNumber: number; column: number }]> = []
+    const rawCursorPositions = session?.cursorPositions
+    if (rawCursorPositions && typeof rawCursorPositions === 'object') {
+      for (const [pathKey, value] of Object.entries(rawCursorPositions)) {
+        const normalizedPath = normalizePath(pathKey)
+        if (!normalizedPath) continue
+        const normalizedPosition = normalizePosition(value)
+        if (!normalizedPosition) continue
+        cursorEntries.push([normalizedPath, normalizedPosition])
+        if (cursorEntries.length >= 60) break
+      }
+    }
+    const normalizedCursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
+    const normalizedContentSearchHistory = normalizeContentSearchHistory(session?.contentSearchHistory)
+    const normalizedContentSearchScope = normalizeContentSearchScope(session?.contentSearchScope)
+    const normalizedSession = normalizedTabs.length > 0 || normalizedCursorPositions
+      || normalizedContentSearchHistory || normalizedContentSearchScope
+      ? {
+        tabs: normalizedTabs,
+        activePath: normalizedActivePath,
+        cursorPositions: normalizedCursorPositions,
+        contentSearchHistory: normalizedContentSearchHistory,
+        contentSearchScope: normalizedContentSearchScope,
+      }
+      : undefined
+
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId ? { ...project, codeSession: normalizedSession } : project
+      ),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
+  },
+
   setProjectLastMarkdownPreviewMode: async (projectId, mode) => {
     const normalized = mode === 'edit' || mode === 'preview' || mode === 'split' ? mode : undefined
     set((state) => ({
@@ -219,6 +289,20 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
         p.id === projectId ? { ...p, lastOpened: Date.now() } : p
       ),
     }))
+    void persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
+  },
+
+  clearProjectLastOpened: async (projectId) => {
+    const target = get().projects.find((project) => project.id === projectId)
+    if (!target?.lastOpened) return
+    set((state) => ({
+      projects: state.projects.map((project) => (
+        project.id === projectId
+          ? { ...project, lastOpened: undefined }
+          : project
+      )),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   createFolder: async (name, color) => {

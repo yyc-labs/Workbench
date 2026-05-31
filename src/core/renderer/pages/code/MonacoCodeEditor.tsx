@@ -33,6 +33,7 @@ interface MonacoCodeEditorProps {
   onSave: () => void
   onFocusSearch?: () => void
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
+  onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
 }
 
 interface MonacoEnvironmentShape {
@@ -85,6 +86,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   onSave,
   onFocusSearch,
   onScrollStateChange,
+  onCursorPositionChange,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
@@ -94,6 +96,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const onSaveRef = useRef(onSave)
   const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
+  const onCursorPositionChangeRef = useRef(onCursorPositionChange)
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchMode, setSearchMode] = useState<EditorSearchMode>('find')
   const [searchQuery, setSearchQuery] = useState('')
@@ -300,6 +303,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     onScrollStateChangeRef.current = onScrollStateChange
   }, [onScrollStateChange])
 
+  useEffect(() => {
+    onCursorPositionChangeRef.current = onCursorPositionChange
+  }, [onCursorPositionChange])
+
   useImperativeHandle(ref, () => ({
     getScrollState: () => {
       const editor = editorRef.current
@@ -447,6 +454,13 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         })
       })
 
+      editor.onDidChangeCursorPosition((event) => {
+        onCursorPositionChangeRef.current?.({
+          lineNumber: event.position.lineNumber,
+          column: event.position.column,
+        })
+      })
+
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
         onSaveRef.current()
       })
@@ -522,6 +536,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           scrollTop: editor.getScrollTop(),
           scrollHeight: editor.getScrollHeight(),
           viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
+        })
+      }
+
+      const initialPosition = editor.getPosition()
+      if (initialPosition) {
+        onCursorPositionChangeRef.current?.({
+          lineNumber: initialPosition.lineNumber,
+          column: initialPosition.column,
         })
       }
 

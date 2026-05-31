@@ -100,6 +100,10 @@ function sendAiCommitStatus(projectId: string, status: 'running' | 'success' | '
   mainWindow?.webContents.send(IPC.AI_COMMIT_STATUS, { projectId, status })
 }
 
+function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; sessionName?: string }): void {
+  mainWindow?.webContents.send(IPC.RUNTIME_STATE_CHANGED, payload)
+}
+
 function markAiCommitInterruptedIfOrphan(projectId: string): AiCommitTaskSnapshot | undefined {
   const task = getAiCommitTask(projectId)
   if (!task) return undefined
@@ -2036,12 +2040,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC.PROCESS_START,
     (_event, projectId: string, command: string, cwd: string, useWsl?: boolean) => {
-      return processManager?.start(projectId, command, cwd, useWsl) ?? false
+      const started = processManager?.start(projectId, command, cwd, useWsl) ?? false
+      if (started) {
+        emitRuntimeStateChanged({ reason: 'process-start', projectId })
+      }
+      return started
     }
   )
 
   ipcMain.handle(IPC.PROCESS_STOP, (_event, projectId: string) => {
-    return processManager?.stop(projectId) ?? false
+    const stopped = processManager?.stop(projectId) ?? false
+    if (stopped) {
+      emitRuntimeStateChanged({ reason: 'process-stop', projectId })
+    }
+    return stopped
   })
 
   ipcMain.handle(
@@ -2305,6 +2317,7 @@ function registerIpcHandlers(): void {
             createdAt: Date.now(),
             lastOpened: Date.now(),
           })
+          emitRuntimeStateChanged({ reason: 'runtime-started', projectId, sessionName })
 
           resolve(true)
         })
@@ -2321,6 +2334,7 @@ function registerIpcHandlers(): void {
     if (statusHint === 'attached') {
       console.log('[open-terminal] fast path — skipping WSL, focusing directly')
       focusTerminalWindow(sessionName)
+      emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
       return true
     }
 
@@ -2333,6 +2347,7 @@ function registerIpcHandlers(): void {
     console.log(`[open-terminal] clients=${clients}`)
     if (clients > 0) {
       focusTerminalWindow(sessionName)
+      emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
       return true
     }
 
@@ -2353,7 +2368,10 @@ function registerIpcHandlers(): void {
         resolve(false)
       })
 
-      child.on('close', () => resolve(true))
+      child.on('close', () => {
+        emitRuntimeStateChanged({ reason: 'terminal-opened', sessionName })
+        resolve(true)
+      })
 
       child.unref()
     })
@@ -2382,7 +2400,10 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.TMUX_KILL_SESSION, (_event, sessionName: string) => {
-    return tmuxManager.killSession(sessionName)
+    return tmuxManager.killSession(sessionName).then((ok) => {
+      if (ok) emitRuntimeStateChanged({ reason: 'tmux-killed', sessionName })
+      return ok
+    })
   })
 
   ipcMain.handle(IPC.TERMINAL_LIST_ALL, async (): Promise<TerminalProcessInventory> => {
@@ -2405,11 +2426,15 @@ function registerIpcHandlers(): void {
     const tmuxSessionNames = allTmuxSessions.map((s) => s.sessionName).filter(Boolean)
 
     if (tmuxSessionNames.length === 0) {
-      return {
+      const result = {
         managedStopped,
         tmuxKilled: 0,
         tmuxSkipped: 0,
       }
+      if (managedStopped > 0) {
+        emitRuntimeStateChanged({ reason: 'terminal-stop-all' })
+      }
+      return result
     }
 
     await tmuxManager.killSessions(tmuxSessionNames)
@@ -2422,11 +2447,15 @@ function registerIpcHandlers(): void {
       else tmuxKilled += 1
     }
 
-    return {
+    const result = {
       managedStopped,
       tmuxKilled,
       tmuxSkipped,
     }
+    if (managedStopped > 0 || tmuxKilled > 0) {
+      emitRuntimeStateChanged({ reason: 'terminal-stop-all' })
+    }
+    return result
   })
 
 }
@@ -2455,6 +2484,9 @@ app.on('before-quit', async (e) => {
     // Drop registry entries on graceful exit to avoid stale mappings on next boot.
     for (const entry of runtimeEntries) {
       removeRuntimeEntry(entry.projectId)
+    }
+    if (runtimeEntries.length > 0) {
+      emitRuntimeStateChanged({ reason: 'runtime-registry-cleared' })
     }
   }
 

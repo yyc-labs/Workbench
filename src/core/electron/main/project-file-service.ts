@@ -367,6 +367,16 @@ function normalizeSearchLineText(lineText: string): string {
   return lineText.replace(/\r?\n$/, '')
 }
 
+function normalizeContentSearchIncludeGlobs(includeGlobs: unknown): string[] {
+  if (!Array.isArray(includeGlobs)) return []
+  const normalized = Array.from(new Set(
+    includeGlobs
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item) => item.length > 0)
+  ))
+  return normalized.slice(0, 24)
+}
+
 function parseSearchMatchLine(rawLine: string): RgJsonMatchMessage | null {
   const trimmed = rawLine.trim()
   if (!trimmed) return null
@@ -756,6 +766,7 @@ export async function searchProjectContent(
 
   const rootRealPath = await resolveRoot(projectPath)
   const caseSensitive = options?.caseSensitive === true
+  const includeGlobs = normalizeContentSearchIncludeGlobs(options?.includeGlobs)
   const args = [
     '--json',
     '--hidden',
@@ -768,6 +779,7 @@ export async function searchProjectContent(
     String(RG_CONTENT_SEARCH_MAX_COLUMNS),
     '--max-count',
     String(MAX_CONTENT_SEARCH_MATCHES_PER_FILE),
+    ...includeGlobs.flatMap((glob) => ['--glob', glob]),
     ...RG_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
     '-e',
     normalizedQuery,

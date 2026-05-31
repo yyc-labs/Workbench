@@ -1,4 +1,4 @@
-import { Search, Settings, Plus, Zap, SlidersHorizontal } from 'lucide-react'
+import { Search, Settings, Plus, Zap, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import type { EnvFilter } from './home.types'
@@ -48,8 +48,25 @@ function HomeToolbar({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search projects..."
-          className="quiet-control h-10 pl-11 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
+          className="quiet-control h-10 pl-11 pr-10 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
+        <button
+          type="button"
+          className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+            searchQuery
+              ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+              : 'pointer-events-none opacity-0'
+          }`}
+          onClick={() => {
+            onSearchChange('')
+            searchRef.current?.focus()
+          }}
+          aria-label="Clear search"
+          title="Clear search"
+          tabIndex={searchQuery ? 0 : -1}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <div className="quiet-control ml-auto flex items-center rounded-full px-1.5 py-1 gap-2.5">

@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
-import { MemoryRouter as Router, Routes, Route } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { MemoryRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { HomePage } from './pages/Home'
 import { DetailPage } from './pages/Detail'
 import { SettingsPage } from './pages/Settings'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
-import { Copy, Minus, Square, X } from 'lucide-react'
+import { Clock3, Copy, Minus, Square, X } from 'lucide-react'
 import { GlobalTitleTooltipBridge } from './components/GlobalTitleTooltipBridge'
+import { RecentProjectsDrawer } from './components/RecentProjectsDrawer'
 import { useMouseGestureNavigator } from './hooks/useMouseGestureNavigator'
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
@@ -49,26 +50,76 @@ function ProcessOutputListener() {
   const appendOutput = useAppStore((s) => s.appendOutput)
   const updateProcessStatus = useAppStore((s) => s.updateProcessStatus)
   const handleProcessExit = useAppStore((s) => s.handleProcessExit)
+  const refreshSessions = useAppStore((s) => s.refreshSessions)
 
   useEffect(() => {
     const unsubOutput = window.electronAPI.onProcessOutput(
       ({ projectId, data }) => { appendOutput(projectId, data) }
     )
     const unsubStatus = window.electronAPI.onProcessStatus(
-      ({ projectId, status }) => { updateProcessStatus(projectId, status) }
+      ({ projectId, status }) => {
+        updateProcessStatus(projectId, status)
+        void refreshSessions()
+      }
     )
     const unsubExit = window.electronAPI.onProcessExit(
-      ({ projectId, code }) => { handleProcessExit(projectId, code) }
+      ({ projectId, code }) => {
+        handleProcessExit(projectId, code)
+        void refreshSessions()
+      }
     )
     return () => { unsubOutput(); unsubStatus(); unsubExit() }
-  }, [appendOutput, updateProcessStatus, handleProcessExit])
+  }, [appendOutput, updateProcessStatus, handleProcessExit, refreshSessions])
+
+  return null
+}
+
+/** Event-driven session refresh path — main process pushes runtime/tmux changes.
+ *  Debounced to coalesce bursts from related IPC actions. */
+function RuntimeStateListener() {
+  const projectIds = useAppStore((s) =>
+    s.projects.map((p) => p.id).sort().join(',')
+  )
+  const loadRuntimeEntries = useAppStore((s) => s.loadRuntimeEntries)
+  const refreshSessions = useAppStore((s) => s.refreshSessions)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (!projectIds) return
+
+    const flush = () => {
+      timerRef.current = null
+      void (async () => {
+        await loadRuntimeEntries()
+        await refreshSessions()
+      })()
+    }
+
+    const scheduleRefresh = () => {
+      if (timerRef.current !== null) return
+      timerRef.current = setTimeout(flush, 120)
+    }
+
+    const unsubscribe = window.electronAPI.onRuntimeStateChanged(() => {
+      scheduleRefresh()
+    })
+
+    return () => {
+      unsubscribe()
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [projectIds, loadRuntimeEntries, refreshSessions])
 
   return null
 }
 
 /** Centralized session polling — RuntimeManager calls onRefresh on each tick,
  *  onRefresh is the store's refreshSessions (single source of truth).
- *  Uses stable project identity string to avoid re-subscribing. */
+ *  Uses stable project identity string to avoid re-subscribing.
+ *  Event-driven updates are primary; polling is low-frequency fallback only. */
 function SessionPoller() {
   const projectIds = useAppStore((s) =>
     s.projects.map((p) => p.id).sort().join(',')
@@ -78,7 +129,7 @@ function SessionPoller() {
 
   useEffect(() => {
     if (projects.length === 0) return
-    runtimeManager.startPolling(() => { refreshSessions() }, 10000)
+    runtimeManager.startPolling(() => { refreshSessions() }, 60000)
     return () => runtimeManager.stopPolling()
   }, [projectIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -142,6 +193,68 @@ function MouseGestureNavigator() {
         </div>
       </div>
     </div>
+  )
+}
+
+function GlobalRecentProjectsDrawerHost() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const projects = useAppStore((s) => s.projects)
+  const updateLastOpened = useAppStore((s) => s.updateLastOpened)
+  const clearProjectLastOpened = useAppStore((s) => s.clearProjectLastOpened)
+  const [open, setOpen] = useState(false)
+
+  const currentProjectId = useMemo(() => {
+    const segments = location.pathname.split('/').filter(Boolean)
+    return segments[0] === 'project' && segments[1] ? segments[1] : undefined
+  }, [location.pathname])
+
+  useEffect(() => {
+    const onOpenRecentDrawer = () => setOpen(true)
+    window.addEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+    return () => {
+      window.removeEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
+        event.preventDefault()
+        setOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  return (
+    <>
+      <button
+        type="button"
+        className="fixed bottom-5 right-5 z-[91] quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+        onClick={() => setOpen(true)}
+        title="最近项目（右键下滑或 Ctrl/Cmd+Shift+P）"
+      >
+        <Clock3 className="h-3.5 w-3.5" />
+        最近项目
+      </button>
+
+      <RecentProjectsDrawer
+        open={open}
+        currentProjectId={currentProjectId}
+        projects={projects}
+        onClose={() => setOpen(false)}
+        onSelectProject={(projectId) => {
+          updateLastOpened(projectId)
+          setOpen(false)
+          navigate(`/project/${projectId}/code`)
+        }}
+        onRemoveProject={(projectId) => {
+          void clearProjectLastOpened(projectId)
+        }}
+      />
+    </>
   )
 }
 
@@ -232,8 +345,10 @@ export function App() {
       <AppInit />
       <ThemeSync />
       <ProcessOutputListener />
+      <RuntimeStateListener />
       <SessionPoller />
       <MouseGestureNavigator />
+      <GlobalRecentProjectsDrawerHost />
       <GlobalTitleTooltipBridge />
       <div className="app-shell">
         <WindowTitleBar />

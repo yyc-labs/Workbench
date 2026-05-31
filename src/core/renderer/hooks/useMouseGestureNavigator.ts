@@ -7,14 +7,14 @@ export type MouseGestureHint = {
   visible: boolean
   label: string
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | null
   points: GesturePoint[]
   cursor: GesturePoint | null
 }
 
 type GesturePreview = {
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | null
   label: string
 }
 
@@ -31,6 +31,7 @@ const ACTIVATE_DISTANCE = 8
 const SAMPLE_MIN_DISTANCE = 6
 const MAX_POINTS = 96
 const HORIZONTAL_THRESHOLD = 72
+const VERTICAL_DOWN_THRESHOLD = 72
 const ANGLE_RATIO = 1.25
 const CIRCLE_MIN_POINTS = 18
 const CIRCLE_MIN_DIAMETER = 44
@@ -41,6 +42,20 @@ const CIRCLE_CLOSURE_RATIO = 0.72
 const CIRCLE_MIN_SWEEP_RAD = Math.PI * 1.45
 const CIRCLE_MIN_PATH_RATIO = 0.65
 const CIRCLE_MAX_PATH_RATIO = 2.25
+const RECENT_GESTURE_IGNORE_SELECTOR = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  '[contenteditable="true"]',
+  '.xterm',
+  '[role="dialog"]',
+].join(', ')
+
+function shouldSkipRecentGesture(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(RECENT_GESTURE_IGNORE_SELECTOR))
+}
 
 function normalizeDeltaAngle(value: number): number {
   let result = value
@@ -112,7 +127,7 @@ function detectCircleGesture(rawPoints: GesturePoint[]): boolean {
   return true
 }
 
-function toPreview(dx: number, dy: number, points: GesturePoint[]): GesturePreview {
+function toPreview(dx: number, dy: number, points: GesturePoint[], allowRecentGesture: boolean): GesturePreview {
   if (detectCircleGesture(points)) {
     return {
       status: 'ready',
@@ -124,6 +139,14 @@ function toPreview(dx: number, dy: number, points: GesturePoint[]): GesturePrevi
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
 
+  if (allowRecentGesture && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
+    return {
+      status: 'ready',
+      action: 'recent',
+      label: '松开后打开最近项目',
+    }
+  }
+
   if (absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO) {
     const action = dx < 0 ? 'back' : 'forward'
     return {
@@ -133,11 +156,19 @@ function toPreview(dx: number, dy: number, points: GesturePoint[]): GesturePrevi
     }
   }
 
+  if (allowRecentGesture && dy > ACTIVATE_DISTANCE && absY > absX * 1.05) {
+    return {
+      status: 'pending',
+      action: 'recent',
+      label: '继续向下拖动（最近项目）…',
+    }
+  }
+
   if (absY > absX * 1.05 && absY >= ACTIVATE_DISTANCE * 2) {
     return {
       status: 'invalid',
       action: null,
-      label: '无效手势：请水平拖动或画圆',
+      label: allowRecentGesture ? '无效手势：请向下/水平拖动或画圆' : '无效手势：请水平拖动或画圆',
     }
   }
 
@@ -164,6 +195,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     tracking: false,
     activated: false,
     moved: false,
+    ignoreRecentInThisGesture: false,
     startX: 0,
     startY: 0,
     lastDx: 0,
@@ -222,6 +254,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.moved = false
+      stateRef.current.ignoreRecentInThisGesture = shouldSkipRecentGesture(e.target)
       stateRef.current.startX = e.clientX
       stateRef.current.startY = e.clientY
       stateRef.current.lastDx = 0
@@ -234,11 +267,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     const onMouseMove = (e: MouseEvent) => {
       const state = stateRef.current
       if (!state.tracking) return
+      const allowRecentGesture = !state.ignoreRecentInThisGesture
 
       if ((e.buttons & 2) === 0) {
         state.tracking = false
         state.activated = false
         state.moved = false
+        state.ignoreRecentInThisGesture = false
         state.points = []
         clearHint()
         return
@@ -275,7 +310,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (!state.activated) return
       const gesturePoints = [...state.points, { x: e.clientX, y: e.clientY }]
-      const preview = toPreview(state.lastDx, state.lastDy, gesturePoints)
+      const preview = toPreview(state.lastDx, state.lastDy, gesturePoints, allowRecentGesture)
       scheduleHint({
         visible: true,
         label: preview.label,
@@ -302,12 +337,17 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const dy = state.lastDy
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
-      const passed = absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
+      const passedHorizontal = absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
       const releasedPoint = { x: e.clientX, y: e.clientY }
       const gesturePoints = state.points.length > 0
         ? [...state.points, releasedPoint]
         : [{ x: state.startX, y: state.startY }, releasedPoint]
       const isCircle = detectCircleGesture(gesturePoints)
+      const segments = location.pathname.split('/').filter(Boolean)
+      const isDetailRoute = segments[0] === 'project' && segments.length >= 2
+      const passedDown = !state.ignoreRecentInThisGesture
+        && dy >= VERTICAL_DOWN_THRESHOLD
+        && dy >= absX * ANGLE_RATIO
 
       if (hadGestureMovement && isCircle) {
         hideHintImmediately()
@@ -320,10 +360,15 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         return
       }
 
-      if (hadGestureMovement && passed) {
+      if (hadGestureMovement && passedDown) {
         hideHintImmediately()
-        const segments = location.pathname.split('/').filter(Boolean)
-        const isDetailRoute = segments[0] === 'project' && segments.length >= 2
+        window.dispatchEvent(new CustomEvent('app:open-recent-project-drawer'))
+        state.points = []
+        return
+      }
+
+      if (hadGestureMovement && passedHorizontal) {
+        hideHintImmediately()
         const currentPane = isDetailRoute ? (segments[2] ?? 'code') : null
         const projectId = isDetailRoute ? segments[1] : null
         const isBack = dx < 0
@@ -343,6 +388,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       }
 
       state.points = []
+      state.ignoreRecentInThisGesture = false
       hideHintImmediately()
     }
 
@@ -359,6 +405,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.tracking = false
       stateRef.current.activated = false
       stateRef.current.moved = false
+      stateRef.current.ignoreRecentInThisGesture = false
       stateRef.current.points = []
       hideHintImmediately()
     }

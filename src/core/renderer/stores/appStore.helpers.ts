@@ -102,6 +102,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   lastCodeFile?: string
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
   codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
+  codeSession?: ProjectInfo['codeSession']
 }> {
   return projects.map((p) => ({
     path: p.path,
@@ -118,6 +119,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     lastCodeFile: p.lastCodeFile,
     lastMarkdownPreviewMode: p.lastMarkdownPreviewMode,
     codeFileDrawerState: p.codeFileDrawerState,
+    codeSession: p.codeSession,
   }))
 }
 
@@ -137,6 +139,7 @@ export function toRemovedProjectSnapshot(project: ProjectInfo): RemovedProjectSn
     lastCodeFile: project.lastCodeFile,
     lastMarkdownPreviewMode: project.lastMarkdownPreviewMode,
     codeFileDrawerState: project.codeFileDrawerState,
+    codeSession: project.codeSession,
     removedAt: Date.now(),
   }
 }
@@ -157,21 +160,27 @@ export function applySavedProjectSnapshot(
     lastCodeFile?: string
     lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
     codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
+    codeSession?: ProjectInfo['codeSession']
   }
 ): ProjectInfo {
-  if (saved.customCommand) project.customCommand = saved.customCommand
-  if (saved.runStartupMode) project.runStartupMode = saved.runStartupMode
-  if (saved.customName?.trim()) project.customName = saved.customName.trim()
-  if (saved.customType?.trim()) project.customType = saved.customType.trim()
-  if (saved.pinned) project.pinned = saved.pinned
-  if (saved.lastOpened) project.lastOpened = saved.lastOpened
-  if (saved.cli) project.cli = saved.cli
-  project.docLinks = saved.docLinks ?? []
-  project.folderId = saved.folderId
-  project.tagIds = saved.tagIds ?? []
-  project.lastCodeFile = saved.lastCodeFile
-  project.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
-  project.codeFileDrawerState = saved.codeFileDrawerState
+  const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => (
+    Object.prototype.hasOwnProperty.call(saved, key)
+  )
+
+  if (hasSavedField('customCommand')) project.customCommand = saved.customCommand
+  if (hasSavedField('runStartupMode')) project.runStartupMode = saved.runStartupMode
+  if (hasSavedField('customName')) project.customName = saved.customName?.trim()
+  if (hasSavedField('customType')) project.customType = saved.customType?.trim()
+  if (hasSavedField('pinned')) project.pinned = saved.pinned
+  if (hasSavedField('lastOpened')) project.lastOpened = saved.lastOpened
+  if (hasSavedField('cli')) project.cli = saved.cli
+  if (hasSavedField('docLinks')) project.docLinks = saved.docLinks ?? []
+  if (hasSavedField('folderId')) project.folderId = saved.folderId
+  if (hasSavedField('tagIds')) project.tagIds = saved.tagIds ?? []
+  if (hasSavedField('lastCodeFile')) project.lastCodeFile = saved.lastCodeFile
+  if (hasSavedField('lastMarkdownPreviewMode')) project.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
+  if (hasSavedField('codeFileDrawerState')) project.codeFileDrawerState = saved.codeFileDrawerState
+  if (hasSavedField('codeSession')) project.codeSession = saved.codeSession
   return project
 }
 

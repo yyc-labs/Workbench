@@ -5,6 +5,8 @@ import type { AppConfig } from '../../shared/types'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, PROJECT_DOC_LINK_FALLBACK_TAG } from '../../renderer/lib/projectDocLinks'
 
 const CONFIG_FILE = 'project-launcher-config.json'
+const MAX_CODE_SESSION_TABS = 5
+const MAX_CODE_SESSION_CURSOR_ENTRIES = 60
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
@@ -69,6 +71,56 @@ function normalizeDocLinkTags(
     .map((item, index) => ({ ...item, sortOrder: index }))
 }
 
+function normalizeCodeSession(value: unknown): {
+  tabs: string[]
+  activePath?: string
+  cursorPositions?: Record<string, { lineNumber: number; column: number }>
+} | undefined {
+  if (!value || typeof value !== 'object') return undefined
+
+  const raw = value as {
+    tabs?: unknown
+    activePath?: unknown
+    cursorPositions?: unknown
+  }
+  const tabs = Array.isArray(raw.tabs)
+    ? Array.from(new Set(raw.tabs
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim())
+      .filter(Boolean))).slice(0, MAX_CODE_SESSION_TABS)
+    : []
+
+  const activePath = typeof raw.activePath === 'string' ? raw.activePath.trim() : ''
+
+  const cursorEntries: Array<[string, { lineNumber: number; column: number }]> = []
+  if (raw.cursorPositions && typeof raw.cursorPositions === 'object') {
+    for (const [rawPath, rawPosition] of Object.entries(raw.cursorPositions as Record<string, unknown>)) {
+      const path = rawPath.trim()
+      if (!path) continue
+      if (!rawPosition || typeof rawPosition !== 'object') continue
+      const lineNumber = Math.max(1, Math.floor(Number((rawPosition as { lineNumber?: unknown }).lineNumber)))
+      const column = Math.max(1, Math.floor(Number((rawPosition as { column?: unknown }).column)))
+      if (!Number.isFinite(lineNumber) || !Number.isFinite(column)) continue
+      cursorEntries.push([path, { lineNumber, column }])
+      if (cursorEntries.length >= MAX_CODE_SESSION_CURSOR_ENTRIES) break
+    }
+  }
+
+  const cursorPositions = cursorEntries.length > 0
+    ? Object.fromEntries(cursorEntries)
+    : undefined
+
+  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
+
+  if (tabs.length <= 0 && !cursorPositions) return undefined
+
+  return {
+    tabs,
+    activePath: normalizedActivePath,
+    cursorPositions,
+  }
+}
+
 export function loadConfig(): AppConfig {
   if (cachedConfig) return cachedConfig
 
@@ -86,6 +138,7 @@ export function loadConfig(): AppConfig {
           ? project.codeFileDrawerState.recents.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
           : []
         const hasDrawerState = favorites.length > 0 || recents.length > 0
+        const codeSession = normalizeCodeSession(project.codeSession)
         return {
           ...project,
           codeFileDrawerState: hasDrawerState
@@ -94,6 +147,7 @@ export function loadConfig(): AppConfig {
               recents: Array.from(new Set(recents)).slice(0, 40),
             }
             : undefined,
+          codeSession,
         }
       })
       : []
@@ -106,6 +160,7 @@ export function loadConfig(): AppConfig {
           ? project.codeFileDrawerState.recents.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
           : []
         const hasDrawerState = favorites.length > 0 || recents.length > 0
+        const codeSession = normalizeCodeSession(project.codeSession)
         return {
           ...project,
           removedAt: Number.isFinite(project.removedAt) ? Math.trunc(project.removedAt) : Date.now(),
@@ -115,6 +170,7 @@ export function loadConfig(): AppConfig {
               recents: Array.from(new Set(recents)).slice(0, 40),
             }
             : undefined,
+          codeSession,
         }
       })
       : []

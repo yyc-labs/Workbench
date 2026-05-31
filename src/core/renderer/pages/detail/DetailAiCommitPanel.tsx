@@ -1,7 +1,8 @@
-import { type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Bot,
   Check,
   ChevronDown,
   CloudDownload,
@@ -57,6 +58,10 @@ type DetailAiCommitPanelProps = {
   flowInitialFocusDoneRef: MutableRefObject<boolean>
   flowLastFocusedStepRef: MutableRefObject<string | null>
   aiCommitStatus: AiCommitStatus
+  isAiEnabled: boolean
+  aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
+  onAiAutoCommit: () => void
+  onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
 }
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
@@ -484,6 +489,11 @@ function DetailAiCommitPanel({
   onRefreshGitSnapshot,
   activeCommitHash,
   setActiveCommitHash,
+  aiCommitStatus,
+  isAiEnabled,
+  aiAutoCommitButtonRef,
+  onAiAutoCommit,
+  onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
@@ -1209,7 +1219,7 @@ function DetailAiCommitPanel({
       <aside className="h-full min-h-0 min-w-0 overflow-hidden rounded-[24px] surface-card">
         <div className="flex h-full min-h-0 flex-col gap-4 p-4">
           <section className="shrink-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 p-4">
-          <div className="flex items-start gap-4">
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="section-label">AI Commit</p>
@@ -1234,6 +1244,34 @@ function DetailAiCommitPanel({
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="shrink-0 self-center">
+              <button
+                ref={aiAutoCommitButtonRef}
+                type="button"
+                className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+                  ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                  : aiCommitStatus === 'error'
+                    ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                    : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                  }`}
+                style={
+                  aiCommitStatus === 'running'
+                    ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                    : aiCommitStatus === 'error'
+                      ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                      : undefined
+                }
+                onClick={() => {
+                  onAiAutoCommit()
+                }}
+                onContextMenu={onAiAutoCommitContextMenu}
+                disabled={aiCommitStatus === 'running'}
+                title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
+              </button>
             </div>
           </div>
         </section>

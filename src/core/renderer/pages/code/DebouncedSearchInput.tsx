@@ -10,6 +10,8 @@ interface DebouncedSearchInputProps {
   leadingIcon: ReactNode
   trailingAction?: ReactNode
   inputRef?: Ref<HTMLInputElement>
+  syncValue?: string
+  syncNonce?: number
 }
 
 export function DebouncedSearchInput({
@@ -20,9 +22,12 @@ export function DebouncedSearchInput({
   leadingIcon,
   trailingAction,
   inputRef,
+  syncValue,
+  syncNonce,
 }: DebouncedSearchInputProps) {
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(syncValue ?? '')
   const lastEmittedRef = useRef('')
+  const lastSyncSignatureRef = useRef<string>('')
 
   const emitQuery = useCallback((nextValue: string) => {
     if (lastEmittedRef.current === nextValue) return
@@ -45,6 +50,15 @@ export function DebouncedSearchInput({
       window.clearTimeout(timer)
     }
   }, [debounceMs, draft, emitQuery])
+
+  useEffect(() => {
+    if (typeof syncValue !== 'string') return
+    const signature = `${syncNonce ?? 0}:${syncValue}`
+    if (signature === lastSyncSignatureRef.current) return
+    lastSyncSignatureRef.current = signature
+    setDraft(syncValue)
+    emitQuery(syncValue)
+  }, [emitQuery, syncNonce, syncValue])
 
   const hasValue = draft.trim().length > 0
 

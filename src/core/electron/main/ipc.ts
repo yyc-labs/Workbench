@@ -7,6 +7,7 @@ export const IPC = {
   PROCESS_STATUS: 'process:status',
   PROCESS_EXIT: 'process:exit',
   PROCESS_RESIZE: 'process:resize',
+  RUNTIME_STATE_CHANGED: 'runtime:state-changed',
   AI_COMMIT_RUN: 'ai-commit:run',
   AI_COMMIT_GET_STATE: 'ai-commit:get-state',
   AI_COMMIT_OUTPUT: 'ai-commit:output',

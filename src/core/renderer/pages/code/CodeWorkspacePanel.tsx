@@ -6,7 +6,7 @@ import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectCodeSession, ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
@@ -41,6 +41,12 @@ const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
 const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
+const MAX_PROJECT_CODE_SESSION_TABS = 5
+const MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS = 60
+const PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS = 220
+const MAX_CONTENT_SEARCH_HISTORY = 12
+const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
+const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
 
 function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
   if (themeMode === 'dark') return 'vs-dark'
@@ -282,13 +288,116 @@ function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number 
   return 0
 }
 
+function fileNameFromRelativePath(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/')
+  const segments = normalized.split('/')
+  return segments[segments.length - 1] || relativePath
+}
+
 type EditorSearchMode = 'find' | 'replace'
+type EditorCursorPosition = { lineNumber: number; column: number }
+
+function normalizeContentSearchHistory(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(
+    value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter((item) => item.length > 0)
+  )).slice(0, MAX_CONTENT_SEARCH_HISTORY)
+}
+
+function normalizeContentSearchScope(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.trim()
+}
+
+function normalizeContentSearchScopeToken(value: string): string {
+  const token = value.trim()
+  if (!token) return ''
+
+  if (token.startsWith('.')) {
+    return `*${token}`
+  }
+
+  if (!token.includes('*') && !token.includes('/') && /^[A-Za-z0-9_-]+$/.test(token)) {
+    return `*.${token}`
+  }
+
+  if (token.endsWith('/') || (!token.includes('*') && token.includes('/'))) {
+    const normalized = token.replace(/\/+$/, '')
+    return `${normalized}/**`
+  }
+
+  return token
+}
+
+function parseContentSearchScopeGlobs(scopeInput: string): string[] {
+  const tokens = scopeInput
+    .split(CONTENT_SEARCH_SCOPE_SEPARATOR_RE)
+    .map(normalizeContentSearchScopeToken)
+    .filter((item) => item.length > 0)
+  return Array.from(new Set(tokens)).slice(0, MAX_CONTENT_SEARCH_SCOPE_GLOBS)
+}
+
+function normalizeProjectCodeCursorPosition(
+  value: unknown
+): EditorCursorPosition | null {
+  if (!value || typeof value !== 'object') return null
+  const lineNumber = Math.max(1, Math.floor(Number((value as { lineNumber?: unknown }).lineNumber)))
+  const column = Math.max(1, Math.floor(Number((value as { column?: unknown }).column)))
+  if (!Number.isFinite(lineNumber) || !Number.isFinite(column)) return null
+  return { lineNumber, column }
+}
+
+function normalizeProjectCodeSession(value: ProjectCodeSession | undefined): ProjectCodeSession | undefined {
+  if (!value) return undefined
+  const tabs = Array.isArray(value.tabs)
+    ? Array.from(new Set(value.tabs.map((item) => item.trim()).filter(Boolean))).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
+    : []
+
+  const activePath = typeof value.activePath === 'string' ? value.activePath.trim() : ''
+  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
+  const cursorEntries: Array<[string, EditorCursorPosition]> = []
+
+  if (value.cursorPositions && typeof value.cursorPositions === 'object') {
+    for (const [pathKey, position] of Object.entries(value.cursorPositions)) {
+      const normalizedPath = pathKey.trim()
+      if (!normalizedPath) continue
+      const normalizedPosition = normalizeProjectCodeCursorPosition(position)
+      if (!normalizedPosition) continue
+      cursorEntries.push([normalizedPath, normalizedPosition])
+      if (cursorEntries.length >= MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) break
+    }
+  }
+
+  const cursorPositions = cursorEntries.length > 0
+    ? Object.fromEntries(cursorEntries)
+    : undefined
+
+  const contentSearchHistory = normalizeContentSearchHistory(value.contentSearchHistory)
+  const contentSearchScope = normalizeContentSearchScope(value.contentSearchScope)
+
+  if (tabs.length <= 0 && !cursorPositions && contentSearchHistory.length <= 0 && !contentSearchScope) return undefined
+
+  return {
+    tabs,
+    activePath: normalizedActivePath,
+    cursorPositions,
+    contentSearchHistory: contentSearchHistory.length > 0 ? contentSearchHistory : undefined,
+    contentSearchScope: contentSearchScope || undefined,
+  }
+}
 
 export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
   const projectMeta = useAppStore((s) => s.projects.find((p) => p.id === projectId))
   const persistedLastCodeFile = projectMeta?.lastCodeFile
+  const persistedProjectCodeSession = useMemo(
+    () => normalizeProjectCodeSession(projectMeta?.codeSession),
+    [projectMeta?.codeSession]
+  )
   const persistedLastMarkdownPreviewMode = projectMeta?.lastMarkdownPreviewMode
   const persistedCodeFileDrawerState = projectMeta?.codeFileDrawerState
+  const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
@@ -308,6 +417,13 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const [contentSearchQuery, setContentSearchQuery] = useState('')
+  const [contentSearchQuerySyncNonce, setContentSearchQuerySyncNonce] = useState(0)
+  const [contentSearchHistory, setContentSearchHistory] = useState<string[]>(
+    () => persistedProjectCodeSession?.contentSearchHistory ?? []
+  )
+  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
+    () => persistedProjectCodeSession?.contentSearchScope ?? ''
+  )
   const [contentSearchCaseSensitive, setContentSearchCaseSensitive] = useState(false)
   const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
     files: [],
@@ -317,6 +433,12 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [isSearchingContent, setIsSearchingContent] = useState(false)
   const [contentSearchError, setContentSearchError] = useState<string | null>(null)
   const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
+  const [openTabPaths, setOpenTabPaths] = useState<string[]>(
+    () => persistedProjectCodeSession?.tabs ?? []
+  )
+  const [cursorPositionsByPath, setCursorPositionsByPath] = useState<Record<string, EditorCursorPosition>>(
+    () => persistedProjectCodeSession?.cursorPositions ?? {}
+  )
   const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
     relativePath: string
     lineNumber: number
@@ -349,13 +471,40 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const searchRequestSeqRef = useRef(0)
   const contentSearchRequestSeqRef = useRef(0)
   const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
+  const pendingCursorRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
+  const saveCodeSessionTimerRef = useRef<number | null>(null)
+  const lastPersistedCodeSessionJsonRef = useRef<string>('')
+  const isRestoringCodeSessionRef = useRef(true)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
   const captureCurrentModeScrollRef = useRef<() => void>(() => {})
+  const pushOpenTabPath = useCallback((tabs: string[], relativePath: string): string[] => {
+    const normalizedPath = relativePath.trim()
+    if (!normalizedPath) return tabs
+    if (tabs.includes(normalizedPath)) return tabs
+    return [...tabs, normalizedPath].slice(-MAX_PROJECT_CODE_SESSION_TABS)
+  }, [])
   const handleBeforeOpenCodeFile = useCallback(() => {
     captureCurrentModeScrollRef.current()
   }, [])
   const handleDidOpenCodeFile = useCallback((result: ProjectFileReadResult) => {
+    const nextPath = result.relativePath.trim()
+    if (nextPath) {
+      setOpenTabPaths((prev) => pushOpenTabPath(prev, nextPath))
+      if (isRestoringCodeSessionRef.current) {
+        const persistedCursor = persistedProjectCodeSession?.cursorPositions?.[nextPath]
+        if (persistedCursor) {
+          pendingCursorRevealRef.current = {
+            relativePath: nextPath,
+            lineNumber: persistedCursor.lineNumber,
+            column: persistedCursor.column,
+          }
+        }
+      } else {
+        pendingCursorRevealRef.current = null
+      }
+    }
+
     splitSyncReadyRef.current = false
     setExpandedDirectories((prev) => {
       const next = new Set(prev)
@@ -368,7 +517,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       return changed ? next : prev
     })
     setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
-  }, [])
+  }, [persistedProjectCodeSession?.cursorPositions, pushOpenTabPath])
   const {
     activeFile,
     editorValue,
@@ -603,9 +752,71 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   }, [persistedCodeFileDrawerState, projectId])
 
   useEffect(() => {
+    const normalizedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
+    setOpenTabPaths(normalizedSession?.tabs ?? [])
+    setCursorPositionsByPath(normalizedSession?.cursorPositions ?? {})
+    setContentSearchHistory(normalizedSession?.contentSearchHistory ?? [])
+    setContentSearchScopeInput(normalizedSession?.contentSearchScope ?? '')
+    lastPersistedCodeSessionJsonRef.current = JSON.stringify(normalizedSession ?? null)
+    if (saveCodeSessionTimerRef.current != null) {
+      window.clearTimeout(saveCodeSessionTimerRef.current)
+      saveCodeSessionTimerRef.current = null
+    }
+    isRestoringCodeSessionRef.current = true
+    pendingCursorRevealRef.current = null
+  }, [persistedProjectCodeSession, projectId])
+
+  useEffect(() => {
     if (!projectId) return
     void setProjectCodeFileDrawerState(projectId, codeFileDrawerState)
   }, [codeFileDrawerState, projectId, setProjectCodeFileDrawerState])
+
+  useEffect(() => {
+    if (!projectId) return
+    const activePath = activeRelativePath?.trim() || undefined
+    const tabs = openTabPaths.slice(0, MAX_PROJECT_CODE_SESSION_TABS)
+    if (activePath && !tabs.includes(activePath)) {
+      tabs.push(activePath)
+      if (tabs.length > MAX_PROJECT_CODE_SESSION_TABS) {
+        tabs.splice(0, tabs.length - MAX_PROJECT_CODE_SESSION_TABS)
+      }
+    }
+
+    let sessionCursorEntries = Object.entries(cursorPositionsByPath)
+      .filter(([pathKey]) => pathKey.trim().length > 0)
+    const sessionTabSet = new Set(tabs)
+    sessionCursorEntries = sessionCursorEntries.filter(([pathKey]) => sessionTabSet.has(pathKey))
+    if (sessionCursorEntries.length > MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) {
+      sessionCursorEntries = sessionCursorEntries.slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
+    }
+
+    const nextSession = normalizeProjectCodeSession({
+      tabs,
+      activePath,
+      cursorPositions: Object.fromEntries(sessionCursorEntries),
+      contentSearchHistory,
+      contentSearchScope: contentSearchScopeInput,
+    })
+    const nextSessionJson = JSON.stringify(nextSession ?? null)
+    if (nextSessionJson === lastPersistedCodeSessionJsonRef.current) return
+
+    if (saveCodeSessionTimerRef.current != null) {
+      window.clearTimeout(saveCodeSessionTimerRef.current)
+    }
+    saveCodeSessionTimerRef.current = window.setTimeout(() => {
+      lastPersistedCodeSessionJsonRef.current = nextSessionJson
+      void setProjectCodeSession(projectId, nextSession)
+      saveCodeSessionTimerRef.current = null
+    }, PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS)
+  }, [
+    activeRelativePath,
+    contentSearchHistory,
+    contentSearchScopeInput,
+    cursorPositionsByPath,
+    openTabPaths,
+    projectId,
+    setProjectCodeSession,
+  ])
 
   useEffect(() => {
     const root = document.documentElement
@@ -635,8 +846,16 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     setCodeFileDrawerState((prev) => removeCodeFilePathFromDrawerState(prev, relativePath))
   }, [])
 
+  const contentSearchScopeGlobs = useMemo(
+    () => parseContentSearchScopeGlobs(contentSearchScopeInput),
+    [contentSearchScopeInput]
+  )
+  const contentSearchScopeSummary = useMemo(() => (
+    contentSearchScopeGlobs.length > 0 ? contentSearchScopeGlobs.join(' · ') : 'All files'
+  ), [contentSearchScopeGlobs])
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const hasContentSearchQuery = contentSearchQuery.trim().length > 0
+  const hasContentSearchScope = contentSearchScopeGlobs.length > 0
   const showContentSearchSummary = hasContentSearchQuery && !isSearchingContent && !contentSearchError
   const canToggleContentSearchTree = hasContentSearchQuery && !isSearchingContent && contentSearchResult.files.length > 0
   const contentSearchToggleLabel = isContentSearchAllExpanded ? 'Collapse all' : 'Expand all'
@@ -645,6 +864,21 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   }, [])
   const handleContentSearchQueryChange = useCallback((nextValue: string) => {
     setContentSearchQuery(nextValue)
+  }, [])
+  const pushContentSearchHistory = useCallback((query: string) => {
+    const normalized = query.trim()
+    if (!normalized) return
+    setContentSearchHistory((prev) => [normalized, ...prev.filter((item) => item !== normalized)].slice(0, MAX_CONTENT_SEARCH_HISTORY))
+  }, [])
+  const applyContentSearchQueryFromHistory = useCallback((query: string) => {
+    const normalized = query.trim()
+    if (!normalized) return
+    setContentSearchQuery(normalized)
+    setContentSearchQuerySyncNonce((prev) => prev + 1)
+    pushContentSearchHistory(normalized)
+  }, [pushContentSearchHistory])
+  const removeContentSearchHistoryItem = useCallback((query: string) => {
+    setContentSearchHistory((prev) => prev.filter((item) => item !== query))
   }, [])
   const focusSearchInputByMode = useCallback(() => {
     const focusTarget = () => {
@@ -805,11 +1039,13 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
 
     void window.electronAPI.searchProjectContent(projectPath, normalizedQuery, {
       caseSensitive: contentSearchCaseSensitive,
+      includeGlobs: contentSearchScopeGlobs.length > 0 ? contentSearchScopeGlobs : undefined,
     })
       .then((result) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setContentSearchResult(result)
         setIsContentSearchAllExpanded(result.files.length > 0)
+        pushContentSearchHistory(normalizedQuery)
       })
       .catch((error) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
@@ -825,7 +1061,13 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setIsSearchingContent(false)
       })
-  }, [contentSearchCaseSensitive, contentSearchQuery, projectPath])
+  }, [
+    contentSearchCaseSensitive,
+    contentSearchQuery,
+    contentSearchScopeGlobs,
+    projectPath,
+    pushContentSearchHistory,
+  ])
 
   useEffect(() => {
     const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
@@ -931,15 +1173,27 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     if (hasAttemptedInitialRestore) return
     setHasAttemptedInitialRestore(true)
 
-    if (!persistedLastCodeFile) return
-    void openFile(persistedLastCodeFile)
-  }, [hasAttemptedInitialRestore, openFile, persistedLastCodeFile, tree.status])
+    const sessionActivePath = persistedProjectCodeSession?.activePath
+    const sessionFirstTabPath = persistedProjectCodeSession?.tabs[0]
+    const restorePath = sessionActivePath || sessionFirstTabPath || persistedLastCodeFile
+    if (!restorePath) {
+      isRestoringCodeSessionRef.current = false
+      return
+    }
+    void openFile(restorePath).finally(() => {
+      isRestoringCodeSessionRef.current = false
+    })
+  }, [hasAttemptedInitialRestore, openFile, persistedLastCodeFile, persistedProjectCodeSession, tree.status])
 
   useEffect(() => {
     return () => {
       if (scrollSyncReleaseTimerRef.current) {
         window.clearTimeout(scrollSyncReleaseTimerRef.current)
         scrollSyncReleaseTimerRef.current = null
+      }
+      if (saveCodeSessionTimerRef.current != null) {
+        window.clearTimeout(saveCodeSessionTimerRef.current)
+        saveCodeSessionTimerRef.current = null
       }
     }
   }, [])
@@ -1139,6 +1393,30 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     setIsContentSearchAllExpanded(true)
   }, [isContentSearchAllExpanded])
 
+  const handleSelectOpenTab = useCallback((relativePath: string) => {
+    void openFile(relativePath)
+  }, [openFile])
+
+  const handleCloseOpenTab = useCallback((relativePath: string) => {
+    const normalizedPath = relativePath.trim()
+    if (!normalizedPath) return
+
+    const nextTabs = openTabPaths.filter((item) => item !== normalizedPath)
+    setOpenTabPaths(nextTabs)
+    setCursorPositionsByPath((prev) => {
+      if (!(normalizedPath in prev)) return prev
+      const next = { ...prev }
+      delete next[normalizedPath]
+      return next
+    })
+
+    if (activeRelativePath !== normalizedPath) return
+    const nextActivePath = nextTabs[0]
+    if (nextActivePath) {
+      void openFile(nextActivePath)
+    }
+  }, [activeRelativePath, openFile, openTabPaths])
+
   useEffect(() => {
     const pending = pendingRevealRef.current
     if (!pending) return
@@ -1146,6 +1424,18 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     editorRef.current?.revealPosition(pending.lineNumber, pending.column)
     pendingRevealRef.current = null
   }, [activeRelativePath, editorValue])
+
+  useEffect(() => {
+    const pending = pendingCursorRevealRef.current
+    if (!pending) return
+    if (pending.relativePath !== activeRelativePath) return
+    editorRef.current?.revealPosition(pending.lineNumber, pending.column)
+    pendingCursorRevealRef.current = null
+  }, [activeRelativePath, editorValue])
+
+  const visibleOpenTabs = useMemo(() => (
+    openTabPaths.filter((path) => allProjectFilePathSet.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
+  ), [allProjectFilePathSet, openTabPaths])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -1265,6 +1555,46 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
           </button>
         </div>
       </div>
+
+      {visibleOpenTabs.length > 0 && (
+        <div className="code-open-tabs mb-3">
+          {visibleOpenTabs.map((path) => {
+            const isActive = activeRelativePath === path
+            return (
+              <button
+                key={path}
+                type="button"
+                className={`code-open-tab ${isActive ? 'is-active' : ''}`}
+                onClick={() => {
+                  handleSelectOpenTab(path)
+                }}
+                title={path}
+              >
+                <span className="code-open-tab-label">{fileNameFromRelativePath(path)}</span>
+                <span className="code-open-tab-path">{path}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="code-open-tab-close"
+                  aria-label={`Close ${path}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleCloseOpenTab(path)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return
+                    event.preventDefault()
+                    event.stopPropagation()
+                    handleCloseOpenTab(path)
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {activeRelativePath && hasExternalChange && (
         <div
@@ -1435,6 +1765,8 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                         inputClassName="code-search-input"
                         debounceMs={FILE_SEARCH_DEBOUNCE_MS}
                         onQueryChange={handleContentSearchQueryChange}
+                        syncValue={contentSearchQuery}
+                        syncNonce={contentSearchQuerySyncNonce}
                         trailingAction={(
                           <div className="flex items-center gap-1.5">
                             <button
@@ -1459,6 +1791,64 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                         )}
                       />
                     </div>
+                    <div className="code-search-scope-row">
+                      <div className="code-search-scope-input-wrap">
+                        <input
+                          type="text"
+                          value={contentSearchScopeInput}
+                          onChange={(event) => setContentSearchScopeInput(event.target.value)}
+                          placeholder="Scope globs: src/**/*.ts, *.md, docs/**"
+                          className="code-search-input code-search-scope-input"
+                          spellCheck={false}
+                          title={contentSearchScopeSummary}
+                        />
+                      </div>
+                      {contentSearchHistory.length > 0 && (
+                        <div className="code-search-history-inline">
+                          <select
+                            className="code-search-history-select"
+                            value=""
+                            onChange={(event) => {
+                              const nextValue = event.target.value
+                              if (!nextValue) return
+                              applyContentSearchQueryFromHistory(nextValue)
+                              event.currentTarget.value = ''
+                            }}
+                            title="Recent search queries"
+                          >
+                            <option value="">History</option>
+                            {contentSearchHistory.map((query) => (
+                              <option key={query} value={query}>{query}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    {contentSearchHistory.length > 0 && (
+                      <div className="code-search-history-chip-row">
+                        {contentSearchHistory.slice(0, 6).map((query) => (
+                          <div key={query} className="code-search-history-chip">
+                            <button
+                              type="button"
+                              className="code-search-history-chip-main"
+                              onClick={() => applyContentSearchQueryFromHistory(query)}
+                              title={query}
+                            >
+                              {query}
+                            </button>
+                            <button
+                              type="button"
+                              className="code-search-history-chip-remove"
+                              onClick={() => removeContentSearchHistoryItem(query)}
+                              title="Remove from history"
+                              aria-label={`Remove ${query} from history`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {showContentSearchSummary && (
                       <div className="code-search-main-toolbar">
                         <div className="code-search-main-meta">
@@ -1466,6 +1856,10 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                             <span className="code-search-main-stat">{contentSearchResult.files.length} files</span>
                             <span className="code-search-main-meta-sep">•</span>
                             <span className="code-search-main-stat">{contentSearchResult.totalMatches} matches</span>
+                            <span className="code-search-main-meta-sep">•</span>
+                            <span className="code-search-main-stat">
+                              {hasContentSearchScope ? `${contentSearchScopeGlobs.length} globs` : 'all files'}
+                            </span>
                             {contentSearchResult.limited && (
                               <span className="code-search-main-limited">limited</span>
                             )}
@@ -1573,6 +1967,22 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                           theme={monacoTheme}
                           onChange={setEditorValue}
                           onScrollStateChange={handleEditorScrollStateChange}
+                          onCursorPositionChange={(position) => {
+                            if (!activeRelativePath) return
+                            setCursorPositionsByPath((prev) => {
+                              const current = prev[activeRelativePath]
+                              if (current && current.lineNumber === position.lineNumber && current.column === position.column) {
+                                return prev
+                              }
+
+                              const nextEntries = [
+                                [activeRelativePath, position],
+                                ...Object.entries(prev).filter(([pathKey]) => pathKey !== activeRelativePath),
+                              ].slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
+
+                              return Object.fromEntries(nextEntries)
+                            })
+                          }}
                           onFocusSearch={focusSearchInputByMode}
                           onSave={() => {
                             void handleSave()

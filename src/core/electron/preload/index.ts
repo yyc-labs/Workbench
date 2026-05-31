@@ -164,7 +164,11 @@ const api = {
   searchProjectFiles: (projectPath: string, query: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH, projectPath, query),
 
-  searchProjectContent: (projectPath: string, query: string, options?: { caseSensitive?: boolean }) =>
+  searchProjectContent: (
+    projectPath: string,
+    query: string,
+    options?: { caseSensitive?: boolean; includeGlobs?: string[] }
+  ) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_CONTENT_SEARCH, projectPath, query, options),
 
   readProjectFile: (projectPath: string, relativePath: string) =>
@@ -221,6 +225,17 @@ const api = {
     ) => cb(d)
     ipcRenderer.on(IPC.PROCESS_EXIT, handler)
     return () => ipcRenderer.removeListener(IPC.PROCESS_EXIT, handler)
+  },
+
+  onRuntimeStateChanged: (
+    cb: (data: { reason: string; projectId?: string; sessionName?: string }) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: { reason: string; projectId?: string; sessionName?: string }
+    ) => cb(d)
+    ipcRenderer.on(IPC.RUNTIME_STATE_CHANGED, handler)
+    return () => ipcRenderer.removeListener(IPC.RUNTIME_STATE_CHANGED, handler)
   },
 
   onAiCommitOutput: (

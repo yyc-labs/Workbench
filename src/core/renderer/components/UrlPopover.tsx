@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink } from 'lucide-react'
 
@@ -92,12 +92,36 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     }
   }
 
-  const scheduleHide = () => {
+  const closePopover = ({ blur = false }: { blur?: boolean } = {}) => {
+    clearHideTimer()
+    if (blur) {
+      const activeEl = document.activeElement
+      if (activeEl instanceof HTMLElement && popoverRef.current?.contains(activeEl)) {
+        activeEl.blur()
+      }
+    }
+    focusWithinRef.current = false
+    hoverStateRef.current = { trigger: false, popover: false }
+    setShow(false)
+  }
+
+  const isWithinInteractiveArea = (target: EventTarget | null) => (
+    target instanceof Node
+    && Boolean(
+      triggerRef.current?.contains(target)
+      || popoverRef.current?.contains(target),
+    )
+  )
+
+  const hasSearchText = () => query.trim().length > 0
+
+  const scheduleHide = ({ forceClose }: { forceClose?: boolean } = {}) => {
     clearHideTimer()
     timerRef.current = setTimeout(() => {
-      if (focusWithinRef.current) return
+      if (forceClose && hasSearchText()) return
+      if (!forceClose && focusWithinRef.current) return
       if (hoverStateRef.current.trigger || hoverStateRef.current.popover) return
-      setShow(false)
+      closePopover({ blur: Boolean(forceClose) })
     }, 150)
   }
 
@@ -108,9 +132,10 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     setShow(true)
   }
 
-  const handleTriggerLeave = () => {
+  const handleTriggerLeave = (event: MouseEvent<HTMLDivElement>) => {
     hoverStateRef.current.trigger = false
-    scheduleHide()
+    if (isWithinInteractiveArea(event.relatedTarget)) return
+    scheduleHide({ forceClose: true })
   }
 
   const handlePopoverEnter = () => {
@@ -118,9 +143,10 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     clearHideTimer()
   }
 
-  const handlePopoverLeave = () => {
+  const handlePopoverLeave = (event: MouseEvent<HTMLDivElement>) => {
     hoverStateRef.current.popover = false
-    scheduleHide()
+    if (isWithinInteractiveArea(event.relatedTarget)) return
+    scheduleHide({ forceClose: true })
   }
 
   const handleCopy = (key: string, url: string) => {

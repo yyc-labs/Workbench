@@ -34,6 +34,7 @@ import type {
   GitResolveConflictRequest,
   GitResolveConflictResult,
   ProjectCodeFileDrawerState,
+  ProjectCodeSession,
 } from '../../shared/types'
 
 declare global {
@@ -53,6 +54,9 @@ declare global {
       onProcessOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onProcessStatus: (cb: (d: { projectId: string; status: string }) => void) => () => void
       onProcessExit: (cb: (d: { projectId: string; code: number | null }) => void) => () => void
+      onRuntimeStateChanged: (
+        cb: (d: { reason: string; projectId?: string; sessionName?: string }) => void
+      ) => () => void
       openExternal: (url: string) => Promise<void>
       resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
       getCapability: () => Promise<Capability>
@@ -163,6 +167,7 @@ export interface AppState {
   markHomeDefaultFilterApplied: () => void
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
+  clearProjectLastOpened: (projectId: string) => Promise<void>
   clearProcessUrl: (projectId: string) => void
   loadTmuxSessions: () => Promise<void>
   syncManagedProcesses: () => Promise<void>
@@ -175,6 +180,7 @@ export interface AppState {
   setProjectRunStartupMode: (projectId: string, mode: 'silent' | 'terminal') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>
+  setProjectCodeSession: (projectId: string, session?: ProjectCodeSession) => Promise<void>
   setProjectLastMarkdownPreviewMode: (projectId: string, mode?: 'edit' | 'preview' | 'split') => Promise<void>
   setProjectCodeFileDrawerState: (projectId: string, state: ProjectCodeFileDrawerState) => Promise<void>
   clearAllProjectLastCodeFiles: () => Promise<void>

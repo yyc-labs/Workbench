@@ -382,42 +382,6 @@ export function DetailPage() {
             )}
           </button>
 
-          <div className="relative">
-            <button
-              ref={quickButtonRef}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
-                ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                : aiCommitStatus === 'error'
-                  ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                  : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                }`}
-              style={
-                aiCommitStatus === 'running'
-                  ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
-                  : aiCommitStatus === 'error'
-                    ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
-                    : undefined
-              }
-              onClick={() => void handleAiCommit()}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (aiCommitStatus === 'running') return
-                setMenuPos(null)
-                const panelWidth = 260
-                const panelHeight = 320
-                const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
-                const y = Math.max(8, Math.min(e.clientY, window.innerHeight - panelHeight - 8))
-                setQuickConfigPos({ x, y })
-                setQuickConfigOpen(true)
-              }}
-              disabled={aiCommitStatus === 'running'}
-              title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
-            >
-              <Bot className="h-3.5 w-3.5" />
-              {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
-            </button>
-          </div>
         </div>
       </header>
 
@@ -605,6 +569,23 @@ export function DetailPage() {
               flowInitialFocusDoneRef={flowInitialFocusDoneRef}
               flowLastFocusedStepRef={flowLastFocusedStepRef}
               aiCommitStatus={aiCommitStatus}
+              isAiEnabled={isAiEnabled}
+              aiAutoCommitButtonRef={quickButtonRef}
+              onAiAutoCommit={() => {
+                void handleAiCommit()
+              }}
+              onAiAutoCommitContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (aiCommitStatus === 'running') return
+                setMenuPos(null)
+                const panelWidth = 260
+                const panelHeight = 320
+                const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
+                const y = Math.max(8, Math.min(e.clientY, window.innerHeight - panelHeight - 8))
+                setQuickConfigPos({ x, y })
+                setQuickConfigOpen(true)
+              }}
             />
           )}
         </div>
