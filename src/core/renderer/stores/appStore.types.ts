@@ -84,7 +84,7 @@ declare global {
       ) => Promise<ProjectFileWriteResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
-      openFolder: (folderPath: string) => Promise<void>
+      openFolder: (folderPath: string, revealPath?: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
       minimizeWindow: () => Promise<boolean>
       toggleMaximizeWindow: () => Promise<boolean>

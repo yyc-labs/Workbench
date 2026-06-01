@@ -2180,7 +2180,18 @@ function registerIpcHandlers(): void {
     return shell.openExternal(url)
   })
 
-  ipcMain.handle(IPC.SHELL_OPEN_FOLDER, async (_event, folderPath: string) => {
+  ipcMain.handle(IPC.SHELL_OPEN_FOLDER, async (_event, folderPath: string, revealPath?: string) => {
+    const normalizedRevealPath = typeof revealPath === 'string' ? revealPath.trim() : ''
+    if (normalizedRevealPath) {
+      try {
+        await access(normalizedRevealPath, FsConstants.F_OK)
+        shell.showItemInFolder(normalizedRevealPath)
+        return
+      } catch {
+        // Fallback to opening the directory when file no longer exists.
+      }
+    }
+
     const err = await shell.openPath(folderPath)
     if (err) throw new Error(`Failed to open folder: ${err}`)
   })

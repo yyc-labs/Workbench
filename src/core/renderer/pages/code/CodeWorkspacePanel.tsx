@@ -30,7 +30,7 @@ import {
   sortTreeNodes,
   toggleFavoriteCodeFilePath,
 } from './code.helpers'
-import { resolveTreeNodeFolderPath } from './code.pathActions'
+import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { parseMarkdownDocument } from './code.frontmatterParser'
 import type { CodeFileDrawerState, FileTreeState } from './code.types'
 
@@ -1270,7 +1270,10 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   }, [isNarrowViewport, openFile])
   const handleOpenTreeNodeFolder = useCallback(async (relativePath: string, nodeKind: ProjectFileNodeKind) => {
     const folderPath = resolveTreeNodeFolderPath(projectPath, relativePath, nodeKind)
-    await window.electronAPI.openFolder(folderPath)
+    const revealPath = nodeKind === 'file'
+      ? joinProjectPath(projectPath, relativePath)
+      : undefined
+    await window.electronAPI.openFolder(folderPath, revealPath)
   }, [projectPath])
   const handleCopyTreeNodeName = useCallback((nodeName: string) => {
     void copyTextToClipboard(nodeName)

@@ -105,8 +105,8 @@ const api = {
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
 
-  openFolder: (folderPath: string) =>
-    ipcRenderer.invoke(IPC.SHELL_OPEN_FOLDER, folderPath),
+  openFolder: (folderPath: string, revealPath?: string) =>
+    ipcRenderer.invoke(IPC.SHELL_OPEN_FOLDER, folderPath, revealPath),
 
   openInVsCode: (folderPath: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_VSCODE, folderPath),
