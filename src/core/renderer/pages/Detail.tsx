@@ -183,6 +183,13 @@ export function DetailPage() {
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
   } = docLinkState
+  const collapsedProjectLinkItems = useMemo(
+    () => [
+      ...(isRunning ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...docMenuItems,
+    ],
+    [docMenuItems, isRunning, processUrls]
+  )
 
   const handleSwitchCli = useCallback(() => {
     if (!project) return
@@ -609,11 +616,27 @@ export function DetailPage() {
               projectId={project.id}
               projectPath={project.path}
               themeMode={themeMode}
+              projectHeaderCollapsed={projectHeaderCollapsed}
+              projectName={projectDisplayName(project)}
+              projectLinkItems={collapsedProjectLinkItems}
+              activePane={activePane}
+              onSwitchPane={(nextPane) => {
+                if (!projectId || nextPane === activePane) return
+                navigate(`/project/${projectId}/${nextPane}`)
+              }}
             />
           ) : (
             <DetailAiCommitPanel
               rightPaneMode={rightPaneMode}
               setRightPaneMode={setRightPaneMode}
+              projectHeaderCollapsed={projectHeaderCollapsed}
+              projectName={projectDisplayName(project)}
+              projectLinkItems={collapsedProjectLinkItems}
+              activePane={activePane}
+              onSwitchPane={(nextPane) => {
+                if (!projectId || nextPane === activePane) return
+                navigate(`/project/${projectId}/${nextPane}`)
+              }}
               jumpToAiLogToken={jumpToAiLogToken}
               flowNodes={flowNodes}
               flowEdges={flowEdges}

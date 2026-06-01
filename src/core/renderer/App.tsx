@@ -247,7 +247,8 @@ function GlobalRecentProjectsDrawerHost() {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
         event.preventDefault()
-        setOpen(true)
+        if (event.repeat) return
+        setOpen((prev) => !prev)
       }
     }
     window.addEventListener('keydown', onKeyDown)

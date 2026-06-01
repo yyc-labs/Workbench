@@ -22,6 +22,7 @@ import {
   searchProjectContent,
   readProjectFile,
   statProjectFile,
+  writeProjectImageFile,
   writeProjectFile,
   toProjectFileServiceErrorMessage,
 } from './project-file-service'
@@ -2305,6 +2306,28 @@ function registerIpcHandlers(): void {
     ) => {
       try {
         return await writeProjectFile(projectPath, relativePath, content, expectedMtimeMs)
+      } catch (error) {
+        throw new Error(toProjectFileServiceErrorMessage(error))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    IPC.PROJECT_FILE_WRITE_IMAGE,
+    async (
+      _event,
+      projectPath: string,
+      targetDirectoryRelativePath: string,
+      extension: string,
+      dataBase64: string
+    ) => {
+      try {
+        return await writeProjectImageFile(
+          projectPath,
+          targetDirectoryRelativePath,
+          extension,
+          dataBase64
+        )
       } catch (error) {
         throw new Error(toProjectFileServiceErrorMessage(error))
       }

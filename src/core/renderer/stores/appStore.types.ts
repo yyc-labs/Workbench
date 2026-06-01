@@ -6,6 +6,7 @@ import type {
   ProjectFileReadResult,
   ProjectFileStatResult,
   ProjectFileTreeResult,
+  ProjectFileWriteImageResult,
   ProjectFileWriteResult,
   ProjectInfo,
   ProcessInfo,
@@ -51,6 +52,7 @@ declare global {
       deleteDocLinkSecret: (projectId: string, linkId: string) => Promise<boolean>
       selectDirectory: () => Promise<string | null>
       getPathForFile: (file: File) => string
+      readClipboardImagePngBase64: () => string | null
       onProcessOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onProcessStatus: (cb: (d: { projectId: string; status: string }) => void) => () => void
       onProcessExit: (cb: (d: { projectId: string; code: number | null }) => void) => () => void
@@ -82,6 +84,12 @@ declare global {
         content: string,
         expectedMtimeMs?: number
       ) => Promise<ProjectFileWriteResult>
+      writeProjectImageFile: (
+        projectPath: string,
+        targetDirectoryRelativePath: string,
+        extension: string,
+        dataBase64: string
+      ) => Promise<ProjectFileWriteImageResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
       openFolder: (folderPath: string, revealPath?: string) => Promise<void>

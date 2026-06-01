@@ -11,6 +11,7 @@ import type {
   ProjectFileReadResult,
   ProjectFileStatResult,
   ProjectFileTreeResult,
+  ProjectFileWriteImageResult,
   ProjectFileWriteResult,
 } from '../../shared/types'
 
@@ -198,6 +199,17 @@ function ensureWithinRoot(rootRealPath: string, targetRealPath: string): void {
   if (targetRealPath === rootRealPath) return
   if (targetRealPath.startsWith(`${rootRealPath}${path.sep}`)) return
   throw new ProjectFileServiceError('Target path is outside project root.')
+}
+
+function normalizeImageExtension(extension: string): string {
+  const normalized = extension.trim().toLowerCase().replace(/^\./, '')
+  if (!normalized) return 'png'
+  if (!/^[a-z0-9]+$/.test(normalized)) return 'png'
+  const aliasMap: Record<string, string> = {
+    jpeg: 'jpg',
+    tif: 'tiff',
+  }
+  return aliasMap[normalized] ?? normalized
 }
 
 async function resolveRoot(projectPath: string): Promise<string> {
@@ -975,6 +987,53 @@ export async function writeProjectFile(
   } catch (error) {
     await fileHandle.close().catch(() => undefined)
     throw error
+  }
+}
+
+export async function writeProjectImageFile(
+  projectPath: string,
+  targetDirectoryRelativePath: string,
+  extension: string,
+  dataBase64: string
+): Promise<ProjectFileWriteImageResult> {
+  const rootRealPath = await resolveRoot(projectPath)
+  const normalizedTargetDirectory = normalizeRelativeInput(targetDirectoryRelativePath)
+  validateRelativePathLooksSafe(normalizedTargetDirectory)
+
+  const targetDirectoryPath = path.resolve(rootRealPath, normalizedTargetDirectory)
+  ensureWithinRoot(rootRealPath, targetDirectoryPath)
+
+  await fs.mkdir(targetDirectoryPath, { recursive: true })
+
+  const directoryRealPath = await fs.realpath(targetDirectoryPath)
+  ensureWithinRoot(rootRealPath, directoryRealPath)
+
+  let dataBuffer: Buffer
+  try {
+    dataBuffer = Buffer.from(dataBase64, 'base64')
+  } catch {
+    throw new ProjectFileServiceError('Invalid image payload.')
+  }
+
+  if (!dataBuffer.length) {
+    throw new ProjectFileServiceError('Image payload is empty.')
+  }
+
+  const normalizedExtension = normalizeImageExtension(extension)
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${normalizedExtension}`
+  const filePath = path.join(directoryRealPath, fileName)
+  await fs.writeFile(filePath, dataBuffer)
+  const stat = await fs.stat(filePath)
+
+  const relativePath = toPosixRelativePath(path.relative(rootRealPath, filePath))
+  if (!relativePath || relativePath.startsWith('..') || path.posix.isAbsolute(relativePath)) {
+    throw new ProjectFileServiceError('Failed to resolve image path within project root.')
+  }
+
+  return {
+    relativePath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
   }
 }
 

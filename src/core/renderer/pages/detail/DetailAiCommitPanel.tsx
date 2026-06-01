@@ -2,11 +2,13 @@ import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObjec
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  BookOpen,
   Bot,
   Check,
   ChevronDown,
   CloudDownload,
   CloudUpload,
+  Code2,
   Copy,
   Download,
   FileText,
@@ -21,6 +23,7 @@ import {
 import { formatCommitDate } from './detail.aiFlow'
 import { GIT_GUIDE_SECTIONS, GIT_GUIDE_TITLE } from './gitGuideContent'
 import { ModalShell } from '../../components/ModalShell'
+import { UrlPopover } from '../../components/UrlPopover'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type {
   AiCommitStatus,
@@ -41,6 +44,11 @@ import type {
 type DetailAiCommitPanelProps = {
   rightPaneMode: RightPaneMode
   setRightPaneMode: Dispatch<SetStateAction<RightPaneMode>>
+  projectHeaderCollapsed?: boolean
+  projectName?: string
+  projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  activePane?: 'code' | 'aicommit'
+  onSwitchPane?: (pane: 'code' | 'aicommit') => void
   jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
   flowEdges: AiFlowEdge[]
@@ -478,6 +486,11 @@ function CommitHistoryItem({
 function DetailAiCommitPanel({
   rightPaneMode,
   setRightPaneMode,
+  projectHeaderCollapsed = false,
+  projectName,
+  projectLinkItems = [],
+  activePane = 'aicommit',
+  onSwitchPane,
   jumpToAiLogToken,
   flowNodes,
   aiRawText,
@@ -495,6 +508,7 @@ function DetailAiCommitPanel({
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
+  const firstProjectLinkItem = projectLinkItems[0]
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
   const [mergeTarget, setMergeTarget] = useState('')
@@ -1216,22 +1230,99 @@ function DetailAiCommitPanel({
 
   return (
     <>
-      <aside className="h-full min-h-0 min-w-0 overflow-hidden rounded-[24px] surface-card">
-        <div className="flex h-full min-h-0 flex-col gap-4 p-4">
-          <section className="shrink-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
+      <div className="relative flex h-full min-h-0 min-w-0 flex-col">
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          <div className="shrink-0 space-y-3">
+            <section className="min-h-[52px] rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 px-4 py-2">
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {projectHeaderCollapsed && (
+                      <p className="max-w-[320px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
+                        {projectName || '当前项目'}
+                      </p>
+                    )}
+                    {projectHeaderCollapsed && (
+                      <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+                        <button
+                          type="button"
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            activePane === 'code'
+                              ? 'bg-primary text-white'
+                              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                          }`}
+                          onClick={() => onSwitchPane?.('code')}
+                        >
+                          <Code2 className="h-3.5 w-3.5" />
+                          Code
+                        </button>
+                        <button
+                          type="button"
+                          className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            activePane === 'aicommit'
+                              ? 'bg-primary text-white'
+                              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                          }`}
+                          onClick={() => onSwitchPane?.('aicommit')}
+                        >
+                          <Bot className="h-3.5 w-3.5" />
+                          AI Commit
+                        </button>
+                      </div>
+                    )}
+                    {projectHeaderCollapsed && firstProjectLinkItem && (
+                      <UrlPopover items={projectLinkItems}>
+                        <button
+                          type="button"
+                          className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                          onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
+                          title="Project links"
+                        >
+                          <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                        </button>
+                      </UrlPopover>
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  <button
+                    ref={aiAutoCommitButtonRef}
+                    type="button"
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+                      ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                      : aiCommitStatus === 'error'
+                        ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                        : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                      }`}
+                    style={
+                      aiCommitStatus === 'running'
+                        ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                        : aiCommitStatus === 'error'
+                          ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
+                          : undefined
+                    }
+                    onClick={() => {
+                      onAiAutoCommit()
+                    }}
+                    onContextMenu={onAiAutoCommitContextMenu}
+                    disabled={aiCommitStatus === 'running'}
+                    title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="section-label">AI Commit</p>
                 <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
                   {statusText}
                 </span>
-                <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
-                  动画改为轻量状态条，主体空间留给 Git 数据
-                </span>
               </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 {flowNodes.map((node, index) => (
                   <div
                     key={node.id}
@@ -1244,37 +1335,8 @@ function DetailAiCommitPanel({
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="shrink-0 self-center">
-              <button
-                ref={aiAutoCommitButtonRef}
-                type="button"
-                className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
-                  ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  : aiCommitStatus === 'error'
-                    ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                    : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                  }`}
-                style={
-                  aiCommitStatus === 'running'
-                    ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
-                    : aiCommitStatus === 'error'
-                      ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
-                      : undefined
-                }
-                onClick={() => {
-                  onAiAutoCommit()
-                }}
-                onContextMenu={onAiAutoCommitContextMenu}
-                disabled={aiCommitStatus === 'running'}
-                title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
-              >
-                <Bot className="h-3.5 w-3.5" />
-                {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
-              </button>
-            </div>
+            </section>
           </div>
-        </section>
 
         {gitSnapshotError && (
           <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
@@ -1840,7 +1902,7 @@ function DetailAiCommitPanel({
           </div>
           </section>
         </div>
-      </aside>
+      </div>
       <ModalShell
         open={Boolean(operationConfirm)}
         onClose={() => setOperationConfirm(null)}

@@ -41,6 +41,7 @@ export const IPC = {
   PROJECT_FILE_READ: 'project-file:read',
   PROJECT_FILE_STAT: 'project-file:stat',
   PROJECT_FILE_WRITE: 'project-file:write',
+  PROJECT_FILE_WRITE_IMAGE: 'project-file:write-image',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',
   SHELL_OPEN_PATH_TERMINAL: 'shell:openPathTerminal',
   SHELL_OPEN_FOLDER: 'shell:openFolder',

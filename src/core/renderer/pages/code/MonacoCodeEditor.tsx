@@ -30,6 +30,7 @@ interface MonacoCodeEditorProps {
   filePath: string | null
   isReadOnly?: boolean
   onChange: (value: string) => void
+  onPasteImage?: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
   onSave: () => void
   onFocusSearch?: () => void
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
@@ -83,6 +84,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   filePath,
   isReadOnly = false,
   onChange,
+  onPasteImage,
   onSave,
   onFocusSearch,
   onScrollStateChange,
@@ -94,6 +96,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const modelRef = useRef<MonacoEditor.ITextModel | null>(null)
   const syncGuardRef = useRef(false)
   const onSaveRef = useRef(onSave)
+  const onPasteImageRef = useRef(onPasteImage)
   const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
   const onCursorPositionChangeRef = useRef(onCursorPositionChange)
@@ -296,6 +299,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   }, [onSave])
 
   useEffect(() => {
+    onPasteImageRef.current = onPasteImage
+  }, [onPasteImage])
+
+  useEffect(() => {
     onFocusSearchRef.current = onFocusSearch
   }, [onFocusSearch])
 
@@ -416,6 +423,65 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         openSearchPanel('find', { prefillFromSelection: true })
       }
       container.addEventListener('keydown', handleCaptureKeyDown, true)
+
+      const handleCapturePaste = (event: ClipboardEvent) => {
+        const pasteImage = onPasteImageRef.current
+        const clipboardData = event.clipboardData
+        const items = clipboardData?.items
+        if (!pasteImage || !items || items.length <= 0) return
+        if (editor.getOption(monaco.editor.EditorOption.readOnly)) return
+
+        let imageFile: File | null = null
+        for (const item of items) {
+          if (!item.type.startsWith('image/')) continue
+          imageFile = item.getAsFile()
+          if (imageFile) break
+        }
+
+        event.preventDefault()
+        event.stopPropagation()
+        event.stopImmediatePropagation()
+
+        const selection = editor.getSelection()
+        const fallbackPosition = editor.getPosition()
+        const insertRange = selection
+          ?? (fallbackPosition
+            ? new monaco.Range(
+              fallbackPosition.lineNumber,
+              fallbackPosition.column,
+              fallbackPosition.lineNumber,
+              fallbackPosition.column
+            )
+            : null)
+        if (!insertRange) return
+
+        void pasteImage(imageFile, event)
+          .then((markdownText) => {
+            if (!markdownText) return
+            const text = `${markdownText}\n`
+            const nextPosition = insertRange.getEndPosition()
+
+            editor.pushUndoStop()
+            editor.executeEdits('paste-image', [{
+              range: insertRange,
+              text,
+              forceMoveMarkers: true,
+            }])
+            editor.pushUndoStop()
+            editor.setPosition({
+              lineNumber: nextPosition.lineNumber + 1,
+              column: 1,
+            })
+            const positionAfterInsert = editor.getPosition()
+            if (positionAfterInsert) {
+              editor.revealPositionInCenter(positionAfterInsert)
+            }
+          })
+          .catch(() => {
+            // Keep default silent behavior when image paste handling fails.
+          })
+      }
+      container.addEventListener('paste', handleCapturePaste, true)
 
       const handleCaptureMouseOver = (event: MouseEvent) => {
         const target = event.target
@@ -549,6 +615,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
       return () => {
         container.removeEventListener('keydown', handleCaptureKeyDown, true)
+        container.removeEventListener('paste', handleCapturePaste, true)
         container.removeEventListener('mouseover', handleCaptureMouseOver, true)
         container.removeEventListener('mouseout', handleCaptureMouseOut, true)
         document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)

@@ -509,6 +509,12 @@ export interface ProjectFileWriteResult {
   mtimeMs: number
 }
 
+export interface ProjectFileWriteImageResult {
+  relativePath: string
+  size: number
+  mtimeMs: number
+}
+
 export interface ProjectFileStatResult {
   relativePath: string
   size: number

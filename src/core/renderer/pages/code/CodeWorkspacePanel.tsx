@@ -1,7 +1,7 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import { BookOpen, Bot, Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -9,6 +9,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import type { ProjectCodeSession, ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
+import { UrlPopover } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileTree } from './CodeFileTree'
@@ -47,6 +48,155 @@ const MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS = 60
 const PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS = 220
 const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
 const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
+const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
+
+function normalizePathSegments(value: string): string[] {
+  return value
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+}
+
+function dirnameFromRelativePath(relativePath: string): string {
+  const segments = normalizePathSegments(relativePath)
+  if (segments.length <= 1) return ''
+  return segments.slice(0, -1).join('/')
+}
+
+function joinPosixPaths(...values: string[]): string {
+  const segments: string[] = []
+  for (const value of values) {
+    segments.push(...normalizePathSegments(value))
+  }
+  return segments.join('/')
+}
+
+function relativePosixPath(fromDirectory: string, toPath: string): string {
+  const from = normalizePathSegments(fromDirectory)
+  const to = normalizePathSegments(toPath)
+
+  let shared = 0
+  const sharedMax = Math.min(from.length, to.length)
+  while (shared < sharedMax && from[shared] === to[shared]) {
+    shared += 1
+  }
+
+  const upSegments = from.slice(shared).map(() => '..')
+  const downSegments = to.slice(shared)
+  const result = [...upSegments, ...downSegments].join('/')
+  return result || '.'
+}
+
+function sanitizeMarkdownImageAlt(relativePath: string): string {
+  const fileName = fileNameFromRelativePath(relativePath)
+  const withoutExtension = fileName.replace(/\.[A-Za-z0-9]+$/, '').trim()
+  const safe = withoutExtension.replace(/[\[\]\r\n]+/g, ' ').trim()
+  return safe || 'image'
+}
+
+function normalizeMarkdownImageExtensionFromMime(mimeType: string): string {
+  const normalized = mimeType.trim().toLowerCase()
+  if (normalized === 'image/jpeg') return 'jpg'
+  if (normalized === 'image/png') return 'png'
+  if (normalized === 'image/gif') return 'gif'
+  if (normalized === 'image/webp') return 'webp'
+  if (normalized === 'image/bmp') return 'bmp'
+  if (normalized === 'image/svg+xml') return 'svg'
+  if (normalized === 'image/tiff') return 'tiff'
+  return 'png'
+}
+
+function parseImageFileFromClipboardEvent(event: ClipboardEvent): File | null {
+  const clipboardData = event.clipboardData
+  const items = clipboardData?.items
+  if (!items || items.length <= 0) return null
+
+  for (const item of items) {
+    if (!item.type.startsWith('image/')) continue
+    const imageFile = item.getAsFile()
+    if (imageFile) return imageFile
+  }
+  return null
+}
+
+function trimMarkdownUrlWrapper(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (trimmed.startsWith('<') && trimmed.endsWith('>') && trimmed.length > 2) {
+    return trimmed.slice(1, -1).trim()
+  }
+  return trimmed
+}
+
+function stripMarkdownImageDestinationSuffix(rawDestination: string): string {
+  const compact = rawDestination.trim()
+  if (!compact) return ''
+  const firstWhitespace = compact.search(/\s/)
+  if (firstWhitespace >= 0) {
+    return compact.slice(0, firstWhitespace)
+  }
+  return compact
+}
+
+function isWindowsAbsolutePath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)
+}
+
+function toFileUrlFromAbsolutePath(absolutePath: string): string {
+  const normalized = absolutePath.trim().replace(/\\/g, '/')
+  if (!normalized) return ''
+  if (normalized.startsWith('//')) {
+    return `file:${encodeURI(normalized)}`
+  }
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return `file:///${encodeURI(normalized)}`
+  }
+  if (normalized.startsWith('/')) {
+    return `file://${encodeURI(normalized)}`
+  }
+  return ''
+}
+
+function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string, activeFilePath: string | null): string {
+  const trimmed = stripMarkdownImageDestinationSuffix(trimMarkdownUrlWrapper(rawSrc))
+  if (!trimmed) return ''
+
+  const lower = trimmed.toLowerCase()
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('file:')
+  ) {
+    return trimmed
+  }
+
+  if (isWindowsAbsolutePath(trimmed) || trimmed.startsWith('/')) {
+    const absoluteFileUrl = toFileUrlFromAbsolutePath(trimmed)
+    return absoluteFileUrl || trimmed
+  }
+
+  if (!projectRootPath) return trimmed
+
+  const activeDirectory = activeFilePath ? dirnameFromRelativePath(activeFilePath) : ''
+  const relativeToProject = activeDirectory
+    ? joinPosixPaths(activeDirectory, trimmed)
+    : joinPosixPaths(trimmed)
+
+  const absolutePath = joinProjectPath(projectRootPath, relativeToProject)
+  const absoluteFileUrl = toFileUrlFromAbsolutePath(absolutePath)
+  return absoluteFileUrl || trimmed
+}
+
+function transformMarkdownUrl(url: string): string {
+  const trimmed = url.trim()
+  if (isWindowsAbsolutePath(trimmed)) {
+    return trimmed
+  }
+  return defaultUrlTransform(trimmed)
+}
 
 function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
   if (themeMode === 'dark') return 'vs-dark'
@@ -272,6 +422,11 @@ type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
   themeMode: 'system' | 'light' | 'dark'
+  projectHeaderCollapsed?: boolean
+  projectName?: string
+  projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  activePane?: 'code' | 'aicommit'
+  onSwitchPane?: (pane: 'code' | 'aicommit') => void
 }
 
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
@@ -501,7 +656,16 @@ function sanitizeProjectCodeSessionByPaths(
   })
 }
 
-export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
+export function CodeWorkspacePanel({
+  projectId,
+  projectPath,
+  themeMode,
+  projectHeaderCollapsed = false,
+  projectName,
+  projectLinkItems = [],
+  activePane = 'code',
+  onSwitchPane,
+}: CodeWorkspacePanelProps) {
   const projectMeta = useAppStore((s) => s.projects.find((p) => p.id === projectId))
   const persistedLastCodeFile = projectMeta?.lastCodeFile
   const persistedProjectCodeSession = useMemo(
@@ -530,6 +694,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
+  const firstProjectLinkItem = projectLinkItems[0]
   const [contentSearchQuery, setContentSearchQuery] = useState('')
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
     () => persistedProjectCodeSession?.contentSearchScope ?? ''
@@ -739,6 +904,60 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     () => codeFileDrawerState.recents.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
     [allProjectFilePathSet, codeFileDrawerState.recents]
   )
+  const handlePasteImage = useCallback(async (file: File | null, clipboardEvent?: ClipboardEvent): Promise<string | null> => {
+    if (!isMarkdownFile || !activeRelativePath) return null
+    const fromClipboardEvent = clipboardEvent ? parseImageFileFromClipboardEvent(clipboardEvent) : null
+    const candidateFile = fromClipboardEvent ?? file
+
+    if (!candidateFile || !candidateFile.type || !candidateFile.type.startsWith('image/')) {
+      const pngBase64 = window.electronAPI.readClipboardImagePngBase64()
+      if (!pngBase64) return null
+
+      const fileDirectory = dirnameFromRelativePath(activeRelativePath)
+      const imageDirectory = fileDirectory
+        ? joinPosixPaths(fileDirectory, MARKDOWN_PASTE_IMAGE_DIRECTORY)
+        : MARKDOWN_PASTE_IMAGE_DIRECTORY
+      const savedImage = await window.electronAPI.writeProjectImageFile(
+        projectPath,
+        imageDirectory,
+        'png',
+        pngBase64
+      )
+      const relativeImagePath = relativePosixPath(fileDirectory, savedImage.relativePath)
+      const normalizedRelativeImagePath = relativeImagePath.startsWith('./') || relativeImagePath.startsWith('../')
+        ? relativeImagePath
+        : `./${relativeImagePath}`
+      const alt = sanitizeMarkdownImageAlt(savedImage.relativePath)
+      return `![${alt}](${normalizedRelativeImagePath})`
+    }
+
+    const fileDirectory = dirnameFromRelativePath(activeRelativePath)
+    const imageDirectory = fileDirectory
+      ? joinPosixPaths(fileDirectory, MARKDOWN_PASTE_IMAGE_DIRECTORY)
+      : MARKDOWN_PASTE_IMAGE_DIRECTORY
+    const extension = normalizeMarkdownImageExtensionFromMime(candidateFile.type)
+    const arrayBuffer = await candidateFile.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuffer)
+
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 1) {
+      binary += String.fromCharCode(bytes[i])
+    }
+    const dataBase64 = btoa(binary)
+
+    const savedImage = await window.electronAPI.writeProjectImageFile(
+      projectPath,
+      imageDirectory,
+      extension,
+      dataBase64
+    )
+    const relativeImagePath = relativePosixPath(fileDirectory, savedImage.relativePath)
+    const normalizedRelativeImagePath = relativeImagePath.startsWith('./') || relativeImagePath.startsWith('../')
+      ? relativeImagePath
+      : `./${relativeImagePath}`
+    const alt = sanitizeMarkdownImageAlt(savedImage.relativePath)
+    return `![${alt}](${normalizedRelativeImagePath})`
+  }, [activeRelativePath, isMarkdownFile, projectPath])
   const markdownComponents = useMemo<Components>(() => ({
     pre({ children }) {
       const codeBlock = extractCodeBlockFromPreChildren(children)
@@ -754,6 +973,14 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
           enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
         />
       )
+    },
+    img({ src, alt, node: _node, ...props }) {
+      const rawSrc = typeof src === 'string' ? src : ''
+      const resolvedSrc = resolveMarkdownImageSrc(rawSrc, projectPath, activeRelativePath)
+      if (!resolvedSrc) {
+        return null
+      }
+      return <img {...props} src={resolvedSrc} alt={alt || ''} loading="lazy" />
     },
     a({ href, children, ...props }) {
       const link = typeof href === 'string' ? href.trim() : ''
@@ -781,7 +1008,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       const mergedClassName = className ? `code-markdown-inline-code ${className}` : 'code-markdown-inline-code'
       return <code className={mergedClassName} {...props}>{children}</code>
     },
-  }), [effectiveTheme, enableMarkdownSyntaxHighlight])
+  }), [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, projectPath])
 
   const captureCurrentModeScroll = useCallback(() => {
     if (!isMarkdownFile || !activeRelativePath) return
@@ -1666,14 +1893,62 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}
       >
         <div className="min-w-0">
-          <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ?? undefined}>
-            {activeRelativePath ?? 'Select a file from the tree'}
-          </p>
-          <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-            {activeRelativePath
-              ? `${activeLanguage || 'plaintext'} • ${formatFileSize(activeFileSize)}`
-              : 'Choose a file to start editing'}
-          </p>
+          {projectHeaderCollapsed ? (
+            <div className="flex min-w-0 items-center gap-2.5">
+              <p className="max-w-[320px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
+                {projectName || '当前项目'}
+              </p>
+              <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activePane === 'code'
+                      ? 'bg-primary text-white'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                  onClick={() => onSwitchPane?.('code')}
+                >
+                  <Code2 className="h-3.5 w-3.5" />
+                  Code
+                </button>
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    activePane === 'aicommit'
+                      ? 'bg-primary text-white'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                  onClick={() => onSwitchPane?.('aicommit')}
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  AI Commit
+                </button>
+              </div>
+              {firstProjectLinkItem && (
+                <UrlPopover items={projectLinkItems}>
+                  <button
+                    type="button"
+                    className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                    onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
+                    title="Project links"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                  </button>
+                </UrlPopover>
+              )}
+            </div>
+          ) : (
+            <>
+              <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ?? undefined}>
+                {activeRelativePath ?? 'Select a file from the tree'}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
+                {activeRelativePath
+                  ? `${activeLanguage || 'plaintext'} • ${formatFileSize(activeFileSize)}`
+                  : 'Choose a file to start editing'}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
@@ -2200,6 +2475,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                           value={editorValue}
                           language={activeLanguage || 'plaintext'}
                           theme={monacoTheme}
+                          onPasteImage={handlePasteImage}
                           onChange={setEditorValue}
                           onScrollStateChange={handleEditorScrollStateChange}
                           onCursorPositionChange={(position) => {
@@ -2338,7 +2614,11 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
                               </div>
                             </section>
                           )}
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={markdownComponents}
+                            urlTransform={transformMarkdownUrl}
+                          >
                             {markdownPreviewContent}
                           </ReactMarkdown>
                         </article>

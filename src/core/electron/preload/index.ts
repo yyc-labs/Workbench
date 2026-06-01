@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import { clipboard, contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
 
 type ThemeMode = 'system' | 'light' | 'dark'
@@ -99,6 +99,16 @@ const api = {
       return webUtils.getPathForFile(file)
     } catch {
       return ''
+    }
+  },
+
+  readClipboardImagePngBase64: () => {
+    try {
+      const image = clipboard.readImage()
+      if (image.isEmpty()) return null
+      return image.toPNG().toString('base64')
+    } catch {
+      return null
     }
   },
 
@@ -222,6 +232,19 @@ const api = {
     content: string,
     expectedMtimeMs?: number
   ) => ipcRenderer.invoke(IPC.PROJECT_FILE_WRITE, projectPath, relativePath, content, expectedMtimeMs),
+
+  writeProjectImageFile: (
+    projectPath: string,
+    targetDirectoryRelativePath: string,
+    extension: string,
+    dataBase64: string
+  ) => ipcRenderer.invoke(
+    IPC.PROJECT_FILE_WRITE_IMAGE,
+    projectPath,
+    targetDirectoryRelativePath,
+    extension,
+    dataBase64
+  ),
 
   openTerminal: (sessionName: string, statusHint?: string) => {
     console.log('[preload.openTerminal] invoking IPC SHELL_OPEN_TERMINAL sessionName=', sessionName, 'statusHint=', statusHint)
