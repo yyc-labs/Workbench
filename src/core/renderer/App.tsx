@@ -125,13 +125,39 @@ function SessionPoller() {
     s.projects.map((p) => p.id).sort().join(',')
   )
   const projects = useAppStore((s) => s.projects)
+  const loadRuntimeEntries = useAppStore((s) => s.loadRuntimeEntries)
   const refreshSessions = useAppStore((s) => s.refreshSessions)
 
   useEffect(() => {
     if (projects.length === 0) return
-    runtimeManager.startPolling(() => { refreshSessions() }, 60000)
+    runtimeManager.startPolling(() => { refreshSessions() }, 10000)
     return () => runtimeManager.stopPolling()
   }, [projectIds]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (projects.length === 0) return
+
+    const refreshNow = () => {
+      void (async () => {
+        await loadRuntimeEntries()
+        await refreshSessions()
+      })()
+    }
+
+    const onFocus = () => refreshNow()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshNow()
+      }
+    }
+
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [projectIds, projects.length, loadRuntimeEntries, refreshSessions])
 
   return null
 }

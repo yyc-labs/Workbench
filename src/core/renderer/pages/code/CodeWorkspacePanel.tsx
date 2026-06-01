@@ -6,6 +6,7 @@ import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import type { ProjectCodeSession, ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { useAppStore } from '../../stores/appStore'
@@ -44,7 +45,6 @@ const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
 const MAX_PROJECT_CODE_SESSION_TABS = 5
 const MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS = 60
 const PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS = 220
-const MAX_CONTENT_SEARCH_HISTORY = 12
 const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
 const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
 
@@ -277,7 +277,25 @@ type CodeWorkspacePanelProps = {
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
 type MarkdownScrollModeKey = 'edit' | 'preview' | 'splitEditor' | 'splitPreview'
 type CodeViewMode = 'files' | 'search'
+type ContentSearchScopePreset = {
+  id: string
+  label: string
+  hint: string
+  scopeInput: string
+  title: string
+}
 const CODE_FILE_DRAWER_SECTION_LIMIT = 40
+const CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES = ['src', 'app', 'packages', 'docs', 'test', 'tests', 'spec', 'scripts']
+const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
+  src: 'Source',
+  app: 'App',
+  packages: 'Packages',
+  docs: 'Docs',
+  test: 'Tests',
+  tests: 'Tests',
+  spec: 'Specs',
+  scripts: 'Scripts',
+}
 
 function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number {
   for (const value of values) {
@@ -296,15 +314,6 @@ function fileNameFromRelativePath(relativePath: string): string {
 
 type EditorSearchMode = 'find' | 'replace'
 type EditorCursorPosition = { lineNumber: number; column: number }
-
-function normalizeContentSearchHistory(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return Array.from(new Set(
-    value
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter((item) => item.length > 0)
-  )).slice(0, MAX_CONTENT_SEARCH_HISTORY)
-}
 
 function normalizeContentSearchScope(value: unknown): string {
   if (typeof value !== 'string') return ''
@@ -337,6 +346,25 @@ function parseContentSearchScopeGlobs(scopeInput: string): string[] {
     .map(normalizeContentSearchScopeToken)
     .filter((item) => item.length > 0)
   return Array.from(new Set(tokens)).slice(0, MAX_CONTENT_SEARCH_SCOPE_GLOBS)
+}
+
+function contentSearchScopeKey(scopeInput: string): string {
+  return parseContentSearchScopeGlobs(scopeInput).join('\n')
+}
+
+function directoryFromRelativePath(relativePath: string | null | undefined): string {
+  const normalized = (relativePath ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+  if (!normalized) return ''
+  const index = normalized.lastIndexOf('/')
+  if (index <= 0) return ''
+  return normalized.slice(0, index)
+}
+
+function extensionFromRelativePath(relativePath: string | null | undefined): string {
+  const fileName = fileNameFromRelativePath(relativePath ?? '')
+  const dotIndex = fileName.lastIndexOf('.')
+  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return ''
+  return fileName.slice(dotIndex + 1).toLowerCase()
 }
 
 function normalizeProjectCodeCursorPosition(
@@ -374,18 +402,103 @@ function normalizeProjectCodeSession(value: ProjectCodeSession | undefined): Pro
     ? Object.fromEntries(cursorEntries)
     : undefined
 
-  const contentSearchHistory = normalizeContentSearchHistory(value.contentSearchHistory)
   const contentSearchScope = normalizeContentSearchScope(value.contentSearchScope)
 
-  if (tabs.length <= 0 && !cursorPositions && contentSearchHistory.length <= 0 && !contentSearchScope) return undefined
+  if (tabs.length <= 0 && !cursorPositions && !contentSearchScope) return undefined
 
   return {
     tabs,
     activePath: normalizedActivePath,
     cursorPositions,
-    contentSearchHistory: contentSearchHistory.length > 0 ? contentSearchHistory : undefined,
     contentSearchScope: contentSearchScope || undefined,
   }
+}
+
+function isSameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
+}
+
+function sanitizePathsForKnownFiles(paths: string[], knownFilePaths: Set<string>, limit: number): string[] {
+  const result: string[] = []
+  const seen = new Set<string>()
+  for (const rawPath of paths) {
+    const path = rawPath.trim()
+    if (!path) continue
+    if (!knownFilePaths.has(path)) continue
+    if (seen.has(path)) continue
+    seen.add(path)
+    result.push(path)
+    if (result.length >= limit) break
+  }
+  return result
+}
+
+function isSameCursorPositionMap(
+  left: Record<string, EditorCursorPosition>,
+  right: Record<string, EditorCursorPosition>
+): boolean {
+  const leftEntries = Object.entries(left)
+  const rightEntries = Object.entries(right)
+  if (leftEntries.length !== rightEntries.length) return false
+
+  for (const [path, position] of leftEntries) {
+    const next = right[path]
+    if (!next) return false
+    if (next.lineNumber !== position.lineNumber || next.column !== position.column) return false
+  }
+
+  return true
+}
+
+function sanitizeCursorPositionsForTabs(
+  cursorPositions: Record<string, EditorCursorPosition> | undefined,
+  tabSet: Set<string>
+): Record<string, EditorCursorPosition> {
+  if (!cursorPositions) return {}
+  if (tabSet.size <= 0) return {}
+
+  const result: Record<string, EditorCursorPosition> = {}
+  for (const [path, position] of Object.entries(cursorPositions)) {
+    if (!tabSet.has(path)) continue
+    result[path] = position
+    if (Object.keys(result).length >= MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) break
+  }
+  return result
+}
+
+function sanitizeCodeFileDrawerStateByPaths(
+  state: CodeFileDrawerState,
+  knownFilePaths: Set<string>
+): CodeFileDrawerState {
+  return {
+    favorites: sanitizePathsForKnownFiles(state.favorites, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
+    recents: sanitizePathsForKnownFiles(state.recents, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
+  }
+}
+
+function sanitizeProjectCodeSessionByPaths(
+  session: ProjectCodeSession | undefined,
+  knownFilePaths: Set<string>
+): ProjectCodeSession | undefined {
+  const normalized = normalizeProjectCodeSession(session)
+  if (!normalized) return undefined
+
+  const tabs = sanitizePathsForKnownFiles(normalized.tabs, knownFilePaths, MAX_PROJECT_CODE_SESSION_TABS)
+  const tabSet = new Set(tabs)
+  const cursorPositions = sanitizeCursorPositionsForTabs(normalized.cursorPositions, tabSet)
+  const activePathRaw = normalized.activePath?.trim() || ''
+  const activePath = activePathRaw && tabSet.has(activePathRaw) ? activePathRaw : tabs[0]
+
+  return normalizeProjectCodeSession({
+    tabs,
+    activePath,
+    cursorPositions: Object.keys(cursorPositions).length > 0 ? cursorPositions : undefined,
+    contentSearchScope: normalized.contentSearchScope,
+  })
 }
 
 export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWorkspacePanelProps) {
@@ -398,6 +511,7 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const persistedLastMarkdownPreviewMode = projectMeta?.lastMarkdownPreviewMode
   const persistedCodeFileDrawerState = projectMeta?.codeFileDrawerState
   const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
+  const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
@@ -417,14 +531,11 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const [contentSearchQuery, setContentSearchQuery] = useState('')
-  const [contentSearchQuerySyncNonce, setContentSearchQuerySyncNonce] = useState(0)
-  const [contentSearchHistory, setContentSearchHistory] = useState<string[]>(
-    () => persistedProjectCodeSession?.contentSearchHistory ?? []
-  )
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
     () => persistedProjectCodeSession?.contentSearchScope ?? ''
   )
   const [contentSearchCaseSensitive, setContentSearchCaseSensitive] = useState(false)
+  const [isContentSearchAdvancedOpen, setIsContentSearchAdvancedOpen] = useState(false)
   const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
     files: [],
     totalMatches: 0,
@@ -604,6 +715,22 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     goToPreviousPreviewSearchMatch,
   } = useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
   const allProjectFilePathSet = useMemo(() => new Set(collectAllFileRelativePaths(tree.nodes)), [tree.nodes])
+  const topLevelDirectorySet = useMemo(() => {
+    const directories = new Set<string>()
+    const visit = (nodes: ProjectFileNode[]) => {
+      for (const node of nodes) {
+        if (node.kind !== 'directory') continue
+        if (!node.relativePath.includes('/')) {
+          directories.add(node.relativePath)
+        }
+        if (node.children?.length) {
+          visit(node.children)
+        }
+      }
+    }
+    visit(tree.nodes)
+    return directories
+  }, [tree.nodes])
   const quickDrawerFavorites = useMemo(
     () => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
     [allProjectFilePathSet, codeFileDrawerState.favorites]
@@ -755,7 +882,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     const normalizedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
     setOpenTabPaths(normalizedSession?.tabs ?? [])
     setCursorPositionsByPath(normalizedSession?.cursorPositions ?? {})
-    setContentSearchHistory(normalizedSession?.contentSearchHistory ?? [])
     setContentSearchScopeInput(normalizedSession?.contentSearchScope ?? '')
     lastPersistedCodeSessionJsonRef.current = JSON.stringify(normalizedSession ?? null)
     if (saveCodeSessionTimerRef.current != null) {
@@ -794,7 +920,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
       tabs,
       activePath,
       cursorPositions: Object.fromEntries(sessionCursorEntries),
-      contentSearchHistory,
       contentSearchScope: contentSearchScopeInput,
     })
     const nextSessionJson = JSON.stringify(nextSession ?? null)
@@ -810,7 +935,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     }, PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS)
   }, [
     activeRelativePath,
-    contentSearchHistory,
     contentSearchScopeInput,
     cursorPositionsByPath,
     openTabPaths,
@@ -850,9 +974,63 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     () => parseContentSearchScopeGlobs(contentSearchScopeInput),
     [contentSearchScopeInput]
   )
+  const contentSearchScopePresets = useMemo<ContentSearchScopePreset[]>(() => {
+    const presets: ContentSearchScopePreset[] = [{
+      id: 'all',
+      label: 'All',
+      hint: 'entire project',
+      scopeInput: '',
+      title: 'Search the whole project',
+    }]
+
+    for (const candidate of CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES) {
+      if (!topLevelDirectorySet.has(candidate)) continue
+      presets.push({
+        id: `dir:${candidate}`,
+        label: CONTENT_SEARCH_ROOT_SCOPE_LABELS[candidate] ?? candidate,
+        hint: `${candidate}/`,
+        scopeInput: `${candidate}/`,
+        title: `Search inside ${candidate}/`,
+      })
+    }
+
+    const activeDirectory = directoryFromRelativePath(activeRelativePath)
+    if (activeDirectory && !presets.some((preset) => preset.scopeInput === `${activeDirectory}/`)) {
+      presets.push({
+        id: 'current-dir',
+        label: 'This dir',
+        hint: `${activeDirectory}/`,
+        scopeInput: `${activeDirectory}/`,
+        title: `Search inside ${activeDirectory}/`,
+      })
+    }
+
+    const activeExtension = extensionFromRelativePath(activeRelativePath)
+    if (activeExtension) {
+      presets.push({
+        id: 'same-type',
+        label: `.${activeExtension}`,
+        hint: `*.${activeExtension}`,
+        scopeInput: activeExtension,
+        title: `Search ${activeExtension.toUpperCase()} files`,
+      })
+    }
+
+    return presets.slice(0, 7)
+  }, [activeRelativePath, topLevelDirectorySet])
+  const activeContentSearchScopeKey = useMemo(
+    () => contentSearchScopeKey(contentSearchScopeInput),
+    [contentSearchScopeInput]
+  )
   const contentSearchScopeSummary = useMemo(() => (
     contentSearchScopeGlobs.length > 0 ? contentSearchScopeGlobs.join(' · ') : 'All files'
   ), [contentSearchScopeGlobs])
+  const activeContentSearchScopeLabel = useMemo(() => {
+    const activePreset = contentSearchScopePresets.find((preset) => contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey)
+    if (activePreset) return activePreset.label
+    if (contentSearchScopeGlobs.length === 1) return contentSearchScopeGlobs[0]
+    return `${contentSearchScopeGlobs.length} globs`
+  }, [activeContentSearchScopeKey, contentSearchScopeGlobs, contentSearchScopePresets])
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const hasContentSearchQuery = contentSearchQuery.trim().length > 0
   const hasContentSearchScope = contentSearchScopeGlobs.length > 0
@@ -865,20 +1043,11 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const handleContentSearchQueryChange = useCallback((nextValue: string) => {
     setContentSearchQuery(nextValue)
   }, [])
-  const pushContentSearchHistory = useCallback((query: string) => {
-    const normalized = query.trim()
-    if (!normalized) return
-    setContentSearchHistory((prev) => [normalized, ...prev.filter((item) => item !== normalized)].slice(0, MAX_CONTENT_SEARCH_HISTORY))
-  }, [])
-  const applyContentSearchQueryFromHistory = useCallback((query: string) => {
-    const normalized = query.trim()
-    if (!normalized) return
-    setContentSearchQuery(normalized)
-    setContentSearchQuerySyncNonce((prev) => prev + 1)
-    pushContentSearchHistory(normalized)
-  }, [pushContentSearchHistory])
-  const removeContentSearchHistoryItem = useCallback((query: string) => {
-    setContentSearchHistory((prev) => prev.filter((item) => item !== query))
+  const applyContentSearchScopePreset = useCallback((preset: ContentSearchScopePreset) => {
+    setContentSearchScopeInput(preset.scopeInput)
+    if (!preset.scopeInput) {
+      setIsContentSearchAdvancedOpen(false)
+    }
   }, [])
   const focusSearchInputByMode = useCallback(() => {
     const focusTarget = () => {
@@ -1045,7 +1214,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setContentSearchResult(result)
         setIsContentSearchAllExpanded(result.files.length > 0)
-        pushContentSearchHistory(normalizedQuery)
       })
       .catch((error) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
@@ -1066,7 +1234,6 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     contentSearchQuery,
     contentSearchScopeGlobs,
     projectPath,
-    pushContentSearchHistory,
   ])
 
   useEffect(() => {
@@ -1173,17 +1340,18 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
     if (hasAttemptedInitialRestore) return
     setHasAttemptedInitialRestore(true)
 
-    const sessionActivePath = persistedProjectCodeSession?.activePath
-    const sessionFirstTabPath = persistedProjectCodeSession?.tabs[0]
-    const restorePath = sessionActivePath || sessionFirstTabPath || persistedLastCodeFile
-    if (!restorePath) {
+    const sessionFirstTabPath = sanitizeProjectCodeSessionByPaths(
+      persistedProjectCodeSession,
+      allProjectFilePathSet
+    )?.tabs[0]
+    if (!sessionFirstTabPath) {
       isRestoringCodeSessionRef.current = false
       return
     }
-    void openFile(restorePath).finally(() => {
+    void openFile(sessionFirstTabPath).finally(() => {
       isRestoringCodeSessionRef.current = false
     })
-  }, [hasAttemptedInitialRestore, openFile, persistedLastCodeFile, persistedProjectCodeSession, tree.status])
+  }, [allProjectFilePathSet, hasAttemptedInitialRestore, openFile, persistedProjectCodeSession, tree.status])
 
   useEffect(() => {
     return () => {
@@ -1436,6 +1604,57 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
   const visibleOpenTabs = useMemo(() => (
     openTabPaths.filter((path) => allProjectFilePathSet.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
   ), [allProjectFilePathSet, openTabPaths])
+
+  useEffect(() => {
+    if (tree.status !== 'ready') return
+
+    const sanitizedLocalTabs = sanitizePathsForKnownFiles(openTabPaths, allProjectFilePathSet, MAX_PROJECT_CODE_SESSION_TABS)
+    if (!isSameStringArray(openTabPaths, sanitizedLocalTabs)) {
+      setOpenTabPaths(sanitizedLocalTabs)
+    }
+
+    const tabSet = new Set(sanitizedLocalTabs)
+    const sanitizedLocalCursors = sanitizeCursorPositionsForTabs(cursorPositionsByPath, tabSet)
+    if (!isSameCursorPositionMap(cursorPositionsByPath, sanitizedLocalCursors)) {
+      setCursorPositionsByPath(sanitizedLocalCursors)
+    }
+
+    const normalizedPersistedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
+    const sanitizedPersistedSession = sanitizeProjectCodeSessionByPaths(persistedProjectCodeSession, allProjectFilePathSet)
+    const normalizedPersistedSessionJson = JSON.stringify(normalizedPersistedSession ?? null)
+    const sanitizedPersistedSessionJson = JSON.stringify(sanitizedPersistedSession ?? null)
+    if (normalizedPersistedSessionJson !== sanitizedPersistedSessionJson) {
+      lastPersistedCodeSessionJsonRef.current = sanitizedPersistedSessionJson
+      if (saveCodeSessionTimerRef.current != null) {
+        window.clearTimeout(saveCodeSessionTimerRef.current)
+        saveCodeSessionTimerRef.current = null
+      }
+      void setProjectCodeSession(projectId, sanitizedPersistedSession)
+    }
+
+    const normalizedPersistedDrawer = normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
+    const sanitizedPersistedDrawer = sanitizeCodeFileDrawerStateByPaths(normalizedPersistedDrawer, allProjectFilePathSet)
+    if (!isSameCodeFileDrawerState(normalizedPersistedDrawer, sanitizedPersistedDrawer)) {
+      void setProjectCodeFileDrawerState(projectId, sanitizedPersistedDrawer)
+    }
+
+    const normalizedLastCodeFile = persistedLastCodeFile?.trim()
+    if (normalizedLastCodeFile && !allProjectFilePathSet.has(normalizedLastCodeFile)) {
+      void setProjectLastCodeFile(projectId, undefined)
+    }
+  }, [
+    allProjectFilePathSet,
+    cursorPositionsByPath,
+    openTabPaths,
+    persistedCodeFileDrawerState,
+    persistedLastCodeFile,
+    persistedProjectCodeSession,
+    projectId,
+    setProjectCodeFileDrawerState,
+    setProjectCodeSession,
+    setProjectLastCodeFile,
+    tree.status,
+  ])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -1757,96 +1976,109 @@ export function CodeWorkspacePanel({ projectId, projectPath, themeMode }: CodeWo
               ) : (
                 <>
                   <div className="code-panel-header code-search-main-header">
+                    <div className="code-search-title-row">
+                      <div className="code-search-title-lockup">
+                        <span className="code-search-title-icon">
+                          <FileSearch className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="code-search-title">Global search</div>
+                          <div className="code-search-subtitle">
+                            {hasContentSearchScope ? `Scope: ${activeContentSearchScopeLabel}` : 'Search text across this project'}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className={`code-search-meta-action ${contentSearchCaseSensitive ? 'is-active' : ''}`}
+                        onClick={() => setContentSearchCaseSensitive((prev) => !prev)}
+                        title={contentSearchCaseSensitive ? 'Case sensitive search: on' : 'Case sensitive search: off'}
+                        aria-pressed={contentSearchCaseSensitive}
+                      >
+                        Aa
+                      </button>
+                    </div>
                     <div className="code-search-main-query">
                       <DebouncedSearchInput
                         inputRef={contentSearchInputRef}
-                        leadingIcon={<FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-                        placeholder="Search text across files (rg)"
-                        inputClassName="code-search-input"
+                        leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                        placeholder="Type text, symbol, or error message"
+                        inputClassName="code-search-input code-search-input--hero"
                         debounceMs={FILE_SEARCH_DEBOUNCE_MS}
                         onQueryChange={handleContentSearchQueryChange}
                         syncValue={contentSearchQuery}
-                        syncNonce={contentSearchQuerySyncNonce}
-                        trailingAction={(
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              className={`code-search-meta-action ${contentSearchCaseSensitive ? 'is-active' : ''}`}
-                              onClick={() => setContentSearchCaseSensitive((prev) => !prev)}
-                              title={contentSearchCaseSensitive ? 'Case sensitive search: on' : 'Case sensitive search: off'}
-                              aria-pressed={contentSearchCaseSensitive}
-                            >
-                              Aa
-                            </button>
-                            <button
-                              type="button"
-                              className="code-search-meta-action code-search-toggle-action"
-                              onClick={handleToggleContentSearchTree}
-                              disabled={!canToggleContentSearchTree}
-                              aria-disabled={!canToggleContentSearchTree}
-                            >
-                              {contentSearchToggleLabel}
-                            </button>
-                          </div>
-                        )}
                       />
                     </div>
-                    <div className="code-search-scope-row">
-                      <div className="code-search-scope-input-wrap">
+                    <ScrollAreaPrimitive.Root className="code-search-scope-strip-root">
+                      <ScrollAreaPrimitive.Viewport className="code-search-scope-strip-viewport" aria-label="Search scope presets">
+                        <div className="code-search-scope-strip">
+                          {contentSearchScopePresets.map((preset) => {
+                            const isActive = contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey
+                            return (
+                              <button
+                                key={preset.id}
+                                type="button"
+                                className={`code-search-scope-pill ${isActive ? 'is-active' : ''}`}
+                                onClick={() => applyContentSearchScopePreset(preset)}
+                                title={preset.title}
+                                aria-pressed={isActive}
+                              >
+                                <span className="code-search-scope-pill-label">{preset.label}</span>
+                                <span className="code-search-scope-pill-hint">{preset.hint}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </ScrollAreaPrimitive.Viewport>
+                      <ScrollAreaPrimitive.Scrollbar
+                        className="code-search-scope-scrollbar"
+                        orientation="horizontal"
+                      >
+                        <ScrollAreaPrimitive.Thumb className="code-search-scope-scrollbar-thumb" />
+                      </ScrollAreaPrimitive.Scrollbar>
+                    </ScrollAreaPrimitive.Root>
+                    <div className="code-search-utility-row">
+                      <button
+                        type="button"
+                        className="code-search-inline-toggle"
+                        onClick={() => setIsContentSearchAdvancedOpen((prev) => !prev)}
+                        aria-expanded={isContentSearchAdvancedOpen}
+                        title="Open advanced glob scope"
+                      >
+                        {isContentSearchAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        <span>Advanced scope</span>
+                        {hasContentSearchScope && (
+                          <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="code-search-meta-action code-search-toggle-action"
+                        onClick={handleToggleContentSearchTree}
+                        disabled={!canToggleContentSearchTree}
+                        aria-disabled={!canToggleContentSearchTree}
+                      >
+                        {contentSearchToggleLabel}
+                      </button>
+                    </div>
+                    {isContentSearchAdvancedOpen && (
+                      <div className="code-search-advanced-panel">
+                        <label className="code-search-advanced-label" htmlFor="code-content-search-scope-input">
+                          Include globs
+                        </label>
                         <input
+                          id="code-content-search-scope-input"
                           type="text"
                           value={contentSearchScopeInput}
                           onChange={(event) => setContentSearchScopeInput(event.target.value)}
-                          placeholder="Scope globs: src/**/*.ts, *.md, docs/**"
+                          placeholder="src/**/*.ts, *.md, docs/**"
                           className="code-search-input code-search-scope-input"
                           spellCheck={false}
                           title={contentSearchScopeSummary}
                         />
-                      </div>
-                      {contentSearchHistory.length > 0 && (
-                        <div className="code-search-history-inline">
-                          <select
-                            className="code-search-history-select"
-                            value=""
-                            onChange={(event) => {
-                              const nextValue = event.target.value
-                              if (!nextValue) return
-                              applyContentSearchQueryFromHistory(nextValue)
-                              event.currentTarget.value = ''
-                            }}
-                            title="Recent search queries"
-                          >
-                            <option value="">History</option>
-                            {contentSearchHistory.map((query) => (
-                              <option key={query} value={query}>{query}</option>
-                            ))}
-                          </select>
+                        <div className="code-search-advanced-help">
+                          Separate scopes with space or comma. Short inputs like <code>ts</code> become <code>*.ts</code>.
                         </div>
-                      )}
-                    </div>
-                    {contentSearchHistory.length > 0 && (
-                      <div className="code-search-history-chip-row">
-                        {contentSearchHistory.slice(0, 6).map((query) => (
-                          <div key={query} className="code-search-history-chip">
-                            <button
-                              type="button"
-                              className="code-search-history-chip-main"
-                              onClick={() => applyContentSearchQueryFromHistory(query)}
-                              title={query}
-                            >
-                              {query}
-                            </button>
-                            <button
-                              type="button"
-                              className="code-search-history-chip-remove"
-                              onClick={() => removeContentSearchHistoryItem(query)}
-                              title="Remove from history"
-                              aria-label={`Remove ${query} from history`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
                       </div>
                     )}
                     {showContentSearchSummary && (

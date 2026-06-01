@@ -41,6 +41,11 @@ export function RecentProjectsDrawer({
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
 
+  const currentProject = useMemo(
+    () => projects.find((project) => project.id === currentProjectId),
+    [projects, currentProjectId]
+  )
+
   const recentProjects = useMemo(
     () => projects
       .filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number')
@@ -100,6 +105,13 @@ export function RecentProjectsDrawer({
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[color:var(--color-foreground)]">最近项目</p>
               <p className="text-[11px] text-[color:var(--color-muted-foreground)]">右键下滑快速打开，点击可切换</p>
+            </div>
+            <div
+              className="recent-project-drawer-current"
+              title={currentProject?.path}
+              aria-label={currentProject ? `当前项目：${projectDisplayName(currentProject)}` : undefined}
+            >
+              {currentProject ? projectDisplayName(currentProject) : null}
             </div>
             <button
               type="button"

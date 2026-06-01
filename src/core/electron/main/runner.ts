@@ -389,7 +389,7 @@ class ProcessManager {
   // ── backend: spawn fallback ─────────────────────────────
 
   private startWithSpawn(projectId: string, command: string, cwd: string): boolean {
-    const child = spawnChild(command, [], {
+    const child = spawnChild(command, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: true,

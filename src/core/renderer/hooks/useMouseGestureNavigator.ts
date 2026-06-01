@@ -7,14 +7,14 @@ export type MouseGestureHint = {
   visible: boolean
   label: string
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | 'recent' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | null
   points: GesturePoint[]
   cursor: GesturePoint | null
 }
 
 type GesturePreview = {
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | 'recent' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | null
   label: string
 }
 
@@ -32,6 +32,7 @@ const SAMPLE_MIN_DISTANCE = 6
 const MAX_POINTS = 96
 const HORIZONTAL_THRESHOLD = 72
 const VERTICAL_DOWN_THRESHOLD = 72
+const VERTICAL_UP_THRESHOLD = 72
 const ANGLE_RATIO = 1.25
 const CIRCLE_MIN_POINTS = 18
 const CIRCLE_MIN_DIAMETER = 44
@@ -52,9 +53,23 @@ const RECENT_GESTURE_IGNORE_SELECTOR = [
   '.xterm',
   '[role="dialog"]',
 ].join(', ')
+const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 
 function shouldSkipRecentGesture(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(RECENT_GESTURE_IGNORE_SELECTOR))
+}
+
+function isProjectDetailRoute(pathname: string): boolean {
+  const segments = pathname.split('/').filter(Boolean)
+  return segments[0] === 'project' && segments.length >= 2
+}
+
+function readProjectHeaderCollapsed(): boolean {
+  try {
+    return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 function normalizeDeltaAngle(value: number): number {
@@ -127,7 +142,15 @@ function detectCircleGesture(rawPoints: GesturePoint[]): boolean {
   return true
 }
 
-function toPreview(dx: number, dy: number, points: GesturePoint[], allowRecentGesture: boolean): GesturePreview {
+function toPreview(
+  dx: number,
+  dy: number,
+  points: GesturePoint[],
+  allowRecentGesture: boolean,
+  allowProjectHeaderGesture: boolean,
+  isDetailRoute: boolean,
+  projectHeaderCollapsed: boolean
+): GesturePreview {
   if (detectCircleGesture(points)) {
     return {
       status: 'ready',
@@ -138,6 +161,19 @@ function toPreview(dx: number, dy: number, points: GesturePoint[], allowRecentGe
 
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
+
+  if (
+    allowProjectHeaderGesture
+    && isDetailRoute
+    && dy <= -VERTICAL_UP_THRESHOLD
+    && absY >= absX * ANGLE_RATIO
+  ) {
+    return {
+      status: 'ready',
+      action: 'toggleProjectHeader',
+      label: projectHeaderCollapsed ? '松开后展开项目栏' : '松开后收起项目栏',
+    }
+  }
 
   if (allowRecentGesture && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
     return {
@@ -164,11 +200,25 @@ function toPreview(dx: number, dy: number, points: GesturePoint[], allowRecentGe
     }
   }
 
+  if (allowProjectHeaderGesture && isDetailRoute && dy < -ACTIVATE_DISTANCE && absY > absX * 1.05) {
+    return {
+      status: 'pending',
+      action: 'toggleProjectHeader',
+      label: projectHeaderCollapsed ? '继续向上拖动（展开项目栏）…' : '继续向上拖动（收起项目栏）…',
+    }
+  }
+
   if (absY > absX * 1.05 && absY >= ACTIVATE_DISTANCE * 2) {
     return {
       status: 'invalid',
       action: null,
-      label: allowRecentGesture ? '无效手势：请向下/水平拖动或画圆' : '无效手势：请水平拖动或画圆',
+      label: allowRecentGesture
+        ? (allowProjectHeaderGesture && isDetailRoute
+          ? '无效手势：请向上/向下/水平拖动或画圆'
+          : '无效手势：请向下/水平拖动或画圆')
+        : (allowProjectHeaderGesture && isDetailRoute
+          ? '无效手势：请向上/水平拖动或画圆'
+          : '无效手势：请水平拖动或画圆'),
     }
   }
 
@@ -196,6 +246,8 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     activated: false,
     moved: false,
     ignoreRecentInThisGesture: false,
+    isDetailRouteAtStart: false,
+    projectHeaderCollapsedAtStart: false,
     startX: 0,
     startY: 0,
     lastDx: 0,
@@ -251,10 +303,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return
+      const detailRoute = isProjectDetailRoute(location.pathname)
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.moved = false
       stateRef.current.ignoreRecentInThisGesture = shouldSkipRecentGesture(e.target)
+      stateRef.current.isDetailRouteAtStart = detailRoute
+      stateRef.current.projectHeaderCollapsedAtStart = detailRoute ? readProjectHeaderCollapsed() : false
       stateRef.current.startX = e.clientX
       stateRef.current.startY = e.clientY
       stateRef.current.lastDx = 0
@@ -268,12 +323,15 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const state = stateRef.current
       if (!state.tracking) return
       const allowRecentGesture = !state.ignoreRecentInThisGesture
+      const allowProjectHeaderGesture = !state.ignoreRecentInThisGesture
 
       if ((e.buttons & 2) === 0) {
         state.tracking = false
         state.activated = false
         state.moved = false
         state.ignoreRecentInThisGesture = false
+        state.isDetailRouteAtStart = false
+        state.projectHeaderCollapsedAtStart = false
         state.points = []
         clearHint()
         return
@@ -310,7 +368,15 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (!state.activated) return
       const gesturePoints = [...state.points, { x: e.clientX, y: e.clientY }]
-      const preview = toPreview(state.lastDx, state.lastDy, gesturePoints, allowRecentGesture)
+      const preview = toPreview(
+        state.lastDx,
+        state.lastDy,
+        gesturePoints,
+        allowRecentGesture,
+        allowProjectHeaderGesture,
+        state.isDetailRouteAtStart,
+        state.projectHeaderCollapsedAtStart
+      )
       scheduleHint({
         visible: true,
         label: preview.label,
@@ -345,6 +411,10 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const isCircle = detectCircleGesture(gesturePoints)
       const segments = location.pathname.split('/').filter(Boolean)
       const isDetailRoute = segments[0] === 'project' && segments.length >= 2
+      const passedUp = !state.ignoreRecentInThisGesture
+        && state.isDetailRouteAtStart
+        && dy <= -VERTICAL_UP_THRESHOLD
+        && absY >= absX * ANGLE_RATIO
       const passedDown = !state.ignoreRecentInThisGesture
         && dy >= VERTICAL_DOWN_THRESHOLD
         && dy >= absX * ANGLE_RATIO
@@ -356,6 +426,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
             gestureResetToStartupDefault: Date.now(),
           },
         })
+        state.points = []
+        return
+      }
+
+      if (hadGestureMovement && passedUp) {
+        hideHintImmediately()
+        window.dispatchEvent(new CustomEvent('app:toggle-project-header'))
         state.points = []
         return
       }
@@ -389,6 +466,8 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       state.points = []
       state.ignoreRecentInThisGesture = false
+      state.isDetailRouteAtStart = false
+      state.projectHeaderCollapsedAtStart = false
       hideHintImmediately()
     }
 
@@ -406,6 +485,8 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.activated = false
       stateRef.current.moved = false
       stateRef.current.ignoreRecentInThisGesture = false
+      stateRef.current.isDetailRouteAtStart = false
+      stateRef.current.projectHeaderCollapsedAtStart = false
       stateRef.current.points = []
       hideHintImmediately()
     }

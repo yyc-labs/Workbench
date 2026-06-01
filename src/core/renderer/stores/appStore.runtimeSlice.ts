@@ -2,6 +2,60 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function pickLatestSessionName(names: string[], createdAtByName: Map<string, number>): string | null {
+  if (names.length === 0) return null
+  let latestName = names[0]
+  let latestCreatedAt = createdAtByName.get(latestName) ?? 0
+  for (let i = 1; i < names.length; i++) {
+    const name = names[i]
+    const createdAt = createdAtByName.get(name) ?? 0
+    if (createdAt >= latestCreatedAt) {
+      latestName = name
+      latestCreatedAt = createdAt
+    }
+  }
+  return latestName
+}
+
+function inferRuntimeSessionName(
+  project: AppState['projects'][number],
+  sessionNames: string[],
+  createdAtByName: Map<string, number>,
+): string | null {
+  const baseName = project.name?.trim()
+  if (!baseName) return null
+
+  const escaped = escapeRegExp(baseName)
+  const normalizedCli = project.cli === 'codex' ? 'codex' : 'claude'
+  const md5Suffix = '[a-f0-9]{6}'
+  const cliPattern = normalizedCli === 'claude'
+    ? new RegExp(`^${escaped}-claude-${md5Suffix}$`)
+    : new RegExp(`^${escaped}-(?:codex-)?${md5Suffix}$`)
+  const genericPattern = new RegExp(`^${escaped}-(?:claude-|codex-)?${md5Suffix}$`)
+
+  const cliMatches = sessionNames.filter((name) => cliPattern.test(name))
+  const cliLatest = pickLatestSessionName(cliMatches, createdAtByName)
+  if (cliLatest) return cliLatest
+
+  const genericMatches = sessionNames.filter((name) => genericPattern.test(name))
+  if (genericMatches.length === 1) return genericMatches[0]
+  return pickLatestSessionName(genericMatches, createdAtByName)
+}
+
+function pickBestSessionName(
+  candidates: string[],
+  rawSessionNameSet: Set<string>,
+): string {
+  for (const name of candidates) {
+    if (name && rawSessionNameSet.has(name)) return name
+  }
+  return candidates.find(Boolean) || ''
+}
+
 export type RuntimeActionsSlice = Pick<
   AppState,
   | 'loadTmuxSessions'
@@ -26,12 +80,19 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
     try {
       const { projects, runtimeEntries } = get()
       const rawSessions = await runtimeManager.listTmuxSessions()
+      const rawSessionNames = rawSessions.map((item) => item.sessionName)
+      const rawSessionNameSet = new Set(rawSessionNames)
+      const createdAtByName = new Map(rawSessions.map((item) => [item.sessionName, item.createdAt] as const))
       const result: AppState['sessions'] = {}
 
       for (const project of projects) {
         const entry = runtimeEntries[project.id]
-        const sessionName = entry?.sessionName
-          || runtimeManager.getSessionName(project.id, project.name)
+        const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName)
+        const fallbackSessionName = runtimeManager.getSessionName(project.id, project.name)
+        const sessionName = pickBestSessionName(
+          [entry?.sessionName || '', inferredSessionName || '', fallbackSessionName],
+          rawSessionNameSet
+        )
 
         const tmux = rawSessions.find((s) => s.sessionName === sessionName)
 
@@ -78,6 +139,10 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
     }
     await get().loadRuntimeEntries()
     await get().refreshSessions()
+    // Launcher script may create/attach tmux slightly after IPC returns.
+    setTimeout(() => {
+      void get().refreshSessions()
+    }, 1200)
   },
 
   stopRuntime: async (projectId) => {
@@ -100,4 +165,3 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
     return ok
   },
 })
-

@@ -410,6 +410,28 @@ function quoteBashSingle(input: string): string {
   return input.replace(/'/g, "'\\''")
 }
 
+function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
+  return cli === 'codex' ? 'codex' : 'claude'
+}
+
+function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'): string {
+  const normalizedCli = normalizeRuntimeCli(cli)
+  const wslPath = wslBridge.toWslPath(projectPath)
+  // Keep backward compatibility with historical codex sessions:
+  // old codex naming did not include cli suffix.
+  if (normalizedCli === 'codex') {
+    const legacyMd5 = createHash('md5').update(wslPath).digest('hex').slice(0, 6)
+    return `${basename(projectPath)}-${legacyMd5}`
+  }
+  // New naming includes cli dimension so switching CLI does not reuse
+  // an existing tmux session booted with the other tool.
+  const cliAwareMd5 = createHash('md5')
+    .update(`${normalizedCli}:${wslPath}`)
+    .digest('hex')
+    .slice(0, 6)
+  return `${basename(projectPath)}-${normalizedCli}-${cliAwareMd5}`
+}
+
 function resolveWslVsCodeTarget(pathValue: string): { distro: string; linuxPath: string } | null {
   const normalized = pathValue.trim().replace(/\\/g, '/')
   if (!normalized) return null
@@ -1706,20 +1728,22 @@ function asFolderPath(pathValue: string): string {
 }
 
 function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
-  const primaryCmd = process.platform === 'win32' ? 'code.cmd' : 'code'
-  const fallbackCmd = 'code'
-
-  const spawnWith = (cmd: string, allowFallback: boolean) => {
-    const child = spawn(cmd, args, {
+  const spawnWith = (
+    cmd: string,
+    spawnArgs: string[],
+    fallback?: () => void
+  ) => {
+    const child = spawn(cmd, spawnArgs, {
       detached: true,
-      shell: true,
+      shell: false,
+      windowsHide: true,
       stdio: 'ignore',
     })
 
     child.on('error', (err) => {
-      console.error(`[open-vscode] failed command="${cmd}" args=${JSON.stringify(args)} error=${err.message}`)
-      if (allowFallback && cmd !== fallbackCmd) {
-        spawnWith(fallbackCmd, false)
+      console.error(`[open-vscode] failed command="${cmd}" args=${JSON.stringify(spawnArgs)} error=${err.message}`)
+      if (fallback) {
+        fallback()
       } else {
         onError?.(err)
       }
@@ -1728,7 +1752,18 @@ function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
     child.unref()
   }
 
-  spawnWith(primaryCmd, true)
+  if (process.platform === 'win32') {
+    // Node on Windows cannot reliably spawn .cmd directly (often EINVAL).
+    // Run VS Code CLI through cmd.exe and keep a direct `code` fallback.
+    spawnWith(
+      'cmd.exe',
+      ['/d', '/s', '/c', 'code.cmd', ...args],
+      () => spawnWith('code', args)
+    )
+    return
+  }
+
+  spawnWith('code', args)
 }
 
 function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
@@ -2278,13 +2313,12 @@ function registerIpcHandlers(): void {
 
       const distro = bootCapability?.wslDistro || 'Ubuntu'
       const wslPath = wslBridge.toWslPath(projectPath)
+      const resolvedCli = normalizeRuntimeCli(cli)
+      const sessionName = buildRuntimeSessionName(projectPath, resolvedCli)
 
-      // Match the script's session naming: basename + first 6 chars of MD5(path)
-      const md5 = createHash('md5').update(wslPath).digest('hex').slice(0, 6)
-      const sessionName = `${basename(projectPath)}-${md5}`
-
-      // Build CLI tool flag for the launcher script
-      const cliFlag = cli === 'codex' ? ' --cli codex' : ''
+      // Always pass --cli explicitly so launcher-side persisted prefs
+      // (e.g. cli-prefs.txt) cannot override this launch intent.
+      const cliFlag = ` --cli ${resolvedCli}`
       const launcher = quoteBashSingle(resolvedRuntimeLauncherScript())
 
       return new Promise<boolean>((resolve) => {

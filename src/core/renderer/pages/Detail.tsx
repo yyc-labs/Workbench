@@ -5,7 +5,9 @@ import {
   ArrowUpRight,
   BookOpen,
   Bot,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Code2,
   Play,
   RefreshCw,
@@ -27,6 +29,7 @@ import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useAiCommitFlow } from './detail/useAiCommitFlow'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 
+const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
   'button',
   'a',
@@ -41,6 +44,14 @@ const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
 
 function shouldSkipProjectPageContextMenu(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
+}
+
+function readProjectHeaderCollapsed(): boolean {
+  try {
+    return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 export function DetailPage() {
@@ -76,9 +87,13 @@ export function DetailPage() {
   const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
+  const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
 
   const environment = project ? detectProjectEnvironment(project.path) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
+  const contentTopPaddingClass = projectHeaderCollapsed
+    ? 'pt-5'
+    : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const isRunning = processStatus === 'running'
   const isStopping = processStatus === 'stopping'
   const isActive = isRunning || isStopping
@@ -209,6 +224,24 @@ export function DetailPage() {
     }
   }, [toolProcessId, stopProject])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY, projectHeaderCollapsed ? '1' : '0')
+    } catch {
+      // ignore storage errors
+    }
+  }, [projectHeaderCollapsed])
+
+  useEffect(() => {
+    const onToggleProjectHeader = () => {
+      setProjectHeaderCollapsed((prev) => !prev)
+    }
+    window.addEventListener('app:toggle-project-header', onToggleProjectHeader as EventListener)
+    return () => {
+      window.removeEventListener('app:toggle-project-header', onToggleProjectHeader as EventListener)
+    }
+  }, [])
+
   if (!project || !projectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -226,164 +259,188 @@ export function DetailPage() {
 
   return (
     <div
-      className="flex h-full flex-col"
+      className="relative flex h-full flex-col"
       onContextMenu={(event) => {
         if (shouldSkipProjectPageContextMenu(event.target)) return
         event.preventDefault()
         setMenuPos({ x: event.clientX, y: event.clientY })
       }}
     >
-      <header className="app-chrome flex min-h-[84px] shrink-0 items-center justify-between px-8 py-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <button
-            className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => navigate('/')}
-          >
-            <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-          </button>
-
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{projectDisplayName(project)}</h1>
-            <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
-              {middleTruncatePath(project.path)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
-          </div>
-
-          {isActive ? (
-            <div
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
-                ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                : isStopping
-                  ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                }`}
+      {!projectHeaderCollapsed && (
+        <header className="app-chrome pointer-events-auto absolute inset-x-0 top-0 z-[85] flex min-h-[84px] items-center justify-between px-8 py-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <button
+              className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={() => navigate('/')}
             >
-              {isStopping ? (
-                <RefreshCw className="h-3 w-3 animate-spin" />
-              ) : (
-                <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
-              )}
-              {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Session Available'}
+              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
+            </button>
+
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{projectDisplayName(project)}</h1>
+              <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
+                {middleTruncatePath(project.path)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
             </div>
-          ) : (
-            <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">Stopped</span>
-          )}
-        </div>
 
-        <div className="flex shrink-0 items-center gap-3">
-          <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activePane === 'code'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => {
-                if (!projectId || activePane === 'code') return
-                navigate(`/project/${projectId}/code`)
-              }}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              Code
-            </button>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                activePane === 'aicommit'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => {
-                if (!projectId || activePane === 'aicommit') return
-                navigate(`/project/${projectId}/aicommit`)
-              }}
-            >
-              <Bot className="h-3.5 w-3.5" />
-              Git Commit
-            </button>
+            {isActive ? (
+              <div
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
+                  ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                  : isStopping
+                    ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                    : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                  }`}
+              >
+                {isStopping ? (
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                ) : (
+                  <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
+                )}
+                {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Session Available'}
+              </div>
+            ) : (
+              <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">Stopped</span>
+            )}
           </div>
 
-          {isRunning && processUrls.length > 0 && (
-            <UrlPopover urls={processUrls}>
-              <button
-                className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
-                onClick={() => window.electronAPI.openExternal(processUrls[0])}
-              >
-                <ArrowUpRight className="h-3 w-3" />
-                <span className="max-w-[180px] truncate">{processUrls[0]}</span>
-              </button>
-            </UrlPopover>
-          )}
-
-          {defaultDocLink && (
-            <UrlPopover items={docMenuItems}>
+          <div className="flex shrink-0 items-center gap-3">
+            <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
               <button
                 type="button"
-                className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
-                title={defaultDocLink.url}
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activePane === 'code'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => {
+                  if (!projectId || activePane === 'code') return
+                  navigate(`/project/${projectId}/code`)
+                }}
               >
-                <BookOpen className="h-3 w-3" />
-                <span className="max-w-[200px] truncate">
-                  资料 · {projectDocLinkTagLabel(
-                    normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
-                    docLinkTagOptions
-                  )}: {defaultDocLink.title}
-                </span>
+                <Code2 className="h-3.5 w-3.5" />
+                Code
               </button>
-            </UrlPopover>
-          )}
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  activePane === 'aicommit'
+                    ? 'bg-primary text-white'
+                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => {
+                  if (!projectId || activePane === 'aicommit') return
+                  navigate(`/project/${projectId}/aicommit`)
+                }}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                Git Commit
+              </button>
+            </div>
+
+            {isRunning && processUrls.length > 0 && (
+              <UrlPopover urls={processUrls}>
+                <button
+                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
+                  onClick={() => window.electronAPI.openExternal(processUrls[0])}
+                >
+                  <ArrowUpRight className="h-3 w-3" />
+                  <span className="max-w-[180px] truncate">{processUrls[0]}</span>
+                </button>
+              </UrlPopover>
+            )}
+
+            {defaultDocLink && (
+              <UrlPopover items={docMenuItems}>
+                <button
+                  type="button"
+                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                  title={defaultDocLink.url}
+                >
+                  <BookOpen className="h-3 w-3" />
+                  <span className="max-w-[200px] truncate">
+                    资料 · {projectDocLinkTagLabel(
+                      normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
+                      docLinkTagOptions
+                    )}: {defaultDocLink.title}
+                  </span>
+                </button>
+              </UrlPopover>
+            )}
+
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+              onClick={() => setLinkSettingsOpen(true)}
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              资料设置
+            </button>
+
+            <button
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
+                ? isStopping
+                  ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                  : 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
+                }`}
+              style={
+                isActive
+                  ? isStopping
+                    ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                    : { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
+                  : undefined
+              }
+              onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setMenuPos(null)
+                setRunConfigPos({ x: e.clientX, y: e.clientY })
+              }}
+              disabled={isStopping}
+              title="左键执行当前动作，右键配置 Run 命令"
+            >
+              {isActive ? (
+                <>
+                  {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
+                  {isStopping ? 'Stopping...' : 'Stop'}
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5" />
+                  Run
+                </>
+              )}
+            </button>
+
+          </div>
 
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onClick={() => setLinkSettingsOpen(true)}
+            aria-label="收起项目栏"
+            title="收起项目栏"
+            className="absolute bottom-0 left-1/2 z-[87] inline-flex h-6 w-6 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+            onClick={() => setProjectHeaderCollapsed(true)}
           >
-            <Settings2 className="h-3.5 w-3.5" />
-            资料设置
+            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.8} />
           </button>
+        </header>
+      )}
 
-          <button
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
-              ? isStopping
-                ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                : 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-              : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
-              }`}
-            style={
-              isActive
-                ? isStopping
-                  ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
-                  : { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
-                : undefined
-            }
-            onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              setMenuPos(null)
-              setRunConfigPos({ x: e.clientX, y: e.clientY })
-            }}
-            disabled={isStopping}
-            title="左键执行当前动作，右键配置 Run 命令"
-          >
-            {isActive ? (
-              <>
-                {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-                {isStopping ? 'Stopping...' : 'Stop'}
-              </>
-            ) : (
-              <>
-                <Play className="h-3.5 w-3.5" />
-                Run
-              </>
-            )}
-          </button>
-
-        </div>
-      </header>
+      {projectHeaderCollapsed && (
+        <button
+          type="button"
+          aria-label="展开项目栏"
+          className="app-chrome fixed left-1/2 top-[calc(var(--window-titlebar-height)+6px)] z-[86] inline-flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+          onClick={() => setProjectHeaderCollapsed(false)}
+          title="展开项目栏"
+        >
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
+        </button>
+      )}
 
       {quickConfigOpen && (
         <div
@@ -540,14 +597,19 @@ export function DetailPage() {
         />
       )}
 
-      <div className={`min-h-0 flex-1 px-6 pb-6 pt-5 sm:px-8 ${activePane === 'aicommit' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
+      <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass} ${activePane === 'aicommit' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
         <div className={`mx-auto h-full min-h-0 w-full ${
           activePane === 'aicommit'
             ? 'min-w-[1060px] max-w-[1640px]'
             : 'min-w-0 max-w-[1360px]'
         }`}>
           {activePane === 'code' ? (
-            <CodeWorkspacePanel projectId={project.id} projectPath={project.path} themeMode={themeMode} />
+            <CodeWorkspacePanel
+              key={`${project.id}:${project.path}`}
+              projectId={project.id}
+              projectPath={project.path}
+              themeMode={themeMode}
+            />
           ) : (
             <DetailAiCommitPanel
               rightPaneMode={rightPaneMode}

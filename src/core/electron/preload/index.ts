@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import { IPC } from '../main/ipc'
 
 type ThemeMode = 'system' | 'light' | 'dark'
+type AiCommitOutputData = { projectId: string; data: string }
+type AiCommitStatusData = { projectId: string; status: 'running' | 'success' | 'error' }
 
 function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
   if (theme === 'system') {
@@ -11,6 +13,43 @@ function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
 }
 
 let initialThemeMode: ThemeMode = 'system'
+
+const aiCommitOutputSubscribers = new Set<(data: AiCommitOutputData) => void>()
+const aiCommitStatusSubscribers = new Set<(data: AiCommitStatusData) => void>()
+
+const aiCommitOutputHandler = (_e: IpcRendererEvent, d: AiCommitOutputData) => {
+  for (const cb of aiCommitOutputSubscribers) cb(d)
+}
+
+const aiCommitStatusHandler = (_e: IpcRendererEvent, d: AiCommitStatusData) => {
+  for (const cb of aiCommitStatusSubscribers) cb(d)
+}
+
+function subscribeAiCommitOutput(cb: (data: AiCommitOutputData) => void) {
+  aiCommitOutputSubscribers.add(cb)
+  if (aiCommitOutputSubscribers.size === 1) {
+    ipcRenderer.on(IPC.AI_COMMIT_OUTPUT, aiCommitOutputHandler)
+  }
+  return () => {
+    aiCommitOutputSubscribers.delete(cb)
+    if (aiCommitOutputSubscribers.size === 0) {
+      ipcRenderer.removeListener(IPC.AI_COMMIT_OUTPUT, aiCommitOutputHandler)
+    }
+  }
+}
+
+function subscribeAiCommitStatus(cb: (data: AiCommitStatusData) => void) {
+  aiCommitStatusSubscribers.add(cb)
+  if (aiCommitStatusSubscribers.size === 1) {
+    ipcRenderer.on(IPC.AI_COMMIT_STATUS, aiCommitStatusHandler)
+  }
+  return () => {
+    aiCommitStatusSubscribers.delete(cb)
+    if (aiCommitStatusSubscribers.size === 0) {
+      ipcRenderer.removeListener(IPC.AI_COMMIT_STATUS, aiCommitStatusHandler)
+    }
+  }
+}
 
 // Apply theme before renderer boot to avoid first-paint flicker.
 try {
@@ -241,23 +280,13 @@ const api = {
   onAiCommitOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {
-    const handler = (
-      _e: IpcRendererEvent,
-      d: { projectId: string; data: string }
-    ) => cb(d)
-    ipcRenderer.on(IPC.AI_COMMIT_OUTPUT, handler)
-    return () => ipcRenderer.removeListener(IPC.AI_COMMIT_OUTPUT, handler)
+    return subscribeAiCommitOutput(cb)
   },
 
   onAiCommitStatus: (
     cb: (data: { projectId: string; status: 'running' | 'success' | 'error' }) => void
   ) => {
-    const handler = (
-      _e: IpcRendererEvent,
-      d: { projectId: string; status: 'running' | 'success' | 'error' }
-    ) => cb(d)
-    ipcRenderer.on(IPC.AI_COMMIT_STATUS, handler)
-    return () => ipcRenderer.removeListener(IPC.AI_COMMIT_STATUS, handler)
+    return subscribeAiCommitStatus(cb)
   },
 
   onWindowState: (
