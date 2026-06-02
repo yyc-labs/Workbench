@@ -11,6 +11,8 @@ export interface FileTreeState {
   status: LoadStatus
   nodes: ProjectFileNode[]
   error: string | null
+  knownFilePaths: Set<string>
+  loadingDirectories: Set<string>
   skippedDirectories: number
   skippedFiles: number
 }

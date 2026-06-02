@@ -83,6 +83,12 @@ const api = {
   setConfig: (partial: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC.CONFIG_SET, partial),
 
+  getClaudeBashrcConfig: () =>
+    ipcRenderer.invoke(IPC.CLAUDE_BASHRC_GET),
+
+  setClaudeBashrcConfig: (config: Record<string, unknown>) =>
+    ipcRenderer.invoke(IPC.CLAUDE_BASHRC_SET, config),
+
   setDocLinkSecret: (projectId: string, linkId: string, secret: string) =>
     ipcRenderer.invoke(IPC.DOC_LINK_SECRET_SET, projectId, linkId, secret),
 
@@ -209,6 +215,9 @@ const api = {
 
   listProjectFiles: (projectPath: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath),
+
+  listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) =>
+    ipcRenderer.invoke(IPC.PROJECT_FILE_TREE_DIRECTORY, projectPath, directoryRelativePath),
 
   searchProjectFiles: (projectPath: string, query: string) =>
     ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH, projectPath, query),

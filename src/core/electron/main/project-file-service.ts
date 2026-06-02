@@ -18,6 +18,7 @@ import type {
 const MAX_TEXT_FILE_SIZE = 1024 * 1024
 const MAX_TREE_FILES = 5000
 const MAX_TREE_DEPTH = 8
+const MAX_DIRECTORY_ENTRIES = 10_000
 const MAX_BINARY_PROBE_BYTES = 8 * 1024
 const RG_FILE_LIST_TIMEOUT_MS = 20_000
 const RG_FILE_LIST_MAX_BUFFER = 64 * 1024 * 1024
@@ -140,6 +141,11 @@ interface FilterListedPathsResult {
   skippedFiles: number
 }
 
+interface DirectoryListCounters {
+  skippedFiles: number
+  skippedDirectories: number
+}
+
 interface RgOutputData {
   text?: string
   bytes?: string
@@ -193,6 +199,13 @@ function validateRelativePathLooksSafe(relativePath: string): void {
   if (/^[A-Za-z]:[\\/]/.test(relativePath)) {
     throw new ProjectFileServiceError('Windows absolute paths are not allowed.')
   }
+}
+
+function compareTreeNodesByName(a: ProjectFileNode, b: ProjectFileNode): number {
+  if (a.kind !== b.kind) {
+    return a.kind === 'directory' ? -1 : 1
+  }
+  return a.name.localeCompare(b.name)
 }
 
 function ensureWithinRoot(rootRealPath: string, targetRealPath: string): void {
@@ -461,6 +474,8 @@ function createDirectoryBucket(name: string, relativePath: string): TreeDirector
       name,
       relativePath,
       kind: 'directory',
+      hasChildren: false,
+      isLoaded: true,
       children: [],
     },
     directoryChildren: new Map(),
@@ -481,6 +496,7 @@ function insertFileIntoTree(rootBucket: TreeDirectoryBucket, relativePath: strin
       childDirectory = createDirectoryBucket(segment, directoryPath)
       bucket.directoryChildren.set(segment, childDirectory)
       ;(bucket.node.children as ProjectFileNode[]).push(childDirectory.node)
+      bucket.node.hasChildren = true
     }
     bucket = childDirectory
   }
@@ -488,6 +504,7 @@ function insertFileIntoTree(rootBucket: TreeDirectoryBucket, relativePath: strin
   const fileName = segments[segments.length - 1]
   if (!fileName || bucket.fileChildren.has(fileName)) return
   bucket.fileChildren.add(fileName)
+  bucket.node.hasChildren = true
   ;(bucket.node.children as ProjectFileNode[]).push({
     name: fileName,
     relativePath,
@@ -645,6 +662,8 @@ async function scanDirectoryFallback(
         name: entry.name,
         relativePath,
         kind: 'directory',
+        hasChildren: children.length > 0,
+        isLoaded: true,
         children,
       })
       continue
@@ -676,40 +695,137 @@ async function scanDirectoryFallback(
 }
 
 export async function listProjectFiles(projectPath: string): Promise<ProjectFileTreeResult> {
-  const rootRealPath = await resolveRoot(projectPath)
+  return listProjectDirectoryFiles(projectPath, null)
+}
 
-  const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
-  if (listedPaths) {
-    listedPaths.sort((a, b) => a.localeCompare(b))
+async function directoryHasVisibleChildren(absoluteDirectoryPath: string): Promise<boolean> {
+  let entries: Dirent[]
+  try {
+    entries = await fs.readdir(absoluteDirectoryPath, { withFileTypes: true })
+  } catch {
+    return false
+  }
 
-    const filtered = filterListedFilePaths(listedPaths)
-    setProjectFileListCache(rootRealPath, filtered.acceptedPaths)
-
-    return {
-      rootPath: rootRealPath,
-      nodes: buildTreeFromRelativePaths(filtered.acceptedPaths),
-      skipped: {
-        files: filtered.skippedFiles,
-        directories: 0,
-      },
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue
+      return true
+    }
+    if (entry.isFile()) {
+      if (isExcludedFile(entry.name)) continue
+      return true
     }
   }
 
-  // Fallback keeps behavior functional when rg is unavailable.
-  const counters: ScanCounters = {
-    filesScanned: 0,
+  return false
+}
+
+async function listProjectDirectoryChildren(
+  rootRealPath: string,
+  directoryRelativePath: string | null
+): Promise<ProjectFileTreeResult> {
+  const normalizedDirectoryRelativePath = directoryRelativePath ? normalizeRelativeInput(directoryRelativePath) : null
+  const targetDirectoryPath = normalizedDirectoryRelativePath
+    ? path.join(rootRealPath, normalizedDirectoryRelativePath)
+    : rootRealPath
+  const directoryRealPath = await fs.realpath(targetDirectoryPath)
+  ensureWithinRoot(rootRealPath, directoryRealPath)
+
+  const directoryStat = await fs.stat(directoryRealPath)
+  if (!directoryStat.isDirectory()) {
+    throw new ProjectFileServiceError('Target path is not a directory.')
+  }
+
+  let entries: Dirent[]
+  try {
+    entries = await fs.readdir(directoryRealPath, { withFileTypes: true })
+  } catch {
+    throw new ProjectFileServiceError('Unable to read directory contents.')
+  }
+
+  entries.sort((a, b) => a.name.localeCompare(b.name))
+
+  const counters: DirectoryListCounters = {
     skippedFiles: 0,
     skippedDirectories: 0,
   }
-  const nodes = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters)
+  const nodes: ProjectFileNode[] = []
+  let includedEntries = 0
+
+  for (const entry of entries) {
+    if (includedEntries >= MAX_DIRECTORY_ENTRIES) {
+      if (entry.isDirectory()) counters.skippedDirectories += 1
+      else if (entry.isFile()) counters.skippedFiles += 1
+      continue
+    }
+
+    const entryAbsolutePath = path.join(directoryRealPath, entry.name)
+    const relativePath = toPosixRelativePath(path.relative(rootRealPath, entryAbsolutePath))
+    if (!relativePath || relativePath.startsWith('..')) {
+      counters.skippedDirectories += 1
+      continue
+    }
+
+    if (fileDepth(relativePath) > MAX_TREE_DEPTH) {
+      if (entry.isDirectory()) counters.skippedDirectories += 1
+      else if (entry.isFile()) counters.skippedFiles += 1
+      continue
+    }
+
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) {
+        counters.skippedDirectories += 1
+        continue
+      }
+
+      const hasChildren = await directoryHasVisibleChildren(entryAbsolutePath)
+      nodes.push({
+        name: entry.name,
+        relativePath,
+        kind: 'directory',
+        hasChildren,
+        isLoaded: false,
+      })
+      includedEntries += 1
+      continue
+    }
+
+    if (!entry.isFile()) {
+      continue
+    }
+
+    if (isExcludedFile(entry.name)) {
+      counters.skippedFiles += 1
+      continue
+    }
+
+    nodes.push({
+      name: entry.name,
+      relativePath,
+      kind: 'file',
+    })
+    includedEntries += 1
+  }
+
+  nodes.sort(compareTreeNodesByName)
+
   return {
     rootPath: rootRealPath,
+    directoryRelativePath: normalizedDirectoryRelativePath,
     nodes,
     skipped: {
-      files: counters.skippedFiles,
       directories: counters.skippedDirectories,
+      files: counters.skippedFiles,
     },
   }
+}
+
+export async function listProjectDirectoryFiles(
+  projectPath: string,
+  directoryRelativePath: string | null
+): Promise<ProjectFileTreeResult> {
+  const rootRealPath = await resolveRoot(projectPath)
+  return listProjectDirectoryChildren(rootRealPath, directoryRelativePath)
 }
 
 export async function searchProjectFiles(projectPath: string, query: string): Promise<ProjectFileNode[]> {
@@ -726,7 +842,12 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
       const filtered = filterListedFilePaths(listedPaths)
       resolvedPaths = filtered.acceptedPaths
     } else {
-      const tree = await listProjectFiles(projectPath)
+      const counters: ScanCounters = {
+        filesScanned: 0,
+        skippedFiles: 0,
+        skippedDirectories: 0,
+      }
+      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters)
       const nextPaths: string[] = []
       const walk = (nodes: ProjectFileNode[]) => {
         for (const node of nodes) {
@@ -739,7 +860,7 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
           }
         }
       }
-      walk(tree.nodes)
+      walk(tree)
       resolvedPaths = nextPaths
     }
     setProjectFileListCache(rootRealPath, resolvedPaths)

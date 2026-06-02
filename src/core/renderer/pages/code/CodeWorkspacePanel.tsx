@@ -1,6 +1,7 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import { BookOpen, Bot, Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
+import { shallow } from 'zustand/shallow'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -19,9 +20,7 @@ import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollS
 import { useCodeFileState } from './useCodeFileState'
 import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import {
-  collectAllFileRelativePaths,
   collectParentDirectories,
-  createDefaultExpandedDirectorySet,
   formatFileSize,
   inferLanguageFromRelativePath,
   isSameCodeFileDrawerState,
@@ -452,6 +451,124 @@ const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
   scripts: 'Scripts',
 }
 
+function sortProjectNodes(nodes: ProjectFileNode[]): ProjectFileNode[] {
+  return sortTreeNodes(nodes)
+}
+
+function mergeKnownFilePaths(previous: Set<string>, nodes: ProjectFileNode[]): Set<string> {
+  const next = new Set(previous)
+  const walk = (items: ProjectFileNode[]) => {
+    for (const item of items) {
+      if (item.kind === 'file') {
+        next.add(item.relativePath)
+        continue
+      }
+      if (item.children && item.children.length > 0) {
+        walk(item.children)
+      }
+    }
+  }
+  walk(nodes)
+  return next
+}
+
+function replaceDirectoryNodes(
+  nodes: ProjectFileNode[],
+  directoryRelativePath: string | null,
+  nextChildren: ProjectFileNode[]
+): ProjectFileNode[] {
+  const sortedChildren = sortProjectNodes(nextChildren)
+  if (directoryRelativePath == null) {
+    return sortedChildren
+  }
+
+  return sortProjectNodes(nodes.map((node) => {
+    if (node.kind !== 'directory') return node
+    if (node.relativePath === directoryRelativePath) {
+      return {
+        ...node,
+        hasChildren: sortedChildren.length > 0,
+        isLoaded: true,
+        children: sortedChildren,
+      }
+    }
+    if (!node.children || node.children.length <= 0) return node
+    return {
+      ...node,
+      children: replaceDirectoryNodes(node.children, directoryRelativePath, sortedChildren),
+    }
+  }))
+}
+
+function findDirectoryNode(nodes: ProjectFileNode[], relativePath: string): ProjectFileNode | null {
+  for (const node of nodes) {
+    if (node.kind !== 'directory') continue
+    if (node.relativePath === relativePath) return node
+    if (node.children && node.children.length > 0) {
+      const nested = findDirectoryNode(node.children, relativePath)
+      if (nested) return nested
+    }
+  }
+  return null
+}
+
+function collectTopLevelDirectories(nodes: ProjectFileNode[]): Set<string> {
+  const directories = new Set<string>()
+  for (const node of nodes) {
+    if (node.kind !== 'directory') continue
+    if (!node.relativePath.includes('/')) {
+      directories.add(node.relativePath)
+    }
+  }
+  return directories
+}
+
+function buildKnownFilePathSet(
+  treeKnownFilePaths: Set<string>,
+  openTabPaths: string[],
+  activeRelativePath: string | null,
+  drawerState: CodeFileDrawerState,
+  session: ProjectCodeSession | undefined,
+  persistedLastCodeFile?: string
+): Set<string> {
+  const next = new Set(treeKnownFilePaths)
+  for (const path of openTabPaths) {
+    if (path.trim()) next.add(path.trim())
+  }
+  for (const path of drawerState.favorites) {
+    if (path.trim()) next.add(path.trim())
+  }
+  for (const path of drawerState.recents) {
+    if (path.trim()) next.add(path.trim())
+  }
+  for (const path of session?.tabs ?? []) {
+    if (path.trim()) next.add(path.trim())
+  }
+  if (session?.activePath?.trim()) next.add(session.activePath.trim())
+  if (activeRelativePath?.trim()) next.add(activeRelativePath.trim())
+  if (persistedLastCodeFile?.trim()) next.add(persistedLastCodeFile.trim())
+  return next
+}
+
+async function expandTreePath(
+  targetRelativePath: string,
+  options: {
+    loadDirectory: (directoryRelativePath: string | null) => Promise<boolean>
+    setExpandedDirectories: Dispatch<SetStateAction<Set<string>>>
+  }
+): Promise<void> {
+  const parents = collectParentDirectories(targetRelativePath).reverse()
+  for (const parent of parents) {
+    await options.loadDirectory(parent)
+    options.setExpandedDirectories((prev) => {
+      if (prev.has(parent)) return prev
+      const next = new Set(prev)
+      next.add(parent)
+      return next
+    })
+  }
+}
+
 function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number {
   for (const value of values) {
     if (Number.isFinite(value)) {
@@ -666,14 +783,25 @@ export function CodeWorkspacePanel({
   activePane = 'code',
   onSwitchPane,
 }: CodeWorkspacePanelProps) {
-  const projectMeta = useAppStore((s) => s.projects.find((p) => p.id === projectId))
-  const persistedLastCodeFile = projectMeta?.lastCodeFile
+  const projectCodeMeta = useAppStore((s) => {
+    const found = s.projects.find((p) => p.id === projectId)
+    return found
+      ? {
+        lastCodeFile: found.lastCodeFile,
+        codeSession: found.codeSession,
+        lastMarkdownPreviewMode: found.lastMarkdownPreviewMode,
+        codeFileDrawerState: found.codeFileDrawerState,
+      }
+      : undefined
+  }, shallow)
+  const persistedLastCodeFile = projectCodeMeta?.lastCodeFile
+  const rawPersistedProjectCodeSession = projectCodeMeta?.codeSession
   const persistedProjectCodeSession = useMemo(
-    () => normalizeProjectCodeSession(projectMeta?.codeSession),
-    [projectMeta?.codeSession]
+    () => normalizeProjectCodeSession(rawPersistedProjectCodeSession),
+    [rawPersistedProjectCodeSession]
   )
-  const persistedLastMarkdownPreviewMode = projectMeta?.lastMarkdownPreviewMode
-  const persistedCodeFileDrawerState = projectMeta?.codeFileDrawerState
+  const persistedLastMarkdownPreviewMode = projectCodeMeta?.lastMarkdownPreviewMode
+  const persistedCodeFileDrawerState = projectCodeMeta?.codeFileDrawerState
   const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
@@ -685,6 +813,8 @@ export function CodeWorkspacePanel({
     status: 'idle',
     nodes: [],
     error: null,
+    knownFilePaths: new Set(),
+    loadingDirectories: new Set(),
     skippedDirectories: 0,
     skippedFiles: 0,
   })
@@ -792,6 +922,10 @@ export function CodeWorkspacePanel({
       }
       return changed ? next : prev
     })
+    setTree((prev) => ({
+      ...prev,
+      knownFilePaths: new Set(prev.knownFilePaths).add(result.relativePath),
+    }))
     setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
   }, [persistedProjectCodeSession?.cursorPositions, pushOpenTabPath])
   const {
@@ -879,23 +1013,24 @@ export function CodeWorkspacePanel({
     goToNextPreviewSearchMatch,
     goToPreviousPreviewSearchMatch,
   } = useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
-  const allProjectFilePathSet = useMemo(() => new Set(collectAllFileRelativePaths(tree.nodes)), [tree.nodes])
-  const topLevelDirectorySet = useMemo(() => {
-    const directories = new Set<string>()
-    const visit = (nodes: ProjectFileNode[]) => {
-      for (const node of nodes) {
-        if (node.kind !== 'directory') continue
-        if (!node.relativePath.includes('/')) {
-          directories.add(node.relativePath)
-        }
-        if (node.children?.length) {
-          visit(node.children)
-        }
-      }
-    }
-    visit(tree.nodes)
-    return directories
-  }, [tree.nodes])
+  const allProjectFilePathSet = useMemo(() => (
+    buildKnownFilePathSet(
+      tree.knownFilePaths,
+      openTabPaths,
+      activeRelativePath,
+      codeFileDrawerState,
+      persistedProjectCodeSession,
+      persistedLastCodeFile,
+    )
+  ), [
+    activeRelativePath,
+    codeFileDrawerState,
+    openTabPaths,
+    persistedLastCodeFile,
+    persistedProjectCodeSession,
+    tree.knownFilePaths,
+  ])
+  const topLevelDirectorySet = useMemo(() => collectTopLevelDirectories(tree.nodes), [tree.nodes])
   const quickDrawerFavorites = useMemo(
     () => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
     [allProjectFilePathSet, codeFileDrawerState.favorites]
@@ -1051,32 +1186,99 @@ export function CodeWorkspacePanel({
     captureCurrentModeScrollRef.current = captureCurrentModeScroll
   }, [captureCurrentModeScroll])
 
+  const loadDirectory = useCallback(async (directoryRelativePath: string | null): Promise<boolean> => {
+    const loadingKey = directoryRelativePath ?? ''
+    if (directoryRelativePath) {
+      const targetNode = findDirectoryNode(tree.nodes, directoryRelativePath)
+      if (targetNode?.isLoaded) return true
+    }
+    setTree((prev) => {
+      if (prev.loadingDirectories.has(loadingKey)) return prev
+      const nextLoadingDirectories = new Set(prev.loadingDirectories)
+      nextLoadingDirectories.add(loadingKey)
+      return {
+        ...prev,
+        loadingDirectories: nextLoadingDirectories,
+      }
+    })
+
+    try {
+      const result = await window.electronAPI.listProjectDirectoryFiles(projectPath, directoryRelativePath)
+      const sortedNodes = sortProjectNodes(result.nodes)
+      setTree((prev) => {
+        const nextLoadingDirectories = new Set(prev.loadingDirectories)
+        nextLoadingDirectories.delete(loadingKey)
+        return {
+          status: 'ready',
+          nodes: replaceDirectoryNodes(prev.nodes, result.directoryRelativePath, sortedNodes),
+          error: null,
+          knownFilePaths: mergeKnownFilePaths(prev.knownFilePaths, sortedNodes),
+          loadingDirectories: nextLoadingDirectories,
+          skippedDirectories: prev.skippedDirectories + result.skipped.directories,
+          skippedFiles: prev.skippedFiles + result.skipped.files,
+        }
+      })
+      return true
+    } catch (error) {
+      setTree((prev) => {
+        const nextLoadingDirectories = new Set(prev.loadingDirectories)
+        nextLoadingDirectories.delete(loadingKey)
+        return {
+          ...prev,
+          status: prev.nodes.length > 0 ? 'ready' : 'error',
+          error: error instanceof Error ? error.message : String(error),
+          loadingDirectories: nextLoadingDirectories,
+        }
+      })
+      return false
+    }
+  }, [projectPath])
+
   const loadTree = useCallback(async () => {
-    setTree((prev) => ({ ...prev, status: 'loading', error: null }))
+    setTree({
+      status: 'loading',
+      nodes: [],
+      error: null,
+      knownFilePaths: new Set(),
+      loadingDirectories: new Set(),
+      skippedDirectories: 0,
+      skippedFiles: 0,
+    })
+    setExpandedDirectories(new Set())
     setFileSearchError(null)
 
     try {
       const result = await window.electronAPI.listProjectFiles(projectPath)
-      const sortedNodes = sortTreeNodes(result.nodes)
+      const sortedNodes = sortProjectNodes(result.nodes)
       setTree({
         status: 'ready',
         nodes: sortedNodes,
         error: null,
+        knownFilePaths: mergeKnownFilePaths(new Set(), sortedNodes),
+        loadingDirectories: new Set(),
         skippedDirectories: result.skipped.directories,
         skippedFiles: result.skipped.files,
       })
-      setExpandedDirectories(createDefaultExpandedDirectorySet(sortedNodes))
     } catch (error) {
       setTree({
         status: 'error',
         nodes: [],
         error: error instanceof Error ? error.message : String(error),
+        knownFilePaths: new Set(),
+        loadingDirectories: new Set(),
         skippedDirectories: 0,
         skippedFiles: 0,
       })
       setSearchResultNodes([])
     }
   }, [projectPath])
+
+  const ensureTreePathLoaded = useCallback(async (relativePath: string) => {
+    await expandTreePath(relativePath, {
+      loadDirectory,
+      setExpandedDirectories,
+    })
+  }, [loadDirectory])
 
   useEffect(() => {
     void loadTree()
@@ -1414,6 +1616,11 @@ export function CodeWorkspacePanel({
   }, [fileSearchQuery, projectPath])
 
   useEffect(() => {
+    if (!activeRelativePath) return
+    void ensureTreePathLoaded(activeRelativePath)
+  }, [activeRelativePath, ensureTreePathLoaded])
+
+  useEffect(() => {
     const normalizedQuery = contentSearchQuery.trim()
     if (!normalizedQuery) {
       setIsSearchingContent(false)
@@ -1482,13 +1689,23 @@ export function CodeWorkspacePanel({
   const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
   const handleToggleTreeDirectory = useCallback((relativePath: string) => {
     if (hasSearchQuery) return
+    const isExpanded = expandedDirectories.has(relativePath)
+    if (isExpanded) {
+      setExpandedDirectories((prev) => {
+        const next = new Set(prev)
+        next.delete(relativePath)
+        return next
+      })
+      return
+    }
     setExpandedDirectories((prev) => {
+      if (prev.has(relativePath)) return prev
       const next = new Set(prev)
-      if (next.has(relativePath)) next.delete(relativePath)
-      else next.add(relativePath)
+      next.add(relativePath)
       return next
     })
-  }, [hasSearchQuery])
+    void loadDirectory(relativePath)
+  }, [expandedDirectories, hasSearchQuery, loadDirectory])
   const handleSelectTreeFile = useCallback((relativePath: string) => {
     void openFile(relativePath)
     if (isNarrowViewport) {
@@ -1578,10 +1795,12 @@ export function CodeWorkspacePanel({
       isRestoringCodeSessionRef.current = false
       return
     }
-    void openFile(sessionFirstTabPath).finally(() => {
+    void ensureTreePathLoaded(sessionFirstTabPath)
+      .then(() => openFile(sessionFirstTabPath))
+      .finally(() => {
       isRestoringCodeSessionRef.current = false
-    })
-  }, [allProjectFilePathSet, hasAttemptedInitialRestore, openFile, persistedProjectCodeSession, tree.status])
+      })
+  }, [allProjectFilePathSet, ensureTreePathLoaded, hasAttemptedInitialRestore, openFile, persistedProjectCodeSession, tree.status])
 
   useEffect(() => {
     return () => {
@@ -1792,8 +2011,8 @@ export function CodeWorkspacePanel({
   }, [isContentSearchAllExpanded])
 
   const handleSelectOpenTab = useCallback((relativePath: string) => {
-    void openFile(relativePath)
-  }, [openFile])
+    void ensureTreePathLoaded(relativePath).then(() => openFile(relativePath))
+  }, [ensureTreePathLoaded, openFile])
 
   const handleCloseOpenTab = useCallback((relativePath: string) => {
     const normalizedPath = relativePath.trim()
@@ -2210,7 +2429,9 @@ export function CodeWorkspacePanel({
                       className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
                       onClick={() => {
                         if (!activeRelativePath) return
-                        setLocateRequestToken((prev) => prev + 1)
+                        void ensureTreePathLoaded(activeRelativePath).then(() => {
+                          setLocateRequestToken((prev) => prev + 1)
+                        })
                       }}
                       title={activeRelativePath ? 'Locate current file' : 'No active file'}
                       disabled={!activeRelativePath}
@@ -2651,7 +2872,7 @@ export function CodeWorkspacePanel({
             {saveError && <span className="text-[color:var(--color-destructive)]">{saveError}</span>}
             {(tree.skippedDirectories > 0 || tree.skippedFiles > 0) && (
               <span>
-                Skipped {tree.skippedDirectories} directories, {tree.skippedFiles} files.
+                Skipped {tree.skippedDirectories} directories, {tree.skippedFiles} files while listing folders.
               </span>
             )}
           </div>

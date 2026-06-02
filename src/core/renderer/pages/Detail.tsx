@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { shallow } from 'zustand/shallow'
 import '@xyflow/react/dist/style.css'
 import {
   ArrowUpRight,
@@ -57,7 +58,27 @@ function readProjectHeaderCollapsed(): boolean {
 export function DetailPage() {
   const { projectId, pane } = useParams<{ projectId: string; pane?: string }>()
   const navigate = useNavigate()
-  const project = useAppStore((s) => s.projects.find((p) => p.id === projectId))
+  const project = useAppStore((s) => {
+    const found = s.projects.find((p) => p.id === projectId)
+    if (!found) return undefined
+    return {
+      id: found.id,
+      path: found.path,
+      name: found.name,
+      customName: found.customName,
+      type: found.type,
+      customType: found.customType,
+      command: found.command,
+      customCommand: found.customCommand,
+      runStartupMode: found.runStartupMode,
+      packageManager: found.packageManager,
+      pinned: found.pinned,
+      cli: found.cli,
+      docLinks: found.docLinks,
+      folderId: found.folderId,
+      tagIds: found.tagIds,
+    }
+  }, shallow)
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
@@ -89,7 +110,8 @@ export function DetailPage() {
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
 
-  const environment = project ? detectProjectEnvironment(project.path) : 'unknown'
+  const projectPath = project?.path
+  const environment = projectPath ? detectProjectEnvironment(projectPath) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
   const contentTopPaddingClass = projectHeaderCollapsed
     ? 'pt-5'
@@ -103,7 +125,7 @@ export function DetailPage() {
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const aiCommitFlow = useAiCommitFlow({
     projectId,
-    projectPath: project?.path,
+    projectPath,
     toolProcessId,
     aiCommitConfig,
   })
@@ -217,12 +239,12 @@ export function DetailPage() {
   }, [projectId, pane, navigate])
 
   useEffect(() => {
-    if (!projectId || !toolProcessId || !project) return
+    if (!projectId || !toolProcessId || !projectPath) return
     if (toolProcessStatus !== 'stopped') return
     const toolCommand = environment === 'ubuntu' ? 'exec bash -i' : 'powershell -NoLogo -NoExit'
     const useWsl = environment === 'ubuntu'
     void startProject(projectId, toolCommand, toolProcessId, useWsl)
-  }, [projectId, project, toolProcessId, toolProcessStatus, environment, startProject])
+  }, [environment, projectId, projectPath, startProject, toolProcessId, toolProcessStatus])
 
   useEffect(() => {
     if (!toolProcessId) return
@@ -264,6 +286,8 @@ export function DetailPage() {
     )
   }
 
+  const resolvedProjectPath = project.path
+
   return (
     <div
       className="relative flex h-full flex-col"
@@ -285,8 +309,8 @@ export function DetailPage() {
 
             <div className="min-w-0">
               <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{projectDisplayName(project)}</h1>
-              <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
-                {middleTruncatePath(project.path)}
+              <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={resolvedProjectPath}>
+                {middleTruncatePath(resolvedProjectPath)}
               </p>
               <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
             </div>
@@ -572,11 +596,11 @@ export function DetailPage() {
             void handleAiCommit()
           }}
           aiCommitStatus={aiCommitStatus}
-          onOpenFolder={() => window.electronAPI.openFolder(project.path)}
+          onOpenFolder={() => window.electronAPI.openFolder(resolvedProjectPath)}
           onOpenPathTerminal={async () => {
-            await window.electronAPI.openPathTerminal(project.path)
+            await window.electronAPI.openPathTerminal(resolvedProjectPath)
           }}
-          onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
+          onOpenVsCode={() => window.electronAPI.openInVsCode(resolvedProjectPath)}
           onTogglePin={() => togglePin(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
         />
@@ -612,9 +636,9 @@ export function DetailPage() {
         }`}>
           {activePane === 'code' ? (
             <CodeWorkspacePanel
-              key={`${project.id}:${project.path}`}
+              key={`${project.id}:${resolvedProjectPath}`}
               projectId={project.id}
-              projectPath={project.path}
+              projectPath={resolvedProjectPath}
               themeMode={themeMode}
               projectHeaderCollapsed={projectHeaderCollapsed}
               projectName={projectDisplayName(project)}

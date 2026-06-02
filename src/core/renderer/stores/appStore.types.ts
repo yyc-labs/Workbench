@@ -1,5 +1,6 @@
 import type {
   AiCommitTaskSnapshot,
+  ClaudeBashrcConfig,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchOptions,
   ProjectFileNode,
@@ -47,6 +48,8 @@ declare global {
       sendInput: (id: string, data: string) => Promise<boolean>
       getConfig: () => Promise<AppConfig>
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
+      getClaudeBashrcConfig: () => Promise<ClaudeBashrcConfig>
+      setClaudeBashrcConfig: (config: ClaudeBashrcConfig) => Promise<ClaudeBashrcConfig>
       setDocLinkSecret: (projectId: string, linkId: string, secret: string) => Promise<boolean>
       getDocLinkSecret: (projectId: string, linkId: string) => Promise<{ secret: string | null }>
       deleteDocLinkSecret: (projectId: string, linkId: string) => Promise<boolean>
@@ -70,6 +73,10 @@ declare global {
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
+      listProjectDirectoryFiles: (
+        projectPath: string,
+        directoryRelativePath: string | null
+      ) => Promise<ProjectFileTreeResult>
       searchProjectFiles: (projectPath: string, query: string) => Promise<ProjectFileNode[]>
       searchProjectContent: (
         projectPath: string,

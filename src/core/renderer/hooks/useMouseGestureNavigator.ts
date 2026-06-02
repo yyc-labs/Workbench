@@ -43,6 +43,7 @@ const CIRCLE_CLOSURE_RATIO = 0.72
 const CIRCLE_MIN_SWEEP_RAD = Math.PI * 1.45
 const CIRCLE_MIN_PATH_RATIO = 0.65
 const CIRCLE_MAX_PATH_RATIO = 2.25
+const RECENT_GESTURE_ALLOW_SELECTOR = '[data-allow-recent-gesture="true"]'
 const RECENT_GESTURE_IGNORE_SELECTOR = [
   'button',
   'a',
@@ -56,7 +57,13 @@ const RECENT_GESTURE_IGNORE_SELECTOR = [
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 
 function shouldSkipRecentGesture(target: EventTarget | null): boolean {
-  return target instanceof Element && Boolean(target.closest(RECENT_GESTURE_IGNORE_SELECTOR))
+  if (!(target instanceof Element)) return false
+  if (target.closest(RECENT_GESTURE_ALLOW_SELECTOR)) return false
+  return Boolean(target.closest(RECENT_GESTURE_IGNORE_SELECTOR))
+}
+
+function isRecentProjectDrawerOpen(): boolean {
+  return Boolean(document.querySelector('[data-recent-project-drawer-open="true"]'))
 }
 
 function isProjectDetailRoute(pathname: string): boolean {
@@ -147,6 +154,7 @@ function toPreview(
   dy: number,
   points: GesturePoint[],
   allowRecentGesture: boolean,
+  recentDrawerOpen: boolean,
   allowProjectHeaderGesture: boolean,
   isDetailRoute: boolean,
   projectHeaderCollapsed: boolean
@@ -179,7 +187,7 @@ function toPreview(
     return {
       status: 'ready',
       action: 'recent',
-      label: '松开后打开最近项目',
+      label: recentDrawerOpen ? '松开后关闭最近项目' : '松开后打开最近项目',
     }
   }
 
@@ -196,7 +204,7 @@ function toPreview(
     return {
       status: 'pending',
       action: 'recent',
-      label: '继续向下拖动（最近项目）…',
+      label: recentDrawerOpen ? '继续向下拖动（关闭最近项目）…' : '继续向下拖动（最近项目）…',
     }
   }
 
@@ -248,6 +256,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     ignoreRecentInThisGesture: false,
     isDetailRouteAtStart: false,
     projectHeaderCollapsedAtStart: false,
+    recentDrawerOpenAtStart: false,
     startX: 0,
     startY: 0,
     lastDx: 0,
@@ -310,6 +319,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.ignoreRecentInThisGesture = shouldSkipRecentGesture(e.target)
       stateRef.current.isDetailRouteAtStart = detailRoute
       stateRef.current.projectHeaderCollapsedAtStart = detailRoute ? readProjectHeaderCollapsed() : false
+      stateRef.current.recentDrawerOpenAtStart = isRecentProjectDrawerOpen()
       stateRef.current.startX = e.clientX
       stateRef.current.startY = e.clientY
       stateRef.current.lastDx = 0
@@ -332,6 +342,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.ignoreRecentInThisGesture = false
         state.isDetailRouteAtStart = false
         state.projectHeaderCollapsedAtStart = false
+        state.recentDrawerOpenAtStart = false
         state.points = []
         clearHint()
         return
@@ -373,6 +384,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.lastDy,
         gesturePoints,
         allowRecentGesture,
+        state.recentDrawerOpenAtStart,
         allowProjectHeaderGesture,
         state.isDetailRouteAtStart,
         state.projectHeaderCollapsedAtStart
@@ -439,7 +451,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (hadGestureMovement && passedDown) {
         hideHintImmediately()
-        window.dispatchEvent(new CustomEvent('app:open-recent-project-drawer'))
+        window.dispatchEvent(new CustomEvent('app:toggle-recent-project-drawer'))
         state.points = []
         return
       }
@@ -468,6 +480,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       state.ignoreRecentInThisGesture = false
       state.isDetailRouteAtStart = false
       state.projectHeaderCollapsedAtStart = false
+      state.recentDrawerOpenAtStart = false
       hideHintImmediately()
     }
 
@@ -487,6 +500,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.ignoreRecentInThisGesture = false
       stateRef.current.isDetailRouteAtStart = false
       stateRef.current.projectHeaderCollapsedAtStart = false
+      stateRef.current.recentDrawerOpenAtStart = false
       stateRef.current.points = []
       hideHintImmediately()
     }

@@ -98,18 +98,9 @@ export function sortTreeNodes(nodes: ProjectFileNode[]): ProjectFileNode[] {
     if (node.kind !== 'directory') return node
     return {
       ...node,
-      children: sortTreeNodes(node.children ?? []),
+      children: node.children ? sortTreeNodes(node.children) : node.children,
     }
   })
-}
-
-export function createDefaultExpandedDirectorySet(nodes: ProjectFileNode[]): Set<string> {
-  const expanded = new Set<string>()
-  for (const node of nodes) {
-    if (node.kind !== 'directory') continue
-    expanded.add(node.relativePath)
-  }
-  return expanded
 }
 
 export function parentDirectory(relativePath: string): string | null {
@@ -187,29 +178,11 @@ export function filterTreeNodesByQuery(nodes: ProjectFileNode[], query: string):
     if (matchedChildren.length > 0) {
       filtered.push({
         ...node,
+        hasChildren: true,
         children: matchedChildren,
       })
     }
   }
 
   return filtered
-}
-
-export function collectAllFileRelativePaths(nodes: ProjectFileNode[]): string[] {
-  const result: string[] = []
-
-  const walk = (items: ProjectFileNode[]) => {
-    for (const node of items) {
-      if (node.kind === 'file') {
-        result.push(node.relativePath)
-        continue
-      }
-      if (node.children && node.children.length > 0) {
-        walk(node.children)
-      }
-    }
-  }
-
-  walk(nodes)
-  return result
 }

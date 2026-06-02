@@ -10,6 +10,39 @@ class WslBridge {
   private _distro: string | null = null
   private _shell: string | null = null
 
+  private execWithArgs(args: string[], cmdLabel: string, timeoutMs: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn('wsl.exe', args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+
+      let out = ''
+      let err = ''
+
+      child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
+      child.stderr?.on('data', (d: Buffer) => { err += d.toString() })
+
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM')
+        reject(new Error(`WSL command timed out after ${timeoutMs}ms: ${cmdLabel}`))
+      }, timeoutMs)
+
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        if (code === 0) {
+          resolve(out.trim())
+        } else {
+          reject(new Error(err.trim() || `WSL command exited with code ${code}: ${cmdLabel}`))
+        }
+      })
+
+      child.on('error', (e) => {
+        clearTimeout(timer)
+        reject(new Error(`Failed to spawn wsl.exe: ${e.message}`))
+      })
+    })
+  }
+
   private parseDistroLines(raw: Buffer, encoding: BufferEncoding): string[] {
     return raw
       .toString(encoding)
@@ -112,38 +145,16 @@ class WslBridge {
 
   /** Execute a command inside WSL. Async, non-blocking. */
   exec(cmd: string, timeoutMs = 15000): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const shell = this.getShell()
-      const shellFlag = shell === 'bash' ? '-lc' : '-c'
-      const child = spawn('wsl.exe', ['-d', this._distro!, '-e', shell, shellFlag, cmd], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
+    const distro = this.getDistro()
+    const shell = this.getShell()
+    const shellFlag = shell === 'bash' ? '-lc' : '-c'
+    return this.execWithArgs(['-d', distro, '-e', shell, shellFlag, cmd], cmd, timeoutMs)
+  }
 
-      let out = ''
-      let err = ''
-
-      child.stdout?.on('data', (d: Buffer) => { out += d.toString() })
-      child.stderr?.on('data', (d: Buffer) => { err += d.toString() })
-
-      const timer = setTimeout(() => {
-        child.kill('SIGTERM')
-        reject(new Error(`WSL command timed out after ${timeoutMs}ms: ${cmd}`))
-      }, timeoutMs)
-
-      child.on('close', (code) => {
-        clearTimeout(timer)
-        if (code === 0) {
-          resolve(out.trim())
-        } else {
-          reject(new Error(err.trim() || `WSL command exited with code ${code}: ${cmd}`))
-        }
-      })
-
-      child.on('error', (e) => {
-        clearTimeout(timer)
-        reject(new Error(`Failed to spawn wsl.exe: ${e.message}`))
-      })
-    })
+  /** Execute a command in interactive login bash so ~/.bashrc is loaded exactly like a terminal session. */
+  execBashInteractiveLogin(cmd: string, timeoutMs = 15000): Promise<string> {
+    const distro = this.getDistro()
+    return this.execWithArgs(['-d', distro, '-e', 'bash', '-ilc', cmd], `bash -ilc ${cmd}`, timeoutMs)
   }
 
   async hasTmux(): Promise<boolean> {

@@ -1,5 +1,6 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
+import { readFileSync, existsSync, mkdirSync } from 'fs'
+import { writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import type { AppConfig } from '../../shared/types'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, PROJECT_DOC_LINK_FALLBACK_TAG } from '../../renderer/lib/projectDocLinks'
@@ -35,6 +36,7 @@ const DEFAULT_CONFIG: AppConfig = {
 }
 
 let cachedConfig: AppConfig | undefined
+let saveQueue: Promise<void> = Promise.resolve()
 
 function normalizeDocLinkTags(
   input: AppConfig['docLinkTags'] | unknown
@@ -185,24 +187,31 @@ export function loadConfig(): AppConfig {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
     }
   } catch {
-    cachedConfig = { ...DEFAULT_CONFIG, docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags) }
+    cachedConfig = {
+      ...DEFAULT_CONFIG,
+      docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
+    }
   }
   return cachedConfig!
 }
 
-export function saveConfig(config: AppConfig): void {
+export function saveConfig(config: AppConfig): Promise<void> {
   cachedConfig = config
   const configPath = getConfigPath()
   const dir = dirname(configPath)
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
-  writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
+  const serialized = JSON.stringify(config, null, 2)
+  saveQueue = saveQueue
+    .catch(() => undefined)
+    .then(() => writeFile(configPath, serialized, 'utf-8'))
+  return saveQueue
 }
 
-export function updateConfig(partial: Partial<AppConfig>): AppConfig {
+export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConfig> {
   const current = loadConfig()
   const updated = { ...current, ...partial }
-  saveConfig(updated)
+  await saveConfig(updated)
   return updated
 }

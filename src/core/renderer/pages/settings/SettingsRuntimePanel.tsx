@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type {
   BackendMode,
+  ClaudeBashrcConfig,
   ManagedProcessSnapshot,
   RuntimeEntry,
   TerminalProcessInventory,
@@ -29,6 +30,18 @@ function SettingsRuntimePanel({
   runtimeEntries,
 }: RuntimePanelProps) {
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.deepseek.com/anthropic')
+  const [anthropicAuthToken, setAnthropicAuthToken] = useState('')
+  const [anthropicModel, setAnthropicModel] = useState('deepseek-v4-pro[1m]')
+  const [anthropicDefaultOpusModel, setAnthropicDefaultOpusModel] = useState('deepseek-v4-pro[1m]')
+  const [anthropicDefaultSonnetModel, setAnthropicDefaultSonnetModel] = useState('deepseek-v4-pro[1m]')
+  const [anthropicDefaultHaikuModel, setAnthropicDefaultHaikuModel] = useState('deepseek-v4-flash')
+  const [claudeCodeSubagentModel, setClaudeCodeSubagentModel] = useState('deepseek-v4-flash')
+  const [claudeCodeEffortLevel, setClaudeCodeEffortLevel] = useState('max')
+  const [claudeBashrcLoaded, setClaudeBashrcLoaded] = useState(false)
+  const [claudeBashrcSaving, setClaudeBashrcSaving] = useState(false)
+  const [claudeBashrcSavedHint, setClaudeBashrcSavedHint] = useState<string | null>(null)
+  const [claudeBashrcError, setClaudeBashrcError] = useState<string | null>(null)
   const [diag, setDiag] = useState<{
     issues: string[]
     hasWsl: boolean
@@ -45,6 +58,32 @@ function SettingsRuntimePanel({
   useEffect(() => {
     setScriptPath(runtimeLauncherScript)
   }, [runtimeLauncherScript])
+
+  useEffect(() => {
+    let mounted = true
+    void window.electronAPI.getClaudeBashrcConfig()
+      .then((result: ClaudeBashrcConfig) => {
+        if (!mounted) return
+        setAnthropicBaseUrl(result.anthropicBaseUrl)
+        setAnthropicAuthToken(result.anthropicAuthToken)
+        setAnthropicModel(result.anthropicModel)
+        setAnthropicDefaultOpusModel(result.anthropicDefaultOpusModel)
+        setAnthropicDefaultSonnetModel(result.anthropicDefaultSonnetModel)
+        setAnthropicDefaultHaikuModel(result.anthropicDefaultHaikuModel)
+        setClaudeCodeSubagentModel(result.claudeCodeSubagentModel)
+        setClaudeCodeEffortLevel(result.claudeCodeEffortLevel)
+        setClaudeBashrcLoaded(true)
+      })
+      .catch((error) => {
+        if (!mounted) return
+        const message = error instanceof Error ? error.message : String(error)
+        setClaudeBashrcError(message || 'Failed to read ~/.bashrc.')
+        setClaudeBashrcLoaded(true)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
   const runtimeSessionProjectNameMap = new Map(
@@ -151,6 +190,38 @@ function SettingsRuntimePanel({
     }
   }
 
+  const handleSaveClaudeBashrc = async () => {
+    setClaudeBashrcSaving(true)
+    setClaudeBashrcSavedHint(null)
+    setClaudeBashrcError(null)
+    try {
+      const saved = await window.electronAPI.setClaudeBashrcConfig({
+        anthropicBaseUrl: anthropicBaseUrl.trim(),
+        anthropicAuthToken: anthropicAuthToken.trim(),
+        anthropicModel: anthropicModel.trim(),
+        anthropicDefaultOpusModel: anthropicDefaultOpusModel.trim(),
+        anthropicDefaultSonnetModel: anthropicDefaultSonnetModel.trim(),
+        anthropicDefaultHaikuModel: anthropicDefaultHaikuModel.trim(),
+        claudeCodeSubagentModel: claudeCodeSubagentModel.trim(),
+        claudeCodeEffortLevel: claudeCodeEffortLevel.trim(),
+      })
+      setAnthropicBaseUrl(saved.anthropicBaseUrl)
+      setAnthropicAuthToken(saved.anthropicAuthToken)
+      setAnthropicModel(saved.anthropicModel)
+      setAnthropicDefaultOpusModel(saved.anthropicDefaultOpusModel)
+      setAnthropicDefaultSonnetModel(saved.anthropicDefaultSonnetModel)
+      setAnthropicDefaultHaikuModel(saved.anthropicDefaultHaikuModel)
+      setClaudeCodeSubagentModel(saved.claudeCodeSubagentModel)
+      setClaudeCodeEffortLevel(saved.claudeCodeEffortLevel)
+      setClaudeBashrcSavedHint('Claude config saved to ~/.bashrc.')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setClaudeBashrcError(message || 'Failed to save Claude config to ~/.bashrc.')
+    } finally {
+      setClaudeBashrcSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -172,6 +243,121 @@ function SettingsRuntimePanel({
           >
             Save
           </Button>
+        </div>
+      </div>
+
+      <div>
+        <p className="section-label mb-3">Claude</p>
+        <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">Runtime Env</h3>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-4">
+          Read and write Claude environment variables directly in `~/.bashrc`. Other programs that depend on `.bashrc` will see the same values.
+        </p>
+        <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_BASE_URL</p>
+            <Input
+              value={anthropicBaseUrl}
+              onChange={(e) => setAnthropicBaseUrl(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="https://api.deepseek.com/anthropic"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_AUTH_TOKEN</p>
+            <Input
+              type="password"
+              value={anthropicAuthToken}
+              onChange={(e) => setAnthropicAuthToken(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder={claudeBashrcLoaded ? 'sk-...' : 'Loading ~/.bashrc...'}
+              disabled={!claudeBashrcLoaded}
+            />
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+              This value is saved as plain text in `~/.bashrc` because other programs also depend on that file.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_MODEL</p>
+            <Input
+              value={anthropicModel}
+              onChange={(e) => setAnthropicModel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="deepseek-v4-pro[1m]"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_DEFAULT_OPUS_MODEL</p>
+            <Input
+              value={anthropicDefaultOpusModel}
+              onChange={(e) => setAnthropicDefaultOpusModel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="deepseek-v4-pro[1m]"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_DEFAULT_SONNET_MODEL</p>
+            <Input
+              value={anthropicDefaultSonnetModel}
+              onChange={(e) => setAnthropicDefaultSonnetModel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="deepseek-v4-pro[1m]"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">ANTHROPIC_DEFAULT_HAIKU_MODEL</p>
+            <Input
+              value={anthropicDefaultHaikuModel}
+              onChange={(e) => setAnthropicDefaultHaikuModel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="deepseek-v4-flash"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">CLAUDE_CODE_SUBAGENT_MODEL</p>
+            <Input
+              value={claudeCodeSubagentModel}
+              onChange={(e) => setClaudeCodeSubagentModel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="deepseek-v4-flash"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">CLAUDE_CODE_EFFORT_LEVEL</p>
+            <Input
+              value={claudeCodeEffortLevel}
+              onChange={(e) => setClaudeCodeEffortLevel(e.target.value)}
+              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+              placeholder="max"
+              disabled={!claudeBashrcLoaded}
+            />
+          </div>
+
+          <Button
+            className="h-10 rounded-full px-5 text-sm disabled:opacity-60"
+            disabled={claudeBashrcSaving || !claudeBashrcLoaded}
+            onClick={() => void handleSaveClaudeBashrc()}
+          >
+            {claudeBashrcSaving ? 'Saving...' : 'Save And Validate .bashrc'}
+          </Button>
+          {claudeBashrcSavedHint && (
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{claudeBashrcSavedHint}</p>
+          )}
+          {claudeBashrcError && (
+            <p className="text-xs text-[color:var(--color-destructive)]">{claudeBashrcError}</p>
+          )}
         </div>
       </div>
 

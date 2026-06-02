@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Clock3, Trash2, X } from 'lucide-react'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import type { ProjectInfo } from '../../shared/types'
+import { useAppStore } from '../stores/appStore'
 
 type RecentProjectsDrawerProps = {
   open: boolean
   currentProjectId?: string
-  projects: ProjectInfo[]
   onClose: () => void
   onSelectProject: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
@@ -14,16 +14,18 @@ type RecentProjectsDrawerProps = {
 
 const DRAWER_TRANSITION_MS = 220
 const DRAWER_CONTENT_REVEAL_MS = 70
+const EMPTY_RECENT_PROJECTS: ProjectInfo[] = []
+const LAST_OPENED_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 function formatLastOpened(timestamp?: number): string {
   if (!timestamp) return '未打开'
   try {
-    return new Intl.DateTimeFormat('zh-CN', {
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(timestamp))
+    return LAST_OPENED_FORMATTER.format(new Date(timestamp))
   } catch {
     return '最近打开'
   }
@@ -32,7 +34,6 @@ function formatLastOpened(timestamp?: number): string {
 export function RecentProjectsDrawer({
   open,
   currentProjectId,
-  projects,
   onClose,
   onSelectProject,
   onRemoveProject,
@@ -40,19 +41,16 @@ export function RecentProjectsDrawer({
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
-
-  const currentProject = useMemo(
-    () => projects.find((project) => project.id === currentProjectId),
-    [projects, currentProjectId]
-  )
-
-  const recentProjects = useMemo(
-    () => projects
+  const currentProject = useAppStore((s) => (
+    currentProjectId ? s.projects.find((project) => project.id === currentProjectId) : undefined
+  ))
+  const recentProjects = useAppStore((s) => {
+    if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
+    return s.projects
       .filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number')
       .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
-      .slice(0, 20),
-    [projects, currentProjectId]
-  )
+      .slice(0, 20)
+  })
 
   useEffect(() => {
     if (open) {
@@ -92,6 +90,7 @@ export function RecentProjectsDrawer({
     <>
       <button
         type="button"
+        data-allow-recent-gesture="true"
         className={`fixed inset-0 z-[89] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
@@ -99,12 +98,16 @@ export function RecentProjectsDrawer({
         onClick={onClose}
       />
 
-      <aside className={`recent-project-drawer ${visible ? 'is-open' : ''}`}>
+      <aside
+        className={`recent-project-drawer ${visible ? 'is-open' : ''}`}
+        data-allow-recent-gesture="true"
+        data-recent-project-drawer-open={open ? 'true' : 'false'}
+      >
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="recent-project-drawer-header">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[color:var(--color-foreground)]">最近项目</p>
-              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">右键下滑快速打开，点击可切换</p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">右键下滑快速开关，点击可切换</p>
             </div>
             <div
               className="recent-project-drawer-current"

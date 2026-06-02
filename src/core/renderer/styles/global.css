@@ -791,8 +791,8 @@ samp {
   border-radius: 24px;
   background: color-mix(in srgb, var(--color-popover) 96%, transparent);
   box-shadow: 0 20px 52px rgba(15, 15, 20, 0.25);
-  backdrop-filter: saturate(152%) blur(16px);
-  -webkit-backdrop-filter: saturate(152%) blur(16px);
+  backdrop-filter: saturate(138%) blur(10px);
+  -webkit-backdrop-filter: saturate(138%) blur(10px);
   overflow: hidden;
   transform: translate3d(0, calc(-100% - 22px), 0);
   opacity: 0;
@@ -819,8 +819,8 @@ samp {
   padding: 14px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
   background: color-mix(in srgb, var(--color-card) 64%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .recent-project-drawer-current {

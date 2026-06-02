@@ -225,7 +225,6 @@ function MouseGestureNavigator() {
 function GlobalRecentProjectsDrawerHost() {
   const location = useLocation()
   const navigate = useNavigate()
-  const projects = useAppStore((s) => s.projects)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const clearProjectLastOpened = useAppStore((s) => s.clearProjectLastOpened)
   const [open, setOpen] = useState(false)
@@ -237,9 +236,12 @@ function GlobalRecentProjectsDrawerHost() {
 
   useEffect(() => {
     const onOpenRecentDrawer = () => setOpen(true)
+    const onToggleRecentDrawer = () => setOpen((prev) => !prev)
     window.addEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+    window.addEventListener('app:toggle-recent-project-drawer', onToggleRecentDrawer as EventListener)
     return () => {
       window.removeEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+      window.removeEventListener('app:toggle-recent-project-drawer', onToggleRecentDrawer as EventListener)
     }
   }, [])
 
@@ -261,7 +263,7 @@ function GlobalRecentProjectsDrawerHost() {
         type="button"
         className="fixed bottom-5 right-5 z-[91] quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
         onClick={() => setOpen(true)}
-        title="最近项目（右键下滑或 Ctrl/Cmd+Shift+P）"
+        title="最近项目（右键下滑开关或 Ctrl/Cmd+Shift+P）"
       >
         <Clock3 className="h-3.5 w-3.5" />
         最近项目
@@ -270,7 +272,6 @@ function GlobalRecentProjectsDrawerHost() {
       <RecentProjectsDrawer
         open={open}
         currentProjectId={currentProjectId}
-        projects={projects}
         onClose={() => setOpen(false)}
         onSelectProject={(projectId) => {
           updateLastOpened(projectId)

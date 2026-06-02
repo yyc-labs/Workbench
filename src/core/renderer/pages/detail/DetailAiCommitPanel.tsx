@@ -541,6 +541,9 @@ function DetailAiCommitPanel({
   const [conflictError, setConflictError] = useState<string | null>(null)
   const [conflictSaving, setConflictSaving] = useState(false)
   const mergeDropdownRef = useRef<HTMLDivElement | null>(null)
+  const mergeSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const currentBranchInputRef = useRef<HTMLInputElement | null>(null)
+  const upstreamBranchInputRef = useRef<HTMLInputElement | null>(null)
   const diffRequestSeqRef = useRef(0)
   const conflictRequestSeqRef = useRef(0)
 
@@ -650,6 +653,9 @@ function DetailAiCommitPanel({
 
   useEffect(() => {
     if (!mergeDropdownOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      mergeSearchInputRef.current?.focus()
+    })
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node
       if (mergeDropdownRef.current?.contains(target)) return
@@ -661,6 +667,7 @@ function DetailAiCommitPanel({
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('keydown', handleEscape)
     return () => {
+      window.cancelAnimationFrame(frame)
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleEscape)
     }
@@ -721,6 +728,17 @@ function DetailAiCommitPanel({
     }
     setUpstreamManagerDangerInput('')
   }, [branchManagerMode, branch?.upstream])
+
+  useEffect(() => {
+    if (!branchManagerMode) return
+    const targetRef = branchManagerMode === 'current' ? currentBranchInputRef : upstreamBranchInputRef
+    const frame = window.requestAnimationFrame(() => {
+      targetRef.current?.focus()
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [branchManagerMode])
 
   useEffect(() => {
     if (!diffDrawerOpen) return
@@ -1789,6 +1807,7 @@ function DetailAiCommitPanel({
                             <div className="sticky top-0 z-10 px-1 pb-2 pt-1">
                               <div className="surface-card rounded-[10px] border border-[color:var(--color-border)] px-2">
                                 <input
+                                  ref={mergeSearchInputRef}
                                   type="text"
                                   value={mergeSearchDraft}
                                   onChange={(event) => setMergeSearchDraft(event.target.value)}
@@ -2009,6 +2028,7 @@ function DetailAiCommitPanel({
               <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
                 <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">新增本地分支</p>
                 <input
+                  ref={currentBranchInputRef}
                   type="text"
                   value={currentManagerInput}
                   onChange={(event) => setCurrentManagerInput(event.target.value)}
@@ -2093,6 +2113,7 @@ function DetailAiCommitPanel({
               <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
                 <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Branch</p>
                 <input
+                  ref={upstreamBranchInputRef}
                   type="text"
                   value={upstreamManagerBranchName}
                   onChange={(event) => setUpstreamManagerBranchName(event.target.value)}

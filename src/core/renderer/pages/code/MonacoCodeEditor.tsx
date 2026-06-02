@@ -77,6 +77,11 @@ function createMonacoModelUri(filePath: string | null): string {
   return `inmemory://model/${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+function toModelCacheKey(filePath: string | null): string {
+  const normalized = filePath?.trim().replace(/\\/g, '/')
+  return normalized && normalized.length > 0 ? normalized : '__inmemory__'
+}
+
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({
   value,
   language,
@@ -94,6 +99,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const modelRef = useRef<MonacoEditor.ITextModel | null>(null)
+  const modelCacheRef = useRef<Map<string, MonacoEditor.ITextModel>>(new Map())
   const syncGuardRef = useRef(false)
   const onSaveRef = useRef(onSave)
   const onPasteImageRef = useRef(onPasteImage)
@@ -363,6 +369,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       const uri = monaco.Uri.parse(createMonacoModelUri(filePath))
       const model = monaco.editor.createModel(value, language, uri)
       modelRef.current = model
+      modelCacheRef.current.set(toModelCacheKey(filePath), model)
 
       const editor = monaco.editor.create(container, {
         model,
@@ -638,11 +645,11 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editor.dispose()
         editorRef.current = null
       }
-      const model = modelRef.current
-      if (model) {
+      for (const model of modelCacheRef.current.values()) {
         model.dispose()
-        modelRef.current = null
       }
+      modelCacheRef.current.clear()
+      modelRef.current = null
       monacoRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -669,30 +676,34 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
   useEffect(() => {
     const monaco = monacoRef.current
-    const model = modelRef.current
-    if (!monaco || !model) return
+    const editor = editorRef.current
+    if (!monaco || !editor) return
 
-    const nextUri = monaco.Uri.parse(createMonacoModelUri(filePath))
-    const sameModelPath = model.uri.toString() === nextUri.toString()
-    if (!sameModelPath) {
-      void ensureTextmateForLanguage(monaco, language)
-      model.dispose()
-      const nextModel = monaco.editor.createModel(value, language, nextUri)
+    const currentModel = modelRef.current
+    const nextKey = toModelCacheKey(filePath)
+    let nextModel = modelCacheRef.current.get(nextKey) ?? null
+
+    if (!nextModel) {
+      const nextUri = monaco.Uri.parse(createMonacoModelUri(filePath))
+      nextModel = monaco.editor.createModel(value, language, nextUri)
+      modelCacheRef.current.set(nextKey, nextModel)
+    }
+
+    if (currentModel !== nextModel) {
       modelRef.current = nextModel
-      editorRef.current?.setModel(nextModel)
-      return
+      editor.setModel(nextModel)
     }
 
-    if (model.getLanguageId() !== language) {
+    if (nextModel.getLanguageId() !== language) {
       void ensureTextmateForLanguage(monaco, language)
-      monaco.editor.setModelLanguage(model, language)
+      monaco.editor.setModelLanguage(nextModel, language)
     }
 
-    if (model.getValue() !== value) {
+    if (nextModel.getValue() !== value) {
       syncGuardRef.current = true
-      model.pushEditOperations(
+      nextModel.pushEditOperations(
         [],
-        [{ range: model.getFullModelRange(), text: value }],
+        [{ range: nextModel.getFullModelRange(), text: value }],
         () => null
       )
       syncGuardRef.current = false

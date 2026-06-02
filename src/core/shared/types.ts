@@ -37,6 +37,17 @@ export interface AiCommitConfig {
   maxBullets?: number
 }
 
+export interface ClaudeBashrcConfig {
+  anthropicBaseUrl: string
+  anthropicAuthToken: string
+  anthropicModel: string
+  anthropicDefaultOpusModel: string
+  anthropicDefaultSonnetModel: string
+  anthropicDefaultHaikuModel: string
+  claudeCodeSubagentModel: string
+  claudeCodeEffortLevel: string
+}
+
 export type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
 
 export interface AiCommitRunOverride {
@@ -482,11 +493,14 @@ export interface ProjectFileNode {
   name: string
   relativePath: string
   kind: ProjectFileNodeKind
+  hasChildren?: boolean
+  isLoaded?: boolean
   children?: ProjectFileNode[]
 }
 
 export interface ProjectFileTreeResult {
   rootPath: string
+  directoryRelativePath: string | null
   nodes: ProjectFileNode[]
   skipped: {
     directories: number

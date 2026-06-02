@@ -17,6 +17,7 @@ import { wslBridge } from './wsl-bridge'
 import { setRuntimeEntry, listRuntimeEntries, removeRuntimeEntry } from './runtime-registry'
 import { getAiCommitTask, upsertAiCommitTask, appendAiCommitTaskOutput } from './ai-commit-registry'
 import {
+  listProjectDirectoryFiles,
   listProjectFiles,
   searchProjectFiles,
   searchProjectContent,
@@ -26,6 +27,11 @@ import {
   writeProjectFile,
   toProjectFileServiceErrorMessage,
 } from './project-file-service'
+import {
+  normalizeClaudeBashrcConfig,
+  readClaudeBashrcConfig,
+  writeClaudeBashrcConfig,
+} from './claude-bashrc'
 import {
   deleteDocLinkSecret,
   getDocLinkSecret,
@@ -2115,8 +2121,8 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC.CONFIG_SET,
-    (_event, partial: Record<string, unknown>) => {
-      const updated = updateConfig(
+    async (_event, partial: Record<string, unknown>) => {
+      const updated = await updateConfig(
         partial as Partial<AppConfig> & { startupDefaultTagId?: string }
       )
       if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
@@ -2125,6 +2131,14 @@ function registerIpcHandlers(): void {
       return updated
     }
   )
+
+  ipcMain.handle(IPC.CLAUDE_BASHRC_GET, async () => {
+    return readClaudeBashrcConfig()
+  })
+
+  ipcMain.handle(IPC.CLAUDE_BASHRC_SET, async (_event, config: Record<string, unknown>) => {
+    return writeClaudeBashrcConfig(normalizeClaudeBashrcConfig(config))
+  })
 
   ipcMain.handle(IPC.DOC_LINK_SECRET_SET, (_event, projectId: string, linkId: string, secret: string) => {
     setDocLinkSecret(projectId, linkId, secret)
@@ -2260,6 +2274,14 @@ function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle(IPC.PROJECT_FILE_TREE_DIRECTORY, async (_event, projectPath: string, directoryRelativePath: string | null) => {
+    try {
+      return await listProjectDirectoryFiles(projectPath, directoryRelativePath)
+    } catch (error) {
+      throw new Error(toProjectFileServiceErrorMessage(error))
+    }
+  })
+
   ipcMain.handle(IPC.PROJECT_FILE_SEARCH, async (_event, projectPath: string, query: string) => {
     try {
       return await searchProjectFiles(projectPath, query)
@@ -2354,6 +2376,7 @@ function registerIpcHandlers(): void {
       // (e.g. cli-prefs.txt) cannot override this launch intent.
       const cliFlag = ` --cli ${resolvedCli}`
       const launcher = quoteBashSingle(resolvedRuntimeLauncherScript())
+      const command = `'${launcher}'${cliFlag} '${quoteBashSingle(wslPath)}'`
 
       return new Promise<boolean>((resolve) => {
         const child = spawn(
@@ -2363,8 +2386,8 @@ function registerIpcHandlers(): void {
             distro,
             '--',
             'bash',
-            '-lc',
-            `'${launcher}'${cliFlag} '${quoteBashSingle(wslPath)}'`
+            '-ilc',
+            command
           ],
           {
             detached: true,

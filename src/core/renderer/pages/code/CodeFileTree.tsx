@@ -6,6 +6,8 @@ import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
 
+const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
+
 interface FileTreeContextMenuPayload {
   x: number
   y: number
@@ -95,6 +97,25 @@ function collectDirectoryPaths(nodes: ProjectFileNode[]): string[] {
   }
   walk(nodes)
   return result
+}
+
+function createPlaceholderNode(parent: ProjectFileNode): ProjectFileNode {
+  return {
+    name: '__loading__',
+    relativePath: `${parent.relativePath}${DIRECTORY_PLACEHOLDER_SUFFIX}`,
+    kind: 'file',
+  }
+}
+
+function isPlaceholderNode(node: ProjectFileNode): boolean {
+  return node.relativePath.endsWith(DIRECTORY_PLACEHOLDER_SUFFIX)
+}
+
+function getTreeChildren(item: ProjectFileNode): ProjectFileNode[] | null {
+  if (item.kind !== 'directory') return null
+  if (item.children && item.children.length > 0) return item.children
+  if (item.hasChildren) return [createPlaceholderNode(item)]
+  return []
 }
 
 function FileTreeContextMenu({
@@ -192,10 +213,13 @@ function FileTreeNodeRenderer({
   onOpenFileContextMenu,
 }: FileTreeNodeRendererProps) {
   const data = node.data
+  if (isPlaceholderNode(data)) {
+    return <div style={style} aria-hidden="true" />
+  }
   const isDirectory = !flatFileListMode && data.kind === 'directory'
   const isExpanded = isDirectory && node.isOpen
   const isActive = data.kind === 'file' && activeRelativePath === data.relativePath
-  const hasChildren = isDirectory && (data.children?.length ?? 0) > 0
+  const hasChildren = isDirectory && Boolean(data.hasChildren || (data.children?.length ?? 0) > 0)
   const rowLabel = flatFileListMode && isActive ? data.relativePath : data.name
 
   return (
@@ -280,17 +304,34 @@ export const CodeFileTree = memo(function CodeFileTree({
   const initialOpenState = useMemo(() => {
     if (flatFileListMode) return {}
     const state: Record<string, boolean> = {}
-    for (const path of directoryPaths) {
-      state[path] = expandedDirectories.has(path)
+    for (const path of expandedDirectories) {
+      state[path] = true
     }
     return state
-  }, [directoryPaths, expandedDirectories, flatFileListMode])
+  }, [expandedDirectories, flatFileListMode])
 
   useEffect(() => {
     if (!locateRequestToken) return
     if (!activeRelativePath) return
     void treeRef.current?.scrollTo(activeRelativePath, 'center')
   }, [locateRequestToken, activeRelativePath, flatFileListMode, nodes])
+
+  useEffect(() => {
+    const tree = treeRef.current
+    if (!tree) return
+
+    if (!activeRelativePath) {
+      tree.deselectAll()
+      return
+    }
+
+    tree.setSelection({
+      ids: [activeRelativePath],
+      anchor: activeRelativePath,
+      mostRecent: activeRelativePath,
+    })
+    tree.focus(activeRelativePath, { scroll: false })
+  }, [activeRelativePath, flatFileListMode, nodes])
 
   useEffect(() => {
     if (flatFileListMode) {
@@ -339,15 +380,15 @@ export const CodeFileTree = memo(function CodeFileTree({
           ref={treeRef}
           data={nodes}
           idAccessor={(item) => item.relativePath}
-          childrenAccessor={flatFileListMode ? (() => null) : ((item) => (item.kind === 'directory' ? (item.children ?? []) : null))}
+          childrenAccessor={flatFileListMode ? (() => null) : getTreeChildren}
           width={size.width}
           height={size.height}
           rowHeight={28}
           indent={14}
           overscanCount={10}
           className="code-tree-virtual-list"
-          selection={activeRelativePath ?? undefined}
           initialOpenState={initialOpenState}
+          openByDefault={false}
           disableDrag
           disableDrop
           disableEdit
