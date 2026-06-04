@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink } from 'lucide-react'
 
@@ -9,6 +9,14 @@ interface UrlPopoverProps {
 }
 
 type UrlPopoverEntry = { url: string; label: string; tag?: string; tagLabel?: string }
+type PreparedUrlPopoverEntry = UrlPopoverEntry & {
+  key: string
+  normalizedLabel: string
+  normalizedUrl: string
+  normalizedTag: string
+  normalizedTagLabel: string
+  searchText: string
+}
 
 function isFuzzySubsequence(query: string, candidate: string): boolean {
   if (!query) return true
@@ -41,26 +49,40 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     ),
     [items, urls]
   )
-  const hasPopover = entries.length > 1
+  const preparedEntries = useMemo<PreparedUrlPopoverEntry[]>(
+    () => entries.map((entry) => {
+      const normalizedLabel = entry.label.toLowerCase()
+      const normalizedUrl = entry.url.toLowerCase()
+      const normalizedTag = (entry.tag ?? '').toLowerCase()
+      const normalizedTagLabel = (entry.tagLabel ?? '').toLowerCase()
+      return {
+        ...entry,
+        key: `${entry.label}:${entry.url}`,
+        normalizedLabel,
+        normalizedUrl,
+        normalizedTag,
+        normalizedTagLabel,
+        searchText: `${normalizedLabel} ${normalizedUrl} ${normalizedTag} ${normalizedTagLabel}`,
+      }
+    }),
+    [entries]
+  )
+  const hasPopover = preparedEntries.length > 1
   const normalizedQuery = query.trim().toLowerCase()
+  const deferredQuery = useDeferredValue(normalizedQuery)
   const filteredEntries = useMemo(() => {
-    if (!normalizedQuery) return entries
+    if (!deferredQuery) return preparedEntries
 
-    return entries.filter((entry) => {
-      const label = entry.label.toLowerCase()
-      const url = entry.url.toLowerCase()
-      const tag = (entry.tag ?? '').toLowerCase()
-      const tagLabel = (entry.tagLabel ?? '').toLowerCase()
-      const text = `${label} ${url} ${tag} ${tagLabel}`
-      if (text.includes(normalizedQuery)) return true
+    return preparedEntries.filter((entry) => {
+      if (entry.searchText.includes(deferredQuery)) return true
       return (
-        isFuzzySubsequence(normalizedQuery, label)
-        || isFuzzySubsequence(normalizedQuery, url)
-        || isFuzzySubsequence(normalizedQuery, tag)
-        || isFuzzySubsequence(normalizedQuery, tagLabel)
+        isFuzzySubsequence(deferredQuery, entry.normalizedLabel)
+        || isFuzzySubsequence(deferredQuery, entry.normalizedUrl)
+        || isFuzzySubsequence(deferredQuery, entry.normalizedTag)
+        || isFuzzySubsequence(deferredQuery, entry.normalizedTagLabel)
       )
     })
-  }, [entries, normalizedQuery])
+  }, [deferredQuery, preparedEntries])
 
   const updatePos = () => {
     if (triggerRef.current) {
@@ -195,8 +217,8 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
         boxShadow: 'var(--shadow-popover)',
-        backdropFilter: 'saturate(165%) blur(22px)',
-        WebkitBackdropFilter: 'saturate(165%) blur(22px)',
+        backdropFilter: 'saturate(145%) blur(14px)',
+        WebkitBackdropFilter: 'saturate(145%) blur(14px)',
         overscrollBehavior: 'contain',
       }}
       onMouseEnter={handlePopoverEnter}
@@ -215,6 +237,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
           }
         }, 0)
       }}
+      onContextMenu={() => closePopover({ blur: true })}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="sticky top-0 z-[1] px-1.5 pb-2">
@@ -244,11 +267,10 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         </div>
       ) : (
         filteredEntries.map((entry) => {
-          const key = `${entry.label}:${entry.url}`
-          const isCopied = copiedKey === key
+          const isCopied = copiedKey === entry.key
           return (
             <div
-              key={key}
+              key={entry.key}
               className="group/item flex cursor-pointer items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
               role="button"
               tabIndex={0}
@@ -273,7 +295,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
                 }`}
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleCopy(key, entry.url)
+                  handleCopy(entry.key, entry.url)
                 }}
               >
                 {isCopied ? '已复制' : '复制'}
@@ -291,6 +313,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       className="relative inline-flex"
       onMouseEnter={handleTriggerEnter}
       onMouseLeave={handleTriggerLeave}
+      onContextMenuCapture={() => closePopover({ blur: true })}
     >
       {children}
       {createPortal(popover, document.body)}

@@ -177,6 +177,12 @@ export interface GitFileDiffRequest {
   staged: boolean
 }
 
+export interface GitOutputLimitInfo {
+  limitBytes: number
+  totalBytes: number
+  keptBytes: number
+}
+
 export interface GitFileDiffResult {
   ok: boolean
   checkedAt: number
@@ -185,6 +191,7 @@ export interface GitFileDiffResult {
   exitCode: number | null
   staged: boolean
   error?: string
+  outputLimit?: GitOutputLimitInfo
 }
 
 export interface GitConflictFileRequest {
@@ -198,6 +205,7 @@ export interface GitConflictStageContent {
   exists: boolean
   output: string
   error?: string
+  outputLimit?: GitOutputLimitInfo
 }
 
 export interface GitConflictFileResult {

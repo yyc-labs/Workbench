@@ -426,6 +426,7 @@ type CodeWorkspacePanelProps = {
   projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onOpenProjectLinksManager?: () => void
 }
 
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
@@ -782,6 +783,7 @@ export function CodeWorkspacePanel({
   projectLinkItems = [],
   activePane = 'code',
   onSwitchPane,
+  onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
   const projectCodeMeta = useAppStore((s) => {
     const found = s.projects.find((p) => p.id === projectId)
@@ -879,6 +881,7 @@ export function CodeWorkspacePanel({
   const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
   const pendingCursorRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
   const saveCodeSessionTimerRef = useRef<number | null>(null)
+  const treeLoadRequestSeqRef = useRef(0)
   const lastPersistedCodeSessionJsonRef = useRef<string>('')
   const isRestoringCodeSessionRef = useRef(true)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
@@ -1235,6 +1238,8 @@ export function CodeWorkspacePanel({
   }, [projectPath])
 
   const loadTree = useCallback(async () => {
+    const requestSeq = treeLoadRequestSeqRef.current + 1
+    treeLoadRequestSeqRef.current = requestSeq
     setTree({
       status: 'loading',
       nodes: [],
@@ -1250,6 +1255,7 @@ export function CodeWorkspacePanel({
     try {
       const result = await window.electronAPI.listProjectFiles(projectPath)
       const sortedNodes = sortProjectNodes(result.nodes)
+      if (treeLoadRequestSeqRef.current !== requestSeq) return
       setTree({
         status: 'ready',
         nodes: sortedNodes,
@@ -1260,6 +1266,7 @@ export function CodeWorkspacePanel({
         skippedFiles: result.skipped.files,
       })
     } catch (error) {
+      if (treeLoadRequestSeqRef.current !== requestSeq) return
       setTree({
         status: 'error',
         nodes: [],
@@ -1281,8 +1288,10 @@ export function CodeWorkspacePanel({
   }, [loadDirectory])
 
   useEffect(() => {
+    if (activePane !== 'code') return
+    if (tree.status !== 'idle' && tree.status !== 'error') return
     void loadTree()
-  }, [loadTree])
+  }, [activePane, loadTree, tree.status])
 
   useEffect(() => {
     const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
@@ -2114,7 +2123,7 @@ export function CodeWorkspacePanel({
         <div className="min-w-0">
           {projectHeaderCollapsed ? (
             <div className="flex min-w-0 items-center gap-2.5">
-              <p className="max-w-[320px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
+              <p className="max-w-[220px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
                 {projectName || '当前项目'}
               </p>
               <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
@@ -2145,14 +2154,19 @@ export function CodeWorkspacePanel({
               </div>
               {firstProjectLinkItem && (
                 <UrlPopover items={projectLinkItems}>
-                  <button
-                    type="button"
-                    className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                    onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
-                    title="Project links"
-                  >
-                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                  </button>
+                <button
+                  type="button"
+                  className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onOpenProjectLinksManager?.()
+                  }}
+                  title="左键打开首个链接，右键打开资料管理"
+                >
+                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                </button>
                 </UrlPopover>
               )}
             </div>
@@ -2429,6 +2443,15 @@ export function CodeWorkspacePanel({
                       className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
                       onClick={() => {
                         if (!activeRelativePath) return
+                        const parentDirectories = collectParentDirectories(activeRelativePath)
+                        const hasUnloadedParent = parentDirectories.some((parent) => {
+                          const node = findDirectoryNode(tree.nodes, parent)
+                          return !node?.isLoaded
+                        })
+                        if (!hasUnloadedParent) {
+                          setLocateRequestToken((prev) => prev + 1)
+                          return
+                        }
                         void ensureTreePathLoaded(activeRelativePath).then(() => {
                           setLocateRequestToken((prev) => prev + 1)
                         })

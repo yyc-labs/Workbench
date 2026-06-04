@@ -95,6 +95,7 @@ export function DetailPage() {
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
+  const clearOutput = useAppStore((s) => s.clearOutput)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
@@ -205,6 +206,9 @@ export function DetailPage() {
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
   } = docLinkState
+  const openProjectLinksManager = useCallback(() => {
+    setLinkSettingsOpen(true)
+  }, [setLinkSettingsOpen])
   const collapsedProjectLinkItems = useMemo(
     () => [
       ...(isRunning ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
@@ -243,15 +247,17 @@ export function DetailPage() {
     if (toolProcessStatus !== 'stopped') return
     const toolCommand = environment === 'ubuntu' ? 'exec bash -i' : 'powershell -NoLogo -NoExit'
     const useWsl = environment === 'ubuntu'
+    clearOutput(toolProcessId)
     void startProject(projectId, toolCommand, toolProcessId, useWsl)
-  }, [environment, projectId, projectPath, startProject, toolProcessId, toolProcessStatus])
+  }, [clearOutput, environment, projectId, projectPath, startProject, toolProcessId, toolProcessStatus])
 
   useEffect(() => {
     if (!toolProcessId) return
     return () => {
+      clearOutput(toolProcessId)
       void stopProject(toolProcessId)
     }
-  }, [toolProcessId, stopProject])
+  }, [clearOutput, toolProcessId, stopProject])
 
   useEffect(() => {
     try {
@@ -388,6 +394,11 @@ export function DetailPage() {
                   type="button"
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                   onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    openProjectLinksManager()
+                  }}
                   title={defaultDocLink.url}
                 >
                   <BookOpen className="h-3 w-3" />
@@ -404,7 +415,7 @@ export function DetailPage() {
             <button
               type="button"
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => setLinkSettingsOpen(true)}
+              onClick={openProjectLinksManager}
             >
               <Settings2 className="h-3.5 w-3.5" />
               资料设置
@@ -608,6 +619,7 @@ export function DetailPage() {
 
       {metaDialogOpen && (
         <ProjectMetaDialog
+          open={metaDialogOpen}
           project={project}
           folders={folders}
           tags={tags}
@@ -648,6 +660,7 @@ export function DetailPage() {
                 if (!projectId || nextPane === activePane) return
                 navigate(`/project/${projectId}/${nextPane}`)
               }}
+              onOpenProjectLinksManager={openProjectLinksManager}
             />
           ) : (
             <DetailAiCommitPanel
@@ -661,6 +674,7 @@ export function DetailPage() {
                 if (!projectId || nextPane === activePane) return
                 navigate(`/project/${projectId}/${nextPane}`)
               }}
+              onOpenProjectLinksManager={openProjectLinksManager}
               jumpToAiLogToken={jumpToAiLogToken}
               flowNodes={flowNodes}
               flowEdges={flowEdges}

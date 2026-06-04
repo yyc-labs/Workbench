@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Copy, FileText, Folder, FolderOpen } from 'lucide-react'
 import { Tree } from 'react-arborist'
@@ -55,11 +55,13 @@ function useContainerSize() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [size, setSize] = useState<TreeSize>({ width: 0, height: 0 })
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
+    let frameId = 0
+    let cancelled = false
 
-    const updateSize = () => {
+    const updateSize = (): { width: number; height: number } => {
       const rect = container.getBoundingClientRect()
       const nextWidth = Math.max(0, Math.floor(rect.width))
       const nextHeight = Math.max(0, Math.floor(rect.height))
@@ -68,15 +70,27 @@ function useContainerSize() {
           ? prev
           : { width: nextWidth, height: nextHeight }
       ))
+      return { width: nextWidth, height: nextHeight }
     }
 
-    updateSize()
+    const measureUntilReady = () => {
+      if (cancelled) return
+      const next = updateSize()
+      if (next.width > 0 && next.height > 0) return
+      frameId = window.requestAnimationFrame(measureUntilReady)
+    }
+
+    measureUntilReady()
     const observer = new ResizeObserver(() => {
       updateSize()
     })
     observer.observe(container)
+    window.addEventListener('resize', updateSize)
 
     return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frameId)
+      window.removeEventListener('resize', updateSize)
       observer.disconnect()
     }
   }, [])
@@ -297,10 +311,12 @@ export const CodeFileTree = memo(function CodeFileTree({
 }: CodeFileTreeProps) {
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
   const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
+  const handledLocateRequestTokenRef = useRef(0)
   const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
   const { containerRef, size } = useContainerSize()
   const [contextMenu, setContextMenu] = useState<FileTreeContextMenuPayload | null>(null)
   const directoryPaths = useMemo(() => collectDirectoryPaths(nodes), [nodes])
+  const isMeasuring = size.width <= 0 || size.height <= 0
   const initialOpenState = useMemo(() => {
     if (flatFileListMode) return {}
     const state: Record<string, boolean> = {}
@@ -312,9 +328,23 @@ export const CodeFileTree = memo(function CodeFileTree({
 
   useEffect(() => {
     if (!locateRequestToken) return
+    if (locateRequestToken === handledLocateRequestTokenRef.current) return
+    handledLocateRequestTokenRef.current = locateRequestToken
     if (!activeRelativePath) return
-    void treeRef.current?.scrollTo(activeRelativePath, 'center')
-  }, [locateRequestToken, activeRelativePath, flatFileListMode, nodes])
+    const tree = treeRef.current
+    if (!tree) return
+
+    const activeIndex = tree.indexOf(activeRelativePath)
+    if (
+      activeIndex != null
+      && activeIndex >= tree.visibleStartIndex
+      && activeIndex <= tree.visibleStopIndex
+    ) {
+      return
+    }
+
+    void tree.scrollTo(activeRelativePath, 'smart')
+  }, [locateRequestToken, activeRelativePath])
 
   useEffect(() => {
     const tree = treeRef.current
@@ -375,7 +405,11 @@ export const CodeFileTree = memo(function CodeFileTree({
 
   return (
     <div ref={containerRef} className="code-tree-virtual-wrap">
-      {size.width > 0 && size.height > 0 && (
+      {isMeasuring ? (
+        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
+          Preparing file tree...
+        </div>
+      ) : (
         <Tree<ProjectFileNode>
           ref={treeRef}
           data={nodes}

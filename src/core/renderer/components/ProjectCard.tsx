@@ -1,9 +1,10 @@
-import { memo, useState, useCallback, useEffect } from 'react'
+import { memo, useState, useCallback, useEffect, useMemo } from 'react'
 import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag, AiCommitTaskSnapshot } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
+import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { RunCommandConfigPopover } from './RunCommandConfigPopover'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
@@ -66,18 +67,21 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const isDevStopping = devStatus === 'stopping'
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
-  const linkMenuItems = [
-    ...(isDevRunning ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
-    ...docLinks.map((link) => ({
-      url: link.url,
-      label: `资料 · ${link.title}`,
-      tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
-      tagLabel: projectDocLinkTagLabel(
-        normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
-        docLinkTagOptions
-      ),
-    })),
-  ]
+  const linkMenuItems = useMemo(
+    () => [
+      ...(isDevRunning ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...docLinks.map((link) => {
+        const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+        return {
+          url: link.url,
+          label: `资料 · ${link.title}`,
+          tag: normalizedTag,
+          tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+        }
+      }),
+    ],
+    [devUrls, docLinkTagOptions, docLinks, isDevRunning]
+  )
   const firstLinkMenuItem = linkMenuItems[0]
   const hoverDocLabel = defaultDocLink
     ? `资料: ${defaultDocLink.title}`
@@ -90,6 +94,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
+  const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
 
   const handleOpenTerminal = useCallback(async () => {
@@ -295,16 +300,23 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         />
       )}
 
-      {metaDialogOpen && (
-        <ProjectMetaDialog
+      <ProjectMetaDialog
+        open={metaDialogOpen}
+        project={project}
+        folders={folders}
+        tags={tags}
+        onClose={() => setMetaDialogOpen(false)}
+        onAssignFolder={assignProjectFolder}
+        onSetProjectTags={setProjectTags}
+        onSetProjectCustomName={setProjectCustomName}
+        onSetProjectCustomType={setProjectCustomType}
+      />
+
+      {docLinksDialogOpen && (
+        <ProjectDocLinksDialog
+          open={docLinksDialogOpen}
           project={project}
-          folders={folders}
-          tags={tags}
-          onClose={() => setMetaDialogOpen(false)}
-          onAssignFolder={assignProjectFolder}
-          onSetProjectTags={setProjectTags}
-          onSetProjectCustomName={setProjectCustomName}
-          onSetProjectCustomType={setProjectCustomType}
+          onClose={() => setDocLinksDialogOpen(false)}
         />
       )}
 
@@ -335,7 +347,12 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             <button
               className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"
               onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(firstLinkMenuItem.url) }}
-              title="Project links"
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDocLinksDialogOpen(true)
+              }}
+              title="左键打开首个链接，右键打开资料管理"
             >
               <BookOpen className="h-3.5 w-3.5 shrink-0" />
             </button>

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { ArrowUpRight, BookOpen, FolderOpen, Play } from 'lucide-react'
 import type { ProjectDocLink, ProjectInfo } from '../../../shared/types'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
@@ -13,6 +14,7 @@ type DetailWorkspaceCardProps = {
   processUrls: string[]
   docLinks: ProjectDocLink[]
   defaultDocLink?: ProjectDocLink
+  onOpenProjectLinksManager?: () => void
 }
 
 function DetailWorkspaceCard({
@@ -22,8 +24,21 @@ function DetailWorkspaceCard({
   processUrls,
   docLinks,
   defaultDocLink,
+  onOpenProjectLinksManager,
 }: DetailWorkspaceCardProps) {
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
+  const docMenuItems = useMemo(
+    () => docLinks.map((link) => {
+      const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+      return {
+        url: link.url,
+        label: `${projectDocLinkTagLabel(normalizedTag, docLinkTagOptions)}: ${link.title}`,
+        tag: normalizedTag,
+        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+      }
+    }),
+    [docLinkTagOptions, docLinks]
+  )
   return (
     <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
       <div className="relative">
@@ -56,21 +71,16 @@ function DetailWorkspaceCard({
               </UrlPopover>
             )}
             {defaultDocLink && (
-              <UrlPopover items={docLinks.map((link) => ({
-                url: link.url,
-                label: `${projectDocLinkTagLabel(
-                  normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
-                  docLinkTagOptions
-                )}: ${link.title}`,
-                tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
-                tagLabel: projectDocLinkTagLabel(
-                  normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
-                  docLinkTagOptions
-                ),
-              }))}>
+              <UrlPopover items={docMenuItems}>
                 <button
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                   onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onOpenProjectLinksManager?.()
+                  }}
+                  title="左键打开默认资料，右键打开资料管理"
                 >
                   <BookOpen className="h-3 w-3" />
                   <span className="max-w-[240px] truncate">

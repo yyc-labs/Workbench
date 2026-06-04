@@ -82,6 +82,8 @@ function toModelCacheKey(filePath: string | null): string {
   return normalized && normalized.length > 0 ? normalized : '__inmemory__'
 }
 
+const MAX_CACHED_MODELS = 8
+
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({
   value,
   language,
@@ -163,6 +165,30 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     )
   }
 
+  const touchModelCacheEntry = (key: string, model: MonacoEditor.ITextModel) => {
+    const cache = modelCacheRef.current
+    if (cache.has(key)) {
+      cache.delete(key)
+    }
+    cache.set(key, model)
+  }
+
+  const evictStaleModels = (activeKey: string) => {
+    const cache = modelCacheRef.current
+    while (cache.size > MAX_CACHED_MODELS) {
+      const oldestEntry = cache.entries().next()
+      if (oldestEntry.done) break
+      const [oldestKey, oldestModel] = oldestEntry.value
+      if (oldestKey === activeKey) {
+        cache.delete(oldestKey)
+        cache.set(oldestKey, oldestModel)
+        continue
+      }
+      cache.delete(oldestKey)
+      oldestModel.dispose()
+    }
+  }
+
   const selectSearchMatch = (
     editor: MonacoEditor.IStandaloneCodeEditor,
     matches: MonacoEditor.FindMatch[],
@@ -179,6 +205,33 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     setActiveSearchMatchIndex(normalizedIndex + 1)
   }
 
+  const syncSearchMatchIndexFromSelection = (
+    editor: MonacoEditor.IStandaloneCodeEditor,
+    matches: MonacoEditor.FindMatch[]
+  ) => {
+    setSearchMatchCount(matches.length)
+    if (matches.length <= 0) {
+      setActiveSearchMatchIndex(0)
+      return
+    }
+
+    const selection = editor.getSelection()
+    if (!selection) {
+      setActiveSearchMatchIndex(activeSearchMatchIndexRef.current > 0 ? activeSearchMatchIndexRef.current : 1)
+      return
+    }
+
+    const activeMatchIndex = matches.findIndex((match) => selection.intersectRanges(match.range) !== null)
+    if (activeMatchIndex >= 0) {
+      setActiveSearchMatchIndex(activeMatchIndex + 1)
+      return
+    }
+
+    const currentIndex = activeSearchMatchIndexRef.current
+    const normalizedIndex = currentIndex > 0 && currentIndex <= matches.length ? currentIndex : 1
+    setActiveSearchMatchIndex(normalizedIndex)
+  }
+
   const refreshSearchResult = (
     editor: MonacoEditor.IStandaloneCodeEditor,
     mode: 'keep' | 'reset-to-first' = 'keep'
@@ -186,17 +239,16 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const model = editor.getModel()
     if (!model) return
     const matches = computeSearchMatches(model, searchQueryRef.current)
-    setSearchMatchCount(matches.length)
-    if (matches.length <= 0) {
-      setActiveSearchMatchIndex(0)
-      return
-    }
     if (mode === 'reset-to-first') {
+      setSearchMatchCount(matches.length)
+      if (matches.length <= 0) {
+        setActiveSearchMatchIndex(0)
+        return
+      }
       selectSearchMatch(editor, matches, 0)
       return
     }
-    const current = activeSearchMatchIndexRef.current > 0 ? activeSearchMatchIndexRef.current - 1 : 0
-    selectSearchMatch(editor, matches, current)
+    syncSearchMatchIndexFromSelection(editor, matches)
   }
 
   const getSelectedTextForSearch = (editor: MonacoEditor.IStandaloneCodeEditor): string => {
@@ -369,7 +421,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       const uri = monaco.Uri.parse(createMonacoModelUri(filePath))
       const model = monaco.editor.createModel(value, language, uri)
       modelRef.current = model
-      modelCacheRef.current.set(toModelCacheKey(filePath), model)
+      const initialKey = toModelCacheKey(filePath)
+      touchModelCacheEntry(initialKey, model)
+      evictStaleModels(initialKey)
 
       const editor = monaco.editor.create(container, {
         model,
@@ -686,8 +740,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     if (!nextModel) {
       const nextUri = monaco.Uri.parse(createMonacoModelUri(filePath))
       nextModel = monaco.editor.createModel(value, language, nextUri)
-      modelCacheRef.current.set(nextKey, nextModel)
     }
+    touchModelCacheEntry(nextKey, nextModel)
+    evictStaleModels(nextKey)
 
     if (currentModel !== nextModel) {
       modelRef.current = nextModel

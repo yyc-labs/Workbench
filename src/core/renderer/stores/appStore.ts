@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { createWithEqualityFn } from 'zustand/traditional'
 import type { AppState } from './appStore.types'
 import { initialThemeMode, loadPersistedProcessUrls } from './appStore.helpers'
 import { createInitActionsSlice } from './appStore.initSlice'
@@ -8,7 +8,7 @@ import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../lib/projectDocLinks'
 
-export const useAppStore = create<AppState>()((...args) => ({
+export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   isAppReady: false,
   projects: [],
   folders: [],

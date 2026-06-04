@@ -7,6 +7,7 @@ import { Input } from './ui/input'
 import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 
 interface ProjectMetaDialogProps {
+  open: boolean
   project: ProjectInfo
   folders: ProjectFolder[]
   tags: ProjectTag[]
@@ -18,6 +19,7 @@ interface ProjectMetaDialogProps {
 }
 
 export function ProjectMetaDialog({
+  open,
   project,
   folders,
   tags,
@@ -34,12 +36,15 @@ export function ProjectMetaDialog({
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, open])
+
+  if (!open) return null
 
   const selectedFolderName = useMemo(() => {
     if (!selectedFolderId) return 'Uncategorized'
@@ -266,6 +271,7 @@ export function ProjectMetaDialog({
 }
 
 interface WorkspaceManagerDialogProps {
+  open: boolean
   folders: ProjectFolder[]
   tags: ProjectTag[]
   onClose: () => void
@@ -403,6 +409,7 @@ function CreateRow({
 }
 
 export function WorkspaceManagerDialog({
+  open,
   folders,
   tags,
   onClose,
@@ -414,12 +421,15 @@ export function WorkspaceManagerDialog({
   onRemoveTag,
 }: WorkspaceManagerDialogProps) {
   useEffect(() => {
+    if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, open])
+
+  if (!open) return null
 
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center px-4">

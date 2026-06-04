@@ -13,13 +13,17 @@ import {
 
 type UseProjectDocLinksOptions = {
   project: ProjectInfo | undefined
+  initialSettingsOpen?: boolean
 }
 
-export function useProjectDocLinks({ project }: UseProjectDocLinksOptions) {
+export function useProjectDocLinks({
+  project,
+  initialSettingsOpen = false,
+}: UseProjectDocLinksOptions) {
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS)
   const setDocLinkTags = useAppStore((s) => s.setDocLinkTags)
-  const [linkSettingsOpen, setLinkSettingsOpen] = useState(false)
+  const [linkSettingsOpen, setLinkSettingsOpen] = useState(initialSettingsOpen)
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
   const [docTagInput, setDocTagInput] = useState<ProjectDocLinkTag>(PROJECT_DOC_LINK_DEFAULT_TAG)

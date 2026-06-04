@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import type { ProjectFileReadResult } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import type { SaveStatus } from './code.types'
 
 const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
+const DIRTY_CHECK_DEBOUNCE_MS = 180
 
 export type DiscardUnsavedConfirmState = {
   nextRelativePath: string
@@ -19,6 +20,26 @@ type UseCodeFileStateOptions = {
   onDidOpenFile?: (file: ProjectFileReadResult) => void
 }
 
+type ActiveCodeFile = Omit<ProjectFileReadResult, 'content' | 'encoding'>
+
+function toActiveCodeFile(result: ProjectFileReadResult): ActiveCodeFile {
+  return {
+    relativePath: result.relativePath,
+    size: result.size,
+    mtimeMs: result.mtimeMs,
+    language: result.language,
+  }
+}
+
+function hashTextContent(value: string): number {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
 export function useCodeFileState({
   projectId,
   projectPath,
@@ -27,9 +48,8 @@ export function useCodeFileState({
   onDidOpenFile,
 }: UseCodeFileStateOptions) {
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
-  const [activeFile, setActiveFile] = useState<ProjectFileReadResult | null>(null)
-  const [editorValue, setEditorValue] = useState('')
-  const [lastSavedValue, setLastSavedValue] = useState('')
+  const [activeFile, setActiveFile] = useState<ActiveCodeFile | null>(null)
+  const [editorValue, setEditorValueState] = useState('')
   const [activeRelativePath, setActiveRelativePath] = useState<string | null>(null)
   const [isReading, setIsReading] = useState(false)
   const [readError, setReadError] = useState<string | null>(null)
@@ -38,9 +58,17 @@ export function useCodeFileState({
   const [hasExternalChange, setHasExternalChange] = useState(false)
   const [isReloadingFromDisk, setIsReloadingFromDisk] = useState(false)
   const [discardUnsavedConfirm, setDiscardUnsavedConfirm] = useState<DiscardUnsavedConfirmState>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [savedContentFingerprint, setSavedContentFingerprint] = useState(0)
+  const [savedContentLength, setSavedContentLength] = useState(0)
   const discardUnsavedResolverRef = useRef<((proceed: boolean) => void) | null>(null)
 
-  const isDirty = editorValue !== lastSavedValue
+  const isDirty = hasUnsavedChanges
+
+  const setEditorValue = useCallback((value: SetStateAction<string>) => {
+    setHasUnsavedChanges(true)
+    setEditorValueState(value)
+  }, [])
 
   const resolveDiscardUnsavedConfirm = useCallback((proceed: boolean) => {
     const resolve = discardUnsavedResolverRef.current
@@ -84,10 +112,13 @@ export function useCodeFileState({
 
     try {
       const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
-      setActiveFile(result)
+      const contentFingerprint = hashTextContent(result.content)
+      setActiveFile(toActiveCodeFile(result))
       setActiveRelativePath(result.relativePath)
-      setEditorValue(result.content)
-      setLastSavedValue(result.content)
+      setEditorValueState(result.content)
+      setSavedContentFingerprint(contentFingerprint)
+      setSavedContentLength(result.content.length)
+      setHasUnsavedChanges(false)
       setHasExternalChange(false)
       onDidOpenFile?.(result)
       void setProjectLastCodeFile(projectId, result.relativePath)
@@ -127,17 +158,19 @@ export function useCodeFileState({
         editorValue,
         activeFile.mtimeMs
       )
+      const contentFingerprint = hashTextContent(editorValue)
       setActiveFile((prev) => (
         prev
           ? {
             ...prev,
-            content: editorValue,
             size: result.size,
             mtimeMs: result.mtimeMs,
           }
           : prev
       ))
-      setLastSavedValue(editorValue)
+      setSavedContentFingerprint(contentFingerprint)
+      setSavedContentLength(editorValue.length)
+      setHasUnsavedChanges(false)
       setSaveStatus('saved')
       setHasExternalChange(false)
       window.setTimeout(() => {
@@ -148,6 +181,23 @@ export function useCodeFileState({
       setSaveError(error instanceof Error ? error.message : String(error))
     }
   }, [activeFile, activeRelativePath, editorValue, isDirty, projectPath])
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const timer = window.setTimeout(() => {
+      const matchesSavedSnapshot = (
+        editorValue.length === savedContentLength
+        && hashTextContent(editorValue) === savedContentFingerprint
+      )
+      if (matchesSavedSnapshot) {
+        setHasUnsavedChanges(false)
+      }
+    }, DIRTY_CHECK_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [editorValue, hasUnsavedChanges, savedContentFingerprint, savedContentLength])
 
   useEffect(() => {
     if (!activeRelativePath || !activeFile) {

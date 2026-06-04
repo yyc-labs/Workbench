@@ -63,6 +63,8 @@ const DARK_SOFT_THEME: ITheme = {
   cursorAccent: '#1f2126',
 }
 
+const XTERM_SCROLLBACK_LINES = 1200
+
 function resolveTerminalTheme(variant: 'default' | 'soft'): ITheme {
   const currentTheme = document.documentElement.getAttribute('data-theme')
   if (currentTheme === 'light') return LIGHT_THEME
@@ -94,6 +96,7 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
       convertEol: true,
       rightClickSelectsWord: true,
       macOptionIsMeta: true,
+      scrollback: XTERM_SCROLLBACK_LINES,
       theme: initialTheme,
     })
 

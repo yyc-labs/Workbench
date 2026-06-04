@@ -381,19 +381,18 @@ export function HomePage() {
         envFilter={envFilter}
       />
 
-      {workspaceDialogOpen && (
-        <WorkspaceManagerDialog
-          folders={folders}
-          tags={tags}
-          onClose={() => setWorkspaceDialogOpen(false)}
-          onCreateFolder={createFolder}
-          onRenameFolder={renameFolder}
-          onRemoveFolder={removeFolder}
-          onCreateTag={createTag}
-          onRenameTag={renameTag}
-          onRemoveTag={removeTag}
-        />
-      )}
+      <WorkspaceManagerDialog
+        open={workspaceDialogOpen}
+        folders={folders}
+        tags={tags}
+        onClose={() => setWorkspaceDialogOpen(false)}
+        onCreateFolder={createFolder}
+        onRenameFolder={renameFolder}
+        onRemoveFolder={removeFolder}
+        onCreateTag={createTag}
+        onRenameTag={renameTag}
+        onRemoveTag={removeTag}
+      />
     </div>
   )
 }

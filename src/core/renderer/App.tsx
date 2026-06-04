@@ -12,6 +12,38 @@ import { RecentProjectsDrawer } from './components/RecentProjectsDrawer'
 import { useMouseGestureNavigator } from './hooks/useMouseGestureNavigator'
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
+const APP_DISPLAY_NAME = 'IDE Electron'
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ')
+}
+
+function resolveWindowTitle(pathname: string, projects: Array<{
+  id: string
+  name: string
+  customName?: string
+}>): string {
+  const segments = pathname.split('/').filter(Boolean)
+
+  if (segments[0] === 'settings') {
+    return `Settings - ${APP_DISPLAY_NAME}`
+  }
+
+  if (segments[0] === 'project' && segments[1]) {
+    const project = projects.find((item) => item.id === segments[1])
+    const projectLabel = project?.customName?.trim() || project?.name || 'Project'
+    const paneLabel = segments[2] ? toTitleCase(segments[2]) : null
+    return paneLabel
+      ? `${projectLabel} - ${paneLabel} - ${APP_DISPLAY_NAME}`
+      : `${projectLabel} - ${APP_DISPLAY_NAME}`
+  }
+
+  return APP_DISPLAY_NAME
+}
 
 function resolveTheme(theme: AppConfig['theme']): 'light' | 'dark' {
   if (theme === 'system') {
@@ -42,6 +74,25 @@ function ThemeSync() {
     media.addEventListener('change', onSystemThemeChange)
     return () => media.removeEventListener('change', onSystemThemeChange)
   }, [theme])
+
+  return null
+}
+
+function useWindowTitleText(): string {
+  const location = useLocation()
+  const projects = useAppStore((s) => s.projects)
+
+  return useMemo(() => resolveWindowTitle(location.pathname, projects), [location.pathname, projects])
+}
+
+function WindowTitleSync() {
+  const title = useWindowTitleText()
+
+  useEffect(() => {
+    if (document.title !== title) {
+      document.title = title
+    }
+  }, [title])
 
   return null
 }
@@ -294,6 +345,7 @@ function AppInit() {
 
 function WindowTitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
+  const title = useWindowTitleText()
 
   useEffect(() => {
     let alive = true
@@ -323,11 +375,11 @@ function WindowTitleBar() {
       <div className="window-titlebar__drag drag flex h-full min-w-0 items-center px-3">
         <img
           src={WINDOW_ICON_SRC}
-          alt="Runtime icon"
+          alt={`${APP_DISPLAY_NAME} icon`}
           className="mr-2 h-4 w-4 shrink-0 rounded-[4px]"
           draggable={false}
         />
-        <span className="truncate text-[12px] font-medium text-[color:var(--color-muted-foreground)]">Runtime</span>
+        <span className="truncate text-[12px] font-medium text-[color:var(--color-muted-foreground)]">{title}</span>
       </div>
       <div className="window-titlebar__controls nodrag">
         <button
@@ -372,6 +424,7 @@ export function App() {
     <Router>
       <AppInit />
       <ThemeSync />
+      <WindowTitleSync />
       <ProcessOutputListener />
       <RuntimeStateListener />
       <SessionPoller />

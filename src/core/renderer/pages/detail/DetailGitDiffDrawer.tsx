@@ -22,6 +22,7 @@ type DetailGitDiffDrawerProps = {
   diffLoading: boolean
   diffContent: string
   diffError: string | null
+  diffTruncated: boolean
   canViewUnstaged: boolean
   canViewStaged: boolean
   conflictLoading: boolean
@@ -121,6 +122,12 @@ function getConflictStageTitle(stage: GitConflictStage): string {
   if (stage.stage === 1) return 'BASE（共同祖先）'
   if (stage.stage === 2) return 'OURS（当前分支）'
   return 'THEIRS（合并分支）'
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
 }
 
 type ConflictBlock = {
@@ -422,6 +429,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   diffLoading,
   diffContent,
   diffError,
+  diffTruncated,
   canViewUnstaged,
   canViewStaged,
   conflictLoading,
@@ -457,6 +465,8 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   const activeConflictBlock = conflictBlocks[activeConflictBlockIndex] ?? null
   const hasConflictBlocks = conflictBlocks.length > 0
   const hasUnresolvedConflictMarkers = hasConflictBlocks
+  const isOursStageTruncated = Boolean(oursStage?.outputLimit)
+  const isTheirsStageTruncated = Boolean(theirsStage?.outputLimit)
   const currentConflictPreviewContent = activeConflictBlock ? activeConflictBlock.oursContent : (oursStage?.output ?? '')
   const incomingConflictPreviewContent = activeConflictBlock ? activeConflictBlock.theirsContent : (theirsStage?.output ?? '')
 
@@ -615,6 +625,11 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           : `${diffViewMode === 'staged' ? '暂存区变更' : '工作区变更'} · ${languageHint}`
                         }
                       </p>
+                      {!isConflictFile && diffTruncated && (
+                        <p className="mt-1 text-[10.5px] text-[color:var(--color-warning)]">
+                          Diff 已截断，避免大补丁持续占用渲染进程内存。
+                        </p>
+                      )}
                     </div>
                     {!isConflictFile ? (
                       <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
@@ -797,24 +812,29 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                     <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">当前（OURS）</p>
                                     <p className="text-[10px] text-[color:var(--color-muted-foreground)]">只读来源</p>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                                    disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && !oursStage?.exists)}
-                                    onClick={() => {
-                                      if (hasConflictBlocks) {
-                                        applyConflictBlockResolution('ours')
-                                        return
-                                      }
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                                      disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!oursStage?.exists || isOursStageTruncated))}
+                                      onClick={() => {
+                                        if (hasConflictBlocks) {
+                                          applyConflictBlockResolution('ours')
+                                          return
+                                        }
                                       if (!oursStage?.exists) return
                                       conflictDraftDirtyRef.current = true
                                       setConflictDraft(oursStage.output)
                                     }}
-                                    title={hasConflictBlocks ? '接受当前（仅作用于当前冲突块）' : '接受当前（覆盖整份结果）'}
-                                  >
-                                    接受当前
-                                  </button>
+                                      title={hasConflictBlocks ? '接受当前（仅作用于当前冲突块）' : isOursStageTruncated ? '来源内容已截断，不能直接整份接受' : '接受当前（覆盖整份结果）'}
+                                    >
+                                      接受当前
+                                    </button>
                                 </div>
+                                {oursStage?.outputLimit && (
+                                  <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
+                                    预览已截断，保留 {formatBytes(oursStage.outputLimit.keptBytes)} / {formatBytes(oursStage.outputLimit.totalBytes)}
+                                  </div>
+                                )}
                                 <div className="min-h-0">
                                   {currentConflictPreviewContent ? (
                                     <MonacoTextViewer
@@ -838,24 +858,29 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                     <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">传入（THEIRS）</p>
                                     <p className="text-[10px] text-[color:var(--color-muted-foreground)]">只读来源</p>
                                   </div>
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                                    disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && !theirsStage?.exists)}
-                                    onClick={() => {
-                                      if (hasConflictBlocks) {
-                                        applyConflictBlockResolution('theirs')
-                                        return
-                                      }
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+                                      disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!theirsStage?.exists || isTheirsStageTruncated))}
+                                      onClick={() => {
+                                        if (hasConflictBlocks) {
+                                          applyConflictBlockResolution('theirs')
+                                          return
+                                        }
                                       if (!theirsStage?.exists) return
                                       conflictDraftDirtyRef.current = true
                                       setConflictDraft(theirsStage.output)
                                     }}
-                                    title={hasConflictBlocks ? '接受传入（仅作用于当前冲突块）' : '接受传入（覆盖整份结果）'}
-                                  >
-                                    接受传入
-                                  </button>
+                                      title={hasConflictBlocks ? '接受传入（仅作用于当前冲突块）' : isTheirsStageTruncated ? '来源内容已截断，不能直接整份接受' : '接受传入（覆盖整份结果）'}
+                                    >
+                                      接受传入
+                                    </button>
                                 </div>
+                                {theirsStage?.outputLimit && (
+                                  <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
+                                    预览已截断，保留 {formatBytes(theirsStage.outputLimit.keptBytes)} / {formatBytes(theirsStage.outputLimit.totalBytes)}
+                                  </div>
+                                )}
                                 <div className="min-h-0">
                                   {incomingConflictPreviewContent ? (
                                     <MonacoTextViewer
@@ -909,24 +934,24 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       <button
                                         type="button"
                                         className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
-                                        disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists}
+                                        disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists || isOursStageTruncated || isTheirsStageTruncated}
                                         onClick={() => {
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${oursStage?.output ?? ''}${theirsStage?.output ?? ''}`)
                                         }}
-                                        title="接受组合：当前在前，传入在后（覆盖整份结果）"
+                                        title={isOursStageTruncated || isTheirsStageTruncated ? '来源内容已截断，不能直接整份组合' : '接受组合：当前在前，传入在后（覆盖整份结果）'}
                                       >
                                         组合整份（当前优先）
                                       </button>
                                       <button
                                         type="button"
                                         className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
-                                        disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists}
+                                        disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists || isOursStageTruncated || isTheirsStageTruncated}
                                         onClick={() => {
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${theirsStage?.output ?? ''}${oursStage?.output ?? ''}`)
                                         }}
-                                        title="接受组合：传入在前，当前在后（覆盖整份结果）"
+                                        title={isOursStageTruncated || isTheirsStageTruncated ? '来源内容已截断，不能直接整份组合' : '接受组合：传入在前，当前在后（覆盖整份结果）'}
                                       >
                                         组合整份（传入优先）
                                       </button>

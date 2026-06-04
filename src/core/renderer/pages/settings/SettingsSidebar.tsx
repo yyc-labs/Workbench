@@ -26,9 +26,9 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
         <button
           key={item.id}
           onClick={() => onSelect(item.id)}
-          className={`flex items-center gap-2.5 px-4 py-3 rounded-[18px] text-sm font-medium transition-colors text-left ${
+          className={`settings-sidebar-item flex items-center gap-2.5 px-4 py-3 rounded-[18px] text-sm font-medium text-left ${
             active === item.id
-              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+              ? 'is-active bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]/60'
           }`}
         >

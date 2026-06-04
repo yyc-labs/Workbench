@@ -5,7 +5,7 @@ import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import { writeFileSync, unlinkSync } from 'fs'
 import { constants as FsConstants } from 'fs'
-import { access, readFile, writeFile, realpath } from 'fs/promises'
+import { access, readFile, writeFile, realpath, stat } from 'fs/promises'
 import { StringDecoder } from 'string_decoder'
 import { ProcessManager } from './runner'
 import { detectProject } from './detector'
@@ -53,6 +53,7 @@ import type {
   GitSetFileStageResult,
   GitFileDiffRequest,
   GitFileDiffResult,
+  GitOutputLimitInfo,
   GitConflictFileRequest,
   GitConflictFileResult,
   GitConflictStageContent,
@@ -484,7 +485,85 @@ function emptyGitBranchInfo(): GitBranchInfo {
   }
 }
 
-function runGitCommand(cwd: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+const DEFAULT_GIT_OUTPUT_LIMIT_BYTES = 512 * 1024
+const GIT_DIFF_OUTPUT_LIMIT_BYTES = 512 * 1024
+const GIT_CONFLICT_STAGE_OUTPUT_LIMIT_BYTES = 512 * 1024
+const GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES = 1024 * 1024
+
+type LimitedGitText = {
+  text: string
+  limitInfo?: GitOutputLimitInfo
+}
+
+type GitCommandExecutionResult = {
+  code: number | null
+  stdout: string
+  stderr: string
+  stdoutLimit?: GitOutputLimitInfo
+  stderrLimit?: GitOutputLimitInfo
+}
+
+type GitCommandLimits = {
+  stdoutLimitBytes?: number
+  stderrLimitBytes?: number
+}
+
+function createLimitedUtf8Accumulator(limitBytes: number) {
+  const decoder = new StringDecoder('utf8')
+  let text = ''
+  let totalBytes = 0
+  let keptBytes = 0
+
+  const pushChunk = (buf: Buffer) => {
+    totalBytes += buf.length
+    if (limitBytes <= 0 || keptBytes >= limitBytes) return
+    const remainingBytes = limitBytes - keptBytes
+    if (remainingBytes <= 0) return
+    const chunk = buf.length <= remainingBytes ? buf : buf.subarray(0, remainingBytes)
+    if (chunk.length <= 0) return
+    text += decoder.write(chunk)
+    keptBytes += chunk.length
+  }
+
+  const finish = (): LimitedGitText => {
+    if (keptBytes < limitBytes) {
+      text += decoder.end()
+    } else {
+      decoder.end()
+    }
+    if (totalBytes <= limitBytes) {
+      return { text }
+    }
+    return {
+      text,
+      limitInfo: {
+        limitBytes,
+        totalBytes,
+        keptBytes,
+      },
+    }
+  }
+
+  return { pushChunk, finish }
+}
+
+function formatGitOutputLimitNotice(limit: GitOutputLimitInfo, label = 'output'): string {
+  const omittedBytes = Math.max(0, limit.totalBytes - limit.keptBytes)
+  return `[truncated ${label}: kept ${limit.keptBytes}/${limit.totalBytes} bytes, omitted ${omittedBytes} bytes]`
+}
+
+function appendGitOutputLimitNotice(
+  text: string,
+  limit: GitOutputLimitInfo | undefined,
+  label = 'output'
+): string {
+  if (!limit) return text
+  const notice = formatGitOutputLimitNotice(limit, label)
+  const base = text.replace(/\s+$/, '')
+  return base ? `${base}\n${notice}` : notice
+}
+
+function runGitCommand(cwd: string, args: string[], limits?: GitCommandLimits): Promise<GitCommandExecutionResult> {
   return new Promise((resolve) => {
     const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(cwd) : null
     const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
@@ -499,21 +578,37 @@ function runGitCommand(cwd: string, args: string[]): Promise<{ code: number | nu
         stdio: ['ignore', 'pipe', 'pipe'],
       })
 
-    let stdout = ''
-    let stderr = ''
+    const stdoutAccumulator = createLimitedUtf8Accumulator(limits?.stdoutLimitBytes ?? Number.POSITIVE_INFINITY)
+    const stderrAccumulator = createLimitedUtf8Accumulator(limits?.stderrLimitBytes ?? Number.POSITIVE_INFINITY)
 
     child.stdout?.on('data', (buf: Buffer) => {
-      stdout += buf.toString('utf8')
+      stdoutAccumulator.pushChunk(buf)
     })
     child.stderr?.on('data', (buf: Buffer) => {
-      stderr += buf.toString('utf8')
+      stderrAccumulator.pushChunk(buf)
     })
 
     child.on('error', (err) => {
-      resolve({ code: null, stdout, stderr: stderr || err.message })
+      const stdoutResult = stdoutAccumulator.finish()
+      const stderrResult = stderrAccumulator.finish()
+      resolve({
+        code: null,
+        stdout: stdoutResult.text,
+        stderr: stderrResult.text || err.message,
+        stdoutLimit: stdoutResult.limitInfo,
+        stderrLimit: stderrResult.limitInfo,
+      })
     })
     child.on('close', (code) => {
-      resolve({ code, stdout, stderr })
+      const stdoutResult = stdoutAccumulator.finish()
+      const stderrResult = stderrAccumulator.finish()
+      resolve({
+        code,
+        stdout: stdoutResult.text,
+        stderr: stderrResult.text,
+        stdoutLimit: stdoutResult.limitInfo,
+        stderrLimit: stderrResult.limitInfo,
+      })
     })
   })
 }
@@ -542,8 +637,14 @@ async function runGitCommandSequence(cwd: string, commandArgsList: string[][]): 
   const outputChunks: string[] = []
 
   for (const args of commandArgsList) {
-    const execution = await runGitCommand(cwd, args)
-    const stepOutput = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    const execution = await runGitCommand(cwd, args, {
+      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    })
+    const stepOutput = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+      stdoutLimit: execution.stdoutLimit,
+      stderrLimit: execution.stderrLimit,
+    })
     outputChunks.push(`$ ${formatGitCommand(args)}`)
     if (stepOutput !== '(no output)') {
       outputChunks.push(stepOutput)
@@ -705,7 +806,10 @@ async function readGitCommitHistory(cwd: string, limit: number): Promise<GitHist
     'log',
     `-${limit}`,
     '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e',
-  ])
+  ], {
+    stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
   if (result.code !== 0) return []
 
   const records = result.stdout
@@ -760,7 +864,10 @@ async function readGitCommitFilesChangedMap(cwd: string, limit: number): Promise
     `-${limit}`,
     '--pretty=format:%H',
     '--numstat',
-  ])
+  ], {
+    stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
   if (result.code !== 0) return new Map()
 
   const lines = result.stdout.replace(/\r/g, '').split('\n')
@@ -808,7 +915,10 @@ async function readRecentCommits(cwd: string): Promise<RecentCommitInfo[]> {
 
 async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspaceSnapshot> {
   const emptyBranch = emptyGitBranchInfo()
-  const statusResult = await runGitCommand(projectPath, ['status', '--porcelain=v2', '--branch', '-uall', '-z'])
+  const statusResult = await runGitCommand(projectPath, ['status', '--porcelain=v2', '--branch', '-uall', '-z'], {
+    stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
 
   if (statusResult.code !== 0) {
     return {
@@ -818,7 +928,10 @@ async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspa
       changedFiles: [],
       recentCommits: [],
       checkedAt: Date.now(),
-      error: statusResult.stderr.trim() || 'Not a git repository',
+      error: normalizeGitOperationOutput(statusResult.stdout, statusResult.stderr, {
+        stdoutLimit: statusResult.stdoutLimit,
+        stderrLimit: statusResult.stderrLimit,
+      }),
     }
   }
 
@@ -860,12 +973,25 @@ function formatGitCommand(args: string[]): string {
   return `git ${escaped.join(' ')}`
 }
 
-function normalizeGitOperationOutput(stdout: string, stderr: string): string {
-  const normalized = [stdout, stderr]
-    .filter(Boolean)
-    .join('\n')
-    .replace(/\r/g, '')
-    .trim()
+function normalizeGitOperationOutput(
+  stdout: string,
+  stderr: string,
+  limits?: { stdoutLimit?: GitOutputLimitInfo; stderrLimit?: GitOutputLimitInfo }
+): string {
+  const segments: string[] = []
+  const normalizedStdout = stdout.replace(/\r/g, '').trim()
+  const normalizedStderr = stderr.replace(/\r/g, '').trim()
+  if (normalizedStdout) {
+    segments.push(appendGitOutputLimitNotice(normalizedStdout, limits?.stdoutLimit, 'stdout'))
+  } else if (limits?.stdoutLimit) {
+    segments.push(formatGitOutputLimitNotice(limits.stdoutLimit, 'stdout'))
+  }
+  if (normalizedStderr) {
+    segments.push(appendGitOutputLimitNotice(normalizedStderr, limits?.stderrLimit, 'stderr'))
+  } else if (limits?.stderrLimit) {
+    segments.push(formatGitOutputLimitNotice(limits.stderrLimit, 'stderr'))
+  }
+  const normalized = segments.join('\n').trim()
   return normalized || '(no output)'
 }
 
@@ -974,7 +1100,10 @@ async function resolveGitFilePath(projectPath: string, filePath: string): Promis
 async function readGitShowStageContent(projectPath: string, filePath: string, stage: 1 | 2 | 3): Promise<GitConflictStageContent> {
   const spec = `:${stage}:${filePath}`
   const args = ['show', '--textconv', spec]
-  const execution = await runGitCommand(projectPath, args)
+  const execution = await runGitCommand(projectPath, args, {
+    stdoutLimitBytes: GIT_CONFLICT_STAGE_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
   const normalizedOutput = execution.stdout.replace(/\r/g, '')
   if (execution.code === 0) {
     return {
@@ -982,12 +1111,16 @@ async function readGitShowStageContent(projectPath: string, filePath: string, st
       label: stage === 1 ? 'base' : stage === 2 ? 'ours' : 'theirs',
       exists: true,
       output: normalizedOutput,
+      outputLimit: execution.stdoutLimit,
     }
   }
 
   const stderr = execution.stderr.replace(/\r/g, '').trim()
   const stdout = execution.stdout.replace(/\r/g, '').trim()
-  const combined = [stderr, stdout].filter(Boolean).join('\n')
+  const combined = normalizeGitOperationOutput(stdout, stderr, {
+    stdoutLimit: execution.stdoutLimit,
+    stderrLimit: execution.stderrLimit,
+  })
   const missing = /path '.*' is in the index, but not at stage/i.test(combined)
     || /exists on disk, but not in '.*'/i.test(combined)
     || /fatal: bad object/i.test(combined)
@@ -997,6 +1130,7 @@ async function readGitShowStageContent(projectPath: string, filePath: string, st
     label: stage === 1 ? 'base' : stage === 2 ? 'ours' : 'theirs',
     exists: !missing,
     output: missing ? '' : normalizedOutput,
+    outputLimit: execution.stdoutLimit,
     error: missing ? undefined : (combined || `git show exited with code ${execution.code ?? 'unknown'}`),
   }
 }
@@ -1092,6 +1226,21 @@ async function getGitConflictFile(request: GitConflictFileRequest): Promise<GitC
 
   let workingTreeContent = ''
   try {
+    const fileStat = await stat(resolvedPath)
+    if (fileStat.size > GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES) {
+      return {
+        ok: false,
+        checkedAt,
+        command: '',
+        output: `Conflicted file is too large to load safely. Limit is ${GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES} bytes.`,
+        exitCode: null,
+        filePath: normalizedFilePath,
+        workingTreeContent: '',
+        hasConflictMarkers: false,
+        stageContents: [],
+        error: `Conflicted file is too large to load safely. Limit is ${GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES} bytes.`,
+      }
+    }
     workingTreeContent = (await readFile(resolvedPath, { encoding: 'utf-8' })).replace(/\r/g, '')
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -1215,8 +1364,14 @@ async function resolveGitConflictFile(request: GitResolveConflictRequest): Promi
   }
 
   const args = ['add', '--', normalizedFilePath]
-  const execution = await runGitCommand(projectPath, args)
-  const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+  const execution = await runGitCommand(projectPath, args, {
+    stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
+  const output = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+    stdoutLimit: execution.stdoutLimit,
+    stderrLimit: execution.stderrLimit,
+  })
   const ok = execution.code === 0
   return {
     ok,
@@ -1270,8 +1425,14 @@ async function setGitFileStage(request: GitSetFileStageRequest): Promise<GitSetF
 
   if (stage) {
     const args = ['add', '--', filePath]
-    const execution = await runGitCommand(projectPath, args)
-    const output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    const execution = await runGitCommand(projectPath, args, {
+      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    })
+    const output = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+      stdoutLimit: execution.stdoutLimit,
+      stderrLimit: execution.stderrLimit,
+    })
     const ok = execution.code === 0
     return {
       ok,
@@ -1289,17 +1450,23 @@ async function setGitFileStage(request: GitSetFileStageRequest): Promise<GitSetF
     ['rm', '--cached', '--', filePath],
   ]
 
-  let lastExecution: { code: number | null; stdout: string; stderr: string } | null = null
+  let lastExecution: GitCommandExecutionResult | null = null
   let lastCommand = ''
   for (const args of fallbackArgs) {
-    const execution = await runGitCommand(projectPath, args)
+    const execution = await runGitCommand(projectPath, args, {
+      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    })
     const ok = execution.code === 0
     if (ok) {
       return {
         ok: true,
         checkedAt,
         command: formatGitCommand(args),
-        output: normalizeGitOperationOutput(execution.stdout, execution.stderr),
+        output: normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+          stdoutLimit: execution.stdoutLimit,
+          stderrLimit: execution.stderrLimit,
+        }),
         exitCode: execution.code,
       }
     }
@@ -1308,7 +1475,10 @@ async function setGitFileStage(request: GitSetFileStageRequest): Promise<GitSetF
   }
 
   const output = lastExecution
-    ? normalizeGitOperationOutput(lastExecution.stdout, lastExecution.stderr)
+    ? normalizeGitOperationOutput(lastExecution.stdout, lastExecution.stderr, {
+      stdoutLimit: lastExecution.stdoutLimit,
+      stderrLimit: lastExecution.stderrLimit,
+    })
     : 'Unstage operation failed.'
   return {
     ok: false,
@@ -1369,21 +1539,32 @@ async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffR
   let args = staged
     ? ['diff', '--cached', '--', filePath]
     : ['diff', '--', filePath]
-  let execution = await runGitCommand(projectPath, args)
+  let execution = await runGitCommand(projectPath, args, {
+    stdoutLimitBytes: GIT_DIFF_OUTPUT_LIMIT_BYTES,
+    stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  })
   let ok = execution.code === 0
-  let output = normalizeGitDiffOutput(execution.stdout)
-  let errorText = ok ? undefined : execution.stderr.trim() || undefined
+  let output = normalizeGitDiffOutput(appendGitOutputLimitNotice(execution.stdout, execution.stdoutLimit, 'diff output'))
+  let errorText = ok
+    ? undefined
+    : normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+      stdoutLimit: execution.stdoutLimit,
+      stderrLimit: execution.stderrLimit,
+    }) || undefined
 
   if (shouldTryUntrackedFallback && ok && !output) {
     const existsInWorkingTree = await fileExistsAtCwd(projectPath, filePath)
     if (existsInWorkingTree) {
       const nullDevicePath = process.platform === 'win32' ? 'NUL' : '/dev/null'
       args = ['diff', '--no-index', '--', nullDevicePath, filePath]
-      const untrackedDiff = await runGitCommand(projectPath, args)
+      const untrackedDiff = await runGitCommand(projectPath, args, {
+        stdoutLimitBytes: GIT_DIFF_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      })
       if (untrackedDiff.code === 0 || untrackedDiff.code === 1) {
         execution = untrackedDiff
         ok = true
-        output = normalizeGitDiffOutput(untrackedDiff.stdout)
+        output = normalizeGitDiffOutput(appendGitOutputLimitNotice(untrackedDiff.stdout, untrackedDiff.stdoutLimit, 'diff output'))
         errorText = undefined
       }
     }
@@ -1402,6 +1583,7 @@ async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffR
     exitCode: execution.code,
     staged,
     error: errorText,
+    outputLimit: execution.stdoutLimit,
   }
 }
 
@@ -1694,8 +1876,14 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
     command = sequenceResult.command
     error = sequenceResult.error
   } else {
-    const execution = await runGitCommand(projectPath, args)
-    output = normalizeGitOperationOutput(execution.stdout, execution.stderr)
+    const execution = await runGitCommand(projectPath, args, {
+      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+    })
+    output = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
+      stdoutLimit: execution.stdoutLimit,
+      stderrLimit: execution.stderrLimit,
+    })
     ok = execution.code === 0
     exitCode = execution.code
     command = formatGitCommand(args)
@@ -2004,7 +2192,7 @@ function createWindow(): void {
 
   const windowIcon =
     process.platform === 'win32'
-      ? join(__dirname, '../../icon/Y (2).ico')
+      ? join(__dirname, '../../icon/Y.ico')
       : join(__dirname, '../../icon/Y.png')
 
   mainWindow = new BrowserWindow({
@@ -2589,6 +2777,10 @@ app.on('before-quit', async (e) => {
 })
 
 // ── startup ──────────────────────────────────────────────
+
+if (process.platform === 'win32' && app.isPackaged) {
+  app.setAppUserModelId('com.yaoyuchen.yyc')
+}
 
 app.whenReady().then(async () => {
   nativeTheme.on('updated', () => {

@@ -49,6 +49,7 @@ type DetailAiCommitPanelProps = {
   projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
   flowEdges: AiFlowEdge[]
@@ -491,6 +492,7 @@ function DetailAiCommitPanel({
   projectLinkItems = [],
   activePane = 'aicommit',
   onSwitchPane,
+  onOpenProjectLinksManager,
   jumpToAiLogToken,
   flowNodes,
   aiRawText,
@@ -536,6 +538,7 @@ function DetailAiCommitPanel({
   const [diffLoading, setDiffLoading] = useState(false)
   const [diffContent, setDiffContent] = useState('')
   const [diffError, setDiffError] = useState<string | null>(null)
+  const [diffTruncated, setDiffTruncated] = useState(false)
   const [conflictLoading, setConflictLoading] = useState(false)
   const [conflictData, setConflictData] = useState<GitConflictFileResult | null>(null)
   const [conflictError, setConflictError] = useState<string | null>(null)
@@ -748,6 +751,7 @@ function DetailAiCommitPanel({
       setActiveDiffFilePath(null)
       setDiffContent('')
       setDiffError(null)
+      setDiffTruncated(false)
       setConflictData(null)
       setConflictError(null)
       return
@@ -914,6 +918,7 @@ function DetailAiCommitPanel({
     diffRequestSeqRef.current = requestSeq
     setDiffLoading(true)
     setDiffError(null)
+    setDiffTruncated(false)
     try {
       const result: GitFileDiffResult = await window.electronAPI.getGitFileDiff({
         projectPath: gitSnapshot.projectPath,
@@ -926,11 +931,13 @@ function DetailAiCommitPanel({
         setDiffError(result.error || result.output || '读取 diff 失败')
         return
       }
+      setDiffTruncated(Boolean(result.outputLimit))
       setDiffContent(result.output)
     } catch (error) {
       if (requestSeq !== diffRequestSeqRef.current) return
       setDiffContent('')
       setDiffError(error instanceof Error ? error.message : String(error))
+      setDiffTruncated(false)
     } finally {
       if (requestSeq === diffRequestSeqRef.current) setDiffLoading(false)
     }
@@ -1294,7 +1301,12 @@ function DetailAiCommitPanel({
                           type="button"
                           className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                           onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
-                          title="Project links"
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onOpenProjectLinksManager?.()
+                          }}
+                          title="左键打开首个链接，右键打开资料管理"
                         >
                           <BookOpen className="h-3.5 w-3.5 shrink-0" />
                         </button>
@@ -2216,6 +2228,7 @@ function DetailAiCommitPanel({
         diffLoading={diffLoading}
         diffContent={diffContent}
         diffError={diffError}
+        diffTruncated={diffTruncated}
         canViewUnstaged={activeDiffSupportsUnstaged}
         canViewStaged={activeDiffSupportsStaged}
         conflictLoading={conflictLoading}
