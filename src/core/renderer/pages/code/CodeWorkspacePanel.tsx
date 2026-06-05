@@ -20,8 +20,6 @@ import {
   collectParentDirectories,
   formatFileSize,
   inferLanguageFromRelativePath,
-  isSameCodeFileDrawerState,
-  normalizeCodeFileDrawerState,
   pushRecentCodeFilePath,
   removeCodeFilePathFromDrawerState,
   toggleFavoriteCodeFilePath,
@@ -53,17 +51,12 @@ import {
   sortProjectNodes,
 } from './code.tree'
 import type { CodeFileDrawerState, FileTreeState } from './code.types'
+import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import {
   CODE_FILE_DRAWER_SECTION_LIMIT,
-  isSameCursorPositionMap,
-  isSameProjectCodeTabList,
   MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS,
   MAX_PROJECT_CODE_SESSION_TABS,
   normalizeProjectCodeSession,
-  PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS,
-  sanitizeCodeFileDrawerStateByPaths,
-  sanitizeCursorPositionsForTabs,
-  sanitizePathsForKnownFiles,
   sanitizeProjectCodeSessionByPaths,
   type EditorCursorPosition,
 } from './useProjectCodeSession'
@@ -223,9 +216,6 @@ export function CodeWorkspacePanel({
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const firstProjectLinkItem = projectLinkItems[0]
   const [contentSearchQuery, setContentSearchQuery] = useState('')
-  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
-    () => persistedProjectCodeSession?.contentSearchScope ?? ''
-  )
   const [contentSearchCaseSensitive, setContentSearchCaseSensitive] = useState(false)
   const [isContentSearchAdvancedOpen, setIsContentSearchAdvancedOpen] = useState(false)
   const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
@@ -236,12 +226,6 @@ export function CodeWorkspacePanel({
   const [isSearchingContent, setIsSearchingContent] = useState(false)
   const [contentSearchError, setContentSearchError] = useState<string | null>(null)
   const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
-  const [openTabPaths, setOpenTabPaths] = useState<string[]>(
-    () => persistedProjectCodeSession?.tabs ?? []
-  )
-  const [cursorPositionsByPath, setCursorPositionsByPath] = useState<Record<string, EditorCursorPosition>>(
-    () => persistedProjectCodeSession?.cursorPositions ?? {}
-  )
   const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
     relativePath: string
     lineNumber: number
@@ -254,9 +238,6 @@ export function CodeWorkspacePanel({
       ? persistedLastMarkdownPreviewMode
       : 'edit'
   )
-  const [codeFileDrawerState, setCodeFileDrawerState] = useState<CodeFileDrawerState>(() => (
-    normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
-  ))
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
@@ -275,10 +256,7 @@ export function CodeWorkspacePanel({
   const contentSearchRequestSeqRef = useRef(0)
   const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
   const pendingCursorRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
-  const saveCodeSessionTimerRef = useRef<number | null>(null)
   const treeLoadRequestSeqRef = useRef(0)
-  const lastPersistedCodeSessionJsonRef = useRef<string>('')
-  const isRestoringCodeSessionRef = useRef(true)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
   const captureCurrentModeScrollRef = useRef<() => void>(() => {})
@@ -411,6 +389,29 @@ export function CodeWorkspacePanel({
     goToNextPreviewSearchMatch,
     goToPreviousPreviewSearchMatch,
   } = useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
+  const {
+    codeFileDrawerState,
+    contentSearchScopeInput,
+    cursorPositionsByPath,
+    isRestoringCodeSessionRef,
+    openTabPaths,
+    setCodeFileDrawerState,
+    setContentSearchScopeInput,
+    setCursorPositionsByPath,
+    setOpenTabPaths,
+    visibleOpenTabs,
+  } = useProjectCodeSessionState({
+    projectId,
+    persistedProjectCodeSession,
+    persistedCodeFileDrawerState,
+    persistedLastCodeFile,
+    activeRelativePath,
+    knownFilePaths: tree.knownFilePaths,
+    treeStatus: tree.status,
+    setProjectCodeSession,
+    setProjectCodeFileDrawerState,
+    setProjectLastCodeFile,
+  })
   const allProjectFilePathSet = useMemo(() => (
     buildKnownFilePathSet(
       tree.knownFilePaths,
@@ -658,77 +659,6 @@ export function CodeWorkspacePanel({
     media.addEventListener('change', handleChange)
     return () => media.removeEventListener('change', handleChange)
   }, [])
-
-  useEffect(() => {
-    const normalized = normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
-    setCodeFileDrawerState((prev) => (
-      isSameCodeFileDrawerState(prev, normalized) ? prev : normalized
-    ))
-  }, [persistedCodeFileDrawerState, projectId])
-
-  useEffect(() => {
-    const normalizedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
-    setOpenTabPaths(normalizedSession?.tabs ?? [])
-    setCursorPositionsByPath(normalizedSession?.cursorPositions ?? {})
-    setContentSearchScopeInput(normalizedSession?.contentSearchScope ?? '')
-    lastPersistedCodeSessionJsonRef.current = JSON.stringify(normalizedSession ?? null)
-    if (saveCodeSessionTimerRef.current != null) {
-      window.clearTimeout(saveCodeSessionTimerRef.current)
-      saveCodeSessionTimerRef.current = null
-    }
-    isRestoringCodeSessionRef.current = true
-    pendingCursorRevealRef.current = null
-  }, [persistedProjectCodeSession, projectId])
-
-  useEffect(() => {
-    if (!projectId) return
-    void setProjectCodeFileDrawerState(projectId, codeFileDrawerState)
-  }, [codeFileDrawerState, projectId, setProjectCodeFileDrawerState])
-
-  useEffect(() => {
-    if (!projectId) return
-    const activePath = activeRelativePath?.trim() || undefined
-    const tabs = openTabPaths.slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-    if (activePath && !tabs.includes(activePath)) {
-      tabs.push(activePath)
-      if (tabs.length > MAX_PROJECT_CODE_SESSION_TABS) {
-        tabs.splice(0, tabs.length - MAX_PROJECT_CODE_SESSION_TABS)
-      }
-    }
-
-    let sessionCursorEntries = Object.entries(cursorPositionsByPath)
-      .filter(([pathKey]) => pathKey.trim().length > 0)
-    const sessionTabSet = new Set(tabs)
-    sessionCursorEntries = sessionCursorEntries.filter(([pathKey]) => sessionTabSet.has(pathKey))
-    if (sessionCursorEntries.length > MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) {
-      sessionCursorEntries = sessionCursorEntries.slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
-    }
-
-    const nextSession = normalizeProjectCodeSession({
-      tabs,
-      activePath,
-      cursorPositions: Object.fromEntries(sessionCursorEntries),
-      contentSearchScope: contentSearchScopeInput,
-    })
-    const nextSessionJson = JSON.stringify(nextSession ?? null)
-    if (nextSessionJson === lastPersistedCodeSessionJsonRef.current) return
-
-    if (saveCodeSessionTimerRef.current != null) {
-      window.clearTimeout(saveCodeSessionTimerRef.current)
-    }
-    saveCodeSessionTimerRef.current = window.setTimeout(() => {
-      lastPersistedCodeSessionJsonRef.current = nextSessionJson
-      void setProjectCodeSession(projectId, nextSession)
-      saveCodeSessionTimerRef.current = null
-    }, PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS)
-  }, [
-    activeRelativePath,
-    contentSearchScopeInput,
-    cursorPositionsByPath,
-    openTabPaths,
-    projectId,
-    setProjectCodeSession,
-  ])
 
   useEffect(() => {
     const root = document.documentElement
@@ -1167,10 +1097,6 @@ export function CodeWorkspacePanel({
         window.clearTimeout(scrollSyncReleaseTimerRef.current)
         scrollSyncReleaseTimerRef.current = null
       }
-      if (saveCodeSessionTimerRef.current != null) {
-        window.clearTimeout(saveCodeSessionTimerRef.current)
-        saveCodeSessionTimerRef.current = null
-      }
     }
   }, [])
 
@@ -1408,61 +1334,6 @@ export function CodeWorkspacePanel({
     editorRef.current?.revealPosition(pending.lineNumber, pending.column)
     pendingCursorRevealRef.current = null
   }, [activeRelativePath, editorValue])
-
-  const visibleOpenTabs = useMemo(() => (
-    openTabPaths.filter((path) => allProjectFilePathSet.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-  ), [allProjectFilePathSet, openTabPaths])
-
-  useEffect(() => {
-    if (tree.status !== 'ready') return
-
-    const sanitizedLocalTabs = sanitizePathsForKnownFiles(openTabPaths, allProjectFilePathSet, MAX_PROJECT_CODE_SESSION_TABS)
-    if (!isSameProjectCodeTabList(openTabPaths, sanitizedLocalTabs)) {
-      setOpenTabPaths(sanitizedLocalTabs)
-    }
-
-    const tabSet = new Set(sanitizedLocalTabs)
-    const sanitizedLocalCursors = sanitizeCursorPositionsForTabs(cursorPositionsByPath, tabSet)
-    if (!isSameCursorPositionMap(cursorPositionsByPath, sanitizedLocalCursors)) {
-      setCursorPositionsByPath(sanitizedLocalCursors)
-    }
-
-    const normalizedPersistedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
-    const sanitizedPersistedSession = sanitizeProjectCodeSessionByPaths(persistedProjectCodeSession, allProjectFilePathSet)
-    const normalizedPersistedSessionJson = JSON.stringify(normalizedPersistedSession ?? null)
-    const sanitizedPersistedSessionJson = JSON.stringify(sanitizedPersistedSession ?? null)
-    if (normalizedPersistedSessionJson !== sanitizedPersistedSessionJson) {
-      lastPersistedCodeSessionJsonRef.current = sanitizedPersistedSessionJson
-      if (saveCodeSessionTimerRef.current != null) {
-        window.clearTimeout(saveCodeSessionTimerRef.current)
-        saveCodeSessionTimerRef.current = null
-      }
-      void setProjectCodeSession(projectId, sanitizedPersistedSession)
-    }
-
-    const normalizedPersistedDrawer = normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
-    const sanitizedPersistedDrawer = sanitizeCodeFileDrawerStateByPaths(normalizedPersistedDrawer, allProjectFilePathSet)
-    if (!isSameCodeFileDrawerState(normalizedPersistedDrawer, sanitizedPersistedDrawer)) {
-      void setProjectCodeFileDrawerState(projectId, sanitizedPersistedDrawer)
-    }
-
-    const normalizedLastCodeFile = persistedLastCodeFile?.trim()
-    if (normalizedLastCodeFile && !allProjectFilePathSet.has(normalizedLastCodeFile)) {
-      void setProjectLastCodeFile(projectId, undefined)
-    }
-  }, [
-    allProjectFilePathSet,
-    cursorPositionsByPath,
-    openTabPaths,
-    persistedCodeFileDrawerState,
-    persistedLastCodeFile,
-    persistedProjectCodeSession,
-    projectId,
-    setProjectCodeFileDrawerState,
-    setProjectCodeSession,
-    setProjectLastCodeFile,
-    tree.status,
-  ])
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
