@@ -83,15 +83,21 @@
 拆分顺序：
 
 1. 先抽 `createWindow`
-2. 再抽 `registerIpcHandlers`
-3. 再把 Git、Runtime、AI Commit、shell 打开逻辑逐个迁出
+2. 再抽 shell opener
+3. 再拆 Git
+4. 再拆 Runtime
+5. 再拆 AI Commit
+6. 最后抽 `registerIpcHandlers`
 
 当前进度：
 
 - `createWindow` 已迁到 `window/createWindow.ts`
 - shell opener 已迁到 `shell/openers.ts`
+- Git 能力已迁到 `git/git-service.ts`
+- Runtime 能力已迁到 `runtime/runtime-service.ts`
 - `registerIpcHandlers` 仍留在 `index.ts`，但已改为单次注册
-- Git、Runtime、AI Commit 仍在 `index.ts`，是下一轮主要体积来源
+- AI Commit 仍在 `index.ts`，是下一轮主要体积来源
+- `index.ts` 当前已收缩到约 760 行，下一轮重点是继续压缩到目标区间
 
 验收：
 
@@ -303,11 +309,10 @@
 
 优先做：
 
-1. 抽 `createWindow`
-2. 抽 `registerIpcHandlers`
-3. 再抽 `runtime-service`
-4. 再抽 `git-service`
-5. 最后抽 `ai-commit-service` 和 `shell/openers`
+1. 先抽 `git-service`
+2. 再抽 `runtime-service`
+3. 再抽 `ai-commit-service`
+4. 最后抽 `registerIpcHandlers`
 
 这一轮结束时应达到：
 
@@ -348,3 +353,246 @@
 - `MonacoCodeEditor.tsx`
 
 适合在前三个核心拆分完成后再做。
+
+## 10. 单次拆分执行模板
+
+为了避免每次拆分都重新摸索，后续可以统一按下面步骤推进：
+
+### 10.1 开始前
+
+先确认：
+
+- 当前文件主要职责到底有几类
+- 哪些逻辑已经有可复用的相邻模块
+- 哪些函数适合先抽成纯函数
+- 哪些状态仍然必须留在入口层
+
+开始前至少做两件事：
+
+1. 记录当前文件行数
+2. 跑一次 `npm run typecheck`
+
+目的不是走流程，而是保证拆分前后能直接对比收益和稳定性。
+
+### 10.2 第一刀先抽什么
+
+优先级固定按下面顺序判断：
+
+1. 类型和常量
+2. 纯函数
+3. 独立 service / hook
+4. 独立 UI 子组件
+5. 最后才是入口文件内部状态重组
+
+这样做的好处：
+
+- 风险最低
+- 最容易保持行为不变
+- 拆完以后模块边界更稳定
+
+### 10.3 每轮拆分的建议上限
+
+单轮不要同时做下面几件事：
+
+- 一边拆 service，一边重命名大量业务概念
+- 一边拆组件，一边改交互行为
+- 一边拆模块，一边顺手改数据结构
+
+更合适的做法是：
+
+- 本轮只做结构调整
+- 行为改动留到下一轮单独处理
+
+### 10.4 拆完后立即检查
+
+每次拆完至少检查：
+
+- 入口文件是否明显变短
+- 新文件名是否能直接表达职责
+- 是否出现循环依赖
+- 是否把本来局部的状态抬成了跨模块耦合
+- `npm run typecheck` 是否通过
+
+如果拆完以后只是“文件数量变多了”，但入口文件仍然塞满细节实现，这轮拆分就不算达标。
+
+## 11. `src/core/electron/main/index.ts` 下一轮细化方案
+
+这一轮不要再泛泛地“继续拆”，而是按职责边界直接下刀。
+
+### 11.1 目标目录
+
+建议逐步收敛到类似结构：
+
+- `src/core/electron/main/index.ts`
+- `src/core/electron/main/ipc/registerIpcHandlers.ts`
+- `src/core/electron/main/git/git-service.ts`
+- `src/core/electron/main/runtime/runtime-service.ts`
+- `src/core/electron/main/ai-commit/ai-commit-service.ts`
+- `src/core/electron/main/window/createWindow.ts`
+- `src/core/electron/main/shell/openers.ts`
+
+这里的重点不是目录层级本身，而是让每一类能力都只有一个清晰入口。
+
+### 11.2 Git 部分先拆什么
+
+优先迁出：
+
+- Git 状态读取
+- Git diff / commit / branch 相关命令执行
+- Git 输出结果整理
+- 和渲染层直接对应的 Git IPC handler
+
+建议结果：
+
+- `index.ts` 不再直接写大段 Git 命令调用
+- Git 相关错误处理集中在 `git-service.ts`
+
+### 11.3 Runtime 部分先拆什么
+
+优先迁出：
+
+- Runtime 启动
+- Runtime 停止
+- terminal 打开
+- 会话或运行状态相关查询
+
+建议结果：
+
+- `index.ts` 不再同时处理 app lifecycle 和 runtime 细节
+- runtime 相关依赖集中到 `runtime-service.ts`
+
+### 11.4 AI Commit 部分先拆什么
+
+优先迁出：
+
+- AI Commit 启动入口
+- 执行状态维护
+- 结果回传
+- 日志或 registry 访问
+
+建议结果：
+
+- `index.ts` 只负责装配 AI Commit 能力
+- 真正执行逻辑迁到 `ai-commit-service.ts`
+
+### 11.5 IPC 最后再抽
+
+`registerIpcHandlers` 不建议最早拆，原因很简单：
+
+- 如果 Git / Runtime / AI Commit 还混在 `index.ts` 里
+- 那么先抽 IPC 只会把一个超大注册函数搬到另一个文件
+
+更合理的顺序是：
+
+1. 先拆业务能力
+2. 再让 IPC 注册文件只做 handler 装配
+
+理想状态下，`registerIpcHandlers.ts` 只保留：
+
+- channel 注册
+- service 调用转发
+- 参数校验或最薄的一层错误包装
+
+## 12. 渲染层大组件拆分约束
+
+渲染层几个大文件在拆的时候，容易出现“看起来拆了，实际上只是 JSX 挪位置”的问题。后续要避免这种假拆分。
+
+### 12.1 `CodeWorkspacePanel.tsx`
+
+重点不是单纯把 JSX 切出去，而是先把下面几类逻辑抽干净：
+
+- 编辑会话状态
+- 搜索状态
+- Markdown 图片与预览相关逻辑
+- drawer 或 quick action 的状态组织
+
+如果这些状态管理还留在入口层，单纯多几个子组件，后续维护成本不会真正下降。
+
+### 12.2 `DetailAiCommitPanel.tsx`
+
+重点先拆：
+
+- 计算逻辑
+- 派生显示数据
+- 操作权限判断
+
+不要一开始就只拆左栏、右栏 UI。否则最后会变成多个展示组件一起依赖同一个超大父组件。
+
+### 12.3 `DetailDocumentationCard.tsx` / `DetailGitDiffDrawer.tsx` / `MonacoCodeEditor.tsx`
+
+这三个文件适合放在第二阶段，原因是：
+
+- 它们虽然大，但模块边界比前两个核心文件更容易收敛
+- 当前收益最高的仍然是主进程入口和核心工作区编排
+
+## 13. 命名与目录约束
+
+后续新增模块时，统一遵守下面约束：
+
+- 用职责命名，不用过渡命名
+- 同一层里不要同时出现 `service`、`manager`、`helper` 混用但职责不清
+- 纯工具优先放到同目录下的明确文件里，不要先丢进通用 `utils`
+
+建议避免的命名：
+
+- `temp.ts`
+- `helpers2.ts`
+- `newLogic.ts`
+- `xxx-final.ts`
+
+建议采用的命名思路：
+
+- `git-service.ts`
+- `runtime-service.ts`
+- `registerIpcHandlers.ts`
+- `useProjectCodeSession.ts`
+- `CodeSearchPanel.tsx`
+
+## 14. 回归检查清单
+
+每完成一轮拆分，至少做下面检查：
+
+### 14.1 静态检查
+
+- `npm run typecheck`
+- 关键文件 import 关系是否清晰
+- 是否新增循环依赖
+
+### 14.2 运行检查
+
+主进程相关拆分至少验证：
+
+- 应用可以正常启动
+- 窗口可以正常创建
+- 常用 IPC 调用没有失效
+
+渲染层相关拆分至少验证：
+
+- 页面可以正常打开
+- 关键交互还能跑通
+- 没有明显状态丢失或事件失联
+
+### 14.3 结果检查
+
+需要明确记录：
+
+- 拆分前行数
+- 拆分后入口文件行数
+- 新增了哪些模块
+- 哪些职责已经迁出
+- 哪些遗留块留待下一轮
+
+不记录这些信息，后面很难判断拆分是否真的产生收益。
+
+## 15. 当前建议的实际落点
+
+如果下一步就开始动代码，建议直接执行下面这轮：
+
+1. 从 `src/core/electron/main/index.ts` 抽 `git-service.ts`
+2. 把 runtime 启停和 terminal 打开整理到 `runtime-service.ts`
+3. 把 AI Commit 执行链路整理到 `ai-commit-service.ts`
+4. 最后补 `ipc/registerIpcHandlers.ts`
+
+这一轮做完后，再回来更新这份文档里的“当前进度”。
+
+这样文档就能持续反映真实状态，而不是停留在一次性规划。
