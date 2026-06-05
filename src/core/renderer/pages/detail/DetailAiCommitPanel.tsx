@@ -6,21 +6,29 @@ import {
   Bot,
   Check,
   ChevronDown,
-  CloudDownload,
-  CloudUpload,
   Code2,
-  Copy,
-  Download,
   FileText,
   GitBranch,
   GitCommitHorizontal,
-  GitMerge,
   History,
   RefreshCw,
-  Shuffle,
   X,
 } from 'lucide-react'
-import { formatCommitDate } from './detail.aiFlow'
+import { CommitHistoryItem, buildCommitHistoryDisplayItems } from './detail.commitHistory'
+import {
+  CHANGE_META,
+  computeOperationState,
+  formatGitBadgeCount,
+  formatLogTime,
+  getOperationLabel,
+  getOperationStatusClass,
+  getOperationStatusText,
+  getScopeLabel,
+  GIT_OPERATION_ITEMS,
+  PanelGitOperationKind,
+  pickDefaultDiffViewMode,
+  type OperationCardState,
+} from './detail.gitOperations'
 import { GIT_GUIDE_SECTIONS, GIT_GUIDE_TITLE } from './gitGuideContent'
 import { ModalShell } from '../../components/ModalShell'
 import { UrlPopover } from '../../components/UrlPopover'
@@ -74,27 +82,7 @@ type DetailAiCommitPanelProps = {
 }
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
-type GitHistoryCommit = DetailGitSnapshot['recentCommits'][number]
 type AiStepStatus = AiFlowNode['data']['status']
-
-type OperationCardState = {
-  disabled: boolean
-  hint: string
-}
-
-type BranchOperationStateParams = {
-  hasConflicts: boolean
-  hasWorkingTreeChanges: boolean
-  branchAhead: number
-  branchBehind: number
-  hasUpstream: boolean
-  upstreamGone: boolean
-  mergeTarget: string
-  currentBranch: string
-  localBranches: string[]
-  remoteBranches: string[]
-  runningOperation: GitOperationKind | null
-}
 
 type OperationConfirmState = {
   operation: PanelGitOperationKind
@@ -106,152 +94,12 @@ type OperationConfirmState = {
 type BranchManagerMode = 'current' | 'upstream'
 
 type MiddlePanelMode = 'history' | 'ai-log' | 'git-log'
-type CopyStatus = 'idle' | 'success' | 'error'
-type CommitHistoryDisplayItem = GitHistoryCommit & {
-  withinRecentBatch: boolean
-  isLocalHead: boolean
-  isUpstreamHead: boolean
-  relationLabel: string
-}
 type IndexedBranchCandidate = {
   name: string
   searchText: string
 }
-type PanelGitOperationKind = (typeof GIT_OPERATION_ITEMS)[number]['key']
 
 const BRANCH_SEARCH_DEBOUNCE_MS = 140
-
-const CHANGE_META: Record<GitChangedFile['kind'], { label: string; className: string }> = {
-  added: { label: '新增', className: 'text-[color:var(--color-success)] bg-[color:var(--color-success-background)]' },
-  modified: { label: '修改', className: 'text-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10' },
-  deleted: { label: '删除', className: 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]' },
-  renamed: { label: '重命名', className: 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' },
-  copied: { label: '复制', className: 'text-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10' },
-  untracked: { label: '未跟踪', className: 'text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)]' },
-  conflicted: { label: '冲突', className: 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive-background)]' },
-  typechanged: { label: '类型变更', className: 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' },
-  unknown: { label: '变更', className: 'text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)]' },
-}
-
-const GIT_OPERATION_ITEMS = [
-  { key: 'fetch', label: 'Fetch', description: '同步远程引用', icon: CloudDownload },
-  { key: 'pull', label: 'Pull', description: '拉取并合并', icon: Download },
-  { key: 'push', label: 'Push', description: '推送当前分支', icon: CloudUpload },
-  { key: 'switch', label: 'Switch', description: '切换到目标分支', icon: Shuffle },
-  { key: 'merge', label: 'Merge', description: '合并目标分支', icon: GitMerge },
-] as const
-
-const GIT_OPERATION_LABELS: Partial<Record<GitOperationKind, string>> = {
-  fetch: 'Fetch',
-  pull: 'Pull',
-  push: 'Push',
-  switch: 'Switch',
-  merge: 'Merge',
-  'create-remote-branch': 'Create Remote',
-  'create-local-branch': 'Create Local',
-  'delete-local-branch': 'Delete Local',
-  'set-upstream': 'Set Upstream',
-}
-
-function formatGitBadgeCount(count: number): string {
-  return count > 99 ? '99+' : String(count)
-}
-
-function getScopeLabel(file: GitChangedFile): string {
-  if (file.scope === 'conflicted') return '冲突'
-  if (file.scope === 'untracked') return '未跟踪'
-  if (file.staged && file.unstaged) return '已暂存 + 未暂存'
-  if (file.staged) return '已暂存'
-  return '未暂存'
-}
-
-function formatLogTime(value: number): string {
-  if (!Number.isFinite(value)) return '-'
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  })
-}
-
-function pickDefaultDiffViewMode(file: GitChangedFile): GitDiffViewMode {
-  return file.unstaged || file.scope === 'untracked' ? 'unstaged' : 'staged'
-}
-
-function getOperationLabel(operation: GitOperationKind): string {
-  return GIT_OPERATION_LABELS[operation] ?? operation
-}
-
-function getOperationStatusClass(result: GitOperationResult): string {
-  if (result.ok) {
-    return 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)]'
-  }
-  if (result.skipped) {
-    return 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]'
-  }
-  return 'border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)]'
-}
-
-function getOperationStatusText(result: GitOperationResult): string {
-  if (result.ok) return '成功'
-  if (result.skipped) return '已跳过'
-  return '失败'
-}
-
-function computeOperationState(
-  operation: GitOperationKind,
-  params: BranchOperationStateParams
-): OperationCardState {
-  if (params.runningOperation && params.runningOperation !== operation) {
-    return { disabled: true, hint: '另一个 Git 操作执行中' }
-  }
-  if (params.hasConflicts && operation !== 'fetch') {
-    return { disabled: true, hint: '存在冲突，先解决冲突' }
-  }
-  if (operation === 'pull') {
-    if (!params.hasUpstream) return { disabled: true, hint: '当前分支无 upstream' }
-    if (params.upstreamGone) return { disabled: true, hint: 'upstream 已丢失，先 push -u 重建远程分支' }
-    if (params.hasWorkingTreeChanges) return { disabled: true, hint: '工作区不干净，先提交或暂存' }
-    if (params.branchBehind <= 0) return { disabled: true, hint: '没有可拉取提交' }
-  }
-  if (operation === 'push') {
-    if (!params.currentBranch || params.currentBranch === 'DETACHED') return { disabled: true, hint: 'Detached HEAD 不能推送' }
-    if (params.hasUpstream && !params.upstreamGone && params.branchAhead <= 0) return { disabled: true, hint: '没有可推送提交' }
-  }
-  if (operation === 'merge') {
-    if (params.hasWorkingTreeChanges) return { disabled: true, hint: '工作区不干净，先提交或暂存' }
-    if (!params.mergeTarget) return { disabled: true, hint: '请选择要合并的分支' }
-    if (params.mergeTarget === params.currentBranch) return { disabled: true, hint: '不能合并到自己' }
-  }
-  if (operation === 'switch') {
-    if (!params.mergeTarget) return { disabled: true, hint: '请选择要切换的分支' }
-    const normalizedTarget = params.mergeTarget.trim()
-    if (normalizedTarget === params.currentBranch) return { disabled: true, hint: '已在当前分支' }
-    const localCandidates = new Set(params.localBranches)
-    const remoteCandidates = new Set(params.remoteBranches)
-    if (localCandidates.has(normalizedTarget)) return { disabled: false, hint: '将切换本地分支' }
-    const remoteMatch = normalizedTarget.match(/^([^/]+)\/(.+)$/)
-    if (!remoteMatch) {
-      return { disabled: true, hint: '远程分支请使用 remote/branch 格式（如 origin/feature/x）' }
-    }
-    const localName = remoteMatch[2]
-    if (remoteCandidates.has(normalizedTarget)) {
-      if (localCandidates.has(localName)) {
-        return { disabled: false, hint: `本地已存在 ${localName}，将切换并重绑 upstream` }
-      }
-      return { disabled: false, hint: '将创建本地分支并跟踪远程分支' }
-    }
-    if (localCandidates.has(localName)) {
-      return { disabled: false, hint: `本地已存在 ${localName}，将尝试切换并在执行时校验远程后重绑 upstream` }
-    }
-    return { disabled: true, hint: '目标分支不存在（本地/远程）' }
-  }
-  return { disabled: false, hint: '可执行' }
-}
 
 function getStepClass(status: AiStepStatus): string {
   if (status === 'success') return 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
@@ -265,223 +113,6 @@ function getStepDotClass(status: AiStepStatus): string {
   if (status === 'running') return 'bg-[color:var(--color-warning)] animate-pulse'
   if (status === 'error') return 'bg-[color:var(--color-destructive)]'
   return 'bg-[color:var(--color-muted-foreground)]/45'
-}
-
-function formatFilesChangedLabel(count: number): string {
-  if (!Number.isFinite(count) || count <= 0) return '0 文件'
-  return `${count} 文件`
-}
-
-function buildCommitHistoryDisplayItems(
-  commits: GitHistoryCommit[],
-  options: {
-    localHead?: string
-    upstreamHead?: string
-    hasUpstream: boolean
-    upstreamGone: boolean
-    branchAhead: number
-    branchBehind: number
-  }
-): CommitHistoryDisplayItem[] {
-  const COMMIT_BATCH_WINDOW_MS = 15_000
-  const commitTimes = commits.map((commit) => new Date(commit.committedAt).getTime())
-  const localHeadLower = options.localHead?.toLowerCase()
-  const upstreamHeadLower = options.upstreamHead?.toLowerCase()
-  const relationLabel = !options.hasUpstream
-    ? 'NO UPSTREAM'
-    : options.upstreamGone
-      ? 'UPSTREAM GONE'
-      : options.branchAhead === 0 && options.branchBehind === 0
-        ? 'SYNCED'
-        : options.branchAhead > 0 && options.branchBehind > 0
-          ? `AHEAD ${options.branchAhead} / BEHIND ${options.branchBehind}`
-          : options.branchAhead > 0
-            ? `AHEAD ${options.branchAhead}`
-            : options.branchBehind > 0
-              ? `BEHIND ${options.branchBehind}`
-              : 'UNKNOWN'
-
-  return commits.map((commit, index) => {
-    const currentTime = commitTimes[index]
-    const commitHashLower = commit.hash.toLowerCase()
-    const isLocalHead = Boolean(localHeadLower && commitHashLower === localHeadLower)
-    const isUpstreamHead = Boolean(upstreamHeadLower && commitHashLower === upstreamHeadLower)
-    if (!Number.isFinite(currentTime)) {
-      return {
-        ...commit,
-        withinRecentBatch: false,
-        isLocalHead,
-        isUpstreamHead,
-        relationLabel,
-      }
-    }
-
-    const prevTime = index > 0 ? commitTimes[index - 1] : Number.NaN
-    const nextTime = index < commits.length - 1 ? commitTimes[index + 1] : Number.NaN
-    const nearPrev = Number.isFinite(prevTime) && Math.abs(prevTime - currentTime) <= COMMIT_BATCH_WINDOW_MS
-    const nearNext = Number.isFinite(nextTime) && Math.abs(nextTime - currentTime) <= COMMIT_BATCH_WINDOW_MS
-    const withinRecentBatch = nearPrev || nearNext
-
-    return {
-      ...commit,
-      withinRecentBatch,
-      isLocalHead,
-      isUpstreamHead,
-      relationLabel,
-    }
-  })
-}
-
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      // Fallback below.
-    }
-  }
-
-  if (typeof document === 'undefined') return false
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '0'
-  textarea.style.left = '-9999px'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-
-  textarea.focus()
-  textarea.select()
-
-  let copied = false
-  try {
-    copied = document.execCommand('copy')
-  } catch {
-    copied = false
-  } finally {
-    document.body.removeChild(textarea)
-  }
-
-  return copied
-}
-
-function CommitHistoryItem({
-  commit,
-  activeCommitHash,
-  setActiveCommitHash,
-}: {
-  commit: CommitHistoryDisplayItem
-  activeCommitHash: string | null
-  setActiveCommitHash: Dispatch<SetStateAction<string | null>>
-}) {
-  const active = activeCommitHash === commit.hash
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle')
-  const hashLabel = copyStatus === 'success' ? '已复制' : copyStatus === 'error' ? '复制失败' : commit.shortHash
-  const showRelationBadge = commit.isLocalHead || commit.isUpstreamHead
-
-  useEffect(() => {
-    if (copyStatus === 'idle') return
-    const timer = window.setTimeout(() => {
-      setCopyStatus('idle')
-    }, 1500)
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [copyStatus])
-
-  const handleCopyHash = async () => {
-    const ok = await copyTextToClipboard(commit.hash)
-    setCopyStatus(ok ? 'success' : 'error')
-  }
-
-  return (
-    <div
-      className={`rounded-[14px] border px-3 py-2.5 transition-all duration-200 ${
-        active
-          ? 'border-[color:var(--color-primary)]/45 bg-[color:var(--color-background)]'
-          : commit.withinRecentBatch
-            ? 'border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)]/45 hover:border-[color:var(--color-warning)]/65 hover:bg-[color:var(--color-warning-background)]/60'
-          : 'border-[color:var(--color-border)] bg-[color:var(--color-card)] hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background)]/70'
-      }`}
-    >
-      <button
-        type="button"
-        className="block w-full min-w-0 text-left"
-        onClick={() => setActiveCommitHash((prev) => (prev === commit.hash ? null : commit.hash))}
-      >
-        <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">
-          {commit.subject}
-        </p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          <span
-            className={`inline-flex cursor-pointer select-none items-center gap-1 rounded-full border px-2 py-0.5 font-mono transition-colors ${
-              copyStatus === 'success'
-                ? 'border-[color:var(--color-success)]/40 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                : copyStatus === 'error'
-                  ? 'border-[color:var(--color-destructive)]/40 bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)]'
-                  : 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-background)]'
-            }`}
-            onClick={(event) => {
-              event.stopPropagation()
-              void handleCopyHash()
-            }}
-            title="点击复制完整 hash"
-          >
-            <Copy className="h-3 w-3" />
-            {hashLabel}
-          </span>
-          {showRelationBadge && (
-            <>
-              {commit.isLocalHead && (
-                <span className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/12 px-2 py-0.5 text-[color:var(--color-primary)]">
-                  LOCAL HEAD
-                </span>
-              )}
-              {commit.isUpstreamHead && (
-                <span className="rounded-full border border-[color:var(--color-success)]/45 bg-[color:var(--color-success-background)] px-2 py-0.5 text-[color:var(--color-success)]">
-                  UPSTREAM
-                </span>
-              )}
-              <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]/80">
-                {commit.relationLabel}
-              </span>
-            </>
-          )}
-          <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5">
-            {formatFilesChangedLabel(commit.filesChanged)}
-          </span>
-          {commit.withinRecentBatch && (
-            <span className="rounded-full border border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">
-              同批（15s）
-            </span>
-          )}
-          <span>{formatCommitDate(commit.committedAt)}</span>
-        </div>
-      </button>
-
-      {active && (
-        <div className="mt-2 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2">
-          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            {commit.authorName || 'Unknown author'}
-            {commit.refs.length > 0 ? ` · ${commit.refs.join(', ')}` : ''}
-          </p>
-          {commit.bullets.length > 0 && (
-            <div className="mt-2 space-y-1">
-              {commit.bullets.map((line, idx) => (
-                <div key={`${commit.hash}-b-${idx}`} className="flex items-start gap-1.5 text-[11.5px] leading-5 text-[color:var(--color-foreground)]">
-                  <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-[color:var(--color-muted-foreground)]/70" />
-                  <span className="min-w-0 break-words">{line.replace(/^-+\s*/, '')}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function DetailAiCommitPanel({

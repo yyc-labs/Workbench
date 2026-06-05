@@ -6,8 +6,7 @@ import { ChevronDown, ChevronUp, Code2, Columns2, Eye, X } from 'lucide-react'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { transformMarkdownUrl } from './code.markdown'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
-
-type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
+import type { MarkdownPreviewMode } from './code.workspace.types'
 
 type CodeWorkspaceEditorPaneProps = {
   activeLanguage: string | null

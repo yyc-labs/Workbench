@@ -27,12 +27,14 @@
 
 | 文件 | 当前行数 | 状态 |
 |------|----------|------|
-| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 2906 | 待拆 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 2248 | 待拆 |
-| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 待拆 |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 待拆 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 待拆 |
-| `src/core/electron/main/index.ts` | 757 | 已完成第一轮，待第二轮 |
+| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 第二轮已完成，已进入目标区间 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 进行中，已拆出一轮 Git helper / history 模块 |
+| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 基本未拆 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 基本未拆 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 基本未拆 |
+| `src/core/electron/main/index.ts` | 121 | 已完成第二轮 |
+| `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 已拆出，后续可按领域继续收口 |
+| `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | 已拆出 |
 | `src/core/electron/main/project-file-service.ts` | 13 | 已完成 |
 
 ## 已完成进度
@@ -43,36 +45,49 @@
   - 文件树与文件名搜索迁到 `project-file/tree-service.ts`
   - 内容搜索迁到 `project-file/content-search-service.ts`
   - 文件读写迁到 `project-file/read-write-service.ts`
-- `src/core/electron/main/index.ts` 第一轮拆分
+- `src/core/electron/main/index.ts` 第二轮拆分
   - `window/createWindow.ts` 承接窗口创建、主题背景和窗口快捷键
   - `shell/openers.ts` 承接打开文件夹、VS Code、路径终端等外部打开逻辑
   - `git/git-service.ts` 承接 Git 相关能力
   - `runtime/runtime-service.ts` 承接 Runtime 相关能力
+  - `ai-commit/ai-commit-service.ts` 承接 AI Commit 执行链路与状态回传
+  - `ipc/registerIpcHandlers.ts` 承接 IPC 注册装配
   - IPC 注册改为启动期单次注册，避免窗口重建时重复挂 handler
+- `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` 第二轮拆分
+  - `CodeWorkspaceChrome.tsx`、`CodeWorkspaceSidebar.tsx`、`CodeWorkspaceEditorPane.tsx` 已拆出
+  - `useProjectCodeSession.ts`、`useProjectCodeSessionState.ts`、`useCodeWorkspaceExplorerState.ts` 已拆出
+  - `useMarkdownPreviewModeState.ts` 已收口 Markdown 预览模式、主题同步和图片粘贴
+  - `useCodeWorkspaceScrollSync.ts` 已收口滚动记忆、split 同步和模式切换恢复
+  - `useCodeWorkspaceRestoreState.ts` 已收口初始恢复、content search reveal 和 cursor reveal
+- `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` 当前轮拆分
+  - `detail.gitOperations.ts` 已收口 Git 操作状态、状态文案和 diff/branch 通用 helper
+  - `detail.commitHistory.tsx` 已收口提交历史映射和历史项子组件
+- 静态检查
+  - `npm run typecheck` 已于本次核对通过
 
 ## 推荐执行顺序
 
 建议继续按下面顺序推进，不并行拆多个核心文件：
 
-1. `src/core/electron/main/index.ts` 第二轮
-2. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`
-3. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
+1. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
+2. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+3. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
 4. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-5. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
-6. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+5. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
 
 原因：
 
-- `index.ts` 虽然已降到约 760 行，但 AI Commit 和 IPC 装配仍然集中，继续拆能尽快收口主进程边界。
-- `CodeWorkspacePanel.tsx` 和 `DetailAiCommitPanel.tsx` 仍然是渲染层最重、最影响后续改动的两个入口。
+- `index.ts` 已经降到 121 行，主进程入口不再是当前最高优先级。
+- `DetailAiCommitPanel.tsx` 现在是渲染层最重、最影响后续改动的入口文件。
+- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 都内嵌了 Monaco 初始化与搜索控件适配逻辑，继续拖延会放大重复实现。
 - `project-file-service.ts` 已完成，可以从后续治理顺序中移除。
 
 ## 下一步
 
 如果下一步直接动代码，优先继续做：
 
-1. 从 `src/core/electron/main/index.ts` 抽 `ai-commit-service.ts`
-2. 把 IPC 注册收口到 `ipc/registerIpcHandlers.ts`
-3. 回来更新本计划中的当前进度和目标行数
+1. 进入 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`，先抽 Git 计算逻辑、派生显示数据和操作判断
+2. 整理 `MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx` 共享的 Monaco 环境配置
+3. 回来更新本计划中的当前进度、遗留问题和验证范围
 
 后续细节见子文档，不再继续往这个入口文件里堆完整计划正文。

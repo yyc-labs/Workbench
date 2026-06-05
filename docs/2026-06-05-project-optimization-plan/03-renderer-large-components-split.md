@@ -6,49 +6,70 @@
 
 | 文件 | 当前行数 | 目标 |
 |------|----------|------|
-| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 2906 | 降到 700-900 行 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 2248 | 降到 800-1000 行 |
+| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 已进入目标区间，后续只做收口 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 继续降到 800-1000 行 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 拆出区域组件和 view-model |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 拆出 diff 状态和渲染区 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 拆出 Monaco 初始化与命令逻辑 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 拆出 diff 状态、冲突编辑与 Monaco 基础设施 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 拆出 Monaco 初始化、搜索控件与命令逻辑 |
 
 ## 2. `CodeWorkspacePanel.tsx`
 
 当前问题：
 
-- 同时承载文件树、文件搜索、Monaco、Markdown preview、图片粘贴、drawer、session 持久化等职责。
-- 这是当前渲染层最重的单文件。
+- 第二轮已经完成，滚动同步、Markdown preview mode、图片粘贴和 session 恢复链路已不再直接堆在父组件里。
+- 当前 732 行，已进入目标区间，主组件已基本收敛为布局和状态串联层。
+
+已完成：
+
+- 已拆出 `CodeWorkspaceChrome.tsx`
+- 已拆出 `CodeWorkspaceSidebar.tsx`
+- 已拆出 `CodeWorkspaceEditorPane.tsx`
+- 已拆出 `useProjectCodeSession.ts`
+- 已拆出 `useProjectCodeSessionState.ts`
+- 已拆出 `useCodeWorkspaceExplorerState.ts`
+- 已拆出 `code.markdown.tsx`
+- 已拆出 `useMarkdownPreviewModeState.ts`
+- 已拆出 `useCodeWorkspaceScrollSync.ts`
+- 已拆出 `useCodeWorkspaceRestoreState.ts`
 
 目标：
 
 - 把“工作区编排”与“具体子功能”分开。
 - 让主组件只负责布局和状态串联。
 
-建议先拆纯逻辑：
+当前遗留问题：
 
-- `markdownImageResolver.ts`
-- `useProjectCodeSession.ts`
-- `useCodeSearchState.ts`
-- `useMarkdownPasteImage.ts`
+- viewport、quick drawer 和搜索聚焦仍然在入口层协调
+- open tab、explorer 和搜索面板切换的状态编排仍然比较集中
+- `useCodeWorkspaceExplorerState.ts` 已到 454 行，后续需要继续避免“逻辑平移式拆分”
 
-建议再拆 UI：
+建议后续只做收口型整理：
 
-- `CodeWorkspaceHeader.tsx`
-- `CodeEditorPane.tsx`
-- `MarkdownPreviewPane.tsx`
-- `CodeSearchPanel.tsx`
+- 如后续再动，优先处理 viewport / search focus / quick drawer 协调
+- 不建议为继续降行数而再拆一轮“纯搬运式” hook
 
 验收：
 
-- `CodeWorkspacePanel.tsx` 控制在 700-900 行以内
-- 主组件以编排为主，不再包含大段 Markdown、编辑器和搜索细节实现
+- `CodeWorkspacePanel.tsx` 已控制在 700-900 行以内
+- 主组件已以编排为主，不再包含大段 Markdown、编辑器和恢复链路细节实现
 
 ## 3. `DetailAiCommitPanel.tsx`
 
 当前问题：
 
-- 混合了 Git 状态计算、分支操作、AI 日志、历史提交、冲突处理相关逻辑。
-- 业务密度高，后续继续加功能会更难维护。
+- 已经拆出 AI Flow 相关模块，并且本轮额外拆出 Git helper / history 子模块，但 Git 状态编排、分支操作、冲突处理、确认弹窗等主体逻辑仍集中在一个 1879 行文件里。
+- 文件内部仍保留大量本地 helper、派生数据和局部子视图。
+
+已完成：
+
+- 已拆出 `useAiCommitFlow.ts`
+- 已拆出 `detail.aiFlow.ts`
+- 已拆出 `detail.aiFlow.styles.ts`
+- 已拆出 `detail.aiFlowNodeTypes.ts`
+- 已拆出 `DetailAiFlowStepNode.tsx`
+- 已拆出 `gitGuideContent.ts`
+- 已拆出 `detail.gitOperations.ts`
+- 已拆出 `detail.commitHistory.tsx`
 
 目标：
 
@@ -76,7 +97,8 @@
 
 当前问题：
 
-- 文档卡片逻辑和展示内容都比较重，已经超过单组件舒适区间。
+- 目前基本仍是单文件实现。
+- 拖拽排序、标签设置、编辑表单、默认链接切换、账号/密钥复制与展示都混在一起。
 
 目标：
 
@@ -96,6 +118,11 @@
 
 ### 4.2 `DetailGitDiffDrawer.tsx`
 
+当前问题：
+
+- diff 切换、冲突文件解析、冲突块提取、Monaco 环境初始化、查找控件适配都在一个文件里。
+- 与 `MonacoCodeEditor.tsx` 已经出现 Monaco worker 配置和查找控件 hover guard 的重复实现。
+
 目标：
 
 - 把 diff 状态、视图切换、文件切换、渲染区域拆开。
@@ -105,8 +132,15 @@
 - `GitDiffToolbar.tsx`
 - `GitDiffContent.tsx`
 - `useGitDiffState.ts`
+- `monacoEnvironment.ts`
+- `monacoSearchWidget.ts`
 
 ### 4.3 `MonacoCodeEditor.tsx`
+
+当前问题：
+
+- Monaco worker 初始化、model cache、查找替换、搜索状态同步、快捷命令都仍集中在单文件中。
+- 与 `DetailGitDiffDrawer.tsx` 有重复的 Monaco 环境和查找控件适配逻辑。
 
 目标：
 
@@ -116,8 +150,10 @@
 
 - `useMonacoInstance.ts`
 - `useMonacoCommands.ts`
+- `useMonacoSearchWidget.ts`
 - `monacoTheme.ts`
 - `monacoLanguageSetup.ts`
+- `monacoEnvironment.ts`
 
 ## 5. 渲染层拆分约束
 
@@ -131,6 +167,7 @@
 - 搜索状态
 - Markdown 图片与预览相关逻辑
 - drawer 或 quick action 的状态组织
+- 滚动同步和恢复链路
 
 如果这些状态管理还留在入口层，单纯多几个子组件，后续维护成本不会真正下降。
 
@@ -148,5 +185,6 @@
 
 这三个文件适合放在第二阶段，原因是：
 
-- 它们虽然大，但模块边界比前两个核心文件更容易收敛
-- 当前收益最高的仍然是主进程入口和核心工作区编排
+- `DetailAiCommitPanel.tsx` 仍然比它们更影响主流程，`CodeWorkspacePanel.tsx` 已转为收口型跟进
+- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 需要一起处理共享基础设施，拆分顺序不能再完全按行数排
+- `DetailDocumentationCard.tsx` 虽然大，但业务相对独立，适合放在后面单独收口

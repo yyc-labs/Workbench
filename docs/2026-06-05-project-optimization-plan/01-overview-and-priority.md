@@ -20,12 +20,14 @@
 
 | 文件 | 当前行数 | 状态 | 说明 |
 |------|----------|------|------|
-| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 2906 | 待拆 | 当前最大的渲染层编排组件 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 2248 | 待拆 | Git 与 AI Commit 逻辑混合过重 |
-| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 待拆 | 数据整理和条件渲染都偏重 |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 待拆 | diff 状态与渲染耦合 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 待拆 | 初始化、主题、命令、同步混在一起 |
-| `src/core/electron/main/index.ts` | 757 | 进行中 | 第一轮已完成，第二轮仍需压缩 |
+| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 本轮完成 | 第二轮已完成，父组件已收敛到编排层 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 进行中 | AI Flow 周边已拆，Git helper / history 已做第一轮下沉 |
+| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 待拆 | 资料编辑、排序、设置仍集中在单文件 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 待拆 | diff、冲突编辑、Monaco 初始化仍耦合 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 待拆 | 初始化、缓存、查找替换、命令仍集中 |
+| `src/core/electron/main/index.ts` | 121 | 已完成 | 第二轮目标已超额达成 |
+| `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 已拆出 | 仍可按 handler 领域继续拆分 |
+| `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | 已拆出 | AI Commit 主链路已迁出入口文件 |
 | `src/core/electron/main/project-file-service.ts` | 13 | 已完成 | 当前只保留兼容出口 |
 
 ### 2.2 当前进度
@@ -33,7 +35,8 @@
 已完成：
 
 - `src/core/electron/main/project-file-service.ts`
-- `src/core/electron/main/index.ts` 第一轮拆分
+- `src/core/electron/main/index.ts` 第二轮拆分
+- `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` 第二轮拆分
 
 本次拆分结果：
 
@@ -46,118 +49,121 @@
 - `src/core/electron/main/shell/openers.ts` 承接打开文件夹、VS Code、路径终端等外部打开逻辑
 - `src/core/electron/main/git/git-service.ts` 承接 Git 能力
 - `src/core/electron/main/runtime/runtime-service.ts` 承接 Runtime 能力
+- `src/core/electron/main/ai-commit/ai-commit-service.ts` 承接 AI Commit 执行链路、输出回传和状态恢复
+- `src/core/electron/main/ipc/registerIpcHandlers.ts` 承接 IPC 装配
+- `src/core/renderer/pages/code/CodeWorkspaceChrome.tsx`、`CodeWorkspaceSidebar.tsx`、`CodeWorkspaceEditorPane.tsx` 已从 `CodeWorkspacePanel.tsx` 拆出
+- `src/core/renderer/pages/code/useProjectCodeSession.ts`、`useProjectCodeSessionState.ts`、`useCodeWorkspaceExplorerState.ts` 已抽为独立模块
+- `src/core/renderer/pages/code/useMarkdownPreviewModeState.ts` 已收口 Markdown 预览模式、主题同步和图片粘贴
+- `src/core/renderer/pages/code/useCodeWorkspaceScrollSync.ts` 已收口滚动记忆、split 同步和模式切换恢复
+- `src/core/renderer/pages/code/useCodeWorkspaceRestoreState.ts` 已收口初始恢复、content search reveal 和 cursor reveal
+- `src/core/renderer/pages/detail/detail.gitOperations.ts` 已收口 Git 操作状态、状态文案和 diff/branch 通用 helper
+- `src/core/renderer/pages/detail/detail.commitHistory.tsx` 已收口提交历史映射和历史项子组件
 
 当前状态：
 
 - 外部调用方式未改
 - `project-file-service.ts` 已从大体积实现文件收缩为兼容出口
-- `index.ts` 已先收缩掉窗口创建、shell opener、Git、Runtime 四块细节
+- `index.ts` 已收缩为主进程启动编排层
 - IPC 注册改为启动期单次注册，避免窗口重建时重复挂 handler
-- 下一轮重点变成 AI Commit 和 IPC 装配层
+- `CodeWorkspacePanel.tsx` 已从 2906 行降到 732 行，进入 700-900 行目标区间
+- `npm run typecheck` 已于本次核对通过
+
+### 2.3 当前已确认的问题
+
+- `CodeWorkspacePanel.tsx` 的滚动同步、Markdown 预览模式和恢复链路已经下沉，但 viewport、quick drawer 和搜索聚焦仍集中在入口层，后续只适合做收口型整理。
+- `useCodeWorkspaceExplorerState.ts` 已单独成文件，但也达到 454 行；如果后续继续往里堆，会把问题从父组件平移到 hook。
+- `DetailAiCommitPanel.tsx` 虽然已经拆出 `detail.gitOperations.ts` 和 `detail.commitHistory.tsx`，但 Git 操作判断的剩余编排、分支候选、确认弹窗和右侧主体 UI 仍在单文件内。
+- `DetailDocumentationCard.tsx` 基本仍是单文件实现，拖拽排序、标签设置、编辑表单、密钥展示都混在一起。
+- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 都内嵌了 Monaco worker 初始化与查找控件适配逻辑，已经出现重复实现。
 
 ## 3. 推荐执行顺序
 
 建议按下面顺序做，不要并行拆多个大文件：
 
-1. `src/core/electron/main/index.ts`
-2. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`
-3. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
+1. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
+2. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+3. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
 4. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-5. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
-6. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+5. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
 
 原因：
 
-- 先拆主进程入口，能尽快建立更清晰的模块边界。
-- `index.ts` 虽然不再是最大文件，但仍然是主进程核心装配点，边界收益高于单纯按行数排序。
-- 再拆两个最大的渲染层业务组件，收益最高。
+- 主进程入口拆分已经完成，不再需要占据第一优先级。
+- `CodeWorkspacePanel.tsx` 第二轮已经达标，当前最高收益点转移到 `DetailAiCommitPanel.tsx`。
+- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 之间已经出现重复基础设施，适合在第二批统一收口。
 - `project-file-service.ts` 已完成，可以从后续顺序中移除。
-- 剩下几个文件作为第二阶段治理。
+- `DetailDocumentationCard.tsx` 虽然也大，但相对更独立，适合放在第三批。
 
 ## 4. 分阶段里程碑
 
 ### M1
 
-- 拆 `src/core/electron/main/index.ts` 第二轮
-- 完成 AI Commit 与 IPC 装配分层
+- 已完成 `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` 第二轮
+- 已完成工作区编排状态进一步下沉
 
 ### M2
 
-- 拆 `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`
-- 完成 code workspace 的逻辑层和 UI 层分离
+- 拆 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
+- 完成 Git/分支/历史区域的主体拆分
 
 ### M3
 
-- 拆 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
-- 完成 Git/AI 面板的计算逻辑与显示逻辑分离
+- 拆 `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+- 抽出共享的 Monaco 环境与命令逻辑
 
 ### M4
 
-- 拆 `DetailDocumentationCard.tsx`
 - 拆 `DetailGitDiffDrawer.tsx`
-- 拆 `MonacoCodeEditor.tsx`
+- 复用 Monaco 共享模块完成 diff 抽离
+- 拆 `DetailDocumentationCard.tsx`
 
 ## 5. 下一步建议
 
 如果按这套计划继续往下做，建议下一步直接从：
 
-- `src/core/electron/main/index.ts` 的 AI Commit / IPC 两块继续拆
+- `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` 的 Git 计算逻辑 / 派生显示数据 / 操作判断继续拆
 
 开始拆。
 
 这一步最值得继续切的是：
 
-- AI Commit 执行链路与状态回传
-- IPC 注册装配层
+- Git 操作状态和权限判断
+- 分支展示、提交历史和复制状态的 view-model
+- 中左三区域的展示组件边界
 
-这样能让 `index.ts` 更接近纯装配层，后面的主进程维护成本会明显下降。
+这样能先把当前渲染层最大的业务入口压下来，再进入 Monaco 共享基础设施治理。
 
 ## 6. 后续执行清单
 
-### 下一步 1：拆 `src/core/electron/main/index.ts`
+### 下一步 1：拆 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
 
 优先做：
 
-1. 先抽 `ai-commit-service`
-2. 再抽 `registerIpcHandlers`
-3. 最后再看是否还需要继续压缩零散启动细节
+1. 先抽 Git 操作判断和派生显示数据
+2. 再抽分支管理区和提交历史区
+3. 最后抽 AI 日志区和操作工具栏
 
 这一轮结束时应达到：
 
-- `index.ts` 只保留主进程启动编排
-- 大部分业务逻辑迁到独立模块
+- `DetailAiCommitPanel.tsx` 主要保留状态组织、事件分发和布局拼装
 
-### 下一步 2：拆 `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`
+### 下一步 2：拆 `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx`
 
 优先做：
 
-1. 先抽纯逻辑 hook
-2. 再抽 markdown 相关逻辑
-3. 再抽头部、编辑区、搜索区 UI
+1. 抽共享的 Monaco worker / environment 配置
+2. 抽编辑器搜索控件适配
+3. 再分别收口编辑器命令和 diff / conflict 视图
 
 这一轮结束时应达到：
 
-- `CodeWorkspacePanel.tsx` 主要保留布局和状态串联
+- Monaco 基础设施不再在两个文件里重复实现
 
-### 下一步 3：拆 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
-
-优先做：
-
-1. 抽 Git 计算逻辑
-2. 抽分支管理区
-3. 抽 AI 日志区
-4. 抽操作工具栏
-
-这一轮结束时应达到：
-
-- Git/AI 面板逻辑和展示边界清晰
-
-### 下一步 4：第二阶段治理
+### 下一步 3：第二阶段治理
 
 这一阶段处理：
 
 - `DetailDocumentationCard.tsx`
-- `DetailGitDiffDrawer.tsx`
-- `MonacoCodeEditor.tsx`
+- `registerIpcHandlers.ts` 的按领域细分（可选）
 
 适合在前三个核心拆分完成后再做。

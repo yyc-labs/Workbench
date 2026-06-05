@@ -2,7 +2,7 @@
 
 ## 1. 当前状态
 
-`src/core/electron/main/index.ts` 当前约 757 行，已经完成第一轮收缩，但仍然不是纯启动编排层。
+`src/core/electron/main/index.ts` 当前 121 行，第二轮拆分已经落地，入口文件已经收敛为主进程启动编排层。
 
 已迁出的职责：
 
@@ -10,18 +10,23 @@
 - `shell/openers.ts`
 - `git/git-service.ts`
 - `runtime/runtime-service.ts`
+- `ai-commit/ai-commit-service.ts`
+- `ipc/registerIpcHandlers.ts`
 
-当前剩余重点：
+当前主进程相关文件规模：
 
-- AI Commit 执行链路
-- IPC handler 注册装配
-- 少量仍然黏在入口层的主进程细节
+| 文件 | 当前行数 | 说明 |
+|------|----------|------|
+| `src/core/electron/main/index.ts` | 121 | 启动编排层 |
+| `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 汇总 IPC handler 装配 |
+| `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | AI Commit 执行链路 |
+| `src/core/electron/main/project-file-service.ts` | 13 | 兼容出口 |
 
 ## 2. 当前问题
 
-- `index.ts` 仍然同时承担 app lifecycle、AI Commit、IPC 装配等多类职责。
-- 入口文件仍然是主进程改动的默认落点，后续容易重新变胖。
-- 如果不把 AI Commit 和 IPC 继续抽出，现有分层会停在“拆了一半”的状态。
+- `index.ts` 本身的问题已经基本解决，不再是主进程治理重点。
+- `registerIpcHandlers.ts` 虽然比原入口清晰，但仍然同时承接 process、config、AI Commit、Git、shell、window、project-file 等多类 handler。
+- `ai-commit-service.ts` 已经独立，但内部仍同时包含配置归并、PowerShell 启动、WSL fallback、输出分发和状态持久化；如果后续继续加能力，仍有继续膨胀的风险。
 
 ## 3. 目标
 
@@ -36,9 +41,14 @@
 - service 装配
 - 最薄的一层启动顺序控制
 
-## 4. 目标目录
+当前结果：
 
-建议逐步收敛到类似结构：
+- 目标已经超额完成，`index.ts` 已低于原计划区间上限很多。
+- 后续主进程优化不应继续围绕 `index.ts` 本身，而应转向 IPC 分域或 service 内部继续收口。
+
+## 4. 当前结构
+
+当前结构已经基本收敛到下面形态：
 
 - `src/core/electron/main/index.ts`
 - `src/core/electron/main/ipc/registerIpcHandlers.ts`
@@ -50,47 +60,13 @@
 
 重点不是目录层级本身，而是让每一类能力都只有一个清晰入口。
 
-## 5. 剩余拆分顺序
+## 5. 当前已完成项
 
-### 5.1 先拆 AI Commit
-
-优先迁出：
-
-- AI Commit 启动入口
-- 执行状态维护
-- 结果回传
-- 日志或 registry 访问
-
-建议结果：
-
-- `index.ts` 只负责装配 AI Commit 能力
-- 真正执行逻辑迁到 `ai-commit-service.ts`
-
-### 5.2 最后拆 IPC
-
-`registerIpcHandlers` 不建议最早拆，原因很简单：
-
-- 如果 AI Commit 还混在 `index.ts` 里
-- 那么先抽 IPC 只会把一个偏大的注册函数搬到另一个文件
-
-更合理的顺序是：
-
-1. 先拆业务能力
-2. 再让 IPC 注册文件只做 handler 装配
-
-理想状态下，`registerIpcHandlers.ts` 只保留：
-
-- channel 注册
-- service 调用转发
-- 参数校验或最薄的一层错误包装
-
-### 5.3 第二轮结束标准
-
-这一轮结束时应达到：
-
-- `index.ts` 不再直接承载大段 AI Commit 逻辑
-- IPC 注册文件从业务实现里解耦出来
-- 主进程新增能力有明确落点，不再默认回到入口文件
+- AI Commit 已从 `index.ts` 迁到 `ai-commit/ai-commit-service.ts`
+- IPC 注册已从 `index.ts` 迁到 `ipc/registerIpcHandlers.ts`
+- `index.ts` 当前只保留 capability probe、service 创建、handler 注册、窗口创建和 app lifecycle
+- IPC 注册保持启动期单次注册，避免窗口重建时重复挂载
+- `project-file-service.ts` 已完成兼容出口收缩
 
 ## 6. 这轮不再重复拆的部分
 
@@ -103,17 +79,19 @@
 
 后续如果要继续细化，只需要在对应目录内部继续收敛共享工具，不需要再把职责拉回 `index.ts`。
 
-## 7. 主进程验收与回归
+## 7. 后续可选优化
 
-验收：
+如果后续还要继续治理主进程，建议优先考虑：
 
-- `index.ts` 控制在 400-600 行以内
-- 只保留 app lifecycle、能力初始化、模块装配
+- 按领域再拆 `registerIpcHandlers.ts`
+  - 例如拆成 `registerWindowIpcHandlers.ts`、`registerGitIpcHandlers.ts`、`registerProjectFileIpcHandlers.ts`
+- 继续压缩 `ai-commit-service.ts`
+  - 例如拆出配置整理、子进程启动、输出桥接
 
-主进程相关拆分至少验证：
+这已经不再是当前最高优先级，只适合作为渲染层大组件治理完成后的收尾优化。
 
-- 应用可以正常启动
-- 窗口可以正常创建
-- 常用 IPC 调用没有失效
-- AI Commit 相关能力仍然可以启动、回传状态、结束
-- Git 和 Runtime 既有调用不因入口重组出现回归
+## 8. 本次核对结果
+
+- 静态检查已完成：`npm run typecheck` 通过
+- 运行回归本次未重新执行
+- 因此当前文档只确认“结构状态”和“静态可通过状态”，不把运行结果写成已验证
