@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ProjectCodeSession } from '../../../shared/types'
 import type { CodeFileDrawerState } from './code.types'
 import {
@@ -25,6 +25,8 @@ type UseProjectCodeSessionStateOptions = {
   persistedCodeFileDrawerState: CodeFileDrawerState | undefined
   persistedLastCodeFile?: string
   activeRelativePath: string | null
+  contentSearchScopeInput: string
+  setContentSearchScopeInput: Dispatch<SetStateAction<string>>
   knownFilePaths: Set<string>
   allProjectFilePathSet?: Set<string>
   treeStatus: 'idle' | 'loading' | 'ready' | 'error'
@@ -39,6 +41,8 @@ export function useProjectCodeSessionState({
   persistedCodeFileDrawerState,
   persistedLastCodeFile,
   activeRelativePath,
+  contentSearchScopeInput,
+  setContentSearchScopeInput,
   knownFilePaths,
   allProjectFilePathSet,
   treeStatus,
@@ -46,9 +50,6 @@ export function useProjectCodeSessionState({
   setProjectCodeFileDrawerState,
   setProjectLastCodeFile,
 }: UseProjectCodeSessionStateOptions) {
-  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
-    () => persistedProjectCodeSession?.contentSearchScope ?? ''
-  )
   const [openTabPaths, setOpenTabPaths] = useState<string[]>(
     () => persistedProjectCodeSession?.tabs ?? []
   )
@@ -86,7 +87,7 @@ export function useProjectCodeSessionState({
       saveCodeSessionTimerRef.current = null
     }
     isRestoringCodeSessionRef.current = true
-  }, [persistedProjectCodeSession, projectId])
+  }, [persistedProjectCodeSession, projectId, setContentSearchScopeInput])
 
   useEffect(() => {
     if (!projectId) return
@@ -200,12 +201,10 @@ export function useProjectCodeSessionState({
 
   return {
     codeFileDrawerState,
-    contentSearchScopeInput,
     cursorPositionsByPath,
     isRestoringCodeSessionRef,
     openTabPaths,
     setCodeFileDrawerState,
-    setContentSearchScopeInput,
     setCursorPositionsByPath,
     setOpenTabPaths,
     visibleOpenTabs,

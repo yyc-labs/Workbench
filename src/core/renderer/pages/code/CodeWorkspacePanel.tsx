@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Bot, ChevronDown, ChevronUp, Code2, Columns2, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
+import { BookOpen, Bot, ChevronDown, ChevronUp, Code2, Columns2, Eye, Files, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
-import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { UrlPopover } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
-import { CodeFileTree } from './CodeFileTree'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
-import { DebouncedSearchInput } from './DebouncedSearchInput'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
+import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { useCodeFileState } from './useCodeFileState'
 import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import {
-  collectParentDirectories,
   formatFileSize,
   inferLanguageFromRelativePath,
   pushRecentCodeFilePath,
@@ -41,31 +38,19 @@ import {
 } from './code.markdown'
 import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { parseMarkdownDocument } from './code.frontmatterParser'
-import {
-  buildKnownFilePathSet,
-  collectTopLevelDirectories,
-  expandTreePath,
-  findDirectoryNode,
-  mergeKnownFilePaths,
-  replaceDirectoryNodes,
-  sortProjectNodes,
-} from './code.tree'
-import type { CodeFileDrawerState, FileTreeState } from './code.types'
+import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
+import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
 import {
   CODE_FILE_DRAWER_SECTION_LIMIT,
   MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS,
   MAX_PROJECT_CODE_SESSION_TABS,
   normalizeProjectCodeSession,
   sanitizeProjectCodeSessionByPaths,
-  type EditorCursorPosition,
 } from './useProjectCodeSession'
 
-const FILE_SEARCH_DEBOUNCE_MS = 180
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
-const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
-const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
 type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
@@ -81,24 +66,6 @@ type CodeWorkspacePanelProps = {
 type MarkdownPreviewMode = 'edit' | 'preview' | 'split'
 type MarkdownScrollModeKey = 'edit' | 'preview' | 'splitEditor' | 'splitPreview'
 type CodeViewMode = 'files' | 'search'
-type ContentSearchScopePreset = {
-  id: string
-  label: string
-  hint: string
-  scopeInput: string
-  title: string
-}
-const CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES = ['src', 'app', 'packages', 'docs', 'test', 'tests', 'spec', 'scripts']
-const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
-  src: 'Source',
-  app: 'App',
-  packages: 'Packages',
-  docs: 'Docs',
-  test: 'Tests',
-  tests: 'Tests',
-  spec: 'Specs',
-  scripts: 'Scripts',
-}
 
 function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number {
   for (const value of values) {
@@ -110,57 +77,6 @@ function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number 
 }
 
 type EditorSearchMode = 'find' | 'replace'
-function normalizeContentSearchScope(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value.trim()
-}
-
-function normalizeContentSearchScopeToken(value: string): string {
-  const token = value.trim()
-  if (!token) return ''
-
-  if (token.startsWith('.')) {
-    return `*${token}`
-  }
-
-  if (!token.includes('*') && !token.includes('/') && /^[A-Za-z0-9_-]+$/.test(token)) {
-    return `*.${token}`
-  }
-
-  if (token.endsWith('/') || (!token.includes('*') && token.includes('/'))) {
-    const normalized = token.replace(/\/+$/, '')
-    return `${normalized}/**`
-  }
-
-  return token
-}
-
-function parseContentSearchScopeGlobs(scopeInput: string): string[] {
-  const tokens = scopeInput
-    .split(CONTENT_SEARCH_SCOPE_SEPARATOR_RE)
-    .map(normalizeContentSearchScopeToken)
-    .filter((item) => item.length > 0)
-  return Array.from(new Set(tokens)).slice(0, MAX_CONTENT_SEARCH_SCOPE_GLOBS)
-}
-
-function contentSearchScopeKey(scopeInput: string): string {
-  return parseContentSearchScopeGlobs(scopeInput).join('\n')
-}
-
-function directoryFromRelativePath(relativePath: string | null | undefined): string {
-  const normalized = (relativePath ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-  if (!normalized) return ''
-  const index = normalized.lastIndexOf('/')
-  if (index <= 0) return ''
-  return normalized.slice(0, index)
-}
-
-function extensionFromRelativePath(relativePath: string | null | undefined): string {
-  const fileName = fileNameFromRelativePath(relativePath ?? '')
-  const dotIndex = fileName.lastIndexOf('.')
-  if (dotIndex <= 0 || dotIndex === fileName.length - 1) return ''
-  return fileName.slice(dotIndex + 1).toLowerCase()
-}
 
 export function CodeWorkspacePanel({
   projectId,
@@ -199,33 +115,11 @@ export function CodeWorkspacePanel({
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
-  const [tree, setTree] = useState<FileTreeState>({
-    status: 'idle',
-    nodes: [],
-    error: null,
-    knownFilePaths: new Set(),
-    loadingDirectories: new Set(),
-    skippedDirectories: 0,
-    skippedFiles: 0,
-  })
-  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
-  const [fileSearchQuery, setFileSearchQuery] = useState('')
-  const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
-  const [isSearchingFiles, setIsSearchingFiles] = useState(false)
-  const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const firstProjectLinkItem = projectLinkItems[0]
-  const [contentSearchQuery, setContentSearchQuery] = useState('')
-  const [contentSearchCaseSensitive, setContentSearchCaseSensitive] = useState(false)
-  const [isContentSearchAdvancedOpen, setIsContentSearchAdvancedOpen] = useState(false)
-  const [contentSearchResult, setContentSearchResult] = useState<ProjectFileContentSearchResponse>({
-    files: [],
-    totalMatches: 0,
-    limited: false,
-  })
-  const [isSearchingContent, setIsSearchingContent] = useState(false)
-  const [contentSearchError, setContentSearchError] = useState<string | null>(null)
-  const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
+  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
+    () => persistedProjectCodeSession?.contentSearchScope ?? ''
+  )
   const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
     relativePath: string
     lineNumber: number
@@ -252,14 +146,12 @@ export function CodeWorkspacePanel({
   const pendingModeSwitchRef = useRef<{ from: MarkdownPreviewMode; to: MarkdownPreviewMode } | null>(null)
   const pendingEditorRestoreTopRef = useRef<number | null>(null)
   const splitSyncReadyRef = useRef(false)
-  const searchRequestSeqRef = useRef(0)
-  const contentSearchRequestSeqRef = useRef(0)
   const pendingRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
   const pendingCursorRevealRef = useRef<{ relativePath: string; lineNumber: number; column: number } | null>(null)
-  const treeLoadRequestSeqRef = useRef(0)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
   const captureCurrentModeScrollRef = useRef<() => void>(() => {})
+  const markOpenedFileInExplorerRef = useRef<(relativePath: string) => void>(() => {})
   const pushOpenTabPath = useCallback((tabs: string[], relativePath: string): string[] => {
     const normalizedPath = relativePath.trim()
     if (!normalizedPath) return tabs
@@ -288,20 +180,7 @@ export function CodeWorkspacePanel({
     }
 
     splitSyncReadyRef.current = false
-    setExpandedDirectories((prev) => {
-      const next = new Set(prev)
-      let changed = false
-      for (const parent of collectParentDirectories(result.relativePath)) {
-        if (next.has(parent)) continue
-        next.add(parent)
-        changed = true
-      }
-      return changed ? next : prev
-    })
-    setTree((prev) => ({
-      ...prev,
-      knownFilePaths: new Set(prev.knownFilePaths).add(result.relativePath),
-    }))
+    markOpenedFileInExplorerRef.current(result.relativePath)
     setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
   }, [persistedProjectCodeSession?.cursorPositions, pushOpenTabPath])
   const {
@@ -331,6 +210,47 @@ export function CodeWorkspacePanel({
     onBeforeOpenFile: handleBeforeOpenCodeFile,
     onDidOpenFile: handleDidOpenCodeFile,
   })
+  const {
+    activeContentSearchScopeKey,
+    activeContentSearchScopeLabel,
+    canToggleContentSearchTree,
+    contentSearchCaseSensitive,
+    contentSearchError,
+    contentSearchQuery,
+    contentSearchResult,
+    contentSearchScopeGlobs,
+    contentSearchScopePresets,
+    contentSearchScopeSummary,
+    contentSearchToggleLabel,
+    ensureTreePathLoaded,
+    expandedDirectories,
+    fileSearchError,
+    hasContentSearchScope,
+    hasSearchQuery,
+    isContentSearchAdvancedOpen,
+    isContentSearchAllExpanded,
+    isSearchingContent,
+    isSearchingFiles,
+    loadDirectory,
+    loadTree,
+    markFilePathKnown,
+    setContentSearchCaseSensitive,
+    setContentSearchQuery,
+    setExpandedDirectories,
+    setFileSearchQuery,
+    setIsContentSearchAdvancedOpen,
+    setIsContentSearchAllExpanded,
+    tree,
+    treeNodesForView,
+  } = useCodeWorkspaceExplorerState({
+    activePane,
+    activeRelativePath,
+    contentSearchScopeInput,
+    projectPath,
+  })
+  useEffect(() => {
+    markOpenedFileInExplorerRef.current = markFilePathKnown
+  }, [markFilePathKnown])
 
   const monacoTheme = useMemo(
     () => (effectiveTheme === 'dark' ? 'vs-dark' : resolveMonacoTheme(themeMode)),
@@ -391,12 +311,10 @@ export function CodeWorkspacePanel({
   } = useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
   const {
     codeFileDrawerState,
-    contentSearchScopeInput,
     cursorPositionsByPath,
     isRestoringCodeSessionRef,
     openTabPaths,
     setCodeFileDrawerState,
-    setContentSearchScopeInput,
     setCursorPositionsByPath,
     setOpenTabPaths,
     visibleOpenTabs,
@@ -406,6 +324,8 @@ export function CodeWorkspacePanel({
     persistedCodeFileDrawerState,
     persistedLastCodeFile,
     activeRelativePath,
+    contentSearchScopeInput,
+    setContentSearchScopeInput,
     knownFilePaths: tree.knownFilePaths,
     treeStatus: tree.status,
     setProjectCodeSession,
@@ -429,7 +349,6 @@ export function CodeWorkspacePanel({
     persistedProjectCodeSession,
     tree.knownFilePaths,
   ])
-  const topLevelDirectorySet = useMemo(() => collectTopLevelDirectories(tree.nodes), [tree.nodes])
   const quickDrawerFavorites = useMemo(
     () => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
     [allProjectFilePathSet, codeFileDrawerState.favorites]
@@ -540,110 +459,6 @@ export function CodeWorkspacePanel({
     captureCurrentModeScrollRef.current = captureCurrentModeScroll
   }, [captureCurrentModeScroll])
 
-  const loadDirectory = useCallback(async (directoryRelativePath: string | null): Promise<boolean> => {
-    const loadingKey = directoryRelativePath ?? ''
-    if (directoryRelativePath) {
-      const targetNode = findDirectoryNode(tree.nodes, directoryRelativePath)
-      if (targetNode?.isLoaded) return true
-    }
-    setTree((prev) => {
-      if (prev.loadingDirectories.has(loadingKey)) return prev
-      const nextLoadingDirectories = new Set(prev.loadingDirectories)
-      nextLoadingDirectories.add(loadingKey)
-      return {
-        ...prev,
-        loadingDirectories: nextLoadingDirectories,
-      }
-    })
-
-    try {
-      const result = await window.electronAPI.listProjectDirectoryFiles(projectPath, directoryRelativePath)
-      const sortedNodes = sortProjectNodes(result.nodes)
-      setTree((prev) => {
-        const nextLoadingDirectories = new Set(prev.loadingDirectories)
-        nextLoadingDirectories.delete(loadingKey)
-        return {
-          status: 'ready',
-          nodes: replaceDirectoryNodes(prev.nodes, result.directoryRelativePath, sortedNodes),
-          error: null,
-          knownFilePaths: mergeKnownFilePaths(prev.knownFilePaths, sortedNodes),
-          loadingDirectories: nextLoadingDirectories,
-          skippedDirectories: prev.skippedDirectories + result.skipped.directories,
-          skippedFiles: prev.skippedFiles + result.skipped.files,
-        }
-      })
-      return true
-    } catch (error) {
-      setTree((prev) => {
-        const nextLoadingDirectories = new Set(prev.loadingDirectories)
-        nextLoadingDirectories.delete(loadingKey)
-        return {
-          ...prev,
-          status: prev.nodes.length > 0 ? 'ready' : 'error',
-          error: error instanceof Error ? error.message : String(error),
-          loadingDirectories: nextLoadingDirectories,
-        }
-      })
-      return false
-    }
-  }, [projectPath])
-
-  const loadTree = useCallback(async () => {
-    const requestSeq = treeLoadRequestSeqRef.current + 1
-    treeLoadRequestSeqRef.current = requestSeq
-    setTree({
-      status: 'loading',
-      nodes: [],
-      error: null,
-      knownFilePaths: new Set(),
-      loadingDirectories: new Set(),
-      skippedDirectories: 0,
-      skippedFiles: 0,
-    })
-    setExpandedDirectories(new Set())
-    setFileSearchError(null)
-
-    try {
-      const result = await window.electronAPI.listProjectFiles(projectPath)
-      const sortedNodes = sortProjectNodes(result.nodes)
-      if (treeLoadRequestSeqRef.current !== requestSeq) return
-      setTree({
-        status: 'ready',
-        nodes: sortedNodes,
-        error: null,
-        knownFilePaths: mergeKnownFilePaths(new Set(), sortedNodes),
-        loadingDirectories: new Set(),
-        skippedDirectories: result.skipped.directories,
-        skippedFiles: result.skipped.files,
-      })
-    } catch (error) {
-      if (treeLoadRequestSeqRef.current !== requestSeq) return
-      setTree({
-        status: 'error',
-        nodes: [],
-        error: error instanceof Error ? error.message : String(error),
-        knownFilePaths: new Set(),
-        loadingDirectories: new Set(),
-        skippedDirectories: 0,
-        skippedFiles: 0,
-      })
-      setSearchResultNodes([])
-    }
-  }, [projectPath])
-
-  const ensureTreePathLoaded = useCallback(async (relativePath: string) => {
-    await expandTreePath(relativePath, collectParentDirectories(relativePath), {
-      loadDirectory,
-      setExpandedDirectories,
-    })
-  }, [loadDirectory])
-
-  useEffect(() => {
-    if (activePane !== 'code') return
-    if (tree.status !== 'idle' && tree.status !== 'error') return
-    void loadTree()
-  }, [activePane, loadTree, tree.status])
-
   useEffect(() => {
     const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
     const handleChange = (event: MediaQueryListEvent) => {
@@ -687,74 +502,7 @@ export function CodeWorkspacePanel({
   const removePathFromQuickDrawer = useCallback((relativePath: string) => {
     setCodeFileDrawerState((prev) => removeCodeFilePathFromDrawerState(prev, relativePath))
   }, [])
-
-  const contentSearchScopeGlobs = useMemo(
-    () => parseContentSearchScopeGlobs(contentSearchScopeInput),
-    [contentSearchScopeInput]
-  )
-  const contentSearchScopePresets = useMemo<ContentSearchScopePreset[]>(() => {
-    const presets: ContentSearchScopePreset[] = [{
-      id: 'all',
-      label: 'All',
-      hint: 'entire project',
-      scopeInput: '',
-      title: 'Search the whole project',
-    }]
-
-    for (const candidate of CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES) {
-      if (!topLevelDirectorySet.has(candidate)) continue
-      presets.push({
-        id: `dir:${candidate}`,
-        label: CONTENT_SEARCH_ROOT_SCOPE_LABELS[candidate] ?? candidate,
-        hint: `${candidate}/`,
-        scopeInput: `${candidate}/`,
-        title: `Search inside ${candidate}/`,
-      })
-    }
-
-    const activeDirectory = directoryFromRelativePath(activeRelativePath)
-    if (activeDirectory && !presets.some((preset) => preset.scopeInput === `${activeDirectory}/`)) {
-      presets.push({
-        id: 'current-dir',
-        label: 'This dir',
-        hint: `${activeDirectory}/`,
-        scopeInput: `${activeDirectory}/`,
-        title: `Search inside ${activeDirectory}/`,
-      })
-    }
-
-    const activeExtension = extensionFromRelativePath(activeRelativePath)
-    if (activeExtension) {
-      presets.push({
-        id: 'same-type',
-        label: `.${activeExtension}`,
-        hint: `*.${activeExtension}`,
-        scopeInput: activeExtension,
-        title: `Search ${activeExtension.toUpperCase()} files`,
-      })
-    }
-
-    return presets.slice(0, 7)
-  }, [activeRelativePath, topLevelDirectorySet])
-  const activeContentSearchScopeKey = useMemo(
-    () => contentSearchScopeKey(contentSearchScopeInput),
-    [contentSearchScopeInput]
-  )
-  const contentSearchScopeSummary = useMemo(() => (
-    contentSearchScopeGlobs.length > 0 ? contentSearchScopeGlobs.join(' · ') : 'All files'
-  ), [contentSearchScopeGlobs])
-  const activeContentSearchScopeLabel = useMemo(() => {
-    const activePreset = contentSearchScopePresets.find((preset) => contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey)
-    if (activePreset) return activePreset.label
-    if (contentSearchScopeGlobs.length === 1) return contentSearchScopeGlobs[0]
-    return `${contentSearchScopeGlobs.length} globs`
-  }, [activeContentSearchScopeKey, contentSearchScopeGlobs, contentSearchScopePresets])
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
-  const hasContentSearchQuery = contentSearchQuery.trim().length > 0
-  const hasContentSearchScope = contentSearchScopeGlobs.length > 0
-  const showContentSearchSummary = hasContentSearchQuery && !isSearchingContent && !contentSearchError
-  const canToggleContentSearchTree = hasContentSearchQuery && !isSearchingContent && contentSearchResult.files.length > 0
-  const contentSearchToggleLabel = isContentSearchAllExpanded ? 'Collapse all' : 'Expand all'
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
   }, [])
@@ -875,91 +623,6 @@ export function CodeWorkspacePanel({
   }, [toggleCodeViewMode])
 
   useEffect(() => {
-    const normalizedQuery = fileSearchQuery.trim()
-    if (!normalizedQuery) {
-      setIsSearchingFiles(false)
-      setFileSearchError(null)
-      setSearchResultNodes([])
-      return
-    }
-
-    const requestSeq = searchRequestSeqRef.current + 1
-    searchRequestSeqRef.current = requestSeq
-    setIsSearchingFiles(true)
-    setFileSearchError(null)
-
-    void window.electronAPI.searchProjectFiles(projectPath, normalizedQuery)
-      .then((result) => {
-        if (searchRequestSeqRef.current !== requestSeq) return
-        setSearchResultNodes(result)
-      })
-      .catch((error) => {
-        if (searchRequestSeqRef.current !== requestSeq) return
-        setSearchResultNodes([])
-        setFileSearchError(error instanceof Error ? error.message : String(error))
-      })
-      .finally(() => {
-        if (searchRequestSeqRef.current !== requestSeq) return
-        setIsSearchingFiles(false)
-      })
-  }, [fileSearchQuery, projectPath])
-
-  useEffect(() => {
-    if (!activeRelativePath) return
-    void ensureTreePathLoaded(activeRelativePath)
-  }, [activeRelativePath, ensureTreePathLoaded])
-
-  useEffect(() => {
-    const normalizedQuery = contentSearchQuery.trim()
-    if (!normalizedQuery) {
-      setIsSearchingContent(false)
-      setContentSearchError(null)
-      setIsContentSearchAllExpanded(false)
-      setContentSearchResult({
-        files: [],
-        totalMatches: 0,
-        limited: false,
-      })
-      return
-    }
-
-    const requestSeq = contentSearchRequestSeqRef.current + 1
-    contentSearchRequestSeqRef.current = requestSeq
-    setIsSearchingContent(true)
-    setContentSearchError(null)
-    setIsContentSearchAllExpanded(false)
-
-    void window.electronAPI.searchProjectContent(projectPath, normalizedQuery, {
-      caseSensitive: contentSearchCaseSensitive,
-      includeGlobs: contentSearchScopeGlobs.length > 0 ? contentSearchScopeGlobs : undefined,
-    })
-      .then((result) => {
-        if (contentSearchRequestSeqRef.current !== requestSeq) return
-        setContentSearchResult(result)
-        setIsContentSearchAllExpanded(result.files.length > 0)
-      })
-      .catch((error) => {
-        if (contentSearchRequestSeqRef.current !== requestSeq) return
-        setContentSearchResult({
-          files: [],
-          totalMatches: 0,
-          limited: false,
-        })
-        setIsContentSearchAllExpanded(false)
-        setContentSearchError(error instanceof Error ? error.message : String(error))
-      })
-      .finally(() => {
-        if (contentSearchRequestSeqRef.current !== requestSeq) return
-        setIsSearchingContent(false)
-      })
-  }, [
-    contentSearchCaseSensitive,
-    contentSearchQuery,
-    contentSearchScopeGlobs,
-    projectPath,
-  ])
-
-  useEffect(() => {
     const normalized = (persistedLastMarkdownPreviewMode === 'edit' || persistedLastMarkdownPreviewMode === 'preview' || persistedLastMarkdownPreviewMode === 'split')
       ? persistedLastMarkdownPreviewMode
       : 'edit'
@@ -972,8 +635,6 @@ export function CodeWorkspacePanel({
 
   const showExplorerPanel = !isNarrowViewport || isExplorerOpen
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
-  const hasSearchQuery = fileSearchQuery.trim().length > 0
-  const treeNodesForView = hasSearchQuery ? searchResultNodes : tree.nodes
   const showExplorerPanelForMode = viewMode === 'files' ? showExplorerPanel : true
   const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
   const handleToggleTreeDirectory = useCallback((relativePath: string) => {
@@ -1645,229 +1306,54 @@ export function CodeWorkspacePanel({
       <div className="min-h-0 flex-1">
         <div className="code-layout-grid h-full" style={isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
           {showExplorerPanelForMode && (
-            <aside className="code-tree-panel surface-card">
-              {viewMode === 'files' ? (
-                <>
-                  <div className="code-panel-header">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <DebouncedSearchInput
-                        inputRef={fileSearchInputRef}
-                        leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-                        placeholder="Search files (e.g. abvd)"
-                        inputClassName="code-search-input"
-                        debounceMs={FILE_SEARCH_DEBOUNCE_MS}
-                        onQueryChange={handleFileSearchQueryChange}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
-                      onClick={() => {
-                        if (!activeRelativePath) return
-                        const parentDirectories = collectParentDirectories(activeRelativePath)
-                        const hasUnloadedParent = parentDirectories.some((parent) => {
-                          const node = findDirectoryNode(tree.nodes, parent)
-                          return !node?.isLoaded
-                        })
-                        if (!hasUnloadedParent) {
-                          setLocateRequestToken((prev) => prev + 1)
-                          return
-                        }
-                        void ensureTreePathLoaded(activeRelativePath).then(() => {
-                          setLocateRequestToken((prev) => prev + 1)
-                        })
-                      }}
-                      title={activeRelativePath ? 'Locate current file' : 'No active file'}
-                      disabled={!activeRelativePath}
-                    >
-                      <LocateFixed className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                      onClick={() => void loadTree()}
-                      title="Reload file tree"
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-
-                  {tree.status === 'loading' ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
-                  ) : tree.status === 'error' ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
-                  ) : hasSearchQuery && isSearchingFiles ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching files...</div>
-                  ) : hasSearchQuery && fileSearchError ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{fileSearchError}</div>
-                  ) : hasSearchQuery && treeNodesForView.length === 0 ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
-                  ) : (
-                    <CodeFileTree
-                      nodes={treeNodesForView}
-                      activeRelativePath={activeRelativePath}
-                      expandedDirectories={expandedDirectories}
-                      flatFileListMode={hasSearchQuery}
-                      locateRequestToken={locateRequestToken}
-                      onToggleDirectory={handleToggleTreeDirectory}
-                      onSelectFile={handleSelectTreeFile}
-                      onOpenNodeFolder={handleOpenTreeNodeFolder}
-                      onCopyNodeName={handleCopyTreeNodeName}
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="code-panel-header code-search-main-header">
-                    <div className="code-search-title-row">
-                      <div className="code-search-title-lockup">
-                        <span className="code-search-title-icon">
-                          <FileSearch className="h-3.5 w-3.5" />
-                        </span>
-                        <div className="min-w-0">
-                          <div className="code-search-title">Global search</div>
-                          <div className="code-search-subtitle">
-                            {hasContentSearchScope ? `Scope: ${activeContentSearchScopeLabel}` : 'Search text across this project'}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className={`code-search-meta-action ${contentSearchCaseSensitive ? 'is-active' : ''}`}
-                        onClick={() => setContentSearchCaseSensitive((prev) => !prev)}
-                        title={contentSearchCaseSensitive ? 'Case sensitive search: on' : 'Case sensitive search: off'}
-                        aria-pressed={contentSearchCaseSensitive}
-                      >
-                        Aa
-                      </button>
-                    </div>
-                    <div className="code-search-main-query">
-                      <DebouncedSearchInput
-                        inputRef={contentSearchInputRef}
-                        leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-                        placeholder="Type text, symbol, or error message"
-                        inputClassName="code-search-input code-search-input--hero"
-                        debounceMs={FILE_SEARCH_DEBOUNCE_MS}
-                        onQueryChange={handleContentSearchQueryChange}
-                        syncValue={contentSearchQuery}
-                      />
-                    </div>
-                    <ScrollAreaPrimitive.Root className="code-search-scope-strip-root">
-                      <ScrollAreaPrimitive.Viewport className="code-search-scope-strip-viewport" aria-label="Search scope presets">
-                        <div className="code-search-scope-strip">
-                          {contentSearchScopePresets.map((preset) => {
-                            const isActive = contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey
-                            return (
-                              <button
-                                key={preset.id}
-                                type="button"
-                                className={`code-search-scope-pill ${isActive ? 'is-active' : ''}`}
-                                onClick={() => applyContentSearchScopePreset(preset)}
-                                title={preset.title}
-                                aria-pressed={isActive}
-                              >
-                                <span className="code-search-scope-pill-label">{preset.label}</span>
-                                <span className="code-search-scope-pill-hint">{preset.hint}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </ScrollAreaPrimitive.Viewport>
-                      <ScrollAreaPrimitive.Scrollbar
-                        className="code-search-scope-scrollbar"
-                        orientation="horizontal"
-                      >
-                        <ScrollAreaPrimitive.Thumb className="code-search-scope-scrollbar-thumb" />
-                      </ScrollAreaPrimitive.Scrollbar>
-                    </ScrollAreaPrimitive.Root>
-                    <div className="code-search-utility-row">
-                      <button
-                        type="button"
-                        className="code-search-inline-toggle"
-                        onClick={() => setIsContentSearchAdvancedOpen((prev) => !prev)}
-                        aria-expanded={isContentSearchAdvancedOpen}
-                        title="Open advanced glob scope"
-                      >
-                        {isContentSearchAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                        <span>Advanced scope</span>
-                        {hasContentSearchScope && (
-                          <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="code-search-meta-action code-search-toggle-action"
-                        onClick={handleToggleContentSearchTree}
-                        disabled={!canToggleContentSearchTree}
-                        aria-disabled={!canToggleContentSearchTree}
-                      >
-                        {contentSearchToggleLabel}
-                      </button>
-                    </div>
-                    {isContentSearchAdvancedOpen && (
-                      <div className="code-search-advanced-panel">
-                        <label className="code-search-advanced-label" htmlFor="code-content-search-scope-input">
-                          Include globs
-                        </label>
-                        <input
-                          id="code-content-search-scope-input"
-                          type="text"
-                          value={contentSearchScopeInput}
-                          onChange={(event) => setContentSearchScopeInput(event.target.value)}
-                          placeholder="src/**/*.ts, *.md, docs/**"
-                          className="code-search-input code-search-scope-input"
-                          spellCheck={false}
-                          title={contentSearchScopeSummary}
-                        />
-                        <div className="code-search-advanced-help">
-                          Separate scopes with space or comma. Short inputs like <code>ts</code> become <code>*.ts</code>.
-                        </div>
-                      </div>
-                    )}
-                    {showContentSearchSummary && (
-                      <div className="code-search-main-toolbar">
-                        <div className="code-search-main-meta">
-                          <span className="code-search-main-meta-text">
-                            <span className="code-search-main-stat">{contentSearchResult.files.length} files</span>
-                            <span className="code-search-main-meta-sep">•</span>
-                            <span className="code-search-main-stat">{contentSearchResult.totalMatches} matches</span>
-                            <span className="code-search-main-meta-sep">•</span>
-                            <span className="code-search-main-stat">
-                              {hasContentSearchScope ? `${contentSearchScopeGlobs.length} globs` : 'all files'}
-                            </span>
-                            {contentSearchResult.limited && (
-                              <span className="code-search-main-limited">limited</span>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {contentSearchQuery.trim().length === 0 ? (
-                    <div className="code-panel-empty">
-                      <div className="text-sm text-[color:var(--color-muted-foreground)]">
-                        Enter keywords to run global content search.
-                      </div>
-                    </div>
-                  ) : isSearchingContent ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching content...</div>
-                  ) : contentSearchError ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{contentSearchError}</div>
-                  ) : contentSearchResult.files.length === 0 ? (
-                    <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching text found.</div>
-                  ) : (
-                    <CodeContentSearchTree
-                      ref={contentSearchTreeRef}
-                      files={contentSearchResult.files}
-                      activeLocation={activeContentSearchLocation}
-                      autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
-                      onOpenMatch={handleOpenContentSearchResult}
-                    />
-                  )}
-                </>
-              )}
-            </aside>
+            <CodeWorkspaceSidebar
+              activeContentSearchLocation={activeContentSearchLocation}
+              activeContentSearchScopeKey={activeContentSearchScopeKey}
+              activeContentSearchScopeLabel={activeContentSearchScopeLabel}
+              activeRelativePath={activeRelativePath}
+              autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
+              canToggleContentSearchTree={canToggleContentSearchTree}
+              contentSearchCaseSensitive={contentSearchCaseSensitive}
+              contentSearchError={contentSearchError}
+              contentSearchInputRef={contentSearchInputRef}
+              contentSearchQuery={contentSearchQuery}
+              contentSearchResult={contentSearchResult}
+              contentSearchScopeGlobs={contentSearchScopeGlobs}
+              contentSearchScopeInput={contentSearchScopeInput}
+              contentSearchScopePresets={contentSearchScopePresets}
+              contentSearchScopeSummary={contentSearchScopeSummary}
+              contentSearchToggleLabel={contentSearchToggleLabel}
+              contentSearchTreeRef={contentSearchTreeRef}
+              ensureTreePathLoaded={ensureTreePathLoaded}
+              expandedDirectories={expandedDirectories}
+              fileSearchError={fileSearchError}
+              fileSearchInputRef={fileSearchInputRef}
+              hasContentSearchScope={hasContentSearchScope}
+              hasSearchQuery={hasSearchQuery}
+              isContentSearchAdvancedOpen={isContentSearchAdvancedOpen}
+              isSearchingContent={isSearchingContent}
+              isSearchingFiles={isSearchingFiles}
+              locateRequestToken={locateRequestToken}
+              onApplyContentSearchScopePreset={applyContentSearchScopePreset}
+              onChangeContentSearchQuery={handleContentSearchQueryChange}
+              onChangeFileSearchQuery={handleFileSearchQueryChange}
+              onCopyTreeNodeName={handleCopyTreeNodeName}
+              onOpenContentSearchResult={handleOpenContentSearchResult}
+              onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
+              onReloadTree={() => {
+                void loadTree()
+              }}
+              onSelectTreeFile={handleSelectTreeFile}
+              onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
+              onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
+              onSetContentSearchScopeInput={setContentSearchScopeInput}
+              onToggleContentSearchTree={handleToggleContentSearchTree}
+              onToggleTreeDirectory={handleToggleTreeDirectory}
+              setLocateRequestToken={setLocateRequestToken}
+              tree={tree}
+              treeNodesForView={treeNodesForView}
+              viewMode={viewMode}
+            />
           )}
 
           {showEditorPanelForMode && (
