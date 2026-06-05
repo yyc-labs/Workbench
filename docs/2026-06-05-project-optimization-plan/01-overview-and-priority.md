@@ -21,7 +21,7 @@
 | 文件 | 当前行数 | 状态 | 说明 |
 |------|----------|------|------|
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 本轮完成 | 第二轮已完成，父组件已收敛到编排层 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 进行中 | AI Flow 周边已拆，Git helper / history 已做第一轮下沉 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 本轮完成 | 已进入目标区间，主体区 / 顶部区 / modal 已拆出 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 待拆 | 资料编辑、排序、设置仍集中在单文件 |
 | `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 待拆 | diff、冲突编辑、Monaco 初始化仍耦合 |
 | `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 待拆 | 初始化、缓存、查找替换、命令仍集中 |
@@ -58,6 +58,13 @@
 - `src/core/renderer/pages/code/useCodeWorkspaceRestoreState.ts` 已收口初始恢复、content search reveal 和 cursor reveal
 - `src/core/renderer/pages/detail/detail.gitOperations.ts` 已收口 Git 操作状态、状态文案和 diff/branch 通用 helper
 - `src/core/renderer/pages/detail/detail.commitHistory.tsx` 已收口提交历史映射和历史项子组件
+- `src/core/renderer/pages/detail/detail.aiCommitPanel.types.ts` 已收口分支候选、middle panel 和确认弹窗类型
+- `src/core/renderer/pages/detail/DetailAiCommitHeader.tsx` 已承接顶部项目切换、链接入口和 AI 状态摘要
+- `src/core/renderer/pages/detail/DetailAiCommitMiddlePanel.tsx` 已承接提交历史 / AI 日志 / Git 日志中区
+- `src/core/renderer/pages/detail/DetailAiCommitBranchPanel.tsx` 已承接分支、远程和 Git 操作右区
+- `src/core/renderer/pages/detail/DetailAiCommitWorkingTreePanel.tsx` 已承接工作区文件列表左区
+- `src/core/renderer/pages/detail/DetailAiCommitOperationConfirmModal.tsx`、`DetailAiCommitBranchManagerModal.tsx` 已承接两类弹窗
+- `src/core/renderer/pages/detail/DetailAiCommitGitGuideModal.tsx` 已承接 Git guide 弹窗
 
 当前状态：
 
@@ -66,13 +73,14 @@
 - `index.ts` 已收缩为主进程启动编排层
 - IPC 注册改为启动期单次注册，避免窗口重建时重复挂 handler
 - `CodeWorkspacePanel.tsx` 已从 2906 行降到 732 行，进入 700-900 行目标区间
+- `DetailAiCommitPanel.tsx` 已从 2248 行降到 989 行，左中右主体区、顶部区和三类 modal 已迁出，进入 800-1000 行目标区间
 - `npm run typecheck` 已于本次核对通过
 
 ### 2.3 当前已确认的问题
 
 - `CodeWorkspacePanel.tsx` 的滚动同步、Markdown 预览模式和恢复链路已经下沉，但 viewport、quick drawer 和搜索聚焦仍集中在入口层，后续只适合做收口型整理。
 - `useCodeWorkspaceExplorerState.ts` 已单独成文件，但也达到 454 行；如果后续继续往里堆，会把问题从父组件平移到 hook。
-- `DetailAiCommitPanel.tsx` 虽然已经拆出 `detail.gitOperations.ts` 和 `detail.commitHistory.tsx`，但 Git 操作判断的剩余编排、分支候选、确认弹窗和右侧主体 UI 仍在单文件内。
+- `DetailAiCommitPanel.tsx` 已进入目标区间，但 diff/conflict 请求链路、branch manager handler 和部分状态编排仍集中在父组件里。
 - `DetailDocumentationCard.tsx` 基本仍是单文件实现，拖拽排序、标签设置、编辑表单、密钥展示都混在一起。
 - `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 都内嵌了 Monaco worker 初始化与查找控件适配逻辑，已经出现重复实现。
 
@@ -80,17 +88,17 @@
 
 建议按下面顺序做，不要并行拆多个大文件：
 
-1. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
-2. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
-3. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
+1. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+2. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
+3. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`（只保留收口型跟进）
 4. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
 5. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
 
 原因：
 
 - 主进程入口拆分已经完成，不再需要占据第一优先级。
-- `CodeWorkspacePanel.tsx` 第二轮已经达标，当前最高收益点转移到 `DetailAiCommitPanel.tsx`。
-- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 之间已经出现重复基础设施，适合在第二批统一收口。
+- `CodeWorkspacePanel.tsx` 和 `DetailAiCommitPanel.tsx` 都已达标，当前最高收益点转移到 `MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx` 的共享基础设施。
+- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 之间已经出现重复基础设施，适合优先统一收口。
 - `project-file-service.ts` 已完成，可以从后续顺序中移除。
 - `DetailDocumentationCard.tsx` 虽然也大，但相对更独立，适合放在第三批。
 
@@ -104,7 +112,7 @@
 ### M2
 
 - 拆 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
-- 完成 Git/分支/历史区域的主体拆分
+- 完成 Git/分支/历史/工作区主体区、顶部区和 modal 的拆分
 
 ### M3
 
@@ -119,19 +127,19 @@
 
 ## 5. 下一步建议
 
-如果按这套计划继续往下做，建议下一步直接从：
+如果按这套计划继续往下做，建议下一步直接进入：
 
-- `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` 的 Git 计算逻辑 / 派生显示数据 / 操作判断继续拆
+- `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` 的 Monaco 共享基础设施治理
 
 开始拆。
 
 这一步最值得继续切的是：
 
-- Git 操作状态和权限判断
-- 分支展示、提交历史和复制状态的 view-model
-- 中左三区域的展示组件边界
+- Monaco worker / environment 初始化
+- 搜索控件适配
+- diff / editor 的共享命令和视图切换支撑
 
-这样能先把当前渲染层最大的业务入口压下来，再进入 Monaco 共享基础设施治理。
+这样可以先消掉当前最明显的重复实现，再决定是否回头继续收口 `DetailAiCommitPanel.tsx` 内剩余 handler。
 
 ## 6. 后续执行清单
 
@@ -139,9 +147,9 @@
 
 优先做：
 
-1. 先抽 Git 操作判断和派生显示数据
-2. 再抽分支管理区和提交历史区
-3. 最后抽 AI 日志区和操作工具栏
+1. 仅保留收口型整理
+2. 优先评估 diff / conflict 请求逻辑是否需要独立 hook
+3. 评估 branch manager handler 是否下沉到独立 hook
 
 这一轮结束时应达到：
 

@@ -28,7 +28,7 @@
 | 文件 | 当前行数 | 状态 |
 |------|----------|------|
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 第二轮已完成，已进入目标区间 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 进行中，已拆出一轮 Git helper / history 模块 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 第二轮已达目标区间，主体区 / 顶部区 / modal 已拆出 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 基本未拆 |
 | `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 基本未拆 |
 | `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 基本未拆 |
@@ -62,6 +62,10 @@
 - `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` 当前轮拆分
   - `detail.gitOperations.ts` 已收口 Git 操作状态、状态文案和 diff/branch 通用 helper
   - `detail.commitHistory.tsx` 已收口提交历史映射和历史项子组件
+  - `detail.aiCommitPanel.types.ts` 已收口分支候选、middle panel 和确认弹窗类型
+  - `DetailAiCommitHeader.tsx`、`DetailAiCommitMiddlePanel.tsx`、`DetailAiCommitBranchPanel.tsx`、`DetailAiCommitWorkingTreePanel.tsx` 已拆出
+  - `DetailAiCommitOperationConfirmModal.tsx`、`DetailAiCommitBranchManagerModal.tsx` 已拆出
+  - `DetailAiCommitGitGuideModal.tsx` 已拆出
 - 静态检查
   - `npm run typecheck` 已于本次核对通过
 
@@ -86,8 +90,8 @@
 
 如果下一步直接动代码，优先继续做：
 
-1. 进入 `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`，先抽 Git 计算逻辑、派生显示数据和操作判断
-2. 整理 `MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx` 共享的 Monaco 环境配置
+1. 进入 `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`，统一收口 Monaco 环境与搜索控件适配
+2. 回头视情况再收口 `DetailAiCommitPanel.tsx` 的 diff/conflict 请求链路和 branch manager handler
 3. 回来更新本计划中的当前进度、遗留问题和验证范围
 
 后续细节见子文档，不再继续往这个入口文件里堆完整计划正文。

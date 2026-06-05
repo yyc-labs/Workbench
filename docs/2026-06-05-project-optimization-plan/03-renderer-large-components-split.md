@@ -7,7 +7,7 @@
 | 文件 | 当前行数 | 目标 |
 |------|----------|------|
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 已进入目标区间，后续只做收口 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 1879 | 继续降到 800-1000 行 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 拆出区域组件和 view-model |
 | `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 拆出 diff 状态、冲突编辑与 Monaco 基础设施 |
 | `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 拆出 Monaco 初始化、搜索控件与命令逻辑 |
@@ -57,8 +57,8 @@
 
 当前问题：
 
-- 已经拆出 AI Flow 相关模块，并且本轮额外拆出 Git helper / history 子模块，但 Git 状态编排、分支操作、冲突处理、确认弹窗等主体逻辑仍集中在一个 1879 行文件里。
-- 文件内部仍保留大量本地 helper、派生数据和局部子视图。
+- 已经拆出 AI Flow 相关模块，并且本轮额外拆出 Git helper / history / left-middle-right 主体区 / 顶部区 / 三类 modal，但 diff/conflict 请求链路和 branch manager handler 仍集中在父组件里。
+- 文件内部剩余压力已经从“大段 JSX”转为“状态编排与请求链路”，优先级已下降。
 
 已完成：
 
@@ -70,26 +70,29 @@
 - 已拆出 `gitGuideContent.ts`
 - 已拆出 `detail.gitOperations.ts`
 - 已拆出 `detail.commitHistory.tsx`
+- 已拆出 `detail.aiCommitPanel.types.ts`
+- 已拆出 `DetailAiCommitHeader.tsx`
+- 已拆出 `DetailAiCommitMiddlePanel.tsx`
+- 已拆出 `DetailAiCommitBranchPanel.tsx`
+- 已拆出 `DetailAiCommitWorkingTreePanel.tsx`
+- 已拆出 `DetailAiCommitOperationConfirmModal.tsx`
+- 已拆出 `DetailAiCommitBranchManagerModal.tsx`
+- 已拆出 `DetailAiCommitGitGuideModal.tsx`
 
 目标：
 
 - 分离“Git 计算逻辑”和“面板展示逻辑”。
 - 分离“左中右区域 UI”和“操作判断逻辑”。
 
-建议拆分：
+建议后续只做收口：
 
-- `gitOperationState.ts`
-- `branchDisplay.ts`
-- `commitHistoryViewModel.ts`
-- `GitOperationToolbar.tsx`
-- `GitChangedFilesPanel.tsx`
-- `BranchManagerPanel.tsx`
-- `AiCommitLogPanel.tsx`
+- `useDetailAiCommitDiffState.ts`
+- `useDetailAiCommitBranchManager.ts`
 
 验收：
 
-- `DetailAiCommitPanel.tsx` 控制在 800-1000 行以内
-- 入口面板主要保留状态组织、事件分发和布局拼装
+- `DetailAiCommitPanel.tsx` 已控制在 800-1000 行以内
+- 入口面板已主要保留状态组织、事件分发和布局拼装
 
 ## 4. 第二阶段文件
 
@@ -179,7 +182,7 @@
 - 派生显示数据
 - 操作权限判断
 
-不要一开始就只拆左栏、右栏 UI。否则最后会变成多个展示组件一起依赖同一个超大父组件。
+当前这一步已经不再需要继续为了降行数做 UI 切分。后续如果再动，重点应该转到 diff/conflict 请求和 branch manager handler 的状态收口，而不是继续机械拆 JSX。
 
 ### 5.3 `DetailDocumentationCard.tsx` / `DetailGitDiffDrawer.tsx` / `MonacoCodeEditor.tsx`
 
