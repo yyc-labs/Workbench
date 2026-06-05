@@ -14,6 +14,7 @@ export interface MarkdownFrontmatterMeta {
 
 export interface ParsedMarkdownDocument {
   hasFrontmatter: boolean
+  markdownBodyLineOffset: number
   markdownBody: string
   ruleMetadata: CursorRuleFrontmatterMeta | null
   markdownMetadata: MarkdownFrontmatterMeta | null
@@ -124,12 +125,18 @@ function parseMarkdownMetadata(kv: FrontmatterKv): MarkdownFrontmatterMeta | nul
   return { title, description }
 }
 
+function countLines(value: string): number {
+  if (!value) return 0
+  return value.split('\n').length
+}
+
 export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
   const normalized = source.replace(/\r\n/g, '\n')
   const frontmatterMatch = normalized.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/)
   if (!frontmatterMatch) {
     return {
       hasFrontmatter: false,
+      markdownBodyLineOffset: 0,
       markdownBody: source,
       ruleMetadata: null,
       markdownMetadata: null,
@@ -140,6 +147,7 @@ export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
   const { kv, globs } = parseFrontmatter(frontmatterRaw)
   return {
     hasFrontmatter: true,
+    markdownBodyLineOffset: Math.max(0, countLines(frontmatterMatch[0]) - 1),
     markdownBody: normalized.slice(frontmatterMatch[0].length),
     ruleMetadata: parseRuleMetadata(kv, globs),
     markdownMetadata: parseMarkdownMetadata(kv),

@@ -1,10 +1,11 @@
-import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
+import { Children, createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { Check, Copy } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
-import type { Components } from 'react-markdown'
+import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import type { Element as HastElement } from 'hast'
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
 
@@ -14,6 +15,16 @@ const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
 const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
 export const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
+const MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR = '[data-source-start-line][data-source-end-line]'
+const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS = 'code-markdown-source-reveal'
+const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_DURATION_MS = 1800
+
+type SourceTrackedMarkdownNode = Pick<HastElement, 'position'>
+
+type SourceLineDataProps = {
+  'data-source-start-line': number
+  'data-source-end-line': number
+}
 
 function normalizePathSegments(value: string): string[] {
   return value
@@ -236,6 +247,92 @@ function canHighlightMarkdownCodeBlock(codeText: string): boolean {
   return countTextLines(codeText) <= MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD
 }
 
+function getSourceLineDataProps(
+  node: SourceTrackedMarkdownNode | null | undefined,
+  lineOffset: number
+): SourceLineDataProps | undefined {
+  const startLine = node?.position?.start.line
+  const endLine = node?.position?.end.line
+  if (typeof startLine !== 'number' || typeof endLine !== 'number') {
+    return undefined
+  }
+
+  return {
+    'data-source-start-line': Math.max(1, Math.floor(startLine) + lineOffset),
+    'data-source-end-line': Math.max(1, Math.floor(endLine) + lineOffset),
+  }
+}
+
+type MarkdownBlockProps<TagName extends keyof JSX.IntrinsicElements> =
+  JSX.IntrinsicElements[TagName] & ExtraProps
+
+function createSourceTrackedBlockComponent<TagName extends keyof JSX.IntrinsicElements>(
+  tagName: TagName,
+  lineOffset: number
+): NonNullable<Components[TagName]> {
+  return function SourceTrackedBlock({
+    children,
+    node,
+    ...props
+  }: MarkdownBlockProps<TagName>) {
+    const sourceLineProps = getSourceLineDataProps(node as HastElement | undefined, lineOffset)
+    return createElement(tagName, { ...props, ...sourceLineProps }, children)
+  } as NonNullable<Components[TagName]>
+}
+
+function parseSourceLineAttribute(value: string | null): number | null {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumber: number): boolean {
+  const targetLine = Math.max(1, Math.floor(lineNumber))
+  const candidates = Array.from(
+    container.querySelectorAll<HTMLElement>(MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR)
+  )
+
+  if (candidates.length <= 0) return false
+
+  let containing: HTMLElement | null = null
+  let nextClosest: { element: HTMLElement; startLine: number } | null = null
+  let previousClosest: { element: HTMLElement; endLine: number } | null = null
+
+  for (const element of candidates) {
+    const startLine = parseSourceLineAttribute(element.getAttribute('data-source-start-line'))
+    const endLine = parseSourceLineAttribute(element.getAttribute('data-source-end-line'))
+    if (startLine == null || endLine == null) continue
+
+    if (startLine <= targetLine && targetLine <= endLine) {
+      containing = element
+      break
+    }
+
+    if (startLine > targetLine && (!nextClosest || startLine < nextClosest.startLine)) {
+      nextClosest = { element, startLine }
+    }
+
+    if (endLine < targetLine && (!previousClosest || endLine > previousClosest.endLine)) {
+      previousClosest = { element, endLine }
+    }
+  }
+
+  const target = containing ?? nextClosest?.element ?? previousClosest?.element
+  if (!target) return false
+
+  const highlighted = container.querySelectorAll<HTMLElement>(`.${MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS}`)
+  highlighted.forEach((element) => {
+    element.classList.remove(MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS)
+  })
+
+  target.classList.add(MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS)
+  window.setTimeout(() => {
+    target.classList.remove(MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS)
+  }, MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_DURATION_MS)
+  target.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+  return true
+}
+
 function useNearViewport<T extends Element>(rootMargin: string): [RefObject<T>, boolean] {
   const ref = useRef<T | null>(null)
   const [isNearViewport, setIsNearViewport] = useState(false)
@@ -283,9 +380,16 @@ type MarkdownCodeBlockProps = {
   language: string
   themeMode: 'light' | 'dark'
   enableSyntaxHighlight: boolean
+  sourceLineProps?: SourceLineDataProps
 }
 
-function MarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighlight }: MarkdownCodeBlockProps) {
+function MarkdownCodeBlock({
+  codeText,
+  language,
+  themeMode,
+  enableSyntaxHighlight,
+  sourceLineProps,
+}: MarkdownCodeBlockProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
   const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText) && isNearViewport
@@ -308,7 +412,7 @@ function MarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighligh
   const copyLabel = copyStatus === 'success' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy'
 
   return (
-    <div ref={containerRef} className="code-markdown-syntax-wrap">
+    <div ref={containerRef} className="code-markdown-syntax-wrap" {...sourceLineProps}>
       <button
         type="button"
         className={`code-markdown-copy-btn ${
@@ -350,6 +454,7 @@ function MarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighligh
 type CreateMarkdownComponentsOptions = {
   activeRelativePath: string | null
   enableMarkdownSyntaxHighlight: boolean
+  lineOffset?: number
   projectPath: string
   themeMode: 'light' | 'dark'
 }
@@ -357,14 +462,34 @@ type CreateMarkdownComponentsOptions = {
 export function createMarkdownComponents({
   activeRelativePath,
   enableMarkdownSyntaxHighlight,
+  lineOffset = 0,
   projectPath,
   themeMode,
 }: CreateMarkdownComponentsOptions): Components {
   return {
-    pre({ children }) {
+    h1: createSourceTrackedBlockComponent('h1', lineOffset),
+    h2: createSourceTrackedBlockComponent('h2', lineOffset),
+    h3: createSourceTrackedBlockComponent('h3', lineOffset),
+    h4: createSourceTrackedBlockComponent('h4', lineOffset),
+    h5: createSourceTrackedBlockComponent('h5', lineOffset),
+    h6: createSourceTrackedBlockComponent('h6', lineOffset),
+    p: createSourceTrackedBlockComponent('p', lineOffset),
+    blockquote: createSourceTrackedBlockComponent('blockquote', lineOffset),
+    ul: createSourceTrackedBlockComponent('ul', lineOffset),
+    ol: createSourceTrackedBlockComponent('ol', lineOffset),
+    li: createSourceTrackedBlockComponent('li', lineOffset),
+    table: createSourceTrackedBlockComponent('table', lineOffset),
+    thead: createSourceTrackedBlockComponent('thead', lineOffset),
+    tbody: createSourceTrackedBlockComponent('tbody', lineOffset),
+    tr: createSourceTrackedBlockComponent('tr', lineOffset),
+    th: createSourceTrackedBlockComponent('th', lineOffset),
+    td: createSourceTrackedBlockComponent('td', lineOffset),
+    hr: createSourceTrackedBlockComponent('hr', lineOffset),
+    pre({ children, node }) {
+      const sourceLineProps = getSourceLineDataProps(node, lineOffset)
       const codeBlock = extractCodeBlockFromPreChildren(children)
       if (!codeBlock) {
-        return <pre>{children}</pre>
+        return <pre {...sourceLineProps}>{children}</pre>
       }
 
       return (
@@ -373,6 +498,7 @@ export function createMarkdownComponents({
           language={codeBlock.language}
           themeMode={themeMode}
           enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
+          sourceLineProps={sourceLineProps}
         />
       )
     },

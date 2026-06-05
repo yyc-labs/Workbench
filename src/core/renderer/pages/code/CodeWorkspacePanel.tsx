@@ -20,6 +20,7 @@ import {
   toggleFavoriteCodeFilePath,
 } from './code.helpers'
 import { copyTextToClipboard } from './code.clipboard'
+import { revealMarkdownPreviewSourceLine } from './code.markdown'
 import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
@@ -292,12 +293,18 @@ export function CodeWorkspacePanel({
     editorRef,
     editorValue,
     ensureTreePathLoaded,
+    isShowingPreview,
     isShowingEditor,
     isRestoringCodeSessionRef,
     openFile,
     persistedLastCodeFile,
     persistedProjectCodeSession,
     projectId,
+    revealPreviewPosition: (lineNumber: number) => {
+      const preview = previewScrollRef.current
+      if (!preview) return false
+      return revealMarkdownPreviewSourceLine(preview, lineNumber)
+    },
     treeStatus: tree.status,
   })
   captureCurrentModeScrollRef.current = captureCurrentModeScroll
@@ -504,16 +511,12 @@ export function CodeWorkspacePanel({
   }, [isNarrowViewport, openFile])
 
   const handleOpenContentSearchResult = useCallback((relativePath: string, lineNumber: number, column: number) => {
-    const isMarkdownTarget = /\.(md|markdown|mdx|mdc)$/i.test(relativePath)
-    if (isMarkdownTarget && effectiveMarkdownPreviewMode === 'preview') {
-      setMarkdownPreviewMode(isNarrowViewport ? 'edit' : 'split')
-    }
     void openContentSearchMatch(relativePath, lineNumber, column)
     setActiveContentSearchLocation({ relativePath, lineNumber, column })
     if (isNarrowViewport) {
       setIsExplorerOpen(false)
     }
-  }, [effectiveMarkdownPreviewMode, isNarrowViewport, openContentSearchMatch, setMarkdownPreviewMode])
+  }, [isNarrowViewport, openContentSearchMatch])
 
   const handleToggleContentSearchTree = useCallback(() => {
     const tree = contentSearchTreeRef.current

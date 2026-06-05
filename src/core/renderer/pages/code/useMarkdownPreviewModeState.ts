@@ -131,9 +131,16 @@ export function useMarkdownPreviewModeState({
   const markdownComponents = useMemo<Components>(() => createMarkdownComponents({
     activeRelativePath,
     enableMarkdownSyntaxHighlight,
+    lineOffset: parsedMarkdownDoc?.markdownBodyLineOffset ?? 0,
     projectPath,
     themeMode: effectiveTheme,
-  }), [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, projectPath])
+  }), [
+    activeRelativePath,
+    effectiveTheme,
+    enableMarkdownSyntaxHighlight,
+    parsedMarkdownDoc?.markdownBodyLineOffset,
+    projectPath,
+  ])
 
   const handlePasteImage = useCallback(async (file: File | null, clipboardEvent?: ClipboardEvent): Promise<string | null> => {
     if (!isMarkdownFile || !activeRelativePath) return null
