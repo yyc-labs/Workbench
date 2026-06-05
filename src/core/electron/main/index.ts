@@ -3,8 +3,7 @@ import { join, basename } from 'path'
 import { createHash } from 'crypto'
 import { spawn } from 'child_process'
 import { tmpdir } from 'os'
-import { writeFileSync, unlinkSync } from 'fs'
-import { constants as FsConstants } from 'fs'
+import { writeFileSync, unlinkSync, constants as FsConstants } from 'fs'
 import { access, readFile, writeFile, realpath, stat } from 'fs/promises'
 import { StringDecoder } from 'string_decoder'
 import { ProcessManager } from './runner'
@@ -37,6 +36,8 @@ import {
   getDocLinkSecret,
   setDocLinkSecret,
 } from './doc-link-secret-store'
+import { createWindow, applyWindowBackground } from './window/createWindow'
+import { openFolder, openTerminalAtPath, openVsCode, resolveWslVsCodeTarget } from './shell/openers'
 import type {
   AiCommitTaskSnapshot,
   AiCommitRunOverride,
@@ -70,23 +71,30 @@ let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 const activeAiCommitProjects = new Set<string>()
+let ipcHandlersRegistered = false
 
-type ThemeMode = AppConfig['theme']
+function createMainWindow(): void {
+  const config = loadConfig()
 
-function resolveEffectiveTheme(theme: ThemeMode): 'light' | 'dark' {
-  if (theme === 'system') {
-    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-  }
-  return theme
-}
+  mainWindow = createWindow({
+    theme: config.theme,
+    shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+    onToggleViewMode: () => {
+      mainWindow?.webContents.send(IPC.CODE_TOGGLE_VIEW_MODE)
+    },
+    onFocusSearch: () => {
+      mainWindow?.webContents.send(IPC.CODE_FOCUS_SEARCH)
+    },
+    onWindowStateChange: (isMaximized) => {
+      mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized })
+    },
+    onClosed: () => {
+      processManager?.setOutputWindow(null)
+      mainWindow = null
+    },
+  })
 
-function getWindowBackgroundColor(theme: ThemeMode): string {
-  return resolveEffectiveTheme(theme) === 'dark' ? '#09090b' : '#f5f7fb'
-}
-
-function applyWindowBackground(theme: ThemeMode): void {
-  if (!mainWindow) return
-  mainWindow.setBackgroundColor(getWindowBackgroundColor(theme))
+  processManager?.setOutputWindow(mainWindow)
 }
 
 function sendAiCommitOutput(projectId: string, data: string): void {
@@ -194,7 +202,9 @@ async function runAiCommit(
   )
   const scriptPs1Path = join(__dirname, '../../script/auto-git-commit/auto_commit.ps1')
   const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
-  const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(projectPath) : null
+  const wslTarget = process.platform === 'win32'
+    ? resolveWslVsCodeTarget(projectPath, bootCapability?.wslDistro || 'Ubuntu')
+    : null
 
   sendAiCommitStatus(projectId, 'running')
   sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
@@ -440,39 +450,6 @@ function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'):
   return `${basename(projectPath)}-${normalizedCli}-${cliAwareMd5}`
 }
 
-function resolveWslVsCodeTarget(pathValue: string): { distro: string; linuxPath: string } | null {
-  const normalized = pathValue.trim().replace(/\\/g, '/')
-  if (!normalized) return null
-
-  const uncWsl = normalized.match(/^\/\/(?:wsl\.localhost|wsl\$)\/([^/]+)\/?(.*)$/i)
-  if (uncWsl) {
-    const distro = uncWsl[1]
-    const rest = uncWsl[2] ?? ''
-    const linuxPath = rest ? `/${rest.replace(/^\/+/, '')}` : '/'
-    return { distro, linuxPath }
-  }
-
-  if (normalized.startsWith('/')) {
-    // /mnt/<drive>/... maps to Windows drives and should open locally.
-    if (/^\/mnt\/[a-z](?:\/|$)/i.test(normalized)) {
-      return null
-    }
-    return {
-      distro: bootCapability?.wslDistro || 'Ubuntu',
-      linuxPath: normalized,
-    }
-  }
-
-  // Accept linux paths that miss the leading slash, e.g. "mnt/d/workspace".
-  // These are Windows-mounted paths in WSL form and should open locally.
-  const noLeadingSlash = normalized.replace(/^\/+/, '')
-  if (/^mnt\/[a-z](?:\/|$)/i.test(noLeadingSlash)) {
-    return null
-  }
-
-  return null
-}
-
 function emptyGitBranchInfo(): GitBranchInfo {
   return {
     current: '',
@@ -565,7 +542,9 @@ function appendGitOutputLimitNotice(
 
 function runGitCommand(cwd: string, args: string[], limits?: GitCommandLimits): Promise<GitCommandExecutionResult> {
   return new Promise((resolve) => {
-    const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(cwd) : null
+    const wslTarget = process.platform === 'win32'
+      ? resolveWslVsCodeTarget(cwd, bootCapability?.wslDistro || 'Ubuntu')
+      : null
     const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
     const child = useWslGit
       ? spawn('wsl.exe', ['-d', wslTarget!.distro, '--cd', wslTarget!.linuxPath, 'git', ...args], {
@@ -1902,139 +1881,6 @@ async function runGitOperation(request: GitOperationRequest): Promise<GitOperati
   }
 }
 
-function resolveLocalVsCodePath(pathValue: string): string {
-  const normalized = pathValue.trim().replace(/\\/g, '/')
-  if (!normalized) return pathValue
-
-  const noLeadingSlash = normalized.replace(/^\/+/, '')
-  if (/^mnt\/[a-z](?:\/|$)/i.test(noLeadingSlash)) {
-    return wslBridge.toWindowsPath(`/${noLeadingSlash}`)
-  }
-
-  return pathValue
-}
-
-function toWslAuthority(distro: string): string {
-  return `wsl+${distro}`
-}
-
-function asFolderPath(pathValue: string): string {
-  return pathValue.endsWith('/') ? pathValue : `${pathValue}/`
-}
-
-function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
-  const spawnWith = (
-    cmd: string,
-    spawnArgs: string[],
-    fallback?: () => void
-  ) => {
-    const child = spawn(cmd, spawnArgs, {
-      detached: true,
-      shell: false,
-      windowsHide: true,
-      stdio: 'ignore',
-    })
-
-    child.on('error', (err) => {
-      console.error(`[open-vscode] failed command="${cmd}" args=${JSON.stringify(spawnArgs)} error=${err.message}`)
-      if (fallback) {
-        fallback()
-      } else {
-        onError?.(err)
-      }
-    })
-
-    child.unref()
-  }
-
-  if (process.platform === 'win32') {
-    // Node on Windows cannot reliably spawn .cmd directly (often EINVAL).
-    // Run VS Code CLI through cmd.exe and keep a direct `code` fallback.
-    spawnWith(
-      'cmd.exe',
-      ['/d', '/s', '/c', 'code.cmd', ...args],
-      () => spawnWith('code', args)
-    )
-    return
-  }
-
-  spawnWith('code', args)
-}
-
-function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
-  const escapedPath = quoteBashSingle(linuxFolder)
-  const command = `cd '${escapedPath}' && code .`
-  const child = spawn(
-    'wsl.exe',
-    ['-d', distro, '--', 'bash', '-lc', command],
-    {
-      detached: true,
-      windowsHide: true,
-      stdio: 'ignore',
-    }
-  )
-  child.on('error', (err) => {
-    console.error(`[open-vscode] wsl fallback failed distro="${distro}" path="${linuxFolder}" error=${err.message}`)
-  })
-  child.unref()
-}
-
-function openTerminalAtPath(folderPath: string, command?: string): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const trimmedCommand = command?.trim()
-    const wslTarget = resolveWslVsCodeTarget(folderPath)
-    if (process.platform === 'win32' && wslTarget) {
-      const wslArgs = trimmedCommand
-        ? [
-          'wsl',
-          '-d',
-          wslTarget.distro,
-          '--cd',
-          wslTarget.linuxPath,
-          '--',
-          'bash',
-          '-lc',
-          `${trimmedCommand}; exec bash -i`,
-        ]
-        : ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath]
-      const child = spawn(
-        'wt.exe',
-        wslArgs,
-        {
-          detached: true,
-          stdio: 'ignore',
-        }
-      )
-
-      child.on('error', (err) => {
-        console.error('[path-terminal] spawn wsl terminal failed:', err.message)
-        resolve(false)
-      })
-
-      child.on('spawn', () => resolve(true))
-      child.unref()
-      return
-    }
-
-    const localPath = resolveLocalVsCodePath(folderPath)
-    const localArgs = trimmedCommand
-      ? ['-d', localPath, 'cmd.exe', '/k', trimmedCommand]
-      : ['-d', localPath]
-    const child = spawn('wt.exe', localArgs, {
-      detached: true,
-      stdio: 'ignore',
-    })
-
-    child.on('error', (err) => {
-      console.error('[path-terminal] spawn local terminal failed:', err.message)
-      resolve(false)
-    })
-
-    child.on('spawn', () => resolve(true))
-    child.unref()
-  })
-}
-
 async function diagnoseRuntime(): Promise<RuntimeDiagnostics> {
   const scriptPath = resolvedRuntimeLauncherScript()
   const issues: string[] = []
@@ -2179,90 +2025,10 @@ function focusTerminalWindow(sessionName: string): void {
   child.unref()
 }
 
-function createWindow(): void {
-  const config = loadConfig()
-
-  // Keep Chromium caches under userData to avoid default temp/profile permission issues.
-  // This only changes cache location and does not affect app logic.
-  try {
-    app.setPath('sessionData', join(app.getPath('userData'), 'session'))
-  } catch {
-    // Best effort only.
-  }
-
-  const windowIcon =
-    process.platform === 'win32'
-      ? join(__dirname, '../../icon/Y.ico')
-      : join(__dirname, '../../icon/Y.png')
-
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    backgroundColor: getWindowBackgroundColor(config.theme),
-    icon: windowIcon,
-    frame: false,
-    titleBarStyle: 'hidden',
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-    show: false,
-  })
-
-  mainWindow.setMenuBarVisibility(false)
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' && input.type !== 'rawKeyDown') return
-    const key = input.key.toLowerCase()
-    const hasPrimaryModifier = input.control || input.meta
-    const isCtrlTab = key === 'tab' && hasPrimaryModifier && !input.shift && !input.alt
-    const isCtrlShiftF = key === 'f' && hasPrimaryModifier && input.shift && !input.alt
-    const isCtrlAltF = key === 'f' && hasPrimaryModifier && input.alt && !input.shift
-    if (isCtrlTab) {
-      event.preventDefault()
-      mainWindow?.webContents.send(IPC.CODE_TOGGLE_VIEW_MODE)
-      return
-    }
-    const isSearchShortcut = isCtrlShiftF || isCtrlAltF
-    if (!isSearchShortcut) return
-    event.preventDefault()
-    mainWindow?.webContents.send(IPC.CODE_FOCUS_SEARCH)
-  })
-  mainWindow.on('maximize', () => {
-    mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized: true })
-  })
-  mainWindow.on('unmaximize', () => {
-    mainWindow?.webContents.send(IPC.WINDOW_STATE, { isMaximized: false })
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
-
-  if (processManager) {
-    processManager.setOutputWindow(mainWindow)
-  }
-
-  mainWindow.on('closed', () => {
-    if (processManager) {
-      processManager.setOutputWindow(null)
-    }
-    mainWindow = null
-  })
-
-  registerIpcHandlers()
-
-  if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-}
-
 function registerIpcHandlers(): void {
+  if (ipcHandlersRegistered) return
+  ipcHandlersRegistered = true
+
   ipcMain.handle(IPC.DETECT_DIRECTORY, (_event, dirPath: string) => {
     return detectProject(dirPath)
   })
@@ -2314,7 +2080,7 @@ function registerIpcHandlers(): void {
         partial as Partial<AppConfig> & { startupDefaultTagId?: string }
       )
       if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
-        applyWindowBackground(updated.theme)
+        applyWindowBackground(mainWindow, updated.theme, nativeTheme.shouldUseDarkColors)
       }
       return updated
     }
@@ -2384,39 +2150,11 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_FOLDER, async (_event, folderPath: string, revealPath?: string) => {
-    const normalizedRevealPath = typeof revealPath === 'string' ? revealPath.trim() : ''
-    if (normalizedRevealPath) {
-      try {
-        await access(normalizedRevealPath, FsConstants.F_OK)
-        shell.showItemInFolder(normalizedRevealPath)
-        return
-      } catch {
-        // Fallback to opening the directory when file no longer exists.
-      }
-    }
-
-    const err = await shell.openPath(folderPath)
-    if (err) throw new Error(`Failed to open folder: ${err}`)
+    return openFolder(folderPath, revealPath)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_VSCODE, (_event, folderPath: string) => {
-    const wslTarget = resolveWslVsCodeTarget(folderPath)
-    if (wslTarget) {
-      const distro = wslTarget.distro
-      const linuxFolder = asFolderPath(wslTarget.linuxPath)
-
-      // Prefer official WSL remote syntax from Windows CLI:
-      //   code --remote wsl+<distro> <path in WSL>
-      // Fallback path for edge cases remains folder-uri.
-      const remoteArgs = ['--remote', toWslAuthority(distro), linuxFolder]
-      spawnVsCode(remoteArgs, () => {
-        spawnVsCodeViaWsl(distro, linuxFolder)
-      })
-      return
-    }
-
-    const localPath = resolveLocalVsCodePath(folderPath)
-    spawnVsCode([localPath])
+    openVsCode(folderPath, bootCapability?.wslDistro || 'Ubuntu')
   })
 
   ipcMain.handle(IPC.WINDOW_MINIMIZE, () => {
@@ -2657,7 +2395,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string, command?: string) => {
-    return openTerminalAtPath(folderPath, command)
+    return openTerminalAtPath(folderPath, bootCapability?.wslDistro || 'Ubuntu', command)
   })
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {
@@ -2786,7 +2524,7 @@ app.whenReady().then(async () => {
   nativeTheme.on('updated', () => {
     const { theme } = loadConfig()
     if (theme === 'system') {
-      applyWindowBackground(theme)
+      applyWindowBackground(mainWindow, theme, nativeTheme.shouldUseDarkColors)
     }
   })
 
@@ -2797,11 +2535,12 @@ app.whenReady().then(async () => {
   // Create ProcessManager with capability injected
   processManager = new ProcessManager(bootCapability)
 
-  createWindow()
+  registerIpcHandlers()
+  createMainWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
+      createMainWindow()
     }
   })
 })

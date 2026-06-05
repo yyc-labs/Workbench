@@ -29,6 +29,7 @@
 已完成：
 
 - `src/core/electron/main/project-file-service.ts`
+- `src/core/electron/main/index.ts` 第一轮拆分
 
 本次拆分结果：
 
@@ -37,11 +38,15 @@
 - 文件树和文件名搜索拆到 `src/core/electron/main/project-file/tree-service.ts`
 - 内容搜索拆到 `src/core/electron/main/project-file/content-search-service.ts`
 - 文件读写拆到 `src/core/electron/main/project-file/read-write-service.ts`
+- `src/core/electron/main/window/createWindow.ts` 承接窗口创建、主题背景和窗口快捷键
+- `src/core/electron/main/shell/openers.ts` 承接打开文件夹、VS Code、路径终端等外部打开逻辑
 
 当前状态：
 
 - 外部调用方式未改
 - `project-file-service.ts` 已从大体积实现文件收缩为兼容出口
+- `index.ts` 已先收缩掉窗口创建和 shell opener 两块平台细节
+- IPC 注册改为启动期单次注册，避免窗口重建时重复挂 handler
 - `npm run typecheck` 已通过
 
 ## 3. 拆分原则
@@ -80,6 +85,13 @@
 1. 先抽 `createWindow`
 2. 再抽 `registerIpcHandlers`
 3. 再把 Git、Runtime、AI Commit、shell 打开逻辑逐个迁出
+
+当前进度：
+
+- `createWindow` 已迁到 `window/createWindow.ts`
+- shell opener 已迁到 `shell/openers.ts`
+- `registerIpcHandlers` 仍留在 `index.ts`，但已改为单次注册
+- Git、Runtime、AI Commit 仍在 `index.ts`，是下一轮主要体积来源
 
 验收：
 
@@ -273,9 +285,15 @@
 
 如果按这个文档继续往下做，建议下一步直接从：
 
-- `src/core/electron/main/index.ts`
+- `src/core/electron/main/index.ts` 的 Git / Runtime / AI Commit 三块继续拆
 
-开始拆。这个文件是当前最典型的“入口承载过多职责”问题，先处理它，后面的主进程和渲染层拆分都会更顺。
+开始拆。窗口创建和 shell 打开已经迁出，下一步最值得继续切的是：
+
+- Git 命令与状态解析
+- Runtime 启动与 terminal 打开
+- AI Commit 执行与状态回传
+
+这样能让 `index.ts` 更接近纯装配层，后面的 `registerIpcHandlers` 拆分也会更直接。
 
 ## 9. 后续执行清单
 
