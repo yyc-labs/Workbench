@@ -30,8 +30,8 @@
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 第二轮已完成，已进入目标区间 |
 | `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 第二轮已达目标区间，主体区 / 顶部区 / modal 已拆出 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 基本未拆 |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 基本未拆 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 基本未拆 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 共享 Monaco 基础设施已抽出，已进入目标区间 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 854 | 共享 Monaco 基础设施已抽出，剩余搜索 / 命令逻辑待继续收口 |
 | `src/core/electron/main/index.ts` | 121 | 已完成第二轮 |
 | `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 已拆出，后续可按领域继续收口 |
 | `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | 已拆出 |
@@ -66,6 +66,11 @@
   - `DetailAiCommitHeader.tsx`、`DetailAiCommitMiddlePanel.tsx`、`DetailAiCommitBranchPanel.tsx`、`DetailAiCommitWorkingTreePanel.tsx` 已拆出
   - `DetailAiCommitOperationConfirmModal.tsx`、`DetailAiCommitBranchManagerModal.tsx` 已拆出
   - `DetailAiCommitGitGuideModal.tsx` 已拆出
+- `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` 当前轮拆分
+  - `src/core/renderer/lib/monacoEnvironment.ts` 已收口 worker 环境、主题判断和 find widget hover guard
+  - `src/core/renderer/lib/monacoDiffLanguage.ts` 已收口 git diff 语言注册
+  - `src/core/renderer/components/MonacoTextViewer.tsx` 已收口只读/可编辑 Monaco 文本查看器
+  - `src/core/renderer/pages/detail/detail.gitDiffConflicts.ts` 已收口冲突块解析与替换 helper
 - 静态检查
   - `npm run typecheck` 已于本次核对通过
 
@@ -73,25 +78,25 @@
 
 建议继续按下面顺序推进，不并行拆多个核心文件：
 
-1. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`
-2. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
-3. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
-4. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-5. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
+1. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
+2. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
+3. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`（只保留收口型跟进）
+4. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
+5. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`（只保留收口型跟进）
 
 原因：
 
 - `index.ts` 已经降到 121 行，主进程入口不再是当前最高优先级。
-- `DetailAiCommitPanel.tsx` 现在是渲染层最重、最影响后续改动的入口文件。
-- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 都内嵌了 Monaco 初始化与搜索控件适配逻辑，继续拖延会放大重复实现。
+- `DetailGitDiffDrawer.tsx` 已明显收缩，`MonacoCodeEditor.tsx` 成为当前 Monaco 批次里剩余最重的入口文件。
+- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 的共享 Monaco 初始化与 hover guard 已经统一，后续重点应转到 `MonacoCodeEditor.tsx` 自身搜索 / 命令逻辑。
 - `project-file-service.ts` 已完成，可以从后续治理顺序中移除。
 
 ## 下一步
 
 如果下一步直接动代码，优先继续做：
 
-1. 进入 `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`，统一收口 Monaco 环境与搜索控件适配
-2. 回头视情况再收口 `DetailAiCommitPanel.tsx` 的 diff/conflict 请求链路和 branch manager handler
-3. 回来更新本计划中的当前进度、遗留问题和验证范围
+1. 继续进入 `src/core/renderer/pages/code/MonacoCodeEditor.tsx`，收口搜索状态、替换逻辑和快捷命令
+2. 之后转到 `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
+3. 回头视情况再收口 `DetailAiCommitPanel.tsx` 的 diff/conflict 请求链路和 branch manager handler
 
 后续细节见子文档，不再继续往这个入口文件里堆完整计划正文。

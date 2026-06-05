@@ -1,11 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { ChevronDown, ChevronUp, Replace, X } from 'lucide-react'
+import { ensureMonacoEnvironmentConfigured, installMonacoFindWidgetHoverGuard } from '../../lib/monacoEnvironment'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 
 export interface MonacoEditorScrollState {
@@ -35,38 +31,6 @@ interface MonacoCodeEditorProps {
   onFocusSearch?: () => void
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
   onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
-}
-
-interface MonacoEnvironmentShape {
-  getWorker: (_workerId: string, label: string) => Worker
-}
-
-const FIND_WIDGET_HOVER_GUARD_CLASS = 'monaco-find-widget-control-hover'
-const FIND_WIDGET_CONTROL_SELECTOR = '.find-widget .button, .find-widget .monaco-custom-toggle, .findOptionsWidget .button, .findOptionsWidget .monaco-custom-toggle'
-
-declare global {
-  interface Window {
-    MonacoEnvironment?: MonacoEnvironmentShape
-  }
-}
-
-let monacoEnvironmentReady = false
-
-function ensureMonacoEnvironmentConfigured(): void {
-  if (monacoEnvironmentReady) return
-  if (typeof window === 'undefined') return
-
-  window.MonacoEnvironment = {
-    getWorker(_workerId: string, label: string) {
-      if (label === 'json') return new JsonWorker()
-      if (label === 'css' || label === 'scss' || label === 'less') return new CssWorker()
-      if (label === 'html' || label === 'handlebars' || label === 'razor') return new HtmlWorker()
-      if (label === 'typescript' || label === 'javascript') return new TsWorker()
-      return new EditorWorker()
-    },
-  }
-
-  monacoEnvironmentReady = true
 }
 
 function createMonacoModelUri(filePath: string | null): string {
@@ -408,6 +372,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const setup = async () => {
       const container = containerRef.current
       if (!container) return
+      const removeFindWidgetHoverGuard = installMonacoFindWidgetHoverGuard(container)
 
       ensureMonacoEnvironmentConfigured()
       const monaco = await import('monaco-editor')
@@ -544,27 +509,6 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       }
       container.addEventListener('paste', handleCapturePaste, true)
 
-      const handleCaptureMouseOver = (event: MouseEvent) => {
-        const target = event.target
-        if (!(target instanceof Element)) return
-        const findWidgetControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
-        if (!findWidgetControl) return
-        // Prevent Monaco's delayed hover from stealing hover state on find-widget controls.
-        document.body.classList.add(FIND_WIDGET_HOVER_GUARD_CLASS)
-        event.stopPropagation()
-      }
-      const handleCaptureMouseOut = (event: MouseEvent) => {
-        const target = event.target
-        if (!(target instanceof Element)) return
-        const fromControl = target.closest(FIND_WIDGET_CONTROL_SELECTOR)
-        if (!fromControl) return
-        const related = event.relatedTarget
-        if (related instanceof Element && related.closest(FIND_WIDGET_CONTROL_SELECTOR)) return
-        document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
-      }
-      container.addEventListener('mouseover', handleCaptureMouseOver, true)
-      container.addEventListener('mouseout', handleCaptureMouseOut, true)
-
       editor.onDidChangeModelContent(() => {
         if (syncGuardRef.current) return
         onChange(editor.getValue())
@@ -677,22 +621,20 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       return () => {
         container.removeEventListener('keydown', handleCaptureKeyDown, true)
         container.removeEventListener('paste', handleCapturePaste, true)
-        container.removeEventListener('mouseover', handleCaptureMouseOver, true)
-        container.removeEventListener('mouseout', handleCaptureMouseOut, true)
-        document.body.classList.remove(FIND_WIDGET_HOVER_GUARD_CLASS)
+        removeFindWidgetHoverGuard()
         removeFontListener?.()
       }
     }
 
-    let cleanupFontListener: (() => void) | undefined
+    let cleanupMonacoSetup: (() => void) | undefined
     void (async () => {
-      cleanupFontListener = await setup()
+      cleanupMonacoSetup = await setup()
     })()
 
     return () => {
       disposed = true
-      if (cleanupFontListener) {
-        cleanupFontListener()
+      if (cleanupMonacoSetup) {
+        cleanupMonacoSetup()
       }
       const editor = editorRef.current
       if (editor) {

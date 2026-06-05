@@ -23,8 +23,8 @@
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 本轮完成 | 第二轮已完成，父组件已收敛到编排层 |
 | `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 本轮完成 | 已进入目标区间，主体区 / 顶部区 / modal 已拆出 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 待拆 | 资料编辑、排序、设置仍集中在单文件 |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 待拆 | diff、冲突编辑、Monaco 初始化仍耦合 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 待拆 | 初始化、缓存、查找替换、命令仍集中 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 本轮完成 | Monaco 基础设施与冲突 helper 已迁出，已进入目标区间 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 854 | 进行中 | 共享 Monaco 基础设施已迁出，搜索 / 命令逻辑仍集中 |
 | `src/core/electron/main/index.ts` | 121 | 已完成 | 第二轮目标已超额达成 |
 | `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 已拆出 | 仍可按 handler 领域继续拆分 |
 | `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | 已拆出 | AI Commit 主链路已迁出入口文件 |
@@ -65,6 +65,10 @@
 - `src/core/renderer/pages/detail/DetailAiCommitWorkingTreePanel.tsx` 已承接工作区文件列表左区
 - `src/core/renderer/pages/detail/DetailAiCommitOperationConfirmModal.tsx`、`DetailAiCommitBranchManagerModal.tsx` 已承接两类弹窗
 - `src/core/renderer/pages/detail/DetailAiCommitGitGuideModal.tsx` 已承接 Git guide 弹窗
+- `src/core/renderer/lib/monacoEnvironment.ts` 已收口 worker 环境、主题判断和 find widget hover guard
+- `src/core/renderer/lib/monacoDiffLanguage.ts` 已收口 git diff 语言注册
+- `src/core/renderer/components/MonacoTextViewer.tsx` 已承接 Diff/Conflict 预览用 Monaco 文本查看器
+- `src/core/renderer/pages/detail/detail.gitDiffConflicts.ts` 已收口冲突块解析与替换 helper
 
 当前状态：
 
@@ -74,6 +78,8 @@
 - IPC 注册改为启动期单次注册，避免窗口重建时重复挂 handler
 - `CodeWorkspacePanel.tsx` 已从 2906 行降到 732 行，进入 700-900 行目标区间
 - `DetailAiCommitPanel.tsx` 已从 2248 行降到 989 行，左中右主体区、顶部区和三类 modal 已迁出，进入 800-1000 行目标区间
+- `DetailGitDiffDrawer.tsx` 已从 996 行降到 612 行，Monaco 基础设施和冲突纯逻辑已迁出，进入目标区间
+- `MonacoCodeEditor.tsx` 已从 912 行降到 854 行，共享 Monaco 基础设施已迁出，但搜索 / 替换 / 命令逻辑仍集中
 - `npm run typecheck` 已于本次核对通过
 
 ### 2.3 当前已确认的问题
@@ -82,23 +88,23 @@
 - `useCodeWorkspaceExplorerState.ts` 已单独成文件，但也达到 454 行；如果后续继续往里堆，会把问题从父组件平移到 hook。
 - `DetailAiCommitPanel.tsx` 已进入目标区间，但 diff/conflict 请求链路、branch manager handler 和部分状态编排仍集中在父组件里。
 - `DetailDocumentationCard.tsx` 基本仍是单文件实现，拖拽排序、标签设置、编辑表单、密钥展示都混在一起。
-- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 都内嵌了 Monaco worker 初始化与查找控件适配逻辑，已经出现重复实现。
+- `MonacoCodeEditor.tsx` 虽然已经迁出共享 Monaco 基础设施，但搜索状态、替换逻辑、快捷命令和 model cache 仍集中在入口层。
 
 ## 3. 推荐执行顺序
 
 建议按下面顺序做，不要并行拆多个大文件：
 
 1. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
-2. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`
+2. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
 3. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`（只保留收口型跟进）
-4. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-5. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
+4. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
+5. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`（只保留收口型跟进）
 
 原因：
 
 - 主进程入口拆分已经完成，不再需要占据第一优先级。
-- `CodeWorkspacePanel.tsx` 和 `DetailAiCommitPanel.tsx` 都已达标，当前最高收益点转移到 `MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx` 的共享基础设施。
-- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 之间已经出现重复基础设施，适合优先统一收口。
+- `CodeWorkspacePanel.tsx`、`DetailAiCommitPanel.tsx`、`DetailGitDiffDrawer.tsx` 都已达标，当前最高收益点转移到 `MonacoCodeEditor.tsx` 和 `DetailDocumentationCard.tsx`。
+- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 之间的共享基础设施已经统一，接下来更适合继续收口编辑器自身逻辑。
 - `project-file-service.ts` 已完成，可以从后续顺序中移除。
 - `DetailDocumentationCard.tsx` 虽然也大，但相对更独立，适合放在第三批。
 
@@ -117,29 +123,29 @@
 ### M3
 
 - 拆 `src/core/renderer/pages/code/MonacoCodeEditor.tsx`
-- 抽出共享的 Monaco 环境与命令逻辑
+- 已抽出共享 Monaco 环境，继续收口搜索与命令逻辑
 
 ### M4
 
 - 拆 `DetailGitDiffDrawer.tsx`
-- 复用 Monaco 共享模块完成 diff 抽离
+- 已复用 Monaco 共享模块完成 diff / conflict 基础设施抽离
 - 拆 `DetailDocumentationCard.tsx`
 
 ## 5. 下一步建议
 
 如果按这套计划继续往下做，建议下一步直接进入：
 
-- `src/core/renderer/pages/code/MonacoCodeEditor.tsx` / `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` 的 Monaco 共享基础设施治理
+- `src/core/renderer/pages/code/MonacoCodeEditor.tsx` 的搜索状态、替换逻辑和快捷命令收口
 
 开始拆。
 
 这一步最值得继续切的是：
 
-- Monaco worker / environment 初始化
-- 搜索控件适配
-- diff / editor 的共享命令和视图切换支撑
+- 搜索状态与匹配计算
+- 查找替换命令绑定
+- model cache / editor instance 的职责边界
 
-这样可以先消掉当前最明显的重复实现，再决定是否回头继续收口 `DetailAiCommitPanel.tsx` 内剩余 handler。
+这样可以把 Monaco 批次从“先去重基础设施”推进到“继续收口入口层业务逻辑”，随后再进入 `DetailDocumentationCard.tsx`。
 
 ## 6. 后续执行清单
 
@@ -159,9 +165,9 @@
 
 优先做：
 
-1. 抽共享的 Monaco worker / environment 配置
-2. 抽编辑器搜索控件适配
-3. 再分别收口编辑器命令和 diff / conflict 视图
+1. 共享的 Monaco worker / environment 配置已完成
+2. 继续抽编辑器搜索控件与命令逻辑
+3. `DetailGitDiffDrawer.tsx` 只保留收口型整理
 
 这一轮结束时应达到：
 

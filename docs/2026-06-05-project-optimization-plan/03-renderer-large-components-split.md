@@ -9,8 +9,8 @@
 | `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 拆出区域组件和 view-model |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 996 | 拆出 diff 状态、冲突编辑与 Monaco 基础设施 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 912 | 拆出 Monaco 初始化、搜索控件与命令逻辑 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 已进入目标区间，后续只做收口 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 854 | 继续收口搜索控件与命令逻辑 |
 
 ## 2. `CodeWorkspacePanel.tsx`
 
@@ -123,8 +123,8 @@
 
 当前问题：
 
-- diff 切换、冲突文件解析、冲突块提取、Monaco 环境初始化、查找控件适配都在一个文件里。
-- 与 `MonacoCodeEditor.tsx` 已经出现 Monaco worker 配置和查找控件 hover guard 的重复实现。
+- 共享 Monaco 基础设施和冲突纯逻辑已经迁出，但 diff 切换、冲突视图拼装和结果区交互仍在主文件里。
+- 当前已不再是重复基础设施问题，而是剩余 diff / conflict 视图编排问题。
 
 目标：
 
@@ -135,15 +135,13 @@
 - `GitDiffToolbar.tsx`
 - `GitDiffContent.tsx`
 - `useGitDiffState.ts`
-- `monacoEnvironment.ts`
-- `monacoSearchWidget.ts`
 
 ### 4.3 `MonacoCodeEditor.tsx`
 
 当前问题：
 
-- Monaco worker 初始化、model cache、查找替换、搜索状态同步、快捷命令都仍集中在单文件中。
-- 与 `DetailGitDiffDrawer.tsx` 有重复的 Monaco 环境和查找控件适配逻辑。
+- 共享 Monaco worker 环境和 find widget hover guard 已迁出，但 model cache、查找替换、搜索状态同步、快捷命令都仍集中在单文件中。
+- 当前问题已从“和 diff 重复”转为“入口层职责仍过重”。
 
 目标：
 
@@ -156,7 +154,6 @@
 - `useMonacoSearchWidget.ts`
 - `monacoTheme.ts`
 - `monacoLanguageSetup.ts`
-- `monacoEnvironment.ts`
 
 ## 5. 渲染层拆分约束
 
@@ -188,6 +185,6 @@
 
 这三个文件适合放在第二阶段，原因是：
 
-- `DetailAiCommitPanel.tsx` 仍然比它们更影响主流程，`CodeWorkspacePanel.tsx` 已转为收口型跟进
-- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 需要一起处理共享基础设施，拆分顺序不能再完全按行数排
+- `DetailAiCommitPanel.tsx` 已进入目标区间，`CodeWorkspacePanel.tsx` 也已转为收口型跟进
+- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 的共享基础设施已经打通，后续重点转到 `MonacoCodeEditor.tsx` 自身逻辑
 - `DetailDocumentationCard.tsx` 虽然大，但业务相对独立，适合放在后面单独收口
