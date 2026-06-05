@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ProjectCodeSession } from '../../../shared/types'
 import type { CodeFileDrawerState } from './code.types'
+import { buildKnownFilePathSet } from './code.tree'
 import {
   isSameCursorPositionMap,
   isSameProjectCodeTabList,
@@ -59,7 +60,25 @@ export function useProjectCodeSessionState({
   const [codeFileDrawerState, setCodeFileDrawerState] = useState<CodeFileDrawerState>(() => (
     normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
   ))
-  const effectiveKnownFilePaths = allProjectFilePathSet ?? knownFilePaths
+  // Tree paths are lazy-loaded by directory, so persisted session paths can be valid before they appear in the tree.
+  const effectiveKnownFilePaths = useMemo(() => (
+    buildKnownFilePathSet(
+      allProjectFilePathSet ?? knownFilePaths,
+      openTabPaths,
+      activeRelativePath,
+      codeFileDrawerState,
+      persistedProjectCodeSession,
+      persistedLastCodeFile,
+    )
+  ), [
+    activeRelativePath,
+    allProjectFilePathSet,
+    codeFileDrawerState,
+    knownFilePaths,
+    openTabPaths,
+    persistedLastCodeFile,
+    persistedProjectCodeSession,
+  ])
 
   const saveCodeSessionTimerRef = useRef<number | null>(null)
   const lastPersistedCodeSessionJsonRef = useRef<string>('')

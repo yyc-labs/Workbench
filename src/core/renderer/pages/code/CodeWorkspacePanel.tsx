@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Bot, ChevronDown, ChevronUp, Code2, Columns2, Eye, Files, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
-import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import type { ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
-import { ModalShell } from '../../components/ModalShell'
-import { UrlPopover } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
+import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
+import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
-import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
+import type { MonacoCodeEditorHandle, MonacoEditorScrollState } from './MonacoCodeEditor'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { useCodeFileState } from './useCodeFileState'
 import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import {
-  formatFileSize,
   inferLanguageFromRelativePath,
   pushRecentCodeFilePath,
   removeCodeFilePathFromDrawerState,
@@ -25,7 +21,6 @@ import { copyTextToClipboard } from './code.clipboard'
 import {
   createMarkdownComponents,
   dirnameFromRelativePath,
-  fileNameFromRelativePath,
   joinPosixPaths,
   MARKDOWN_PASTE_IMAGE_DIRECTORY,
   normalizeMarkdownImageExtensionFromMime,
@@ -34,7 +29,6 @@ import {
   resolveMonacoTheme,
   sanitizeMarkdownImageAlt,
   shouldDisableMarkdownSyntaxHighlight,
-  transformMarkdownUrl,
 } from './code.markdown'
 import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { parseMarkdownDocument } from './code.frontmatterParser'
@@ -116,7 +110,6 @@ export function CodeWorkspacePanel({
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
-  const firstProjectLinkItem = projectLinkItems[0]
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
     () => persistedProjectCodeSession?.contentSearchScope ?? ''
   )
@@ -737,20 +730,40 @@ export function CodeWorkspacePanel({
     if (hasAttemptedInitialRestore) return
     setHasAttemptedInitialRestore(true)
 
-    const sessionFirstTabPath = sanitizeProjectCodeSessionByPaths(
+    const sanitizedSession = sanitizeProjectCodeSessionByPaths(
       persistedProjectCodeSession,
       allProjectFilePathSet
-    )?.tabs[0]
-    if (!sessionFirstTabPath) {
+    )
+    const restoreCandidates = Array.from(new Set([
+      persistedLastCodeFile?.trim() || '',
+      sanitizedSession?.activePath?.trim() || '',
+      sanitizedSession?.tabs[0]?.trim() || '',
+    ].filter(Boolean)))
+
+    if (restoreCandidates.length <= 0) {
       isRestoringCodeSessionRef.current = false
       return
     }
-    void ensureTreePathLoaded(sessionFirstTabPath)
-      .then(() => openFile(sessionFirstTabPath))
+
+    void (async () => {
+      for (const relativePath of restoreCandidates) {
+        await ensureTreePathLoaded(relativePath)
+        const opened = await openFile(relativePath)
+        if (opened) return
+      }
+    })()
       .finally(() => {
-      isRestoringCodeSessionRef.current = false
+        isRestoringCodeSessionRef.current = false
       })
-  }, [allProjectFilePathSet, ensureTreePathLoaded, hasAttemptedInitialRestore, openFile, persistedProjectCodeSession, tree.status])
+  }, [
+    allProjectFilePathSet,
+    ensureTreePathLoaded,
+    hasAttemptedInitialRestore,
+    openFile,
+    persistedLastCodeFile,
+    persistedProjectCodeSession,
+    tree.status,
+  ])
 
   useEffect(() => {
     return () => {
@@ -979,6 +992,22 @@ export function CodeWorkspacePanel({
       void openFile(nextActivePath)
     }
   }, [activeRelativePath, openFile, openTabPaths])
+  const handleEditorCursorPositionChange = useCallback((position: { lineNumber: number; column: number }) => {
+    if (!activeRelativePath) return
+    setCursorPositionsByPath((prev) => {
+      const current = prev[activeRelativePath]
+      if (current && current.lineNumber === position.lineNumber && current.column === position.column) {
+        return prev
+      }
+
+      const nextEntries = [
+        [activeRelativePath, position],
+        ...Object.entries(prev).filter(([pathKey]) => pathKey !== activeRelativePath),
+      ].slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
+
+      return Object.fromEntries(nextEntries)
+    })
+  }, [activeRelativePath])
 
   useEffect(() => {
     const pending = pendingRevealRef.current
@@ -998,299 +1027,59 @@ export function CodeWorkspacePanel({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      <div
-        className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[16px] border px-4 py-2"
-        style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}
-      >
-        <div className="min-w-0">
-          {projectHeaderCollapsed ? (
-            <div className="flex min-w-0 items-center gap-2.5">
-              <p className="max-w-[220px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
-                {projectName || '当前项目'}
-              </p>
-              <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activePane === 'code'
-                      ? 'bg-primary text-white'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                  onClick={() => onSwitchPane?.('code')}
-                >
-                  <Code2 className="h-3.5 w-3.5" />
-                  Code
-                </button>
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activePane === 'aicommit'
-                      ? 'bg-primary text-white'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                  onClick={() => onSwitchPane?.('aicommit')}
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  AI Commit
-                </button>
-              </div>
-              {firstProjectLinkItem && (
-                <UrlPopover items={projectLinkItems}>
-                <button
-                  type="button"
-                  className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onOpenProjectLinksManager?.()
-                  }}
-                  title="左键打开首个链接，右键打开资料管理"
-                >
-                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                </button>
-                </UrlPopover>
-              )}
-            </div>
-          ) : (
-            <>
-              <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ?? undefined}>
-                {activeRelativePath ?? 'Select a file from the tree'}
-              </p>
-              <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-                {activeRelativePath
-                  ? `${activeLanguage || 'plaintext'} • ${formatFileSize(activeFileSize)}`
-                  : 'Choose a file to start editing'}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-3">
-          {viewMode === 'files' && activeRelativePath && (
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs transition-colors ${
-                isActiveFileFavorite
-                  ? 'border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => toggleFavoriteForPath(activeRelativePath)}
-              title={isActiveFileFavorite ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <Star className={`h-3.5 w-3.5 ${isActiveFileFavorite ? 'fill-current' : ''}`} />
-              {isActiveFileFavorite ? 'Favorited' : 'Favorite'}
-            </button>
-          )}
-          {activeRelativePath && (
-            <>
-              <button
-                type="button"
-                className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                onClick={() => openEditorSearchByMode('find')}
-                title={isShowingEditor ? 'Find in current file (Ctrl/Cmd+F)' : 'Switch to editor mode first'}
-                disabled={!isShowingEditor}
-              >
-                Find
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                onClick={() => openEditorSearchByMode('replace')}
-                title={isShowingEditor ? 'Replace in current file (Ctrl/Cmd+H)' : 'Switch to editor mode first'}
-                disabled={!isShowingEditor}
-              >
-                Replace
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-              isQuickDrawerOpen
-                ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
-                : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-            }`}
-            onClick={() => setIsQuickDrawerOpen((prev) => !prev)}
-            title="Quick file drawer"
-          >
-            <PanelLeftOpen className="h-3.5 w-3.5" />
-            Files
-          </button>
-          <div className="code-view-mode-switch" role="tablist" aria-label="Code workspace mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'files'}
-              className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`}
-              onClick={() => setViewMode('files')}
-              title="File explorer and editor"
-            >
-              <Files className="h-3.5 w-3.5" />
-              Files
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'search'}
-              className={`code-view-mode-btn ${viewMode === 'search' ? 'is-active' : ''}`}
-              onClick={() => setViewMode('search')}
-              title="Global content search"
-            >
-              <TextSearch className="h-3.5 w-3.5" />
-              Search
-            </button>
-          </div>
-          {isNarrowViewport && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => setIsExplorerOpen((prev) => !prev)}
-              title={isExplorerOpen ? 'Switch to editor' : (viewMode === 'search' ? 'Open search panel' : 'Open file explorer')}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              {isExplorerOpen ? 'Editor' : (viewMode === 'search' ? 'Search' : 'Explorer')}
-            </button>
-          )}
-          <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
-          <button
-            type="button"
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${saveStatus === 'saving'
-              ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-              : 'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:opacity-50'
-              }`}
-            onClick={() => void handleSave()}
-            disabled={!activeRelativePath || !isDirty || saveStatus === 'saving'}
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saveText}
-          </button>
-        </div>
-      </div>
-
-      {visibleOpenTabs.length > 0 && (
-        <div className="code-open-tabs mb-3">
-          {visibleOpenTabs.map((path) => {
-            const isActive = activeRelativePath === path
-            return (
-              <button
-                key={path}
-                type="button"
-                className={`code-open-tab ${isActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  handleSelectOpenTab(path)
-                }}
-                title={path}
-              >
-                <span className="code-open-tab-label">{fileNameFromRelativePath(path)}</span>
-                <span className="code-open-tab-path">{path}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="code-open-tab-close"
-                  aria-label={`Close ${path}`}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handleCloseOpenTab(path)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return
-                    event.preventDefault()
-                    event.stopPropagation()
-                    handleCloseOpenTab(path)
-                  }}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {activeRelativePath && hasExternalChange && (
-        <div
-          className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2 text-xs"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--color-warning) 40%, transparent)',
-            background: 'var(--color-warning-background)',
-            color: 'var(--color-foreground)',
-          }}
-        >
-          <span>
-            File changed on disk. Reload to view latest content, or keep your unsaved edits.
-          </span>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => {
-                setHasExternalChange(false)
-              }}
-            >
-              Keep My Changes
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover"
-              onClick={() => {
-                void openFile(activeRelativePath, true)
-              }}
-            >
-              Reload from Disk
-            </button>
-          </div>
-        </div>
-      )}
-
-      <ModalShell
-        open={Boolean(discardUnsavedConfirm)}
-        onClose={() => resolveDiscardUnsavedConfirm(false)}
-        widthClassName="max-w-[440px]"
-        baseZIndex={1100}
-        ariaLabel="Unsaved changes confirmation"
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <p className="section-label mb-1">Unsaved Changes</p>
-            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-              当前文件有未保存修改
-            </p>
-          </div>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => resolveDiscardUnsavedConfirm(false)}
-            title="Close"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
-          {discardUnsavedConfirm?.forceReload
-            ? '重新加载后将丢弃当前未保存内容，是否继续？'
-            : `切换到 ${discardUnsavedConfirm?.nextRelativePath ?? '目标文件'} 后将丢弃当前未保存内容，是否继续？`}
-        </p>
-        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          你也可以先保存当前文件，再执行切换或重载。
-        </p>
-        <div className="mt-4 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onClick={() => resolveDiscardUnsavedConfirm(false)}
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
-            onClick={() => resolveDiscardUnsavedConfirm(true)}
-          >
-            丢弃并继续
-          </button>
-        </div>
-      </ModalShell>
+      <CodeWorkspaceChrome
+        activeLanguage={activeLanguage}
+        activeRelativePath={activeRelativePath}
+        activePane={activePane}
+        discardUnsavedConfirm={discardUnsavedConfirm}
+        hasExternalChange={hasExternalChange}
+        isActiveFileFavorite={isActiveFileFavorite}
+        isDirty={isDirty}
+        isExplorerOpen={isExplorerOpen}
+        isNarrowViewport={isNarrowViewport}
+        isReading={isReading}
+        isReloadingFromDisk={isReloadingFromDisk}
+        onCloseOpenTab={handleCloseOpenTab}
+        onHandleSave={() => {
+          void handleSave()
+        }}
+        onKeepMyChanges={() => {
+          setHasExternalChange(false)
+        }}
+        onOpenEditorSearch={openEditorSearchByMode}
+        onOpenFileFromTab={handleSelectOpenTab}
+        onOpenFirstProjectLink={() => {
+          const firstLink = projectLinkItems[0]
+          if (!firstLink) return
+          void window.electronAPI.openExternal(firstLink.url)
+        }}
+        onOpenProjectLinksManager={onOpenProjectLinksManager}
+        onReloadFromDisk={() => {
+          if (!activeRelativePath) return
+          void openFile(activeRelativePath, true)
+        }}
+        onResolveDiscardUnsavedConfirm={resolveDiscardUnsavedConfirm}
+        onSetExplorerOpen={setIsExplorerOpen}
+        onSetQuickDrawerOpen={setIsQuickDrawerOpen}
+        onSetViewMode={setViewMode}
+        onSwitchPane={onSwitchPane}
+        onToggleFavorite={toggleFavoriteForPath}
+        openTabs={visibleOpenTabs}
+        projectFileSize={activeFileSize}
+        projectHeaderCollapsed={projectHeaderCollapsed}
+        projectLinkItems={projectLinkItems}
+        projectName={projectName}
+        readError={readError}
+        saveError={saveError}
+        saveIndicatorText={saveIndicatorText}
+        saveIndicatorToneClass={saveIndicatorToneClass}
+        saveStatus={saveStatus}
+        saveText={saveText}
+        showEditorSearchActions={isShowingEditor}
+        skippedDirectories={tree.skippedDirectories}
+        skippedFiles={tree.skippedFiles}
+        viewMode={viewMode}
+      />
 
       <CodeFileQuickDrawer
         open={isQuickDrawerOpen}
@@ -1358,256 +1147,47 @@ export function CodeWorkspacePanel({
 
           {showEditorPanelForMode && (
             <section className="code-editor-panel surface-card">
-              {activeRelativePath ? (
-                <div className="code-editor-shell">
-                  {isMarkdownFile && (
-                    <div className="code-editor-preview-toolbar">
-                      <span className="text-[11px] text-[color:var(--color-muted-foreground)]">Markdown</span>
-                      <div className="code-editor-preview-mode-group">
-                        <button
-                          type="button"
-                          className={`code-editor-preview-mode-btn ${
-                            effectiveMarkdownPreviewMode === 'edit' ? 'is-active' : ''
-                          }`}
-                          onClick={() => {
-                            captureCurrentModeScroll()
-                            setMarkdownPreviewMode('edit')
-                          }}
-                          title="Editor"
-                        >
-                          <Code2 className="h-3.5 w-3.5" />
-                          Editor
-                        </button>
-                        <button
-                          type="button"
-                          className={`code-editor-preview-mode-btn ${
-                            effectiveMarkdownPreviewMode === 'preview' ? 'is-active' : ''
-                          }`}
-                          onClick={() => {
-                            captureCurrentModeScroll()
-                            setMarkdownPreviewMode('preview')
-                          }}
-                          title="Preview"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          className={`code-editor-preview-mode-btn ${
-                            effectiveMarkdownPreviewMode === 'split' ? 'is-active' : ''
-                          }`}
-                          onClick={() => {
-                            captureCurrentModeScroll()
-                            setMarkdownPreviewMode('split')
-                          }}
-                          title={isNarrowViewport ? 'Split is only available on wide layout' : 'Split view'}
-                          disabled={isNarrowViewport}
-                        >
-                          <Columns2 className="h-3.5 w-3.5" />
-                          Split
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div
-                    className={`code-editor-content ${
-                      effectiveMarkdownPreviewMode === 'split'
-                        ? 'code-editor-content--split'
-                        : 'code-editor-content--single'
-                    }`}
-                  >
-                    {effectiveMarkdownPreviewMode !== 'preview' && (
-                      <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`}>
-                        <MonacoCodeEditor
-                          ref={editorRef}
-                          filePath={activeRelativePath}
-                          value={editorValue}
-                          language={activeLanguage || 'plaintext'}
-                          theme={monacoTheme}
-                          onPasteImage={handlePasteImage}
-                          onChange={setEditorValue}
-                          onScrollStateChange={handleEditorScrollStateChange}
-                          onCursorPositionChange={(position) => {
-                            if (!activeRelativePath) return
-                            setCursorPositionsByPath((prev) => {
-                              const current = prev[activeRelativePath]
-                              if (current && current.lineNumber === position.lineNumber && current.column === position.column) {
-                                return prev
-                              }
-
-                              const nextEntries = [
-                                [activeRelativePath, position],
-                                ...Object.entries(prev).filter(([pathKey]) => pathKey !== activeRelativePath),
-                              ].slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
-
-                              return Object.fromEntries(nextEntries)
-                            })
-                          }}
-                          onFocusSearch={focusSearchInputByMode}
-                          onSave={() => {
-                            void handleSave()
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {(effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split') && (
-                      <div
-                        ref={previewScrollRef}
-                        className="code-editor-pane code-editor-pane--preview"
-                        onScroll={handlePreviewScroll}
-                      >
-                        {previewSearchVisible && effectiveMarkdownPreviewMode === 'preview' && (
-                          <div className="code-editor-findbar code-editor-findbar--preview">
-                            <div className="code-editor-findbar-row">
-                              <input
-                                ref={previewSearchInputRef}
-                                type="text"
-                                value={previewSearchQuery}
-                                onChange={(event) => {
-                                  setPreviewSearchQuery(event.target.value)
-                                  setActivePreviewSearchMatchIndex(0)
-                                }}
-                                placeholder="Find in preview"
-                                className="code-editor-findbar-input"
-                                spellCheck={false}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter' && event.shiftKey) {
-                                    event.preventDefault()
-                                    goToPreviousPreviewSearchMatch()
-                                    return
-                                  }
-                                  if (event.key === 'Enter') {
-                                    event.preventDefault()
-                                    goToNextPreviewSearchMatch()
-                                    return
-                                  }
-                                  if (event.key === 'Escape') {
-                                    event.preventDefault()
-                                    closePreviewSearch()
-                                  }
-                                }}
-                              />
-                              <span className="code-editor-findbar-count">
-                                {previewSearchMatches.length > 0
-                                  ? `${activePreviewSearchMatchIndex + 1}/${previewSearchMatches.length}`
-                                  : 'No results'}
-                              </span>
-                              <button
-                                type="button"
-                                className="code-editor-findbar-icon-btn"
-                                onClick={goToPreviousPreviewSearchMatch}
-                                title="Previous Match"
-                                disabled={previewSearchMatches.length <= 0}
-                              >
-                                <ChevronUp className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                className="code-editor-findbar-icon-btn"
-                                onClick={goToNextPreviewSearchMatch}
-                                title="Next Match"
-                                disabled={previewSearchMatches.length <= 0}
-                              >
-                                <ChevronDown className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                className="code-editor-findbar-icon-btn"
-                                onClick={closePreviewSearch}
-                                title="Close"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <article className="code-markdown-content">
-                          {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
-                            <section className="code-mdc-meta-card">
-                              <h3 className="code-mdc-meta-title">Agent Rule Metadata</h3>
-                              <div className="code-mdc-meta-grid">
-                                <span className="code-mdc-meta-key">Type</span>
-                                <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
-
-                                <span className="code-mdc-meta-key">Always Apply</span>
-                                <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
-
-                                <span className="code-mdc-meta-key">Description</span>
-                                <span className="code-mdc-meta-value">
-                                  {parsedMarkdownDoc.ruleMetadata.description?.trim() || 'N/A'}
-                                </span>
-
-                                <span className="code-mdc-meta-key">Globs</span>
-                                <span className="code-mdc-meta-value">
-                                  {parsedMarkdownDoc.ruleMetadata.globs.length > 0
-                                    ? parsedMarkdownDoc.ruleMetadata.globs.join(', ')
-                                    : 'N/A'}
-                                </span>
-                              </div>
-                            </section>
-                          )}
-                          {!isMdcFile && parsedMarkdownDoc?.markdownMetadata && (
-                            <section className="code-mdc-meta-card">
-                              <h3 className="code-mdc-meta-title">Document Metadata</h3>
-                              <div className="code-mdc-meta-grid">
-                                <span className="code-mdc-meta-key">Title</span>
-                                <span className="code-mdc-meta-value">
-                                  {parsedMarkdownDoc.markdownMetadata.title?.trim() || 'N/A'}
-                                </span>
-
-                                <span className="code-mdc-meta-key">Description</span>
-                                <span className="code-mdc-meta-value">
-                                  {parsedMarkdownDoc.markdownMetadata.description?.trim() || 'N/A'}
-                                </span>
-                              </div>
-                            </section>
-                          )}
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={markdownComponents}
-                            urlTransform={transformMarkdownUrl}
-                          >
-                            {markdownPreviewContent}
-                          </ReactMarkdown>
-                        </article>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="code-panel-empty">
-                  <div className="text-sm text-[color:var(--color-muted-foreground)]">
-                    {isNarrowViewport
-                      ? (viewMode === 'search' ? 'Open Search to choose a match.' : 'Open Explorer to choose a file.')
-                      : (viewMode === 'search'
-                        ? 'Select a search result from the left panel to open and edit.'
-                        : 'Select a file from the left panel to start editing.')}
-                  </div>
-                </div>
-              )}
+              <CodeWorkspaceEditorPane
+                activeLanguage={activeLanguage}
+                activeRelativePath={activeRelativePath}
+                editorRef={editorRef}
+                editorValue={editorValue}
+                effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
+                handlePasteImage={handlePasteImage}
+                isMdcFile={isMdcFile}
+                isMarkdownFile={isMarkdownFile}
+                isNarrowViewport={isNarrowViewport}
+                markdownComponents={markdownComponents}
+                markdownPreviewContent={markdownPreviewContent}
+                monacoTheme={monacoTheme}
+                onCaptureCurrentModeScroll={captureCurrentModeScroll}
+                onChangeEditorValue={setEditorValue}
+                onClosePreviewSearch={closePreviewSearch}
+                onEditorScrollStateChange={handleEditorScrollStateChange}
+                onFocusSearch={focusSearchInputByMode}
+                onGoToNextPreviewSearchMatch={goToNextPreviewSearchMatch}
+                onGoToPreviousPreviewSearchMatch={goToPreviousPreviewSearchMatch}
+                onHandleSave={() => {
+                  void handleSave()
+                }}
+                onPreviewScroll={handlePreviewScroll}
+                onSetActivePreviewSearchMatchIndex={setActivePreviewSearchMatchIndex}
+                onSetCursorPosition={handleEditorCursorPositionChange}
+                onSetMarkdownPreviewMode={setMarkdownPreviewMode}
+                onSetPreviewSearchQuery={setPreviewSearchQuery}
+                parsedMarkdownDoc={parsedMarkdownDoc}
+                previewScrollRef={previewScrollRef}
+                previewSearchInputRef={previewSearchInputRef}
+                previewSearchMatches={previewSearchMatches}
+                previewSearchQuery={previewSearchQuery}
+                previewSearchVisible={previewSearchVisible}
+                previewSearchMatchIndex={activePreviewSearchMatchIndex}
+                viewMode={viewMode}
+              />
             </section>
           )}
         </div>
       </div>
-
-      {(readError || saveError || isReading || isReloadingFromDisk || tree.skippedDirectories > 0 || tree.skippedFiles > 0) && (
-        <div className="px-1 pb-1 pt-2">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-muted-foreground)]">
-            {isReading && <span>Reading file...</span>}
-            {isReloadingFromDisk && <span>Reloading changed file from disk...</span>}
-            {readError && <span className="text-[color:var(--color-destructive)]">{readError}</span>}
-            {saveError && <span className="text-[color:var(--color-destructive)]">{saveError}</span>}
-            {(tree.skippedDirectories > 0 || tree.skippedFiles > 0) && (
-              <span>
-                Skipped {tree.skippedDirectories} directories, {tree.skippedFiles} files while listing folders.
-              </span>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
