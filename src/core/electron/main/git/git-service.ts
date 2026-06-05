@@ -1482,3 +1482,5 @@ export function createGitService(deps: GitServiceDependencies) {
     resolveGitConflictFile,
   }
 }
+
+export type GitService = ReturnType<typeof createGitService>

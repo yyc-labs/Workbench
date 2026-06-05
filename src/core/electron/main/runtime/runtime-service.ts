@@ -419,3 +419,5 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     cleanupOnBeforeQuit,
   }
 }
+
+export type RuntimeService = ReturnType<typeof createRuntimeService>
