@@ -1,14 +1,11 @@
-import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, ReactNode, SetStateAction } from 'react'
-import { BookOpen, Bot, Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BookOpen, Bot, ChevronDown, ChevronUp, Code2, Columns2, Eye, FileSearch, Files, LocateFixed, PanelLeftOpen, RefreshCw, Save, Search, Star, TextSearch, X } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
-import type { ProjectCodeSession, ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { UrlPopover } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
@@ -27,396 +24,55 @@ import {
   normalizeCodeFileDrawerState,
   pushRecentCodeFilePath,
   removeCodeFilePathFromDrawerState,
-  sortTreeNodes,
   toggleFavoriteCodeFilePath,
 } from './code.helpers'
+import { copyTextToClipboard } from './code.clipboard'
+import {
+  createMarkdownComponents,
+  dirnameFromRelativePath,
+  fileNameFromRelativePath,
+  joinPosixPaths,
+  MARKDOWN_PASTE_IMAGE_DIRECTORY,
+  normalizeMarkdownImageExtensionFromMime,
+  parseImageFileFromClipboardEvent,
+  relativePosixPath,
+  resolveMonacoTheme,
+  sanitizeMarkdownImageAlt,
+  shouldDisableMarkdownSyntaxHighlight,
+  transformMarkdownUrl,
+} from './code.markdown'
 import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { parseMarkdownDocument } from './code.frontmatterParser'
+import {
+  buildKnownFilePathSet,
+  collectTopLevelDirectories,
+  expandTreePath,
+  findDirectoryNode,
+  mergeKnownFilePaths,
+  replaceDirectoryNodes,
+  sortProjectNodes,
+} from './code.tree'
 import type { CodeFileDrawerState, FileTreeState } from './code.types'
+import {
+  CODE_FILE_DRAWER_SECTION_LIMIT,
+  isSameCursorPositionMap,
+  isSameProjectCodeTabList,
+  MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS,
+  MAX_PROJECT_CODE_SESSION_TABS,
+  normalizeProjectCodeSession,
+  PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS,
+  sanitizeCodeFileDrawerStateByPaths,
+  sanitizeCursorPositionsForTabs,
+  sanitizePathsForKnownFiles,
+  sanitizeProjectCodeSessionByPaths,
+  type EditorCursorPosition,
+} from './useProjectCodeSession'
 
 const FILE_SEARCH_DEBOUNCE_MS = 180
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
-const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
-const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
-const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
-const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
-const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
-const MAX_PROJECT_CODE_SESSION_TABS = 5
-const MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS = 60
-const PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS = 220
 const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
 const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
-const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
-
-function normalizePathSegments(value: string): string[] {
-  return value
-    .replace(/\\/g, '/')
-    .split('/')
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-}
-
-function dirnameFromRelativePath(relativePath: string): string {
-  const segments = normalizePathSegments(relativePath)
-  if (segments.length <= 1) return ''
-  return segments.slice(0, -1).join('/')
-}
-
-function joinPosixPaths(...values: string[]): string {
-  const segments: string[] = []
-  for (const value of values) {
-    segments.push(...normalizePathSegments(value))
-  }
-  return segments.join('/')
-}
-
-function relativePosixPath(fromDirectory: string, toPath: string): string {
-  const from = normalizePathSegments(fromDirectory)
-  const to = normalizePathSegments(toPath)
-
-  let shared = 0
-  const sharedMax = Math.min(from.length, to.length)
-  while (shared < sharedMax && from[shared] === to[shared]) {
-    shared += 1
-  }
-
-  const upSegments = from.slice(shared).map(() => '..')
-  const downSegments = to.slice(shared)
-  const result = [...upSegments, ...downSegments].join('/')
-  return result || '.'
-}
-
-function sanitizeMarkdownImageAlt(relativePath: string): string {
-  const fileName = fileNameFromRelativePath(relativePath)
-  const withoutExtension = fileName.replace(/\.[A-Za-z0-9]+$/, '').trim()
-  const safe = withoutExtension.replace(/[\[\]\r\n]+/g, ' ').trim()
-  return safe || 'image'
-}
-
-function normalizeMarkdownImageExtensionFromMime(mimeType: string): string {
-  const normalized = mimeType.trim().toLowerCase()
-  if (normalized === 'image/jpeg') return 'jpg'
-  if (normalized === 'image/png') return 'png'
-  if (normalized === 'image/gif') return 'gif'
-  if (normalized === 'image/webp') return 'webp'
-  if (normalized === 'image/bmp') return 'bmp'
-  if (normalized === 'image/svg+xml') return 'svg'
-  if (normalized === 'image/tiff') return 'tiff'
-  return 'png'
-}
-
-function parseImageFileFromClipboardEvent(event: ClipboardEvent): File | null {
-  const clipboardData = event.clipboardData
-  const items = clipboardData?.items
-  if (!items || items.length <= 0) return null
-
-  for (const item of items) {
-    if (!item.type.startsWith('image/')) continue
-    const imageFile = item.getAsFile()
-    if (imageFile) return imageFile
-  }
-  return null
-}
-
-function trimMarkdownUrlWrapper(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  if (trimmed.startsWith('<') && trimmed.endsWith('>') && trimmed.length > 2) {
-    return trimmed.slice(1, -1).trim()
-  }
-  return trimmed
-}
-
-function stripMarkdownImageDestinationSuffix(rawDestination: string): string {
-  const compact = rawDestination.trim()
-  if (!compact) return ''
-  const firstWhitespace = compact.search(/\s/)
-  if (firstWhitespace >= 0) {
-    return compact.slice(0, firstWhitespace)
-  }
-  return compact
-}
-
-function isWindowsAbsolutePath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)
-}
-
-function toFileUrlFromAbsolutePath(absolutePath: string): string {
-  const normalized = absolutePath.trim().replace(/\\/g, '/')
-  if (!normalized) return ''
-  if (normalized.startsWith('//')) {
-    return `file:${encodeURI(normalized)}`
-  }
-  if (/^[A-Za-z]:\//.test(normalized)) {
-    return `file:///${encodeURI(normalized)}`
-  }
-  if (normalized.startsWith('/')) {
-    return `file://${encodeURI(normalized)}`
-  }
-  return ''
-}
-
-function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string, activeFilePath: string | null): string {
-  const trimmed = stripMarkdownImageDestinationSuffix(trimMarkdownUrlWrapper(rawSrc))
-  if (!trimmed) return ''
-
-  const lower = trimmed.toLowerCase()
-  if (
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('data:') ||
-    lower.startsWith('blob:') ||
-    lower.startsWith('file:')
-  ) {
-    return trimmed
-  }
-
-  if (isWindowsAbsolutePath(trimmed) || trimmed.startsWith('/')) {
-    const absoluteFileUrl = toFileUrlFromAbsolutePath(trimmed)
-    return absoluteFileUrl || trimmed
-  }
-
-  if (!projectRootPath) return trimmed
-
-  const activeDirectory = activeFilePath ? dirnameFromRelativePath(activeFilePath) : ''
-  const relativeToProject = activeDirectory
-    ? joinPosixPaths(activeDirectory, trimmed)
-    : joinPosixPaths(trimmed)
-
-  const absolutePath = joinProjectPath(projectRootPath, relativeToProject)
-  const absoluteFileUrl = toFileUrlFromAbsolutePath(absolutePath)
-  return absoluteFileUrl || trimmed
-}
-
-function transformMarkdownUrl(url: string): string {
-  const trimmed = url.trim()
-  if (isWindowsAbsolutePath(trimmed)) {
-    return trimmed
-  }
-  return defaultUrlTransform(trimmed)
-}
-
-function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
-  if (themeMode === 'dark') return 'vs-dark'
-  if (themeMode === 'light') return 'vs'
-  return 'vs'
-}
-
-function normalizeSyntaxLanguage(value: string | null | undefined): string {
-  const raw = (value ?? '').trim().toLowerCase()
-  if (!raw) return 'text'
-
-  if (raw === 'ts') return 'typescript'
-  if (raw === 'tsx') return 'tsx'
-  if (raw === 'js') return 'javascript'
-  if (raw === 'jsx') return 'jsx'
-  if (raw === 'sh' || raw === 'shell') return 'bash'
-  if (raw === 'yml') return 'yaml'
-  if (raw === 'md') return 'markdown'
-  if (raw === 'py') return 'python'
-  if (raw === 'rb') return 'ruby'
-  if (raw === 'rs') return 'rust'
-  if (raw === 'kt') return 'kotlin'
-  if (raw === 'cs') return 'csharp'
-  if (raw === 'ps1') return 'powershell'
-  return raw
-}
-
-function extractCodeLanguageFromClassName(className?: string): string | null {
-  const match = /language-([A-Za-z0-9_+-]+)/.exec(className ?? '')
-  return match?.[1] ?? null
-}
-
-function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: string; language: string } | null {
-  const childNodes = Children.toArray(children)
-  if (childNodes.length !== 1) return null
-
-  const onlyChild = childNodes[0]
-  if (!isValidElement(onlyChild)) {
-    return null
-  }
-
-  const codeProps = onlyChild.props as {
-    className?: string
-    children?: ReactNode
-    node?: { tagName?: string }
-  }
-  if (codeProps.node?.tagName !== 'code' && onlyChild.type !== 'code') {
-    return null
-  }
-
-  const codeText = String(codeProps.children ?? '').replace(/\n$/, '')
-  const language = normalizeSyntaxLanguage(extractCodeLanguageFromClassName(codeProps.className))
-  return { codeText, language }
-}
-
-function countTextLines(value: string): number {
-  if (!value) return 0
-  let count = 1
-  for (let i = 0; i < value.length; i += 1) {
-    if (value.charCodeAt(i) === 10) count += 1
-  }
-  return count
-}
-
-function shouldDisableMarkdownSyntaxHighlight(markdown: string): boolean {
-  if (markdown.length > MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD) return true
-  return countTextLines(markdown) > MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD
-}
-
-function canHighlightMarkdownCodeBlock(codeText: string): boolean {
-  if (codeText.length > MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD) return false
-  return countTextLines(codeText) <= MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD
-}
-
-function useNearViewport<T extends Element>(rootMargin: string): [React.RefObject<T>, boolean] {
-  const ref = useRef<T | null>(null)
-  const [isNearViewport, setIsNearViewport] = useState(false)
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsNearViewport(true)
-      return
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0)) {
-        setIsNearViewport(true)
-      }
-    }, {
-      root: null,
-      rootMargin,
-      threshold: 0.01,
-    })
-
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-    }
-  }, [rootMargin])
-
-  return [ref, isNearViewport]
-}
-
-function shouldOpenInSystemBrowser(href: string): boolean {
-  const value = href.trim().toLowerCase()
-  return (
-    value.startsWith('http://') ||
-    value.startsWith('https://') ||
-    value.startsWith('mailto:') ||
-    value.startsWith('tel:')
-  )
-}
-
-async function copyTextToClipboard(text: string): Promise<boolean> {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      // Fallback below.
-    }
-  }
-
-  if (typeof document === 'undefined') return false
-
-  const textarea = document.createElement('textarea')
-  textarea.value = text
-  textarea.setAttribute('readonly', 'true')
-  textarea.style.position = 'fixed'
-  textarea.style.top = '0'
-  textarea.style.left = '-9999px'
-  textarea.style.opacity = '0'
-  document.body.appendChild(textarea)
-
-  textarea.focus()
-  textarea.select()
-
-  let copied = false
-  try {
-    copied = document.execCommand('copy')
-  } catch {
-    copied = false
-  } finally {
-    document.body.removeChild(textarea)
-  }
-
-  return copied
-}
-
-type MarkdownCodeBlockProps = {
-  codeText: string
-  language: string
-  themeMode: 'light' | 'dark'
-  enableSyntaxHighlight: boolean
-}
-
-function MarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighlight }: MarkdownCodeBlockProps) {
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
-  const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText) && isNearViewport
-
-  useEffect(() => {
-    if (copyStatus === 'idle') return
-    const timer = window.setTimeout(() => {
-      setCopyStatus('idle')
-    }, 1500)
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [copyStatus])
-
-  const handleCopy = useCallback(async () => {
-    const ok = await copyTextToClipboard(codeText)
-    setCopyStatus(ok ? 'success' : 'error')
-  }, [codeText])
-
-  const copyLabel = copyStatus === 'success' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy'
-
-  return (
-    <div ref={containerRef} className="code-markdown-syntax-wrap">
-      <button
-        type="button"
-        className={`code-markdown-copy-btn ${
-          copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''
-        }`}
-        onClick={() => {
-          void handleCopy()
-        }}
-        title={copyLabel}
-      >
-        {copyStatus === 'success' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        <span>{copyLabel}</span>
-      </button>
-
-      {shouldRenderSyntax ? (
-        <SyntaxHighlighter
-          language={language}
-          style={themeMode === 'dark' ? oneDark : oneLight}
-          PreTag="div"
-          className="code-markdown-syntax-block"
-          customStyle={{ margin: 0, borderRadius: 10, paddingTop: 38 }}
-          codeTagProps={{
-            style: {
-              fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
-            },
-          }}
-        >
-          {codeText}
-        </SyntaxHighlighter>
-      ) : (
-        <pre className="code-markdown-plain-block">
-          <code className={`language-${language}`}>{codeText}</code>
-        </pre>
-      )}
-    </div>
-  )
-}
-
 type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
@@ -439,7 +95,6 @@ type ContentSearchScopePreset = {
   scopeInput: string
   title: string
 }
-const CODE_FILE_DRAWER_SECTION_LIMIT = 40
 const CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES = ['src', 'app', 'packages', 'docs', 'test', 'tests', 'spec', 'scripts']
 const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
   src: 'Source',
@@ -452,124 +107,6 @@ const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
   scripts: 'Scripts',
 }
 
-function sortProjectNodes(nodes: ProjectFileNode[]): ProjectFileNode[] {
-  return sortTreeNodes(nodes)
-}
-
-function mergeKnownFilePaths(previous: Set<string>, nodes: ProjectFileNode[]): Set<string> {
-  const next = new Set(previous)
-  const walk = (items: ProjectFileNode[]) => {
-    for (const item of items) {
-      if (item.kind === 'file') {
-        next.add(item.relativePath)
-        continue
-      }
-      if (item.children && item.children.length > 0) {
-        walk(item.children)
-      }
-    }
-  }
-  walk(nodes)
-  return next
-}
-
-function replaceDirectoryNodes(
-  nodes: ProjectFileNode[],
-  directoryRelativePath: string | null,
-  nextChildren: ProjectFileNode[]
-): ProjectFileNode[] {
-  const sortedChildren = sortProjectNodes(nextChildren)
-  if (directoryRelativePath == null) {
-    return sortedChildren
-  }
-
-  return sortProjectNodes(nodes.map((node) => {
-    if (node.kind !== 'directory') return node
-    if (node.relativePath === directoryRelativePath) {
-      return {
-        ...node,
-        hasChildren: sortedChildren.length > 0,
-        isLoaded: true,
-        children: sortedChildren,
-      }
-    }
-    if (!node.children || node.children.length <= 0) return node
-    return {
-      ...node,
-      children: replaceDirectoryNodes(node.children, directoryRelativePath, sortedChildren),
-    }
-  }))
-}
-
-function findDirectoryNode(nodes: ProjectFileNode[], relativePath: string): ProjectFileNode | null {
-  for (const node of nodes) {
-    if (node.kind !== 'directory') continue
-    if (node.relativePath === relativePath) return node
-    if (node.children && node.children.length > 0) {
-      const nested = findDirectoryNode(node.children, relativePath)
-      if (nested) return nested
-    }
-  }
-  return null
-}
-
-function collectTopLevelDirectories(nodes: ProjectFileNode[]): Set<string> {
-  const directories = new Set<string>()
-  for (const node of nodes) {
-    if (node.kind !== 'directory') continue
-    if (!node.relativePath.includes('/')) {
-      directories.add(node.relativePath)
-    }
-  }
-  return directories
-}
-
-function buildKnownFilePathSet(
-  treeKnownFilePaths: Set<string>,
-  openTabPaths: string[],
-  activeRelativePath: string | null,
-  drawerState: CodeFileDrawerState,
-  session: ProjectCodeSession | undefined,
-  persistedLastCodeFile?: string
-): Set<string> {
-  const next = new Set(treeKnownFilePaths)
-  for (const path of openTabPaths) {
-    if (path.trim()) next.add(path.trim())
-  }
-  for (const path of drawerState.favorites) {
-    if (path.trim()) next.add(path.trim())
-  }
-  for (const path of drawerState.recents) {
-    if (path.trim()) next.add(path.trim())
-  }
-  for (const path of session?.tabs ?? []) {
-    if (path.trim()) next.add(path.trim())
-  }
-  if (session?.activePath?.trim()) next.add(session.activePath.trim())
-  if (activeRelativePath?.trim()) next.add(activeRelativePath.trim())
-  if (persistedLastCodeFile?.trim()) next.add(persistedLastCodeFile.trim())
-  return next
-}
-
-async function expandTreePath(
-  targetRelativePath: string,
-  options: {
-    loadDirectory: (directoryRelativePath: string | null) => Promise<boolean>
-    setExpandedDirectories: Dispatch<SetStateAction<Set<string>>>
-  }
-): Promise<void> {
-  const parents = collectParentDirectories(targetRelativePath).reverse()
-  for (const parent of parents) {
-    await options.loadDirectory(parent)
-    options.setExpandedDirectories((prev) => {
-      if (prev.has(parent)) return prev
-      const next = new Set(prev)
-      next.add(parent)
-      return next
-    })
-  }
-}
-
 function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number {
   for (const value of values) {
     if (Number.isFinite(value)) {
@@ -579,15 +116,7 @@ function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number 
   return 0
 }
 
-function fileNameFromRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/')
-  const segments = normalized.split('/')
-  return segments[segments.length - 1] || relativePath
-}
-
 type EditorSearchMode = 'find' | 'replace'
-type EditorCursorPosition = { lineNumber: number; column: number }
-
 function normalizeContentSearchScope(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value.trim()
@@ -638,140 +167,6 @@ function extensionFromRelativePath(relativePath: string | null | undefined): str
   const dotIndex = fileName.lastIndexOf('.')
   if (dotIndex <= 0 || dotIndex === fileName.length - 1) return ''
   return fileName.slice(dotIndex + 1).toLowerCase()
-}
-
-function normalizeProjectCodeCursorPosition(
-  value: unknown
-): EditorCursorPosition | null {
-  if (!value || typeof value !== 'object') return null
-  const lineNumber = Math.max(1, Math.floor(Number((value as { lineNumber?: unknown }).lineNumber)))
-  const column = Math.max(1, Math.floor(Number((value as { column?: unknown }).column)))
-  if (!Number.isFinite(lineNumber) || !Number.isFinite(column)) return null
-  return { lineNumber, column }
-}
-
-function normalizeProjectCodeSession(value: ProjectCodeSession | undefined): ProjectCodeSession | undefined {
-  if (!value) return undefined
-  const tabs = Array.isArray(value.tabs)
-    ? Array.from(new Set(value.tabs.map((item) => item.trim()).filter(Boolean))).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-    : []
-
-  const activePath = typeof value.activePath === 'string' ? value.activePath.trim() : ''
-  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
-  const cursorEntries: Array<[string, EditorCursorPosition]> = []
-
-  if (value.cursorPositions && typeof value.cursorPositions === 'object') {
-    for (const [pathKey, position] of Object.entries(value.cursorPositions)) {
-      const normalizedPath = pathKey.trim()
-      if (!normalizedPath) continue
-      const normalizedPosition = normalizeProjectCodeCursorPosition(position)
-      if (!normalizedPosition) continue
-      cursorEntries.push([normalizedPath, normalizedPosition])
-      if (cursorEntries.length >= MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) break
-    }
-  }
-
-  const cursorPositions = cursorEntries.length > 0
-    ? Object.fromEntries(cursorEntries)
-    : undefined
-
-  const contentSearchScope = normalizeContentSearchScope(value.contentSearchScope)
-
-  if (tabs.length <= 0 && !cursorPositions && !contentSearchScope) return undefined
-
-  return {
-    tabs,
-    activePath: normalizedActivePath,
-    cursorPositions,
-    contentSearchScope: contentSearchScope || undefined,
-  }
-}
-
-function isSameStringArray(left: string[], right: string[]): boolean {
-  if (left.length !== right.length) return false
-  for (let i = 0; i < left.length; i += 1) {
-    if (left[i] !== right[i]) return false
-  }
-  return true
-}
-
-function sanitizePathsForKnownFiles(paths: string[], knownFilePaths: Set<string>, limit: number): string[] {
-  const result: string[] = []
-  const seen = new Set<string>()
-  for (const rawPath of paths) {
-    const path = rawPath.trim()
-    if (!path) continue
-    if (!knownFilePaths.has(path)) continue
-    if (seen.has(path)) continue
-    seen.add(path)
-    result.push(path)
-    if (result.length >= limit) break
-  }
-  return result
-}
-
-function isSameCursorPositionMap(
-  left: Record<string, EditorCursorPosition>,
-  right: Record<string, EditorCursorPosition>
-): boolean {
-  const leftEntries = Object.entries(left)
-  const rightEntries = Object.entries(right)
-  if (leftEntries.length !== rightEntries.length) return false
-
-  for (const [path, position] of leftEntries) {
-    const next = right[path]
-    if (!next) return false
-    if (next.lineNumber !== position.lineNumber || next.column !== position.column) return false
-  }
-
-  return true
-}
-
-function sanitizeCursorPositionsForTabs(
-  cursorPositions: Record<string, EditorCursorPosition> | undefined,
-  tabSet: Set<string>
-): Record<string, EditorCursorPosition> {
-  if (!cursorPositions) return {}
-  if (tabSet.size <= 0) return {}
-
-  const result: Record<string, EditorCursorPosition> = {}
-  for (const [path, position] of Object.entries(cursorPositions)) {
-    if (!tabSet.has(path)) continue
-    result[path] = position
-    if (Object.keys(result).length >= MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) break
-  }
-  return result
-}
-
-function sanitizeCodeFileDrawerStateByPaths(
-  state: CodeFileDrawerState,
-  knownFilePaths: Set<string>
-): CodeFileDrawerState {
-  return {
-    favorites: sanitizePathsForKnownFiles(state.favorites, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
-    recents: sanitizePathsForKnownFiles(state.recents, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
-  }
-}
-
-function sanitizeProjectCodeSessionByPaths(
-  session: ProjectCodeSession | undefined,
-  knownFilePaths: Set<string>
-): ProjectCodeSession | undefined {
-  const normalized = normalizeProjectCodeSession(session)
-  if (!normalized) return undefined
-
-  const tabs = sanitizePathsForKnownFiles(normalized.tabs, knownFilePaths, MAX_PROJECT_CODE_SESSION_TABS)
-  const tabSet = new Set(tabs)
-  const cursorPositions = sanitizeCursorPositionsForTabs(normalized.cursorPositions, tabSet)
-  const activePathRaw = normalized.activePath?.trim() || ''
-  const activePath = activePathRaw && tabSet.has(activePathRaw) ? activePathRaw : tabs[0]
-
-  return normalizeProjectCodeSession({
-    tabs,
-    activePath,
-    cursorPositions: Object.keys(cursorPositions).length > 0 ? cursorPositions : undefined,
-    contentSearchScope: normalized.contentSearchScope,
-  })
 }
 
 export function CodeWorkspacePanel({
@@ -1096,56 +491,11 @@ export function CodeWorkspacePanel({
     const alt = sanitizeMarkdownImageAlt(savedImage.relativePath)
     return `![${alt}](${normalizedRelativeImagePath})`
   }, [activeRelativePath, isMarkdownFile, projectPath])
-  const markdownComponents = useMemo<Components>(() => ({
-    pre({ children }) {
-      const codeBlock = extractCodeBlockFromPreChildren(children)
-      if (!codeBlock) {
-        return <pre>{children}</pre>
-      }
-
-      return (
-        <MarkdownCodeBlock
-          codeText={codeBlock.codeText}
-          language={codeBlock.language}
-          themeMode={effectiveTheme}
-          enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
-        />
-      )
-    },
-    img({ src, alt, node: _node, ...props }) {
-      const rawSrc = typeof src === 'string' ? src : ''
-      const resolvedSrc = resolveMarkdownImageSrc(rawSrc, projectPath, activeRelativePath)
-      if (!resolvedSrc) {
-        return null
-      }
-      return <img {...props} src={resolvedSrc} alt={alt || ''} loading="lazy" />
-    },
-    a({ href, children, ...props }) {
-      const link = typeof href === 'string' ? href.trim() : ''
-      const external = Boolean(link) && shouldOpenInSystemBrowser(link)
-
-      return (
-        <a
-          {...props}
-          href={link || href}
-          target={external ? '_blank' : props.target}
-          rel={external ? 'noopener noreferrer' : props.rel}
-          onClick={(event) => {
-            props.onClick?.(event)
-            if (event.defaultPrevented) return
-            if (!external) return
-            event.preventDefault()
-            void window.electronAPI.openExternal(link)
-          }}
-        >
-          {children}
-        </a>
-      )
-    },
-    code({ className, children, node: _node, ...props }) {
-      const mergedClassName = className ? `code-markdown-inline-code ${className}` : 'code-markdown-inline-code'
-      return <code className={mergedClassName} {...props}>{children}</code>
-    },
+  const markdownComponents = useMemo<Components>(() => createMarkdownComponents({
+    activeRelativePath,
+    enableMarkdownSyntaxHighlight,
+    projectPath,
+    themeMode: effectiveTheme,
   }), [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, projectPath])
 
   const captureCurrentModeScroll = useCallback(() => {
@@ -1281,7 +631,7 @@ export function CodeWorkspacePanel({
   }, [projectPath])
 
   const ensureTreePathLoaded = useCallback(async (relativePath: string) => {
-    await expandTreePath(relativePath, {
+    await expandTreePath(relativePath, collectParentDirectories(relativePath), {
       loadDirectory,
       setExpandedDirectories,
     })
@@ -2067,7 +1417,7 @@ export function CodeWorkspacePanel({
     if (tree.status !== 'ready') return
 
     const sanitizedLocalTabs = sanitizePathsForKnownFiles(openTabPaths, allProjectFilePathSet, MAX_PROJECT_CODE_SESSION_TABS)
-    if (!isSameStringArray(openTabPaths, sanitizedLocalTabs)) {
+    if (!isSameProjectCodeTabList(openTabPaths, sanitizedLocalTabs)) {
       setOpenTabPaths(sanitizedLocalTabs)
     }
 
