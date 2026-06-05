@@ -292,6 +292,7 @@ export function CodeWorkspacePanel({
     editorRef,
     editorValue,
     ensureTreePathLoaded,
+    isShowingEditor,
     isRestoringCodeSessionRef,
     openFile,
     persistedLastCodeFile,
@@ -503,12 +504,16 @@ export function CodeWorkspacePanel({
   }, [isNarrowViewport, openFile])
 
   const handleOpenContentSearchResult = useCallback((relativePath: string, lineNumber: number, column: number) => {
+    const isMarkdownTarget = /\.(md|markdown|mdx|mdc)$/i.test(relativePath)
+    if (isMarkdownTarget && effectiveMarkdownPreviewMode === 'preview') {
+      setMarkdownPreviewMode(isNarrowViewport ? 'edit' : 'split')
+    }
     void openContentSearchMatch(relativePath, lineNumber, column)
     setActiveContentSearchLocation({ relativePath, lineNumber, column })
     if (isNarrowViewport) {
       setIsExplorerOpen(false)
     }
-  }, [isNarrowViewport, openContentSearchMatch])
+  }, [effectiveMarkdownPreviewMode, isNarrowViewport, openContentSearchMatch, setMarkdownPreviewMode])
 
   const handleToggleContentSearchTree = useCallback(() => {
     const tree = contentSearchTreeRef.current

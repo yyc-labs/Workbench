@@ -9,6 +9,7 @@ type UseCodeWorkspaceRestoreStateOptions = {
   editorRef: RefObject<MonacoCodeEditorHandle | null>
   editorValue: string
   ensureTreePathLoaded: (relativePath: string) => Promise<void>
+  isShowingEditor: boolean
   isRestoringCodeSessionRef: MutableRefObject<boolean>
   openFile: (relativePath: string, preferDisk?: boolean) => Promise<boolean>
   persistedLastCodeFile?: string
@@ -29,6 +30,7 @@ export function useCodeWorkspaceRestoreState({
   editorRef,
   editorValue,
   ensureTreePathLoaded,
+  isShowingEditor,
   isRestoringCodeSessionRef,
   openFile,
   persistedLastCodeFile,
@@ -39,6 +41,13 @@ export function useCodeWorkspaceRestoreState({
   const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
   const pendingRevealRef = useRef<RevealLocation | null>(null)
   const pendingCursorRevealRef = useRef<RevealLocation | null>(null)
+  const revealInEditor = useCallback((location: RevealLocation | null): boolean => {
+    if (!location) return false
+    const editor = editorRef.current
+    if (!editor) return false
+    editor.revealPosition(location.lineNumber, location.column)
+    return true
+  }, [editorRef])
 
   useEffect(() => {
     setHasAttemptedInitialRestore(false)
@@ -118,23 +127,29 @@ export function useCodeWorkspaceRestoreState({
       const pending = pendingRevealRef.current
       if (!pending) return
       if (pending.relativePath !== relativePath || pending.lineNumber !== lineNumber || pending.column !== column) return
-      editorRef.current?.revealPosition(lineNumber, column)
+      if (revealInEditor(pending)) {
+        pendingRevealRef.current = null
+      }
     }, 0)
-  }, [editorRef, openFile])
+  }, [openFile, revealInEditor])
 
   useEffect(() => {
     const pending = pendingRevealRef.current
     if (!pending || pending.relativePath !== activeRelativePath) return
-    editorRef.current?.revealPosition(pending.lineNumber, pending.column)
-    pendingRevealRef.current = null
-  }, [activeRelativePath, editorRef, editorValue])
+    if (!isShowingEditor) return
+    if (revealInEditor(pending)) {
+      pendingRevealRef.current = null
+    }
+  }, [activeRelativePath, editorValue, isShowingEditor, revealInEditor])
 
   useEffect(() => {
     const pending = pendingCursorRevealRef.current
     if (!pending || pending.relativePath !== activeRelativePath) return
-    editorRef.current?.revealPosition(pending.lineNumber, pending.column)
-    pendingCursorRevealRef.current = null
-  }, [activeRelativePath, editorRef, editorValue])
+    if (!isShowingEditor) return
+    if (revealInEditor(pending)) {
+      pendingCursorRevealRef.current = null
+    }
+  }, [activeRelativePath, editorValue, isShowingEditor, revealInEditor])
 
   return {
     handleOpenedCodeFile,

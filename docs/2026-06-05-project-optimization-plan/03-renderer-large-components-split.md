@@ -10,7 +10,7 @@
 | `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 拆出区域组件和 view-model |
 | `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 已进入目标区间，后续只做收口 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 854 | 继续收口搜索控件与命令逻辑 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 501 | 已进入目标区间，后续只做收口 |
 
 ## 2. `CodeWorkspacePanel.tsx`
 
@@ -140,8 +140,8 @@
 
 当前问题：
 
-- 共享 Monaco worker 环境和 find widget hover guard 已迁出，但 model cache、查找替换、搜索状态同步、快捷命令都仍集中在单文件中。
-- 当前问题已从“和 diff 重复”转为“入口层职责仍过重”。
+- 共享 Monaco worker 环境、find widget hover guard、搜索状态、findbar 和 model cache 已迁出。
+- 当前已从“重构进行中”转为“达标后的可选收口”状态。
 
 目标：
 
@@ -151,7 +151,6 @@
 
 - `useMonacoInstance.ts`
 - `useMonacoCommands.ts`
-- `useMonacoSearchWidget.ts`
 - `monacoTheme.ts`
 - `monacoLanguageSetup.ts`
 
