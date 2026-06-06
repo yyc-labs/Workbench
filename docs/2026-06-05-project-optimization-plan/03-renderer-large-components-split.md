@@ -6,18 +6,43 @@
 
 | 文件 | 当前行数 | 目标 |
 |------|----------|------|
-| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 已进入目标区间，后续只做收口 |
-| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 拆出区域组件和 view-model |
+| `src/core/renderer/pages/Detail.tsx` | 751 | 新的页面入口候选，拆出 header、pane 装配和项目操作 handler |
+| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 740 | 已进入目标区间，后续只做收口 |
 | `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 已进入目标区间，后续只做收口 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 501 | 已进入目标区间，后续只做收口 |
+| `src/core/renderer/pages/settings/SettingsRuntimePanel.tsx` | 551 | 新的独立面板候选，拆出 runtime 设置、诊断和终端清理区域 |
+| `src/core/renderer/pages/code/code.markdown.tsx` | 546 | 可选收口，拆出 Markdown renderer / helper |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 540 | 已进入目标区间，后续只做收口 |
+| `src/core/renderer/components/ProjectMetaDialog.tsx` | 536 | 新的弹窗候选，拆分项目元信息与 workspace 管理 |
+| `src/core/renderer/hooks/useMouseGestureNavigator.ts` | 530 | 谨慎处理，hook 职责集中时不为降行数强拆 |
+| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 138 | 已完成拆分，不再是大文件目标 |
+| `src/core/renderer/pages/detail/useDetailDocumentationCardState.ts` | 454 | 已拆出的状态 hook，后续避免继续膨胀 |
 
-## 2. `CodeWorkspacePanel.tsx`
+## 2. `Detail.tsx`
+
+当前问题：
+
+- 当前 751 行，是新的渲染层页面入口候选。
+- 文件同时承接路由参数、store 接线、项目 header 展示、pane 装配、运行/停止/终端/CLI/元信息 handler。
+- 业务功能分散在页面入口里，后续新增项目操作容易继续堆到同一个文件。
+
+建议拆分方向：
+
+- `DetailProjectHeader.tsx`：承接项目标题、环境、运行状态、折叠状态和资料入口。
+- `useDetailProjectActions.ts`：收口运行/停止、打开终端、切换 CLI、元信息保存等 handler。
+- `DetailPaneContent.tsx`：收口 `code` / `aicommit` pane 的装配。
+
+验收：
+
+- `Detail.tsx` 只保留路由参数、store 接线和页面级布局编排。
+- header 细节和项目操作 handler 不再直接堆在页面入口里。
+
+## 3. `CodeWorkspacePanel.tsx`
 
 当前问题：
 
 - 第二轮已经完成，滚动同步、Markdown preview mode、图片粘贴和 session 恢复链路已不再直接堆在父组件里。
-- 当前 732 行，已进入目标区间，主组件已基本收敛为布局和状态串联层。
+- 当前 740 行，已进入目标区间，主组件已基本收敛为布局和状态串联层。
 
 已完成：
 
@@ -53,7 +78,7 @@
 - `CodeWorkspacePanel.tsx` 已控制在 700-900 行以内
 - 主组件已以编排为主，不再包含大段 Markdown、编辑器和恢复链路细节实现
 
-## 3. `DetailAiCommitPanel.tsx`
+## 4. `DetailAiCommitPanel.tsx`
 
 当前问题：
 
@@ -94,32 +119,51 @@
 - `DetailAiCommitPanel.tsx` 已控制在 800-1000 行以内
 - 入口面板已主要保留状态组织、事件分发和布局拼装
 
-## 4. 第二阶段文件
+## 5. 第二阶段文件
 
-### 4.1 `DetailDocumentationCard.tsx`
+### 5.1 `DetailDocumentationCard.tsx`
+
+当前状态：
+
+- 当前 138 行，已完成拆分。
+- 主体只保留默认资料卡片入口和 `DetailDocumentationSettingsModal` 装配。
+- `useDetailDocumentationCardState.ts` 承接状态、标签、排序、链接 action 和派生数据。
+- `DetailDocumentationSettingsModal.tsx`、`DetailDocumentationLinkList.tsx`、`DetailDocumentationLinkItem.tsx`、`DetailDocumentationTagSelect.tsx` 已承接原来的大块 UI。
+
+后续约束：
+
+- 不再把资料编辑、排序、标签管理、账号/密钥展示重新堆回 `DetailDocumentationCard.tsx`。
+- `useDetailDocumentationCardState.ts` 当前 454 行，如果后续继续增长，应优先拆 view-model 或 action helper，而不是继续扩大 hook。
+
+### 5.2 `SettingsRuntimePanel.tsx`
 
 当前问题：
 
-- 目前基本仍是单文件实现。
-- 拖拽排序、标签设置、编辑表单、默认链接切换、账号/密钥复制与展示都混在一起。
+- 当前 551 行，runtime launcher 配置、Claude bashrc 写入、诊断、inventory 刷新、终端清理都在同一组件。
+- UI 区块和异步 handler 交织，后续新增 runtime 设置会继续扩大组件。
 
-目标：
+建议拆分：
 
-- 把卡片内部不同区域拆成独立展示组件。
-- 把数据整理逻辑从组件主体中抽离。
+- `useRuntimeInventory.ts`：收口 inventory 刷新、分类和清理操作。
+- `SettingsRuntimeLauncherForm.tsx`：承接 launcher / Anthropic 环境变量表单。
+- `SettingsRuntimeDiagnostics.tsx`：承接诊断和 bashrc 写入状态。
+- `SettingsRuntimeTerminalInventory.tsx`：承接 managed process / tmux session 列表。
 
-建议拆分方向：
+### 5.3 `ProjectMetaDialog.tsx`
 
-- 文档列表区域
-- 标签/筛选区域
-- 链接编辑区域
-- 展示映射或 view-model 逻辑
+当前问题：
 
-验收：
+- 当前 536 行，同时包含项目元信息编辑和 workspace/folder/tag 管理弹窗。
+- `ManagerRow`、`CreateRow` 等通用管理 UI 与项目编辑表单在同一文件。
 
-- 主卡片组件不再直接承载大段条件渲染和数据整理代码
+建议拆分：
 
-### 4.2 `DetailGitDiffDrawer.tsx`
+- `ProjectMetaForm.tsx`
+- `WorkspaceManagerDialog.tsx`
+- `WorkspaceManagerRow.tsx`
+- `WorkspaceCreateRow.tsx`
+
+### 5.4 `DetailGitDiffDrawer.tsx`
 
 当前问题：
 
@@ -136,7 +180,7 @@
 - `GitDiffContent.tsx`
 - `useGitDiffState.ts`
 
-### 4.3 `MonacoCodeEditor.tsx`
+### 5.5 `MonacoCodeEditor.tsx`
 
 当前问题：
 
@@ -154,11 +198,28 @@
 - `monacoTheme.ts`
 - `monacoLanguageSetup.ts`
 
-## 5. 渲染层拆分约束
+### 5.6 `code.markdown.tsx`
+
+当前问题：
+
+- 当前 546 行，Markdown 渲染、代码块渲染、链接/图片处理和 helper 混在一个文件。
+- 这是 Code Workspace 拆分后的派生大文件，优先级低于页面入口和独立面板。
+
+建议拆分：
+
+- `MarkdownCodeBlock.tsx`
+- `markdownRenderers.tsx`
+- `markdownMedia.ts`
+
+## 6. 渲染层拆分约束
 
 渲染层几个大文件在拆的时候，容易出现“看起来拆了，实际上只是 JSX 挪位置”的问题。后续要避免这种假拆分。
 
-### 5.1 `CodeWorkspacePanel.tsx`
+### 6.1 `Detail.tsx`
+
+重点不是只把 header JSX 切出去，而是同步收口项目操作 handler 和 pane 装配逻辑。入口页面最后应该看起来像路由和布局编排，而不是项目详情所有行为的集合。
+
+### 6.2 `CodeWorkspacePanel.tsx`
 
 重点不是单纯把 JSX 切出去，而是先把下面几类逻辑抽干净：
 
@@ -170,7 +231,7 @@
 
 如果这些状态管理还留在入口层，单纯多几个子组件，后续维护成本不会真正下降。
 
-### 5.2 `DetailAiCommitPanel.tsx`
+### 6.3 `DetailAiCommitPanel.tsx`
 
 重点先拆：
 
@@ -180,10 +241,18 @@
 
 当前这一步已经不再需要继续为了降行数做 UI 切分。后续如果再动，重点应该转到 diff/conflict 请求和 branch manager handler 的状态收口，而不是继续机械拆 JSX。
 
-### 5.3 `DetailDocumentationCard.tsx` / `DetailGitDiffDrawer.tsx` / `MonacoCodeEditor.tsx`
+### 6.4 `SettingsRuntimePanel.tsx` / `ProjectMetaDialog.tsx`
 
-这三个文件适合放在第二阶段，原因是：
+这两个文件适合做独立面板拆分，原因是：
 
-- `DetailAiCommitPanel.tsx` 已进入目标区间，`CodeWorkspacePanel.tsx` 也已转为收口型跟进
-- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 的共享基础设施已经打通，后续重点转到 `MonacoCodeEditor.tsx` 自身逻辑
-- `DetailDocumentationCard.tsx` 虽然大，但业务相对独立，适合放在后面单独收口
+- 业务边界相对清晰
+- 可以按 UI 区域和异步 handler 分离
+- 拆分不应改动实际设置项、持久化结构或 IPC 协议
+
+### 6.5 `DetailDocumentationCard.tsx` / `DetailGitDiffDrawer.tsx` / `MonacoCodeEditor.tsx`
+
+这三个文件当前状态不同：
+
+- `DetailDocumentationCard.tsx` 已完成拆分，不再是待拆大文件。
+- `DetailGitDiffDrawer.tsx` 和 `MonacoCodeEditor.tsx` 的共享基础设施已经打通，后续重点是收口剩余 view/state 编排。
+- 如果后续继续处理 Monaco 批次，不建议为了继续降行数而做纯搬运。

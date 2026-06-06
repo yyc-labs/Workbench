@@ -17,14 +17,22 @@
 
 | 文件 | 当前行数 | 说明 |
 |------|----------|------|
-| `src/core/electron/main/index.ts` | 121 | 启动编排层 |
+| `src/core/electron/main/git/git-file-operations.ts` | 616 | Git diff、conflict stage、worktree 文件读写操作 |
+| `src/core/electron/main/project-file/shared.ts` | 506 | project-file 共享路径、过滤和响应 helper |
+| `src/core/electron/main/runner.ts` | 505 | pty 与 spawn 进程管理 |
+| `src/core/electron/main/runtime/runtime-service.ts` | 423 | Runtime 启停和 session 管理 |
+| `src/core/electron/main/git/git-service.ts` | 375 | Git 仓库状态、分支和提交操作 |
 | `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 汇总 IPC handler 装配 |
 | `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | AI Commit 执行链路 |
+| `src/core/electron/main/index.ts` | 121 | 启动编排层 |
 | `src/core/electron/main/project-file-service.ts` | 13 | 兼容出口 |
 
 ## 2. 当前问题
 
 - `index.ts` 本身的问题已经基本解决，不再是主进程治理重点。
+- `git-file-operations.ts` 当前 616 行，diff 获取、空 diff 提示、冲突 stage 读取、worktree 文件读写和路径校验仍集中在一个 service 工厂中。
+- `runner.ts` 当前 505 行，pty 和普通 spawn 的进程管理仍在同一模块。
+- `project-file/shared.ts` 当前 506 行，作为共享 helper 文件已经偏大，但拆分时需要避免制造跨 service 的循环依赖。
 - `registerIpcHandlers.ts` 虽然比原入口清晰，但仍然同时承接 process、config、AI Commit、Git、shell、window、project-file 等多类 handler。
 - `ai-commit-service.ts` 已经独立，但内部仍同时包含配置归并、PowerShell 启动、WSL fallback、输出分发和状态持久化；如果后续继续加能力，仍有继续膨胀的风险。
 
@@ -83,6 +91,12 @@
 
 如果后续还要继续治理主进程，建议优先考虑：
 
+- 拆 `git-file-operations.ts`
+  - 例如拆出 diff helper、conflict stage helper、worktree file helper
+- 拆 `runner.ts`
+  - 例如按 pty 管理和 spawn 管理分离
+- 收口 `project-file/shared.ts`
+  - 例如拆出路径校验、目录过滤、响应封装
 - 按领域再拆 `registerIpcHandlers.ts`
   - 例如拆成 `registerWindowIpcHandlers.ts`、`registerGitIpcHandlers.ts`、`registerProjectFileIpcHandlers.ts`
 - 继续压缩 `ai-commit-service.ts`

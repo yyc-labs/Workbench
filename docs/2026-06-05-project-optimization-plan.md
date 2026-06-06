@@ -23,19 +23,31 @@
 
 ## 当前文件规模
 
-基于当前分支快照，剩余重点目标如下：
+基于 2026-06-06 当前分支快照，`src` 下仍超过 500 行的实现文件如下。TextMate grammar JSON、主题 JSON、lockfile 和图标资源属于数据/资源文件，不作为拆分目标。
 
 | 文件 | 当前行数 | 状态 |
 |------|----------|------|
-| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 732 | 第二轮已完成，已进入目标区间 |
-| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 第二轮已达目标区间，主体区 / 顶部区 / modal 已拆出 |
-| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 1308 | 基本未拆 |
-| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 共享 Monaco 基础设施已抽出，已进入目标区间 |
-| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 501 | 搜索状态 / findbar / model cache 已拆出，已进入目标区间 |
+| `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx` | 989 | 已进入目标区间，后续只做 diff/conflict 与 branch manager 收口 |
+| `src/core/renderer/pages/Detail.tsx` | 751 | 待评估拆分，当前是新的页面入口优先候选 |
+| `src/core/renderer/pages/code/CodeWorkspacePanel.tsx` | 740 | 第二轮已完成，后续只做 viewport / quick drawer / search focus 收口 |
+| `src/core/electron/main/git/git-file-operations.ts` | 616 | 待评估拆分，Git diff / conflict / file operation 逻辑偏集中 |
+| `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx` | 612 | 已进入目标区间，后续只做 diff view 编排收口 |
+| `src/core/shared/types.ts` | 569 | 谨慎处理，类型文件偏大但拆分会带来较多 import 变动 |
+| `src/core/renderer/pages/settings/SettingsRuntimePanel.tsx` | 551 | 待评估拆分，runtime 设置、诊断、终端清理逻辑集中 |
+| `src/core/renderer/pages/code/code.markdown.tsx` | 546 | 可选收口，Markdown renderer / helper 可继续分离 |
+| `src/core/renderer/pages/code/MonacoCodeEditor.tsx` | 540 | 已进入目标区间，后续只做 Monaco instance / commands 收口 |
+| `src/core/renderer/components/ProjectMetaDialog.tsx` | 536 | 待评估拆分，项目元信息弹窗与 workspace 管理弹窗在同文件 |
+| `src/core/renderer/hooks/useMouseGestureNavigator.ts` | 530 | 谨慎处理，hook 体积偏大但职责相对集中 |
+| `src/core/electron/main/project-file/shared.ts` | 506 | 可选收口，project-file 共享工具可按路径/过滤/常量再切 |
+| `src/core/electron/main/runner.ts` | 505 | 待评估拆分，pty 与 spawn 进程管理可继续分离 |
+
+已从重点目标移除：
+
+| 文件 | 当前行数 | 状态 |
+|------|----------|------|
+| `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` | 138 | 已完成拆分，主体只保留卡片入口和 settings modal 装配 |
 | `src/core/electron/main/index.ts` | 121 | 已完成第二轮 |
-| `src/core/electron/main/ipc/registerIpcHandlers.ts` | 351 | 已拆出，后续可按领域继续收口 |
-| `src/core/electron/main/ai-commit/ai-commit-service.ts` | 341 | 已拆出 |
-| `src/core/electron/main/project-file-service.ts` | 13 | 已完成 |
+| `src/core/electron/main/project-file-service.ts` | 13 | 已完成兼容出口收缩 |
 
 ## 已完成进度
 
@@ -74,6 +86,12 @@
   - `src/core/renderer/pages/code/useMonacoSearchWidget.ts` 已收口搜索状态、匹配计算与查找替换行为
   - `src/core/renderer/pages/code/MonacoCodeEditorFindBar.tsx` 已收口编辑器 findbar UI
   - `src/core/renderer/pages/code/monacoModelCache.ts` 已收口 model cache key / LRU 淘汰逻辑
+- `src/core/renderer/pages/detail/DetailDocumentationCard.tsx` 后续拆分
+  - 主入口已降到 138 行
+  - `DetailDocumentationSettingsModal.tsx` 承接资料设置弹窗
+  - `DetailDocumentationLinkList.tsx`、`DetailDocumentationLinkItem.tsx` 承接链接列表与单项展示
+  - `DetailDocumentationTagSelect.tsx` 承接标签选择
+  - `useDetailDocumentationCardState.ts` 承接卡片状态和派生数据
 - 静态检查
   - `npm run typecheck` 已于本次核对通过
 
@@ -81,25 +99,27 @@
 
 建议继续按下面顺序推进，不并行拆多个核心文件：
 
-1. `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-2. `src/core/renderer/pages/detail/DetailAiCommitPanel.tsx`（只保留收口型跟进）
-3. `src/core/renderer/pages/code/CodeWorkspacePanel.tsx`（只保留收口型跟进）
-4. `src/core/renderer/pages/detail/DetailGitDiffDrawer.tsx`（只保留收口型跟进）
-5. `src/core/renderer/pages/code/MonacoCodeEditor.tsx`（只保留收口型跟进）
+1. `src/core/renderer/pages/Detail.tsx`
+2. `src/core/electron/main/git/git-file-operations.ts`
+3. `src/core/renderer/pages/settings/SettingsRuntimePanel.tsx`
+4. `src/core/renderer/components/ProjectMetaDialog.tsx`
+5. `src/core/electron/main/runner.ts`
+6. `src/core/electron/main/project-file/shared.ts`（可选收口）
 
 原因：
 
 - `index.ts` 已经降到 121 行，主进程入口不再是当前最高优先级。
-- `MonacoCodeEditor.tsx` 和 `DetailGitDiffDrawer.tsx` 都已经进入目标区间，Monaco 批次的主要重复实现已经清掉。
-- 当前更值得继续投入的是 `DetailDocumentationCard.tsx`，而不是继续为 Monaco 文件降行数做机械拆分。
+- `DetailDocumentationCard.tsx` 已降到 138 行，不再是拆分目标。
+- `MonacoCodeEditor.tsx`、`DetailGitDiffDrawer.tsx`、`CodeWorkspacePanel.tsx`、`DetailAiCommitPanel.tsx` 都已经进入目标区间，后续只保留收口型跟进。
+- 当前更值得继续投入的是 `Detail.tsx`、`git-file-operations.ts`、`SettingsRuntimePanel.tsx`、`ProjectMetaDialog.tsx` 这类仍未系统拆分的入口或独立面板。
 - `project-file-service.ts` 已完成，可以从后续治理顺序中移除。
 
 ## 下一步
 
 如果下一步直接动代码，优先继续做：
 
-1. 进入 `src/core/renderer/pages/detail/DetailDocumentationCard.tsx`
-2. 回头视情况再收口 `DetailAiCommitPanel.tsx` 的 diff/conflict 请求链路和 branch manager handler
-3. `MonacoCodeEditor.tsx` / `DetailGitDiffDrawer.tsx` 只保留收口型整理
+1. 评估并拆 `src/core/renderer/pages/Detail.tsx`，优先把页面 header、pane 装配和项目操作 handler 分离。
+2. 评估 `src/core/electron/main/git/git-file-operations.ts`，优先把 diff、conflict stage、worktree 文件读取写入逻辑分离。
+3. 回头视情况再收口 `DetailAiCommitPanel.tsx` 的 diff/conflict 请求链路和 branch manager handler。
 
 后续细节见子文档，不再继续往这个入口文件里堆完整计划正文。
