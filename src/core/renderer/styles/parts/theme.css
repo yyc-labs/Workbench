@@ -1,0 +1,180 @@
+@theme {
+  /* Base */
+  --color-background: #f5f5f7;
+  --color-background-sunken: #ececf0;
+  --color-foreground: #1d1d1f;
+
+  /* Surface */
+  --color-card: rgba(255, 255, 255, 0.7);
+  --color-card-foreground: #1d1d1f;
+  --color-popover: rgba(255, 255, 255, 0.94);
+  --color-popover-foreground: #1d1d1f;
+
+  /* Brand */
+  --color-primary: #0a84ff;
+  --color-primary-hover: #0071e3;
+  --color-primary-foreground: #ffffff;
+
+  /* Secondary */
+  --color-secondary: #e9e9ed;
+  --color-secondary-foreground: #515154;
+
+  /* Accent */
+  --color-accent: rgba(0, 0, 0, 0.045);
+  --color-accent-foreground: #1d1d1f;
+
+  /* Text */
+  --color-muted: #eeeeef;
+  --color-muted-foreground: #6e6e73;
+
+  /* States */
+  --color-success: #248a63;
+  --color-success-background: rgba(36, 138, 99, 0.1);
+  --color-warning: #a56a21;
+  --color-warning-background: rgba(165, 106, 33, 0.1);
+  --color-destructive: #bf504a;
+  --color-destructive-background: rgba(191, 80, 74, 0.1);
+  --color-destructive-foreground: #ffffff;
+
+  /* Borders */
+  --color-border: rgba(29, 29, 31, 0.08);
+  --color-border-hover: rgba(29, 29, 31, 0.14);
+
+  /* Inputs */
+  --color-input: #ffffff;
+
+  /* Focus */
+  --color-ring: rgba(10, 132, 255, 0.38);
+
+  /* Scrollbar */
+  --scrollbar-size: 10px;
+  --scrollbar-edge-gap: 6px;
+  --scrollbar-track: rgba(29, 29, 31, 0.08);
+  --scrollbar-thumb: rgba(29, 29, 31, 0.28);
+  --scrollbar-thumb-hover: rgba(29, 29, 31, 0.38);
+  --scrollbar-thumb-active: rgba(29, 29, 31, 0.5);
+
+  /* Checkbox */
+  --checkbox-size: 18px;
+  --checkbox-radius: 6px;
+  --checkbox-bg: rgba(255, 255, 255, 0.88);
+  --checkbox-bg-hover: #ffffff;
+  --checkbox-border: rgba(29, 29, 31, 0.18);
+  --checkbox-border-hover: rgba(29, 29, 31, 0.32);
+  --checkbox-checkmark: #ffffff;
+  --checkbox-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.64), 0 1px 2px rgba(29, 29, 31, 0.08);
+
+  /* Terminal */
+  --color-terminal-surface: #2c2c2e;
+  --color-terminal-inner: #232326;
+
+  /* Radius */
+  --radius: 1.25rem;
+}
+
+[data-theme='dark'] {
+  /* Base */
+  --color-background: #1c1c1e;
+  --color-background-sunken: #141416;
+  --color-foreground: #f5f5f7;
+
+  /* Surface */
+  --color-card: rgba(44, 44, 46, 0.72);
+  --color-card-foreground: #f5f8ff;
+  --color-popover: rgba(44, 44, 46, 0.95);
+  --color-popover-foreground: #f5f8ff;
+
+  /* Brand */
+  --color-primary: #0a84ff;
+  --color-primary-hover: #409cff;
+  --color-primary-foreground: #ffffff;
+
+  /* Secondary */
+  --color-secondary: #2c2c2e;
+  --color-secondary-foreground: #d1d1d6;
+
+  /* Accent */
+  --color-accent: rgba(255, 255, 255, 0.08);
+  --color-accent-foreground: #f5f5f7;
+
+  /* Text */
+  --color-muted: #2c2c2e;
+  --color-muted-foreground: #a1a1a6;
+
+  /* States */
+  --color-success: #32d286;
+  --color-success-background: rgba(50, 210, 134, 0.13);
+  --color-warning: #ffd166;
+  --color-warning-background: rgba(255, 209, 102, 0.13);
+  --color-destructive: #ff8a85;
+  --color-destructive-background: rgba(255, 138, 133, 0.13);
+  --color-destructive-foreground: #ffffff;
+
+  /* Borders */
+  --color-border: rgba(245, 245, 247, 0.1);
+  --color-border-hover: rgba(245, 245, 247, 0.18);
+
+  /* Inputs */
+  --color-input: #2c2c2e;
+
+  /* Focus */
+  --color-ring: rgba(10, 132, 255, 0.46);
+
+  /* Scrollbar */
+  --scrollbar-size: 10px;
+  --scrollbar-edge-gap: 6px;
+  --scrollbar-track: rgba(245, 245, 247, 0.1);
+  --scrollbar-thumb: rgba(245, 245, 247, 0.26);
+  --scrollbar-thumb-hover: rgba(245, 245, 247, 0.36);
+  --scrollbar-thumb-active: rgba(245, 245, 247, 0.48);
+
+  /* Checkbox */
+  --checkbox-size: 18px;
+  --checkbox-radius: 6px;
+  --checkbox-bg: rgba(44, 44, 46, 0.9);
+  --checkbox-bg-hover: rgba(56, 56, 60, 0.94);
+  --checkbox-border: rgba(245, 245, 247, 0.26);
+  --checkbox-border-hover: rgba(245, 245, 247, 0.4);
+  --checkbox-checkmark: #ffffff;
+  --checkbox-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.28);
+
+  /* Terminal */
+  --color-terminal-surface: #2c2c2e;
+  --color-terminal-inner: #1f1f22;
+}
+
+:root {
+  --shadow-card: 0 1px 1px rgba(29, 29, 31, 0.025), 0 10px 28px rgba(29, 29, 31, 0.045);
+  --shadow-card-hover: 0 1px 1px rgba(29, 29, 31, 0.03), 0 14px 36px rgba(29, 29, 31, 0.07);
+  --shadow-popover: 0 18px 52px rgba(29, 29, 31, 0.16);
+  --spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --window-titlebar-height: 34px;
+}
+
+[data-theme='dark'] {
+  --shadow-card: 0 1px 1px rgba(0, 0, 0, 0.16), 0 14px 34px rgba(0, 0, 0, 0.18);
+  --shadow-card-hover: 0 1px 1px rgba(0, 0, 0, 0.2), 0 18px 46px rgba(0, 0, 0, 0.24);
+  --shadow-popover: 0 22px 64px rgba(0, 0, 0, 0.36);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', sans-serif;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 34%),
+    var(--color-background);
+  color: var(--color-foreground);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}

@@ -1,0 +1,318 @@
+.git-panel-loading-surface {
+  overflow: hidden;
+}
+
+.git-panel-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-muted) 86%, transparent);
+}
+
+.git-panel-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 48%, transparent) 50%,
+    transparent 100%
+  );
+  animation: git-panel-shimmer 1.2s ease-in-out infinite;
+}
+
+[data-theme='dark'] .git-panel-skeleton::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, #ffffff 18%, transparent) 50%,
+    transparent 100%
+  );
+}
+
+@keyframes git-panel-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.app-shell {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.nodrag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.window-titlebar {
+  height: var(--window-titlebar-height);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 86%, var(--color-background-sunken));
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+}
+
+.window-titlebar__drag {
+  user-select: none;
+}
+
+.window-titlebar__controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.window-titlebar__button {
+  width: 46px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 160ms var(--spring), color 160ms var(--spring);
+}
+
+.window-titlebar__button:hover {
+  color: var(--color-foreground);
+}
+
+.window-titlebar__button--neutral:hover {
+  background: var(--color-accent);
+}
+
+.window-titlebar__button--danger:hover {
+  background: var(--color-destructive);
+  color: #ffffff;
+}
+
+.app-tooltip-trigger {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.app-tooltip-content {
+  position: fixed;
+  z-index: 10050;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  color: var(--color-popover-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: saturate(150%) blur(16px);
+  -webkit-backdrop-filter: saturate(150%) blur(16px);
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: auto;
+}
+
+/* Bridge tooltips mirror native `title`; they should never steal hover from the target. */
+.app-title-tooltip-content {
+  pointer-events: none;
+}
+
+/* Monaco find-widget control hovers can overlap controls and cause hover flicker; suppress while hovering those controls. */
+body.monaco-find-widget-control-hover .workbench-hover-container {
+  display: none !important;
+}
+
+[data-theme='dark'] body {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
+    var(--color-background);
+}
+
+/* ── Unified Scrollbar ── */
+
+*::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track:vertical {
+  margin-block: var(--scrollbar-edge-gap);
+}
+
+*::-webkit-scrollbar-track:horizontal {
+  margin-inline: var(--scrollbar-edge-gap);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 180ms var(--spring);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Unified Checkbox (Apple-like) ── */
+
+input[type='checkbox'] {
+  -webkit-appearance: none;
+  appearance: none;
+  inline-size: var(--checkbox-size);
+  block-size: var(--checkbox-size);
+  margin: 0;
+  border-radius: var(--checkbox-radius);
+  border: 1px solid var(--checkbox-border);
+  background: var(--checkbox-bg);
+  box-shadow: var(--checkbox-shadow);
+  display: inline-grid;
+  place-content: center;
+  cursor: pointer;
+  transition:
+    background-color 180ms var(--spring),
+    border-color 180ms var(--spring),
+    box-shadow 180ms var(--spring),
+    transform 180ms var(--spring);
+}
+
+input[type='checkbox']::before {
+  content: '';
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid var(--checkbox-checkmark);
+  border-bottom: 2px solid var(--checkbox-checkmark);
+  transform: translateY(-1px) rotate(45deg) scale(0);
+  transform-origin: center;
+  transition: transform 180ms var(--spring);
+}
+
+input[type='checkbox']:hover:not(:checked) {
+  background: var(--checkbox-bg-hover);
+  border-color: var(--checkbox-border-hover);
+}
+
+input[type='checkbox']:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 1px 2px rgba(29, 29, 31, 0.14);
+}
+
+input[type='checkbox']:checked::before {
+  transform: translateY(-1px) rotate(45deg) scale(1);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 65%, transparent),
+    var(--checkbox-shadow);
+}
+
+input[type='checkbox']:active {
+  transform: scale(0.96);
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.font-mono,
+code,
+pre,
+kbd,
+samp {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+}
+
+.surface-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  backdrop-filter: saturate(150%) blur(18px);
+  -webkit-backdrop-filter: saturate(150%) blur(18px);
+  box-shadow: var(--shadow-card);
+}
+
+.surface-card-hover {
+  transition:
+    background-color 360ms var(--spring),
+    border-color 360ms var(--spring),
+    transform 360ms var(--spring),
+    box-shadow 360ms var(--spring);
+}
+
+.surface-card-hover:hover {
+  border-color: var(--color-border-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.app-chrome {
+  background: color-mix(in srgb, var(--color-card) 88%, var(--color-background-sunken));
+  border-bottom: 1px solid var(--color-border);
+  backdrop-filter: saturate(155%) blur(24px);
+  -webkit-backdrop-filter: saturate(155%) blur(24px);
+}
+
+.quiet-control {
+  background: color-mix(in srgb, var(--color-background-sunken) 70%, rgba(255, 255, 255, 0.5));
+  border: 1px solid color-mix(in srgb, var(--color-border) 74%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
+}
+
+[data-theme='dark'] .quiet-control {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.content-breathe {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+  padding: 44px 48px 56px;
+}
+
+.section-label {
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 860px) {
+  .content-breathe {
+    padding: 32px 24px 44px;
+  }
+}

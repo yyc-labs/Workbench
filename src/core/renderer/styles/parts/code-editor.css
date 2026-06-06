@@ -1,0 +1,231 @@
+.code-tree-panel {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.code-editor-panel {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.code-editor-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.code-editor-preview-toolbar {
+  min-height: 36px;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.code-editor-preview-mode-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.code-editor-preview-mode-btn {
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 94%, transparent);
+  color: var(--color-muted-foreground);
+  border-radius: 999px;
+  height: 26px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  transition: background-color 120ms var(--spring), color 120ms var(--spring), border-color 120ms var(--spring);
+}
+
+.code-editor-preview-mode-btn:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+
+.code-editor-preview-mode-btn:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.code-editor-preview-mode-btn.is-active {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, var(--color-border));
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.code-editor-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.code-editor-content--single {
+  display: block;
+}
+
+.code-editor-content--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.code-editor-pane {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Keep Monaco find widget away from the panel edge so its content isn't clipped. */
+.code-editor-pane .monaco-editor .find-widget {
+  top: 0px !important;
+}
+
+/* We render a wrapped custom find/replace bar in the React layer. */
+.code-editor-pane .monaco-editor .find-widget {
+  display: none !important;
+}
+
+.code-editor-findbar {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 35;
+  width: min(620px, calc(100% - 28px));
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: saturate(145%) blur(18px);
+  -webkit-backdrop-filter: saturate(145%) blur(18px);
+  padding: 8px;
+}
+
+.code-editor-findbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-editor-findbar-row + .code-editor-findbar-row {
+  margin-top: 6px;
+}
+
+.code-editor-findbar-input {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--color-border);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-size: 13px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.code-editor-findbar-input:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.code-editor-findbar-count {
+  min-width: 86px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+}
+
+.code-editor-findbar-toggle {
+  height: 30px;
+  min-width: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+  line-height: 1;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-toggle:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-toggle.is-active {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-editor-findbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-icon-btn:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-icon-btn.is-active {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-editor-findbar-action-btn {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-foreground);
+  font-size: 12px;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.code-editor-findbar-action-btn:hover {
+  background: var(--color-accent);
+}
+
+.code-editor-findbar-action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.code-editor-findbar--preview {
+  position: sticky;
+  top: 10px;
+  right: 0;
+  margin: 10px 14px 10px auto;
+}
+
+.code-editor-pane--split {
+  border-right: 1px solid var(--color-border);
+}
+
+.code-editor-pane--preview {
+  overflow: auto;
+}
+

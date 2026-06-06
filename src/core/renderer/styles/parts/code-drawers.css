@@ -1,0 +1,328 @@
+.code-file-quick-drawer {
+  position: absolute;
+  z-index: 30;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: min(540px, calc(100% - 20px));
+  height: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  box-shadow: 0 20px 52px rgba(15, 15, 20, 0.28);
+  backdrop-filter: saturate(160%) blur(22px);
+  -webkit-backdrop-filter: saturate(160%) blur(22px);
+  overflow: hidden;
+  transform: translateX(calc(100% + 16px));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 220ms var(--spring), opacity 220ms var(--spring);
+  will-change: transform;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.code-file-quick-drawer.is-open {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.code-file-quick-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+  background: color-mix(in srgb, var(--color-card) 64%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.code-file-quick-drawer-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.code-file-quick-drawer-section {
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-card) 94%, transparent);
+  padding: 11px;
+  display: grid;
+  gap: 9px;
+}
+
+.code-file-quick-drawer-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.code-file-quick-drawer-empty {
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  padding: 2px 2px 4px;
+}
+
+.code-file-quick-drawer-list {
+  display: grid;
+  gap: 6px;
+}
+
+.code-file-quick-drawer-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-background) 96%, transparent);
+  transition: background-color 120ms var(--spring), border-color 120ms var(--spring);
+}
+
+.code-file-quick-drawer-item:hover {
+  background: var(--color-accent);
+}
+
+.code-file-quick-drawer-item.is-active {
+  border-color: color-mix(in srgb, var(--color-primary) 52%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-file-quick-drawer-open {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 8px 6px 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.code-file-quick-drawer-path {
+  display: block;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--color-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.code-file-quick-drawer-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+  text-transform: lowercase;
+}
+
+.code-file-quick-drawer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 8px;
+}
+
+.code-file-quick-drawer-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  transition: color 120ms var(--spring), background-color 120ms var(--spring);
+}
+
+.code-file-quick-drawer-action:hover {
+  color: var(--color-foreground);
+  background: color-mix(in srgb, var(--color-card) 82%, transparent);
+}
+
+.code-file-quick-drawer-action.is-starred {
+  color: var(--color-warning);
+}
+
+.code-file-quick-drawer-action.is-danger:hover {
+  color: var(--color-destructive);
+  background: var(--color-destructive-background);
+}
+
+.recent-project-drawer {
+  --recent-project-drawer-top: clamp(96px, 14vh, 150px);
+  position: fixed;
+  z-index: 90;
+  top: var(--recent-project-drawer-top);
+  left: 12px;
+  right: 12px;
+  height: min(580px, calc(100% - var(--recent-project-drawer-top) - 16px));
+  border: 1px solid var(--color-border);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  box-shadow: 0 20px 52px rgba(15, 15, 20, 0.25);
+  backdrop-filter: saturate(138%) blur(10px);
+  -webkit-backdrop-filter: saturate(138%) blur(10px);
+  overflow: hidden;
+  transform: translate3d(0, calc(-100% - 22px), 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 220ms var(--spring), opacity 220ms var(--spring);
+  will-change: transform, opacity;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.recent-project-drawer.is-open {
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.recent-project-drawer-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+  background: color-mix(in srgb, var(--color-card) 64%, transparent);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.recent-project-drawer-current {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(36vw, 420px);
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 5px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-project-drawer-current:empty {
+  display: none;
+}
+
+.recent-project-drawer-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  contain: layout paint;
+  padding: 14px;
+}
+
+.recent-project-drawer-empty {
+  min-height: 140px;
+  border: 1px dashed color-mix(in srgb, var(--color-border) 86%, transparent);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+
+.recent-project-drawer-list {
+  display: grid;
+  gap: 7px;
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
+}
+
+.recent-project-drawer-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-background) 96%, transparent);
+  transition: background-color 120ms var(--spring), border-color 120ms var(--spring);
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 56px;
+}
+
+.recent-project-drawer-item:hover {
+  background: var(--color-accent);
+}
+
+.recent-project-drawer-open {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 8px 6px 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.recent-project-drawer-name {
+  display: block;
+  font-size: 12px;
+  color: var(--color-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-project-drawer-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--color-muted-foreground);
+}
+
+.recent-project-drawer-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  margin-right: 8px;
+  transition: color 120ms var(--spring), background-color 120ms var(--spring);
+}
+
+.recent-project-drawer-remove:hover {
+  color: var(--color-destructive);
+  background: var(--color-destructive-background);
+}
+
