@@ -63,7 +63,7 @@ const DARK_SOFT_THEME: ITheme = {
   cursorAccent: '#1f2126',
 }
 
-const XTERM_SCROLLBACK_LINES = 1200
+const XTERM_SCROLLBACK_LINES = 500
 
 function resolveTerminalTheme(variant: 'default' | 'soft'): ITheme {
   const currentTheme = document.documentElement.getAttribute('data-theme')

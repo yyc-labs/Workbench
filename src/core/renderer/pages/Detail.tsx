@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import '@xyflow/react/dist/style.css'
 import {
   ArrowUpRight,
   BookOpen,
@@ -23,12 +22,16 @@ import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projec
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../lib/projectDocLinks'
 import { useAppStore } from '../stores/appStore'
-import type { CliTool } from '../../shared/types'
-import { CodeWorkspacePanel } from './code/CodeWorkspacePanel'
-import { DetailAiCommitPanel } from './detail/DetailAiCommitPanel'
+import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
-import { useAiCommitFlow } from './detail/useAiCommitFlow'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
+
+const CodeWorkspacePanel = lazy(() =>
+  import('./code/CodeWorkspacePanel').then((module) => ({ default: module.CodeWorkspacePanel }))
+)
+const DetailAiCommitPaneHost = lazy(() =>
+  import('./detail/DetailAiCommitPaneHost').then((module) => ({ default: module.DetailAiCommitPaneHost }))
+)
 
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
@@ -53,6 +56,14 @@ function readProjectHeaderCollapsed(): boolean {
   } catch {
     return false
   }
+}
+
+function DetailPaneFallback() {
+  return (
+    <div className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/50 text-xs text-[color:var(--color-muted-foreground)]">
+      Loading...
+    </div>
+  )
 }
 
 export function DetailPage() {
@@ -84,10 +95,6 @@ export function DetailPage() {
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
   const processUrls = projectId ? useAppStore((s) => s.processUrls[projectId] || []) : ([] as string[])
   const session = projectId ? useAppStore((s) => s.sessions[projectId]) : undefined
-  const toolProcessId = useMemo(() => (projectId ? `${projectId}::toolbox` : ''), [projectId])
-  const toolProcessStatus = toolProcessId
-    ? useAppStore((s) => s.processes[toolProcessId]?.status ?? 'stopped')
-    : 'stopped'
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
   const themeMode = useAppStore((s) => s.config.theme)
   const startProject = useAppStore((s) => s.startProject)
@@ -95,7 +102,6 @@ export function DetailPage() {
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
-  const clearOutput = useAppStore((s) => s.clearOutput)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
@@ -124,54 +130,7 @@ export function DetailPage() {
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
-  const aiCommitFlow = useAiCommitFlow({
-    projectId,
-    projectPath,
-    toolProcessId,
-    aiCommitConfig,
-  })
-  const {
-    aiCommitStatus,
-    rightPaneMode,
-    setRightPaneMode,
-    aiRawText,
-    jumpToAiLogToken,
-    gitSnapshot,
-    gitSnapshotLoading,
-    gitSnapshotError,
-    refreshGitSnapshot,
-    activeCommitHash,
-    setActiveCommitHash,
-    quickConfigOpen,
-    setQuickConfigOpen,
-    quickSplit,
-    setQuickSplit,
-    quickSplitMaxBatches,
-    setQuickSplitMaxBatches,
-    quickMaxBullets,
-    setQuickMaxBullets,
-    quickConfigPos,
-    setQuickConfigPos,
-    quickConfigRef,
-    quickButtonRef,
-    flowViewportReadyRef,
-    flowInitialFocusDoneRef,
-    flowLastFocusedStepRef,
-    flowApiRef,
-    isAiEnabled,
-    defaultSplit,
-    defaultSplitMaxBatches,
-    defaultMaxBullets,
-    quickSplitMaxBatchesNumber,
-    quickMaxBulletsNumber,
-    handleAiCommit,
-    runWithQuickConfig,
-    saveQuickConfigAsDefault,
-    statusText,
-    statusClass,
-    flowNodes,
-    flowEdges,
-  } = aiCommitFlow
+  const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const docLinkState = useProjectDocLinks({ project })
   const {
     docLinks,
@@ -232,6 +191,17 @@ export function DetailPage() {
     }
   }, [projectId, isOpeningTerminal, openTerminal, session?.status])
 
+  const handleAiAutoCommit = useCallback(async () => {
+    if (!project || aiCommitStatus === 'running') return
+    try {
+      setAiCommitStatus('running')
+      const ok = await window.electronAPI.runAiCommit(project.id, project.path)
+      if (!ok) setAiCommitStatus('error')
+    } catch {
+      setAiCommitStatus('error')
+    }
+  }, [aiCommitStatus, project])
+
   useEffect(() => {
     if (!projectId) return
     if (pane === 'git') {
@@ -243,21 +213,33 @@ export function DetailPage() {
   }, [projectId, pane, navigate])
 
   useEffect(() => {
-    if (!projectId || !toolProcessId || !projectPath) return
-    if (toolProcessStatus !== 'stopped') return
-    const toolCommand = environment === 'ubuntu' ? 'exec bash -i' : 'powershell -NoLogo -NoExit'
-    const useWsl = environment === 'ubuntu'
-    clearOutput(toolProcessId)
-    void startProject(projectId, toolCommand, toolProcessId, useWsl)
-  }, [clearOutput, environment, projectId, projectPath, startProject, toolProcessId, toolProcessStatus])
-
-  useEffect(() => {
-    if (!toolProcessId) return
-    return () => {
-      clearOutput(toolProcessId)
-      void stopProject(toolProcessId)
+    if (!projectId) return
+    const api = window.electronAPI as unknown as {
+      onAiCommitStatus?: (
+        cb: (d: { projectId: string; status: Exclude<AiCommitStatus, 'idle'> }) => void
+      ) => () => void
+      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
     }
-  }, [clearOutput, toolProcessId, stopProject])
+
+    const cleanup = typeof api.onAiCommitStatus === 'function'
+      ? api.onAiCommitStatus(({ projectId: pid, status }) => {
+        if (pid !== projectId) return
+        setAiCommitStatus(status)
+      })
+      : undefined
+
+    void (async () => {
+      if (typeof api.getAiCommitState !== 'function') return
+      try {
+        const state = await api.getAiCommitState(projectId)
+        setAiCommitStatus(state?.status ?? 'idle')
+      } catch {
+        // ignore restore failures
+      }
+    })()
+
+    return cleanup
+  }, [projectId])
 
   useEffect(() => {
     try {
@@ -484,108 +466,6 @@ export function DetailPage() {
         </button>
       )}
 
-      {quickConfigOpen && (
-        <div
-          ref={quickConfigRef}
-          className="fixed z-[120] w-[260px] rounded-[16px] border p-3 shadow-xl surface-card"
-          style={{
-            left: `${quickConfigPos.x}px`,
-            top: `${quickConfigPos.y}px`,
-            borderColor: 'var(--color-border)',
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-          }}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold text-[color:var(--color-foreground)]">Quick AI Commit Config</p>
-            <button
-              className="rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => setQuickConfigOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-
-          <label className="mb-2 flex items-center gap-2 text-xs text-[color:var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={quickSplit}
-              onChange={(e) => setQuickSplit(e.target.checked)}
-            />
-            Enable split commit
-          </label>
-
-          <div className="mb-3">
-            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Split max batches (1-12)</p>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              step={1}
-              value={quickSplitMaxBatches}
-              disabled={!quickSplit}
-              onChange={(e) => setQuickSplitMaxBatches(e.target.value)}
-              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
-            />
-          </div>
-
-          <div className="mb-3">
-            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Max bullets per commit</p>
-            <div className="mb-2 flex items-center gap-1.5">
-              {[8, 12, 16].map((value) => {
-                const active = quickMaxBulletsNumber === value
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      active
-                        ? 'bg-primary text-white'
-                        : 'border border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                    }`}
-                    onClick={() => setQuickMaxBullets(String(value))}
-                  >
-                    {value}
-                  </button>
-                )
-              })}
-            </div>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              value={quickMaxBullets}
-              onChange={(e) => setQuickMaxBullets(e.target.value)}
-              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
-              placeholder="8"
-            />
-          </div>
-
-          <div className="mb-2 text-[10px] text-[color:var(--color-muted-foreground)]">
-            Default: Split {defaultSplit ? 'On' : 'Off'} · {defaultSplitMaxBatches} · Bullets {defaultMaxBullets}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              className="flex-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
-              onClick={() => void runWithQuickConfig()}
-              disabled={aiCommitStatus === 'running'}
-            >
-              Run This Time
-            </button>
-            <button
-              className="rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-              onClick={() => void saveQuickConfigAsDefault()}
-            >
-              Save Default
-            </button>
-          </div>
-        </div>
-      )}
-
       {menuPos && (
         <CardContextMenu
           x={menuPos.x}
@@ -604,7 +484,7 @@ export function DetailPage() {
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={() => {
-            void handleAiCommit()
+            void handleAiAutoCommit()
           }}
           aiCommitStatus={aiCommitStatus}
           onOpenFolder={() => window.electronAPI.openFolder(resolvedProjectPath)}
@@ -646,71 +526,41 @@ export function DetailPage() {
             ? 'min-w-[1060px] max-w-[1640px]'
             : 'min-w-0 max-w-[1360px]'
         }`}>
-          {activePane === 'code' ? (
-            <CodeWorkspacePanel
-              key={`${project.id}:${resolvedProjectPath}`}
-              projectId={project.id}
-              projectPath={resolvedProjectPath}
-              themeMode={themeMode}
-              projectHeaderCollapsed={projectHeaderCollapsed}
-              projectName={projectDisplayName(project)}
-              projectLinkItems={collapsedProjectLinkItems}
-              activePane={activePane}
-              onSwitchPane={(nextPane) => {
-                if (!projectId || nextPane === activePane) return
-                navigate(`/project/${projectId}/${nextPane}`)
-              }}
-              onOpenProjectLinksManager={openProjectLinksManager}
-            />
-          ) : (
-            <DetailAiCommitPanel
-              rightPaneMode={rightPaneMode}
-              setRightPaneMode={setRightPaneMode}
-              projectHeaderCollapsed={projectHeaderCollapsed}
-              projectName={projectDisplayName(project)}
-              projectLinkItems={collapsedProjectLinkItems}
-              activePane={activePane}
-              onSwitchPane={(nextPane) => {
-                if (!projectId || nextPane === activePane) return
-                navigate(`/project/${projectId}/${nextPane}`)
-              }}
-              onOpenProjectLinksManager={openProjectLinksManager}
-              jumpToAiLogToken={jumpToAiLogToken}
-              flowNodes={flowNodes}
-              flowEdges={flowEdges}
-              aiRawText={aiRawText}
-              statusClass={statusClass}
-              statusText={statusText}
-              gitSnapshot={gitSnapshot}
-              gitSnapshotLoading={gitSnapshotLoading}
-              gitSnapshotError={gitSnapshotError}
-              onRefreshGitSnapshot={() => void refreshGitSnapshot()}
-              activeCommitHash={activeCommitHash}
-              setActiveCommitHash={setActiveCommitHash}
-              flowApiRef={flowApiRef}
-              flowViewportReadyRef={flowViewportReadyRef}
-              flowInitialFocusDoneRef={flowInitialFocusDoneRef}
-              flowLastFocusedStepRef={flowLastFocusedStepRef}
-              aiCommitStatus={aiCommitStatus}
-              isAiEnabled={isAiEnabled}
-              aiAutoCommitButtonRef={quickButtonRef}
-              onAiAutoCommit={() => {
-                void handleAiCommit()
-              }}
-              onAiAutoCommitContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                if (aiCommitStatus === 'running') return
-                setMenuPos(null)
-                const panelWidth = 260
-                const panelHeight = 320
-                const x = Math.max(8, Math.min(e.clientX, window.innerWidth - panelWidth - 8))
-                const y = Math.max(8, Math.min(e.clientY, window.innerHeight - panelHeight - 8))
-                setQuickConfigPos({ x, y })
-                setQuickConfigOpen(true)
-              }}
-            />
-          )}
+          <Suspense fallback={<DetailPaneFallback />}>
+            {activePane === 'code' ? (
+              <CodeWorkspacePanel
+                key={`${project.id}:${resolvedProjectPath}`}
+                projectId={project.id}
+                projectPath={resolvedProjectPath}
+                themeMode={themeMode}
+                projectHeaderCollapsed={projectHeaderCollapsed}
+                projectName={projectDisplayName(project)}
+                projectLinkItems={collapsedProjectLinkItems}
+                activePane={activePane}
+                onSwitchPane={(nextPane) => {
+                  if (!projectId || nextPane === activePane) return
+                  navigate(`/project/${projectId}/${nextPane}`)
+                }}
+                onOpenProjectLinksManager={openProjectLinksManager}
+              />
+            ) : (
+              <DetailAiCommitPaneHost
+                projectId={project.id}
+                projectPath={resolvedProjectPath}
+                projectHeaderCollapsed={projectHeaderCollapsed}
+                projectName={projectDisplayName(project)}
+                projectLinkItems={collapsedProjectLinkItems}
+                aiCommitConfig={aiCommitConfig}
+                activePane={activePane}
+                onSwitchPane={(nextPane) => {
+                  if (!projectId || nextPane === activePane) return
+                  navigate(`/project/${projectId}/${nextPane}`)
+                }}
+                onOpenProjectLinksManager={openProjectLinksManager}
+                onCloseProjectContextMenu={() => setMenuPos(null)}
+              />
+            )}
+          </Suspense>
         </div>
       </div>
 

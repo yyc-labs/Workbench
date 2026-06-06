@@ -25,10 +25,8 @@ import {
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type {
   AiCommitStatus,
-  AiFlowEdge,
   AiFlowNode,
   DetailGitSnapshot,
-  FlowViewportApi,
   GitDiffViewMode,
   GitConflictFileResult,
   GitFileDiffResult,
@@ -36,12 +34,9 @@ import type {
   GitOperationResult,
   GitResolveConflictResult,
   GitSetFileStageResult,
-  RightPaneMode,
 } from './detail.types'
 
 type DetailAiCommitPanelProps = {
-  rightPaneMode: RightPaneMode
-  setRightPaneMode: Dispatch<SetStateAction<RightPaneMode>>
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: ProjectLinkItem[]
@@ -50,7 +45,6 @@ type DetailAiCommitPanelProps = {
   onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
-  flowEdges: AiFlowEdge[]
   aiRawText: string
   statusClass: string
   statusText: string
@@ -60,10 +54,6 @@ type DetailAiCommitPanelProps = {
   onRefreshGitSnapshot: () => void
   activeCommitHash: string | null
   setActiveCommitHash: Dispatch<SetStateAction<string | null>>
-  flowApiRef: MutableRefObject<FlowViewportApi | null>
-  flowViewportReadyRef: MutableRefObject<boolean>
-  flowInitialFocusDoneRef: MutableRefObject<boolean>
-  flowLastFocusedStepRef: MutableRefObject<string | null>
   aiCommitStatus: AiCommitStatus
   isAiEnabled: boolean
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
@@ -76,8 +66,6 @@ type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
 const BRANCH_SEARCH_DEBOUNCE_MS = 140
 
 function DetailAiCommitPanel({
-  rightPaneMode,
-  setRightPaneMode,
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],

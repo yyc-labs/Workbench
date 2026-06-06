@@ -1,14 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MarkerType } from '@xyflow/react'
 import type { AiCommitConfig, AiCommitRunOverride, AiCommitTaskSnapshot } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import {
   BASE_AI_STEPS,
-  FLOW_NODE_GAP_X,
-  FLOW_NODE_HEIGHT,
-  FLOW_NODE_START_X,
-  FLOW_NODE_START_Y,
-  FLOW_NODE_WIDTH,
   applyStep,
   clampMaxBullets,
   clampSplitMaxBatches,
@@ -19,13 +13,10 @@ import {
 } from './detail.aiFlow'
 import type {
   AiCommitStatus,
-  AiFlowEdge,
   AiFlowNode,
   AiStepKey,
   AiStepState,
   DetailGitSnapshot,
-  FlowViewportApi,
-  RightPaneMode,
 } from './detail.types'
 
 type UseAiCommitFlowOptions = {
@@ -42,7 +33,6 @@ export function useAiCommitFlow({
   aiCommitConfig,
 }: UseAiCommitFlowOptions) {
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
-  const [rightPaneMode, setRightPaneMode] = useState<RightPaneMode>('flow')
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
   const [aiRawText, setAiRawText] = useState('')
   const [jumpToAiLogToken, setJumpToAiLogToken] = useState(0)
@@ -61,10 +51,6 @@ export function useAiCommitFlow({
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
-  const flowViewportReadyRef = useRef(false)
-  const flowInitialFocusDoneRef = useRef(false)
-  const flowLastFocusedStepRef = useRef<AiStepKey | null>(null)
-  const flowApiRef = useRef<FlowViewportApi | null>(null)
 
   const isAiEnabled = aiCommitConfig?.enabled ?? true
   const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
@@ -190,11 +176,6 @@ export function useAiCommitFlow({
     }
   }, [activeCommitHash])
 
-  useEffect(() => {
-    if (rightPaneMode !== 'flow') return
-    flowInitialFocusDoneRef.current = false
-  }, [rightPaneMode])
-
   const refreshGitSnapshot = useCallback(async () => {
     if (!projectPath) {
       setGitSnapshot(null)
@@ -254,7 +235,6 @@ export function useAiCommitFlow({
     }
 
     setAiCommitStatus('running')
-    setRightPaneMode('flow')
     setJumpToAiLogToken((prev) => prev + 1)
     useAppStore.getState().appendOutput(
       toolProcessId,
@@ -317,12 +297,6 @@ export function useAiCommitFlow({
     () =>
       flowSteps.map((step, index) => ({
         id: step.key,
-        type: 'ai-step',
-        position: { x: FLOW_NODE_START_X + index * FLOW_NODE_GAP_X, y: FLOW_NODE_START_Y },
-        style: {
-          width: FLOW_NODE_WIDTH,
-          height: FLOW_NODE_HEIGHT,
-        },
         data: {
           key: step.key,
           label: step.label,
@@ -331,96 +305,12 @@ export function useAiCommitFlow({
           index,
           isFocused: step.key === flowFocusedStepKey,
         },
-        draggable: false,
-        selectable: false,
       })),
     [flowSteps, flowFocusedStepKey]
   )
-  const flowEdges = useMemo<AiFlowEdge[]>(
-    () =>
-      flowSteps.slice(0, -1).map((step, index) => {
-        const next = flowSteps[index + 1]
-        const errored = step.status === 'error' || next.status === 'error'
-        const running = step.status === 'running' || next.status === 'running'
-        const reached = step.status !== 'pending' || next.status !== 'pending'
-        const completed = step.status === 'success' && next.status !== 'pending'
-        const edgeColor = errored
-          ? 'var(--color-destructive)'
-          : running
-            ? 'var(--color-warning)'
-            : completed
-              ? 'var(--color-success)'
-              : 'color-mix(in srgb, var(--color-border) 88%, transparent)'
-
-        return {
-          id: `e-${step.key}-${next.key}`,
-          source: step.key,
-          target: next.key,
-          type: 'smoothstep',
-          animated: running && !errored,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 18,
-            height: 18,
-            color: edgeColor,
-          },
-          style: {
-            stroke: edgeColor,
-            strokeWidth: running ? 2.8 : completed ? 2.4 : 1.6,
-            strokeDasharray: reached ? undefined : '4 7',
-            opacity: reached ? 1 : 0.72,
-            transition: 'stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease',
-          },
-          pathOptions: { offset: 18 },
-          selectable: false,
-          focusable: false,
-          data: {
-            status: errored ? 'error' : running ? 'running' : reached ? 'success' : 'pending',
-          },
-        }
-      }),
-    [flowSteps]
-  )
-
-  useEffect(() => {
-    if (rightPaneMode !== 'flow') return
-    const api = flowApiRef.current
-    if (!api || !flowViewportReadyRef.current) return
-
-    if (!flowInitialFocusDoneRef.current) {
-      flowInitialFocusDoneRef.current = true
-      flowLastFocusedStepRef.current = 'start'
-      const startCenterX = FLOW_NODE_START_X + FLOW_NODE_WIDTH / 2
-      const startCenterY = FLOW_NODE_START_Y + FLOW_NODE_HEIGHT / 2
-      void api.setCenter(startCenterX, startCenterY, {
-        zoom: 0.95,
-        duration: 520,
-        interpolate: 'smooth',
-      })
-      return
-    }
-
-    const targetStepKey = getFocusedStepKey(flowSteps, aiCommitStatus)
-    if (flowLastFocusedStepRef.current === targetStepKey) return
-
-    const targetIndex = flowSteps.findIndex((step) => step.key === targetStepKey)
-    if (targetIndex < 0) return
-
-    flowLastFocusedStepRef.current = targetStepKey
-    const centerX = FLOW_NODE_START_X + targetIndex * FLOW_NODE_GAP_X + FLOW_NODE_WIDTH / 2
-    const centerY = FLOW_NODE_START_Y + FLOW_NODE_HEIGHT / 2
-    void api.setCenter(centerX, centerY, {
-      zoom: 0.95,
-      duration: 700,
-      interpolate: 'smooth',
-      ease: (t) => 1 - (1 - t) * (1 - t) * (1 - t),
-    })
-  }, [flowSteps, aiCommitStatus, rightPaneMode])
 
   return {
     aiCommitStatus,
-    rightPaneMode,
-    setRightPaneMode,
     aiRawText,
     jumpToAiLogToken,
     gitSnapshot,
@@ -441,10 +331,6 @@ export function useAiCommitFlow({
     setQuickConfigPos,
     quickConfigRef,
     quickButtonRef,
-    flowViewportReadyRef,
-    flowInitialFocusDoneRef,
-    flowLastFocusedStepRef,
-    flowApiRef,
     isAiEnabled,
     defaultSplit,
     defaultSplitMaxBatches,
@@ -457,6 +343,5 @@ export function useAiCommitFlow({
     statusText,
     statusClass,
     flowNodes,
-    flowEdges,
   }
 }

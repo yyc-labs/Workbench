@@ -8,7 +8,7 @@ interface AiCommitRegistry {
 }
 
 const REGISTRY_FILE = 'ai-commit-registry.json'
-const MAX_OUTPUT_CHARS = 1_000_000
+const MAX_OUTPUT_CHARS = 300_000
 
 function getRegistryPath(): string {
   return join(app.getPath('userData'), REGISTRY_FILE)

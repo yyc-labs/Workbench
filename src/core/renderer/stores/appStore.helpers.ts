@@ -6,7 +6,7 @@ import type {
   RunStartupMode,
 } from '../../shared/types'
 
-const MAX_TERMINAL_OUTPUT_CHARS = 1_000_000
+const MAX_TERMINAL_OUTPUT_CHARS = 300_000
 const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
 const PROCESS_URLS_STORAGE_KEY = 'launcher:process-urls:v1'
 

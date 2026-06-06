@@ -1,8 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { MemoryRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
-import { HomePage } from './pages/Home'
-import { DetailPage } from './pages/Detail'
-import { SettingsPage } from './pages/Settings'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
@@ -10,6 +7,10 @@ import { Clock3, Copy, Minus, Square, X } from 'lucide-react'
 import { GlobalTitleTooltipBridge } from './components/GlobalTitleTooltipBridge'
 import { RecentProjectsDrawer } from './components/RecentProjectsDrawer'
 import { useMouseGestureNavigator } from './hooks/useMouseGestureNavigator'
+
+const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
+const DetailPage = lazy(() => import('./pages/Detail').then((module) => ({ default: module.DetailPage })))
+const SettingsPage = lazy(() => import('./pages/Settings').then((module) => ({ default: module.SettingsPage })))
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
 const APP_DISPLAY_NAME = 'IDE Electron'
@@ -419,6 +420,14 @@ function WindowTitleBar() {
   )
 }
 
+function AppRouteFallback() {
+  return (
+    <div className="flex h-full items-center justify-center text-xs text-[color:var(--color-muted-foreground)]">
+      Loading...
+    </div>
+  )
+}
+
 export function App() {
   return (
     <Router>
@@ -434,12 +443,14 @@ export function App() {
       <div className="app-shell">
         <WindowTitleBar />
         <div className="app-content">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/project/:projectId" element={<DetailPage />} />
-            <Route path="/project/:projectId/:pane" element={<DetailPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <Suspense fallback={<AppRouteFallback />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/project/:projectId" element={<DetailPage />} />
+              <Route path="/project/:projectId/:pane" element={<DetailPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </Suspense>
         </div>
       </div>
     </Router>

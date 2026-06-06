@@ -1,4 +1,3 @@
-import type { Edge as FlowEdge, Node as FlowNode } from '@xyflow/react'
 import type {
   AiCommitStatus as SharedAiCommitStatus,
   AiCommitTaskSnapshot,
@@ -19,7 +18,6 @@ import type {
 export type AiCommitStatus = SharedAiCommitStatus
 export type AiStepStatus = 'pending' | 'running' | 'success' | 'error'
 export type AiStepKey = 'start' | 'stage' | 'ai' | 'message' | 'commit' | 'done'
-export type RightPaneMode = 'flow' | 'raw'
 
 export interface AiStepState {
   key: AiStepKey
@@ -53,18 +51,7 @@ export type AiFlowNodeData = {
   isFocused: boolean
 }
 
-export type AiFlowNode = FlowNode<AiFlowNodeData, 'ai-step'>
-export type AiFlowEdge = FlowEdge<{ status: AiStepStatus }, 'smoothstep'>
-
-export type FlowViewportApi = {
-  setCenter: (
-    x: number,
-    y: number,
-    options?: {
-      zoom?: number
-      duration?: number
-      interpolate?: 'smooth' | 'linear'
-      ease?: (t: number) => number
-    }
-  ) => Promise<boolean>
+export type AiFlowNode = {
+  id: AiStepKey
+  data: AiFlowNodeData
 }
