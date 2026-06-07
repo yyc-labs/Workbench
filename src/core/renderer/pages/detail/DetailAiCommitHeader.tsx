@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { BookOpen, Bot, Code2 } from 'lucide-react'
+import { BookOpen, Bot, Code2, Loader2, RotateCcw } from 'lucide-react'
+import type { AiCommitUndoState } from '../../../shared/types'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
@@ -22,12 +23,18 @@ type DetailAiCommitHeaderProps = {
   activePane: 'code' | 'aicommit'
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
   aiCommitStatus: AiCommitStatus
+  aiCommitUndo: AiCommitUndoState | null
+  aiCommitUndoAvailable: boolean
+  aiCommitUndoError: string | null
+  aiCommitUndoRemainingSeconds: number
+  aiCommitUndoRunning: boolean
   firstProjectLinkItem?: ProjectLinkItem
   flowNodes: AiFlowNode[]
   gitRepositoryControls?: ReactNode
   isAiEnabled: boolean
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onUndoAiCommit: () => void
   onOpenProjectLinksManager?: () => void
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   projectHeaderCollapsed: boolean
@@ -41,12 +48,18 @@ export function DetailAiCommitHeader({
   activePane,
   aiAutoCommitButtonRef,
   aiCommitStatus,
+  aiCommitUndo,
+  aiCommitUndoAvailable,
+  aiCommitUndoError,
+  aiCommitUndoRemainingSeconds,
+  aiCommitUndoRunning,
   firstProjectLinkItem,
   flowNodes,
   gitRepositoryControls,
   isAiEnabled,
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
+  onUndoAiCommit,
   onOpenProjectLinksManager,
   onSwitchPane,
   projectHeaderCollapsed,
@@ -55,6 +68,10 @@ export function DetailAiCommitHeader({
   statusClass,
   statusText,
 }: DetailAiCommitHeaderProps) {
+  const undoButtonLabel = aiCommitUndo?.commitCount && aiCommitUndo.commitCount > 1
+    ? `撤回 ${aiCommitUndo.commitCount} 个提交`
+    : '撤回提交'
+
   return (
     <div className="shrink-0 space-y-3">
       <section className="min-h-[52px] rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 px-4 py-2">
@@ -149,6 +166,28 @@ export function DetailAiCommitHeader({
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
             {statusText}
           </span>
+          {aiCommitUndoAvailable && (
+            <button
+              type="button"
+              className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2.5 text-[11px] font-medium text-[color:var(--color-warning)] transition-colors hover:bg-[color:var(--color-warning-background)]/80 disabled:opacity-70"
+              onClick={onUndoAiCommit}
+              disabled={aiCommitUndoRunning}
+              title="撤回本次 AI Commit"
+            >
+              {aiCommitUndoRunning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-3.5 w-3.5" />
+              )}
+              <span>{undoButtonLabel}</span>
+              <span className="font-mono">{aiCommitUndoRemainingSeconds}s</span>
+            </button>
+          )}
+          {aiCommitUndoError && (
+            <span className="inline-flex max-w-[360px] items-center truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-destructive)]" title={aiCommitUndoError}>
+              {aiCommitUndoError}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {flowNodes.map((node, index) => (

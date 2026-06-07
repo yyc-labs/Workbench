@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AiCommitConfig, AiCommitRunOverride, AiCommitTaskSnapshot } from '../../../shared/types'
+import type { AiCommitConfig, AiCommitRunOverride, AiCommitTaskSnapshot, AiCommitUndoResult, AiCommitUndoState } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import {
   BASE_AI_STEPS,
@@ -28,6 +28,8 @@ type UseAiCommitFlowOptions = {
   aiCommitConfig: AiCommitConfig | undefined
 }
 
+const pendingUndoCloseTimers = new Map<string, number>()
+
 export function useAiCommitFlow({
   projectId,
   projectPath,
@@ -47,6 +49,10 @@ export function useAiCommitFlow({
   const [gitRepositoriesTruncated, setGitRepositoriesTruncated] = useState(false)
   const [selectedGitRepositoryId, setSelectedGitRepositoryId] = useState<string | null>(null)
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
+  const [aiCommitUndo, setAiCommitUndo] = useState<AiCommitUndoState | null>(null)
+  const [aiCommitUndoRemainingMs, setAiCommitUndoRemainingMs] = useState(0)
+  const [aiCommitUndoRunning, setAiCommitUndoRunning] = useState(false)
+  const [aiCommitUndoError, setAiCommitUndoError] = useState<string | null>(null)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
   const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
   const [quickSplitMaxBatches, setQuickSplitMaxBatches] = useState(
@@ -66,6 +72,8 @@ export function useAiCommitFlow({
   const defaultMaxBullets = clampMaxBullets(aiCommitConfig?.maxBullets)
   const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
   const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
+  const aiCommitUndoAvailable = Boolean(aiCommitUndo && aiCommitUndo.status === 'available' && aiCommitUndoRemainingMs > 0)
+  const aiCommitUndoRemainingSeconds = Math.max(0, Math.ceil(aiCommitUndoRemainingMs / 1000))
   const selectedGitRepository = useMemo(() => {
     if (gitRepositories.length <= 0) return null
     return gitRepositories.find((repo) => repo.id === selectedGitRepositoryId) ?? gitRepositories[0]
@@ -84,6 +92,9 @@ export function useAiCommitFlow({
     setGitRepositoriesError(null)
     setGitRepositoriesTruncated(false)
     setActiveCommitHash(null)
+    setAiCommitUndo(null)
+    setAiCommitUndoRemainingMs(0)
+    setAiCommitUndoError(null)
   }, [projectPath])
 
   useEffect(() => {
@@ -91,6 +102,9 @@ export function useAiCommitFlow({
     setGitSnapshot(null)
     setGitSnapshotError(null)
     setActiveCommitHash(null)
+    setAiCommitUndo(null)
+    setAiCommitUndoRemainingMs(0)
+    setAiCommitUndoError(null)
   }, [selectedGitRepositoryId])
 
   useEffect(() => {
@@ -125,9 +139,21 @@ export function useAiCommitFlow({
       if (status === 'running') {
         setFlowSteps(BASE_AI_STEPS)
         setAiRawText('')
+        setAiCommitUndo(null)
+        setAiCommitUndoRemainingMs(0)
+        setAiCommitUndoError(null)
       } else {
         if (status === 'success') {
           setFlowSteps((prev) => applyStep(completePreviousSteps(prev, 'done'), 'done', 'success'))
+          if (typeof api.getAiCommitState === 'function') {
+            void api.getAiCommitState(projectId).then((state) => {
+              const undo = state?.undo && state.undo.status === 'available' ? state.undo : null
+              setAiCommitUndo(undo)
+              setAiCommitUndoRemainingMs(undo ? Math.max(0, undo.expiresAt - Date.now()) : 0)
+            }).catch(() => {
+              // ignore undo refresh failures; the commit itself has already completed
+            })
+          }
         }
         if (status === 'error') {
           setFlowSteps((prev) => {
@@ -135,6 +161,8 @@ export function useAiCommitFlow({
             if (running) return applyStep(prev, running.key, 'error')
             return applyStep(prev, 'done', 'error')
           })
+          setAiCommitUndo(null)
+          setAiCommitUndoRemainingMs(0)
         }
       }
     })
@@ -148,6 +176,9 @@ export function useAiCommitFlow({
         setAiCommitStatus(restored.status)
         setAiRawText(restored.rawText)
         setFlowSteps(restored.steps)
+        const undo = state.undo && state.undo.status === 'available' ? state.undo : null
+        setAiCommitUndo(undo)
+        setAiCommitUndoRemainingMs(undo ? Math.max(0, undo.expiresAt - Date.now()) : 0)
         if (restored.rawText) {
           useAppStore.getState().appendOutput(
             toolProcessId,
@@ -170,6 +201,63 @@ export function useAiCommitFlow({
     setQuickSplitMaxBatches(String(defaultSplitMaxBatches))
     setQuickMaxBullets(String(defaultMaxBullets))
   }, [defaultSplit, defaultSplitMaxBatches, defaultMaxBullets, projectId])
+
+  useEffect(() => {
+    if (!aiCommitUndo || aiCommitUndo.status !== 'available') {
+      setAiCommitUndoRemainingMs(0)
+      return
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.max(0, aiCommitUndo.expiresAt - Date.now())
+      setAiCommitUndoRemainingMs(remaining)
+      if (remaining <= 0) {
+        setAiCommitUndo(null)
+        const api = window.electronAPI as unknown as {
+          closeAiCommitUndo?: (projectId: string, reason?: 'expired') => Promise<AiCommitTaskSnapshot | null>
+        }
+        if (projectId && typeof api.closeAiCommitUndo === 'function') {
+          void api.closeAiCommitUndo(projectId, 'expired')
+        }
+      }
+    }
+
+    updateRemaining()
+    const timer = window.setInterval(updateRemaining, 250)
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [aiCommitUndo, projectId])
+
+  useEffect(() => {
+    if (!projectId) return undefined
+
+    const pendingTimer = pendingUndoCloseTimers.get(projectId)
+    if (pendingTimer) {
+      window.clearTimeout(pendingTimer)
+      pendingUndoCloseTimers.delete(projectId)
+    }
+
+    return () => {
+      const previousTimer = pendingUndoCloseTimers.get(projectId)
+      if (previousTimer) {
+        window.clearTimeout(previousTimer)
+      }
+
+      const api = window.electronAPI as unknown as {
+        closeAiCommitUndo?: (projectId: string, reason?: 'left-pane') => Promise<AiCommitTaskSnapshot | null>
+      }
+
+      const timer = window.setTimeout(() => {
+        pendingUndoCloseTimers.delete(projectId)
+        if (typeof api.closeAiCommitUndo === 'function') {
+          void api.closeAiCommitUndo(projectId, 'left-pane')
+        }
+      }, 0)
+
+      pendingUndoCloseTimers.set(projectId, timer)
+    }
+  }, [projectId])
 
   useEffect(() => {
     if (!quickConfigOpen) return
@@ -300,6 +388,10 @@ export function useAiCommitFlow({
     if (!projectId || !activeRepoRoot) return
     if (aiCommitStatus === 'running') return
 
+    setAiCommitUndo(null)
+    setAiCommitUndoRemainingMs(0)
+    setAiCommitUndoError(null)
+
     const api = window.electronAPI as unknown as {
       runAiCommit?: (
         projectId: string,
@@ -342,6 +434,36 @@ export function useAiCommitFlow({
     activeRepoRoot,
     toolProcessId,
   ])
+
+  const handleUndoAiCommit = useCallback(async () => {
+    if (!projectId || !aiCommitUndoAvailable || aiCommitUndoRunning) return
+    const api = window.electronAPI as unknown as {
+      undoAiCommit?: (projectId: string) => Promise<AiCommitUndoResult>
+    }
+    if (typeof api.undoAiCommit !== 'function') {
+      setAiCommitUndoError('撤回 API 不可用，请重启 Electron 应用。')
+      return
+    }
+
+    setAiCommitUndoRunning(true)
+    setAiCommitUndoError(null)
+    try {
+      const result = await api.undoAiCommit(projectId)
+      if (!result.ok) {
+        setAiCommitUndoError(result.error || result.output || '撤回提交失败')
+        setAiCommitUndo(result.undo && result.undo.status === 'available' ? result.undo : null)
+        setAiCommitUndoRemainingMs(result.undo?.status === 'available' ? Math.max(0, result.undo.expiresAt - Date.now()) : 0)
+        return
+      }
+      setAiCommitUndo(null)
+      setAiCommitUndoRemainingMs(0)
+      await refreshGitSnapshot()
+    } catch (error) {
+      setAiCommitUndoError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setAiCommitUndoRunning(false)
+    }
+  }, [aiCommitUndoAvailable, aiCommitUndoRunning, projectId, refreshGitSnapshot])
 
   const runWithQuickConfig = useCallback(async () => {
     const override = {
@@ -410,6 +532,11 @@ export function useAiCommitFlow({
     refreshGitSnapshot,
     activeCommitHash,
     setActiveCommitHash,
+    aiCommitUndo,
+    aiCommitUndoAvailable,
+    aiCommitUndoRemainingSeconds,
+    aiCommitUndoRunning,
+    aiCommitUndoError,
     quickConfigOpen,
     setQuickConfigOpen,
     quickSplit,
@@ -429,6 +556,7 @@ export function useAiCommitFlow({
     quickSplitMaxBatchesNumber,
     quickMaxBulletsNumber,
     handleAiCommit,
+    handleUndoAiCommit,
     runWithQuickConfig,
     saveQuickConfigAsDefault,
     statusText,

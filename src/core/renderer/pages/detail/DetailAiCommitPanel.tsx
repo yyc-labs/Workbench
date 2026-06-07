@@ -1,5 +1,6 @@
 import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { AiCommitUndoState } from '../../../shared/types'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
 import { DetailAiCommitGitGuideModal } from './DetailAiCommitGitGuideModal'
@@ -63,10 +64,16 @@ type DetailAiCommitPanelProps = {
   onRefreshGitSnapshot: () => void
   activeCommitHash: string | null
   setActiveCommitHash: Dispatch<SetStateAction<string | null>>
+  aiCommitUndo: AiCommitUndoState | null
+  aiCommitUndoAvailable: boolean
+  aiCommitUndoRemainingSeconds: number
+  aiCommitUndoRunning: boolean
+  aiCommitUndoError: string | null
   aiCommitStatus: AiCommitStatus
   isAiEnabled: boolean
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
   onAiAutoCommit: () => void
+  onUndoAiCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
 }
 
@@ -99,10 +106,16 @@ function DetailAiCommitPanel({
   onRefreshGitSnapshot,
   activeCommitHash,
   setActiveCommitHash,
+  aiCommitUndo,
+  aiCommitUndoAvailable,
+  aiCommitUndoRemainingSeconds,
+  aiCommitUndoRunning,
+  aiCommitUndoError,
   aiCommitStatus,
   isAiEnabled,
   aiAutoCommitButtonRef,
   onAiAutoCommit,
+  onUndoAiCommit,
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
   const firstProjectLinkItem = projectLinkItems[0]
@@ -861,12 +874,18 @@ function DetailAiCommitPanel({
             activePane={activePane}
             aiAutoCommitButtonRef={aiAutoCommitButtonRef}
             aiCommitStatus={aiCommitStatus}
+            aiCommitUndo={aiCommitUndo}
+            aiCommitUndoAvailable={aiCommitUndoAvailable}
+            aiCommitUndoError={aiCommitUndoError}
+            aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
+            aiCommitUndoRunning={aiCommitUndoRunning}
             firstProjectLinkItem={firstProjectLinkItem}
             flowNodes={flowNodes}
             gitRepositoryControls={gitRepositoryControls}
             isAiEnabled={isAiEnabled}
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
+            onUndoAiCommit={onUndoAiCommit}
             onOpenProjectLinksManager={onOpenProjectLinksManager}
             onSwitchPane={onSwitchPane}
             projectHeaderCollapsed={projectHeaderCollapsed}

@@ -60,6 +60,11 @@ export function DetailAiCommitPaneHost({
     refreshGitSnapshot,
     activeCommitHash,
     setActiveCommitHash,
+    aiCommitUndo,
+    aiCommitUndoAvailable,
+    aiCommitUndoRemainingSeconds,
+    aiCommitUndoRunning,
+    aiCommitUndoError,
     quickConfigOpen,
     setQuickConfigOpen,
     quickSplit,
@@ -79,6 +84,7 @@ export function DetailAiCommitPaneHost({
     quickSplitMaxBatchesNumber,
     quickMaxBulletsNumber,
     handleAiCommit,
+    handleUndoAiCommit,
     runWithQuickConfig,
     saveQuickConfigAsDefault,
     statusText,
@@ -230,11 +236,19 @@ export function DetailAiCommitPaneHost({
         onRefreshGitSnapshot={() => void refreshGitSnapshot()}
         activeCommitHash={activeCommitHash}
         setActiveCommitHash={setActiveCommitHash}
+        aiCommitUndo={aiCommitUndo}
+        aiCommitUndoAvailable={aiCommitUndoAvailable}
+        aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
+        aiCommitUndoRunning={aiCommitUndoRunning}
+        aiCommitUndoError={aiCommitUndoError}
         aiCommitStatus={aiCommitStatus}
         isAiEnabled={isAiEnabled}
         aiAutoCommitButtonRef={quickButtonRef}
         onAiAutoCommit={() => {
           void handleAiCommit()
+        }}
+        onUndoAiCommit={() => {
+          void handleUndoAiCommit()
         }}
         onAiAutoCommitContextMenu={(e) => {
           e.preventDefault()
