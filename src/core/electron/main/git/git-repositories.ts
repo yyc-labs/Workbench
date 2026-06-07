@@ -88,7 +88,7 @@ function buildRepositorySummaries(
     return {
       id: repo.rootPath,
       name: relativePath === '.' ? path.basename(workspaceRoot) : path.basename(repo.rootPath),
-      rootPath: repo.rootPath,
+      repoRoot: repo.rootPath,
       relativePath,
       isNested: false,
       gitDirPath: repo.gitDirPath,
@@ -97,8 +97,8 @@ function buildRepositorySummaries(
 
   for (const summary of summaries) {
     const parent = summaries
-      .filter((candidate) => isPathInside(candidate.rootPath, summary.rootPath))
-      .sort((a, b) => b.rootPath.length - a.rootPath.length)[0]
+      .filter((candidate) => isPathInside(candidate.repoRoot, summary.repoRoot))
+      .sort((a, b) => b.repoRoot.length - a.repoRoot.length)[0]
 
     if (parent) {
       summary.isNested = true

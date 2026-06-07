@@ -15,8 +15,10 @@ function getRegistryPath(): string {
 }
 
 function normalizeEntry(entry: AiCommitTaskSnapshot): AiCommitTaskSnapshot {
+  const legacyEntry = entry as AiCommitTaskSnapshot & { projectPath?: string }
   return {
     ...entry,
+    repoRoot: entry.repoRoot || legacyEntry.projectPath || '',
     output: trimOutput(entry.output || ''),
     updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : Date.now(),
     startedAt: Number.isFinite(entry.startedAt) ? entry.startedAt : Date.now(),

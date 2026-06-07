@@ -70,7 +70,7 @@ export function useAiCommitFlow({
     if (gitRepositories.length <= 0) return null
     return gitRepositories.find((repo) => repo.id === selectedGitRepositoryId) ?? gitRepositories[0]
   }, [gitRepositories, selectedGitRepositoryId])
-  const activeGitProjectPath = selectedGitRepository?.rootPath || projectPath
+  const activeRepoRoot = selectedGitRepository?.repoRoot
   const selectGitRepository = useCallback((repoId: string) => {
     setSelectedGitRepositoryId(repoId || null)
   }, [])
@@ -223,7 +223,7 @@ export function useAiCommitFlow({
     }
 
     const api = window.electronAPI as unknown as {
-      listGitRepositories?: (projectPath: string) => Promise<DetailGitRepositoryList>
+      listGitRepositories?: (workspacePath: string) => Promise<DetailGitRepositoryList>
     }
 
     if (typeof api.listGitRepositories !== 'function') {
@@ -260,11 +260,11 @@ export function useAiCommitFlow({
     }
 
     const api = window.electronAPI as unknown as {
-      getGitWorkspaceSnapshot?: (projectPath: string) => Promise<DetailGitSnapshot>
+      getGitRepositorySnapshot?: (repoRoot: string) => Promise<DetailGitSnapshot>
     }
 
-    if (typeof api.getGitWorkspaceSnapshot !== 'function') {
-      setGitSnapshotError('Git workspace API is unavailable. Please restart Electron app process.')
+    if (typeof api.getGitRepositorySnapshot !== 'function') {
+      setGitSnapshotError('Git repository API is unavailable. Please restart Electron app process.')
       return
     }
 
@@ -273,7 +273,7 @@ export function useAiCommitFlow({
     const requestSeq = gitSnapshotRequestSeqRef.current + 1
     gitSnapshotRequestSeqRef.current = requestSeq
     try {
-      const result = await api.getGitWorkspaceSnapshot(selectedGitRepository.rootPath)
+      const result = await api.getGitRepositorySnapshot(selectedGitRepository.repoRoot)
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshot(result)
       setGitSnapshotError(result.error ?? null)
@@ -297,13 +297,13 @@ export function useAiCommitFlow({
   }, [refreshGitSnapshot, aiCommitStatus, selectedGitRepositoryId])
 
   const handleAiCommit = useCallback(async (override?: AiCommitRunOverride) => {
-    if (!projectId || !activeGitProjectPath) return
+    if (!projectId || !activeRepoRoot) return
     if (aiCommitStatus === 'running') return
 
     const api = window.electronAPI as unknown as {
       runAiCommit?: (
         projectId: string,
-        projectPath: string,
+        repoRoot: string,
         override?: AiCommitRunOverride
       ) => Promise<boolean>
     }
@@ -329,7 +329,7 @@ export function useAiCommitFlow({
         `[AI Commit] quick override: split=${override.split ? 'on' : 'off'}, maxBatches=${override.splitMaxBatches ?? defaultSplitMaxBatches}, maxBullets=${override.maxBullets ?? defaultMaxBullets}\r\n`
       )
     }
-    const ok = await api.runAiCommit(projectId, activeGitProjectPath, override)
+    const ok = await api.runAiCommit(projectId, activeRepoRoot, override)
     if (!ok) {
       setAiCommitStatus('error')
     }
@@ -339,7 +339,7 @@ export function useAiCommitFlow({
     defaultSplitMaxBatches,
     isAiEnabled,
     projectId,
-    activeGitProjectPath,
+    activeRepoRoot,
     toolProcessId,
   ])
 

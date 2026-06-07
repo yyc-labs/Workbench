@@ -63,7 +63,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
   async function runAiCommit(
     projectId: string,
-    projectPath: string,
+    repoRoot: string,
     override?: AiCommitRunOverride
   ): Promise<boolean> {
     const existing = markAiCommitInterruptedIfOrphan(projectId)
@@ -76,7 +76,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     const now = Date.now()
     upsertAiCommitTask({
       projectId,
-      projectPath,
+      repoRoot,
       runId: `${now}-${Math.random().toString(36).slice(2, 8)}`,
       status: 'running',
       output: '',
@@ -121,11 +121,11 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     const scriptPs1Path = join(__dirname, '../../script/auto-git-commit/auto_commit.ps1')
     const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
     const wslTarget = process.platform === 'win32'
-      ? resolveWslVsCodeTarget(projectPath, deps.getDefaultWslDistro())
+      ? resolveWslVsCodeTarget(repoRoot, deps.getDefaultWslDistro())
       : null
 
     sendAiCommitStatus(projectId, 'running')
-    sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${projectPath}\r\n`)
+    sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${repoRoot}\r\n`)
     sendAiCommitOutput(
       projectId,
       `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}, max bullets=${maxBullets}\r\n`
@@ -161,7 +161,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
       const spawnPowerShell = (command: string) =>
         spawn(command, windowsPsArgs, {
-          cwd: projectPath,
+          cwd: repoRoot,
           shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
         })

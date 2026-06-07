@@ -483,7 +483,7 @@ function DetailAiCommitPanel({
     setStagingFilePath(file.path)
     try {
       const result: GitSetFileStageResult = await window.electronAPI.setGitFileStage({
-        projectPath: gitSnapshot.projectPath,
+        repoRoot: gitSnapshot.repoRoot,
         filePath: file.path,
         stage,
       })
@@ -507,7 +507,7 @@ function DetailAiCommitPanel({
     setDiffTruncated(false)
     try {
       const result: GitFileDiffResult = await window.electronAPI.getGitFileDiff({
-        projectPath: gitSnapshot.projectPath,
+        repoRoot: gitSnapshot.repoRoot,
         filePath,
         staged,
       })
@@ -537,7 +537,7 @@ function DetailAiCommitPanel({
     setConflictError(null)
     try {
       const result: GitConflictFileResult = await window.electronAPI.getGitConflictFile({
-        projectPath: gitSnapshot.projectPath,
+        repoRoot: gitSnapshot.repoRoot,
         filePath,
       })
       if (requestSeq !== conflictRequestSeqRef.current) return
@@ -564,7 +564,7 @@ function DetailAiCommitPanel({
     setFileActionError(null)
     try {
       const result: GitResolveConflictResult = await window.electronAPI.resolveGitConflictFile({
-        projectPath: gitSnapshot.projectPath,
+        repoRoot: gitSnapshot.repoRoot,
         filePath: payload.filePath,
         content: payload.content,
         markResolved: payload.markResolved,
@@ -633,7 +633,7 @@ function DetailAiCommitPanel({
     setRunningOperation(operation)
     try {
       const result = await window.electronAPI.runGitOperation({
-        projectPath: gitSnapshot.projectPath,
+        repoRoot: gitSnapshot.repoRoot,
         operation,
         targetBranch: operation === 'merge' || operation === 'switch' ? mergeTarget : undefined,
       })
@@ -643,6 +643,7 @@ function DetailAiCommitPanel({
       }
     } catch (error) {
       const failedResult: GitOperationResult = {
+        repoRoot: gitSnapshot.repoRoot,
         operation,
         ok: false,
         checkedAt: Date.now(),
@@ -666,6 +667,7 @@ function DetailAiCommitPanel({
   }): Promise<GitOperationResult> => {
     if (!gitSnapshot) {
       return {
+        repoRoot: '',
         operation: request.operation,
         ok: false,
         checkedAt: Date.now(),
@@ -676,7 +678,7 @@ function DetailAiCommitPanel({
       }
     }
     return window.electronAPI.runGitOperation({
-      projectPath: gitSnapshot.projectPath,
+      repoRoot: gitSnapshot.repoRoot,
       operation: request.operation,
       targetBranch: request.targetBranch,
       remoteName: request.remoteName,

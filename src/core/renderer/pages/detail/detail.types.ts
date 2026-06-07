@@ -14,7 +14,7 @@ import type {
   GitConflictFileResult as SharedGitConflictFileResult,
   GitResolveConflictRequest as SharedGitResolveConflictRequest,
   GitResolveConflictResult as SharedGitResolveConflictResult,
-  GitWorkspaceSnapshot,
+  GitRepositorySnapshot,
 } from '../../../shared/types'
 
 export type AiCommitStatus = SharedAiCommitStatus
@@ -31,7 +31,7 @@ export interface AiStepState {
 export type LatestCommitInfo = GitHistoryCommitInfo
 export type DetailGitRepositoryList = GitRepositoryListResult
 export type DetailGitRepositorySummary = GitRepositorySummary
-export type DetailGitSnapshot = GitWorkspaceSnapshot
+export type DetailGitSnapshot = GitRepositorySnapshot
 export type GitOperationKind = SharedGitOperationKind
 export type GitOperationResult = SharedGitOperationResult
 export type GitSetFileStageRequest = SharedGitSetFileStageRequest

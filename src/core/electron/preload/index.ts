@@ -144,25 +144,25 @@ const api = {
 
   runAiCommit: (
     projectId: string,
-    projectPath: string,
+    repoRoot: string,
     override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
-  ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, projectPath, override),
+  ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, repoRoot, override),
 
   getAiCommitState: (projectId: string) =>
     ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId),
 
-  getLatestCommit: (projectPath: string) =>
-    ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, projectPath),
+  getLatestCommit: (repoRoot: string) =>
+    ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, repoRoot),
 
-  listGitRepositories: (projectPath: string) =>
-    ipcRenderer.invoke(IPC.GIT_LIST_REPOSITORIES, projectPath),
+  listGitRepositories: (workspacePath: string) =>
+    ipcRenderer.invoke(IPC.GIT_LIST_REPOSITORIES, workspacePath),
 
-  getGitWorkspaceSnapshot: (projectPath: string) =>
-    ipcRenderer.invoke(IPC.GIT_GET_WORKSPACE_SNAPSHOT, projectPath),
+  getGitRepositorySnapshot: (repoRoot: string) =>
+    ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT, repoRoot),
 
   runGitOperation: (
     request: {
-      projectPath: string
+      repoRoot: string
       operation:
         | 'fetch'
         | 'pull'
@@ -179,19 +179,19 @@ const api = {
   ) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 
   setGitFileStage: (
-    request: { projectPath: string; filePath: string; stage: boolean }
+    request: { repoRoot: string; filePath: string; stage: boolean }
   ) => ipcRenderer.invoke(IPC.GIT_SET_FILE_STAGE, request),
 
   getGitFileDiff: (
-    request: { projectPath: string; filePath: string; staged: boolean }
+    request: { repoRoot: string; filePath: string; staged: boolean }
   ) => ipcRenderer.invoke(IPC.GIT_GET_FILE_DIFF, request),
 
   getGitConflictFile: (
-    request: { projectPath: string; filePath: string }
+    request: { repoRoot: string; filePath: string }
   ) => ipcRenderer.invoke(IPC.GIT_GET_CONFLICT_FILE, request),
 
   resolveGitConflictFile: (
-    request: { projectPath: string; filePath: string; content: string; markResolved?: boolean }
+    request: { repoRoot: string; filePath: string; content: string; markResolved?: boolean }
   ) => ipcRenderer.invoke(IPC.GIT_RESOLVE_CONFLICT_FILE, request),
 
   getCapability: () => ipcRenderer.invoke(IPC.WSL_GET_CAPABILITY),

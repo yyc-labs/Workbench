@@ -3,13 +3,14 @@ import {
   normalizeGitOperationOutput,
   type GitCommandRunner,
 } from './git-command'
+import { promises as fs } from 'node:fs'
 import type {
   GitBranchInfo,
   GitChangedFile,
   GitChangeKind,
   GitChangeScope,
   GitHistoryCommitInfo,
-  GitWorkspaceSnapshot,
+  GitRepositorySnapshot,
 } from '../../../shared/types'
 
 export function emptyGitBranchInfo(): GitBranchInfo {
@@ -281,29 +282,50 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined
   }
 
-  async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspaceSnapshot> {
-    const repositoryResult = await runner.runGitCommand(projectPath, ['rev-parse', '--show-toplevel'])
+  async function readGitRepositorySnapshot(repoRoot: string): Promise<GitRepositorySnapshot> {
+    const inputRepoRoot = repoRoot.trim()
+    if (!inputRepoRoot) {
+      return {
+        repoRoot: '',
+        isGitRepository: false,
+        branch: emptyGitBranchInfo(),
+        changedFiles: [],
+        recentCommits: [],
+        checkedAt: Date.now(),
+        error: 'Repository root is required.',
+      }
+    }
+
+    let checkedRepoRoot = inputRepoRoot
+    try {
+      checkedRepoRoot = await fs.realpath(inputRepoRoot)
+    } catch {
+      // Keep the caller-provided path so the error can still point at the requested repoRoot.
+    }
+
+    const repositoryResult = await runner.runGitCommand(checkedRepoRoot, ['rev-parse', '--show-toplevel'])
     const repositoryRoot = repositoryResult.code === 0
       ? repositoryResult.stdout.replace(/\r/g, '').trim()
       : ''
+    const effectiveRepoRoot = repositoryRoot || checkedRepoRoot
     const repository = repositoryRoot
       ? {
           id: repositoryRoot,
           name: repositoryRoot.split(/[\\/]/).filter(Boolean).pop() || repositoryRoot,
-          rootPath: repositoryRoot,
+          repoRoot: repositoryRoot,
           relativePath: '.',
           isNested: false,
         }
       : undefined
     const emptyBranch = emptyGitBranchInfo()
-    const statusResult = await runGitCommand(projectPath, ['status', '--porcelain=v2', '--branch', '-uall', '-z'], {
+    const statusResult = await runGitCommand(effectiveRepoRoot, ['status', '--porcelain=v2', '--branch', '-uall', '-z'], {
       stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
 
     if (statusResult.code !== 0) {
       return {
-        projectPath,
+        repoRoot: effectiveRepoRoot,
         isGitRepository: false,
         repository,
         branch: emptyBranch,
@@ -318,9 +340,9 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     }
 
     const [localBranches, remoteBranches, recentCommits] = await Promise.all([
-      listGitLines(projectPath, ['branch', '--format=%(refname:short)']),
-      listGitLines(projectPath, ['branch', '--remotes', '--format=%(refname:short)']),
-      readGitCommitHistory(projectPath, 10),
+      listGitLines(effectiveRepoRoot, ['branch', '--format=%(refname:short)']),
+      listGitLines(effectiveRepoRoot, ['branch', '--remotes', '--format=%(refname:short)']),
+      readGitCommitHistory(effectiveRepoRoot, 10),
     ])
 
     const parsed = parseGitStatus(statusResult.stdout)
@@ -328,7 +350,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     const remoteBranchSet = new Set(filteredRemoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
     const upstreamOid = parsed.branch.upstream && !upstreamGone
-      ? await readGitRefOid(projectPath, parsed.branch.upstream)
+      ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream)
       : undefined
     const branch = {
       ...parsed.branch,
@@ -339,7 +361,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     }
 
     return {
-      projectPath,
+      repoRoot: effectiveRepoRoot,
       isGitRepository: true,
       repository,
       branch,
@@ -351,6 +373,6 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
 
   return {
     readRecentCommits,
-    readGitWorkspaceSnapshot,
+    readGitRepositorySnapshot,
   }
 }

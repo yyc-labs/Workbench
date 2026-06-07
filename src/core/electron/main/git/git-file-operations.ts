@@ -17,11 +17,11 @@ import type {
   GitConflictStageContent,
   GitFileDiffRequest,
   GitFileDiffResult,
+  GitRepositorySnapshot,
   GitResolveConflictRequest,
   GitResolveConflictResult,
   GitSetFileStageRequest,
   GitSetFileStageResult,
-  GitWorkspaceSnapshot,
 } from '../../../shared/types'
 
 const GIT_DIFF_OUTPUT_LIMIT_BYTES = 512 * 1024
@@ -30,7 +30,7 @@ const GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES = 1024 * 1024
 
 type GitFileOperationDependencies = {
   runner: GitCommandRunner
-  readGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
+  readGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
 }
 
 function firstNonEmptyLine(input: string): string | undefined {
@@ -81,11 +81,11 @@ function normalizeGitRelativePath(input: string): string | null {
   return trimmed
 }
 
-async function resolveGitFilePath(projectPath: string, filePath: string): Promise<string | null> {
+async function resolveGitFilePath(repoRoot: string, filePath: string): Promise<string | null> {
   const normalized = normalizeGitRelativePath(filePath)
   if (!normalized) return null
   try {
-    const rootRealPath = await realpath(projectPath)
+    const rootRealPath = await realpath(repoRoot)
     const candidatePath = join(rootRealPath, normalized)
     const candidateRealPath = await realpath(candidatePath)
     if (
@@ -108,7 +108,7 @@ function hasConflictMarker(content: string): boolean {
 
 export function createGitFileOperations({
   runner,
-  readGitWorkspaceSnapshot,
+  readGitRepositorySnapshot,
 }: GitFileOperationDependencies) {
   const { runGitCommand } = runner
 
@@ -119,13 +119,13 @@ export function createGitFileOperations({
   }
 
   async function readGitShowStageContent(
-    projectPath: string,
+    repoRoot: string,
     filePath: string,
     stage: 1 | 2 | 3
   ): Promise<GitConflictStageContent> {
     const spec = `:${stage}:${filePath}`
     const args = ['show', '--textconv', spec]
-    const execution = await runGitCommand(projectPath, args, {
+    const execution = await runGitCommand(repoRoot, args, {
       stdoutLimitBytes: GIT_CONFLICT_STAGE_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
@@ -162,26 +162,28 @@ export function createGitFileOperations({
 
   async function getGitConflictFile(request: GitConflictFileRequest): Promise<GitConflictFileResult> {
     const checkedAt = Date.now()
-    const projectPath = request.projectPath.trim()
+    const repoRoot = request.repoRoot.trim()
     const normalizedFilePath = normalizeGitRelativePath(request.filePath)
     const filePath = normalizedFilePath ?? ''
 
-    if (!projectPath) {
+    if (!repoRoot) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'Project path is required.',
+        output: 'Repository root is required.',
         exitCode: null,
         filePath,
         workingTreeContent: '',
         hasConflictMarkers: false,
         stageContents: [],
-        error: 'Project path is required.',
+        error: 'Repository root is required.',
       }
     }
     if (!normalizedFilePath) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -195,10 +197,11 @@ export function createGitFileOperations({
       }
     }
 
-    const snapshot = await readGitWorkspaceSnapshot(projectPath)
+    const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || 'Not a git repository.'
       return {
+        repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -211,10 +214,12 @@ export function createGitFileOperations({
         error: reason,
       }
     }
+    const resolvedRepoRoot = snapshot.repoRoot
 
     const conflictFile = snapshot.changedFiles.find((file) => file.path === normalizedFilePath && file.scope === 'conflicted')
     if (!conflictFile) {
       return {
+        repoRoot: resolvedRepoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -228,9 +233,10 @@ export function createGitFileOperations({
       }
     }
 
-    const resolvedPath = await resolveGitFilePath(projectPath, normalizedFilePath)
+    const resolvedPath = await resolveGitFilePath(resolvedRepoRoot, normalizedFilePath)
     if (!resolvedPath) {
       return {
+        repoRoot: resolvedRepoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -249,6 +255,7 @@ export function createGitFileOperations({
       const fileStat = await stat(resolvedPath)
       if (fileStat.size > GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES) {
         return {
+          repoRoot: resolvedRepoRoot,
           ok: false,
           checkedAt,
           command: '',
@@ -265,6 +272,7 @@ export function createGitFileOperations({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return {
+        repoRoot: resolvedRepoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -279,9 +287,9 @@ export function createGitFileOperations({
     }
 
     const stageContents = await Promise.all([
-      readGitShowStageContent(projectPath, normalizedFilePath, 1),
-      readGitShowStageContent(projectPath, normalizedFilePath, 2),
-      readGitShowStageContent(projectPath, normalizedFilePath, 3),
+      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 1),
+      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 2),
+      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 3),
     ])
 
     const errors = stageContents
@@ -294,6 +302,7 @@ export function createGitFileOperations({
     ].filter(Boolean)
 
     return {
+      repoRoot: resolvedRepoRoot,
       ok: true,
       checkedAt,
       command: `git show --textconv :1:${normalizedFilePath}; git show --textconv :2:${normalizedFilePath}; git show --textconv :3:${normalizedFilePath}`,
@@ -308,23 +317,25 @@ export function createGitFileOperations({
 
   async function resolveGitConflictFile(request: GitResolveConflictRequest): Promise<GitResolveConflictResult> {
     const checkedAt = Date.now()
-    const projectPath = request.projectPath.trim()
+    const repoRoot = request.repoRoot.trim()
     const normalizedFilePath = normalizeGitRelativePath(request.filePath)
     const content = request.content ?? ''
     const markResolved = request.markResolved !== false
 
-    if (!projectPath) {
+    if (!repoRoot) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'Project path is required.',
+        output: 'Repository root is required.',
         exitCode: null,
-        error: 'Project path is required.',
+        error: 'Repository root is required.',
       }
     }
     if (!normalizedFilePath) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -334,10 +345,11 @@ export function createGitFileOperations({
       }
     }
 
-    const snapshot = await readGitWorkspaceSnapshot(projectPath)
+    const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || 'Not a git repository.'
       return {
+        repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -346,10 +358,12 @@ export function createGitFileOperations({
         error: reason,
       }
     }
+    const resolvedRepoRoot = snapshot.repoRoot
 
-    const resolvedPath = await resolveGitFilePath(projectPath, normalizedFilePath)
+    const resolvedPath = await resolveGitFilePath(resolvedRepoRoot, normalizedFilePath)
     if (!resolvedPath) {
       return {
+        repoRoot: resolvedRepoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -364,6 +378,7 @@ export function createGitFileOperations({
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       return {
+        repoRoot: resolvedRepoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -375,6 +390,7 @@ export function createGitFileOperations({
 
     if (!markResolved) {
       return {
+        repoRoot: resolvedRepoRoot,
         ok: true,
         checkedAt,
         command: `write ${normalizedFilePath}`,
@@ -384,7 +400,7 @@ export function createGitFileOperations({
     }
 
     const args = ['add', '--', normalizedFilePath]
-    const execution = await runGitCommand(projectPath, args, {
+    const execution = await runGitCommand(resolvedRepoRoot, args, {
       stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
@@ -394,6 +410,7 @@ export function createGitFileOperations({
     })
     const ok = execution.code === 0
     return {
+      repoRoot: resolvedRepoRoot,
       ok,
       checkedAt,
       command: formatGitCommand(args),
@@ -405,35 +422,38 @@ export function createGitFileOperations({
 
   async function setGitFileStage(request: GitSetFileStageRequest): Promise<GitSetFileStageResult> {
     const checkedAt = Date.now()
-    const projectPath = request.projectPath.trim()
-    const filePath = request.filePath.trim()
+    const repoRoot = request.repoRoot.trim()
+    const filePath = normalizeGitRelativePath(request.filePath)
     const stage = request.stage
 
-    if (!projectPath) {
+    if (!repoRoot) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'Project path is required.',
+        output: 'Repository root is required.',
         exitCode: null,
-        error: 'Project path is required.',
+        error: 'Repository root is required.',
       }
     }
     if (!filePath) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'File path is required.',
+        output: 'File path is invalid.',
         exitCode: null,
-        error: 'File path is required.',
+        error: 'File path is invalid.',
       }
     }
 
-    const snapshot = await readGitWorkspaceSnapshot(projectPath)
+    const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || 'Not a git repository.'
       return {
+        repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -442,10 +462,11 @@ export function createGitFileOperations({
         error: reason,
       }
     }
+    const resolvedRepoRoot = snapshot.repoRoot
 
     if (stage) {
       const args = ['add', '--', filePath]
-      const execution = await runGitCommand(projectPath, args, {
+      const execution = await runGitCommand(resolvedRepoRoot, args, {
         stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
         stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       })
@@ -455,6 +476,7 @@ export function createGitFileOperations({
       })
       const ok = execution.code === 0
       return {
+        repoRoot: resolvedRepoRoot,
         ok,
         checkedAt,
         command: formatGitCommand(args),
@@ -473,13 +495,14 @@ export function createGitFileOperations({
     let lastExecution: GitCommandExecutionResult | null = null
     let lastCommand = ''
     for (const args of fallbackArgs) {
-      const execution = await runGitCommand(projectPath, args, {
+      const execution = await runGitCommand(resolvedRepoRoot, args, {
         stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
         stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       })
       const ok = execution.code === 0
       if (ok) {
         return {
+          repoRoot: resolvedRepoRoot,
           ok: true,
           checkedAt,
           command: formatGitCommand(args),
@@ -501,6 +524,7 @@ export function createGitFileOperations({
       })
       : 'Unstage operation failed.'
     return {
+      repoRoot: resolvedRepoRoot,
       ok: false,
       checkedAt,
       command: lastCommand,
@@ -512,37 +536,40 @@ export function createGitFileOperations({
 
   async function getGitFileDiff(request: GitFileDiffRequest): Promise<GitFileDiffResult> {
     const checkedAt = Date.now()
-    const projectPath = request.projectPath.trim()
-    const filePath = request.filePath.trim()
+    const repoRoot = request.repoRoot.trim()
+    const filePath = normalizeGitRelativePath(request.filePath)
     const staged = Boolean(request.staged)
 
-    if (!projectPath) {
+    if (!repoRoot) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'Project path is required.',
+        output: 'Repository root is required.',
         exitCode: null,
         staged,
-        error: 'Project path is required.',
+        error: 'Repository root is required.',
       }
     }
     if (!filePath) {
       return {
+        repoRoot,
         ok: false,
         checkedAt,
         command: '',
-        output: 'File path is required.',
+        output: 'File path is invalid.',
         exitCode: null,
         staged,
-        error: 'File path is required.',
+        error: 'File path is invalid.',
       }
     }
 
-    const snapshot = await readGitWorkspaceSnapshot(projectPath)
+    const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || 'Not a git repository.'
       return {
+        repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
         checkedAt,
         command: '',
@@ -552,6 +579,7 @@ export function createGitFileOperations({
         error: reason,
       }
     }
+    const resolvedRepoRoot = snapshot.repoRoot
 
     const changedFile = snapshot.changedFiles.find((file) => file.path === filePath)
     const shouldTryUntrackedFallback = !staged && changedFile?.scope === 'untracked'
@@ -559,7 +587,7 @@ export function createGitFileOperations({
     let args = staged
       ? ['diff', '--cached', '--', filePath]
       : ['diff', '--', filePath]
-    let execution = await runGitCommand(projectPath, args, {
+    let execution = await runGitCommand(resolvedRepoRoot, args, {
       stdoutLimitBytes: GIT_DIFF_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
@@ -573,11 +601,11 @@ export function createGitFileOperations({
       }) || undefined
 
     if (shouldTryUntrackedFallback && ok && !output) {
-      const existsInWorkingTree = await fileExistsAtCwd(projectPath, filePath)
+      const existsInWorkingTree = await fileExistsAtCwd(resolvedRepoRoot, filePath)
       if (existsInWorkingTree) {
         const nullDevicePath = process.platform === 'win32' ? 'NUL' : '/dev/null'
         args = ['diff', '--no-index', '--', nullDevicePath, filePath]
-        const untrackedDiff = await runGitCommand(projectPath, args, {
+        const untrackedDiff = await runGitCommand(resolvedRepoRoot, args, {
           stdoutLimitBytes: GIT_DIFF_OUTPUT_LIMIT_BYTES,
           stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
         })
@@ -591,11 +619,12 @@ export function createGitFileOperations({
     }
 
     if (ok && !output && changedFile && changedFile.scope !== 'conflicted') {
-      const eolInfo = await readGitFileEolInfo(projectPath, filePath)
+      const eolInfo = await readGitFileEolInfo(resolvedRepoRoot, filePath)
       output = buildEmptyGitDiffHint(filePath, changedFile, eolInfo)
     }
 
     return {
+      repoRoot: resolvedRepoRoot,
       ok,
       checkedAt,
       command: formatGitCommand(args),

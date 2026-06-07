@@ -5,6 +5,8 @@ import { wslBridge } from '../wsl-bridge'
 import type { GitOutputLimitInfo } from '../../../shared/types'
 
 export const DEFAULT_GIT_OUTPUT_LIMIT_BYTES = 512 * 1024
+export const DEFAULT_GIT_COMMAND_TIMEOUT_MS = 30_000
+export const DEFAULT_GIT_OPERATION_TIMEOUT_MS = 120_000
 
 type LimitedGitText = {
   text: string
@@ -22,6 +24,7 @@ export type GitCommandExecutionResult = {
 type GitCommandLimits = {
   stdoutLimitBytes?: number
   stderrLimitBytes?: number
+  timeoutMs?: number
 }
 
 type GitCommandSequenceResult = {
@@ -129,23 +132,71 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
 
   function runGitCommand(cwd: string, args: string[], limits?: GitCommandLimits): Promise<GitCommandExecutionResult> {
     return new Promise((resolve) => {
+      const stdoutAccumulator = createLimitedUtf8Accumulator(limits?.stdoutLimitBytes ?? Number.POSITIVE_INFINITY)
+      const stderrAccumulator = createLimitedUtf8Accumulator(limits?.stderrLimitBytes ?? Number.POSITIVE_INFINITY)
+      const timeoutMs = limits?.timeoutMs ?? DEFAULT_GIT_COMMAND_TIMEOUT_MS
       const wslTarget = process.platform === 'win32'
         ? resolveWslVsCodeTarget(cwd, getDefaultWslDistro())
         : null
       const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
-      const child = useWslGit
-        ? spawn('wsl.exe', ['-d', wslTarget!.distro, '--cd', wslTarget!.linuxPath, 'git', ...args], {
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-        : spawn('git', args, {
-          cwd,
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
+      let settled = false
+      let timedOut = false
+      let timeout: NodeJS.Timeout | null = null
+      let forceKillTimeout: NodeJS.Timeout | null = null
 
-      const stdoutAccumulator = createLimitedUtf8Accumulator(limits?.stdoutLimitBytes ?? Number.POSITIVE_INFINITY)
-      const stderrAccumulator = createLimitedUtf8Accumulator(limits?.stderrLimitBytes ?? Number.POSITIVE_INFINITY)
+      const finish = (result: GitCommandExecutionResult) => {
+        if (settled) return
+        settled = true
+        if (timeout) clearTimeout(timeout)
+        if (forceKillTimeout) clearTimeout(forceKillTimeout)
+        resolve(result)
+      }
+
+      const finishBuffers = (stderrFallback = ''): Omit<GitCommandExecutionResult, 'code'> => {
+        const stdoutResult = stdoutAccumulator.finish()
+        const stderrResult = stderrAccumulator.finish()
+        const stderrParts = [stderrResult.text || stderrFallback]
+        if (timedOut) {
+          stderrParts.push(`Git command timed out after ${timeoutMs}ms.`)
+        }
+        return {
+          stdout: stdoutResult.text,
+          stderr: stderrParts.filter(Boolean).join('\n'),
+          stdoutLimit: stdoutResult.limitInfo,
+          stderrLimit: stderrResult.limitInfo,
+        }
+      }
+
+      let child: ReturnType<typeof spawn>
+      try {
+        child = useWslGit
+          ? spawn('wsl.exe', ['-d', wslTarget!.distro, '--cd', wslTarget!.linuxPath, 'git', ...args], {
+            shell: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
+          : spawn('git', args, {
+            cwd,
+            shell: false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          })
+      } catch (error) {
+        const buffers = finishBuffers(error instanceof Error ? error.message : String(error))
+        finish({
+          code: null,
+          ...buffers,
+        })
+        return
+      }
+
+      if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+        timeout = setTimeout(() => {
+          timedOut = true
+          child.kill('SIGTERM')
+          forceKillTimeout = setTimeout(() => {
+            child.kill('SIGKILL')
+          }, 2_000)
+        }, timeoutMs)
+      }
 
       child.stdout?.on('data', (buf: Buffer) => {
         stdoutAccumulator.pushChunk(buf)
@@ -155,25 +206,19 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
       })
 
       child.on('error', (err) => {
-        const stdoutResult = stdoutAccumulator.finish()
-        const stderrResult = stderrAccumulator.finish()
-        resolve({
+        if (settled) return
+        const buffers = finishBuffers(err.message)
+        finish({
           code: null,
-          stdout: stdoutResult.text,
-          stderr: stderrResult.text || err.message,
-          stdoutLimit: stdoutResult.limitInfo,
-          stderrLimit: stderrResult.limitInfo,
+          ...buffers,
         })
       })
       child.on('close', (code) => {
-        const stdoutResult = stdoutAccumulator.finish()
-        const stderrResult = stderrAccumulator.finish()
-        resolve({
+        if (settled) return
+        const buffers = finishBuffers()
+        finish({
           code,
-          stdout: stdoutResult.text,
-          stderr: stderrResult.text,
-          stdoutLimit: stdoutResult.limitInfo,
-          stderrLimit: stderrResult.limitInfo,
+          ...buffers,
         })
       })
     })
@@ -198,6 +243,7 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
       const execution = await runGitCommand(cwd, args, {
         stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
         stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+        timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
       })
       const stepOutput = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
         stdoutLimit: execution.stdoutLimit,

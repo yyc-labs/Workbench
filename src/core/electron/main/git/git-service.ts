@@ -1,6 +1,7 @@
 import {
   createGitCommandRunner,
   DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+  DEFAULT_GIT_OPERATION_TIMEOUT_MS,
   formatGitCommand,
   normalizeGitOperationOutput,
 } from './git-command'
@@ -17,7 +18,7 @@ export function createGitService(deps: GitServiceDependencies) {
   const getDefaultWslDistro = () => deps.getDefaultWslDistro() || 'Ubuntu'
   const gitCommandRunner = createGitCommandRunner({ getDefaultWslDistro })
   const { runGitCommand, runGitCommandSequence } = gitCommandRunner
-  const { readRecentCommits, readGitWorkspaceSnapshot } = createGitSnapshotReader(gitCommandRunner)
+  const { readRecentCommits, readGitRepositorySnapshot } = createGitSnapshotReader(gitCommandRunner)
   const {
     getGitConflictFile,
     getGitFileDiff,
@@ -25,7 +26,7 @@ export function createGitService(deps: GitServiceDependencies) {
     setGitFileStage,
   } = createGitFileOperations({
     runner: gitCommandRunner,
-    readGitWorkspaceSnapshot,
+    readGitRepositorySnapshot,
   })
 
   function normalizeRemoteName(input: string | undefined): string {
@@ -50,26 +51,28 @@ export function createGitService(deps: GitServiceDependencies) {
   async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
     const checkedAt = Date.now()
     const operation = request.operation
-    const projectPath = request.projectPath.trim()
+    const repoRoot = request.repoRoot.trim()
     const targetBranch = request.targetBranch?.trim()
     const remoteName = normalizeRemoteName(request.remoteName)
 
-    if (!projectPath) {
+    if (!repoRoot) {
       return {
+        repoRoot,
         operation,
         ok: false,
         checkedAt,
         command: '',
-        output: 'Project path is required.',
+        output: 'Repository root is required.',
         exitCode: null,
-        error: 'Project path is required.',
+        error: 'Repository root is required.',
       }
     }
 
-    const snapshot = await readGitWorkspaceSnapshot(projectPath)
+    const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || 'Not a git repository.'
       return {
+        repoRoot: snapshot.repoRoot || repoRoot,
         operation,
         ok: false,
         checkedAt,
@@ -79,6 +82,7 @@ export function createGitService(deps: GitServiceDependencies) {
         error: reason,
       }
     }
+    const resolvedRepoRoot = snapshot.repoRoot
 
     const currentBranch = snapshot.branch.current
     const hasConflicts = snapshot.changedFiles.some((file) => file.scope === 'conflicted')
@@ -297,6 +301,7 @@ export function createGitService(deps: GitServiceDependencies) {
       default: {
         const unreachable: never = operation
         return {
+          repoRoot: resolvedRepoRoot,
           operation: unreachable,
           ok: false,
           checkedAt,
@@ -310,6 +315,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
     if (skipReason) {
       return {
+        repoRoot: resolvedRepoRoot,
         operation,
         ok: false,
         checkedAt,
@@ -329,16 +335,17 @@ export function createGitService(deps: GitServiceDependencies) {
     let error: string | undefined
 
     if (commandSequence && commandSequence.length > 0) {
-      const sequenceResult = await runGitCommandSequence(projectPath, commandSequence)
+      const sequenceResult = await runGitCommandSequence(resolvedRepoRoot, commandSequence)
       ok = sequenceResult.ok
       output = sequenceResult.output
       exitCode = sequenceResult.exitCode
       command = sequenceResult.command
       error = sequenceResult.error
     } else {
-      const execution = await runGitCommand(projectPath, args, {
+      const execution = await runGitCommand(resolvedRepoRoot, args, {
         stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
         stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+        timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
       })
       output = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
         stdoutLimit: execution.stdoutLimit,
@@ -351,6 +358,7 @@ export function createGitService(deps: GitServiceDependencies) {
     }
 
     return {
+      repoRoot: resolvedRepoRoot,
       operation,
       ok,
       checkedAt,
@@ -365,7 +373,7 @@ export function createGitService(deps: GitServiceDependencies) {
   return {
     listGitRepositories,
     readRecentCommits,
-    readGitWorkspaceSnapshot,
+    readGitRepositorySnapshot,
     runGitOperation,
     setGitFileStage,
     getGitFileDiff,

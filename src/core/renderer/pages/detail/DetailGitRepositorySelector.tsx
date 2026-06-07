@@ -47,7 +47,7 @@ export function DetailGitRepositorySelector({
     return repositories.filter((repo) => (
       repo.name.toLowerCase().includes(normalizedQuery)
       || repo.relativePath.toLowerCase().includes(normalizedQuery)
-      || repo.rootPath.toLowerCase().includes(normalizedQuery)
+      || repo.repoRoot.toLowerCase().includes(normalizedQuery)
     ))
   }, [query, repositories])
 
@@ -169,7 +169,7 @@ export function DetailGitRepositorySelector({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-[12px] font-medium">{repo.relativePath === '.' ? repo.name : repo.relativePath}</span>
                             <span className="block truncate text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                              {repo.relativePath === '.' ? '根仓库' : repo.isNested ? '子仓库' : '仓库'} · {repo.rootPath}
+                              {repo.relativePath === '.' ? '根仓库' : repo.isNested ? '子仓库' : '仓库'} · {repo.repoRoot}
                             </span>
                           </span>
                           {selected && <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
@@ -215,7 +215,7 @@ export function DetailGitRepositorySelector({
                 </span>
               )}
             </div>
-            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]" title={selectedRepository?.rootPath}>
+            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]" title={selectedRepository?.repoRoot}>
               {selectedRepository ? repositoryLabel(selectedRepository) : '未发现 Git 仓库'}
             </p>
           </div>

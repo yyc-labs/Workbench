@@ -24,7 +24,7 @@ import type {
   StartupDefaultFilter,
   TerminalProcessInventory,
   TerminalStopAllResult,
-  GitWorkspaceSnapshot,
+  GitRepositorySnapshot,
   GitRepositoryListResult,
   GitOperationRequest,
   GitOperationResult,
@@ -108,11 +108,11 @@ declare global {
       isWindowMaximized: () => Promise<boolean>
       runAiCommit: (
         projectId: string,
-        projectPath: string,
+        repoRoot: string,
         override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
       getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-      getLatestCommit: (projectPath: string) => Promise<{
+      getLatestCommit: (repoRoot: string) => Promise<{
         hash: string
         shortHash: string
         subject: string
@@ -120,8 +120,8 @@ declare global {
         bullets: string[]
         filesChanged: number
       }[]>
-      listGitRepositories: (projectPath: string) => Promise<GitRepositoryListResult>
-      getGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
+      listGitRepositories: (workspacePath: string) => Promise<GitRepositoryListResult>
+      getGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
       runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
       setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>
       getGitFileDiff: (request: GitFileDiffRequest) => Promise<GitFileDiffResult>

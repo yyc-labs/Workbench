@@ -58,7 +58,7 @@ export interface AiCommitRunOverride {
 
 export interface AiCommitTaskSnapshot {
   projectId: string
-  projectPath: string
+  repoRoot: string
   runId: string
   status: Exclude<AiCommitStatus, 'idle'>
   output: string
@@ -121,7 +121,7 @@ export type GitRepositoryLoadState = 'unloaded' | 'loading' | 'loaded' | 'dirty'
 export interface GitRepositorySummary {
   id: string
   name: string
-  rootPath: string
+  repoRoot: string
   relativePath: string
   isNested: boolean
   parentRepoId?: string
@@ -136,8 +136,8 @@ export interface GitRepositoryListResult {
   error?: string
 }
 
-export interface GitWorkspaceSnapshot {
-  projectPath: string
+export interface GitRepositorySnapshot {
+  repoRoot: string
   isGitRepository: boolean
   repository?: GitRepositorySummary
   branch: GitBranchInfo
@@ -159,13 +159,14 @@ export type GitOperationKind =
   | 'set-upstream'
 
 export interface GitOperationRequest {
-  projectPath: string
+  repoRoot: string
   operation: GitOperationKind
   targetBranch?: string
   remoteName?: string
 }
 
 export interface GitOperationResult {
+  repoRoot: string
   operation: GitOperationKind
   ok: boolean
   checkedAt: number
@@ -178,12 +179,13 @@ export interface GitOperationResult {
 }
 
 export interface GitSetFileStageRequest {
-  projectPath: string
+  repoRoot: string
   filePath: string
   stage: boolean
 }
 
 export interface GitSetFileStageResult {
+  repoRoot: string
   ok: boolean
   checkedAt: number
   command: string
@@ -193,7 +195,7 @@ export interface GitSetFileStageResult {
 }
 
 export interface GitFileDiffRequest {
-  projectPath: string
+  repoRoot: string
   filePath: string
   staged: boolean
 }
@@ -205,6 +207,7 @@ export interface GitOutputLimitInfo {
 }
 
 export interface GitFileDiffResult {
+  repoRoot: string
   ok: boolean
   checkedAt: number
   command: string
@@ -216,7 +219,7 @@ export interface GitFileDiffResult {
 }
 
 export interface GitConflictFileRequest {
-  projectPath: string
+  repoRoot: string
   filePath: string
 }
 
@@ -230,6 +233,7 @@ export interface GitConflictStageContent {
 }
 
 export interface GitConflictFileResult {
+  repoRoot: string
   ok: boolean
   checkedAt: number
   command: string
@@ -243,13 +247,14 @@ export interface GitConflictFileResult {
 }
 
 export interface GitResolveConflictRequest {
-  projectPath: string
+  repoRoot: string
   filePath: string
   content: string
   markResolved?: boolean
 }
 
 export interface GitResolveConflictResult {
+  repoRoot: string
   ok: boolean
   checkedAt: number
   command: string
