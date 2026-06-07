@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
+import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
@@ -65,6 +66,7 @@ export function SettingsPage() {
                   runtimeEntries={runtimeEntries}
                 />
               )}
+              {section === 'hooks' && <SettingsAgentHooksPanel />}
               {section === 'logs' && (
                 <SettingsStartupLogsPanel
                   projects={projects}
