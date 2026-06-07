@@ -33,6 +33,14 @@ const DEFAULT_CONFIG: AppConfig = {
     splitMaxBatches: 4,
     maxBullets: 8,
   },
+  agentHooks: {
+    enabled: true,
+    host: '127.0.0.1',
+    port: 17373,
+    token: '',
+    maxBodyBytes: 256 * 1024,
+    recentEventLimit: 200,
+  },
 }
 
 let cachedConfig: AppConfig | undefined

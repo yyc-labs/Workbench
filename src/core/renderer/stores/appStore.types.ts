@@ -1,5 +1,7 @@
 import type {
   AiCommitTaskSnapshot,
+  AiCommitUndoCloseReason,
+  AiCommitUndoResult,
   ClaudeBashrcConfig,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchOptions,
@@ -38,6 +40,8 @@ import type {
   GitResolveConflictResult,
   ProjectCodeFileDrawerState,
   ProjectCodeSession,
+  AgentHookEnvelope,
+  AgentHookGatewayStatus,
 } from '../../shared/types'
 
 declare global {
@@ -112,6 +116,13 @@ declare global {
         override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
       getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+      undoAiCommit: (projectId: string) => Promise<AiCommitUndoResult>
+      closeAiCommitUndo: (
+        projectId: string,
+        reason?: AiCommitUndoCloseReason
+      ) => Promise<AiCommitTaskSnapshot | null>
+      getAgentHookStatus: () => Promise<AgentHookGatewayStatus>
+      getAgentHookRecentEvents: () => Promise<AgentHookEnvelope[]>
       getLatestCommit: (repoRoot: string) => Promise<{
         hash: string
         shortHash: string
@@ -131,6 +142,7 @@ declare global {
       onAiCommitStatus: (
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
       ) => () => void
+      onAgentHookEvent: (cb: (d: AgentHookEnvelope) => void) => () => void
       onWindowState: (cb: (d: { isMaximized: boolean }) => void) => () => void
       onCodeFocusSearch: (cb: () => void) => () => void
       onCodeToggleViewMode: (cb: () => void) => () => void

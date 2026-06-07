@@ -56,6 +56,28 @@ export interface AiCommitRunOverride {
   maxBullets?: number
 }
 
+export type AiCommitUndoStatus = 'available' | 'closed' | 'expired' | 'undone'
+export type AiCommitUndoCloseReason =
+  | 'expired'
+  | 'left-pane'
+  | 'new-run'
+  | 'manual'
+  | 'undone'
+  | 'head-changed'
+
+export interface AiCommitUndoState {
+  repoRoot: string
+  runId: string
+  beforeHead?: string
+  afterHead: string
+  commitCount: number
+  status: AiCommitUndoStatus
+  createdAt: number
+  expiresAt: number
+  closedAt?: number
+  closeReason?: AiCommitUndoCloseReason
+}
+
 export interface AiCommitTaskSnapshot {
   projectId: string
   repoRoot: string
@@ -66,6 +88,86 @@ export interface AiCommitTaskSnapshot {
   updatedAt: number
   finishedAt?: number
   override?: AiCommitRunOverride
+  undo?: AiCommitUndoState
+  undoSuppressedAt?: number
+  undoSuppressedReason?: AiCommitUndoCloseReason
+}
+
+export interface AiCommitUndoResult {
+  projectId: string
+  repoRoot: string
+  ok: boolean
+  checkedAt: number
+  command: string
+  output: string
+  exitCode: number | null
+  error?: string
+  undo?: AiCommitUndoState
+}
+
+export type AgentHookProvider = 'claude-code' | 'codex-cli' | 'unknown'
+
+export type AgentHookCanonicalEvent =
+  | 'session-start'
+  | 'session-end'
+  | 'user-prompt-submit'
+  | 'pre-tool-use'
+  | 'permission-request'
+  | 'post-tool-use'
+  | 'post-tool-use-failure'
+  | 'post-tool-batch'
+  | 'stop'
+  | 'stop-failure'
+  | 'pre-compact'
+  | 'post-compact'
+  | 'subagent-start'
+  | 'subagent-stop'
+  | 'task-created'
+  | 'task-completed'
+  | 'notification'
+  | 'file-changed'
+  | 'cwd-changed'
+  | 'config-change'
+  | 'worktree-create'
+  | 'worktree-remove'
+  | 'teammate-idle'
+  | 'unknown'
+
+export interface AgentHookEnvelope {
+  schemaVersion: 1
+  provider: AgentHookProvider
+  providerEvent: string
+  canonicalEvent: AgentHookCanonicalEvent
+  eventId: string
+  receivedAt: number
+  sessionId?: string
+  turnId?: string
+  cwd?: string
+  toolName?: string
+  agentId?: string
+  agentType?: string
+  permissionMode?: string
+  raw: unknown
+}
+
+export interface AgentHookGatewayConfig {
+  enabled?: boolean
+  host?: string
+  port?: number
+  token?: string
+  maxBodyBytes?: number
+  recentEventLimit?: number
+}
+
+export interface AgentHookGatewayStatus {
+  enabled: boolean
+  running: boolean
+  host: string
+  port: number
+  url: string
+  tokenConfigured: boolean
+  recentEventCount: number
+  error?: string
 }
 
 export type GitChangeKind =
@@ -409,6 +511,8 @@ export interface AppConfig {
   runtimeKeepAliveOnQuit?: boolean
   /** AI-assisted git commit configuration */
   aiCommit?: AiCommitConfig
+  /** Local lifecycle hook gateway for Claude Code and Codex CLI events */
+  agentHooks?: AgentHookGatewayConfig
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
 }

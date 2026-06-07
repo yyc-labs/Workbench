@@ -6,6 +6,7 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { createWindow, applyWindowBackground } from './window/createWindow'
 import type { Capability } from '../../shared/types'
@@ -24,6 +25,12 @@ const runtimeService = createRuntimeService({
 const aiCommitService = createAiCommitService({
   getMainWindow: () => mainWindow,
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
+})
+const agentHookGateway = new AgentHookGateway({
+  getConfig: () => loadConfig().agentHooks,
+  onEvent: (event) => {
+    mainWindow?.webContents.send(IPC.AGENT_HOOK_EVENT, event)
+  },
 })
 
 function createMainWindow(): void {
@@ -69,6 +76,7 @@ app.on('before-quit', async (e) => {
   }
 
   processManager?.stopAll()
+  await agentHookGateway.stop()
 
   setTimeout(() => {
     app.quit()
@@ -102,10 +110,12 @@ app.whenReady().then(async () => {
     getBootCapability: () => bootCapability,
     emitRuntimeStateChanged,
     aiCommitService,
+    agentHookGateway,
     gitService,
     runtimeService,
   })
   createMainWindow()
+  agentHookGateway.start()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

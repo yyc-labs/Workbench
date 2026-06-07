@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { dirname, join } from 'path'
-import type { AiCommitTaskSnapshot } from '../../shared/types'
+import type { AiCommitTaskSnapshot, AiCommitUndoState } from '../../shared/types'
 
 interface AiCommitRegistry {
   entries: Record<string, AiCommitTaskSnapshot>
@@ -14,6 +14,23 @@ function getRegistryPath(): string {
   return join(app.getPath('userData'), REGISTRY_FILE)
 }
 
+function normalizeUndoState(entry: AiCommitTaskSnapshot): AiCommitUndoState | undefined {
+  const undo = entry.undo
+  if (!undo || !undo.afterHead || !undo.repoRoot || !undo.runId) return undefined
+
+  const now = Date.now()
+  const status = undo.status === 'available' && undo.expiresAt <= now ? 'expired' : undo.status
+  return {
+    ...undo,
+    commitCount: Math.max(1, Math.trunc(Number.isFinite(undo.commitCount) ? undo.commitCount : 1)),
+    createdAt: Number.isFinite(undo.createdAt) ? undo.createdAt : entry.finishedAt ?? entry.updatedAt ?? now,
+    expiresAt: Number.isFinite(undo.expiresAt) ? undo.expiresAt : now,
+    status,
+    closedAt: status === undo.status ? undo.closedAt : now,
+    closeReason: status === undo.status ? undo.closeReason : 'expired',
+  }
+}
+
 function normalizeEntry(entry: AiCommitTaskSnapshot): AiCommitTaskSnapshot {
   const legacyEntry = entry as AiCommitTaskSnapshot & { projectPath?: string }
   return {
@@ -22,6 +39,7 @@ function normalizeEntry(entry: AiCommitTaskSnapshot): AiCommitTaskSnapshot {
     output: trimOutput(entry.output || ''),
     updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : Date.now(),
     startedAt: Number.isFinite(entry.startedAt) ? entry.startedAt : Date.now(),
+    undo: normalizeUndoState(entry),
   }
 }
 

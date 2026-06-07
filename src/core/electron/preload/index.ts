@@ -1,5 +1,6 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
+import type { AgentHookEnvelope, AgentHookGatewayStatus } from '../../shared/types'
 
 type ThemeMode = 'system' | 'light' | 'dark'
 type AiCommitOutputData = { projectId: string; data: string }
@@ -150,6 +151,18 @@ const api = {
 
   getAiCommitState: (projectId: string) =>
     ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId),
+
+  undoAiCommit: (projectId: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_UNDO, projectId),
+
+  closeAiCommitUndo: (projectId: string, reason?: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_CLOSE_UNDO, projectId, reason),
+
+  getAgentHookStatus: () =>
+    ipcRenderer.invoke(IPC.AGENT_HOOK_GET_STATUS) as Promise<AgentHookGatewayStatus>,
+
+  getAgentHookRecentEvents: () =>
+    ipcRenderer.invoke(IPC.AGENT_HOOK_GET_RECENT_EVENTS) as Promise<AgentHookEnvelope[]>,
 
   getLatestCommit: (repoRoot: string) =>
     ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, repoRoot),
@@ -322,6 +335,17 @@ const api = {
     cb: (data: { projectId: string; status: 'running' | 'success' | 'error' }) => void
   ) => {
     return subscribeAiCommitStatus(cb)
+  },
+
+  onAgentHookEvent: (
+    cb: (data: AgentHookEnvelope) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: AgentHookEnvelope
+    ) => cb(d)
+    ipcRenderer.on(IPC.AGENT_HOOK_EVENT, handler)
+    return () => ipcRenderer.removeListener(IPC.AGENT_HOOK_EVENT, handler)
   },
 
   onWindowState: (

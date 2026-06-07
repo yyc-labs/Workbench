@@ -32,12 +32,15 @@ import {
   openVsCode,
 } from '../shell/openers'
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
+import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
+  AiCommitUndoCloseReason,
+  AiCommitUndoResult,
   AppConfig,
   Capability,
   GitConflictFileRequest,
@@ -62,6 +65,7 @@ type RegisterIpcHandlersDependencies = {
   getBootCapability: () => Capability | null
   emitRuntimeStateChanged: (payload: RuntimeStateChangedPayload) => void
   aiCommitService: AiCommitService
+  agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService
 }
@@ -177,6 +181,25 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.AI_COMMIT_GET_STATE, (_event, projectId: string): AiCommitTaskSnapshot | null => {
     return deps.aiCommitService.getAiCommitState(projectId)
+  })
+
+  ipcMain.handle(IPC.AI_COMMIT_UNDO, async (_event, projectId: string): Promise<AiCommitUndoResult> => {
+    return deps.aiCommitService.undoAiCommit(projectId)
+  })
+
+  ipcMain.handle(
+    IPC.AI_COMMIT_CLOSE_UNDO,
+    (_event, projectId: string, reason?: AiCommitUndoCloseReason): AiCommitTaskSnapshot | null => {
+      return deps.aiCommitService.closeAiCommitUndo(projectId, reason)
+    }
+  )
+
+  ipcMain.handle(IPC.AGENT_HOOK_GET_STATUS, () => {
+    return deps.agentHookGateway.getStatus()
+  })
+
+  ipcMain.handle(IPC.AGENT_HOOK_GET_RECENT_EVENTS, () => {
+    return deps.agentHookGateway.getRecentEvents()
   })
 
   ipcMain.handle(IPC.GIT_GET_LATEST_COMMIT, async (_event, repoRoot: string) => {
