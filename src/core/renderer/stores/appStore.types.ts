@@ -146,6 +146,8 @@ declare global {
       onWindowState: (cb: (d: { isMaximized: boolean }) => void) => () => void
       onCodeFocusSearch: (cb: () => void) => () => void
       onCodeToggleViewMode: (cb: () => void) => () => void
+      onGlobalHomeShortcut: (cb: () => void) => () => void
+      onGlobalThemeShortcut: (cb: () => void) => () => void
     }
   }
 }

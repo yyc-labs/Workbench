@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
 
 type GesturePoint = { x: number; y: number }
 
@@ -55,6 +55,14 @@ const RECENT_GESTURE_IGNORE_SELECTOR = [
   '[role="dialog"]',
 ].join(', ')
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
+
+export function navigateHomeWithStartupDefaultReset(navigate: NavigateFunction): void {
+  navigate('/', {
+    state: {
+      gestureResetToStartupDefault: Date.now(),
+    },
+  })
+}
 
 function shouldSkipRecentGesture(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
@@ -433,11 +441,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (hadGestureMovement && isCircle) {
         hideHintImmediately()
-        navigate('/', {
-          state: {
-            gestureResetToStartupDefault: Date.now(),
-          },
-        })
+        navigateHomeWithStartupDefaultReset(navigate)
         state.points = []
         return
       }

@@ -6,7 +6,10 @@ import type { AppConfig } from '../shared/types'
 import { Clock3, Copy, Minus, Square, X } from 'lucide-react'
 import { GlobalTitleTooltipBridge } from './components/GlobalTitleTooltipBridge'
 import { RecentProjectsDrawer } from './components/RecentProjectsDrawer'
-import { useMouseGestureNavigator } from './hooks/useMouseGestureNavigator'
+import {
+  navigateHomeWithStartupDefaultReset,
+  useMouseGestureNavigator,
+} from './hooks/useMouseGestureNavigator'
 
 const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
 const DetailPage = lazy(() => import('./pages/Detail').then((module) => ({ default: module.DetailPage })))
@@ -338,6 +341,31 @@ function GlobalRecentProjectsDrawerHost() {
   )
 }
 
+function GlobalHomeShortcutListener() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    return window.electronAPI.onGlobalHomeShortcut(() => {
+      navigateHomeWithStartupDefaultReset(navigate)
+    })
+  }, [navigate])
+
+  return null
+}
+
+function GlobalThemeShortcutListener() {
+  const setTheme = useAppStore((s) => s.setTheme)
+
+  useEffect(() => {
+    return window.electronAPI.onGlobalThemeShortcut(() => {
+      const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+      void setTheme(currentTheme === 'dark' ? 'light' : 'dark')
+    })
+  }, [setTheme])
+
+  return null
+}
+
 function AppInit() {
   const initApp = useAppStore((s) => s.initApp)
   useEffect(() => { initApp() }, [initApp])
@@ -438,6 +466,8 @@ export function App() {
       <RuntimeStateListener />
       <SessionPoller />
       <MouseGestureNavigator />
+      <GlobalHomeShortcutListener />
+      <GlobalThemeShortcutListener />
       <GlobalRecentProjectsDrawerHost />
       <GlobalTitleTooltipBridge />
       <div className="app-shell">
