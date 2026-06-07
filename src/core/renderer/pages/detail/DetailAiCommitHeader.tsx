@@ -71,6 +71,17 @@ export function DetailAiCommitHeader({
   const undoButtonLabel = aiCommitUndo?.commitCount && aiCommitUndo.commitCount > 1
     ? `撤回 ${aiCommitUndo.commitCount} 个提交`
     : '撤回提交'
+  const primaryButtonLabel = aiCommitUndoAvailable
+    ? `${undoButtonLabel} ${aiCommitUndoRemainingSeconds}s`
+    : aiCommitStatus === 'running'
+      ? 'AI Committing...'
+      : 'AI Auto Commit'
+  const primaryButtonTitle = aiCommitUndoAvailable
+    ? '撤回本次 AI Commit'
+    : isAiEnabled
+      ? 'Left click: run commit. Right click: quick config.'
+      : 'AI disabled in Settings, local commit message only'
+  const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning
 
   return (
     <div className="shrink-0 space-y-3">
@@ -135,8 +146,10 @@ export function DetailAiCommitHeader({
             <button
               ref={aiAutoCommitButtonRef}
               type="button"
-              className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+              className={`inline-flex min-w-[150px] items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
                 ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                : aiCommitUndoAvailable
+                  ? 'border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning-background)]/80'
                 : aiCommitStatus === 'error'
                   ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
                   : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
@@ -148,13 +161,26 @@ export function DetailAiCommitHeader({
                     ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
                     : undefined
               }
-              onClick={onAiAutoCommit}
-              onContextMenu={onAiAutoCommitContextMenu}
-              disabled={aiCommitStatus === 'running'}
-              title={isAiEnabled ? 'Left click: run commit. Right click: quick config.' : 'AI disabled in Settings, local commit message only'}
+              onClick={aiCommitUndoAvailable ? onUndoAiCommit : onAiAutoCommit}
+              onContextMenu={(event) => {
+                if (aiCommitUndoAvailable) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  return
+                }
+                onAiAutoCommitContextMenu(event)
+              }}
+              disabled={primaryButtonDisabled}
+              title={primaryButtonTitle}
             >
-              <Bot className="h-3.5 w-3.5" />
-              {aiCommitStatus === 'running' ? 'AI Committing...' : 'AI Auto Commit'}
+              {aiCommitUndoRunning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : aiCommitUndoAvailable ? (
+                <RotateCcw className="h-3.5 w-3.5" />
+              ) : (
+                <Bot className="h-3.5 w-3.5" />
+              )}
+              <span>{primaryButtonLabel}</span>
             </button>
           </div>
         </div>
@@ -166,23 +192,6 @@ export function DetailAiCommitHeader({
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
             {statusText}
           </span>
-          {aiCommitUndoAvailable && (
-            <button
-              type="button"
-              className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2.5 text-[11px] font-medium text-[color:var(--color-warning)] transition-colors hover:bg-[color:var(--color-warning-background)]/80 disabled:opacity-70"
-              onClick={onUndoAiCommit}
-              disabled={aiCommitUndoRunning}
-              title="撤回本次 AI Commit"
-            >
-              {aiCommitUndoRunning ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RotateCcw className="h-3.5 w-3.5" />
-              )}
-              <span>{undoButtonLabel}</span>
-              <span className="font-mono">{aiCommitUndoRemainingSeconds}s</span>
-            </button>
-          )}
           {aiCommitUndoError && (
             <span className="inline-flex max-w-[360px] items-center truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-destructive)]" title={aiCommitUndoError}>
               {aiCommitUndoError}
