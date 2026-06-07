@@ -1,4 +1,4 @@
-import { Children, createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
+import { Children, createElement, isValidElement, useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { Check, Copy } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
@@ -14,6 +14,7 @@ const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
 const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
+const MARKDOWN_MERMAID_RENDER_ID_PREFIX = 'code-markdown-mermaid'
 export const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
 const MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR = '[data-source-start-line][data-source-end-line]'
 const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS = 'code-markdown-source-reveal'
@@ -205,6 +206,19 @@ function extractCodeLanguageFromClassName(className?: string): string | null {
   return match?.[1] ?? null
 }
 
+function extractPlainTextFromReactNode(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) {
+    return node.map((child) => extractPlainTextFromReactNode(child)).join('')
+  }
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode }
+    return extractPlainTextFromReactNode(props.children)
+  }
+  return ''
+}
+
 function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: string; language: string } | null {
   const childNodes = Children.toArray(children)
   if (childNodes.length !== 1) return null
@@ -223,7 +237,7 @@ function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: strin
     return null
   }
 
-  const codeText = String(codeProps.children ?? '').replace(/\n$/, '')
+  const codeText = extractPlainTextFromReactNode(codeProps.children).replace(/\n$/, '')
   const language = normalizeSyntaxLanguage(extractCodeLanguageFromClassName(codeProps.className))
   return { codeText, language }
 }
@@ -383,7 +397,98 @@ type MarkdownCodeBlockProps = {
   sourceLineProps?: SourceLineDataProps
 }
 
-function MarkdownCodeBlock({
+type MermaidModule = typeof import('mermaid')
+
+let mermaidModulePromise: Promise<MermaidModule> | null = null
+
+async function loadMermaid(): Promise<MermaidModule> {
+  if (!mermaidModulePromise) {
+    mermaidModulePromise = import('mermaid')
+  }
+  return mermaidModulePromise
+}
+
+async function renderMermaidDiagram(id: string, codeText: string, themeMode: 'light' | 'dark'): Promise<string> {
+  const mermaidModule = await loadMermaid()
+  const mermaid = mermaidModule.default
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: themeMode === 'dark' ? 'dark' : 'default',
+    flowchart: {
+      htmlLabels: false,
+    },
+  })
+
+  const { svg } = await mermaid.render(id, codeText)
+  return svg
+}
+
+function MermaidBlock({
+  codeText,
+  themeMode,
+  sourceLineProps,
+}: Pick<MarkdownCodeBlockProps, 'codeText' | 'themeMode' | 'sourceLineProps'>) {
+  const diagramId = useId().replace(/:/g, '-')
+  const [svgMarkup, setSvgMarkup] = useState<string>('')
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isRendering, setIsRendering] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setIsRendering(true)
+    setErrorMessage(null)
+
+    void renderMermaidDiagram(`${MARKDOWN_MERMAID_RENDER_ID_PREFIX}-${diagramId}`, codeText, themeMode)
+      .then((svg) => {
+        if (cancelled) return
+        setSvgMarkup(svg)
+        setErrorMessage(null)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        const message = error instanceof Error ? error.message : 'Unknown Mermaid render error'
+        setSvgMarkup('')
+        setErrorMessage(message)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setIsRendering(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [codeText, diagramId, themeMode])
+
+  return (
+    <div className="code-markdown-mermaid-wrap" {...sourceLineProps}>
+      <div className="code-markdown-mermaid-header">
+        <span className="code-markdown-mermaid-badge">Mermaid</span>
+        {isRendering && <span className="code-markdown-mermaid-status">Rendering...</span>}
+        {!isRendering && errorMessage && <span className="code-markdown-mermaid-status is-error">Render failed</span>}
+      </div>
+      {svgMarkup ? (
+        <div
+          className="code-markdown-mermaid-diagram"
+          dangerouslySetInnerHTML={{ __html: svgMarkup }}
+        />
+      ) : (
+        <pre className="code-markdown-plain-block">
+          <code className="language-mermaid">{codeText}</code>
+        </pre>
+      )}
+      {errorMessage && (
+        <div className="code-markdown-mermaid-error" title={errorMessage}>
+          {errorMessage}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StandardMarkdownCodeBlock({
   codeText,
   language,
   themeMode,
@@ -449,6 +554,20 @@ function MarkdownCodeBlock({
       )}
     </div>
   )
+}
+
+function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
+  if (props.language === 'mermaid') {
+    return (
+      <MermaidBlock
+        codeText={props.codeText}
+        themeMode={props.themeMode}
+        sourceLineProps={props.sourceLineProps}
+      />
+    )
+  }
+
+  return <StandardMarkdownCodeBlock {...props} />
 }
 
 type CreateMarkdownComponentsOptions = {

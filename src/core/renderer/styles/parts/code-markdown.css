@@ -97,6 +97,73 @@
   position: relative;
 }
 
+.code-markdown-mermaid-wrap {
+  margin: 0.85em 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  overflow: hidden;
+}
+
+.code-markdown-mermaid-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+
+.code-markdown-mermaid-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-foreground);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.code-markdown-mermaid-status {
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+}
+
+.code-markdown-mermaid-status.is-error {
+  color: var(--color-destructive);
+}
+
+.code-markdown-mermaid-diagram {
+  padding: 14px 14px 10px;
+  overflow: auto;
+}
+
+.code-markdown-mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.code-markdown-mermaid-wrap .code-markdown-plain-block {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-markdown-mermaid-error {
+  padding: 0 12px 12px;
+  color: var(--color-destructive);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .code-markdown-plain-block {
   margin: 0;
   border: 1px solid var(--color-border);
@@ -220,4 +287,3 @@
   color: var(--color-foreground);
   word-break: break-word;
 }
-
