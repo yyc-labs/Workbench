@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme } from 'electron'
+import { app, BrowserWindow, globalShortcut, nativeTheme } from 'electron'
 import { ProcessManager } from './runner'
 import { loadConfig } from './config'
 import { IPC } from './ipc'
@@ -14,6 +14,8 @@ import type { Capability } from '../../shared/types'
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+const GLOBAL_HOME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+H'
+const GLOBAL_THEME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+L'
 const gitService = createGitService({
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
 })
@@ -61,6 +63,40 @@ function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; 
   mainWindow?.webContents.send(IPC.RUNTIME_STATE_CHANGED, payload)
 }
 
+function sendGlobalHomeShortcut(): void {
+  if (!mainWindow) {
+    createMainWindow()
+  }
+
+  if (!mainWindow) return
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
+  mainWindow.show()
+  mainWindow.focus()
+  mainWindow.webContents.send(IPC.GLOBAL_HOME_SHORTCUT)
+}
+
+function sendGlobalThemeShortcut(): void {
+  if (!mainWindow) {
+    createMainWindow()
+  }
+
+  mainWindow?.webContents.send(IPC.GLOBAL_THEME_SHORTCUT)
+}
+
+function registerGlobalShortcut(accelerator: string, action: () => void): void {
+  const registered = globalShortcut.register(accelerator, action)
+  if (!registered) {
+    console.warn(`[globalShortcut] failed to register ${accelerator}`)
+  }
+}
+
+function registerGlobalShortcuts(): void {
+  registerGlobalShortcut(GLOBAL_HOME_SHORTCUT_ACCELERATOR, sendGlobalHomeShortcut)
+  registerGlobalShortcut(GLOBAL_THEME_SHORTCUT_ACCELERATOR, sendGlobalThemeShortcut)
+}
+
 // ── before-quit ───────────────────────────────────────────
 
 let isQuitting = false
@@ -81,6 +117,11 @@ app.on('before-quit', async (e) => {
   setTimeout(() => {
     app.quit()
   }, 1500)
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregister(GLOBAL_HOME_SHORTCUT_ACCELERATOR)
+  globalShortcut.unregister(GLOBAL_THEME_SHORTCUT_ACCELERATOR)
 })
 
 // ── startup ──────────────────────────────────────────────
@@ -115,6 +156,7 @@ app.whenReady().then(async () => {
     runtimeService,
   })
   createMainWindow()
+  registerGlobalShortcuts()
   agentHookGateway.start()
 
   app.on('activate', () => {

@@ -370,6 +370,18 @@ const api = {
     ipcRenderer.on(IPC.CODE_TOGGLE_VIEW_MODE, handler)
     return () => ipcRenderer.removeListener(IPC.CODE_TOGGLE_VIEW_MODE, handler)
   },
+
+  onGlobalHomeShortcut: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on(IPC.GLOBAL_HOME_SHORTCUT, handler)
+    return () => ipcRenderer.removeListener(IPC.GLOBAL_HOME_SHORTCUT, handler)
+  },
+
+  onGlobalThemeShortcut: (cb: () => void) => {
+    const handler = () => cb()
+    ipcRenderer.on(IPC.GLOBAL_THEME_SHORTCUT, handler)
+    return () => ipcRenderer.removeListener(IPC.GLOBAL_THEME_SHORTCUT, handler)
+  },
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)

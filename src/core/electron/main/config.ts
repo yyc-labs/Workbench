@@ -35,7 +35,7 @@ const DEFAULT_CONFIG: AppConfig = {
   },
   agentHooks: {
     enabled: true,
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     port: 17373,
     token: '',
     maxBodyBytes: 256 * 1024,

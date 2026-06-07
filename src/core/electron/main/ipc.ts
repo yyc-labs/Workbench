@@ -62,4 +62,6 @@ export const IPC = {
   WINDOW_STATE: 'window:state',
   CODE_FOCUS_SEARCH: 'code:focus-search',
   CODE_TOGGLE_VIEW_MODE: 'code:toggle-view-mode',
+  GLOBAL_HOME_SHORTCUT: 'global-shortcut:home',
+  GLOBAL_THEME_SHORTCUT: 'global-shortcut:theme',
 } as const

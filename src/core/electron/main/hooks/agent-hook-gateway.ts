@@ -13,7 +13,7 @@ type AgentHookGatewayOptions = {
   onEvent: (event: AgentHookEnvelope) => void
 }
 
-const DEFAULT_HOST = '127.0.0.1'
+const DEFAULT_HOST = '0.0.0.0'
 const DEFAULT_PORT = 17373
 const DEFAULT_MAX_BODY_BYTES = 256 * 1024
 const DEFAULT_RECENT_EVENT_LIMIT = 200
@@ -283,9 +283,10 @@ export class AgentHookGateway {
 
   private resolveConfig(): Required<AgentHookGatewayConfig> {
     const config = this.getConfig() || {}
+    const configuredHost = config.host || DEFAULT_HOST
     return {
       enabled: config.enabled ?? true,
-      host: config.host || DEFAULT_HOST,
+      host: configuredHost === '127.0.0.1' ? DEFAULT_HOST : configuredHost,
       port: Number.isFinite(config.port) ? Number(config.port) : DEFAULT_PORT,
       token: config.token || '',
       maxBodyBytes: Number.isFinite(config.maxBodyBytes)
