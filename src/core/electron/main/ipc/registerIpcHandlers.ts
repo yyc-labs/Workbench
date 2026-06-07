@@ -174,6 +174,10 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
     return deps.gitService.readRecentCommits(projectPath)
   })
 
+  ipcMain.handle(IPC.GIT_LIST_REPOSITORIES, async (_event, projectPath: string) => {
+    return deps.gitService.listGitRepositories(projectPath)
+  })
+
   ipcMain.handle(IPC.GIT_GET_WORKSPACE_SNAPSHOT, async (_event, projectPath: string) => {
     return deps.gitService.readGitWorkspaceSnapshot(projectPath)
   })

@@ -116,9 +116,30 @@ export interface GitHistoryCommitInfo {
   filesChanged: number
 }
 
+export type GitRepositoryLoadState = 'unloaded' | 'loading' | 'loaded' | 'dirty' | 'error'
+
+export interface GitRepositorySummary {
+  id: string
+  name: string
+  rootPath: string
+  relativePath: string
+  isNested: boolean
+  parentRepoId?: string
+  gitDirPath?: string
+}
+
+export interface GitRepositoryListResult {
+  workspacePath: string
+  repositories: GitRepositorySummary[]
+  scannedAt: number
+  truncated: boolean
+  error?: string
+}
+
 export interface GitWorkspaceSnapshot {
   projectPath: string
   isGitRepository: boolean
+  repository?: GitRepositorySummary
   branch: GitBranchInfo
   changedFiles: GitChangedFile[]
   recentCommits: GitHistoryCommitInfo[]

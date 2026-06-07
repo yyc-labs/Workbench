@@ -50,6 +50,13 @@ export function DetailAiCommitPaneHost({
     gitSnapshot,
     gitSnapshotLoading,
     gitSnapshotError,
+    gitRepositories,
+    gitRepositoriesLoading,
+    gitRepositoriesError,
+    gitRepositoriesTruncated,
+    selectedGitRepositoryId,
+    setSelectedGitRepositoryId,
+    refreshGitRepositories,
     refreshGitSnapshot,
     activeCommitHash,
     setActiveCommitHash,
@@ -213,6 +220,13 @@ export function DetailAiCommitPaneHost({
         gitSnapshot={gitSnapshot}
         gitSnapshotLoading={gitSnapshotLoading}
         gitSnapshotError={gitSnapshotError}
+        gitRepositories={gitRepositories}
+        gitRepositoriesLoading={gitRepositoriesLoading}
+        gitRepositoriesError={gitRepositoriesError}
+        gitRepositoriesTruncated={gitRepositoriesTruncated}
+        selectedGitRepositoryId={selectedGitRepositoryId}
+        onChangeGitRepository={setSelectedGitRepositoryId}
+        onRefreshGitRepositories={() => void refreshGitRepositories()}
         onRefreshGitSnapshot={() => void refreshGitSnapshot()}
         activeCommitHash={activeCommitHash}
         setActiveCommitHash={setActiveCommitHash}

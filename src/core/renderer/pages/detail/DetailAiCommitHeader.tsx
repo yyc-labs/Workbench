@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent, MutableRefObject } from 'react'
+import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
 import { BookOpen, Bot, Code2 } from 'lucide-react'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
@@ -24,6 +24,7 @@ type DetailAiCommitHeaderProps = {
   aiCommitStatus: AiCommitStatus
   firstProjectLinkItem?: ProjectLinkItem
   flowNodes: AiFlowNode[]
+  gitRepositoryControls?: ReactNode
   isAiEnabled: boolean
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
@@ -42,6 +43,7 @@ export function DetailAiCommitHeader({
   aiCommitStatus,
   firstProjectLinkItem,
   flowNodes,
+  gitRepositoryControls,
   isAiEnabled,
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
@@ -111,7 +113,8 @@ export function DetailAiCommitHeader({
               )}
             </div>
           </div>
-          <div className="shrink-0">
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-2">
+            {gitRepositoryControls}
             <button
               ref={aiAutoCommitButtonRef}
               type="button"

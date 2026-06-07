@@ -25,6 +25,7 @@ import type {
   TerminalProcessInventory,
   TerminalStopAllResult,
   GitWorkspaceSnapshot,
+  GitRepositoryListResult,
   GitOperationRequest,
   GitOperationResult,
   GitSetFileStageRequest,
@@ -119,6 +120,7 @@ declare global {
         bullets: string[]
         filesChanged: number
       }[]>
+      listGitRepositories: (projectPath: string) => Promise<GitRepositoryListResult>
       getGitWorkspaceSnapshot: (projectPath: string) => Promise<GitWorkspaceSnapshot>
       runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
       setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>

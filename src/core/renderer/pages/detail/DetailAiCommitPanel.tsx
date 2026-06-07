@@ -7,6 +7,7 @@ import { DetailAiCommitHeader } from './DetailAiCommitHeader'
 import { DetailAiCommitMiddlePanel } from './DetailAiCommitMiddlePanel'
 import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationConfirmModal'
 import { DetailAiCommitWorkingTreePanel } from './DetailAiCommitWorkingTreePanel'
+import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
 import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
 import type {
   BranchManagerMode,
@@ -26,6 +27,7 @@ import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type {
   AiCommitStatus,
   AiFlowNode,
+  DetailGitRepositorySummary,
   DetailGitSnapshot,
   GitDiffViewMode,
   GitConflictFileResult,
@@ -51,6 +53,13 @@ type DetailAiCommitPanelProps = {
   gitSnapshot: DetailGitSnapshot | null
   gitSnapshotLoading: boolean
   gitSnapshotError: string | null
+  gitRepositories: DetailGitRepositorySummary[]
+  gitRepositoriesLoading: boolean
+  gitRepositoriesError: string | null
+  gitRepositoriesTruncated: boolean
+  selectedGitRepositoryId: string | null
+  onChangeGitRepository: (repoId: string) => void
+  onRefreshGitRepositories: () => void
   onRefreshGitSnapshot: () => void
   activeCommitHash: string | null
   setActiveCommitHash: Dispatch<SetStateAction<string | null>>
@@ -80,6 +89,13 @@ function DetailAiCommitPanel({
   gitSnapshot,
   gitSnapshotLoading,
   gitSnapshotError,
+  gitRepositories,
+  gitRepositoriesLoading,
+  gitRepositoriesError,
+  gitRepositoriesTruncated,
+  selectedGitRepositoryId,
+  onChangeGitRepository,
+  onRefreshGitRepositories,
   onRefreshGitSnapshot,
   activeCommitHash,
   setActiveCommitHash,
@@ -163,6 +179,7 @@ function DetailAiCommitPanel({
   const activeDiffFile = activeDiffFilePath ? changedFilesMap.get(activeDiffFilePath) ?? null : null
   const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
   const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
+  const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || gitSnapshotLoading
 
   const localMergeCandidates = useMemo<IndexedBranchCandidate[]>(
     () =>
@@ -366,6 +383,17 @@ function DetailAiCommitPanel({
   }, [diffDrawerOpen, activeDiffFilePath, activeDiffFile, gitSnapshot?.checkedAt])
 
   const operationStates = useMemo<Record<PanelGitOperationKind, OperationCardState>>(() => {
+    if (gitOperationsUnavailable) {
+      const hint = gitSnapshotLoading ? 'Git 状态加载中' : '当前未加载 Git 仓库'
+      return {
+        fetch: { disabled: true, hint },
+        pull: { disabled: true, hint },
+        push: { disabled: true, hint },
+        switch: { disabled: true, hint },
+        merge: { disabled: true, hint },
+      }
+    }
+
     return {
       fetch: computeOperationState('fetch', {
         hasConflicts,
@@ -445,6 +473,8 @@ function DetailAiCommitPanel({
     localBranches,
     remoteBranches,
     runningOperation,
+    gitOperationsUnavailable,
+    gitSnapshotLoading,
   ])
 
   const setFileStaged = async (file: GitChangedFile, stage: boolean) => {
@@ -807,6 +837,19 @@ function DetailAiCommitPanel({
   const handleSaveConflict = useCallback((payload: { filePath: string; content: string; markResolved: boolean }) => {
     void saveConflict(payload)
   }, [saveConflict])
+  const gitRepositoryControls = (
+    <DetailGitRepositorySelector
+      repositories={gitRepositories}
+      selectedRepositoryId={selectedGitRepositoryId}
+      snapshot={gitSnapshot}
+      loading={gitSnapshotLoading}
+      repositoriesLoading={gitRepositoriesLoading}
+      repositoriesTruncated={gitRepositoriesTruncated}
+      variant="inline"
+      onChangeRepository={onChangeGitRepository}
+      onRefreshRepositories={onRefreshGitRepositories}
+    />
+  )
 
   return (
     <>
@@ -818,6 +861,7 @@ function DetailAiCommitPanel({
             aiCommitStatus={aiCommitStatus}
             firstProjectLinkItem={firstProjectLinkItem}
             flowNodes={flowNodes}
+            gitRepositoryControls={gitRepositoryControls}
             isAiEnabled={isAiEnabled}
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
@@ -829,6 +873,12 @@ function DetailAiCommitPanel({
             statusClass={statusClass}
             statusText={statusText}
           />
+
+        {gitRepositoriesError && (
+          <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
+            {gitRepositoriesError}
+          </div>
+        )}
 
         {gitSnapshotError && (
           <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">

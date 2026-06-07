@@ -5,6 +5,7 @@ import {
   normalizeGitOperationOutput,
 } from './git-command'
 import { createGitFileOperations } from './git-file-operations'
+import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
 
@@ -362,6 +363,7 @@ export function createGitService(deps: GitServiceDependencies) {
   }
 
   return {
+    listGitRepositories,
     readRecentCommits,
     readGitWorkspaceSnapshot,
     runGitOperation,

@@ -16,6 +16,8 @@ import type {
   AiFlowNode,
   AiStepKey,
   AiStepState,
+  DetailGitRepositoryList,
+  DetailGitRepositorySummary,
   DetailGitSnapshot,
 } from './detail.types'
 
@@ -39,6 +41,11 @@ export function useAiCommitFlow({
   const [gitSnapshot, setGitSnapshot] = useState<DetailGitSnapshot | null>(null)
   const [gitSnapshotLoading, setGitSnapshotLoading] = useState(false)
   const [gitSnapshotError, setGitSnapshotError] = useState<string | null>(null)
+  const [gitRepositories, setGitRepositories] = useState<DetailGitRepositorySummary[]>([])
+  const [gitRepositoriesLoading, setGitRepositoriesLoading] = useState(false)
+  const [gitRepositoriesError, setGitRepositoriesError] = useState<string | null>(null)
+  const [gitRepositoriesTruncated, setGitRepositoriesTruncated] = useState(false)
+  const [selectedGitRepositoryId, setSelectedGitRepositoryId] = useState<string | null>(null)
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
   const [quickSplit, setQuickSplit] = useState(Boolean(aiCommitConfig?.split ?? false))
@@ -51,6 +58,7 @@ export function useAiCommitFlow({
   const [quickConfigPos, setQuickConfigPos] = useState({ x: 0, y: 0 })
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
+  const gitSnapshotRequestSeqRef = useRef(0)
 
   const isAiEnabled = aiCommitConfig?.enabled ?? true
   const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
@@ -58,6 +66,32 @@ export function useAiCommitFlow({
   const defaultMaxBullets = clampMaxBullets(aiCommitConfig?.maxBullets)
   const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
   const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
+  const selectedGitRepository = useMemo(() => {
+    if (gitRepositories.length <= 0) return null
+    return gitRepositories.find((repo) => repo.id === selectedGitRepositoryId) ?? gitRepositories[0]
+  }, [gitRepositories, selectedGitRepositoryId])
+  const activeGitProjectPath = selectedGitRepository?.rootPath || projectPath
+  const selectGitRepository = useCallback((repoId: string) => {
+    setSelectedGitRepositoryId(repoId || null)
+  }, [])
+
+  useEffect(() => {
+    gitSnapshotRequestSeqRef.current += 1
+    setGitRepositories([])
+    setSelectedGitRepositoryId(null)
+    setGitSnapshot(null)
+    setGitSnapshotError(null)
+    setGitRepositoriesError(null)
+    setGitRepositoriesTruncated(false)
+    setActiveCommitHash(null)
+  }, [projectPath])
+
+  useEffect(() => {
+    gitSnapshotRequestSeqRef.current += 1
+    setGitSnapshot(null)
+    setGitSnapshotError(null)
+    setActiveCommitHash(null)
+  }, [selectedGitRepositoryId])
 
   useEffect(() => {
     if (!projectId || !toolProcessId) return
@@ -176,8 +210,49 @@ export function useAiCommitFlow({
     }
   }, [activeCommitHash])
 
-  const refreshGitSnapshot = useCallback(async () => {
+  const refreshGitRepositories = useCallback(async () => {
     if (!projectPath) {
+      setGitRepositories([])
+      setSelectedGitRepositoryId(null)
+      setGitSnapshot(null)
+      setGitSnapshotError(null)
+      setGitRepositoriesError(null)
+      setGitRepositoriesTruncated(false)
+      setActiveCommitHash(null)
+      return
+    }
+
+    const api = window.electronAPI as unknown as {
+      listGitRepositories?: (projectPath: string) => Promise<DetailGitRepositoryList>
+    }
+
+    if (typeof api.listGitRepositories !== 'function') {
+      setGitRepositoriesError('Git repository list API is unavailable. Please restart Electron app process.')
+      return
+    }
+
+    setGitRepositoriesLoading(true)
+    setGitRepositoriesError(null)
+    try {
+      const result = await api.listGitRepositories(projectPath)
+      setGitRepositories(result.repositories)
+      setGitRepositoriesTruncated(result.truncated)
+      setGitRepositoriesError(result.error ?? null)
+      setSelectedGitRepositoryId((prev) => {
+        if (prev && result.repositories.some((repo) => repo.id === prev)) return prev
+        return result.repositories[0]?.id ?? null
+      })
+    } catch (error) {
+      setGitRepositoriesError(error instanceof Error ? error.message : String(error))
+      setGitRepositories([])
+      setSelectedGitRepositoryId(null)
+    } finally {
+      setGitRepositoriesLoading(false)
+    }
+  }, [projectPath])
+
+  const refreshGitSnapshot = useCallback(async () => {
+    if (!selectedGitRepository) {
       setGitSnapshot(null)
       setGitSnapshotError(null)
       setActiveCommitHash(null)
@@ -195,26 +270,34 @@ export function useAiCommitFlow({
 
     setGitSnapshotLoading(true)
     setGitSnapshotError(null)
+    const requestSeq = gitSnapshotRequestSeqRef.current + 1
+    gitSnapshotRequestSeqRef.current = requestSeq
     try {
-      const result = await api.getGitWorkspaceSnapshot(projectPath)
+      const result = await api.getGitWorkspaceSnapshot(selectedGitRepository.rootPath)
+      if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshot(result)
       setGitSnapshotError(result.error ?? null)
       setActiveCommitHash((prev) => (
         result.recentCommits.some((item) => item.hash === prev) ? prev : null
       ))
     } catch (error) {
+      if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshotError(error instanceof Error ? error.message : String(error))
     } finally {
-      setGitSnapshotLoading(false)
+      if (requestSeq === gitSnapshotRequestSeqRef.current) setGitSnapshotLoading(false)
     }
-  }, [projectPath])
+  }, [selectedGitRepository])
+
+  useEffect(() => {
+    void refreshGitRepositories()
+  }, [refreshGitRepositories])
 
   useEffect(() => {
     void refreshGitSnapshot()
-  }, [refreshGitSnapshot, aiCommitStatus])
+  }, [refreshGitSnapshot, aiCommitStatus, selectedGitRepositoryId])
 
   const handleAiCommit = useCallback(async (override?: AiCommitRunOverride) => {
-    if (!projectId || !projectPath) return
+    if (!projectId || !activeGitProjectPath) return
     if (aiCommitStatus === 'running') return
 
     const api = window.electronAPI as unknown as {
@@ -246,7 +329,7 @@ export function useAiCommitFlow({
         `[AI Commit] quick override: split=${override.split ? 'on' : 'off'}, maxBatches=${override.splitMaxBatches ?? defaultSplitMaxBatches}, maxBullets=${override.maxBullets ?? defaultMaxBullets}\r\n`
       )
     }
-    const ok = await api.runAiCommit(projectId, projectPath, override)
+    const ok = await api.runAiCommit(projectId, activeGitProjectPath, override)
     if (!ok) {
       setAiCommitStatus('error')
     }
@@ -256,7 +339,7 @@ export function useAiCommitFlow({
     defaultSplitMaxBatches,
     isAiEnabled,
     projectId,
-    projectPath,
+    activeGitProjectPath,
     toolProcessId,
   ])
 
@@ -316,6 +399,14 @@ export function useAiCommitFlow({
     gitSnapshot,
     gitSnapshotLoading,
     gitSnapshotError,
+    gitRepositories,
+    gitRepositoriesLoading,
+    gitRepositoriesError,
+    gitRepositoriesTruncated,
+    selectedGitRepositoryId,
+    selectedGitRepository,
+    setSelectedGitRepositoryId: selectGitRepository,
+    refreshGitRepositories,
     refreshGitSnapshot,
     activeCommitHash,
     setActiveCommitHash,

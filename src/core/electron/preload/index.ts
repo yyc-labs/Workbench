@@ -154,6 +154,9 @@ const api = {
   getLatestCommit: (projectPath: string) =>
     ipcRenderer.invoke(IPC.GIT_GET_LATEST_COMMIT, projectPath),
 
+  listGitRepositories: (projectPath: string) =>
+    ipcRenderer.invoke(IPC.GIT_LIST_REPOSITORIES, projectPath),
+
   getGitWorkspaceSnapshot: (projectPath: string) =>
     ipcRenderer.invoke(IPC.GIT_GET_WORKSPACE_SNAPSHOT, projectPath),
 

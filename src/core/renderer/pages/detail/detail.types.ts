@@ -2,6 +2,8 @@ import type {
   AiCommitStatus as SharedAiCommitStatus,
   AiCommitTaskSnapshot,
   GitHistoryCommitInfo,
+  GitRepositoryListResult,
+  GitRepositorySummary,
   GitOperationKind as SharedGitOperationKind,
   GitOperationResult as SharedGitOperationResult,
   GitSetFileStageRequest as SharedGitSetFileStageRequest,
@@ -27,6 +29,8 @@ export interface AiStepState {
 }
 
 export type LatestCommitInfo = GitHistoryCommitInfo
+export type DetailGitRepositoryList = GitRepositoryListResult
+export type DetailGitRepositorySummary = GitRepositorySummary
 export type DetailGitSnapshot = GitWorkspaceSnapshot
 export type GitOperationKind = SharedGitOperationKind
 export type GitOperationResult = SharedGitOperationResult

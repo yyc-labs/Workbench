@@ -13,6 +13,7 @@ export const IPC = {
   AI_COMMIT_OUTPUT: 'ai-commit:output',
   AI_COMMIT_STATUS: 'ai-commit:status',
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
+  GIT_LIST_REPOSITORIES: 'git:listRepositories',
   GIT_GET_WORKSPACE_SNAPSHOT: 'git:getWorkspaceSnapshot',
   GIT_RUN_OPERATION: 'git:runOperation',
   GIT_SET_FILE_STAGE: 'git:setFileStage',

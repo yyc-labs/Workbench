@@ -282,6 +282,19 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
   }
 
   async function readGitWorkspaceSnapshot(projectPath: string): Promise<GitWorkspaceSnapshot> {
+    const repositoryResult = await runner.runGitCommand(projectPath, ['rev-parse', '--show-toplevel'])
+    const repositoryRoot = repositoryResult.code === 0
+      ? repositoryResult.stdout.replace(/\r/g, '').trim()
+      : ''
+    const repository = repositoryRoot
+      ? {
+          id: repositoryRoot,
+          name: repositoryRoot.split(/[\\/]/).filter(Boolean).pop() || repositoryRoot,
+          rootPath: repositoryRoot,
+          relativePath: '.',
+          isNested: false,
+        }
+      : undefined
     const emptyBranch = emptyGitBranchInfo()
     const statusResult = await runGitCommand(projectPath, ['status', '--porcelain=v2', '--branch', '-uall', '-z'], {
       stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
@@ -292,6 +305,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       return {
         projectPath,
         isGitRepository: false,
+        repository,
         branch: emptyBranch,
         changedFiles: [],
         recentCommits: [],
@@ -327,6 +341,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return {
       projectPath,
       isGitRepository: true,
+      repository,
       branch,
       changedFiles: parsed.changedFiles,
       recentCommits,
