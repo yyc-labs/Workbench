@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronUp,
   Code2,
+  FileText,
   Play,
   RefreshCw,
   Settings2,
@@ -204,6 +205,10 @@ export function DetailPage() {
 
   useEffect(() => {
     if (!projectId) return
+    if (pane === 'transcript') {
+      navigate(`/project/${projectId}/transcript`, { replace: true })
+      return
+    }
     if (pane === 'git') {
       navigate(`/project/${projectId}/aicommit`, { replace: true })
       return
@@ -357,6 +362,18 @@ export function DetailPage() {
                 Git Commit
               </button>
             </div>
+
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={() => {
+                if (!projectId) return
+                navigate(`/project/${projectId}/transcript`)
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Transcript
+            </button>
 
             {isRunning && processUrls.length > 0 && (
               <UrlPopover urls={processUrls}>
@@ -541,6 +558,10 @@ export function DetailPage() {
                   if (!projectId || nextPane === activePane) return
                   navigate(`/project/${projectId}/${nextPane}`)
                 }}
+                onOpenTranscript={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/transcript`)
+                }}
                 onOpenProjectLinksManager={openProjectLinksManager}
               />
             ) : (
@@ -555,6 +576,10 @@ export function DetailPage() {
                 onSwitchPane={(nextPane) => {
                   if (!projectId || nextPane === activePane) return
                   navigate(`/project/${projectId}/${nextPane}`)
+                }}
+                onOpenTranscript={() => {
+                  if (!projectId) return
+                  navigate(`/project/${projectId}/transcript`)
                 }}
                 onOpenProjectLinksManager={openProjectLinksManager}
                 onCloseProjectContextMenu={() => setMenuPos(null)}

@@ -13,6 +13,7 @@ import {
 
 const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
 const DetailPage = lazy(() => import('./pages/Detail').then((module) => ({ default: module.DetailPage })))
+const TranscriptPage = lazy(() => import('./pages/TranscriptPage').then((module) => ({ default: module.TranscriptPage })))
 const SettingsPage = lazy(() => import('./pages/Settings').then((module) => ({ default: module.SettingsPage })))
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
@@ -125,6 +126,22 @@ function ProcessOutputListener() {
     )
     return () => { unsubOutput(); unsubStatus(); unsubExit() }
   }, [appendOutput, updateProcessStatus, handleProcessExit, refreshSessions])
+
+  return null
+}
+
+function TranscriptImportListener() {
+  const navigate = useNavigate()
+  const upsertTranscriptSession = useAppStore((s) => s.upsertTranscriptSession)
+
+  useEffect(() => {
+    return window.electronAPI.onTranscriptImported(({ session, openViewer }) => {
+      upsertTranscriptSession(session, { activate: true, initialMode: 'preview' })
+      if (openViewer) {
+        navigate(`/project/${session.projectId}/transcript`)
+      }
+    })
+  }, [navigate, upsertTranscriptSession])
 
   return null
 }
@@ -282,13 +299,10 @@ function MouseGestureNavigator() {
       </svg>
       <div className="fixed left-1/2 top-4 -translate-x-1/2">
         <div
-          className="rounded-[14px] px-3 py-2 text-xs text-[color:var(--color-foreground)]"
+          className="mouse-gesture-hint rounded-[14px] px-3 py-2 text-xs text-[color:var(--color-foreground)]"
           style={{
             background: 'var(--color-popover)',
             border: '1px solid var(--color-border)',
-            backdropFilter: 'saturate(165%) blur(18px)',
-            WebkitBackdropFilter: 'saturate(165%) blur(18px)',
-            boxShadow: 'var(--shadow-popover)',
           }}
         >
           <div className="whitespace-nowrap">{hint.label}</div>
@@ -484,6 +498,7 @@ export function App() {
       <ThemeSync />
       <WindowTitleSync />
       <ProcessOutputListener />
+      <TranscriptImportListener />
       <RuntimeStateListener />
       <SessionPoller />
       <MouseGestureNavigator />
@@ -498,6 +513,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/project/:projectId" element={<DetailPage />} />
+              <Route path="/project/:projectId/transcript" element={<TranscriptPage />} />
               <Route path="/project/:projectId/:pane" element={<DetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>

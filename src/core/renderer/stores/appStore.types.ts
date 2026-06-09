@@ -42,6 +42,12 @@ import type {
   ProjectCodeSession,
   AgentHookEnvelope,
   AgentHookGatewayStatus,
+  TranscriptImportedEvent,
+  TranscriptImportPayload,
+  TranscriptSession,
+  TranscriptSessionSummary,
+  TranscriptViewerMode,
+  TranscriptViewerRequest,
 } from '../../shared/types'
 
 declare global {
@@ -102,6 +108,11 @@ declare global {
         extension: string,
         dataBase64: string
       ) => Promise<ProjectFileWriteImageResult>
+      importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
+      listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
+      listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
+      getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
+      deleteTranscript: (projectId: string, transcriptId: string) => Promise<boolean>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
       openFolder: (folderPath: string, revealPath?: string) => Promise<void>
@@ -145,6 +156,7 @@ declare global {
         cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
       ) => () => void
       onAgentHookEvent: (cb: (d: AgentHookEnvelope) => void) => () => void
+      onTranscriptImported: (cb: (d: TranscriptImportedEvent) => void) => () => void
       onWindowState: (cb: (d: { isMaximized: boolean }) => void) => () => void
       onCodeFocusSearch: (cb: () => void) => () => void
       onCodeToggleViewMode: (cb: () => void) => () => void
@@ -171,6 +183,12 @@ export interface AppState {
   tmuxSessions: TmuxSessionInfo[]
   sessions: Record<string, SessionRuntime>
   runtimeEntries: Record<string, RuntimeEntry>
+  transcriptSummariesByProjectId: Record<string, TranscriptSessionSummary[]>
+  transcriptSessions: Record<string, TranscriptSession>
+  activeTranscriptIdByProjectId: Record<string, string | undefined>
+  transcriptModeBySessionId: Record<string, TranscriptViewerMode | undefined>
+  activeTranscriptReferenceIdBySessionId: Record<string, string | undefined>
+  transcriptListStatusByProjectId: Record<string, 'idle' | 'loading' | 'ready' | 'error'>
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
@@ -207,6 +225,19 @@ export interface AppState {
   syncManagedProcesses: () => Promise<void>
   rehydrateProcessUrlsFromStorage: () => void
   refreshSessions: () => Promise<void>
+  importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession | null>
+  importCurrentProcessOutputTranscript: (projectId: string, title?: string) => Promise<TranscriptSession | null>
+  loadProjectTranscripts: (projectId: string) => Promise<void>
+  loadTranscriptSession: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
+  openTranscript: (request: TranscriptViewerRequest) => Promise<void>
+  upsertTranscriptSession: (
+    session: TranscriptSession,
+    options?: { activate?: boolean; initialMode?: TranscriptViewerMode }
+  ) => void
+  openTranscriptReference: (sessionId: string, referenceId: string) => void
+  closeTranscriptReference: (sessionId: string) => void
+  setTranscriptMode: (sessionId: string, mode: TranscriptViewerMode) => void
+  removeTranscriptSession: (projectId: string, transcriptId: string) => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
   setProjectCustomName: (projectId: string, customName?: string) => Promise<void>
   setProjectCustomType: (projectId: string, customType?: string) => Promise<void>

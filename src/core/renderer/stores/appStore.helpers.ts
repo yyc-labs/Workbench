@@ -5,6 +5,7 @@ import type {
   ProjectTag,
   RunStartupMode,
 } from '../../shared/types'
+import { projectIdFromPath } from '../../shared/rules'
 
 const MAX_TERMINAL_OUTPUT_CHARS = 300_000
 const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
@@ -59,16 +60,6 @@ function fallbackProjectName(dirPath: string): string {
   return parts[parts.length - 1] || dirPath
 }
 
-function fallbackProjectId(filePath: string): string {
-  let hash = 0
-  for (let i = 0; i < filePath.length; i++) {
-    const char = filePath.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash |= 0
-  }
-  return `p${Math.abs(hash).toString(36)}`
-}
-
 export function createEntityId(prefix: 'folder' | 'tag'): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `${prefix}-${crypto.randomUUID()}`
@@ -78,7 +69,7 @@ export function createEntityId(prefix: 'folder' | 'tag'): string {
 
 export function createFallbackProject(dirPath: string): ProjectInfo {
   return {
-    id: fallbackProjectId(dirPath),
+    id: projectIdFromPath(dirPath),
     path: dirPath,
     name: fallbackProjectName(dirPath),
     type: 'unknown',

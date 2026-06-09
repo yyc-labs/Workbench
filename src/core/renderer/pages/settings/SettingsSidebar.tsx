@@ -1,4 +1,4 @@
-import { Palette, Database, Info, Wrench, Bot, Terminal as TerminalIcon, RadioTower } from 'lucide-react'
+import { Palette, Database, FileText, Info, Wrench, Bot, Terminal as TerminalIcon, RadioTower } from 'lucide-react'
 import type { Section } from './settings.types'
 
 type SettingsSidebarProps = {
@@ -14,6 +14,7 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
   }[] = [
       { id: 'general', label: 'General', icon: Palette },
       { id: 'runtime', label: 'Runtime', icon: Wrench },
+      { id: 'transcripts', label: 'Transcripts', icon: FileText },
       { id: 'hooks', label: 'Agent Hooks', icon: RadioTower },
       { id: 'logs', label: 'Startup Logs', icon: TerminalIcon },
       { id: 'ai', label: 'AI Commit', icon: Bot },

@@ -6,6 +6,7 @@ import { createSettingsActionsSlice } from './appStore.settingsSlice'
 import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
+import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../lib/projectDocLinks'
 
 export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
@@ -30,10 +31,17 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   tmuxSessions: [],
   sessions: {},
   runtimeEntries: {},
+  transcriptSummariesByProjectId: {},
+  transcriptSessions: {},
+  activeTranscriptIdByProjectId: {},
+  transcriptModeBySessionId: {},
+  activeTranscriptReferenceIdBySessionId: {},
+  transcriptListStatusByProjectId: {},
 
   ...createInitActionsSlice(...args),
   ...createSettingsActionsSlice(...args),
   ...createWorkspaceActionsSlice(...args),
   ...createProcessActionsSlice(...args),
   ...createRuntimeActionsSlice(...args),
+  ...createTranscriptActionsSlice(...args),
 }))

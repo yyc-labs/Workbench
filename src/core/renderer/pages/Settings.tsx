@@ -5,6 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
+import { SettingsTranscriptPanel } from './settings/SettingsTranscriptPanel'
 import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
@@ -64,6 +65,12 @@ export function SettingsPage() {
                   onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
                   projects={projects}
                   runtimeEntries={runtimeEntries}
+                />
+              )}
+              {section === 'transcripts' && (
+                <SettingsTranscriptPanel
+                  projects={projects}
+                  removedProjects={config.removedProjects}
                 />
               )}
               {section === 'hooks' && <SettingsAgentHooksPanel />}
