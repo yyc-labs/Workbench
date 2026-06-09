@@ -31,6 +31,7 @@ type AiCommitServiceDependencies = {
 }
 
 const AI_COMMIT_UNDO_WINDOW_MS = 30_000
+const AI_COMMIT_UNDO_AUTH_GRACE_MS = 10_000
 const GIT_HASH_RE = /^[0-9a-f]{40}$/i
 
 export function createAiCommitService(deps: AiCommitServiceDependencies) {
@@ -128,6 +129,18 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     return 'closed'
   }
 
+  function getUndoEffectiveExpiresAt(undo: AiCommitUndoState): number {
+    if (
+      Number.isFinite(undo.authStartedAt)
+      && Number.isFinite(undo.authExpiresAt)
+      && (undo.authStartedAt as number) <= undo.expiresAt
+      && (undo.authExpiresAt as number) > undo.expiresAt
+    ) {
+      return undo.authExpiresAt as number
+    }
+    return undo.expiresAt
+  }
+
   function closeAiCommitUndo(
     projectId: string,
     reason: AiCommitUndoCloseReason = 'manual'
@@ -142,6 +155,8 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       undo: {
         ...task.undo,
         status: undoStatusForCloseReason(reason),
+        authStartedAt: undefined,
+        authExpiresAt: undefined,
         closedAt: now,
         closeReason: reason,
       },
@@ -153,8 +168,61 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
   function expireAiCommitUndoIfNeeded(task: AiCommitTaskSnapshot | undefined): AiCommitTaskSnapshot | undefined {
     if (!task?.undo || task.undo.status !== 'available') return task
-    if (task.undo.expiresAt > Date.now()) return task
+    if (getUndoEffectiveExpiresAt(task.undo) > Date.now()) return task
     return closeAiCommitUndo(task.projectId, 'expired') ?? task
+  }
+
+  function beginAiCommitUndoAuth(projectId: string): AiCommitTaskSnapshot | null {
+    const task = expireAiCommitUndoIfNeeded(getAiCommitTask(projectId))
+    if (!task?.undo || task.undo.status !== 'available') return task ?? null
+
+    const now = Date.now()
+    const effectiveExpiresAt = getUndoEffectiveExpiresAt(task.undo)
+    if (
+      Number.isFinite(task.undo.authStartedAt)
+      && Number.isFinite(task.undo.authExpiresAt)
+      && effectiveExpiresAt > now
+    ) {
+      return task
+    }
+
+    if (task.undo.expiresAt <= now) {
+      return closeAiCommitUndo(projectId, 'expired') ?? task
+    }
+
+    return upsertAiCommitTask({
+      ...task,
+      undo: {
+        ...task.undo,
+        authStartedAt: now,
+        authExpiresAt: task.undo.expiresAt + AI_COMMIT_UNDO_AUTH_GRACE_MS,
+      },
+      updatedAt: now,
+    })
+  }
+
+  function cancelAiCommitUndoAuth(projectId: string): AiCommitTaskSnapshot | null {
+    const task = getAiCommitTask(projectId)
+    if (!task?.undo || task.undo.status !== 'available') return task ?? null
+
+    const now = Date.now()
+    if (task.undo.expiresAt <= now) {
+      return closeAiCommitUndo(projectId, 'expired') ?? task
+    }
+
+    if (!Number.isFinite(task.undo.authStartedAt) && !Number.isFinite(task.undo.authExpiresAt)) {
+      return task
+    }
+
+    return upsertAiCommitTask({
+      ...task,
+      undo: {
+        ...task.undo,
+        authStartedAt: undefined,
+        authExpiresAt: undefined,
+      },
+      updatedAt: now,
+    })
   }
 
   async function runAiCommit(
@@ -373,7 +441,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
                 })
                 sendAiCommitOutput(
                   projectId,
-                  `[AI Commit] undo available for ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''} (30s).\r\n`
+                  `[AI Commit] undo available for ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''} (30s, +10s while confirming).\r\n`
                 )
               }
             } catch (error) {
@@ -480,7 +548,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       return fail('AI commit undo is no longer available.')
     }
 
-    if (undo.expiresAt <= Date.now()) {
+    if (getUndoEffectiveExpiresAt(undo) <= Date.now()) {
       const closed = closeAiCommitUndo(projectId, 'expired')
       return {
         ...fail('AI commit undo window expired.'),
@@ -539,6 +607,8 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
   return {
     runAiCommit,
     getAiCommitState,
+    beginAiCommitUndoAuth,
+    cancelAiCommitUndoAuth,
     undoAiCommit,
     closeAiCommitUndo,
   }

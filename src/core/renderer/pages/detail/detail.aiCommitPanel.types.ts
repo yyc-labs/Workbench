@@ -1,8 +1,12 @@
 import type { PanelGitOperationKind } from './detail.gitOperations'
 
 export type OperationConfirmState = {
-  operation: PanelGitOperationKind
+  operation: PanelGitOperationKind | 'undo-ai-commit'
   message: string
+  title?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  helperText?: string
   riskLevel?: 'normal' | 'high'
   requireExactMatch?: string
 } | null

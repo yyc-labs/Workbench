@@ -19,15 +19,30 @@ function normalizeUndoState(entry: AiCommitTaskSnapshot): AiCommitUndoState | un
   if (!undo || !undo.afterHead || !undo.repoRoot || !undo.runId) return undefined
 
   const now = Date.now()
-  const status = undo.status === 'available' && undo.expiresAt <= now ? 'expired' : undo.status
+  const status = undo.status === 'closed' || undo.status === 'expired' || undo.status === 'undone'
+    ? undo.status
+    : 'available'
+  const expiresAt = Number.isFinite(undo.expiresAt) ? undo.expiresAt : now
+  const authStartedAt = status === 'available' && Number.isFinite(undo.authStartedAt)
+    ? undo.authStartedAt
+    : undefined
+  const authExpiresAtValue = Number.isFinite(undo.authExpiresAt) ? undo.authExpiresAt : undefined
+  const authExpiresAt = status === 'available' && authExpiresAtValue !== undefined && authExpiresAtValue > expiresAt
+    ? authExpiresAtValue
+    : undefined
   return {
     ...undo,
     commitCount: Math.max(1, Math.trunc(Number.isFinite(undo.commitCount) ? undo.commitCount : 1)),
     createdAt: Number.isFinite(undo.createdAt) ? undo.createdAt : entry.finishedAt ?? entry.updatedAt ?? now,
-    expiresAt: Number.isFinite(undo.expiresAt) ? undo.expiresAt : now,
+    expiresAt,
+    authStartedAt,
+    authExpiresAt,
     status,
-    closedAt: status === undo.status ? undo.closedAt : now,
-    closeReason: status === undo.status ? undo.closeReason : 'expired',
+    closedAt: Number.isFinite(undo.closedAt)
+      ? undo.closedAt
+      : status === 'available'
+        ? undefined
+        : entry.finishedAt ?? entry.updatedAt ?? now,
   }
 }
 

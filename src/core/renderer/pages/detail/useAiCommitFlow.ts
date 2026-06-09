@@ -30,6 +30,18 @@ type UseAiCommitFlowOptions = {
 
 const pendingUndoCloseTimers = new Map<string, number>()
 
+function getUndoEffectiveExpiresAt(undo: AiCommitUndoState): number {
+  if (
+    Number.isFinite(undo.authStartedAt)
+    && Number.isFinite(undo.authExpiresAt)
+    && (undo.authStartedAt as number) <= undo.expiresAt
+    && (undo.authExpiresAt as number) > undo.expiresAt
+  ) {
+    return undo.authExpiresAt as number
+  }
+  return undo.expiresAt
+}
+
 export function useAiCommitFlow({
   projectId,
   projectPath,
@@ -74,6 +86,22 @@ export function useAiCommitFlow({
   const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
   const aiCommitUndoAvailable = Boolean(aiCommitUndo && aiCommitUndo.status === 'available' && aiCommitUndoRemainingMs > 0)
   const aiCommitUndoRemainingSeconds = Math.max(0, Math.ceil(aiCommitUndoRemainingMs / 1000))
+  const aiCommitUndoAuthActive = Boolean(
+    aiCommitUndo
+    && aiCommitUndo.status === 'available'
+    && Number.isFinite(aiCommitUndo.authStartedAt)
+    && Number.isFinite(aiCommitUndo.authExpiresAt)
+    && getUndoEffectiveExpiresAt(aiCommitUndo) > Date.now()
+  )
+  const aiCommitUndoGraceActive = Boolean(
+    aiCommitUndoAuthActive
+    && aiCommitUndo
+    && aiCommitUndo.expiresAt <= Date.now()
+    && getUndoEffectiveExpiresAt(aiCommitUndo) > Date.now()
+  )
+  const aiCommitUndoGraceRemainingSeconds = aiCommitUndoGraceActive && aiCommitUndo
+    ? Math.max(0, Math.ceil((getUndoEffectiveExpiresAt(aiCommitUndo) - Date.now()) / 1000))
+    : 0
   const selectedGitRepository = useMemo(() => {
     if (gitRepositories.length <= 0) return null
     return gitRepositories.find((repo) => repo.id === selectedGitRepositoryId) ?? gitRepositories[0]
@@ -81,6 +109,12 @@ export function useAiCommitFlow({
   const activeRepoRoot = selectedGitRepository?.repoRoot
   const selectGitRepository = useCallback((repoId: string) => {
     setSelectedGitRepositoryId(repoId || null)
+  }, [])
+
+  const applyUndoState = useCallback((undo: AiCommitUndoState | null | undefined) => {
+    const availableUndo = undo && undo.status === 'available' ? undo : null
+    setAiCommitUndo(availableUndo)
+    setAiCommitUndoRemainingMs(availableUndo ? Math.max(0, getUndoEffectiveExpiresAt(availableUndo) - Date.now()) : 0)
   }, [])
 
   useEffect(() => {
@@ -147,9 +181,7 @@ export function useAiCommitFlow({
           setFlowSteps((prev) => applyStep(completePreviousSteps(prev, 'done'), 'done', 'success'))
           if (typeof api.getAiCommitState === 'function') {
             void api.getAiCommitState(projectId).then((state) => {
-              const undo = state?.undo && state.undo.status === 'available' ? state.undo : null
-              setAiCommitUndo(undo)
-              setAiCommitUndoRemainingMs(undo ? Math.max(0, undo.expiresAt - Date.now()) : 0)
+              applyUndoState(state?.undo)
             }).catch(() => {
               // ignore undo refresh failures; the commit itself has already completed
             })
@@ -176,9 +208,7 @@ export function useAiCommitFlow({
         setAiCommitStatus(restored.status)
         setAiRawText(restored.rawText)
         setFlowSteps(restored.steps)
-        const undo = state.undo && state.undo.status === 'available' ? state.undo : null
-        setAiCommitUndo(undo)
-        setAiCommitUndoRemainingMs(undo ? Math.max(0, undo.expiresAt - Date.now()) : 0)
+        applyUndoState(state.undo)
         if (restored.rawText) {
           useAppStore.getState().appendOutput(
             toolProcessId,
@@ -194,7 +224,7 @@ export function useAiCommitFlow({
       cleanupOutput()
       cleanupStatus()
     }
-  }, [projectId, toolProcessId])
+  }, [applyUndoState, projectId, toolProcessId])
 
   useEffect(() => {
     setQuickSplit(defaultSplit)
@@ -209,7 +239,7 @@ export function useAiCommitFlow({
     }
 
     const updateRemaining = () => {
-      const remaining = Math.max(0, aiCommitUndo.expiresAt - Date.now())
+      const remaining = Math.max(0, getUndoEffectiveExpiresAt(aiCommitUndo) - Date.now())
       setAiCommitUndoRemainingMs(remaining)
       if (remaining <= 0) {
         setAiCommitUndo(null)
@@ -451,19 +481,57 @@ export function useAiCommitFlow({
       const result = await api.undoAiCommit(projectId)
       if (!result.ok) {
         setAiCommitUndoError(result.error || result.output || '撤回提交失败')
-        setAiCommitUndo(result.undo && result.undo.status === 'available' ? result.undo : null)
-        setAiCommitUndoRemainingMs(result.undo?.status === 'available' ? Math.max(0, result.undo.expiresAt - Date.now()) : 0)
+        applyUndoState(result.undo)
         return
       }
-      setAiCommitUndo(null)
-      setAiCommitUndoRemainingMs(0)
+      applyUndoState(null)
       await refreshGitSnapshot()
     } catch (error) {
       setAiCommitUndoError(error instanceof Error ? error.message : String(error))
     } finally {
       setAiCommitUndoRunning(false)
     }
-  }, [aiCommitUndoAvailable, aiCommitUndoRunning, projectId, refreshGitSnapshot])
+  }, [aiCommitUndoAvailable, aiCommitUndoRunning, applyUndoState, projectId, refreshGitSnapshot])
+
+  const handleBeginUndoAiCommitAuth = useCallback(async (): Promise<boolean> => {
+    if (!projectId || !aiCommitUndoAvailable || aiCommitUndoRunning) return false
+    const api = window.electronAPI as unknown as {
+      beginAiCommitUndoAuth?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+    }
+    if (typeof api.beginAiCommitUndoAuth !== 'function') {
+      setAiCommitUndoError('撤回认证 API 不可用，请重启 Electron 应用。')
+      return false
+    }
+
+    setAiCommitUndoError(null)
+    try {
+      const state = await api.beginAiCommitUndoAuth(projectId)
+      applyUndoState(state?.undo)
+      if (!state?.undo || state.undo.status !== 'available') {
+        setAiCommitUndoError('撤回窗口已失效，请重新执行 AI Commit 后再试。')
+        return false
+      }
+      return true
+    } catch (error) {
+      setAiCommitUndoError(error instanceof Error ? error.message : String(error))
+      return false
+    }
+  }, [aiCommitUndoAvailable, aiCommitUndoRunning, applyUndoState, projectId])
+
+  const handleCancelUndoAiCommitAuth = useCallback(async (): Promise<void> => {
+    if (!projectId) return
+    const api = window.electronAPI as unknown as {
+      cancelAiCommitUndoAuth?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+    }
+    if (typeof api.cancelAiCommitUndoAuth !== 'function') return
+
+    try {
+      const state = await api.cancelAiCommitUndoAuth(projectId)
+      applyUndoState(state?.undo)
+    } catch {
+      // ignore auth cancel failures; undo availability will naturally expire if needed
+    }
+  }, [applyUndoState, projectId])
 
   const runWithQuickConfig = useCallback(async () => {
     const override = {
@@ -535,6 +603,9 @@ export function useAiCommitFlow({
     aiCommitUndo,
     aiCommitUndoAvailable,
     aiCommitUndoRemainingSeconds,
+    aiCommitUndoAuthActive,
+    aiCommitUndoGraceActive,
+    aiCommitUndoGraceRemainingSeconds,
     aiCommitUndoRunning,
     aiCommitUndoError,
     quickConfigOpen,
@@ -556,6 +627,8 @@ export function useAiCommitFlow({
     quickSplitMaxBatchesNumber,
     quickMaxBulletsNumber,
     handleAiCommit,
+    handleBeginUndoAiCommitAuth,
+    handleCancelUndoAiCommitAuth,
     handleUndoAiCommit,
     runWithQuickConfig,
     saveQuickConfigAsDefault,

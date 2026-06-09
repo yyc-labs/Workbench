@@ -2,9 +2,12 @@ import { AlertTriangle, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
 
 type DetailAiCommitOperationConfirmModalProps = {
+  cancelLabel?: string
   confirmExactMatch: string
+  confirmLabel?: string
   confirmNeedsTypedMatch: boolean
   confirmTypedMatchPassed: boolean
+  helperText?: string
   onChangeOperationConfirmInput: (value: string) => void
   onClose: () => void
   onConfirm: () => void
@@ -13,12 +16,16 @@ type DetailAiCommitOperationConfirmModalProps = {
   pendingOperationLabel: string
   pendingOperationMessage: string
   riskLevel?: 'normal' | 'high'
+  title?: string
 }
 
 export function DetailAiCommitOperationConfirmModal({
+  cancelLabel = '取消',
   confirmExactMatch,
+  confirmLabel = '确认执行',
   confirmNeedsTypedMatch,
   confirmTypedMatchPassed,
+  helperText,
   onChangeOperationConfirmInput,
   onClose,
   onConfirm,
@@ -27,6 +34,7 @@ export function DetailAiCommitOperationConfirmModal({
   pendingOperationLabel,
   pendingOperationMessage,
   riskLevel = 'normal',
+  title,
 }: DetailAiCommitOperationConfirmModalProps) {
   return (
     <ModalShell
@@ -34,13 +42,13 @@ export function DetailAiCommitOperationConfirmModal({
       onClose={onClose}
       widthClassName="max-w-[420px]"
       baseZIndex={1100}
-      ariaLabel={`${pendingOperationLabel} 操作确认`}
+      ariaLabel={title || `${pendingOperationLabel} 操作确认`}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="section-label mb-1">Remote Operation</p>
           <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-            {pendingOperationLabel} 操作确认
+            {title || `${pendingOperationLabel} 操作确认`}
           </p>
         </div>
         <button
@@ -79,7 +87,7 @@ export function DetailAiCommitOperationConfirmModal({
         </div>
       )}
       <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-        将执行真实 git 命令并刷新状态快照。
+        {helperText || '将执行真实 git 命令并刷新状态快照。'}
       </p>
       <div className="mt-4 flex items-center justify-end gap-2">
         <button
@@ -87,7 +95,7 @@ export function DetailAiCommitOperationConfirmModal({
           className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
           onClick={onClose}
         >
-          取消
+          {cancelLabel}
         </button>
         <button
           type="button"
@@ -99,7 +107,7 @@ export function DetailAiCommitOperationConfirmModal({
           disabled={!confirmTypedMatchPassed}
           onClick={onConfirm}
         >
-          确认执行
+          {confirmLabel}
         </button>
       </div>
     </ModalShell>

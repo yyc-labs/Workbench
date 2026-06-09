@@ -116,6 +116,8 @@ declare global {
         override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
       getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+      beginAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+      cancelAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
       undoAiCommit: (projectId: string) => Promise<AiCommitUndoResult>
       closeAiCommitUndo: (
         projectId: string,

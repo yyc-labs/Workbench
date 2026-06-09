@@ -24,8 +24,11 @@ type DetailAiCommitHeaderProps = {
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
   aiCommitStatus: AiCommitStatus
   aiCommitUndo: AiCommitUndoState | null
+  aiCommitUndoAuthActive: boolean
   aiCommitUndoAvailable: boolean
   aiCommitUndoError: string | null
+  aiCommitUndoGraceActive: boolean
+  aiCommitUndoGraceRemainingSeconds: number
   aiCommitUndoRemainingSeconds: number
   aiCommitUndoRunning: boolean
   firstProjectLinkItem?: ProjectLinkItem
@@ -49,8 +52,11 @@ export function DetailAiCommitHeader({
   aiAutoCommitButtonRef,
   aiCommitStatus,
   aiCommitUndo,
+  aiCommitUndoAuthActive,
   aiCommitUndoAvailable,
   aiCommitUndoError,
+  aiCommitUndoGraceActive,
+  aiCommitUndoGraceRemainingSeconds,
   aiCommitUndoRemainingSeconds,
   aiCommitUndoRunning,
   firstProjectLinkItem,
@@ -71,13 +77,18 @@ export function DetailAiCommitHeader({
   const undoButtonLabel = aiCommitUndo?.commitCount && aiCommitUndo.commitCount > 1
     ? `撤回 ${aiCommitUndo.commitCount} 个提交`
     : '撤回提交'
+  const undoCountdownLabel = aiCommitUndoGraceActive
+    ? `${undoButtonLabel} ${aiCommitUndoGraceRemainingSeconds}s`
+    : `${undoButtonLabel} ${aiCommitUndoRemainingSeconds}s`
   const primaryButtonLabel = aiCommitUndoAvailable
-    ? `${undoButtonLabel} ${aiCommitUndoRemainingSeconds}s`
+    ? undoCountdownLabel
     : aiCommitStatus === 'running'
       ? 'AI Committing...'
       : 'AI Auto Commit'
   const primaryButtonTitle = aiCommitUndoAvailable
-    ? '撤回本次 AI Commit'
+    ? aiCommitUndoAuthActive
+      ? '撤回认证进行中'
+      : '撤回本次 AI Commit'
     : isAiEnabled
       ? 'Left click: run commit. Right click: quick config.'
       : 'AI disabled in Settings, local commit message only'
@@ -192,6 +203,11 @@ export function DetailAiCommitHeader({
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
             {statusText}
           </span>
+          {aiCommitUndoGraceActive && (
+            <span className="inline-flex items-center rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-warning)]">
+              认证中，剩余 {aiCommitUndoGraceRemainingSeconds}s
+            </span>
+          )}
           {aiCommitUndoError && (
             <span className="inline-flex max-w-[360px] items-center truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-destructive)]" title={aiCommitUndoError}>
               {aiCommitUndoError}

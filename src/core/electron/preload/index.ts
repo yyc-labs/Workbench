@@ -152,6 +152,12 @@ const api = {
   getAiCommitState: (projectId: string) =>
     ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId),
 
+  beginAiCommitUndoAuth: (projectId: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_BEGIN_UNDO_AUTH, projectId),
+
+  cancelAiCommitUndoAuth: (projectId: string) =>
+    ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL_UNDO_AUTH, projectId),
+
   undoAiCommit: (projectId: string) =>
     ipcRenderer.invoke(IPC.AI_COMMIT_UNDO, projectId),
 

@@ -74,6 +74,8 @@ export interface AiCommitUndoState {
   status: AiCommitUndoStatus
   createdAt: number
   expiresAt: number
+  authStartedAt?: number
+  authExpiresAt?: number
   closedAt?: number
   closeReason?: AiCommitUndoCloseReason
 }

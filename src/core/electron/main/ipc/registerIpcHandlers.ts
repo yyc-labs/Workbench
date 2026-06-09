@@ -183,6 +183,14 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
     return deps.aiCommitService.getAiCommitState(projectId)
   })
 
+  ipcMain.handle(IPC.AI_COMMIT_BEGIN_UNDO_AUTH, (_event, projectId: string): AiCommitTaskSnapshot | null => {
+    return deps.aiCommitService.beginAiCommitUndoAuth(projectId)
+  })
+
+  ipcMain.handle(IPC.AI_COMMIT_CANCEL_UNDO_AUTH, (_event, projectId: string): AiCommitTaskSnapshot | null => {
+    return deps.aiCommitService.cancelAiCommitUndoAuth(projectId)
+  })
+
   ipcMain.handle(IPC.AI_COMMIT_UNDO, async (_event, projectId: string): Promise<AiCommitUndoResult> => {
     return deps.aiCommitService.undoAiCommit(projectId)
   })

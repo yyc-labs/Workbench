@@ -65,14 +65,19 @@ type DetailAiCommitPanelProps = {
   activeCommitHash: string | null
   setActiveCommitHash: Dispatch<SetStateAction<string | null>>
   aiCommitUndo: AiCommitUndoState | null
+  aiCommitUndoAuthActive: boolean
   aiCommitUndoAvailable: boolean
   aiCommitUndoRemainingSeconds: number
+  aiCommitUndoGraceActive: boolean
+  aiCommitUndoGraceRemainingSeconds: number
   aiCommitUndoRunning: boolean
   aiCommitUndoError: string | null
   aiCommitStatus: AiCommitStatus
   isAiEnabled: boolean
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
   onAiAutoCommit: () => void
+  onBeginUndoAiCommitAuth: () => Promise<boolean>
+  onCancelUndoAiCommitAuth: () => Promise<void>
   onUndoAiCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
 }
@@ -107,14 +112,19 @@ function DetailAiCommitPanel({
   activeCommitHash,
   setActiveCommitHash,
   aiCommitUndo,
+  aiCommitUndoAuthActive,
   aiCommitUndoAvailable,
   aiCommitUndoRemainingSeconds,
+  aiCommitUndoGraceActive,
+  aiCommitUndoGraceRemainingSeconds,
   aiCommitUndoRunning,
   aiCommitUndoError,
   aiCommitStatus,
   isAiEnabled,
   aiAutoCommitButtonRef,
   onAiAutoCommit,
+  onBeginUndoAiCommitAuth,
+  onCancelUndoAiCommitAuth,
   onUndoAiCommit,
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
@@ -297,6 +307,12 @@ function DetailAiCommitPanel({
       document.removeEventListener('keydown', handleEscape)
     }
   }, [operationConfirm])
+
+  useEffect(() => {
+    if (!operationConfirm || operationConfirm.operation !== 'undo-ai-commit') return
+    if (aiCommitUndoAvailable) return
+    setOperationConfirm(null)
+  }, [aiCommitUndoAvailable, operationConfirm])
 
   useEffect(() => {
     if (!branchManagerMode) return
@@ -639,6 +655,24 @@ function DetailAiCommitPanel({
     })
   }
 
+  const requestUndoAiCommit = useCallback(async () => {
+    if (!aiCommitUndoAvailable || aiCommitUndoRunning) return
+    const ready = await onBeginUndoAiCommitAuth()
+    if (!ready) return
+    setOperationConfirm({
+      operation: 'undo-ai-commit',
+      message: '',
+      title: '撤回提交 二次认证',
+      confirmLabel: '确认撤回',
+      cancelLabel: '取消',
+      riskLevel: 'normal',
+    })
+  }, [
+    aiCommitUndoAvailable,
+    aiCommitUndoRunning,
+    onBeginUndoAiCommitAuth,
+  ])
+
   const runGitOperation = async (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
@@ -819,13 +853,33 @@ function DetailAiCommitPanel({
   ])
 
   const pendingOperationLabel = operationConfirm
-    ? GIT_OPERATION_ITEMS.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
+    ? operationConfirm.operation === 'undo-ai-commit'
+      ? '撤回提交'
+      : GIT_OPERATION_ITEMS.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
     : 'Git'
   const pendingOperation = operationConfirm?.operation ?? null
-  const pendingOperationMessage = operationConfirm?.message ?? ''
+  const pendingOperationMessage = pendingOperation === 'undo-ai-commit'
+    ? aiCommitUndoGraceActive
+      ? `认证期间主撤回计时已到时，当前还有 ${aiCommitUndoGraceRemainingSeconds} 秒操作时间。确认后将撤回本次 AI Commit。`
+      : '确认后将撤回本次 AI Commit。若认证期间主倒计时结束，系统会额外保留 10 秒操作时间。'
+    : operationConfirm?.message ?? ''
   const confirmExactMatch = operationConfirm?.requireExactMatch ?? ''
   const confirmNeedsTypedMatch = Boolean(confirmExactMatch)
   const confirmTypedMatchPassed = !confirmNeedsTypedMatch || operationConfirmInput.trim() === confirmExactMatch
+  const pendingOperationTitle = pendingOperation === 'undo-ai-commit'
+    ? '撤回提交 二次认证'
+    : operationConfirm?.title
+  const pendingOperationConfirmLabel = pendingOperation === 'undo-ai-commit'
+    ? '确认撤回'
+    : operationConfirm?.confirmLabel
+  const pendingOperationCancelLabel = pendingOperation === 'undo-ai-commit'
+    ? '取消'
+    : operationConfirm?.cancelLabel
+  const pendingOperationHelperText = pendingOperation === 'undo-ai-commit'
+    ? aiCommitUndoGraceActive
+      ? '将执行真实 git reset 并刷新状态快照。'
+      : '将执行真实 git reset 并刷新状态快照；认证阶段若主计时到时，会自动进入 10 秒缓冲。'
+    : operationConfirm?.helperText
   const handleDiffDrawerClose = useCallback(() => {
     setDiffDrawerOpen(false)
   }, [])
@@ -875,8 +929,11 @@ function DetailAiCommitPanel({
             aiAutoCommitButtonRef={aiAutoCommitButtonRef}
             aiCommitStatus={aiCommitStatus}
             aiCommitUndo={aiCommitUndo}
+            aiCommitUndoAuthActive={aiCommitUndoAuthActive}
             aiCommitUndoAvailable={aiCommitUndoAvailable}
             aiCommitUndoError={aiCommitUndoError}
+            aiCommitUndoGraceActive={aiCommitUndoGraceActive}
+            aiCommitUndoGraceRemainingSeconds={aiCommitUndoGraceRemainingSeconds}
             aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
             aiCommitUndoRunning={aiCommitUndoRunning}
             firstProjectLinkItem={firstProjectLinkItem}
@@ -885,7 +942,9 @@ function DetailAiCommitPanel({
             isAiEnabled={isAiEnabled}
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
-            onUndoAiCommit={onUndoAiCommit}
+            onUndoAiCommit={() => {
+              void requestUndoAiCommit()
+            }}
             onOpenProjectLinksManager={onOpenProjectLinksManager}
             onSwitchPane={onSwitchPane}
             projectHeaderCollapsed={projectHeaderCollapsed}
@@ -969,11 +1028,21 @@ function DetailAiCommitPanel({
         confirmNeedsTypedMatch={confirmNeedsTypedMatch}
         confirmTypedMatchPassed={confirmTypedMatchPassed}
         onChangeOperationConfirmInput={setOperationConfirmInput}
-        onClose={() => setOperationConfirm(null)}
+        onClose={() => {
+          const shouldCancelUndoAuth = operationConfirm?.operation === 'undo-ai-commit'
+          setOperationConfirm(null)
+          if (shouldCancelUndoAuth) {
+            void onCancelUndoAiCommitAuth()
+          }
+        }}
         onConfirm={() => {
           if (!pendingOperation) return
-          setMiddlePanelMode('git-log')
           setOperationConfirm(null)
+          if (pendingOperation === 'undo-ai-commit') {
+            void onUndoAiCommit()
+            return
+          }
+          setMiddlePanelMode('git-log')
           void runGitOperation(pendingOperation)
         }}
         open={Boolean(operationConfirm)}
@@ -981,6 +1050,10 @@ function DetailAiCommitPanel({
         pendingOperationLabel={pendingOperationLabel}
         pendingOperationMessage={pendingOperationMessage}
         riskLevel={operationConfirm?.riskLevel}
+        title={pendingOperationTitle}
+        confirmLabel={pendingOperationConfirmLabel}
+        cancelLabel={pendingOperationCancelLabel}
+        helperText={pendingOperationHelperText}
       />
       <DetailAiCommitBranchManagerModal
         branchManagerDangerText={branchManagerDangerText}
