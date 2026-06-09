@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Activity, CircleAlert, RefreshCw } from 'lucide-react'
-import type { AgentHookEnvelope, AgentHookGatewayStatus } from '../../../shared/types'
+import type { AgentHookEnvelope, AgentHookGatewayStatus, AppConfig } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
 
 function formatTime(value: number): string {
   return new Date(value).toLocaleTimeString([], {
@@ -26,11 +27,19 @@ function providerLabel(provider: AgentHookEnvelope['provider']): string {
 }
 
 export function SettingsAgentHooksPanel() {
+  const [agentHookConfig, setAgentHookConfig] = useState<NonNullable<AppConfig['agentHooks']> | null>(null)
   const [status, setStatus] = useState<AgentHookGatewayStatus | null>(null)
   const [events, setEvents] = useState<AgentHookEnvelope[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [savingFeishu, setSavingFeishu] = useState(false)
+  const [feishuSaveError, setFeishuSaveError] = useState<string | null>(null)
+  const [feishuEnabled, setFeishuEnabled] = useState(false)
+  const [feishuAppId, setFeishuAppId] = useState('')
+  const [feishuAppSecret, setFeishuAppSecret] = useState('')
+  const [feishuReceiveId, setFeishuReceiveId] = useState('')
+  const [feishuReceiveIdType, setFeishuReceiveIdType] = useState<'open_id' | 'user_id' | 'union_id' | 'email' | 'chat_id'>('open_id')
 
   const selectedEvent = useMemo(
     () => events.find((event) => event.eventId === selectedEventId) || events[0],
@@ -45,6 +54,8 @@ export function SettingsAgentHooksPanel() {
         window.electronAPI.getAgentHookStatus(),
         window.electronAPI.getAgentHookRecentEvents(),
       ])
+      const nextConfig = await window.electronAPI.getConfig()
+      setAgentHookConfig(nextConfig.agentHooks || null)
       setStatus(nextStatus)
       setEvents(nextEvents)
     } catch (refreshError) {
@@ -63,6 +74,41 @@ export function SettingsAgentHooksPanel() {
     })
     return () => unsubscribe()
   }, [])
+
+  useEffect(() => {
+    const feishu = agentHookConfig?.feishu
+    setFeishuEnabled(Boolean(feishu?.enabled))
+    setFeishuAppId(feishu?.appId || '')
+    setFeishuAppSecret(feishu?.appSecret || '')
+    setFeishuReceiveId(feishu?.receiveId || '')
+    setFeishuReceiveIdType(feishu?.receiveIdType || 'open_id')
+  }, [agentHookConfig])
+
+  const handleSaveFeishu = async () => {
+    if (!agentHookConfig) return
+    setSavingFeishu(true)
+    setFeishuSaveError(null)
+    try {
+      const updated = await window.electronAPI.setConfig({
+        agentHooks: {
+          ...agentHookConfig,
+          feishu: {
+            enabled: feishuEnabled,
+            appId: feishuAppId.trim(),
+            appSecret: feishuAppSecret.trim(),
+            receiveId: feishuReceiveId.trim(),
+            receiveIdType: feishuReceiveIdType,
+            notifyOn: ['stop', 'permission-request'],
+          },
+        },
+      })
+      setAgentHookConfig(updated.agentHooks || null)
+    } catch (saveError) {
+      setFeishuSaveError(saveError instanceof Error ? saveError.message : String(saveError))
+    } finally {
+      setSavingFeishu(false)
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -114,6 +160,86 @@ export function SettingsAgentHooksPanel() {
             <span>{error || status?.error}</span>
           </div>
         )}
+      </section>
+
+      <section className="quiet-control rounded-[22px] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-[color:var(--color-foreground)]">Feishu Notification</div>
+            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+              Send a message when an AI turn finishes on `Stop` or needs approval on `PermissionRequest`.
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              checked={feishuEnabled}
+              onChange={(event) => setFeishuEnabled(event.target.checked)}
+            />
+            Enabled
+          </label>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">App ID</p>
+            <Input
+              value={feishuAppId}
+              onChange={(event) => setFeishuAppId(event.target.value)}
+              className="h-11"
+              placeholder="cli_..."
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">App Secret</p>
+            <Input
+              type="password"
+              value={feishuAppSecret}
+              onChange={(event) => setFeishuAppSecret(event.target.value)}
+              className="h-11"
+              placeholder="app secret"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Receive ID</p>
+            <Input
+              value={feishuReceiveId}
+              onChange={(event) => setFeishuReceiveId(event.target.value)}
+              className="h-11"
+              placeholder="open_id / chat_id / email"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Receive ID Type</p>
+            <select
+              value={feishuReceiveIdType}
+              onChange={(event) => setFeishuReceiveIdType(event.target.value as typeof feishuReceiveIdType)}
+              className="quiet-control h-11 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] focus-visible:outline-none"
+            >
+              <option value="open_id">open_id</option>
+              <option value="user_id">user_id</option>
+              <option value="union_id">union_id</option>
+              <option value="email">email</option>
+              <option value="chat_id">chat_id</option>
+            </select>
+          </div>
+        </div>
+
+        {(feishuSaveError || error) && (
+          <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
+            <span>{feishuSaveError || error}</span>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <div className="text-xs text-[color:var(--color-muted-foreground)]">
+            Current triggers: `Stop`, `PermissionRequest`
+          </div>
+          <Button onClick={() => void handleSaveFeishu()} disabled={savingFeishu}>
+            {savingFeishu ? 'Saving...' : 'Save Feishu Config'}
+          </Button>
+        </div>
       </section>
 
       <section className="grid min-h-[420px] gap-4 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]">

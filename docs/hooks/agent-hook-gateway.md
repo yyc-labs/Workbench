@@ -3,7 +3,7 @@
 The Electron main process starts a local hook ingress at:
 
 ```text
-http://127.0.0.1:17373
+http://0.0.0.0:17373
 ```
 
 Routes:
@@ -37,8 +37,9 @@ The example uses the same command-forwarder approach as Codex:
 
 ## Security
 
-The gateway binds to loopback only. If `agentHooks.token` is configured in the
-app config, hook requests must send:
+The gateway listens on `0.0.0.0` by default so WSL-based hooks can reach the
+Windows-side Electron process. If `agentHooks.token` is configured in the app
+config, hook requests must send:
 
 ```text
 X-Agent-Hook-Token: <token>

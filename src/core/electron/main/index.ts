@@ -7,6 +7,7 @@ import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
+import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { createWindow, applyWindowBackground } from './window/createWindow'
 import type { Capability } from '../../shared/types'
@@ -28,10 +29,14 @@ const aiCommitService = createAiCommitService({
   getMainWindow: () => mainWindow,
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
 })
+const feishuNotifier = new FeishuNotifier({
+  getConfig: () => loadConfig().agentHooks,
+})
 const agentHookGateway = new AgentHookGateway({
   getConfig: () => loadConfig().agentHooks,
   onEvent: (event) => {
     mainWindow?.webContents.send(IPC.AGENT_HOOK_EVENT, event)
+    void feishuNotifier.notifyIfNeeded(event).catch(() => undefined)
   },
 })
 

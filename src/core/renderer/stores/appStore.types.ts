@@ -175,6 +175,7 @@ export interface AppState {
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
+  setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
   setDocLinkTags: (tags: ProjectDocTagOption[]) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>

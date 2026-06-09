@@ -133,6 +133,11 @@ export type AgentHookCanonicalEvent =
   | 'teammate-idle'
   | 'unknown'
 
+export type AgentHookFeishuNotifyEvent =
+  | 'stop'
+  | 'session-end'
+  | 'permission-request'
+
 export interface AgentHookEnvelope {
   schemaVersion: 1
   provider: AgentHookProvider
@@ -157,6 +162,14 @@ export interface AgentHookGatewayConfig {
   token?: string
   maxBodyBytes?: number
   recentEventLimit?: number
+  feishu?: {
+    enabled?: boolean
+    appId?: string
+    appSecret?: string
+    receiveId?: string
+    receiveIdType?: 'open_id' | 'user_id' | 'union_id' | 'email' | 'chat_id'
+    notifyOn?: AgentHookFeishuNotifyEvent[]
+  }
 }
 
 export interface AgentHookGatewayStatus {

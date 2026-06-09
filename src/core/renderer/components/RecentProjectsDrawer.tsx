@@ -1,8 +1,19 @@
-import { useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Clock3, Trash2, X } from 'lucide-react'
+import { shallow } from 'zustand/shallow'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
-import type { ProjectInfo } from '../../shared/types'
+import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
+import { CardContextMenu } from './CardContextMenu'
+import { ProjectMetaDialog } from './ProjectMetaDialog'
+
+type RecentProjectDrawerCardProps = {
+  project: RecentProjectListItem
+  isContextActive: boolean
+  onSelectProject: (projectId: string) => void
+  onRemoveProject: (projectId: string) => void
+  onOpenContextMenu: (projectId: string, x: number, y: number) => void
+}
 
 type RecentProjectsDrawerProps = {
   open: boolean
@@ -12,9 +23,29 @@ type RecentProjectsDrawerProps = {
   onRemoveProject: (projectId: string) => void
 }
 
+type RecentProjectListItem = Pick<ProjectInfo, 'id' | 'path' | 'name' | 'customName' | 'lastOpened'>
+
+type ContextMenuState = {
+  projectId: string
+  x: number
+  y: number
+}
+
+type RecentProjectsContextMenuProps = {
+  contextMenu: ContextMenuState
+  project: ProjectInfo
+  onClose: () => void
+  onEditMetadata: (projectId: string) => void
+}
+
+type RecentProjectsMetaDialogHostProps = {
+  projectId: string
+  onClose: () => void
+}
+
 const DRAWER_TRANSITION_MS = 220
 const DRAWER_CONTENT_REVEAL_MS = 70
-const EMPTY_RECENT_PROJECTS: ProjectInfo[] = []
+const EMPTY_RECENT_PROJECTS: RecentProjectListItem[] = []
 const LAST_OPENED_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   month: '2-digit',
   day: '2-digit',
@@ -31,6 +62,149 @@ function formatLastOpened(timestamp?: number): string {
   }
 }
 
+function getProjectById(projects: ProjectInfo[], projectId?: string | null): ProjectInfo | undefined {
+  if (!projectId) return undefined
+  return projects.find((project) => project.id === projectId)
+}
+
+const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
+  project,
+  isContextActive,
+  onSelectProject,
+  onRemoveProject,
+  onOpenContextMenu,
+}: RecentProjectDrawerCardProps) {
+  return (
+    <div
+      className={`recent-project-drawer-item ${isContextActive ? 'is-context-active' : ''}`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        onOpenContextMenu(project.id, event.clientX, event.clientY)
+      }}
+    >
+      <button
+        type="button"
+        className="recent-project-drawer-open"
+        onClick={() => onSelectProject(project.id)}
+        title={project.path}
+      >
+        <span className="recent-project-drawer-name">{projectDisplayName(project)}</span>
+        <span className="recent-project-drawer-meta">
+          <span>{middleTruncatePath(project.path, 24, 18)}</span>
+          <span>·</span>
+          <span>{formatLastOpened(project.lastOpened)}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="recent-project-drawer-remove"
+        title="从最近列表移除"
+        onClick={() => onRemoveProject(project.id)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+})
+
+const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
+  contextMenu,
+  project,
+  onClose,
+  onEditMetadata,
+}: RecentProjectsContextMenuProps) {
+  const startProject = useAppStore((s) => s.startProject)
+  const stopProject = useAppStore((s) => s.stopProject)
+  const startRuntime = useAppStore((s) => s.startRuntime)
+  const stopRuntime = useAppStore((s) => s.stopRuntime)
+  const openTerminal = useAppStore((s) => s.openTerminal)
+  const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const togglePin = useAppStore((s) => s.togglePin)
+  const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
+  const session = useAppStore((s) => s.sessions[project.id])
+  const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+
+  const currentCli: CliTool = project.cli || 'claude'
+  const isDevRunning = devStatus === 'running'
+  const isDevStopping = devStatus === 'stopping'
+  const isRuntimeAttached = session?.status === 'attached'
+  const isRuntimeDetached = session?.status === 'detached'
+  const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
+  const aiCommitStatus: AiCommitStatus = 'idle'
+
+  const handleSwitchCli = useCallback(() => {
+    void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
+  }, [currentCli, project.id, setProjectCli])
+
+  const handleOpenTerminal = useCallback(async () => {
+    if (isOpeningTerminal) return
+    setIsOpeningTerminal(true)
+    try {
+      await openTerminal(project.id, session?.status)
+    } finally {
+      window.setTimeout(() => setIsOpeningTerminal(false), 400)
+    }
+  }, [isOpeningTerminal, openTerminal, project.id, session?.status])
+
+  return (
+    <CardContextMenu
+      x={contextMenu.x}
+      y={contextMenu.y}
+      onClose={onClose}
+      isRuntimeActive={isRuntimeActive}
+      isDevRunning={isDevRunning}
+      isDevStopping={isDevStopping}
+      isOpeningTerminal={isOpeningTerminal}
+      currentCli={currentCli}
+      isPinned={project.pinned}
+      onStartRuntime={() => startRuntime(project.id)}
+      onStopRuntime={() => stopRuntime(project.id)}
+      onOpenTerminal={handleOpenTerminal}
+      onSwitchCli={handleSwitchCli}
+      onStartProject={() => startProject(project.id)}
+      onStopProject={() => stopProject(project.id)}
+      aiCommitStatus={aiCommitStatus}
+      onOpenFolder={() => window.electronAPI.openFolder(project.path)}
+      onOpenPathTerminal={async () => {
+        await window.electronAPI.openPathTerminal(project.path)
+      }}
+      onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
+      onTogglePin={() => togglePin(project.id)}
+      onEditMetadata={() => onEditMetadata(project.id)}
+    />
+  )
+})
+
+const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDialogHost({
+  projectId,
+  onClose,
+}: RecentProjectsMetaDialogHostProps) {
+  const project = useAppStore((s) => getProjectById(s.projects, projectId))
+  const folders = useAppStore((s) => s.folders)
+  const tags = useAppStore((s) => s.tags)
+  const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
+  const setProjectTags = useAppStore((s) => s.setProjectTags)
+  const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
+  const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
+
+  if (!project) return null
+
+  return (
+    <ProjectMetaDialog
+      open
+      project={project}
+      folders={folders}
+      tags={tags}
+      onClose={onClose}
+      onAssignFolder={assignProjectFolder}
+      onSetProjectTags={setProjectTags}
+      onSetProjectCustomName={setProjectCustomName}
+      onSetProjectCustomType={setProjectCustomType}
+    />
+  )
+})
+
 export function RecentProjectsDrawer({
   open,
   currentProjectId,
@@ -41,16 +215,27 @@ export function RecentProjectsDrawer({
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
-  const currentProject = useAppStore((s) => (
-    currentProjectId ? s.projects.find((project) => project.id === currentProjectId) : undefined
-  ))
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [metaDialogProjectId, setMetaDialogProjectId] = useState<string | null>(null)
+  const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
   const recentProjects = useAppStore((s) => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
     return s.projects
       .filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number')
       .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
       .slice(0, 20)
-  })
+  }, shallow)
+  const contextMenuProjectId = contextMenu?.projectId
+  const contextMenuProject = useAppStore((s) => getProjectById(s.projects, contextMenuProjectId))
+  const metaDialogProject = useAppStore((s) => getProjectById(s.projects, metaDialogProjectId))
+
+  const handleOpenContextMenu = useCallback((projectId: string, x: number, y: number) => {
+    setContextMenu({ projectId, x, y })
+  }, [])
+
+  const handleCloseContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -83,6 +268,22 @@ export function RecentProjectsDrawer({
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [shouldRender, onClose])
+
+  useEffect(() => {
+    if (open) return
+    setContextMenu(null)
+    setMetaDialogProjectId(null)
+  }, [open])
+
+  useEffect(() => {
+    if (!contextMenuProjectId || contextMenuProject) return
+    setContextMenu(null)
+  }, [contextMenuProject, contextMenuProjectId])
+
+  useEffect(() => {
+    if (!metaDialogProjectId || metaDialogProject) return
+    setMetaDialogProjectId(null)
+  }, [metaDialogProject, metaDialogProjectId])
 
   if (!shouldRender) return null
 
@@ -135,35 +336,36 @@ export function RecentProjectsDrawer({
             ) : (
               <div className="recent-project-drawer-list">
                 {recentProjects.map((project) => (
-                  <div key={project.id} className="recent-project-drawer-item">
-                    <button
-                      type="button"
-                      className="recent-project-drawer-open"
-                      onClick={() => onSelectProject(project.id)}
-                      title={project.path}
-                    >
-                      <span className="recent-project-drawer-name">{projectDisplayName(project)}</span>
-                      <span className="recent-project-drawer-meta">
-                        <span>{middleTruncatePath(project.path, 24, 18)}</span>
-                        <span>·</span>
-                        <span>{formatLastOpened(project.lastOpened)}</span>
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="recent-project-drawer-remove"
-                      title="从最近列表移除"
-                      onClick={() => onRemoveProject(project.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <RecentProjectDrawerCard
+                    key={project.id}
+                    project={project}
+                    isContextActive={contextMenuProjectId === project.id}
+                    onSelectProject={onSelectProject}
+                    onRemoveProject={onRemoveProject}
+                    onOpenContextMenu={handleOpenContextMenu}
+                  />
                 ))}
               </div>
             )}
           </div>
         </div>
       </aside>
+
+      {contextMenu && contextMenuProject && (
+        <RecentProjectsContextMenu
+          contextMenu={contextMenu}
+          project={contextMenuProject}
+          onClose={handleCloseContextMenu}
+          onEditMetadata={setMetaDialogProjectId}
+        />
+      )}
+
+      {metaDialogProjectId && (
+        <RecentProjectsMetaDialogHost
+          projectId={metaDialogProjectId}
+          onClose={() => setMetaDialogProjectId(null)}
+        />
+      )}
     </>
   )
 }

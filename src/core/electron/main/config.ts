@@ -40,6 +40,14 @@ const DEFAULT_CONFIG: AppConfig = {
     token: '',
     maxBodyBytes: 256 * 1024,
     recentEventLimit: 200,
+    feishu: {
+      enabled: false,
+      appId: '',
+      appSecret: '',
+      receiveId: '',
+      receiveIdType: 'open_id',
+      notifyOn: ['stop', 'permission-request'],
+    },
   },
 }
 

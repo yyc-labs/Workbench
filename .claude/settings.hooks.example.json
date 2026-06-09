@@ -1,35 +1,43 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code SessionStart",
-            "timeout": 3
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code UserPromptSubmit",
-            "timeout": 3
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
+    "PermissionRequest": [
       {
         "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code PreToolUse",
+            "command": "~/.claude/hooks/flash-background.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code PermissionRequest",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/flash-done.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code Stop",
             "timeout": 3
           }
         ]
@@ -41,7 +49,74 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code PostToolUse",
+            "command": "~/.claude/hooks/restore-background.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code PostToolUse",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/restore-background.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code PostToolUseFailure",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code SessionStart",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code UserPromptSubmit",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code PreToolUse",
             "timeout": 3
           }
         ]
@@ -52,7 +127,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code Notification",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code Notification",
             "timeout": 3
           }
         ]
@@ -64,22 +139,61 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code FileChanged",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code FileChanged",
             "timeout": 3
           }
         ]
       }
     ],
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/agent-hook-forwarder.mjs\" claude-code Stop",
+            "command": "node ~/.claude/hooks/agent-hook-forwarder.mjs claude-code SessionEnd",
             "timeout": 3
           }
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "learning-output-style@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": true,
+    "mcp-server-dev@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-code-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    },
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
+  "effortLevel": "medium",
+  "theme": "auto",
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    }
   }
 }

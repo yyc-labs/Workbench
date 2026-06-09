@@ -8,6 +8,7 @@ export type SettingsActionsSlice = Pick<
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
+  | 'setAgentHookConfig'
   | 'setDocLinkTags'
   | 'setStartupDefaultFilter'
   | 'setSearchQuery'
@@ -53,6 +54,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         aiCommit: updated.aiCommit,
+      },
+    }))
+  },
+
+  setAgentHookConfig: async (agentHooks) => {
+    const updated = await window.electronAPI.setConfig({ agentHooks })
+    set((state) => ({
+      config: {
+        ...state.config,
+        agentHooks: updated.agentHooks,
       },
     }))
   },

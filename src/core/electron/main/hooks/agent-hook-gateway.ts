@@ -281,7 +281,14 @@ export class AgentHookGateway {
     }
   }
 
-  private resolveConfig(): Required<AgentHookGatewayConfig> {
+  private resolveConfig(): {
+    enabled: boolean
+    host: string
+    port: number
+    token: string
+    maxBodyBytes: number
+    recentEventLimit: number
+  } {
     const config = this.getConfig() || {}
     const configuredHost = config.host || DEFAULT_HOST
     return {

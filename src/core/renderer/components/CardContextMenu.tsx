@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Play,
@@ -147,9 +147,6 @@ export function CardContextMenu({
   onEditMetadata,
   onRemoveProject,
 }: CardContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [measuredMenuHeight, setMeasuredMenuHeight] = useState<number | null>(null)
-
   const handleClick = useCallback(
     async (action: () => void | Promise<void>) => {
       await action()
@@ -290,23 +287,14 @@ export function CardContextMenu({
   const pointerGap = 8
   const menuWidth = Math.min(372, Math.max(300, window.innerWidth - viewportPadding * 2))
   const estimatedMenuHeight = 218 + (utilityActions.length > 0 ? 44 : 0) + (dangerActions.length > 0 ? 44 : 0)
-  const menuHeight = measuredMenuHeight ?? estimatedMenuHeight
   const { menuLeft, menuTop, opensUpward } = getClampedMenuPosition({
     x,
     y,
     menuWidth,
-    menuHeight,
+    menuHeight: estimatedMenuHeight,
     viewportPadding,
     pointerGap,
   })
-
-  useLayoutEffect(() => {
-    const menu = menuRef.current
-    if (!menu) return
-
-    const nextHeight = Math.ceil(menu.getBoundingClientRect().height)
-    setMeasuredMenuHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight))
-  }, [dangerActions.length, utilityActions.length, isRuntimeActive, isDevRunning, isDevStopping, isOpeningTerminal, currentCli])
 
   const dangerActionsBlock = dangerActions.length > 0 && (
     <div
@@ -330,8 +318,7 @@ export function CardContextMenu({
 
   return createPortal(
     <div
-      ref={menuRef}
-      className="card-enter fixed z-[9998] rounded-[24px] p-2"
+      className="fixed z-[9998] rounded-[24px] p-2"
       style={{
         top: menuTop,
         left: menuLeft,
@@ -339,8 +326,8 @@ export function CardContextMenu({
         background:
           'linear-gradient(180deg, color-mix(in srgb, var(--color-popover) 96%, var(--color-primary) 4%) 0%, var(--color-popover) 100%)',
         border: '1px solid var(--color-border)',
-        backdropFilter: 'saturate(170%) blur(24px)',
-        WebkitBackdropFilter: 'saturate(170%) blur(24px)',
+        backdropFilter: 'saturate(132%) blur(10px)',
+        WebkitBackdropFilter: 'saturate(132%) blur(10px)',
         boxShadow: 'var(--shadow-popover)',
       }}
       onPointerDown={(e) => e.stopPropagation()}

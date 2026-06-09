@@ -138,25 +138,45 @@ function RuntimeStateListener() {
   const loadRuntimeEntries = useAppStore((s) => s.loadRuntimeEntries)
   const refreshSessions = useAppStore((s) => s.refreshSessions)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingModeRef = useRef<'sessions' | 'all'>('sessions')
 
   useEffect(() => {
     if (!projectIds) return
 
-    const flush = () => {
+    const flush = (mode: 'sessions' | 'all') => {
       timerRef.current = null
       void (async () => {
-        await loadRuntimeEntries()
+        if (mode === 'all') {
+          await loadRuntimeEntries()
+        }
         await refreshSessions()
       })()
     }
 
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (mode: 'sessions' | 'all') => {
+      if (mode === 'all') {
+        pendingModeRef.current = 'all'
+      }
       if (timerRef.current !== null) return
-      timerRef.current = setTimeout(flush, 120)
+      pendingModeRef.current = mode
+      timerRef.current = setTimeout(() => { flush(pendingModeRef.current) }, 120)
     }
 
-    const unsubscribe = window.electronAPI.onRuntimeStateChanged(() => {
-      scheduleRefresh()
+    const unsubscribe = window.electronAPI.onRuntimeStateChanged(({ reason }) => {
+      switch (reason) {
+        case 'runtime-started':
+        case 'tmux-killed':
+        case 'terminal-stop-all':
+        case 'runtime-registry-cleared':
+          scheduleRefresh('all')
+          break
+        case 'terminal-opened':
+        case 'terminal-focused':
+          scheduleRefresh('sessions')
+          break
+        default:
+          break
+      }
     })
 
     return () => {
@@ -165,6 +185,7 @@ function RuntimeStateListener() {
         clearTimeout(timerRef.current)
         timerRef.current = null
       }
+      pendingModeRef.current = 'sessions'
     }
   }, [projectIds, loadRuntimeEntries, refreshSessions])
 

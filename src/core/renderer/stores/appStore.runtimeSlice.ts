@@ -2,6 +2,56 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 
+function sessionsEqual(
+  prev: AppState['sessions'],
+  next: AppState['sessions'],
+): boolean {
+  const prevKeys = Object.keys(prev)
+  const nextKeys = Object.keys(next)
+  if (prevKeys.length !== nextKeys.length) return false
+
+  for (const key of nextKeys) {
+    const prevSession = prev[key]
+    const nextSession = next[key]
+    if (!prevSession || !nextSession) return false
+    if (
+      prevSession.projectId !== nextSession.projectId
+      || prevSession.sessionName !== nextSession.sessionName
+      || prevSession.status !== nextSession.status
+      || prevSession.createdAt !== nextSession.createdAt
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function runtimeEntriesEqual(
+  prev: AppState['runtimeEntries'],
+  next: AppState['runtimeEntries'],
+): boolean {
+  const prevKeys = Object.keys(prev)
+  const nextKeys = Object.keys(next)
+  if (prevKeys.length !== nextKeys.length) return false
+
+  for (const key of nextKeys) {
+    const prevEntry = prev[key]
+    const nextEntry = next[key]
+    if (!prevEntry || !nextEntry) return false
+    if (
+      prevEntry.projectId !== nextEntry.projectId
+      || prevEntry.sessionName !== nextEntry.sessionName
+      || prevEntry.createdAt !== nextEntry.createdAt
+      || prevEntry.lastOpened !== nextEntry.lastOpened
+    ) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function escapeRegExp(input: string): string {
   return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -70,7 +120,26 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
   loadTmuxSessions: async () => {
     try {
       const sessions = await window.electronAPI.listTmuxSessions()
-      set({ tmuxSessions: sessions })
+      set((state) => {
+        if (state.tmuxSessions.length === sessions.length) {
+          let unchanged = true
+          for (let i = 0; i < sessions.length; i++) {
+            const prev = state.tmuxSessions[i]
+            const next = sessions[i]
+            if (
+              prev?.sessionName !== next.sessionName
+              || prev?.projectId !== next.projectId
+              || prev?.createdAt !== next.createdAt
+              || prev?.status !== next.status
+            ) {
+              unchanged = false
+              break
+            }
+          }
+          if (unchanged) return state
+        }
+        return { tmuxSessions: sessions }
+      })
     } catch {
       // tmux not available
     }
@@ -106,7 +175,7 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
         }
       }
 
-      set({ sessions: result })
+      set((state) => (sessionsEqual(state.sessions, result) ? state : { sessions: result }))
     } catch {
       // tmux may not be available or WSL bridge timed out — sessions stay as-is
     }
@@ -119,7 +188,7 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
       for (const e of entries) {
         map[e.projectId] = e
       }
-      set({ runtimeEntries: map })
+      set((state) => (runtimeEntriesEqual(state.runtimeEntries, map) ? state : { runtimeEntries: map }))
     } catch {
       // registry not available
     }

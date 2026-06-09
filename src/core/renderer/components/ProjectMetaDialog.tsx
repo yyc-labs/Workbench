@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, FolderTree, Tag, X } from 'lucide-react'
 import type { ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
@@ -44,12 +44,11 @@ export function ProjectMetaDialog({
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose, open])
 
-  if (!open) return null
+  const selectedFolderName = !selectedFolderId
+    ? 'Uncategorized'
+    : folders.find((folder) => folder.id === selectedFolderId)?.name ?? 'Uncategorized'
 
-  const selectedFolderName = useMemo(() => {
-    if (!selectedFolderId) return 'Uncategorized'
-    return folders.find((folder) => folder.id === selectedFolderId)?.name ?? 'Uncategorized'
-  }, [folders, selectedFolderId])
+  if (!open) return null
 
   const handleToggleTag = (tagId: string) => {
     setSelectedTagIds((prev) => (
