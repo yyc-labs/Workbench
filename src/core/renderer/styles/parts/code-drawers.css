@@ -162,6 +162,20 @@
   background: var(--color-destructive-background);
 }
 
+.monaco-text-viewer-highlight-line {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+.monaco-text-viewer-highlight-line-gutter {
+  border-left: 3px solid color-mix(in srgb, var(--color-primary) 84%, transparent);
+  margin-left: 2px;
+}
+
+.monaco-text-viewer-highlight-line-number {
+  color: color-mix(in srgb, var(--color-primary) 88%, white 12%);
+  font-weight: 700;
+}
+
 .recent-project-drawer {
   --recent-project-drawer-top: clamp(96px, 14vh, 150px);
   position: fixed;

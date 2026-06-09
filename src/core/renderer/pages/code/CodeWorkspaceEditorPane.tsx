@@ -5,6 +5,7 @@ import type { Components } from 'react-markdown'
 import { ChevronDown, ChevronUp, Code2, Columns2, Eye, X } from 'lucide-react'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { transformMarkdownUrl } from './code.markdown'
+import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
 
@@ -174,7 +175,7 @@ export function CodeWorkspaceEditorPane({
         {(effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split') && (
           <div
             ref={previewScrollRef}
-            className="code-editor-pane code-editor-pane--preview"
+            className="code-editor-pane code-editor-pane--preview code-markdown-preview-scroll-root"
             onScroll={onPreviewScroll}
           >
             {previewSearchVisible && effectiveMarkdownPreviewMode === 'preview' && (
@@ -242,7 +243,7 @@ export function CodeWorkspaceEditorPane({
                 </div>
               </div>
             )}
-            <article className="code-markdown-content">
+            <article className="code-markdown-content code-markdown-content--viewport-scroll">
               {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
                 <section className="code-mdc-meta-card">
                   <h3 className="code-mdc-meta-title">Agent Rule Metadata</h3>
@@ -284,7 +285,7 @@ export function CodeWorkspaceEditorPane({
                 </section>
               )}
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
                 components={markdownComponents}
                 urlTransform={transformMarkdownUrl}
               >

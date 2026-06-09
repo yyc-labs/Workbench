@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { BookOpen, Bot, Code2, Loader2, RotateCcw } from 'lucide-react'
+import { BookOpen, Bot, Code2, FileText, Loader2, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
@@ -37,6 +37,7 @@ type DetailAiCommitHeaderProps = {
   isAiEnabled: boolean
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onOpenTranscript?: () => void
   onUndoAiCommit: () => void
   onOpenProjectLinksManager?: () => void
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
@@ -65,6 +66,7 @@ export function DetailAiCommitHeader({
   isAiEnabled,
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
+  onOpenTranscript,
   onUndoAiCommit,
   onOpenProjectLinksManager,
   onSwitchPane,
@@ -130,6 +132,14 @@ export function DetailAiCommitHeader({
                   >
                     <Bot className="h-3.5 w-3.5" />
                     AI Commit
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
+                    onClick={onOpenTranscript}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Transcript
                   </button>
                 </div>
               )}

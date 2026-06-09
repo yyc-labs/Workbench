@@ -77,9 +77,9 @@ export function DebouncedSearchInput({
         />
         <button
           type="button"
-          className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+          className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
             hasValue
-              ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+              ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
               : 'pointer-events-none opacity-0'
           }`}
           onClick={() => {

@@ -8,6 +8,8 @@ type ModalShellProps = {
   widthClassName?: string
   baseZIndex?: number
   ariaLabel?: string
+  overlayClassName?: string
+  panelClassName?: string
 }
 
 function ModalShell({
@@ -17,6 +19,8 @@ function ModalShell({
   widthClassName = 'max-w-[760px]',
   baseZIndex = 1000,
   ariaLabel,
+  overlayClassName = '',
+  panelClassName = '',
 }: ModalShellProps) {
   if (!open) return null
 
@@ -27,12 +31,12 @@ function ModalShell({
     >
       <button
         type="button"
-        className="absolute inset-0 bg-black/25 backdrop-blur-[1px]"
+        className={`absolute inset-0 bg-black/25 backdrop-blur-[1px] ${overlayClassName}`.trim()}
         onClick={onClose}
         aria-label="关闭弹窗"
       />
       <div
-        className={`relative w-full ${widthClassName} rounded-[20px] border p-5`}
+        className={`relative w-full ${widthClassName} rounded-[20px] border p-5 ${panelClassName}`.trim()}
         style={{
           zIndex: baseZIndex + 1,
           background: 'var(--color-popover)',

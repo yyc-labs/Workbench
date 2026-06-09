@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import {
   ensureMonacoEnvironmentConfigured,
@@ -22,11 +22,16 @@ type MonacoTextViewerProps = {
   stickyScroll?: boolean
 }
 
+export interface MonacoTextViewerHandle {
+  revealPosition: (lineNumber: number, column?: number) => void
+  highlightLine: (lineNumber: number) => void
+}
+
 function createMonacoModelUri(modelNamespace: string, filePath: string): string {
   return `inmemory://${modelNamespace}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${filePath.replace(/[^\w./-]/g, '_')}`
 }
 
-export const MonacoTextViewer = memo(function MonacoTextViewer({
+export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextViewerProps>(function MonacoTextViewer({
   value,
   filePath,
   language,
@@ -39,7 +44,7 @@ export const MonacoTextViewer = memo(function MonacoTextViewer({
   lineHeight = 20,
   padding = { top: 10, bottom: 10 },
   stickyScroll = false,
-}: MonacoTextViewerProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRuntimeRef = useRef({
     editor: null as MonacoEditor.IStandaloneCodeEditor | null,
@@ -47,10 +52,76 @@ export const MonacoTextViewer = memo(function MonacoTextViewer({
     monaco: null as typeof import('monaco-editor') | null,
     syncGuard: false,
     subscription: null as IDisposable | null,
+    highlightDecorations: [] as string[],
+    pendingRevealPosition: null as { lineNumber: number; column: number } | null,
+    pendingHighlightLine: null as number | null,
   })
   const onChangeRef = useRef(onChange)
   const prepareMonacoRef = useRef(prepareMonaco)
   const [theme, setTheme] = useState<MonacoThemeName>(() => resolveMonacoTheme())
+
+  const revealPositionInEditor = (lineNumber: number, column = 1): boolean => {
+    const editor = editorRuntimeRef.current.editor
+    const model = editorRuntimeRef.current.model
+    if (!editor || !model) return false
+
+    const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
+    const safeColumn = Math.min(Math.max(1, Math.floor(column)), model.getLineMaxColumn(safeLine))
+    editor.setPosition({ lineNumber: safeLine, column: safeColumn })
+    editor.revealPositionInCenter({ lineNumber: safeLine, column: safeColumn })
+    editor.focus()
+    return true
+  }
+
+  const highlightLineInEditor = (lineNumber: number): boolean => {
+    const editor = editorRuntimeRef.current.editor
+    const model = editorRuntimeRef.current.model
+    const monaco = editorRuntimeRef.current.monaco
+    if (!editor || !model || !monaco) return false
+
+    const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
+    editorRuntimeRef.current.highlightDecorations = editor.deltaDecorations(
+      editorRuntimeRef.current.highlightDecorations,
+      [{
+        range: new monaco.Range(safeLine, 1, safeLine, model.getLineMaxColumn(safeLine)),
+        options: {
+          isWholeLine: true,
+          className: 'monaco-text-viewer-highlight-line',
+          linesDecorationsClassName: 'monaco-text-viewer-highlight-line-gutter',
+          lineNumberClassName: 'monaco-text-viewer-highlight-line-number',
+        },
+      }]
+    )
+    return true
+  }
+
+  const flushPendingEditorActions = (): void => {
+    const runtime = editorRuntimeRef.current
+
+    if (runtime.pendingRevealPosition) {
+      const { lineNumber, column } = runtime.pendingRevealPosition
+      if (revealPositionInEditor(lineNumber, column)) {
+        runtime.pendingRevealPosition = null
+      }
+    }
+
+    if (runtime.pendingHighlightLine != null) {
+      if (highlightLineInEditor(runtime.pendingHighlightLine)) {
+        runtime.pendingHighlightLine = null
+      }
+    }
+  }
+
+  useImperativeHandle(ref, () => ({
+    revealPosition: (lineNumber: number, column = 1) => {
+      if (revealPositionInEditor(lineNumber, column)) return
+      editorRuntimeRef.current.pendingRevealPosition = { lineNumber, column }
+    },
+    highlightLine: (lineNumber: number) => {
+      if (highlightLineInEditor(lineNumber)) return
+      editorRuntimeRef.current.pendingHighlightLine = lineNumber
+    },
+  }), [])
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -124,6 +195,7 @@ export const MonacoTextViewer = memo(function MonacoTextViewer({
       editorRuntimeRef.current.model = model
       editorRuntimeRef.current.editor = editor
       editorRuntimeRef.current.subscription = subscription
+      flushPendingEditorActions()
     }
 
     void setup()
@@ -131,6 +203,12 @@ export const MonacoTextViewer = memo(function MonacoTextViewer({
     return () => {
       disposed = true
       removeHoverGuard()
+      if (editorRuntimeRef.current.editor) {
+        editorRuntimeRef.current.editor.deltaDecorations(
+          editorRuntimeRef.current.highlightDecorations,
+          []
+        )
+      }
       editorRuntimeRef.current.subscription?.dispose()
       editorRuntimeRef.current.editor?.dispose()
       editorRuntimeRef.current.model?.dispose()
@@ -138,6 +216,9 @@ export const MonacoTextViewer = memo(function MonacoTextViewer({
       editorRuntimeRef.current.model = null
       editorRuntimeRef.current.monaco = null
       editorRuntimeRef.current.subscription = null
+      editorRuntimeRef.current.highlightDecorations = []
+      editorRuntimeRef.current.pendingRevealPosition = null
+      editorRuntimeRef.current.pendingHighlightLine = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

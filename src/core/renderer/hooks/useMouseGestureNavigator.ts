@@ -55,6 +55,7 @@ const RECENT_GESTURE_IGNORE_SELECTOR = [
   '[role="dialog"]',
 ].join(', ')
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
+const GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
 
 export function navigateHomeWithStartupDefaultReset(navigate: NavigateFunction): void {
   navigate('/', {
@@ -279,6 +280,10 @@ export function useMouseGestureNavigator(): MouseGestureHint {
   const suppressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    const setGestureActive = (active: boolean) => {
+      document.body.classList.toggle(GESTURE_ACTIVE_CLASS_NAME, active)
+    }
+
     const hideHintImmediately = () => {
       nextHintRef.current = EMPTY_HINT
       if (frameRef.current !== null) {
@@ -321,6 +326,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return
       const detailRoute = isProjectDetailRoute(location.pathname)
+      setGestureActive(true)
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.moved = false
@@ -344,6 +350,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const allowProjectHeaderGesture = !state.ignoreRecentInThisGesture
 
       if ((e.buttons & 2) === 0) {
+        setGestureActive(false)
         state.tracking = false
         state.activated = false
         state.moved = false
@@ -411,6 +418,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       if (e.button !== 2) return
       const state = stateRef.current
       if (!state.tracking) return
+      setGestureActive(false)
       state.tracking = false
       const hadGestureMovement = state.activated
       state.activated = false
@@ -498,6 +506,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     }
 
     const onWindowBlur = () => {
+      setGestureActive(false)
       stateRef.current.tracking = false
       stateRef.current.activated = false
       stateRef.current.moved = false
@@ -526,6 +535,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         frameRef.current = null
       }
       nextHintRef.current = EMPTY_HINT
+      setGestureActive(false)
       clearSuppressTimer()
     }
   }, [location.pathname, navigate])

@@ -1,5 +1,5 @@
 import { Children, createElement, isValidElement, useCallback, useEffect, useId, useRef, useState } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react'
 import { Check, Copy } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
@@ -25,6 +25,14 @@ type SourceTrackedMarkdownNode = Pick<HastElement, 'position'>
 type SourceLineDataProps = {
   'data-source-start-line': number
   'data-source-end-line': number
+}
+
+export type MarkdownStructuredBlockKind = 'table' | 'box-flow' | 'vertical-flow'
+
+export type MarkdownStructuredBlockClickPayload = {
+  kind: MarkdownStructuredBlockKind
+  startLine: number
+  endLine: number
 }
 
 function normalizePathSegments(value: string): string[] {
@@ -169,6 +177,9 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
 
 export function transformMarkdownUrl(url: string): string {
   const trimmed = url.trim()
+  if (trimmed.toLowerCase().startsWith('transcript-ref://')) {
+    return trimmed
+  }
   if (isWindowsAbsolutePath(trimmed)) {
     return trimmed
   }
@@ -294,6 +305,124 @@ function createSourceTrackedBlockComponent<TagName extends keyof JSX.IntrinsicEl
   } as NonNullable<Components[TagName]>
 }
 
+function normalizeMarkdownClassNames(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return value.split(/\s+/).map((item) => item.trim()).filter(Boolean)
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeMarkdownClassNames(item))
+  }
+  return []
+}
+
+function resolveStructuredBlockKind(
+  tagName: 'div' | 'table',
+  className: unknown
+): MarkdownStructuredBlockKind | null {
+  if (tagName === 'table') {
+    return 'table'
+  }
+
+  const classNames = new Set(normalizeMarkdownClassNames(className))
+  if (classNames.has('code-markdown-box-flow')) {
+    return 'box-flow'
+  }
+  if (classNames.has('code-markdown-vertical-flow')) {
+    return 'vertical-flow'
+  }
+  return null
+}
+
+function shouldIgnoreStructuredBlockActivation(
+  target: EventTarget | null,
+  currentTarget: EventTarget | null
+): boolean {
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed && selection.toString().trim()) {
+    return true
+  }
+
+  if (!(target instanceof Element) || !(currentTarget instanceof Element)) {
+    return false
+  }
+
+  const interactiveAncestor = target.closest(
+    'a,button,input,select,textarea,summary,[role="button"],[role="link"]'
+  )
+  return Boolean(
+    interactiveAncestor
+    && interactiveAncestor !== currentTarget
+    && currentTarget.contains(interactiveAncestor)
+  )
+}
+
+function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
+  tagName: TagName,
+  lineOffset: number,
+  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
+): NonNullable<Components[TagName]> {
+  return function StructuredMarkdownBlock({
+    children,
+    node,
+    ...props
+  }: MarkdownBlockProps<TagName>) {
+    const sourceLineProps = getSourceLineDataProps(node as HastElement | undefined, lineOffset)
+    const rawClassName = (props as { className?: unknown }).className
+    const structuredBlockKind = onStructuredBlockClick
+      ? resolveStructuredBlockKind(tagName, rawClassName)
+      : null
+
+    if (!structuredBlockKind || !sourceLineProps) {
+      return createElement(tagName, { ...props, ...sourceLineProps }, children)
+    }
+
+    if (!onStructuredBlockClick) {
+      return createElement(tagName, { ...props, ...sourceLineProps }, children)
+    }
+
+    const resolvedClassName = [
+      ...normalizeMarkdownClassNames(rawClassName),
+      'code-markdown-zoomable-structure',
+    ].join(' ')
+
+    const activate = () => {
+      onStructuredBlockClick({
+        kind: structuredBlockKind,
+        startLine: sourceLineProps['data-source-start-line'],
+        endLine: sourceLineProps['data-source-end-line'],
+      })
+    }
+
+    const ariaLabel = `Open larger ${structuredBlockKind} preview`
+    const title = (props as { title?: string }).title
+    const resolvedTitle = [title, 'Click to enlarge'].filter(Boolean).join('\n')
+
+    return createElement(tagName, {
+      ...props,
+      ...sourceLineProps,
+      className: resolvedClassName || undefined,
+      tabIndex: 0,
+      title: resolvedTitle || undefined,
+      'aria-label': ariaLabel,
+      'data-structured-block-kind': structuredBlockKind,
+      ...(tagName === 'div' ? { role: 'button' as const } : {}),
+      onClick: (event: ReactMouseEvent<HTMLElement>) => {
+        if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
+          return
+        }
+        activate()
+      },
+      onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+          return
+        }
+        event.preventDefault()
+        activate()
+      },
+    }, children)
+  } as NonNullable<Components[TagName]>
+}
+
 function parseSourceLineAttribute(value: string | null): number | null {
   if (!value) return null
   const parsed = Number.parseInt(value, 10)
@@ -308,7 +437,7 @@ export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumb
 
   if (candidates.length <= 0) return false
 
-  let containing: HTMLElement | null = null
+  let containing: { element: HTMLElement; lineSpan: number } | null = null
   let nextClosest: { element: HTMLElement; startLine: number } | null = null
   let previousClosest: { element: HTMLElement; endLine: number } | null = null
 
@@ -318,8 +447,11 @@ export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumb
     if (startLine == null || endLine == null) continue
 
     if (startLine <= targetLine && targetLine <= endLine) {
-      containing = element
-      break
+      const lineSpan = Math.max(0, endLine - startLine)
+      if (!containing || lineSpan <= containing.lineSpan) {
+        containing = { element, lineSpan }
+      }
+      continue
     }
 
     if (startLine > targetLine && (!nextClosest || startLine < nextClosest.startLine)) {
@@ -331,7 +463,7 @@ export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumb
     }
   }
 
-  const target = containing ?? nextClosest?.element ?? previousClosest?.element
+  const target = containing?.element ?? nextClosest?.element ?? previousClosest?.element
   if (!target) return false
 
   const highlighted = container.querySelectorAll<HTMLElement>(`.${MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS}`)
@@ -572,20 +704,31 @@ function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
 
 type CreateMarkdownComponentsOptions = {
   activeRelativePath: string | null
+  activeInternalHref?: string | null
   enableMarkdownSyntaxHighlight: boolean
   lineOffset?: number
+  onInternalLinkClick?: (href: string) => void
+  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   projectPath: string
   themeMode: 'light' | 'dark'
 }
 
+function isTranscriptReferenceHref(value: string): boolean {
+  return value.trim().toLowerCase().startsWith('transcript-ref://')
+}
+
 export function createMarkdownComponents({
   activeRelativePath,
+  activeInternalHref = null,
   enableMarkdownSyntaxHighlight,
   lineOffset = 0,
+  onInternalLinkClick,
+  onStructuredBlockClick,
   projectPath,
   themeMode,
 }: CreateMarkdownComponentsOptions): Components {
   return {
+    div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
     h1: createSourceTrackedBlockComponent('h1', lineOffset),
     h2: createSourceTrackedBlockComponent('h2', lineOffset),
     h3: createSourceTrackedBlockComponent('h3', lineOffset),
@@ -597,7 +740,7 @@ export function createMarkdownComponents({
     ul: createSourceTrackedBlockComponent('ul', lineOffset),
     ol: createSourceTrackedBlockComponent('ol', lineOffset),
     li: createSourceTrackedBlockComponent('li', lineOffset),
-    table: createSourceTrackedBlockComponent('table', lineOffset),
+    table: createStructuredBlockComponent('table', lineOffset, onStructuredBlockClick),
     thead: createSourceTrackedBlockComponent('thead', lineOffset),
     tbody: createSourceTrackedBlockComponent('tbody', lineOffset),
     tr: createSourceTrackedBlockComponent('tr', lineOffset),
@@ -629,19 +772,42 @@ export function createMarkdownComponents({
       }
       return <img {...props} src={resolvedSrc} alt={alt || ''} loading="lazy" />
     },
-    a({ href, children, ...props }) {
+    a({ href, children, className, ...props }) {
       const link = typeof href === 'string' ? href.trim() : ''
+      const internal = Boolean(link) && isTranscriptReferenceHref(link)
+      const canConsumeInternal = internal && typeof onInternalLinkClick === 'function'
       const external = Boolean(link) && shouldOpenInSystemBrowser(link)
+      const resolvedClassName = [
+        className,
+        internal ? 'code-markdown-transcript-ref rounded-[8px] px-1.5 py-0.5 transition-all duration-150' : '',
+        internal && activeInternalHref === link
+          ? 'is-active bg-[color:var(--color-warning-background)] text-[color:var(--color-foreground)]'
+          : '',
+      ].filter(Boolean).join(' ')
+
+      if (internal && !canConsumeInternal) {
+        return (
+          <span className={resolvedClassName || undefined} title={link}>
+            {children}
+          </span>
+        )
+      }
 
       return (
         <a
           {...props}
+          className={resolvedClassName || undefined}
           href={link || href}
           target={external ? '_blank' : props.target}
           rel={external ? 'noopener noreferrer' : props.rel}
           onClick={(event) => {
             props.onClick?.(event)
             if (event.defaultPrevented) return
+            if (canConsumeInternal) {
+              event.preventDefault()
+              onInternalLinkClick(link)
+              return
+            }
             if (!external) return
             event.preventDefault()
             void window.electronAPI.openExternal(link)

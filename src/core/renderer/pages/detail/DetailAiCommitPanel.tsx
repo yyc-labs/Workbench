@@ -45,6 +45,7 @@ type DetailAiCommitPanelProps = {
   projectLinkItems?: ProjectLinkItem[]
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
   flowNodes: AiFlowNode[]
@@ -93,6 +94,7 @@ function DetailAiCommitPanel({
   projectLinkItems = [],
   activePane = 'aicommit',
   onSwitchPane,
+  onOpenTranscript,
   onOpenProjectLinksManager,
   jumpToAiLogToken,
   flowNodes,
@@ -945,6 +947,7 @@ function DetailAiCommitPanel({
             isAiEnabled={isAiEnabled}
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
+            onOpenTranscript={onOpenTranscript}
             onUndoAiCommit={() => {
               void requestUndoAiCommit()
             }}

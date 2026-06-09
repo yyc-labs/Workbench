@@ -43,6 +43,7 @@ type CodeWorkspacePanelProps = {
   projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
 }
 
@@ -59,6 +60,7 @@ export function CodeWorkspacePanel({
   projectLinkItems = [],
   activePane = 'code',
   onSwitchPane,
+  onOpenTranscript,
   onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
   const projectCodeMeta = useAppStore((s) => {
@@ -600,6 +602,7 @@ export function CodeWorkspacePanel({
           if (!firstLink) return
           void window.electronAPI.openExternal(firstLink.url)
         }}
+        onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         onReloadFromDisk={() => {
           if (!activeRelativePath) return

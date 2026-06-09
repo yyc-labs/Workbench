@@ -1,4 +1,4 @@
-import { BookOpen, Bot, Code2, Files, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
+import { BookOpen, Bot, Code2, Files, FileText, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
@@ -22,6 +22,7 @@ type CodeWorkspaceChromeProps = {
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
   onOpenFileFromTab: (relativePath: string) => void
   onOpenFirstProjectLink: () => void
+  onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   onReloadFromDisk: () => void
   onResolveDiscardUnsavedConfirm: (proceed: boolean) => void
@@ -101,6 +102,7 @@ export function CodeWorkspaceChrome({
   onOpenEditorSearch,
   onOpenFileFromTab,
   onOpenFirstProjectLink,
+  onOpenTranscript,
   onOpenProjectLinksManager,
   onReloadFromDisk,
   onResolveDiscardUnsavedConfirm,
@@ -163,6 +165,14 @@ export function CodeWorkspaceChrome({
                 >
                   <Bot className="h-3.5 w-3.5" />
                   AI Commit
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
+                  onClick={onOpenTranscript}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Transcript
                 </button>
               </div>
               {firstProjectLinkItem && (

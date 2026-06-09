@@ -15,6 +15,7 @@ type DetailAiCommitPaneHostProps = {
   aiCommitConfig: AiCommitConfig | undefined
   activePane: 'code' | 'aicommit'
   onSwitchPane: (pane: 'code' | 'aicommit') => void
+  onOpenTranscript: () => void
   onOpenProjectLinksManager: () => void
   onCloseProjectContextMenu: () => void
 }
@@ -28,6 +29,7 @@ export function DetailAiCommitPaneHost({
   aiCommitConfig,
   activePane,
   onSwitchPane,
+  onOpenTranscript,
   onOpenProjectLinksManager,
   onCloseProjectContextMenu,
 }: DetailAiCommitPaneHostProps) {
@@ -223,6 +225,7 @@ export function DetailAiCommitPaneHost({
         projectLinkItems={projectLinkItems}
         activePane={activePane}
         onSwitchPane={onSwitchPane}
+        onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         jumpToAiLogToken={jumpToAiLogToken}
         flowNodes={flowNodes}
