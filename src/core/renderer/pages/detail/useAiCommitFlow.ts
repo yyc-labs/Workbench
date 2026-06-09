@@ -63,6 +63,7 @@ export function useAiCommitFlow({
   const [activeCommitHash, setActiveCommitHash] = useState<string | null>(null)
   const [aiCommitUndo, setAiCommitUndo] = useState<AiCommitUndoState | null>(null)
   const [aiCommitUndoRemainingMs, setAiCommitUndoRemainingMs] = useState(0)
+  const [aiCommitUndoEffectiveRemainingMs, setAiCommitUndoEffectiveRemainingMs] = useState(0)
   const [aiCommitUndoRunning, setAiCommitUndoRunning] = useState(false)
   const [aiCommitUndoError, setAiCommitUndoError] = useState<string | null>(null)
   const [quickConfigOpen, setQuickConfigOpen] = useState(false)
@@ -85,22 +86,26 @@ export function useAiCommitFlow({
   const quickSplitMaxBatchesNumber = clampSplitMaxBatches(Number.parseInt(quickSplitMaxBatches.trim(), 10))
   const quickMaxBulletsNumber = clampMaxBullets(Number.parseInt(quickMaxBullets.trim(), 10))
   const aiCommitUndoAvailable = Boolean(aiCommitUndo && aiCommitUndo.status === 'available' && aiCommitUndoRemainingMs > 0)
+  const aiCommitUndoActionAvailable = Boolean(
+    aiCommitUndo
+    && aiCommitUndo.status === 'available'
+    && aiCommitUndoEffectiveRemainingMs > 0
+  )
   const aiCommitUndoRemainingSeconds = Math.max(0, Math.ceil(aiCommitUndoRemainingMs / 1000))
   const aiCommitUndoAuthActive = Boolean(
     aiCommitUndo
     && aiCommitUndo.status === 'available'
     && Number.isFinite(aiCommitUndo.authStartedAt)
     && Number.isFinite(aiCommitUndo.authExpiresAt)
-    && getUndoEffectiveExpiresAt(aiCommitUndo) > Date.now()
+    && aiCommitUndoEffectiveRemainingMs > 0
   )
   const aiCommitUndoGraceActive = Boolean(
     aiCommitUndoAuthActive
-    && aiCommitUndo
-    && aiCommitUndo.expiresAt <= Date.now()
-    && getUndoEffectiveExpiresAt(aiCommitUndo) > Date.now()
+    && aiCommitUndoRemainingMs <= 0
+    && aiCommitUndoEffectiveRemainingMs > 0
   )
-  const aiCommitUndoGraceRemainingSeconds = aiCommitUndoGraceActive && aiCommitUndo
-    ? Math.max(0, Math.ceil((getUndoEffectiveExpiresAt(aiCommitUndo) - Date.now()) / 1000))
+  const aiCommitUndoGraceRemainingSeconds = aiCommitUndoGraceActive
+    ? Math.max(0, Math.ceil(aiCommitUndoEffectiveRemainingMs / 1000))
     : 0
   const selectedGitRepository = useMemo(() => {
     if (gitRepositories.length <= 0) return null
@@ -114,7 +119,15 @@ export function useAiCommitFlow({
   const applyUndoState = useCallback((undo: AiCommitUndoState | null | undefined) => {
     const availableUndo = undo && undo.status === 'available' ? undo : null
     setAiCommitUndo(availableUndo)
-    setAiCommitUndoRemainingMs(availableUndo ? Math.max(0, getUndoEffectiveExpiresAt(availableUndo) - Date.now()) : 0)
+    if (!availableUndo) {
+      setAiCommitUndoRemainingMs(0)
+      setAiCommitUndoEffectiveRemainingMs(0)
+      return
+    }
+
+    const now = Date.now()
+    setAiCommitUndoRemainingMs(Math.max(0, availableUndo.expiresAt - now))
+    setAiCommitUndoEffectiveRemainingMs(Math.max(0, getUndoEffectiveExpiresAt(availableUndo) - now))
   }, [])
 
   useEffect(() => {
@@ -128,6 +141,7 @@ export function useAiCommitFlow({
     setActiveCommitHash(null)
     setAiCommitUndo(null)
     setAiCommitUndoRemainingMs(0)
+    setAiCommitUndoEffectiveRemainingMs(0)
     setAiCommitUndoError(null)
   }, [projectPath])
 
@@ -138,6 +152,7 @@ export function useAiCommitFlow({
     setActiveCommitHash(null)
     setAiCommitUndo(null)
     setAiCommitUndoRemainingMs(0)
+    setAiCommitUndoEffectiveRemainingMs(0)
     setAiCommitUndoError(null)
   }, [selectedGitRepositoryId])
 
@@ -175,6 +190,7 @@ export function useAiCommitFlow({
         setAiRawText('')
         setAiCommitUndo(null)
         setAiCommitUndoRemainingMs(0)
+        setAiCommitUndoEffectiveRemainingMs(0)
         setAiCommitUndoError(null)
       } else {
         if (status === 'success') {
@@ -195,6 +211,7 @@ export function useAiCommitFlow({
           })
           setAiCommitUndo(null)
           setAiCommitUndoRemainingMs(0)
+          setAiCommitUndoEffectiveRemainingMs(0)
         }
       }
     })
@@ -235,13 +252,17 @@ export function useAiCommitFlow({
   useEffect(() => {
     if (!aiCommitUndo || aiCommitUndo.status !== 'available') {
       setAiCommitUndoRemainingMs(0)
+      setAiCommitUndoEffectiveRemainingMs(0)
       return
     }
 
     const updateRemaining = () => {
-      const remaining = Math.max(0, getUndoEffectiveExpiresAt(aiCommitUndo) - Date.now())
-      setAiCommitUndoRemainingMs(remaining)
-      if (remaining <= 0) {
+      const now = Date.now()
+      const baseRemaining = Math.max(0, aiCommitUndo.expiresAt - now)
+      const effectiveRemaining = Math.max(0, getUndoEffectiveExpiresAt(aiCommitUndo) - now)
+      setAiCommitUndoRemainingMs(baseRemaining)
+      setAiCommitUndoEffectiveRemainingMs(effectiveRemaining)
+      if (effectiveRemaining <= 0) {
         setAiCommitUndo(null)
         const api = window.electronAPI as unknown as {
           closeAiCommitUndo?: (projectId: string, reason?: 'expired') => Promise<AiCommitTaskSnapshot | null>
@@ -466,7 +487,7 @@ export function useAiCommitFlow({
   ])
 
   const handleUndoAiCommit = useCallback(async () => {
-    if (!projectId || !aiCommitUndoAvailable || aiCommitUndoRunning) return
+    if (!projectId || !aiCommitUndoActionAvailable || aiCommitUndoRunning) return
     const api = window.electronAPI as unknown as {
       undoAiCommit?: (projectId: string) => Promise<AiCommitUndoResult>
     }
@@ -491,7 +512,7 @@ export function useAiCommitFlow({
     } finally {
       setAiCommitUndoRunning(false)
     }
-  }, [aiCommitUndoAvailable, aiCommitUndoRunning, applyUndoState, projectId, refreshGitSnapshot])
+  }, [aiCommitUndoActionAvailable, aiCommitUndoRunning, applyUndoState, projectId, refreshGitSnapshot])
 
   const handleBeginUndoAiCommitAuth = useCallback(async (): Promise<boolean> => {
     if (!projectId || !aiCommitUndoAvailable || aiCommitUndoRunning) return false
@@ -602,6 +623,7 @@ export function useAiCommitFlow({
     setActiveCommitHash,
     aiCommitUndo,
     aiCommitUndoAvailable,
+    aiCommitUndoActionAvailable,
     aiCommitUndoRemainingSeconds,
     aiCommitUndoAuthActive,
     aiCommitUndoGraceActive,

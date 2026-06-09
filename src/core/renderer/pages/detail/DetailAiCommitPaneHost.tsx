@@ -63,6 +63,7 @@ export function DetailAiCommitPaneHost({
     aiCommitUndo,
     aiCommitUndoAuthActive,
     aiCommitUndoAvailable,
+    aiCommitUndoActionAvailable,
     aiCommitUndoRemainingSeconds,
     aiCommitUndoGraceActive,
     aiCommitUndoGraceRemainingSeconds,
@@ -244,6 +245,7 @@ export function DetailAiCommitPaneHost({
         aiCommitUndo={aiCommitUndo}
         aiCommitUndoAuthActive={aiCommitUndoAuthActive}
         aiCommitUndoAvailable={aiCommitUndoAvailable}
+        aiCommitUndoActionAvailable={aiCommitUndoActionAvailable}
         aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
         aiCommitUndoGraceActive={aiCommitUndoGraceActive}
         aiCommitUndoGraceRemainingSeconds={aiCommitUndoGraceRemainingSeconds}

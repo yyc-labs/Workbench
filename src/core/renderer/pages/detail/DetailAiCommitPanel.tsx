@@ -67,6 +67,7 @@ type DetailAiCommitPanelProps = {
   aiCommitUndo: AiCommitUndoState | null
   aiCommitUndoAuthActive: boolean
   aiCommitUndoAvailable: boolean
+  aiCommitUndoActionAvailable: boolean
   aiCommitUndoRemainingSeconds: number
   aiCommitUndoGraceActive: boolean
   aiCommitUndoGraceRemainingSeconds: number
@@ -114,6 +115,7 @@ function DetailAiCommitPanel({
   aiCommitUndo,
   aiCommitUndoAuthActive,
   aiCommitUndoAvailable,
+  aiCommitUndoActionAvailable,
   aiCommitUndoRemainingSeconds,
   aiCommitUndoGraceActive,
   aiCommitUndoGraceRemainingSeconds,
@@ -310,9 +312,9 @@ function DetailAiCommitPanel({
 
   useEffect(() => {
     if (!operationConfirm || operationConfirm.operation !== 'undo-ai-commit') return
-    if (aiCommitUndoAvailable) return
+    if (aiCommitUndoActionAvailable) return
     setOperationConfirm(null)
-  }, [aiCommitUndoAvailable, operationConfirm])
+  }, [aiCommitUndoActionAvailable, operationConfirm])
 
   useEffect(() => {
     if (!branchManagerMode) return
@@ -656,7 +658,7 @@ function DetailAiCommitPanel({
   }
 
   const requestUndoAiCommit = useCallback(async () => {
-    if (!aiCommitUndoAvailable || aiCommitUndoRunning) return
+    if (!aiCommitUndoAvailable || !aiCommitUndoActionAvailable || aiCommitUndoRunning) return
     const ready = await onBeginUndoAiCommitAuth()
     if (!ready) return
     setOperationConfirm({
@@ -668,6 +670,7 @@ function DetailAiCommitPanel({
       riskLevel: 'normal',
     })
   }, [
+    aiCommitUndoActionAvailable,
     aiCommitUndoAvailable,
     aiCommitUndoRunning,
     onBeginUndoAiCommitAuth,
