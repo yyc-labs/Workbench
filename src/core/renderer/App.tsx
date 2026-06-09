@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { MemoryRouter as Router, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter as Router, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
@@ -10,6 +10,11 @@ import {
   navigateHomeWithStartupDefaultReset,
   useMouseGestureNavigator,
 } from './hooks/useMouseGestureNavigator'
+import {
+  DEFAULT_SETTINGS_SECTION,
+  getSettingsSectionLabel,
+  isSettingsSection,
+} from './pages/settings/settings.types'
 
 const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
 const DetailPage = lazy(() => import('./pages/Detail').then((module) => ({ default: module.DetailPage })))
@@ -35,6 +40,9 @@ function resolveWindowTitle(pathname: string, projects: Array<{
   const segments = pathname.split('/').filter(Boolean)
 
   if (segments[0] === 'settings') {
+    if (isSettingsSection(segments[1])) {
+      return `Settings - ${getSettingsSectionLabel(segments[1])} - ${APP_DISPLAY_NAME}`
+    }
     return `Settings - ${APP_DISPLAY_NAME}`
   }
 
@@ -515,7 +523,11 @@ export function App() {
               <Route path="/project/:projectId" element={<DetailPage />} />
               <Route path="/project/:projectId/transcript" element={<TranscriptPage />} />
               <Route path="/project/:projectId/:pane" element={<DetailPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route
+                path="/settings"
+                element={<Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />}
+              />
+              <Route path="/settings/:section" element={<SettingsPage />} />
             </Routes>
           </Suspense>
         </div>

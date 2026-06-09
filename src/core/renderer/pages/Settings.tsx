@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
 import { SettingsSidebar } from './settings/SettingsSidebar'
@@ -11,9 +11,14 @@ import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
-import type { Section, ThemeMode } from './settings/settings.types'
+import {
+  DEFAULT_SETTINGS_SECTION,
+  isSettingsSection,
+  type ThemeMode,
+} from './settings/settings.types'
 
 export function SettingsPage() {
+  const { section: sectionParam } = useParams<{ section?: string }>()
   const navigate = useNavigate()
   const config = useAppStore((s) => s.config)
   const projects = useAppStore((s) => s.projects)
@@ -23,7 +28,7 @@ export function SettingsPage() {
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
-  const [section, setSection] = useState<Section>('general')
+  const section = isSettingsSection(sectionParam) ? sectionParam : DEFAULT_SETTINGS_SECTION
 
   useEffect(() => {
     setTheme(config.theme)
@@ -32,6 +37,10 @@ export function SettingsPage() {
   const handleThemeChange = async (newTheme: ThemeMode) => {
     setTheme(newTheme)
     await setThemeConfig(newTheme)
+  }
+
+  if (!isSettingsSection(sectionParam)) {
+    return <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />
   }
 
   return (
@@ -50,7 +59,7 @@ export function SettingsPage() {
 
       <div className="flex-1 min-h-0 overflow-hidden px-8 pb-10 pt-10">
         <div className="flex h-full min-h-0 min-w-0">
-          <SettingsSidebar active={section} onSelect={setSection} />
+          <SettingsSidebar active={section} onSelect={(nextSection) => navigate(`/settings/${nextSection}`)} />
 
           <main className="flex-1 min-h-0 min-w-0 ml-12 overflow-y-auto px-6 pt-1">
             <div className="pb-6 -mb-6">
