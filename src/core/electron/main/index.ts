@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut, nativeTheme } from 'electron'
+import path from 'path'
 import { ProcessManager } from './runner'
 import { loadConfig } from './config'
 import { IPC } from './ipc'
@@ -6,11 +7,14 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { createTranscriptRepository } from './transcript/transcriptRepository'
+import { createTranscriptService } from './transcript/transcriptService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { createWindow, applyWindowBackground } from './window/createWindow'
-import type { Capability } from '../../shared/types'
+import { projectIdFromPath } from '../../shared/rules'
+import type { Capability, TranscriptImportedEvent } from '../../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
@@ -29,14 +33,49 @@ const aiCommitService = createAiCommitService({
   getMainWindow: () => mainWindow,
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
 })
+const transcriptRepository = createTranscriptRepository()
+const transcriptService = createTranscriptService({
+  repository: transcriptRepository,
+  getProjectIdByPath: (projectPath) => {
+    const normalizedTarget = path.resolve(projectPath)
+    const project = loadConfig().projects.find((item) => path.resolve(item.path) === normalizedTarget)
+    return project ? projectIdFromPath(project.path) : null
+  },
+  getProjectPathById: (projectId) => {
+    const project = loadConfig().projects.find((item) => projectIdFromPath(item.path) === projectId)
+    return project?.path ?? null
+  },
+})
 const feishuNotifier = new FeishuNotifier({
   getConfig: () => loadConfig().agentHooks,
 })
+
+function listTranscriptImportProjects() {
+  return loadConfig().projects.map((project) => {
+    const projectId = projectIdFromPath(project.path)
+    const name = path.basename(project.path) || project.path
+    const customName = project.customName?.trim() || undefined
+    return {
+      projectId,
+      projectPath: project.path,
+      name,
+      customName,
+      displayName: customName || name,
+    }
+  })
+}
+
 const agentHookGateway = new AgentHookGateway({
   getConfig: () => loadConfig().agentHooks,
   onEvent: (event) => {
     mainWindow?.webContents.send(IPC.AGENT_HOOK_EVENT, event)
     void feishuNotifier.notifyIfNeeded(event).catch(() => undefined)
+  },
+  listProjects: () => listTranscriptImportProjects(),
+  onTranscriptImport: async (payload) => {
+    const imported = await transcriptService.importExternalTranscript(payload)
+    emitTranscriptImported(imported)
+    return imported
   },
 })
 
@@ -66,6 +105,31 @@ function createMainWindow(): void {
 
 function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; sessionName?: string }): void {
   mainWindow?.webContents.send(IPC.RUNTIME_STATE_CHANGED, payload)
+}
+
+function emitTranscriptImported(payload: TranscriptImportedEvent): void {
+  if (!mainWindow && payload.openViewer) {
+    createMainWindow()
+  }
+  if (!mainWindow) return
+
+  if (payload.openViewer) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore()
+    }
+    mainWindow.show()
+    mainWindow.focus()
+  }
+
+  const targetWindow = mainWindow
+  const send = () => {
+    targetWindow?.webContents.send(IPC.TRANSCRIPT_IMPORTED, payload)
+  }
+  if (targetWindow.webContents.isLoading()) {
+    targetWindow.webContents.once('did-finish-load', send)
+    return
+  }
+  send()
 }
 
 function sendGlobalHomeShortcut(): void {
@@ -159,6 +223,7 @@ app.whenReady().then(async () => {
     agentHookGateway,
     gitService,
     runtimeService,
+    transcriptService,
   })
   createMainWindow()
   registerGlobalShortcuts()

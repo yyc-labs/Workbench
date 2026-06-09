@@ -1,6 +1,13 @@
 import { clipboard, contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
-import type { AgentHookEnvelope, AgentHookGatewayStatus } from '../../shared/types'
+import type {
+  AgentHookEnvelope,
+  AgentHookGatewayStatus,
+  TranscriptImportedEvent,
+  TranscriptImportPayload,
+  TranscriptSession,
+  TranscriptSessionSummary,
+} from '../../shared/types'
 
 type ThemeMode = 'system' | 'light' | 'dark'
 type AiCommitOutputData = { projectId: string; data: string }
@@ -277,6 +284,21 @@ const api = {
     dataBase64
   ),
 
+  importTranscript: (payload: TranscriptImportPayload) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT, payload) as Promise<TranscriptSession>,
+
+  listProjectTranscripts: (projectId: string) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_LIST, projectId) as Promise<TranscriptSessionSummary[]>,
+
+  listAllTranscripts: () =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_LIST_ALL) as Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>,
+
+  getTranscript: (projectId: string, transcriptId: string) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_GET, projectId, transcriptId) as Promise<TranscriptSession | null>,
+
+  deleteTranscript: (projectId: string, transcriptId: string) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_DELETE, projectId, transcriptId) as Promise<boolean>,
+
   openTerminal: (sessionName: string, statusHint?: string) => {
     console.log('[preload.openTerminal] invoking IPC SHELL_OPEN_TERMINAL sessionName=', sessionName, 'statusHint=', statusHint)
     return ipcRenderer.invoke(IPC.SHELL_OPEN_TERMINAL, sessionName, statusHint)
@@ -352,6 +374,17 @@ const api = {
     ) => cb(d)
     ipcRenderer.on(IPC.AGENT_HOOK_EVENT, handler)
     return () => ipcRenderer.removeListener(IPC.AGENT_HOOK_EVENT, handler)
+  },
+
+  onTranscriptImported: (
+    cb: (data: TranscriptImportedEvent) => void
+  ) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: TranscriptImportedEvent
+    ) => cb(d)
+    ipcRenderer.on(IPC.TRANSCRIPT_IMPORTED, handler)
+    return () => ipcRenderer.removeListener(IPC.TRANSCRIPT_IMPORTED, handler)
   },
 
   onWindowState: (

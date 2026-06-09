@@ -164,6 +164,11 @@ export interface AgentHookGatewayConfig {
   token?: string
   maxBodyBytes?: number
   recentEventLimit?: number
+  transcriptImport?: {
+    enabled?: boolean
+    token?: string
+    openViewerByDefault?: boolean
+  }
   feishu?: {
     enabled?: boolean
     appId?: string
@@ -182,7 +187,103 @@ export interface AgentHookGatewayStatus {
   url: string
   tokenConfigured: boolean
   recentEventCount: number
+  transcriptImportEnabled: boolean
+  transcriptImportUrl: string
+  transcriptProjectsUrl: string
+  transcriptImportTokenConfigured: boolean
   error?: string
+}
+
+export type TranscriptSourceType =
+  | 'process-output'
+  | 'tmux-capture'
+  | 'agent-hook'
+  | 'manual-markdown'
+  | 'imported-file'
+
+export type TranscriptViewerMode = 'preview' | 'editor' | 'split'
+
+export interface TranscriptMessageRange {
+  startOffset: number
+  endOffset: number
+  startLine: number
+  endLine: number
+}
+
+export interface TranscriptReference {
+  id: string
+  sessionId: string
+  relativePath: string
+  lineNumber?: number
+  column?: number
+  label: string
+  rawText: string
+  href: string
+  messageRange: TranscriptMessageRange
+}
+
+export interface TranscriptSession {
+  id: string
+  projectId: string
+  sourceType: TranscriptSourceType
+  title: string
+  rawText: string
+  markdownText: string
+  references: TranscriptReference[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface TranscriptImportPayload {
+  projectId: string
+  sourceType: TranscriptSourceType
+  rawText: string
+  title?: string
+  sourceLabel?: string
+  processId?: string
+  capturedAt?: number
+}
+
+export interface TranscriptExternalImportPayload {
+  projectId?: string
+  projectPath?: string
+  sourceType?: TranscriptSourceType
+  rawText: string
+  title?: string
+  sourceLabel?: string
+  processId?: string
+  capturedAt?: number
+  openViewer?: boolean
+}
+
+export interface TranscriptImportProjectTarget {
+  projectId: string
+  projectPath: string
+  name: string
+  customName?: string
+  displayName: string
+}
+
+export interface TranscriptImportedEvent {
+  session: TranscriptSession
+  openViewer?: boolean
+}
+
+export interface TranscriptViewerRequest {
+  projectId: string
+  transcriptId: string
+  initialMode?: TranscriptViewerMode
+  host?: 'main-window' | 'secondary-window'
+}
+
+export interface TranscriptSessionSummary {
+  id: string
+  projectId: string
+  sourceType: TranscriptSourceType
+  title: string
+  createdAt: number
+  updatedAt: number
+  referenceCount: number
 }
 
 export type GitChangeKind =

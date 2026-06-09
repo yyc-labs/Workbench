@@ -8,6 +8,27 @@ import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, PROJECT_DOC_LINK_FALLBACK_TAG } f
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
 const MAX_CODE_SESSION_CURSOR_ENTRIES = 60
+const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
+  enabled: true,
+  host: '0.0.0.0',
+  port: 17373,
+  token: '',
+  maxBodyBytes: 256 * 1024,
+  recentEventLimit: 200,
+  transcriptImport: {
+    enabled: true,
+    token: '',
+    openViewerByDefault: false,
+  },
+  feishu: {
+    enabled: false,
+    appId: '',
+    appSecret: '',
+    receiveId: '',
+    receiveIdType: 'open_id',
+    notifyOn: ['stop', 'permission-request'],
+  },
+}
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
@@ -33,22 +54,7 @@ const DEFAULT_CONFIG: AppConfig = {
     splitMaxBatches: 4,
     maxBullets: 8,
   },
-  agentHooks: {
-    enabled: true,
-    host: '0.0.0.0',
-    port: 17373,
-    token: '',
-    maxBodyBytes: 256 * 1024,
-    recentEventLimit: 200,
-    feishu: {
-      enabled: false,
-      appId: '',
-      appSecret: '',
-      receiveId: '',
-      receiveIdType: 'open_id',
-      notifyOn: ['stop', 'permission-request'],
-    },
-  },
+  agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
 }
 
 let cachedConfig: AppConfig | undefined
@@ -139,6 +145,31 @@ function normalizeCodeSession(value: unknown): {
   }
 }
 
+function normalizeAgentHookConfig(
+  value: AppConfig['agentHooks'] | unknown
+): NonNullable<AppConfig['agentHooks']> {
+  const raw = value && typeof value === 'object'
+    ? value as NonNullable<AppConfig['agentHooks']>
+    : {}
+  const rawFeishu = raw.feishu && typeof raw.feishu === 'object' ? raw.feishu : {}
+  const rawTranscriptImport = raw.transcriptImport && typeof raw.transcriptImport === 'object'
+    ? raw.transcriptImport
+    : {}
+
+  return {
+    ...DEFAULT_AGENT_HOOK_CONFIG,
+    ...raw,
+    feishu: {
+      ...DEFAULT_AGENT_HOOK_CONFIG.feishu,
+      ...rawFeishu,
+    },
+    transcriptImport: {
+      ...DEFAULT_AGENT_HOOK_CONFIG.transcriptImport,
+      ...rawTranscriptImport,
+    },
+  }
+}
+
 export function loadConfig(): AppConfig {
   if (cachedConfig) return cachedConfig
 
@@ -198,6 +229,7 @@ export function loadConfig(): AppConfig {
       projects: normalizedProjects,
       removedProjects: normalizedRemovedProjects,
       docLinkTags: normalizeDocLinkTags(parsed.docLinkTags),
+      agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
     }
     if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
@@ -206,6 +238,7 @@ export function loadConfig(): AppConfig {
     cachedConfig = {
       ...DEFAULT_CONFIG,
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
+      agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
     }
   }
   return cachedConfig!
@@ -227,7 +260,13 @@ export function saveConfig(config: AppConfig): Promise<void> {
 
 export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConfig> {
   const current = loadConfig()
-  const updated = { ...current, ...partial }
+  const updated: AppConfig = {
+    ...current,
+    ...partial,
+    agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
+      ? normalizeAgentHookConfig(partial.agentHooks)
+      : current.agentHooks,
+  }
   await saveConfig(updated)
   return updated
 }

@@ -2,17 +2,7 @@ import { readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { basename } from 'path'
 import type { ProjectInfo } from '../../shared/types'
-import { RULES, globMatch, detectPackageManager } from '../../shared/rules'
-
-function generateId(filePath: string): string {
-  let hash = 0
-  for (let i = 0; i < filePath.length; i++) {
-    const char = filePath.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash | 0
-  }
-  return 'p' + Math.abs(hash).toString(36)
-}
+import { RULES, globMatch, detectPackageManager, projectIdFromPath } from '../../shared/rules'
 
 function substitutePackageManager(
   command: string,
@@ -70,7 +60,7 @@ export function detectProject(dirPath: string): ProjectInfo | null {
   // many student/team projects miss wrapper files in repo, but still are valid Android roots.
   if (isLikelyAndroidProject(files)) {
     return {
-      id: generateId(dirPath),
+      id: projectIdFromPath(dirPath),
       path: dirPath,
       name,
       type: 'android',
@@ -106,7 +96,7 @@ export function detectProject(dirPath: string): ProjectInfo | null {
     )
 
     return {
-      id: generateId(dirPath),
+      id: projectIdFromPath(dirPath),
       path: dirPath,
       name,
       type: rule.type,

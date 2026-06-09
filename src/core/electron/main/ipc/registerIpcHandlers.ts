@@ -36,6 +36,7 @@ import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
+import type { TranscriptService } from '../transcript/transcriptService'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
@@ -51,6 +52,7 @@ import type {
   ProjectFileContentSearchOptions,
   TerminalProcessInventory,
   TerminalStopAllResult,
+  TranscriptImportPayload,
 } from '../../../shared/types'
 
 type RuntimeStateChangedPayload = {
@@ -68,6 +70,7 @@ type RegisterIpcHandlersDependencies = {
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService
+  transcriptService: TranscriptService
 }
 
 type GitRequestWithRepoRoot = {
@@ -349,6 +352,26 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
       ))
     }
   )
+
+  ipcMain.handle(IPC.TRANSCRIPT_IMPORT, async (_event, payload: TranscriptImportPayload) => {
+    return deps.transcriptService.importTranscript(payload)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_LIST, async (_event, projectId: string) => {
+    return deps.transcriptService.listProjectTranscripts(projectId)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_LIST_ALL, async () => {
+    return deps.transcriptService.listAllTranscripts()
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_GET, async (_event, projectId: string, transcriptId: string) => {
+    return deps.transcriptService.getTranscript(projectId, transcriptId)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_DELETE, async (_event, projectId: string, transcriptId: string) => {
+    return deps.transcriptService.deleteTranscript(projectId, transcriptId)
+  })
 
   ipcMain.handle(
     IPC.RUNTIME_START,
