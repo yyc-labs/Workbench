@@ -33,6 +33,11 @@ export function SettingsAgentHooksPanel() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [savingTranscriptImport, setSavingTranscriptImport] = useState(false)
+  const [transcriptImportSaveError, setTranscriptImportSaveError] = useState<string | null>(null)
+  const [transcriptImportEnabled, setTranscriptImportEnabled] = useState(true)
+  const [transcriptImportToken, setTranscriptImportToken] = useState('')
+  const [transcriptImportOpenViewerByDefault, setTranscriptImportOpenViewerByDefault] = useState(false)
   const [savingFeishu, setSavingFeishu] = useState(false)
   const [feishuSaveError, setFeishuSaveError] = useState<string | null>(null)
   const [feishuEnabled, setFeishuEnabled] = useState(false)
@@ -77,12 +82,40 @@ export function SettingsAgentHooksPanel() {
 
   useEffect(() => {
     const feishu = agentHookConfig?.feishu
+    const transcriptImport = agentHookConfig?.transcriptImport
+    setTranscriptImportEnabled(transcriptImport?.enabled ?? true)
+    setTranscriptImportToken(transcriptImport?.token || '')
+    setTranscriptImportOpenViewerByDefault(Boolean(transcriptImport?.openViewerByDefault))
     setFeishuEnabled(Boolean(feishu?.enabled))
     setFeishuAppId(feishu?.appId || '')
     setFeishuAppSecret(feishu?.appSecret || '')
     setFeishuReceiveId(feishu?.receiveId || '')
     setFeishuReceiveIdType(feishu?.receiveIdType || 'open_id')
   }, [agentHookConfig])
+
+  const handleSaveTranscriptImport = async () => {
+    if (!agentHookConfig) return
+    setSavingTranscriptImport(true)
+    setTranscriptImportSaveError(null)
+    try {
+      const updated = await window.electronAPI.setConfig({
+        agentHooks: {
+          ...agentHookConfig,
+          transcriptImport: {
+            enabled: transcriptImportEnabled,
+            token: transcriptImportToken.trim(),
+            openViewerByDefault: transcriptImportOpenViewerByDefault,
+          },
+        },
+      })
+      setAgentHookConfig(updated.agentHooks || null)
+      setStatus(await window.electronAPI.getAgentHookStatus())
+    } catch (saveError) {
+      setTranscriptImportSaveError(saveError instanceof Error ? saveError.message : String(saveError))
+    } finally {
+      setSavingTranscriptImport(false)
+    }
+  }
 
   const handleSaveFeishu = async () => {
     if (!agentHookConfig) return
@@ -120,7 +153,7 @@ export function SettingsAgentHooksPanel() {
               Hook Gateway
             </h2>
             <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">
-              Local ingress for Claude Code and Codex CLI lifecycle events.
+              Local ingress for Claude Code, Codex CLI lifecycle events, and external transcript imports.
             </p>
           </div>
           <Button onClick={() => void refresh()} disabled={loading} className="rounded-full gap-2">
@@ -142,6 +175,9 @@ export function SettingsAgentHooksPanel() {
           <div>
             <div className="text-xs font-medium uppercase text-[color:var(--color-muted-foreground)]">Endpoint</div>
             <div className="mt-2 truncate text-sm text-[color:var(--color-foreground)]">{status?.url || 'n/a'}</div>
+            <div className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]">
+              {status?.url ? `${status.url}/transcripts/import` : 'n/a'}
+            </div>
           </div>
           <div>
             <div className="text-xs font-medium uppercase text-[color:var(--color-muted-foreground)]">Token</div>
@@ -160,6 +196,98 @@ export function SettingsAgentHooksPanel() {
             <span>{error || status?.error}</span>
           </div>
         )}
+      </section>
+
+      <section className="quiet-control rounded-[22px] p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-[color:var(--color-foreground)]">Transcript Import API</div>
+            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
+              Receive transcript text from other local applications and expose a project discovery endpoint.
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              checked={transcriptImportEnabled}
+              onChange={(event) => setTranscriptImportEnabled(event.target.checked)}
+            />
+            Enabled
+          </label>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Import Endpoint</p>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">
+              {status?.transcriptImportUrl || 'n/a'}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Projects Endpoint</p>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">
+              {status?.transcriptProjectsUrl || 'n/a'}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Dedicated Token</p>
+            <Input
+              type="password"
+              value={transcriptImportToken}
+              onChange={(event) => setTranscriptImportToken(event.target.value)}
+              className="h-11"
+              placeholder="optional transcript import token"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">Default Viewer Behavior</p>
+            <label className="quiet-control flex h-11 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
+              <input
+                type="checkbox"
+                checked={transcriptImportOpenViewerByDefault}
+                onChange={(event) => setTranscriptImportOpenViewerByDefault(event.target.checked)}
+              />
+              Open Transcript Viewer by default
+            </label>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">Route Status</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {status?.transcriptImportEnabled ? 'Enabled' : 'Disabled'}
+            </div>
+          </div>
+          <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">Dedicated Token</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {status?.transcriptImportTokenConfigured ? 'Configured' : 'Not required'}
+            </div>
+          </div>
+          <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">Discovery API</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              `GET /transcripts/projects`
+            </div>
+          </div>
+        </div>
+
+        {(transcriptImportSaveError || error) && (
+          <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
+            <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
+            <span>{transcriptImportSaveError || error}</span>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <div className="text-xs text-[color:var(--color-muted-foreground)]">
+            Auth headers: `Authorization: Bearer ...` or `x-ide-electron-transcript-token`
+          </div>
+          <Button onClick={() => void handleSaveTranscriptImport()} disabled={savingTranscriptImport}>
+            {savingTranscriptImport ? 'Saving...' : 'Save Transcript Import Config'}
+          </Button>
+        </div>
       </section>
 
       <section className="quiet-control rounded-[22px] p-5">

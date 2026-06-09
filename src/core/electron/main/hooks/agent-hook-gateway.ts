@@ -6,11 +6,16 @@ import type {
   AgentHookGatewayConfig,
   AgentHookGatewayStatus,
   AgentHookProvider,
+  TranscriptExternalImportPayload,
+  TranscriptImportedEvent,
+  TranscriptImportProjectTarget,
 } from '../../../shared/types'
 
 type AgentHookGatewayOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
   onEvent: (event: AgentHookEnvelope) => void
+  listProjects?: () => TranscriptImportProjectTarget[]
+  onTranscriptImport?: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
 }
 
 const DEFAULT_HOST = '0.0.0.0'
@@ -80,6 +85,10 @@ function getNestedString(source: Record<string, unknown>, keys: string[]): strin
     current = object[key]
   }
   return getString(current)
+}
+
+function getBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined
 }
 
 function stableEventId(provider: AgentHookProvider, providerEvent: string, rawBody: string): string {
@@ -211,6 +220,8 @@ function readRequestBody(req: IncomingMessage, maxBodyBytes: number): Promise<st
 export class AgentHookGateway {
   private readonly getConfig: AgentHookGatewayOptions['getConfig']
   private readonly onEvent: AgentHookGatewayOptions['onEvent']
+  private readonly listProjects?: AgentHookGatewayOptions['listProjects']
+  private readonly onTranscriptImport?: AgentHookGatewayOptions['onTranscriptImport']
   private server: Server | null = null
   private recentEvents: AgentHookEnvelope[] = []
   private running = false
@@ -221,6 +232,8 @@ export class AgentHookGateway {
   constructor(options: AgentHookGatewayOptions) {
     this.getConfig = options.getConfig
     this.onEvent = options.onEvent
+    this.listProjects = options.listProjects
+    this.onTranscriptImport = options.onTranscriptImport
   }
 
   start(): void {
@@ -269,14 +282,19 @@ export class AgentHookGateway {
     const config = this.resolveConfig()
     const host = this.server ? this.activeHost : config.host
     const port = this.server ? this.activePort : config.port
+    const baseUrl = `http://${host}:${port}`
     return {
       enabled: config.enabled,
       running: this.running,
       host,
       port,
-      url: `http://${host}:${port}`,
+      url: baseUrl,
       tokenConfigured: Boolean(config.token),
       recentEventCount: this.recentEvents.length,
+      transcriptImportEnabled: config.transcriptImportEnabled,
+      transcriptImportUrl: `${baseUrl}/transcripts/import`,
+      transcriptProjectsUrl: `${baseUrl}/transcripts/projects`,
+      transcriptImportTokenConfigured: Boolean(config.transcriptImportToken),
       error: this.error,
     }
   }
@@ -288,9 +306,13 @@ export class AgentHookGateway {
     token: string
     maxBodyBytes: number
     recentEventLimit: number
+    transcriptImportEnabled: boolean
+    transcriptImportToken: string
+    transcriptImportOpenViewerByDefault: boolean
   } {
     const config = this.getConfig() || {}
     const configuredHost = config.host || DEFAULT_HOST
+    const transcriptImport = config.transcriptImport || {}
     return {
       enabled: config.enabled ?? true,
       host: configuredHost === '127.0.0.1' ? DEFAULT_HOST : configuredHost,
@@ -302,14 +324,45 @@ export class AgentHookGateway {
       recentEventLimit: Number.isFinite(config.recentEventLimit)
         ? Number(config.recentEventLimit)
         : DEFAULT_RECENT_EVENT_LIMIT,
+      transcriptImportEnabled: transcriptImport.enabled ?? true,
+      transcriptImportToken: transcriptImport.token || '',
+      transcriptImportOpenViewerByDefault: transcriptImport.openViewerByDefault ?? false,
     }
   }
 
-  private isAuthorized(req: IncomingMessage, token: string): boolean {
+  private isAuthorized(req: IncomingMessage, token: string, headerNames: string[]): boolean {
     if (!token) return true
-    const header = req.headers['x-agent-hook-token']
-    const received = Array.isArray(header) ? header[0] : header
-    return received === token
+    for (const headerName of headerNames) {
+      const header = req.headers[headerName]
+      const received = Array.isArray(header) ? header[0] : header
+      if (received === token) return true
+    }
+    const authHeader = req.headers.authorization
+    const receivedAuth = Array.isArray(authHeader) ? authHeader[0] : authHeader
+    return receivedAuth === `Bearer ${token}`
+  }
+
+  private normalizeTranscriptImportPayload(payload: unknown): TranscriptExternalImportPayload {
+    const object = getObject(payload)
+    if (!object) {
+      throw new Error('INVALID_TRANSCRIPT_IMPORT_PAYLOAD')
+    }
+    const rawText = typeof object.rawText === 'string'
+      ? object.rawText
+      : typeof object.content === 'string'
+        ? object.content
+        : ''
+    return {
+      projectId: getString(object.projectId),
+      projectPath: getString(object.projectPath),
+      sourceType: getString(object.sourceType) as TranscriptExternalImportPayload['sourceType'],
+      rawText,
+      title: getString(object.title),
+      sourceLabel: getString(object.sourceLabel),
+      processId: getString(object.processId),
+      capturedAt: Number.isFinite(Number(object.capturedAt)) ? Number(object.capturedAt) : undefined,
+      openViewer: getBoolean(object.openViewer) ?? getBoolean(object.reveal),
+    }
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -321,8 +374,70 @@ export class AgentHookGateway {
       return
     }
 
+    if (url.pathname.startsWith('/transcripts/')) {
+      if (!config.transcriptImportEnabled) {
+        emptyResponse(res, 404)
+        return
+      }
+      if (!this.isAuthorized(req, config.transcriptImportToken, [
+        'x-ide-electron-transcript-token',
+        'x-ide-electron-token',
+      ])) {
+        emptyResponse(res, 401)
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/transcripts/projects') {
+        jsonResponse(res, 200, {
+          ok: true,
+          projects: this.listProjects ? this.listProjects() : [],
+        })
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/transcripts/import') {
+        if (!this.onTranscriptImport) {
+          emptyResponse(res, 404)
+          return
+        }
+        try {
+          const rawBody = await readRequestBody(req, config.maxBodyBytes)
+          const payload = rawBody.trim() ? JSON.parse(rawBody) : {}
+          const normalizedPayload = this.normalizeTranscriptImportPayload(payload)
+          if (normalizedPayload.openViewer === undefined) {
+            normalizedPayload.openViewer = config.transcriptImportOpenViewerByDefault
+          }
+          const imported = await this.onTranscriptImport(normalizedPayload)
+          jsonResponse(res, 200, {
+            ok: true,
+            projectId: imported.session.projectId,
+            sessionId: imported.session.id,
+            title: imported.session.title,
+            sourceType: imported.session.sourceType,
+            openViewer: Boolean(imported.openViewer),
+          })
+        } catch (error) {
+          if (error instanceof Error && error.message === 'REQUEST_BODY_TOO_LARGE') {
+            jsonResponse(res, 413, { error: 'request body too large' })
+            return
+          }
+          const message = error instanceof Error ? error.message : 'invalid transcript payload'
+          jsonResponse(res, 400, { error: message, requestId: randomUUID() })
+        }
+        return
+      }
+      emptyResponse(res, req.method === 'GET' ? 404 : 405)
+      return
+    }
+
     if (req.method !== 'POST') {
       emptyResponse(res, 405)
+      return
+    }
+
+    if (!this.isAuthorized(req, config.token, [
+      'x-agent-hook-token',
+      'x-ide-electron-token',
+    ])) {
+      emptyResponse(res, 401)
       return
     }
 
@@ -330,11 +445,6 @@ export class AgentHookGateway {
       || (url.pathname.startsWith('/hooks/') ? 'unknown' : undefined)
     if (!provider) {
       emptyResponse(res, 404)
-      return
-    }
-
-    if (!this.isAuthorized(req, config.token)) {
-      emptyResponse(res, 401)
       return
     }
 

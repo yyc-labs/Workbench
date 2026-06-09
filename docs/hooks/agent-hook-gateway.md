@@ -12,6 +12,10 @@ Routes:
 - `POST /hooks/claude-code`
 - `POST /hooks/codex-cli`
 
+Transcript import API is documented separately:
+
+- `docs/hooks/transcript-import-api.md`
+
 The gateway normalizes Claude Code and Codex CLI lifecycle payloads into
 `AgentHookEnvelope`, keeps the latest 200 events in memory, and broadcasts new
 events to the renderer over `agent-hook:event`.

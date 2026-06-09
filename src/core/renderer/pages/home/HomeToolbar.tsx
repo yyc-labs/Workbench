@@ -52,9 +52,9 @@ function HomeToolbar({
         />
         <button
           type="button"
-          className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full transition-colors ${
+          className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
             searchQuery
-              ? 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+              ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
               : 'pointer-events-none opacity-0'
           }`}
           onClick={() => {
