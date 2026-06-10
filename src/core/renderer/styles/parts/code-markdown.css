@@ -882,6 +882,82 @@
 .transcript-markdown-preview-scroll-root .transcript-markdown-content,
 .transcript-structured-preview-modal .transcript-markdown-content {
   max-width: 100%;
+  color: color-mix(in srgb, var(--color-foreground) 94%, var(--color-muted-foreground));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h1,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h2,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h3,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h4,
+.transcript-structured-preview-modal .transcript-markdown-content h1,
+.transcript-structured-preview-modal .transcript-markdown-content h2,
+.transcript-structured-preview-modal .transcript-markdown-content h3,
+.transcript-structured-preview-modal .transcript-markdown-content h4 {
+  color: var(--color-foreground);
+  letter-spacing: -0.015em;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h1,
+.transcript-structured-preview-modal .transcript-markdown-content h1 {
+  color: color-mix(in srgb, var(--color-foreground) 88%, white 12%);
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h2,
+.transcript-structured-preview-modal .transcript-markdown-content h2 {
+  color: color-mix(in srgb, var(--color-foreground) 82%, var(--color-primary));
+  border-bottom-color: color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h3,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h4,
+.transcript-structured-preview-modal .transcript-markdown-content h3,
+.transcript-structured-preview-modal .transcript-markdown-content h4 {
+  color: color-mix(in srgb, var(--color-foreground) 74%, var(--color-primary));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content p,
+.transcript-structured-preview-modal .transcript-markdown-content p {
+  color: color-mix(in srgb, var(--color-foreground) 92%, var(--color-muted-foreground));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content strong,
+.transcript-structured-preview-modal .transcript-markdown-content strong {
+  color: color-mix(in srgb, var(--color-foreground) 84%, white 16%);
+  font-weight: 800;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content em,
+.transcript-structured-preview-modal .transcript-markdown-content em {
+  color: color-mix(in srgb, var(--color-primary) 48%, var(--color-foreground));
+  font-style: italic;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content blockquote,
+.transcript-structured-preview-modal .transcript-markdown-content blockquote {
+  border-left-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  color: color-mix(in srgb, var(--color-muted-foreground) 88%, var(--color-foreground));
+  border-radius: 0 12px 12px 0;
+  padding: 0.55em 0.9em 0.55em 1em;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ul > li::marker,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ol > li::marker,
+.transcript-structured-preview-modal .transcript-markdown-content ul > li::marker,
+.transcript-structured-preview-modal .transcript-markdown-content ol > li::marker {
+  color: color-mix(in srgb, var(--color-primary) 84%, #6bb7ff);
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ol > li,
+.transcript-structured-preview-modal .transcript-markdown-content ol > li {
+  color: color-mix(in srgb, var(--color-foreground) 94%, var(--color-primary));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-inline-code,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-inline-code {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-accent));
+  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  color: color-mix(in srgb, var(--color-primary) 62%, var(--color-foreground));
 }
 
 .transcript-markdown-preview-scroll-root .transcript-markdown-content p,

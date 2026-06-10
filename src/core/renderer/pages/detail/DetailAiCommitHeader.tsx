@@ -103,7 +103,7 @@ export function DetailAiCommitHeader({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2.5">
               {projectHeaderCollapsed && (
-                <p className="max-w-[150px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
+                <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
                   {projectName || '当前项目'}
                 </p>
               )}
