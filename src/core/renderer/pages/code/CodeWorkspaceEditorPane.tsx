@@ -1,17 +1,59 @@
-import type { Ref } from 'react'
+import { memo, type Ref } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { ChevronDown, ChevronUp, Code2, Columns2, Eye, X } from 'lucide-react'
+import { ModalShell } from '../../components/ModalShell'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { transformMarkdownUrl } from './code.markdown'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
 
+type MarkdownStructuredPreviewState = {
+  kind: 'table' | 'box-flow' | 'vertical-flow'
+  startLine: number
+  endLine: number
+  markdown: string
+}
+
+const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
+  markdown,
+  components,
+}: {
+  markdown: string
+  components: Components
+}) {
+  return (
+    <article className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
+        components={components}
+        urlTransform={transformMarkdownUrl}
+      >
+        {markdown}
+      </ReactMarkdown>
+    </article>
+  )
+})
+
+function formatStructuredBlockKind(kind: MarkdownStructuredPreviewState['kind']): string {
+  switch (kind) {
+    case 'box-flow':
+      return 'Flow'
+    case 'vertical-flow':
+      return 'Vertical Flow'
+    case 'table':
+      return 'Table'
+    default:
+      return 'Structured Block'
+  }
+}
+
 type CodeWorkspaceEditorPaneProps = {
   activeLanguage: string | null
   activeRelativePath: string | null
+  closeStructuredPreview: () => void
   editorRef: Ref<MonacoCodeEditorHandle>
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
@@ -42,12 +84,15 @@ type CodeWorkspaceEditorPaneProps = {
   previewSearchQuery: string
   previewSearchVisible: boolean
   previewSearchMatchIndex: number
+  structuredPreview: MarkdownStructuredPreviewState | null
+  structuredPreviewComponents: Components
   viewMode: 'files' | 'search'
 }
 
 export function CodeWorkspaceEditorPane({
   activeLanguage,
   activeRelativePath,
+  closeStructuredPreview,
   editorRef,
   editorValue,
   effectiveMarkdownPreviewMode,
@@ -78,6 +123,8 @@ export function CodeWorkspaceEditorPane({
   previewSearchQuery,
   previewSearchVisible,
   previewSearchMatchIndex,
+  structuredPreview,
+  structuredPreviewComponents,
   viewMode,
 }: CodeWorkspaceEditorPaneProps) {
   if (!activeRelativePath) {
@@ -295,6 +342,52 @@ export function CodeWorkspaceEditorPane({
           </div>
         )}
       </div>
+
+      <ModalShell
+        open={Boolean(structuredPreview)}
+        onClose={closeStructuredPreview}
+        widthClassName="max-w-[min(1280px,calc(100vw-40px))]"
+        baseZIndex={1180}
+        ariaLabel="Markdown structured preview"
+        overlayClassName="backdrop-blur-0 bg-black/18"
+        panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
+      >
+        <div className="flex max-h-[min(88vh,980px)] min-h-0 flex-col">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="section-label mb-1">Markdown</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
+                  {structuredPreview ? formatStructuredBlockKind(structuredPreview.kind) : 'Structured Block'}
+                </p>
+                {structuredPreview && (
+                  <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+                    Lines {structuredPreview.startLine}-{structuredPreview.endLine}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
+                原位内容保留在文档里，这里提供放大查看。
+              </p>
+            </div>
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={closeStructuredPreview}
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]">
+            <StructuredPreviewMarkdown
+              markdown={structuredPreview?.markdown ?? ''}
+              components={structuredPreviewComponents}
+            />
+          </div>
+        </div>
+      </ModalShell>
     </div>
   )
 }

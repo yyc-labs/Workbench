@@ -1,329 +1,454 @@
-# Build 后脚本依赖自包含改造计划（2026-06-10）
+# Build 后 AI 环境选择与脚本自包含改造计划（2026-06-10）
 
 ## 背景
 
-当前分支目标是解决应用 build / 后续打包后不能直接使用的问题。这里的“外部资源”重点不是网络 API 或字体资源，而是当前开发机上已经存在的外部脚本和工具路径。现状里部分运行时能力依赖 `$HOME/tools/...`、固定 WSL 路径、项目源码目录中的脚本相对位置；这些假设在 build 输出目录或安装包环境中不稳定。
+当前要解决的问题不是单纯“把脚本打进去”，而是应用现在默认把 AI 运行环境等同于 WSL 和开发机已有脚本。用户未必想用 WSL，目标机器也未必支持 WSL，所以安装期或首启期必须让用户选择 AI 运行环境，应用内部要有统一的环境调控层，根据选择决定 Runtime 和 AI Commit 怎么启动。
 
-## 当前问题定位
+这里的“外部资源”重点仍然是：
 
-### 1. Runtime 启动脚本依赖开发机路径
+- 开发机已有脚本，如 `$HOME/tools/...`。
+- 项目源码目录中的 `.ps1` / `.sh`。
+- 目标机器上是否具备 WSL、pwsh、tmux、Claude/Codex CLI 等系统能力。
 
-当前默认配置写死为：
+## 当前实现快照
+
+### 1. Runtime 目前本质上是 WSL-only
+
+当前默认配置：
 
 - `src/core/electron/main/config.ts`
 - `runtimeLauncherScript: '$HOME/tools/claude-code-script/start-claude-with-env.sh'`
 
-实际启动链路在：
+当前 Runtime 启动链路：
 
 - `src/core/electron/main/runtime/runtime-service.ts`
-- 读取 `loadConfig().runtimeLauncherScript`
-- 展开 `$HOME`
-- 在 WSL 内检查脚本是否存在且可执行
-- 通过 `wsl.exe -d <distro> -- bash -ilc '<launcher> --cli <claude|codex> <projectPath>'` 启动
+- 只认 WSL 路径脚本
+- 通过 `wsl.exe -d <distro> -- bash -ilc ...` 启动
+- 依赖 `tmux`
 
-风险：
+结论：
 
-- 新机器没有 `$HOME/tools/claude-code-script/start-claude-with-env.sh`。
-- build 后应用本身没有提供这个脚本。
-- 用户配置一旦保留旧路径，打包版仍然继续找开发机路径。
-- 诊断只能提示缺失，不能修复或初始化。
+- 当前分支的 Runtime 并没有 Windows native 启动器。
+- 用户如果不想用 WSL，现状没有正式选项。
+- 用户如果机器没有 WSL，Runtime 只能报错，不能引导选择别的环境。
 
-### 2. AI Commit 脚本路径依赖源码布局
+### 2. AI Commit 比 Runtime 更宽松，但仍依赖外部脚本
 
-当前执行链路在：
+当前 AI Commit 链路：
 
 - `src/core/electron/main/ai-commit/ai-commit-service.ts`
-- `scriptPs1Path = join(__dirname, '../../script/auto-git-commit/auto_commit.ps1')`
-- Windows 项目走 `pwsh -File <scriptPs1Path>`
-- WSL 项目把该路径转换成 WSL 路径后走 WSL 内的 `pwsh`
+- 脚本路径来自 `../../script/auto-git-commit/auto_commit.ps1`
+- WSL 项目优先走 WSL `pwsh`
+- 非 WSL 项目走 Windows `pwsh`，失败后 fallback `powershell.exe`
 
-风险：
+结论：
 
-- `electron-vite build` 只输出 `out/main`、`out/preload`、`out/renderer`，不会天然复制 `script/auto-git-commit/*.ps1`。
-- 后续如果启用 asar，`spawn` 不能可靠执行 asar 内脚本，脚本必须放在 unpacked 或 extraResources。
-- WSL 内固定优先 `/snap/bin/pwsh`，新机器可能没有，虽然会 fallback 到 `pwsh`，但缺少明确诊断。
+- AI Commit 已经部分支持 Windows 和 WSL 两套执行环境。
+- 但脚本资产仍然绑定源码目录，build 后不自包含。
+- 也没有统一的“环境选择”配置，只有零散的路径和 fallback。
 
-### 3. 系统能力和应用脚本边界混在一起
+### 3. 现在缺的是“环境选择层”，不是单一脚本复制
 
-必须区分两类依赖：
+当前代码里缺少一个统一能力：
 
-- 目标机器必须安装的系统能力：WSL、目标 distro、bash/sh、tmux、Windows Terminal、PowerShell/pwsh、git、Claude/Codex CLI。
-- 应用应该自带或初始化的脚本资产：runtime launcher、AI Commit PowerShell 脚本、未来可能增加的 hook / bootstrap 脚本。
+- 安装时或首启时探测可选环境。
+- 让用户明确选择 AI 启动环境。
+- 根据选择决定 Runtime 和 AI Commit 的脚本来源、shell、能力要求和诊断策略。
+- 在不支持当前环境时，提供降级方案，比如导出/下载脚本包给用户做一体化注入。
 
-当前代码对系统能力有部分探测，但对“应用脚本资产”没有统一资源目录、版本、安装、迁移和修复机制。
+## 当前支持矩阵
+
+以当前分支代码为准，现状大致如下：
+
+| 模式 | Runtime | AI Commit | 当前分支状态 |
+|------|---------|-----------|--------------|
+| `wsl-managed` | WSL + bash + tmux + 外部 `.sh` | WSL `pwsh` + `.ps1` | 部分支持，但不自包含 |
+| `windows-managed` | Windows native launcher | Windows `pwsh` / `powershell.exe` + `.ps1` | 只支持 AI Commit，Runtime 不支持 |
+| `custom-script` | 用户自定义脚本 | 用户自定义脚本 | 只有零散路径输入，不成体系 |
+| `disabled` | 不启用 Runtime | 不启用 AI Commit | 没有正式的产品配置入口 |
+
+这意味着：
+
+- 当前分支不能把 “WSL” 写成唯一正确路径。
+- 当前分支也不能承诺“Windows managed Runtime 已支持”。
+- 需要先把环境选择能力建起来，再逐步补每种模式。
 
 ## 改造目标
 
-目标不是把 WSL、tmux、Claude/Codex CLI 全部打进应用，而是让应用自带自己的启动脚本，并能在新机器上完成初始化：
+目标调整为“环境可选 + 脚本自包含 + 不支持时可导出注入包”：
 
-- build / package 后，应用能找到自身附带的脚本资产。
-- 首次启动时能把需要在 WSL 内执行的脚本安装到稳定位置。
-- 用户旧配置指向开发机路径时，能自动迁移到应用托管路径或明确提示。
-- 设置页诊断能区分“系统能力缺失”和“应用脚本缺失”。
-- 任何脚本升级都有版本号，避免用户机器残留旧脚本导致行为不可控。
+- 安装期或首启期让用户选择 AI 运行环境，而不是默认强塞 WSL。
+- 应用内部有统一环境控制器，决定 Runtime 和 AI Commit 用什么环境启动。
+- build / package 后，应用能找到自己附带的脚本资产。
+- 当前模式不支持时，UI 要明确告知“不支持 / 可安装 / 需导出脚本包”，而不是直接失败。
+- 对没有 WSL 或不想用 WSL 的用户，提供 `custom-script` 路径，支持导出一体化脚本包。
+- 所有脚本资产有版本号，避免旧机器残留脚本不可控。
 
 ## 推荐架构
 
-### 1. 新增应用脚本资源目录
+### 1. 新增 AI 环境配置模型
 
-建议在源码中新增：
+建议新增统一环境配置，而不是继续只保存单个脚本路径：
 
-```text
-resources/
-  scripts/
-    runtime/
-      start-runtime.sh
-      runtime-script.version
-    ai-commit/
-      auto_commit.ps1
-      ai_split_plan.ps1
-      apply_split_plan.ps1
-      ai-commit-script.version
+```ts
+export type AiEnvironmentMode =
+  | 'wsl-managed'
+  | 'windows-managed'
+  | 'custom-script'
+  | 'disabled'
+
+export interface AiEnvironmentConfig {
+  mode: AiEnvironmentMode
+  runtimeScriptPath?: string
+  aiCommitScriptPath?: string
+  wslDistro?: string
+  wslPwshPath?: string
+  scriptSource?: 'bundled' | 'exported' | 'custom'
+}
 ```
 
-说明：
+建议挂在 `AppConfig` 下，而不是把 Runtime 和 AI Commit 完全拆散：
 
-- `resources/scripts/runtime/start-runtime.sh` 替代 `$HOME/tools/claude-code-script/start-claude-with-env.sh` 作为应用内置 runtime launcher。
-- `resources/scripts/ai-commit/*.ps1` 替代运行时从源码 `script/auto-git-commit` 查找。
-- `script/auto-git-commit` 可以保留为开发期入口，但发布链路只认 `resources/scripts/...`。
+```ts
+aiEnvironment?: AiEnvironmentConfig
+```
 
-### 2. 新增脚本资源解析层
+原因：
+
+- 用户选的是“AI 启动环境”，不是单独选一条脚本路径。
+- Runtime 和 AI Commit 最终都属于 AI 运行体系，应该复用同一份环境选择结果。
+- 后续支持更多模式时，不需要继续往 `config.ts` 塞零散字段。
+
+### 2. 安装期 / 首启期环境选择器
+
+当前项目还没有正式 installer 配置，所以建议分两层：
+
+- 有 installer 时：安装期询问用户环境偏好。
+- 没有 installer 时：应用首启 Setup Wizard 完成同样流程。
+
+首屏逻辑建议：
+
+1. 探测当前机器能力。
+2. 列出可选环境。
+3. 标注每个环境的状态：`已支持`、`可安装`、`当前分支不支持`、`需自定义脚本`。
+4. 用户确认后，执行 bootstrap 或导出脚本包。
+
+建议选项：
+
+- `WSL 托管`
+- `Windows 托管`
+- `自定义脚本注入`
+- `暂不启用 AI Runtime`
+
+其中：
+
+- 如果检测到 WSL + tmux，就允许选择 `WSL 托管`。
+- 如果当前分支还没有 Windows Runtime launcher，就把 `Windows 托管` 标成“AI Commit 可用，Runtime 暂不支持”。
+- 如果两者都不适合，允许选择 `自定义脚本注入`。
+- 对企业机或受限机器，`自定义脚本注入` 是必须保留的兜底路径。
+
+### 3. 新增环境控制器
 
 建议新增主进程模块：
 
 ```text
-src/core/electron/main/app-resources/
-  script-resources.ts
+src/core/electron/main/ai-environment/
+  environment-controller.ts
+  environment-diagnostics.ts
+  environment-installer.ts
 ```
 
 职责：
 
-- 判断当前是 dev / build / packaged。
-- 返回应用脚本资源根目录。
-- dev 模式可指向项目根下 `resources/scripts`。
-- packaged 模式指向 `process.resourcesPath/scripts` 或 electron-builder `extraResources` 目标目录。
-- 禁止业务代码直接用 `__dirname ../../script/...` 拼路径。
+- 探测当前机器支持哪些模式。
+- 根据用户配置生成 Runtime 和 AI Commit 的实际启动方案。
+- 判断当前模式是否可运行。
+- 负责安装托管脚本、修复托管脚本、导出脚本包。
+- 给设置页和首启向导提供统一诊断结果。
 
-建议提供接口：
+建议接口：
 
 ```ts
-resolveBundledScriptPath(kind: 'runtime' | 'ai-commit', fileName: string): string
-resolveUserDataScriptPath(kind: 'runtime' | 'ai-commit', fileName: string): string
-getBundledScriptVersion(kind: 'runtime' | 'ai-commit'): string
+getEnvironmentSupport(): EnvironmentSupportMatrix
+prepareEnvironment(mode: AiEnvironmentMode): Promise<PrepareResult>
+resolveRuntimeLaunch(): RuntimeLaunchPlan
+resolveAiCommitLaunch(): AiCommitLaunchPlan
+exportIntegrationScripts(targetDir: string): Promise<ExportResult>
 ```
 
-### 3. Runtime 脚本采用“内置资源 + WSL 安装”模式
+### 4. 脚本资源目录要按环境拆分
 
-Runtime launcher 最终需要在 WSL 内执行，因此不能只依赖 Windows 侧资源路径。建议启动时执行 bootstrap：
+建议资源目录改成按环境组织：
 
 ```text
-Windows resources/scripts/runtime/start-runtime.sh
-  -> copy/install to WSL:
-     ~/.ide-electron/scripts/runtime/start-runtime.sh
-     ~/.ide-electron/scripts/runtime/runtime-script.version
-  -> chmod +x
-  -> runtime-service 使用该 WSL 路径启动
+resources/
+  scripts/
+    wsl/
+      start-runtime.sh
+      runtime.version
+    windows/
+      auto_commit.ps1
+      ai_split_plan.ps1
+      apply_split_plan.ps1
+      ai-commit.version
+    packages/
+      manifest.json
 ```
 
-默认配置建议改为应用托管语义，而不是物理路径：
+说明：
+
+- `wsl/` 放 WSL 托管模式所需脚本。
+- `windows/` 放 Windows PowerShell 侧脚本。
+- `packages/manifest.json` 描述版本、目标路径、导出清单。
+- 如果后续要提供“一键下载脚本注入包”，这个包应从 `resources/scripts` 生成，而不是再单独维护一套外链资源。
+
+### 5. 各模式的目标行为
+
+#### `wsl-managed`
+
+适用条件：
+
+- Windows 主机
+- 已安装 WSL
+- 已有可用 distro
+- 有 bash/sh
+- 有 tmux
+
+目标行为：
+
+- 应用把内置 WSL runtime 脚本安装到 WSL 用户目录。
+- Runtime 通过 WSL + tmux 启动。
+- AI Commit 根据项目路径决定走 WSL `pwsh` 或 Windows `pwsh`。
+
+建议托管路径：
+
+```text
+~/.ide-electron/scripts/runtime/start-runtime.sh
+~/.ide-electron/scripts/runtime/runtime.version
+```
+
+#### `windows-managed`
+
+当前分支现状：
+
+- AI Commit 基本具备 Windows PowerShell 执行能力。
+- Runtime 没有 Windows native launcher。
+
+因此本阶段策略：
+
+- 可以把该模式纳入环境模型。
+- 但在 UI 中明确标成“当前分支仅支持 AI Commit，Runtime 暂不可用”。
+- 只有在 Windows Runtime launcher 实现后，才允许把它作为完整模式开放。
+
+这一步很重要，因为它能避免后续继续把 WSL 假设写死在配置结构里。
+
+#### `custom-script`
+
+这是非 WSL 用户和受限机器的关键兜底模式。
+
+目标行为：
+
+- 应用允许用户指定自定义 Runtime 脚本和 AI Commit 脚本路径。
+- 应用提供“导出一体化脚本包”按钮，把 bundled scripts 导出到用户指定目录。
+- 用户可以手动注入到自己的环境中，再把路径回填给应用。
+
+建议支持两种动作：
+
+- `导出脚本包到本地目录`
+- `复制脚本注入说明`
+
+这比单纯要求用户自己去仓库翻 `.ps1` / `.sh` 更可控。
+
+#### `disabled`
+
+目标行为：
+
+- 不启用 Runtime。
+- 不启用 AI Commit。
+- 其余项目管理能力照常使用。
+
+这个模式应该正式存在，而不是靠用户什么都不填来“间接禁用”。
+
+### 6. 统一诊断结果
+
+诊断不应再只围绕 “WSL 是否存在”，而应先围绕“当前选中的环境模式”。
+
+建议结果结构：
 
 ```ts
-runtimeLauncherScript: 'managed'
-```
-
-或者新增字段，兼容旧配置：
-
-```ts
-runtimeLauncherMode?: 'managed' | 'custom'
-runtimeLauncherScript?: string
-```
-
-迁移策略：
-
-- 新用户默认 `managed`。
-- 旧用户如果 `runtimeLauncherScript` 等于 `$HOME/tools/claude-code-script/start-claude-with-env.sh`，自动迁移到 `managed`。
-- 旧用户如果配置了自定义路径，保留为 `custom`，但诊断页明确提示“自定义脚本不随应用打包”。
-
-### 4. AI Commit 脚本采用“extraResources / unpacked 可执行文件”模式
-
-AI Commit PowerShell 脚本不应该从 `out/main` 反推源码目录。建议：
-
-- dev 模式读取 `resources/scripts/ai-commit/auto_commit.ps1`。
-- packaged 模式读取 `process.resourcesPath/scripts/ai-commit/auto_commit.ps1`。
-- 如果启用 asar，必须保证脚本在 asar 外。
-
-后续打包配置应包含：
-
-```json
-{
-  "extraResources": [
-    {
-      "from": "resources/scripts",
-      "to": "scripts"
-    }
-  ]
+interface EnvironmentSupportMatrix {
+  checkedAt: number
+  availableModes: Array<{
+    mode: AiEnvironmentMode
+    status: 'supported' | 'installable' | 'unsupported' | 'partial'
+    message: string
+  }>
+  currentMode: AiEnvironmentMode
 }
-```
 
-如果暂时只做 `electron-vite build`，也要增加复制步骤，把 `resources/scripts` 同步到 `out/resources/scripts` 或统一的 build 产物资源目录。否则 build 输出仍然不包含脚本。
-
-### 5. 增加脚本诊断和修复入口
-
-设置页 Runtime Diagnostics 应拆成两组：
-
-- 系统能力：WSL、distro、bash/sh、tmux、wt.exe、pwsh、git、Claude/Codex CLI。
-- 应用脚本：bundled script 是否存在、版本是否匹配、WSL installed script 是否存在、是否 executable、是否需要重装。
-
-建议新增 IPC：
-
-```text
-scripts:diagnose
-scripts:install-runtime
-scripts:repair
-```
-
-诊断结果示例：
-
-```ts
 interface ManagedScriptDiagnostics {
   checkedAt: number
+  currentMode: AiEnvironmentMode
   runtime: {
+    supported: boolean
     bundledExists: boolean
-    bundledVersion: string
-    installedWslPath: string
-    installedExists: boolean
-    installedExecutable: boolean
-    installedVersion: string
-    needsInstall: boolean
+    installedPath?: string
+    installedExists?: boolean
+    installedExecutable?: boolean
+    version?: string
   }
   aiCommit: {
+    supported: boolean
     bundledExists: boolean
-    bundledVersion: string
-    pwshAvailable: boolean
+    pwshAvailable?: boolean
+    scriptPath?: string
   }
 }
 ```
+
+设置页展示逻辑：
+
+- 先显示当前模式。
+- 再显示当前模式的能力缺口。
+- 最后给出动作：安装、修复、切换模式、导出脚本包。
 
 ## 分阶段执行计划
 
-### P0：冻结现状并补资源清单
+### P0：先补“环境选择”设计，不先写死 WSL
 
-目标：先把“不自包含”的点写清楚，避免边改边漏。
-
-任务：
-
-- 建立 `resources/scripts` 目录。
-- 把当前 `script/auto-git-commit/*.ps1` 复制到 `resources/scripts/ai-commit/`。
-- 根据现有 `$HOME/tools/claude-code-script/start-claude-with-env.sh` 的真实内容，整理出 `resources/scripts/runtime/start-runtime.sh`。
-- 给 runtime 和 ai-commit 脚本各加一个 version 文件。
-- 明确目标机器仍需用户安装的系统能力清单。
-
-验收：
-
-- 文档列出的应用脚本都能在仓库内找到。
-- 不再只有开发机 `$HOME/tools/...` 才有 runtime launcher 源码。
-
-### P1：主进程统一资源解析
-
-目标：业务代码不再手写 `__dirname ../../script/...`。
+目标：把产品层面的环境模型先立住。
 
 任务：
 
-- 新增 `script-resources.ts`。
-- AI Commit 改为通过 `resolveBundledScriptPath('ai-commit', 'auto_commit.ps1')` 获取脚本。
-- Runtime 改为通过托管路径获取 WSL installed script。
-- 保留 dev fallback，但 fallback 只能指向仓库内 `resources/scripts`，不能指向个人 `$HOME/tools`。
+- 明确 `wsl-managed`、`windows-managed`、`custom-script`、`disabled` 四种模式。
+- 补当前分支支持矩阵。
+- 确认首启向导替代 installer 的方案。
+- 明确“当前分支 Runtime 仅支持 WSL”的限制文案。
 
 验收：
 
-- 搜索 `../../script/auto-git-commit` 无结果。
-- 搜索 `$HOME/tools/claude-code-script` 只允许出现在迁移兼容或文档中。
+- 文档不再把 WSL 当成唯一默认方案。
+- 团队对“先做环境选择层，再补各模式实现”达成一致。
 
-### P2：Runtime 托管脚本安装器
+### P1：引入环境配置和控制器
 
-目标：新机器首次运行时可自动准备 WSL 侧 launcher。
+目标：先把配置模型和分发逻辑统一。
 
 任务：
 
-- 新增 runtime script installer。
-- 安装路径固定为 `~/.ide-electron/scripts/runtime/start-runtime.sh`。
-- 安装过程使用 WSL 执行 `mkdir -p`、写入文件、`chmod +x`、写入 version。
-- 启动 Runtime 前，如果诊断发现缺失或版本不一致，提示用户一键修复；也可以在首次启动时自动安装。
-- 旧默认路径自动迁移到 managed。
+- 在 `AppConfig` 中新增 `aiEnvironment`。
+- 新增 `environment-controller.ts`。
+- Runtime 和 AI Commit 不再各自直接拼脚本路径，而是从环境控制器取 launch plan。
+- 旧配置迁移到新结构。
 
 验收：
 
-- 删除 WSL 内 `~/.ide-electron/scripts/runtime` 后，点击修复能恢复。
-- Runtime 启动不再依赖 `$HOME/tools/claude-code-script/start-claude-with-env.sh`。
-- 自定义脚本路径仍可使用，但 UI 明确显示这是 advanced/custom。
+- 启动链路不再直接依赖 `$HOME/tools/...` 或 `../../script/...`。
+- 当前模式切换后，Runtime / AI Commit 的路径和 shell 解析来自同一个地方。
 
-### P3：打包链路接入资源
+### P2：脚本资源内置化
 
-目标：build / package 输出包含脚本资产。
+目标：先让应用自带脚本资产。
 
 任务：
 
-- 决定正式打包工具。当前 `package.json` 只有 `electron-vite build`，还没有 electron-builder / forge 配置。
-- 如果引入 electron-builder，配置 `extraResources` 复制 `resources/scripts -> scripts`。
-- 如果短期仍只做 build，新增一个 build 后复制脚本的命令，例如 `build:scripts`，保证产物目录包含资源。
-- 明确 asar 策略：脚本必须在 asar 外，不能只放进 JS bundle。
+- 建立 `resources/scripts`。
+- 把现有 `script/auto-git-commit/*.ps1` 收进 `resources/scripts/windows/`。
+- 把当前外部 WSL runtime 脚本回收到 `resources/scripts/wsl/`。
+- 给各类脚本增加版本文件和 manifest。
 
 验收：
 
-- 清理 `out/` 后重新 build，产物中能找到 `scripts/runtime/start-runtime.sh` 和 `scripts/ai-commit/auto_commit.ps1`。
-- 从产物目录启动应用时，AI Commit 脚本路径指向产物资源，不指向源码 `script/`。
+- 仓库内可找到所有发布所需脚本源。
+- build / package 不再依赖开发机私有目录才能找到脚本。
 
-### P4：诊断、错误提示和迁移收口
+### P3：先完成 `wsl-managed`
 
-目标：用户看到的是可操作问题，而不是底层 spawn 失败。
+目标：在当前分支已有基础上，把 WSL 模式做完整。
 
 任务：
 
-- 设置页增加“应用脚本”诊断块。
-- Runtime 诊断里区分：
-  - WSL 缺失
-  - tmux 缺失
-  - managed runtime script 未安装
-  - managed runtime script 版本过旧
-  - custom runtime script 不存在
-- AI Commit 诊断里区分：
-  - bundled ps1 缺失
-  - pwsh 缺失
-  - WSL pwsh 缺失但 Windows pwsh 可用
-- 对旧配置执行一次迁移，并保留用户可回滚的 custom 选项。
+- 托管安装 WSL runtime 脚本到 `~/.ide-electron/...`。
+- 增加 WSL 模式诊断、修复、重装。
+- 旧默认路径自动迁移到 `wsl-managed`。
 
 验收：
 
-- 新机器首次运行时，设置页能明确告诉用户缺什么。
-- 点击修复后，应用脚本类问题可以被应用自己解决。
-- 系统能力缺失只提示安装指引，不伪装成应用可自动修复。
+- 删除开发机 `$HOME/tools/claude-code-script` 后，WSL 模式仍能初始化。
+- WSL 脚本缺失时，应用可以自修复。
+
+### P4：完成 `custom-script` 导出 / 注入闭环
+
+目标：没有 WSL 或不想用 WSL 的用户也能继续走下去。
+
+任务：
+
+- 增加“导出一体化脚本包”功能。
+- 增加自定义脚本路径保存和验证。
+- 给出脚本注入说明。
+- 环境不支持时自动推荐切到 `custom-script`。
+
+验收：
+
+- 无 WSL 机器上，用户可以选择 `custom-script`，而不是只能失败。
+- 应用能校验用户填入的脚本是否存在、是否可执行、版本是否匹配。
+
+### P5：补打包链路和首启向导
+
+目标：把设计真正落到 build / package 产物。
+
+任务：
+
+- 决定正式打包工具。当前只有 `electron-vite build`，没有 installer。
+- build 阶段复制 `resources/scripts` 到产物资源目录。
+- packaged 模式从 `process.resourcesPath/scripts` 解析脚本。
+- 加入首启向导 UI。
+
+验收：
+
+- 清理 `out/` 后重新 build，产物内可找到脚本资源。
+- 新机器首次启动时能先进入环境选择，而不是直接撞到 Runtime 错误。
+
+### P6：再决定是否做 `windows-managed Runtime`
+
+目标：把 Windows managed 作为后续增强，而不是当前阶段硬承诺。
+
+任务：
+
+- 评估是否真的需要 Windows native Runtime launcher。
+- 如果需要，再设计对应 launcher、会话管理和诊断体系。
+
+验收：
+
+- 在实现前，UI 和文档都明确它是“未完成能力”。
+- 不再出现“配置里好像支持，实际运行不了”的假支持状态。
 
 ## 实施顺序建议
 
-建议按下面顺序推进，不要先做 UI：
+建议按下面顺序推进：
 
-1. 先把 `resources/scripts` 和资源解析层落地。
-2. 再改 AI Commit 脚本路径，因为它最容易验证。
-3. 再做 Runtime WSL 安装器，因为它涉及跨 Windows / WSL 文件写入和权限。
-4. 最后补设置页诊断和迁移 UI。
-5. 打包配置在资源解析稳定后接入，避免先写死错误目录。
+1. 先改文档和配置模型，把环境选择层定下来。
+2. 再做资源内置和环境控制器。
+3. 然后把 `wsl-managed` 做完整，因为它是当前分支唯一真正可运行的 Runtime 模式。
+4. 接着补 `custom-script` 导出 / 注入闭环，解决无 WSL 用户。
+5. 最后再接打包和首启向导。
+6. `windows-managed Runtime` 放到后续能力阶段，不和本轮自包含混在一起。
 
 ## 风险和决策点
 
-- 是否要引入 electron-builder：如果目标是安装包，必须尽快确定；只跑 `electron-vite build` 不是完整桌面应用打包。
-- runtime launcher 的真实内容需要从当前机器外部脚本回收进仓库，否则无法做到自包含。
-- WSL 里的 Claude/Codex CLI 不建议随应用打包，应该作为系统能力诊断和安装指引处理。
-- `pwsh` 不建议由应用静默安装，应该诊断缺失并给出用户可执行的安装说明。
-- 如果未来支持非 Windows，资源解析和 Runtime installer 要先抽象平台分支，避免把 WSL 假设扩散到业务层。
+- 当前没有 installer，安装期选择很可能需要先由首启向导承担。
+- Runtime 外部 WSL 脚本的真实内容必须回收到仓库，否则无法做到自包含。
+- `custom-script` 如果只给路径输入、不提供导出包和说明，实际可用性仍然很差。
+- `windows-managed Runtime` 当前没有实现，不能在产品文案里暗示已经支持。
+- WSL、tmux、pwsh、Claude/Codex CLI 这类系统能力不建议由应用静默安装，应做诊断和安装引导。
 
 ## 完成标准
 
-满足下面条件后，可以认为“脚本依赖自包含”这一阶段完成：
+满足下面条件后，可以认为这一阶段完成：
 
-- 仓库内包含 runtime launcher 和 AI Commit 脚本的发布源。
-- build / package 产物包含脚本资产。
-- 运行时代码通过统一资源解析层获取脚本路径。
-- Runtime 默认使用应用托管的 WSL 脚本路径。
-- 删除开发机 `$HOME/tools/claude-code-script` 后，打包版仍能完成 Runtime 初始化或给出一键修复。
-- 删除源码目录 `script/auto-git-commit` 后，打包版 AI Commit 不受影响。
-- 设置页能明确区分系统能力缺失和应用脚本缺失。
+- 用户首次进入应用时可以明确选择 AI 运行环境。
+- 当前模式的支持状态、缺失能力和修复动作在 UI 中清晰可见。
+- 应用内置 Runtime / AI Commit 所需脚本资产。
+- 当前分支的 `wsl-managed` 模式不再依赖开发机私有脚本路径。
+- 无 WSL 或不想用 WSL 的用户可以切到 `custom-script`，并导出一体化脚本包。
+- build / package 产物能包含脚本资源，并在 packaged 模式下被正确解析。

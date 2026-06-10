@@ -13,8 +13,13 @@
 }
 
 .code-markdown-content--viewport-scroll {
-  min-width: 0;
-  width: auto;
+  min-width: max-content;
+  width: max-content;
+}
+
+.code-markdown-content--viewport-scroll > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-mermaid-wrap) {
+  inline-size: min(100%, min(860px, var(--code-markdown-block-max-inline-size, 100%)));
+  max-inline-size: min(860px, var(--code-markdown-block-max-inline-size, 100%));
 }
 
 .code-markdown-preview-scroll-root {
@@ -66,6 +71,8 @@
   margin: 1.15em 0 0.55em;
   line-height: 1.3;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .code-markdown-content h1 {
@@ -739,7 +746,7 @@
 }
 
 .code-markdown-content img {
-  max-width: 100%;
+  max-width: min(100%, var(--code-markdown-block-max-inline-size, 100%));
   height: auto;
 }
 

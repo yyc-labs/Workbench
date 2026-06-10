@@ -5,6 +5,7 @@ import {
   dirnameFromRelativePath,
   joinPosixPaths,
   MARKDOWN_PASTE_IMAGE_DIRECTORY,
+  type MarkdownStructuredBlockClickPayload,
   normalizeMarkdownImageExtensionFromMime,
   parseImageFileFromClipboardEvent,
   relativePosixPath,
@@ -24,6 +25,21 @@ type UseMarkdownPreviewModeStateOptions = {
   projectPath: string
   setProjectLastMarkdownPreviewMode: (projectId: string, mode: MarkdownPreviewMode) => Promise<void>
   themeMode: 'system' | 'light' | 'dark'
+}
+
+type MarkdownStructuredPreviewState = {
+  kind: MarkdownStructuredBlockClickPayload['kind']
+  startLine: number
+  endLine: number
+  markdown: string
+}
+
+function sliceMarkdownLines(markdown: string, startLine: number, endLine: number): string {
+  if (!markdown) return ''
+  const lines = markdown.split('\n')
+  const safeStartLine = Math.max(1, Math.floor(startLine))
+  const safeEndLine = Math.max(safeStartLine, Math.floor(endLine))
+  return lines.slice(safeStartLine - 1, safeEndLine).join('\n').trim()
 }
 
 function normalizeMarkdownPreviewMode(value: string | undefined): MarkdownPreviewMode {
@@ -49,6 +65,7 @@ export function useMarkdownPreviewModeState({
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
+  const [structuredPreview, setStructuredPreview] = useState<MarkdownStructuredPreviewState | null>(null)
 
   useEffect(() => {
     setMarkdownPreviewMode(normalizeMarkdownPreviewMode(persistedLastMarkdownPreviewMode))
@@ -132,13 +149,37 @@ export function useMarkdownPreviewModeState({
     activeRelativePath,
     enableMarkdownSyntaxHighlight,
     lineOffset: parsedMarkdownDoc?.markdownBodyLineOffset ?? 0,
+    onStructuredBlockClick: (payload) => {
+      const markdownBodyLineOffset = parsedMarkdownDoc?.markdownBodyLineOffset ?? 0
+      const bodyStartLine = Math.max(1, payload.startLine - markdownBodyLineOffset)
+      const bodyEndLine = Math.max(bodyStartLine, payload.endLine - markdownBodyLineOffset)
+      const markdown = sliceMarkdownLines(markdownPreviewContent, bodyStartLine, bodyEndLine)
+      if (!markdown) return
+      setStructuredPreview({
+        ...payload,
+        markdown,
+      })
+    },
     projectPath,
     themeMode: effectiveTheme,
   }), [
     activeRelativePath,
     effectiveTheme,
     enableMarkdownSyntaxHighlight,
+    markdownPreviewContent,
     parsedMarkdownDoc?.markdownBodyLineOffset,
+    projectPath,
+  ])
+
+  const structuredPreviewComponents = useMemo<Components>(() => createMarkdownComponents({
+    activeRelativePath,
+    enableMarkdownSyntaxHighlight,
+    projectPath,
+    themeMode: effectiveTheme,
+  }), [
+    activeRelativePath,
+    effectiveTheme,
+    enableMarkdownSyntaxHighlight,
     projectPath,
   ])
 
@@ -198,7 +239,11 @@ export function useMarkdownPreviewModeState({
   }, [activeRelativePath, isMarkdownFile, projectPath])
 
   return {
+    closeStructuredPreview: useCallback(() => {
+      setStructuredPreview(null)
+    }, []),
     effectiveMarkdownPreviewMode,
+    effectiveTheme,
     handlePasteImage,
     isMarkdownFile,
     isMdcFile,
@@ -210,6 +255,8 @@ export function useMarkdownPreviewModeState({
     monacoTheme,
     parsedMarkdownDoc,
     setMarkdownPreviewMode,
+    structuredPreview,
+    structuredPreviewComponents,
     shouldHandleFindInPreview,
   }
 }

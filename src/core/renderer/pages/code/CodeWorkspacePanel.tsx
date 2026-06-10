@@ -194,6 +194,7 @@ export function CodeWorkspacePanel({
     projectPath,
   })
   const {
+    closeStructuredPreview,
     effectiveMarkdownPreviewMode,
     handlePasteImage,
     isMarkdownFile,
@@ -205,6 +206,8 @@ export function CodeWorkspacePanel({
     monacoTheme,
     parsedMarkdownDoc,
     setMarkdownPreviewMode,
+    structuredPreview,
+    structuredPreviewComponents,
     shouldHandleFindInPreview,
   } = useMarkdownPreviewModeState({
     activeRelativePath,
@@ -700,6 +703,7 @@ export function CodeWorkspacePanel({
               <CodeWorkspaceEditorPane
                 activeLanguage={activeLanguage}
                 activeRelativePath={activeRelativePath}
+                closeStructuredPreview={closeStructuredPreview}
                 editorRef={editorRef}
                 editorValue={editorValue}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
@@ -732,6 +736,8 @@ export function CodeWorkspacePanel({
                 previewSearchQuery={previewSearchQuery}
                 previewSearchVisible={previewSearchVisible}
                 previewSearchMatchIndex={activePreviewSearchMatchIndex}
+                structuredPreview={structuredPreview}
+                structuredPreviewComponents={structuredPreviewComponents}
                 viewMode={viewMode}
               />
             </section>
