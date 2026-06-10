@@ -101,47 +101,50 @@ export function DetailAiCommitHeader({
       <section className="min-h-[52px] rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 px-4 py-2">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2.5">
               {projectHeaderCollapsed && (
-                <p className="max-w-[320px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
+                <p className="max-w-[150px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
                   {projectName || '当前项目'}
                 </p>
               )}
               {projectHeaderCollapsed && (
-                <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+                <>
+                  <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        activePane === 'code'
+                          ? 'bg-primary text-white'
+                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                      }`}
+                      onClick={() => onSwitchPane?.('code')}
+                    >
+                      <Code2 className="h-3.5 w-3.5" />
+                      Code
+                    </button>
+                    <button
+                      type="button"
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        activePane === 'aicommit'
+                          ? 'bg-primary text-white'
+                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                      }`}
+                      onClick={() => onSwitchPane?.('aicommit')}
+                    >
+                      <Bot className="h-3.5 w-3.5" />
+                      AI Commit
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      activePane === 'code'
-                        ? 'bg-primary text-white'
-                        : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                    }`}
-                    onClick={() => onSwitchPane?.('code')}
-                  >
-                    <Code2 className="h-3.5 w-3.5" />
-                    Code
-                  </button>
-                  <button
-                    type="button"
-                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      activePane === 'aicommit'
-                        ? 'bg-primary text-white'
-                        : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                    }`}
-                    onClick={() => onSwitchPane?.('aicommit')}
-                  >
-                    <Bot className="h-3.5 w-3.5" />
-                    AI Commit
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                     onClick={onOpenTranscript}
+                    title="Open transcript viewer"
                   >
                     <FileText className="h-3.5 w-3.5" />
                     Transcript
                   </button>
-                </div>
+                </>
               )}
               {projectHeaderCollapsed && firstProjectLinkItem && (
                 <UrlPopover items={projectLinkItems}>
@@ -167,7 +170,7 @@ export function DetailAiCommitHeader({
             <button
               ref={aiAutoCommitButtonRef}
               type="button"
-              className={`inline-flex min-w-[150px] items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
+              className={`inline-flex h-9 min-w-[150px] items-center justify-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-all ${aiCommitStatus === 'running'
                 ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 : aiCommitUndoAvailable
                   ? 'border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning-background)]/80'

@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm'
 import {
   AlertTriangle,
   ArrowDownToLine,
+  Bot,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
@@ -513,6 +514,28 @@ export function TranscriptPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
+            <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
+                onClick={() => navigate(`/project/${projectId}/code`)}
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                Code
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
+                onClick={() => navigate(`/project/${projectId}/aicommit`)}
+              >
+                <Bot className="h-3.5 w-3.5" />
+                AI Commit
+              </button>
+            </div>
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[color:var(--color-primary)]">
+              <FileText className="h-3.5 w-3.5" />
+              Transcript
+            </div>
             <button
               type="button"
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${

@@ -57,17 +57,17 @@ function EmptyStateSummary({
   activeLanguage: string | null
   projectFileSize: number
 }) {
+  const summaryText = activeRelativePath
+    ? `${activeLanguage || 'plaintext'} • ${formatFileSize(projectFileSize)}`
+    : 'Choose a file to start editing'
+
   return (
-    <>
-      <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ?? undefined}>
-        {activeRelativePath ?? 'Select a file from the tree'}
-      </p>
-      <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-        {activeRelativePath
-          ? `${activeLanguage || 'plaintext'} • ${formatFileSize(projectFileSize)}`
-          : 'Choose a file to start editing'}
-      </p>
-    </>
+    <p
+      className="truncate text-xs text-[color:var(--color-muted-foreground)]"
+      title={activeRelativePath ? `${activeRelativePath} • ${summaryText}` : summaryText}
+    >
+      {activeRelativePath ? `${activeRelativePath} • ${summaryText}` : summaryText}
+    </p>
   )
 }
 
@@ -132,13 +132,13 @@ export function CodeWorkspaceChrome({
   return (
     <>
       <div
-        className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[16px] border px-4 py-2"
+        className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[20px] border px-4 py-2"
         style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}
       >
         <div className="min-w-0">
           {projectHeaderCollapsed ? (
             <div className="flex min-w-0 items-center gap-2.5">
-              <p className="max-w-[220px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
+              <p className="max-w-[150px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
                 {projectName || '当前项目'}
               </p>
               <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
@@ -166,15 +166,16 @@ export function CodeWorkspaceChrome({
                   <Bot className="h-3.5 w-3.5" />
                   AI Commit
                 </button>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
-                  onClick={onOpenTranscript}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  Transcript
-                </button>
               </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={onOpenTranscript}
+                title="Open transcript viewer"
+              >
+                <FileText className="h-3.5 w-3.5" />
+                Transcript
+              </button>
               {firstProjectLinkItem && (
                 <UrlPopover items={projectLinkItems}>
                   <button
@@ -291,7 +292,7 @@ export function CodeWorkspaceChrome({
           <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
           <button
             type="button"
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
               saveStatus === 'saving'
                 ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
                 : 'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:opacity-50'
