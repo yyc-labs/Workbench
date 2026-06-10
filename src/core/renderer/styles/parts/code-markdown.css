@@ -13,8 +13,8 @@
 }
 
 .code-markdown-content--viewport-scroll {
-  min-width: max-content;
-  width: max-content;
+  min-width: 0;
+  width: auto;
 }
 
 .code-markdown-preview-scroll-root {
@@ -127,6 +127,13 @@
   margin-bottom: 0;
 }
 
+.code-markdown-content p,
+.code-markdown-content li,
+.code-markdown-content blockquote {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .code-markdown-content li > ul,
 .code-markdown-content li > ol {
   margin-top: 0.35em;
@@ -220,6 +227,9 @@
   padding: 0.12em 0.34em;
   font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
   font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .code-markdown-content pre {
