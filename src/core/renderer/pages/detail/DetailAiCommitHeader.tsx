@@ -2,6 +2,7 @@ import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 
 import { BookOpen, Bot, Code2, FileText, Loader2, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { UrlPopover } from '../../components/UrlPopover'
+import { useI18n } from '../../i18n'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
 
@@ -76,24 +77,25 @@ export function DetailAiCommitHeader({
   statusClass,
   statusText,
 }: DetailAiCommitHeaderProps) {
+  const { t } = useI18n()
   const undoButtonLabel = aiCommitUndo?.commitCount && aiCommitUndo.commitCount > 1
-    ? `撤回 ${aiCommitUndo.commitCount} 个提交`
-    : '撤回提交'
+    ? t('detail.aiCommitUndoCommit', { count: aiCommitUndo.commitCount })
+    : t('detail.aiCommitUndoCommit', { count: 1 })
   const undoCountdownLabel = aiCommitUndoGraceActive
     ? `${undoButtonLabel} ${aiCommitUndoGraceRemainingSeconds}s`
     : `${undoButtonLabel} ${aiCommitUndoRemainingSeconds}s`
   const primaryButtonLabel = aiCommitUndoAvailable
     ? undoCountdownLabel
     : aiCommitStatus === 'running'
-      ? 'AI Committing...'
-      : 'AI Auto Commit'
+      ? t('detail.aiCommitRunning')
+      : t('common.aiAutoCommit')
   const primaryButtonTitle = aiCommitUndoAvailable
     ? aiCommitUndoAuthActive
-      ? '撤回认证进行中'
-      : '撤回本次 AI Commit'
+      ? t('detail.aiCommitUndoAuthActive')
+      : t('detail.aiCommitUndoCurrent')
     : isAiEnabled
-      ? 'Left click: run commit. Right click: quick config.'
-      : 'AI disabled in Settings, local commit message only'
+      ? t('detail.aiCommitButtonHintEnabled')
+      : t('detail.aiCommitButtonHintDisabled')
   const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning
 
   return (
@@ -103,8 +105,8 @@ export function DetailAiCommitHeader({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2.5">
               {projectHeaderCollapsed && (
-                <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || '当前项目'}>
-                  {projectName || '当前项目'}
+                <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName || t('common.currentProject')}>
+                  {projectName || t('common.currentProject')}
                 </p>
               )}
               {projectHeaderCollapsed && (
@@ -120,7 +122,7 @@ export function DetailAiCommitHeader({
                       onClick={() => onSwitchPane?.('code')}
                     >
                       <Code2 className="h-3.5 w-3.5" />
-                      Code
+                      {t('codeWorkspace.codeTab')}
                     </button>
                     <button
                       type="button"
@@ -132,17 +134,17 @@ export function DetailAiCommitHeader({
                       onClick={() => onSwitchPane?.('aicommit')}
                     >
                       <Bot className="h-3.5 w-3.5" />
-                      AI Commit
+                      {t('codeWorkspace.aiCommitTab')}
                     </button>
                   </div>
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                     onClick={onOpenTranscript}
-                    title="Open transcript viewer"
+                    title={t('detail.openTranscriptViewer')}
                   >
                     <FileText className="h-3.5 w-3.5" />
-                    Transcript
+                    {t('detail.transcript')}
                   </button>
                 </>
               )}
@@ -157,7 +159,7 @@ export function DetailAiCommitHeader({
                       event.stopPropagation()
                       onOpenProjectLinksManager?.()
                     }}
-                    title="左键打开首个链接，右键打开资料管理"
+                    title={t('common.leftClickOpenFirstLink')}
                   >
                     <BookOpen className="h-3.5 w-3.5 shrink-0" />
                   </button>
@@ -212,13 +214,13 @@ export function DetailAiCommitHeader({
 
       <section className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 p-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <p className="section-label">AI Commit</p>
+          <p className="section-label">{t('detail.aiCommit')}</p>
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
             {statusText}
           </span>
           {aiCommitUndoGraceActive && (
             <span className="inline-flex items-center rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-warning)]">
-              认证中，剩余 {aiCommitUndoGraceRemainingSeconds}s
+              {t('detail.aiCommitUndoAuthActive')} {aiCommitUndoGraceRemainingSeconds}s
             </span>
           )}
           {aiCommitUndoError && (

@@ -1,5 +1,6 @@
 import { AlertTriangle, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { useI18n } from '../../i18n'
 
 type DetailAiCommitOperationConfirmModalProps = {
   cancelLabel?: string
@@ -20,9 +21,9 @@ type DetailAiCommitOperationConfirmModalProps = {
 }
 
 export function DetailAiCommitOperationConfirmModal({
-  cancelLabel = '取消',
+  cancelLabel,
   confirmExactMatch,
-  confirmLabel = '确认执行',
+  confirmLabel,
   confirmNeedsTypedMatch,
   confirmTypedMatchPassed,
   helperText,
@@ -36,26 +37,31 @@ export function DetailAiCommitOperationConfirmModal({
   riskLevel = 'normal',
   title,
 }: DetailAiCommitOperationConfirmModalProps) {
+  const { t } = useI18n()
+  const resolvedTitle = title || `${pendingOperationLabel} ${t('detail.operationConfirmSuffix')}`
+  const resolvedCancelLabel = cancelLabel || t('common.cancel')
+  const resolvedConfirmLabel = confirmLabel || t('detail.operationConfirmExecute')
+
   return (
     <ModalShell
       open={open}
       onClose={onClose}
       widthClassName="max-w-[420px]"
       baseZIndex={1100}
-      ariaLabel={title || `${pendingOperationLabel} 操作确认`}
+      ariaLabel={resolvedTitle}
     >
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <p className="section-label mb-1">Remote Operation</p>
+          <p className="section-label mb-1">{t('detail.operationConfirmRemoteOperation')}</p>
           <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-            {title || `${pendingOperationLabel} 操作确认`}
+            {resolvedTitle}
           </p>
         </div>
         <button
           type="button"
           className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
           onClick={onClose}
-          title="Close"
+          title={t('detail.operationConfirmClose')}
         >
           <X className="h-4 w-4" />
         </button>
@@ -67,12 +73,12 @@ export function DetailAiCommitOperationConfirmModal({
         <div className="mt-2 rounded-[14px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-destructive-background)] px-3 py-2">
           <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
             <AlertTriangle className="h-3.5 w-3.5" />
-            高危操作：切换分支会改变当前工作目录视图与上下文
+            {t('detail.operationConfirmHighRiskSwitch')}
           </p>
           {confirmNeedsTypedMatch && (
             <>
               <p className="mt-1 text-[10.5px] text-[color:var(--color-destructive)]/90">
-                请输入目标分支名以确认：<span className="font-mono">{confirmExactMatch}</span>
+                {t('detail.operationConfirmBranchPrompt')} <span className="font-mono">{confirmExactMatch}</span>
               </p>
               <input
                 type="text"
@@ -87,7 +93,7 @@ export function DetailAiCommitOperationConfirmModal({
         </div>
       )}
       <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-        {helperText || '将执行真实 git 命令并刷新状态快照。'}
+        {helperText || t('detail.operationConfirmHelper')}
       </p>
       <div className="mt-4 flex items-center justify-end gap-2">
         <button
@@ -95,7 +101,7 @@ export function DetailAiCommitOperationConfirmModal({
           className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
           onClick={onClose}
         >
-          {cancelLabel}
+          {resolvedCancelLabel}
         </button>
         <button
           type="button"
@@ -107,7 +113,7 @@ export function DetailAiCommitOperationConfirmModal({
           disabled={!confirmTypedMatchPassed}
           onClick={onConfirm}
         >
-          {confirmLabel}
+          {resolvedConfirmLabel}
         </button>
       </div>
     </ModalShell>

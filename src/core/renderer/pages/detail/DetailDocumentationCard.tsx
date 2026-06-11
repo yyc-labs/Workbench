@@ -3,6 +3,7 @@ import {
   normalizeProjectDocLinkTag,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
+import { useI18n, useLocale } from '../../i18n'
 import { DetailDocumentationSettingsModal } from './DetailDocumentationSettingsModal'
 import type { DetailDocumentationCardProps } from './detail.documentationCard.types'
 import { useDetailDocumentationCardState } from './useDetailDocumentationCardState'
@@ -39,6 +40,8 @@ function DetailDocumentationCard({
   setSettingsOpen,
   hideCard = false,
 }: DetailDocumentationCardProps) {
+  const locale = useLocale()
+  const { t } = useI18n()
   const state = useDetailDocumentationCardState({
     docLinks,
     docTagOptions,
@@ -66,9 +69,9 @@ function DetailDocumentationCard({
         <div className="rounded-[24px] p-5 surface-card">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <p className="section-label">项目资料</p>
+              <p className="section-label">{t('documentation.cardTitle')}</p>
               <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                接口文档、部署地址、后台账号、设计稿等项目关键入口
+                {t('documentation.cardDescription')}
               </p>
             </div>
             <span className="rounded-full px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] quiet-control">
@@ -88,19 +91,20 @@ function DetailDocumentationCard({
                   <p className="truncate text-[10px] text-[color:var(--color-muted-foreground)]">
                     {projectDocLinkTagLabel(
                       normalizeProjectDocLinkTag(defaultLink.tag, state.tags.options),
-                      state.tags.options
+                      state.tags.options,
+                      locale
                     )}
                   </p>
                   <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{defaultLink.url}</p>
                 </div>
                 <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                  Default
+                  {t('documentation.defaultBadge')}
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />
               </button>
             ) : (
               <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
-                暂无默认资料链接。
+                {t('documentation.noDefaultLink')}
               </div>
             )}
             <button
@@ -108,7 +112,7 @@ function DetailDocumentationCard({
               onClick={() => state.settings.setOpen(true)}
             >
               <Settings2 className="h-3.5 w-3.5" />
-              资料设置
+              {t('documentation.settings')}
             </button>
           </div>
         </div>

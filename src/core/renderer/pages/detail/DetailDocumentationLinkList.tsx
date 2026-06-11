@@ -8,6 +8,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useMemo } from 'react'
+import { useI18n } from '../../i18n'
 import type { UseDetailDocumentationCardStateResult } from './useDetailDocumentationCardState'
 import { DetailDocumentationLinkItem } from './DetailDocumentationLinkItem'
 
@@ -22,6 +23,7 @@ function DetailDocumentationLinkList({
   editing,
   docTagOptions,
 }: DetailDocumentationLinkListProps) {
+  const { t } = useI18n()
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -43,7 +45,7 @@ function DetailDocumentationLinkList({
   if (links.filteredLinks.length === 0) {
     return (
       <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
-        {links.allCount === 0 ? '还没有项目资料。' : '当前标签下暂无资料。'}
+        {links.allCount === 0 ? t('documentation.noDocsYet') : t('documentation.noDocsInCategory')}
       </div>
     )
   }

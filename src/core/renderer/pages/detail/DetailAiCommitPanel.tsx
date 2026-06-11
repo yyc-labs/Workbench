@@ -1,6 +1,7 @@
 import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
+import { useI18n } from '../../i18n'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
 import { DetailAiCommitGitGuideModal } from './DetailAiCommitGitGuideModal'
@@ -19,7 +20,7 @@ import type {
 } from './detail.aiCommitPanel.types'
 import {
   computeOperationState,
-  GIT_OPERATION_ITEMS,
+  getGitOperationItems,
   PanelGitOperationKind,
   pickDefaultDiffViewMode,
   type OperationCardState,
@@ -132,7 +133,9 @@ function DetailAiCommitPanel({
   onUndoAiCommit,
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
+  const { t } = useI18n()
   const firstProjectLinkItem = projectLinkItems[0]
+  const gitOperationItems = getGitOperationItems()
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
   const [mergeTarget, setMergeTarget] = useState('')
@@ -190,8 +193,8 @@ function DetailAiCommitPanel({
     }),
     [recentCommits, branch?.oid, branch?.upstreamOid, branch?.upstream, branch?.upstreamGone, branch?.ahead, branch?.behind]
   )
-  const currentBranch = branch?.current || 'No branch'
-  const upstreamBranch = branch?.upstream || 'No upstream'
+  const currentBranch = branch?.current || t('detail.noBranch')
+  const upstreamBranch = branch?.upstream || t('detail.noUpstream')
   const remoteBranches = branch?.remoteBranches ?? []
   const localBranches = branch?.localBranches ?? []
   const conflictedCount = changedFiles.filter((file) => file.scope === 'conflicted').length
@@ -242,7 +245,7 @@ function DetailAiCommitPanel({
 
   const mergeSearchResultCount = filteredLocalMergeCandidates.length + filteredRemoteMergeCandidates.length
   const branchManagerDangerText = `${(upstreamManagerRemoteName.trim() || 'origin')}/${upstreamManagerBranchName.trim()}`
-  const mergeTargetLabel = mergeTarget || '选择分支（本地 / 远程）...'
+  const mergeTargetLabel = mergeTarget || t('detail.mergeTargetPlaceholder')
   const conflictSavingRef = useRef(conflictSaving)
 
   useEffect(() => {
@@ -417,7 +420,7 @@ function DetailAiCommitPanel({
 
   const operationStates = useMemo<Record<PanelGitOperationKind, OperationCardState>>(() => {
     if (gitOperationsUnavailable) {
-      const hint = gitSnapshotLoading ? 'Git 状态加载中' : '当前未加载 Git 仓库'
+      const hint = gitSnapshotLoading ? t('detail.gitSnapshotLoadingHint') : t('detail.gitRepositoryUnavailableHint')
       return {
         fetch: { disabled: true, hint },
         pull: { disabled: true, hint },
@@ -508,6 +511,7 @@ function DetailAiCommitPanel({
     runningOperation,
     gitOperationsUnavailable,
     gitSnapshotLoading,
+    t,
   ])
 
   const setFileStaged = async (file: GitChangedFile, stage: boolean) => {
@@ -521,7 +525,7 @@ function DetailAiCommitPanel({
         stage,
       })
       if (!result.ok) {
-        setFileActionError(result.error || result.output || '文件暂存操作失败')
+        setFileActionError(result.error || result.output || t('detail.gitFileStageFailed'))
       }
     } catch (error) {
       setFileActionError(error instanceof Error ? error.message : String(error))
@@ -547,7 +551,7 @@ function DetailAiCommitPanel({
       if (requestSeq !== diffRequestSeqRef.current) return
       if (!result.ok) {
         setDiffContent('')
-        setDiffError(result.error || result.output || '读取 diff 失败')
+        setDiffError(result.error || result.output || t('detail.gitDiffLoadFailed'))
         return
       }
       setDiffTruncated(Boolean(result.outputLimit))
@@ -576,7 +580,7 @@ function DetailAiCommitPanel({
       if (requestSeq !== conflictRequestSeqRef.current) return
       if (!result.ok) {
         setConflictData(null)
-        setConflictError(result.error || result.output || '读取冲突详情失败')
+        setConflictError(result.error || result.output || t('detail.gitConflictLoadFailed'))
         return
       }
       setConflictData(result)
@@ -603,7 +607,7 @@ function DetailAiCommitPanel({
         markResolved: payload.markResolved,
       })
       if (!result.ok) {
-        const msg = result.error || result.output || '保存冲突内容失败'
+        const msg = result.error || result.output || t('detail.gitConflictSaveFailed')
         setConflictError(msg)
         setFileActionError(msg)
         return
@@ -642,14 +646,14 @@ function DetailAiCommitPanel({
     if (state.disabled || !gitSnapshot) return
 
     const message = operation === 'merge'
-      ? `将把 ${mergeTarget} 合并到 ${currentBranch}，继续吗？`
+      ? t('detail.operationConfirmMergeMessage', { targetBranch: mergeTarget, currentBranch })
       : operation === 'switch'
-        ? `将切换到 ${mergeTarget}，继续吗？`
+        ? t('detail.operationConfirmSwitchMessage', { targetBranch: mergeTarget })
         : operation === 'pull'
-        ? `将拉取并快进合并到 ${currentBranch}，继续吗？`
+        ? t('detail.operationConfirmPullMessage', { currentBranch })
         : operation === 'push'
-          ? `将把 ${currentBranch} 推送到远程，继续吗？`
-          : '将执行 fetch 更新远程引用，继续吗？'
+          ? t('detail.operationConfirmPushMessage', { currentBranch })
+          : t('detail.operationConfirmFetchMessage')
 
     setOperationConfirm({
       operation,
@@ -666,9 +670,9 @@ function DetailAiCommitPanel({
     setOperationConfirm({
       operation: 'undo-ai-commit',
       message: '',
-      title: '撤回提交 二次认证',
-      confirmLabel: '确认撤回',
-      cancelLabel: '取消',
+      title: t('detail.operationConfirmUndoTitle'),
+      confirmLabel: t('detail.operationConfirmUndoConfirm'),
+      cancelLabel: t('detail.operationConfirmUndoCancel'),
       riskLevel: 'normal',
     })
   }, [
@@ -676,6 +680,7 @@ function DetailAiCommitPanel({
     aiCommitUndoAvailable,
     aiCommitUndoRunning,
     onBeginUndoAiCommitAuth,
+    t,
   ])
 
   const runGitOperation = async (operation: PanelGitOperationKind) => {
@@ -724,9 +729,9 @@ function DetailAiCommitPanel({
         ok: false,
         checkedAt: Date.now(),
         command: '',
-        output: 'Git snapshot is unavailable.',
+        output: t('detail.gitSnapshotUnavailable'),
         exitCode: null,
-        error: 'Git snapshot is unavailable.',
+        error: t('detail.gitSnapshotUnavailable'),
       }
     }
     return window.electronAPI.runGitOperation({
@@ -749,7 +754,7 @@ function DetailAiCommitPanel({
       })
       setOperationLogs((prev) => [result, ...prev].slice(0, 50))
       if (!result.ok) {
-        setBranchManagerError(result.error || result.output || '本地分支创建失败')
+        setBranchManagerError(result.error || result.output || t('detail.gitBranchCreateLocalFailed'))
         return
       }
       setCurrentManagerInput('')
@@ -773,7 +778,7 @@ function DetailAiCommitPanel({
       })
       setOperationLogs((prev) => [result, ...prev].slice(0, 50))
       if (!result.ok) {
-        setBranchManagerError(result.error || result.output || '本地分支删除失败')
+        setBranchManagerError(result.error || result.output || t('detail.gitBranchDeleteLocalFailed'))
         return
       }
       setCurrentManagerDeleteTarget('')
@@ -800,7 +805,7 @@ function DetailAiCommitPanel({
       })
       setOperationLogs((prev) => [result, ...prev].slice(0, 50))
       if (!result.ok) {
-        setBranchManagerError(result.error || result.output || 'upstream 绑定失败')
+        setBranchManagerError(result.error || result.output || t('detail.gitBranchSetUpstreamFailed'))
         return
       }
       setUpstreamManagerDangerInput('')
@@ -836,7 +841,7 @@ function DetailAiCommitPanel({
       })
       setOperationLogs((prev) => [result, ...prev].slice(0, 50))
       if (!result.ok) {
-        setBranchManagerError(result.error || result.output || '远程分支创建失败')
+        setBranchManagerError(result.error || result.output || t('detail.gitBranchCreateRemoteFailed'))
         return
       }
       setUpstreamManagerDangerInput('')
@@ -859,31 +864,31 @@ function DetailAiCommitPanel({
 
   const pendingOperationLabel = operationConfirm
     ? operationConfirm.operation === 'undo-ai-commit'
-      ? '撤回提交'
-      : GIT_OPERATION_ITEMS.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
+      ? t('detail.operationConfirmUndoConfirm')
+      : gitOperationItems.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
     : 'Git'
   const pendingOperation = operationConfirm?.operation ?? null
   const pendingOperationMessage = pendingOperation === 'undo-ai-commit'
     ? aiCommitUndoGraceActive
-      ? `认证期间主撤回计时已到时，当前还有 ${aiCommitUndoGraceRemainingSeconds} 秒操作时间。确认后将撤回本次 AI Commit。`
-      : '确认后将撤回本次 AI Commit。若认证期间主倒计时结束，系统会额外保留 10 秒操作时间。'
+      ? t('detail.operationConfirmUndoMessageGrace', { seconds: aiCommitUndoGraceRemainingSeconds })
+      : t('detail.operationConfirmUndoMessage')
     : operationConfirm?.message ?? ''
   const confirmExactMatch = operationConfirm?.requireExactMatch ?? ''
   const confirmNeedsTypedMatch = Boolean(confirmExactMatch)
   const confirmTypedMatchPassed = !confirmNeedsTypedMatch || operationConfirmInput.trim() === confirmExactMatch
   const pendingOperationTitle = pendingOperation === 'undo-ai-commit'
-    ? '撤回提交 二次认证'
+    ? t('detail.operationConfirmUndoTitle')
     : operationConfirm?.title
   const pendingOperationConfirmLabel = pendingOperation === 'undo-ai-commit'
-    ? '确认撤回'
+    ? t('detail.operationConfirmUndoConfirm')
     : operationConfirm?.confirmLabel
   const pendingOperationCancelLabel = pendingOperation === 'undo-ai-commit'
-    ? '取消'
+    ? t('detail.operationConfirmUndoCancel')
     : operationConfirm?.cancelLabel
   const pendingOperationHelperText = pendingOperation === 'undo-ai-commit'
     ? aiCommitUndoGraceActive
-      ? '将执行真实 git reset 并刷新状态快照。'
-      : '将执行真实 git reset 并刷新状态快照；认证阶段若主计时到时，会自动进入 10 秒缓冲。'
+      ? t('detail.operationConfirmUndoHelper')
+      : t('detail.operationConfirmUndoHelperGrace')
     : operationConfirm?.helperText
   const handleDiffDrawerClose = useCallback(() => {
     setDiffDrawerOpen(false)

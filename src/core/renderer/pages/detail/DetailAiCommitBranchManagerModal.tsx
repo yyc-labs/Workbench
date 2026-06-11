@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { AlertTriangle, Check, ChevronDown, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { useI18n } from '../../i18n'
 import type { BranchManagerMode } from './detail.aiCommitPanel.types'
 
 type DetailAiCommitBranchManagerModalProps = {
@@ -44,6 +45,7 @@ function BranchSearchSelect({
   value,
   onChange,
 }: BranchSearchSelectProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -105,7 +107,7 @@ function BranchSearchSelect({
             type="button"
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={() => setOpen(false)}
-            title="关闭分支列表"
+            title={t('detail.branchPanelCloseList')}
           >
             <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
           </button>
@@ -158,7 +160,7 @@ function BranchSearchSelect({
                 )
               })
             ) : (
-              <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">未找到匹配分支</p>
+              <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.branchPanelNoMatch')}</p>
             )}
           </div>
         </div>
@@ -192,6 +194,7 @@ export function DetailAiCommitBranchManagerModal({
   upstreamManagerDangerInput,
   upstreamManagerRemoteName,
 }: DetailAiCommitBranchManagerModalProps) {
+  const { t } = useI18n()
   const deletableLocalBranches = useMemo(
     () => localBranches.filter((name) => name !== currentBranch),
     [currentBranch, localBranches]
@@ -203,27 +206,27 @@ export function DetailAiCommitBranchManagerModal({
       onClose={onClose}
       widthClassName="max-w-[460px]"
       baseZIndex={1120}
-      ariaLabel={mode === 'current' ? 'Current Branch 管理' : 'Upstream 管理'}
+      ariaLabel={mode === 'current' ? t('detail.branchManagerCurrentTitle') : t('detail.branchManagerUpstreamTitle')}
     >
       {mode === 'current' ? (
         <>
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <p className="section-label mb-1">Current Branch</p>
-              <p className="text-sm font-semibold text-[color:var(--color-foreground)]">本地分支管理</p>
+              <p className="section-label mb-1">{t('detail.branchManagerCurrentTitle')}</p>
+              <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('detail.branchManagerCurrentDescription')}</p>
             </div>
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('detail.branchManagerClose')}
             >
               <X className="h-4 w-4" />
             </button>
           </div>
           <div className="space-y-2">
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">新增本地分支</p>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchManagerNewLocalBranch')}</p>
               <input
                 ref={(node) => {
                   currentBranchInputRef.current = node
@@ -241,16 +244,16 @@ export function DetailAiCommitBranchManagerModal({
                 disabled={!currentManagerInput.trim() || branchManagerLoading}
                 onClick={onCreateLocalBranch}
               >
-                {branchManagerLoading ? '执行中...' : '新增'}
+                {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerCreate')}
               </button>
             </div>
 
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">删除本地分支</p>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchManagerDeleteLocalBranch')}</p>
               <BranchSearchSelect
                 value={currentManagerDeleteTarget}
                 options={deletableLocalBranches}
-                placeholder="搜索分支（不含当前分支）"
+                placeholder={t('detail.branchManagerSearchBranchesPlaceholder')}
                 disabled={branchManagerLoading || deletableLocalBranches.length <= 0}
                 onChange={onChangeCurrentManagerDeleteTarget}
               />
@@ -260,7 +263,7 @@ export function DetailAiCommitBranchManagerModal({
                 disabled={!currentManagerDeleteTarget || branchManagerLoading}
                 onClick={onDeleteLocalBranch}
               >
-                {branchManagerLoading ? '执行中...' : '删除'}
+                {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerDelete')}
               </button>
             </div>
           </div>
@@ -274,14 +277,14 @@ export function DetailAiCommitBranchManagerModal({
         <>
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <p className="section-label mb-1">Upstream</p>
-              <p className="text-sm font-semibold text-[color:var(--color-foreground)]">远程绑定管理（仅新增）</p>
+              <p className="section-label mb-1">{t('detail.branchManagerUpstreamTitle')}</p>
+              <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('detail.branchManagerUpstreamDescription')}</p>
             </div>
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('detail.branchManagerClose')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -289,12 +292,12 @@ export function DetailAiCommitBranchManagerModal({
           <div className="rounded-[14px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2">
             <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
               <AlertTriangle className="h-3.5 w-3.5" />
-              高危操作：会修改当前分支的 upstream 绑定
+              {t('detail.branchManagerHighRisk')}
             </p>
           </div>
           <div className="mt-2 space-y-2">
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Remote</p>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchManagerRemote')}</p>
               <input
                 type="text"
                 value={upstreamManagerRemoteName}
@@ -305,7 +308,7 @@ export function DetailAiCommitBranchManagerModal({
               />
             </div>
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
-              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">Branch</p>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchManagerBranch')}</p>
               <input
                 ref={(node) => {
                   upstreamBranchInputRef.current = node
@@ -320,7 +323,7 @@ export function DetailAiCommitBranchManagerModal({
             </div>
             <div className="rounded-[14px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-destructive-background)]/55 px-3 py-2">
               <p className="text-[10.5px] text-[color:var(--color-destructive)]/92">
-                请输入以下目标以确认：
+                {t('detail.branchManagerDangerPrompt')}
                 <span className="ml-1 font-mono">{branchManagerDangerText}</span>
               </p>
               <input
@@ -349,7 +352,7 @@ export function DetailAiCommitBranchManagerModal({
               }
               onClick={onCreateRemoteBranchFromUpstream}
             >
-              {branchManagerLoading ? '执行中...' : '创建远程分支'}
+              {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerCreateRemoteBranch')}
             </button>
             <button
               type="button"
@@ -361,7 +364,7 @@ export function DetailAiCommitBranchManagerModal({
               }
               onClick={onSetUpstream}
             >
-              {branchManagerLoading ? '执行中...' : '仅绑定 upstream'}
+              {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerBindUpstream')}
             </button>
           </div>
         </>

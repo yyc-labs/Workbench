@@ -15,8 +15,8 @@ import {
   getAiCommitTask,
   upsertAiCommitTask,
 } from '../ai-commit-registry'
-import { resolveWslVsCodeTarget } from '../shell/openers'
 import { wslBridge } from '../wsl-bridge'
+import type { AiEnvironmentController } from '../ai-environment/environment-controller'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
@@ -28,6 +28,7 @@ import type {
 type AiCommitServiceDependencies = {
   getMainWindow: () => BrowserWindow | null
   getDefaultWslDistro: () => string
+  aiEnvironmentController: AiEnvironmentController
 }
 
 const AI_COMMIT_UNDO_WINDOW_MS = 30_000
@@ -286,9 +287,6 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     )
     const scriptPs1Path = join(__dirname, '../../script/auto-git-commit/auto_commit.ps1')
     const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
-    const wslTarget = process.platform === 'win32'
-      ? resolveWslVsCodeTarget(repoRoot, deps.getDefaultWslDistro())
-      : null
 
     sendAiCommitStatus(projectId, 'running')
     sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${repoRoot}\r\n`)
@@ -298,109 +296,27 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     )
 
     return new Promise<boolean>((resolve) => {
-      const windowsPsArgs = [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        scriptPs1Path,
-        '-All',
-      ]
-
-      if (aiCfg.enabled ?? true) {
-        windowsPsArgs.push('-UseAi')
-      }
-      if (splitEnabled) {
-        windowsPsArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
-      }
-      windowsPsArgs.push('-MaxBullets', String(maxBullets))
-
-      if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
-        windowsPsArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
-      }
-      if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
-        windowsPsArgs.push('-ApiKey', aiCfg.apiKey.trim())
-      }
-      if (aiCfg.model && aiCfg.model.trim()) {
-        windowsPsArgs.push('-Model', aiCfg.model.trim())
-      }
-
-      const spawnPowerShell = (command: string) =>
-        spawn(command, windowsPsArgs, {
-          cwd: repoRoot,
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-
-      const quoteBash = (value: string) => `'${quoteBashSingle(value)}'`
-
-      const spawnWslPowerShell = () => {
-        if (!wslTarget || !scriptPs1WslPath) return spawnPowerShell('pwsh')
-
-        const wslPwshArgs = [
-          '-NoProfile',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          scriptPs1WslPath,
-          '-All',
-        ]
-        if (aiCfg.enabled ?? true) {
-          wslPwshArgs.push('-UseAi')
-        }
-        if (splitEnabled) {
-          wslPwshArgs.push('-Split', '-SplitMaxBatches', String(splitMaxBatches))
-        }
-        wslPwshArgs.push('-MaxBullets', String(maxBullets))
-        if (aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim()) {
-          wslPwshArgs.push('-ApiBaseUrl', aiCfg.apiBaseUrl.trim())
-        }
-        if (aiCfg.apiKey && aiCfg.apiKey.trim()) {
-          wslPwshArgs.push('-ApiKey', aiCfg.apiKey.trim())
-        }
-        if (aiCfg.model && aiCfg.model.trim()) {
-          wslPwshArgs.push('-Model', aiCfg.model.trim())
-        }
-
-        const preferredPwsh = quoteBash(wslPwshPath)
-        const quotedArgs = wslPwshArgs.map((arg) => quoteBash(arg)).join(' ')
-        const command = [
-          'set -euo pipefail',
-          `if [ -x ${preferredPwsh} ]; then`,
-          `  echo "[AI Commit] wsl pwsh cmd: ${wslPwshPath}"`,
-          `  exec ${preferredPwsh} ${quotedArgs}`,
-          'else',
-          '  echo "[AI Commit] wsl pwsh cmd: pwsh"',
-          `  exec pwsh ${quotedArgs}`,
-          'fi',
-        ].join('\n')
-
-        return spawn('wsl.exe', [
-          '-d',
-          wslTarget.distro,
-          '--cd',
-          wslTarget.linuxPath,
-          '--',
-          'bash',
-          '-lc',
-          command,
-        ], {
-          shell: false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-      }
-
-      let child = (() => {
-        if (wslTarget) {
-          return spawnWslPowerShell()
-        }
-
-        return spawnPowerShell('pwsh')
-      })()
+      let launchPlanPromise = deps.aiEnvironmentController.resolveAiCommitLaunch({
+        repoRoot,
+        scriptPath: scriptPs1Path,
+        scriptWslPath: scriptPs1WslPath,
+        aiCommitConfig: {
+          ...aiCfg,
+          enabled: aiCfg.enabled ?? true,
+          apiBaseUrl: aiCfg.apiBaseUrl?.trim(),
+          apiKey: aiCfg.apiKey?.trim(),
+          model: aiCfg.model?.trim(),
+          wslPwshPath,
+          split: splitEnabled,
+          splitMaxBatches,
+          maxBullets,
+        },
+      })
+      let child = null as ReturnType<typeof spawn> | null
 
       let started = false
       let settled = false
-      const allowWindowsFallback = !wslTarget
+      const allowWindowsFallback = process.platform === 'win32'
       let switchedToWindowsPowerShell = false
 
       const stdoutDecoder = new StringDecoder('utf8')
@@ -465,15 +381,15 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         resolve(false)
       }
 
-      const attachStreams = () => {
-        child.stdout?.on('data', (buf: Buffer) => {
+      const attachStreams = (proc: ReturnType<typeof spawn>) => {
+        proc.stdout?.on('data', (buf: Buffer) => {
           const text = stdoutDecoder.write(buf)
           if (text) {
             sendAiCommitOutput(projectId, text.replace(/\r?\n/g, '\r\n'))
           }
         })
 
-        child.stderr?.on('data', (buf: Buffer) => {
+        proc.stderr?.on('data', (buf: Buffer) => {
           const text = stderrDecoder.write(buf)
           if (text) {
             sendAiCommitOutput(projectId, text.replace(/\r?\n/g, '\r\n'))
@@ -481,35 +397,60 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         })
       }
 
-      child.on('spawn', () => {
-        started = true
-        sendAiCommitOutput(projectId, `[AI Commit] shell: ${wslTarget ? 'wsl-pwsh' : 'pwsh'}\r\n`)
-        attachStreams()
-      })
+      void launchPlanPromise.then((plan) => {
+        child = spawn(plan.command, plan.args, {
+          cwd: plan.cwd,
+          shell: plan.shell ?? false,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: plan.env ? { ...process.env, ...plan.env } : process.env,
+        })
 
-      child.on('error', (err) => {
-        if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
-          switchedToWindowsPowerShell = true
-          sendAiCommitOutput(projectId, `[AI Commit] pwsh unavailable, fallback to powershell.exe (${err.message})\r\n`)
-          child = spawnPowerShell('powershell.exe')
-          child.on('spawn', () => {
-            sendAiCommitOutput(projectId, '[AI Commit] shell: powershell.exe\r\n')
-            attachStreams()
-          })
-          child.on('error', (fallbackErr) => {
-            fail(fallbackErr.message)
-          })
-          child.on('close', (code) => {
-            finalize(code)
-          })
-          return
-        }
+        child.on('spawn', () => {
+          started = true
+          sendAiCommitOutput(projectId, `[AI Commit] shell: ${plan.outputLabel}\r\n`)
+          attachStreams(child!)
+        })
 
-        fail(err.message)
-      })
+        child.on('error', (err) => {
+          if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
+            switchedToWindowsPowerShell = true
+            sendAiCommitOutput(projectId, `[AI Commit] pwsh unavailable, fallback to powershell.exe (${err.message})\r\n`)
+            child = spawn('powershell.exe', [
+              '-NoProfile',
+              '-ExecutionPolicy',
+              'Bypass',
+              '-File',
+              scriptPs1Path,
+              '-All',
+              ...(aiCfg.enabled ?? true ? ['-UseAi'] : []),
+              ...(splitEnabled ? ['-Split', '-SplitMaxBatches', String(splitMaxBatches)] : []),
+              '-MaxBullets',
+              String(maxBullets),
+              ...(aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim() ? ['-ApiBaseUrl', aiCfg.apiBaseUrl.trim()] : []),
+              ...(aiCfg.apiKey && aiCfg.apiKey.trim() ? ['-ApiKey', aiCfg.apiKey.trim()] : []),
+              ...(aiCfg.model && aiCfg.model.trim() ? ['-Model', aiCfg.model.trim()] : []),
+            ], {
+              cwd: repoRoot,
+              shell: false,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            })
+            child.on('spawn', () => {
+              sendAiCommitOutput(projectId, '[AI Commit] shell: powershell.exe\r\n')
+              attachStreams(child!)
+            })
+            child.on('error', (fallbackErr) => fail(fallbackErr.message))
+            child.on('close', (code) => finalize(code))
+            return
+          }
 
-      child.on('close', (code) => {
-        finalize(code)
+          fail(err.message)
+        })
+
+        child.on('close', (code) => {
+          finalize(code)
+        })
+      }).catch((error) => {
+        fail(error instanceof Error ? error.message : String(error))
       })
     })
   }
@@ -615,7 +556,3 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 }
 
 export type AiCommitService = ReturnType<typeof createAiCommitService>
-
-function quoteBashSingle(input: string): string {
-  return input.replace(/'/g, "'\\''")
-}

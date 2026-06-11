@@ -1,6 +1,6 @@
 import { ChevronDown, Edit3, Plus, Trash2, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
-import { PROJECT_DOC_LINK_FALLBACK_TAG } from '../../lib/projectDocLinks'
+import { useI18n } from '../../i18n'
 import type { DetailDocumentationCardProps } from './detail.documentationCard.types'
 import { DetailDocumentationLinkList } from './DetailDocumentationLinkList'
 import { DetailDocumentationTagSelect } from './DetailDocumentationTagSelect'
@@ -43,27 +43,29 @@ function DetailDocumentationSettingsModal({
   onAddDocLink,
   state,
 }: DetailDocumentationSettingsModalProps) {
+  const { t } = useI18n()
+
   return (
     <ModalShell
       open={state.settings.open}
       baseZIndex={1000}
       widthClassName="max-w-[760px]"
-      ariaLabel="Project Materials"
+      ariaLabel={t('documentation.modalAria')}
       onClose={state.settings.close}
     >
       <div className="flex h-[78vh] max-h-[780px] flex-col">
         <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
           <div>
-            <p className="section-label mb-1 text-base">项目资料夹</p>
+            <p className="section-label mb-1 text-base">{t('documentation.modalTitle')}</p>
             <p className="text-xs text-[color:var(--color-muted-foreground)]">
-              管理全部资料，并设置默认展示项（显示在项目顶部）
+              {t('documentation.modalDescription')}
             </p>
           </div>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={state.settings.close}
-            title="Close"
+            title={t('common.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -74,7 +76,7 @@ function DetailDocumentationSettingsModal({
             type="text"
             value={docTitleInput}
             onChange={(event) => setDocTitleInput(event.target.value)}
-            placeholder="名称（可选）"
+            placeholder={t('documentation.namePlaceholder')}
             className="quiet-control block h-10 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -85,7 +87,7 @@ function DetailDocumentationSettingsModal({
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void onAddDocLink()
               }}
-              placeholder="docs.example.com / https://..."
+              placeholder={t('documentation.urlPlaceholder')}
               className="quiet-control block h-10 w-full min-w-0 rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-1"
             />
             <button
@@ -95,7 +97,7 @@ function DetailDocumentationSettingsModal({
               }}
             >
               <Plus className="h-3.5 w-3.5" />
-              添加资料
+              {t('documentation.addLink')}
             </button>
           </div>
           <button
@@ -104,7 +106,7 @@ function DetailDocumentationSettingsModal({
             aria-expanded={state.settings.advancedOptionsOpen}
             onClick={state.settings.toggleAdvancedOptions}
           >
-            <span>更多设置（分类 / 备注 / 账号 / 密码 / 全局分类）</span>
+            <span>{t('documentation.advancedOptions')}</span>
             <ChevronDown
               className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${
                 state.settings.advancedOptionsOpen ? 'rotate-180' : ''
@@ -122,7 +124,7 @@ function DetailDocumentationSettingsModal({
                 value={docNoteInput}
                 onChange={(event) => setDocNoteInput(event.target.value)}
                 rows={2}
-                placeholder="备注（可选）"
+                placeholder={t('documentation.notePlaceholder')}
                 className="quiet-control block min-h-[72px] w-full rounded-[14px] border-0 px-4 py-2 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -130,20 +132,20 @@ function DetailDocumentationSettingsModal({
                   type="text"
                   value={docAccountInput}
                   onChange={(event) => setDocAccountInput(event.target.value)}
-                  placeholder="账号 / 用户名（可选）"
+                  placeholder={t('documentation.accountPlaceholder')}
                   className="quiet-control block h-10 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
                 <input
                   type="text"
                   value={docSecretInput}
                   onChange={(event) => setDocSecretInput(event.target.value)}
-                  placeholder="密码 / Token（可选，安全存储）"
+                  placeholder={t('documentation.secretPlaceholder')}
                   className="quiet-control block h-10 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
               <div className="rounded-[14px] border border-[color:var(--color-border)] px-3 py-2">
                 <p className="mb-2 px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  全局资料分类（所有项目共用）
+                  {t('documentation.categoriesTitle')}
                 </p>
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
@@ -153,7 +155,7 @@ function DetailDocumentationSettingsModal({
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') void state.tags.create()
                     }}
-                    placeholder="新增分类名称"
+                    placeholder={t('documentation.newCategoryPlaceholder')}
                     className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-1"
                   />
                   <button
@@ -164,12 +166,11 @@ function DetailDocumentationSettingsModal({
                       void state.tags.create()
                     }}
                   >
-                    新增分类
+                    {t('documentation.addCategory')}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {state.tags.options.map((option) => {
-                    const isFallback = option.value === PROJECT_DOC_LINK_FALLBACK_TAG
                     const isRenaming = state.tags.renamingValue === option.value
                     return (
                       <div
@@ -196,41 +197,37 @@ function DetailDocumentationSettingsModal({
                               }}
                               disabled={state.tags.saving}
                             >
-                              保存
+                              {t('common.save')}
                             </button>
                             <button
                               type="button"
                               className="rounded-full px-1.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
                               onClick={state.tags.cancelRename}
                             >
-                              取消
+                              {t('common.cancel')}
                             </button>
                           </>
                         ) : (
                           <>
                             <span>{option.label}</span>
-                            {!isFallback && (
-                              <button
-                                type="button"
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                                onClick={() => state.tags.beginRename(option)}
-                                title="重命名分类"
-                              >
-                                <Edit3 className="h-3 w-3" />
-                              </button>
-                            )}
-                            {!isFallback && (
-                              <button
-                                type="button"
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
-                                onClick={() => {
-                                  void state.tags.remove(option.value)
-                                }}
-                                title="删除分类"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                              onClick={() => state.tags.beginRename(option)}
+                              title={t('common.rename')}
+                            >
+                              <Edit3 className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
+                              onClick={() => {
+                                void state.tags.remove(option.value)
+                              }}
+                              title={t('common.delete')}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
                           </>
                         )}
                       </div>
@@ -252,7 +249,7 @@ function DetailDocumentationSettingsModal({
             }`}
             onClick={() => state.tags.selectFilter('all')}
           >
-            全部
+            {t('documentation.all')}
           </button>
           {state.tags.options.map((option) => (
             <button

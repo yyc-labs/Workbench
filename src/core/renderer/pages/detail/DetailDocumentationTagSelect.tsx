@@ -1,11 +1,8 @@
 import { Check, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectDocLinkTag, ProjectDocTagOption } from '../../../shared/types'
-import {
-  PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
-  normalizeProjectDocLinkTag,
-  projectDocLinkTagLabel,
-} from '../../lib/projectDocLinks'
+import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
+import { useI18n } from '../../i18n'
 
 type DetailDocumentationTagSelectProps = {
   value: ProjectDocLinkTag
@@ -20,13 +17,11 @@ function DetailDocumentationTagSelect({
   options,
   compact = false,
 }: DetailDocumentationTagSelectProps) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const safeOptions = useMemo(
-    () => (options.length > 0 ? options : PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS),
-    [options]
-  )
+  const safeOptions = useMemo(() => options, [options])
   const normalizedValue = useMemo(
     () => normalizeProjectDocLinkTag(value, safeOptions),
     [safeOptions, value]
@@ -80,9 +75,28 @@ function DetailDocumentationTagSelect({
         <div
           className="surface-card absolute left-0 right-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-[14px]"
           role="listbox"
-          aria-label="资料类型"
+          aria-label={t('documentation.categoriesTitle')}
         >
           <div className="max-h-[220px] overflow-auto p-1">
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left outline-none transition-colors focus-visible:outline-none ${
+                compact ? 'text-xs' : 'text-sm'
+              } ${
+                !normalizedValue
+                  ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
+                  : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+              }`}
+              onClick={() => {
+                onChange('')
+                setOpen(false)
+              }}
+            >
+              <span>{t('common.uncategorized')}</span>
+              {!normalizedValue && (
+                <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+              )}
+            </button>
             {safeOptions.map((option) => {
               const selected = normalizedValue === option.value
               return (

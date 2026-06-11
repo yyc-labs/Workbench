@@ -9,6 +9,7 @@ import {
 } from './detail.gitOperations'
 import type { MiddlePanelMode } from './detail.aiCommitPanel.types'
 import type { GitOperationResult } from './detail.types'
+import { useI18n } from '../../i18n'
 
 type DetailAiCommitMiddlePanelProps = {
   activeCommitHash: string | null
@@ -70,21 +71,22 @@ export function DetailAiCommitMiddlePanel({
   setActiveCommitHash,
   showCommitHistoryLoading,
 }: DetailAiCommitMiddlePanelProps) {
+  const { t } = useI18n()
   const middlePanelMeta = middlePanelMode === 'history'
     ? {
-      title: '提交历史',
-      description: '最近 10 次提交，支持复制 hash、文件数与 15 秒同批标记',
+      title: t('detail.middlePanelHistoryTitle'),
+      description: t('detail.middlePanelHistoryDescription'),
       icon: History,
     }
     : middlePanelMode === 'ai-log'
       ? {
-        title: 'AI Commit 日志',
-        description: '完整原始输出，便于排查生成过程',
+        title: t('detail.middlePanelAiLogTitle'),
+        description: t('detail.middlePanelAiLogDescription'),
         icon: GitCommitHorizontal,
       }
       : {
-        title: 'Git 操作日志',
-        description: '右侧操作执行记录会累计到这里',
+        title: t('detail.middlePanelGitLogTitle'),
+        description: t('detail.middlePanelGitLogDescription'),
         icon: GitBranch,
       }
   const MiddlePanelIcon = middlePanelMeta.icon
@@ -112,7 +114,7 @@ export function DetailAiCommitMiddlePanel({
               }`}
             onClick={() => onSetMiddlePanelMode('history')}
           >
-            历史
+            {t('detail.middlePanelHistoryTab')}
           </button>
           <button
             type="button"
@@ -122,7 +124,7 @@ export function DetailAiCommitMiddlePanel({
               }`}
             onClick={() => onSetMiddlePanelMode('ai-log')}
           >
-            AI 日志
+            {t('detail.middlePanelAiLogTab')}
           </button>
           <button
             type="button"
@@ -132,7 +134,7 @@ export function DetailAiCommitMiddlePanel({
               }`}
             onClick={() => onSetMiddlePanelMode('git-log')}
           >
-            Git 日志
+            {t('detail.middlePanelGitLogTab')}
           </button>
         </div>
       </div>
@@ -153,7 +155,7 @@ export function DetailAiCommitMiddlePanel({
               ))}
             </div>
           ) : (
-            <EmptyMiddlePanel text="暂无提交记录" />
+            <EmptyMiddlePanel text={t('detail.middlePanelNoHistory')} />
           )}
         </>
       )}
@@ -167,7 +169,7 @@ export function DetailAiCommitMiddlePanel({
               </pre>
             </div>
           ) : (
-            <EmptyMiddlePanel text="暂无 AI Commit 日志" />
+            <EmptyMiddlePanel text={t('detail.middlePanelNoAiLog')} />
           )}
         </>
       )}
@@ -191,7 +193,7 @@ export function DetailAiCommitMiddlePanel({
                   </div>
                   {result.targetBranch && (
                     <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                      目标分支：{result.targetBranch}
+                      {t('detail.middlePanelTargetBranch')}: {result.targetBranch}
                     </p>
                   )}
                   {result.command && (
@@ -206,7 +208,7 @@ export function DetailAiCommitMiddlePanel({
               ))}
             </div>
           ) : (
-            <EmptyMiddlePanel text="暂无 Git 操作日志，执行右侧操作后会显示在这里" />
+            <EmptyMiddlePanel text={t('detail.middlePanelNoGitLog')} />
           )}
         </>
       )}

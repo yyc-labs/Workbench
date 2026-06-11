@@ -1,10 +1,9 @@
 import type { DragCancelEvent, DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ProjectDocLink, ProjectDocTagOption } from '../../../shared/types'
+import { useI18n } from '../../i18n'
 import {
-  PROJECT_DOC_LINK_DEFAULT_TAG,
   PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
-  PROJECT_DOC_LINK_FALLBACK_TAG,
   normalizeProjectDocLinkTag,
 } from '../../lib/projectDocLinks'
 import type {
@@ -101,6 +100,7 @@ function useDetailDocumentationCardState({
   settingsOpen: settingsOpenProp,
   setSettingsOpen: setSettingsOpenProp,
 }: UseDetailDocumentationCardStateOptions): UseDetailDocumentationCardStateResult {
+  const { t } = useI18n()
   const safeTagOptions = useMemo(
     () => (docTagOptions.length > 0 ? docTagOptions : PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS),
     [docTagOptions]
@@ -111,7 +111,7 @@ function useDetailDocumentationCardState({
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
   const [editingTitle, setEditingTitle] = useState('')
   const [editingUrl, setEditingUrl] = useState('')
-  const [editingTag, setEditingTag] = useState(PROJECT_DOC_LINK_DEFAULT_TAG)
+  const [editingTag, setEditingTag] = useState('')
   const [editingNote, setEditingNote] = useState('')
   const [editingAccount, setEditingAccount] = useState('')
   const [editingSecret, setEditingSecret] = useState('')
@@ -182,7 +182,7 @@ function useDetailDocumentationCardState({
     setEditingLinkId(null)
     setEditingTitle('')
     setEditingUrl('')
-    setEditingTag(normalizeProjectDocLinkTag(PROJECT_DOC_LINK_DEFAULT_TAG, safeTagOptions))
+    setEditingTag('')
     setEditingNote('')
     setEditingAccount('')
     setEditingSecret('')
@@ -279,7 +279,7 @@ function useDetailDocumentationCardState({
     try {
       const result = await onAddDocTag(newTagLabel)
       if (!result.ok) {
-        setDocError(result.message ?? '新增分类失败')
+        setDocError(result.message ?? t('documentation.addCategoryFailed'))
         return
       }
       setNewTagLabel('')
@@ -287,7 +287,7 @@ function useDetailDocumentationCardState({
     } finally {
       setTagSaving(false)
     }
-  }, [newTagLabel, onAddDocTag, setDocError, tagSaving])
+  }, [newTagLabel, onAddDocTag, setDocError, t, tagSaving])
 
   const beginRenameTag = useCallback((option: ProjectDocTagOption) => {
     setRenamingTagValue(option.value)
@@ -305,7 +305,7 @@ function useDetailDocumentationCardState({
     try {
       const result = await onRenameDocTag(renamingTagValue, renamingTagLabel)
       if (!result.ok) {
-        setDocError(result.message ?? '重命名分类失败')
+        setDocError(result.message ?? t('documentation.renameCategoryFailed'))
         return
       }
       cancelRenameTag()
@@ -313,7 +313,7 @@ function useDetailDocumentationCardState({
     } finally {
       setTagSaving(false)
     }
-  }, [cancelRenameTag, onRenameDocTag, renamingTagLabel, renamingTagValue, setDocError, tagSaving])
+  }, [cancelRenameTag, onRenameDocTag, renamingTagLabel, renamingTagValue, setDocError, t, tagSaving])
 
   const handleDeleteTag = useCallback(async (value: string) => {
     if (tagSaving) return
@@ -321,17 +321,17 @@ function useDetailDocumentationCardState({
     try {
       const result = await onRemoveDocTag(value)
       if (!result.ok) {
-        setDocError(result.message ?? '删除分类失败')
+        setDocError(result.message ?? t('documentation.removeCategoryFailed'))
         return
       }
       if (activeTagFilter === value) {
         selectTagFilter('all')
       }
       if (docTagInput === value) {
-        setDocTagInput(PROJECT_DOC_LINK_FALLBACK_TAG)
+        setDocTagInput('')
       }
       if (editingTag === value) {
-        setEditingTag(PROJECT_DOC_LINK_FALLBACK_TAG)
+        setEditingTag('')
       }
       setDocError(null)
     } finally {
@@ -345,6 +345,7 @@ function useDetailDocumentationCardState({
     selectTagFilter,
     setDocError,
     setDocTagInput,
+    t,
     tagSaving,
   ])
 

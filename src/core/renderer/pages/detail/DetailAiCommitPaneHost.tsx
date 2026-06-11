@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
+import { useI18n } from '../../i18n'
 import { detectProjectEnvironment } from '../../lib/projectEnvironment'
 import { DetailAiCommitPanel } from './DetailAiCommitPanel'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
@@ -33,6 +34,7 @@ export function DetailAiCommitPaneHost({
   onOpenProjectLinksManager,
   onCloseProjectContextMenu,
 }: DetailAiCommitPaneHostProps) {
+  const { t } = useI18n()
   const toolProcessId = useMemo(() => `${projectId}::toolbox`, [projectId])
   const toolProcessStatus = useAppStore((s) => s.processes[toolProcessId]?.status ?? 'stopped')
   const startProject = useAppStore((s) => s.startProject)
@@ -132,12 +134,12 @@ export function DetailAiCommitPaneHost({
           }}
         >
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-xs font-semibold text-[color:var(--color-foreground)]">Quick AI Commit Config</p>
+            <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('detail.quickAiCommitConfigTitle')}</p>
             <button
               className="rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={() => setQuickConfigOpen(false)}
             >
-              Close
+              {t('common.close')}
             </button>
           </div>
 
@@ -147,11 +149,11 @@ export function DetailAiCommitPaneHost({
               checked={quickSplit}
               onChange={(e) => setQuickSplit(e.target.checked)}
             />
-            Enable split commit
+            {t('detail.quickAiCommitEnableSplitCommit')}
           </label>
 
           <div className="mb-3">
-            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Split max batches (1-12)</p>
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.quickAiCommitSplitBatches')}</p>
             <input
               type="number"
               min={1}
@@ -165,7 +167,7 @@ export function DetailAiCommitPaneHost({
           </div>
 
           <div className="mb-3">
-            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">Max bullets per commit</p>
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.quickAiCommitMaxBullets')}</p>
             <div className="mb-2 flex items-center gap-1.5">
               {[8, 12, 16].map((value) => {
                 const active = quickMaxBulletsNumber === value
@@ -198,7 +200,11 @@ export function DetailAiCommitPaneHost({
           </div>
 
           <div className="mb-2 text-[10px] text-[color:var(--color-muted-foreground)]">
-            Default: Split {defaultSplit ? 'On' : 'Off'} · {defaultSplitMaxBatches} · Bullets {defaultMaxBullets}
+            {t('detail.quickAiCommitDefaultSummary', {
+              split: defaultSplit ? t('detail.quickAiCommitSplitOn') : t('detail.quickAiCommitSplitOff'),
+              batches: defaultSplitMaxBatches,
+              bullets: defaultMaxBullets,
+            })}
           </div>
 
           <div className="flex items-center gap-2">
@@ -207,13 +213,13 @@ export function DetailAiCommitPaneHost({
               onClick={() => void runWithQuickConfig()}
               disabled={aiCommitStatus === 'running'}
             >
-              Run This Time
+              {t('detail.quickAiCommitRunThisTime')}
             </button>
             <button
               className="rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
               onClick={() => void saveQuickConfigAsDefault()}
             >
-              Save Default
+              {t('detail.quickAiCommitSaveDefault')}
             </button>
           </div>
         </div>

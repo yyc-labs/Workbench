@@ -1,9 +1,10 @@
 import { FileText, RefreshCw } from 'lucide-react'
 import {
-  CHANGE_META,
   formatGitBadgeCount,
+  getChangeMeta,
   getScopeLabel,
 } from './detail.gitOperations'
+import { useI18n } from '../../i18n'
 import type { DetailGitSnapshot } from './detail.types'
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
@@ -58,7 +59,8 @@ function WorkingTreeFileItem({
   onSetFileStaged: (file: GitChangedFile, stage: boolean) => Promise<void> | void
   stagingFilePath: string | null
 }) {
-  const meta = CHANGE_META[file.kind]
+  const { t } = useI18n()
+  const meta = getChangeMeta(file.kind)
   const isBusy = stagingFilePath === file.path
   const canStage = (file.unstaged || file.scope === 'untracked') && file.scope !== 'conflicted'
   const canUnstage = file.staged && file.scope !== 'conflicted'
@@ -81,7 +83,7 @@ function WorkingTreeFileItem({
               <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={file.path}>{file.path}</p>
               {file.originalPath && (
                 <p className="mt-0.5 truncate font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]" title={file.originalPath}>
-                  from {file.originalPath}
+                  {t('detail.workingTreeFrom', { path: file.originalPath })}
                 </p>
               )}
             </div>
@@ -95,9 +97,9 @@ function WorkingTreeFileItem({
               void onSetFileStaged(file, true)
             }}
             disabled={!canStage || Boolean(stagingFilePath)}
-            title={canStage ? '将文件加入暂存区' : '当前状态不可暂存'}
+            title={canStage ? t('detail.workingTreeStage') : t('detail.workingTreeStageUnavailable')}
           >
-            {isBusy && canStage ? '暂存中...' : '暂存'}
+            {isBusy && canStage ? t('detail.workingTreeStaging') : t('detail.workingTreeStage')}
           </button>
           <button
             type="button"
@@ -106,9 +108,9 @@ function WorkingTreeFileItem({
               void onSetFileStaged(file, false)
             }}
             disabled={!canUnstage || Boolean(stagingFilePath)}
-            title={canUnstage ? '将文件移出暂存区' : '当前状态不可取消暂存'}
+            title={canUnstage ? t('detail.workingTreeUnstage') : t('detail.workingTreeUnstageUnavailable')}
           >
-            {isBusy && canUnstage ? '取消中...' : '取消暂存'}
+            {isBusy && canUnstage ? t('detail.workingTreeUnstaging') : t('detail.workingTreeUnstage')}
           </button>
         </div>
       </div>
@@ -130,6 +132,7 @@ export function DetailAiCommitWorkingTreePanel({
   onSetFileStaged,
   stagingFilePath,
 }: DetailAiCommitWorkingTreePanelProps) {
+  const { t } = useI18n()
   const stagedCount = changedFiles.filter((file) => file.staged).length
   const unstagedCount = changedFiles.filter((file) => file.unstaged).length
   const untrackedCount = changedFiles.filter((file) => file.scope === 'untracked').length
@@ -142,8 +145,8 @@ export function DetailAiCommitWorkingTreePanel({
             <FileText className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
-            <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">暂未提交文件</p>
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">工作区变更优先显示，方便提交前确认</p>
+            <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">{t('detail.workingTreeTitle')}</p>
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('detail.workingTreeDescription')}</p>
           </div>
         </div>
         <button
@@ -153,32 +156,32 @@ export function DetailAiCommitWorkingTreePanel({
           disabled={gitSnapshotLoading}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${gitSnapshotLoading ? 'animate-spin' : ''}`} />
-          刷新
+          {t('detail.workingTreeRefresh')}
         </button>
       </div>
 
       <div className="mb-3 grid grid-cols-4 gap-2">
         <WorkingTreeStatCard
           colorClassName="bg-[color:var(--color-background-sunken)]/60"
-          label="全部"
+          label={t('detail.workingTreeAll')}
           loading={gitSnapshotLoading}
           value={formatGitBadgeCount(changedFiles.length)}
         />
         <WorkingTreeStatCard
           colorClassName="bg-[color:var(--color-success-background)]"
-          label="已暂存"
+          label={t('detail.workingTreeStaged')}
           loading={gitSnapshotLoading}
           value={formatGitBadgeCount(stagedCount)}
         />
         <WorkingTreeStatCard
           colorClassName="bg-[color:var(--color-warning-background)]"
-          label="未暂存"
+          label={t('detail.workingTreeUnstaged')}
           loading={gitSnapshotLoading}
           value={formatGitBadgeCount(unstagedCount)}
         />
         <WorkingTreeStatCard
           colorClassName="bg-[color:var(--color-background-sunken)]/60"
-          label="未跟踪"
+          label={t('detail.workingTreeUntracked')}
           loading={gitSnapshotLoading}
           value={formatGitBadgeCount(untrackedCount)}
         />
@@ -186,7 +189,7 @@ export function DetailAiCommitWorkingTreePanel({
 
       {!gitSnapshotLoading && conflictedCount > 0 && (
         <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-          当前有 {conflictedCount} 个冲突文件，建议先解决后再提交。
+          {t('detail.workingTreeConflictHint', { count: conflictedCount })}
         </div>
       )}
 
@@ -218,8 +221,8 @@ export function DetailAiCommitWorkingTreePanel({
       ) : (
         <div className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-background)]/45 px-3 py-5 text-center">
           <div>
-            <p className="text-base font-semibold text-[color:var(--color-foreground)]">工作区干净</p>
-            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">没有暂未提交的文件</p>
+            <p className="text-base font-semibold text-[color:var(--color-foreground)]">{t('detail.workingTreeCleanTitle')}</p>
+            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">{t('detail.workingTreeCleanDescription')}</p>
           </div>
         </div>
       )}

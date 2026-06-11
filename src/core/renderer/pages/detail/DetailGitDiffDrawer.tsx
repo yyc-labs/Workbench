@@ -2,9 +2,10 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, RefreshCw, Save, X } from 'lucide-react'
 import { MonacoTextViewer } from '../../components/MonacoTextViewer'
+import { useI18n } from '../../i18n'
 import { ensureGitDiffMonacoLanguage, GIT_DIFF_MONACO_LANGUAGE_ID } from '../../lib/monacoDiffLanguage'
 import { inferLanguageFromRelativePath } from '../code/code.helpers'
-import { CHANGE_META, getScopeLabel } from './detail.gitOperations'
+import { getChangeMeta, getScopeLabel } from './detail.gitOperations'
 import { formatBytes, parseConflictMarkers, replaceConflictBlock, type ConflictBlock } from './detail.gitDiffConflicts'
 import type { DetailGitSnapshot, GitConflictFileResult, GitDiffViewMode } from './detail.types'
 
@@ -58,6 +59,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   onLoadConflict,
   onSaveConflict,
 }: DetailGitDiffDrawerProps) {
+  const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
@@ -162,28 +164,28 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
         type="button"
         className={`absolute inset-0 bg-[color:var(--color-background-sunken)]/72 backdrop-blur-[7px] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
-        aria-label="关闭改动详情"
+        aria-label={t('detail.gitDiffClose')}
       />
       <aside
         className={`absolute inset-y-3 right-3 w-[min(1480px,calc(100%-1.5rem))] overflow-hidden rounded-[26px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 shadow-[0_28px_84px_rgba(15,15,20,0.34)] backdrop-blur-[26px] transition-[transform,opacity] duration-240 ease-out will-change-transform ${visible ? 'translate-x-0 opacity-100' : 'translate-x-[36px] opacity-0'}`}
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="文件改动详情"
+        aria-label={t('detail.gitDiffFileTitle')}
       >
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-120 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-card)]/62 px-5 py-4 backdrop-blur-[14px]">
             <div className="min-w-0">
-              <p className="section-label">Changed Files</p>
+              <p className="section-label">{t('detail.gitDiffTitle')}</p>
               <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-                支持普通 diff 查看与冲突文件三方合并解决
+                {t('detail.gitDiffDescription')}
               </p>
             </div>
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/80 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('detail.gitDiffClose')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -194,7 +196,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
               <div className="space-y-2">
                 {changedFiles.map((file) => {
                   const itemActive = activeFilePath === file.path
-                  const meta = CHANGE_META[file.kind]
+                  const meta = getChangeMeta(file.kind)
                   return (
                     <button
                       key={`drawer-${file.path}-${file.indexStatus}-${file.worktreeStatus}`}
@@ -214,7 +216,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           <p className="truncate font-mono text-[11.5px] text-[color:var(--color-foreground)]">{file.path}</p>
                           {file.originalPath && (
                             <p className="mt-0.5 truncate font-mono text-[10px] text-[color:var(--color-muted-foreground)]">
-                              from {file.originalPath}
+                              {t('detail.workingTreeFrom', { path: file.originalPath })}
                             </p>
                           )}
                           <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]">
@@ -236,13 +238,13 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                       <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]">{activeFile.path}</p>
                       <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">
                         {isConflictFile
-                          ? `冲突解决模式 · ${languageHint}`
-                          : `${diffViewMode === 'staged' ? '暂存区变更' : '工作区变更'} · ${languageHint}`
+                          ? `${t('detail.gitDiffConflictMode')} · ${languageHint}`
+                          : `${diffViewMode === 'staged' ? t('detail.gitDiffStagedMode') : t('detail.gitDiffUnstagedMode')} · ${languageHint}`
                         }
                       </p>
                       {!isConflictFile && diffTruncated && (
                         <p className="mt-1 text-[10.5px] text-[color:var(--color-warning)]">
-                          Diff 已截断，避免大补丁持续占用渲染进程内存。
+                          {t('detail.gitDiffTruncated')}
                         </p>
                       )}
                     </div>
@@ -258,7 +260,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           disabled={!canViewUnstaged || diffLoading}
                           onClick={() => onChangeDiffViewMode('unstaged')}
                         >
-                          未暂存
+                          {t('detail.gitDiffUnstagedMode')}
                         </button>
                         <button
                           type="button"
@@ -270,7 +272,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           disabled={!canViewStaged || diffLoading}
                           onClick={() => onChangeDiffViewMode('staged')}
                         >
-                          已暂存
+                          {t('detail.gitDiffStagedMode')}
                         </button>
                       </div>
                     ) : (
@@ -285,7 +287,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           disabled={conflictLoading || conflictSaving}
                         >
                           <RefreshCw className={`h-3.5 w-3.5 ${conflictLoading ? 'animate-spin' : ''}`} />
-                          重新加载
+                          {t('detail.gitDiffReload')}
                         </button>
                         <button
                           type="button"
@@ -295,10 +297,10 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                             onSaveConflict({ filePath: activeFile.path, content: conflictDraft, markResolved: false })
                           }}
                           disabled={conflictLoading || conflictSaving || hasUnresolvedConflictMarkers}
-                          title={hasUnresolvedConflictMarkers ? '仍有冲突标记，请先处理所有冲突块' : undefined}
+                          title={hasUnresolvedConflictMarkers ? t('detail.gitDiffHasUnresolvedMarkers') : undefined}
                         >
                           <Save className="h-3.5 w-3.5" />
-                          仅保存
+                          {t('detail.gitDiffSaveOnly')}
                         </button>
                         <button
                           type="button"
@@ -308,10 +310,10 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                             onSaveConflict({ filePath: activeFile.path, content: conflictDraft, markResolved: true })
                           }}
                           disabled={conflictLoading || conflictSaving || hasUnresolvedConflictMarkers}
-                          title={hasUnresolvedConflictMarkers ? '仍有冲突标记，请先处理所有冲突块' : undefined}
+                          title={hasUnresolvedConflictMarkers ? t('detail.gitDiffHasUnresolvedMarkers') : undefined}
                         >
                           <CheckCheck className="h-3.5 w-3.5" />
-                          保存并标记解决
+                          {t('detail.gitDiffSaveAndMarkResolved')}
                         </button>
                       </div>
                     )}
@@ -321,7 +323,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                     {!isConflictFile ? (
                       diffLoading ? (
                         <div className="flex h-full items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                          正在加载 diff...
+                          {t('detail.gitDiffLoading')}
                         </div>
                       ) : diffError ? (
                         <div className="flex h-full items-center justify-center px-4 text-[11px] text-[color:var(--color-destructive)]">
@@ -351,14 +353,17 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                               <AlertTriangle className="h-3.5 w-3.5" />
                               <span>
                                 {hasConflictBlocks
-                                  ? `检测到 ${conflictBlocks.length} 处冲突，可对当前块执行“接受当前/接受传入/接受组合”。`
-                                  : '未检测到冲突标记，可直接对左右来源进行对比后编辑结果。'
+                                  ? t('detail.gitDiffConflictDetected', { count: conflictBlocks.length })
+                                  : t('detail.gitDiffConflictDetailsMissing')
                                 }
                               </span>
                             </div>
                             {hasConflictBlocks && (
                               <span className="shrink-0 rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10px]">
-                                冲突 {Math.min(activeConflictBlockIndex + 1, conflictBlocks.length)} / {conflictBlocks.length}
+                                {t('detail.gitDiffConflictCount', {
+                                  current: Math.min(activeConflictBlockIndex + 1, conflictBlocks.length),
+                                  total: conflictBlocks.length,
+                                })}
                               </span>
                             )}
                           </div>
@@ -366,7 +371,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
 
                         {conflictLoading ? (
                           <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                            正在加载冲突三方内容...
+                            {t('detail.gitDiffLoadingConflict')}
                           </div>
                         ) : conflictError ? (
                           <div className="flex min-h-0 flex-1 items-center justify-center rounded-[12px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-4 text-[11px] text-[color:var(--color-destructive)]">
@@ -374,7 +379,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           </div>
                         ) : !conflictDataForActiveFile ? (
                           <div className="flex min-h-0 flex-1 items-center justify-center rounded-[12px] border border-dashed border-[color:var(--color-border)] px-4 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            冲突详情未加载，点击“重新加载”读取 base/ours/theirs。
+                            {t('detail.gitDiffConflictDetailsMissing')}
                           </div>
                         ) : (
                           <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-3">
@@ -382,7 +387,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                               <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75 px-3 py-2.5">
                                 <div className="flex items-center justify-between gap-2">
                                   <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">
-                                    冲突块导航
+                                    {t('detail.gitDiffConflictNav')}
                                   </p>
                                   <div className="flex items-center gap-1">
                                     <button
@@ -390,7 +395,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                       onClick={() => setActiveConflictBlockIndex((prev) => Math.max(0, prev - 1))}
                                       disabled={activeConflictBlockIndex <= 0}
-                                      title="上一个冲突块"
+                                      title={t('detail.gitDiffPrevConflict')}
                                     >
                                       <ChevronLeft className="h-3.5 w-3.5" />
                                     </button>
@@ -399,7 +404,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                       onClick={() => setActiveConflictBlockIndex((prev) => Math.min(conflictBlocks.length - 1, prev + 1))}
                                       disabled={activeConflictBlockIndex >= conflictBlocks.length - 1}
-                                      title="下一个冲突块"
+                                      title={t('detail.gitDiffNextConflict')}
                                     >
                                       <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
@@ -408,13 +413,13 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                 {activeConflictBlock && (
                                   <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
                                     <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]">
-                                      行 {activeConflictBlock.startLine}-{activeConflictBlock.endLine}
+                                      {t('detail.gitDiffLineRange', { start: activeConflictBlock.startLine, end: activeConflictBlock.endLine })}
                                     </span>
                                     <span className="rounded-full border border-[color:var(--color-primary)]/25 bg-[color:var(--color-primary)]/10 px-2 py-0.5 text-[color:var(--color-primary)]">
-                                      当前: {activeConflictBlock.oursLabel || 'OURS'}
+                                      {t('detail.gitDiffCurrent')}: {activeConflictBlock.oursLabel || 'OURS'}
                                     </span>
                                     <span className="rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">
-                                      传入: {activeConflictBlock.theirsLabel || 'THEIRS'}
+                                      {t('detail.gitDiffIncoming')}: {activeConflictBlock.theirsLabel || 'THEIRS'}
                                     </span>
                                   </div>
                                 )}
@@ -425,8 +430,8 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                               <div className="grid min-h-0 grid-rows-[56px_minmax(160px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
                                 <div className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">当前（OURS）</p>
-                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">只读来源</p>
+                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffCurrent')} (OURS)</p>
+                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitDiffCurrentReadonly')}</p>
                                   </div>
                                     <button
                                       type="button"
@@ -441,14 +446,14 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       conflictDraftDirtyRef.current = true
                                       setConflictDraft(oursStage.output)
                                     }}
-                                      title={hasConflictBlocks ? '接受当前（仅作用于当前冲突块）' : isOursStageTruncated ? '来源内容已截断，不能直接整份接受' : '接受当前（覆盖整份结果）'}
+                                      title={hasConflictBlocks ? t('detail.gitDiffAcceptCurrent') : isOursStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptCurrentWhole')}
                                     >
-                                      接受当前
+                                      {t('detail.gitDiffAcceptCurrent')}
                                     </button>
                                 </div>
                                 {oursStage?.outputLimit && (
                                   <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
-                                    预览已截断，保留 {formatBytes(oursStage.outputLimit.keptBytes)} / {formatBytes(oursStage.outputLimit.totalBytes)}
+                                    {t('detail.gitDiffTruncated')} {formatBytes(oursStage.outputLimit.keptBytes)} / {formatBytes(oursStage.outputLimit.totalBytes)}
                                   </div>
                                 )}
                                 <div className="min-h-0">
@@ -462,7 +467,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                     />
                                   ) : (
                                     <div className="flex h-full items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      当前来源不存在（新增/删除冲突场景可能出现）。
+                                      {t('detail.gitDiffCurrentMissing')}
                                     </div>
                                   )}
                                 </div>
@@ -471,8 +476,8 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                               <div className="grid min-h-0 grid-rows-[56px_minmax(160px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
                                 <div className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
                                   <div className="min-w-0">
-                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">传入（THEIRS）</p>
-                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">只读来源</p>
+                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffIncoming')} (THEIRS)</p>
+                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitDiffIncomingReadonly')}</p>
                                   </div>
                                     <button
                                       type="button"
@@ -487,14 +492,14 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       conflictDraftDirtyRef.current = true
                                       setConflictDraft(theirsStage.output)
                                     }}
-                                      title={hasConflictBlocks ? '接受传入（仅作用于当前冲突块）' : isTheirsStageTruncated ? '来源内容已截断，不能直接整份接受' : '接受传入（覆盖整份结果）'}
+                                      title={hasConflictBlocks ? t('detail.gitDiffAcceptIncoming') : isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptIncomingWhole')}
                                     >
-                                      接受传入
+                                      {t('detail.gitDiffAcceptIncoming')}
                                     </button>
                                 </div>
                                 {theirsStage?.outputLimit && (
                                   <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
-                                    预览已截断，保留 {formatBytes(theirsStage.outputLimit.keptBytes)} / {formatBytes(theirsStage.outputLimit.totalBytes)}
+                                    {t('detail.gitDiffTruncated')} {formatBytes(theirsStage.outputLimit.keptBytes)} / {formatBytes(theirsStage.outputLimit.totalBytes)}
                                   </div>
                                 )}
                                 <div className="min-h-0">
@@ -508,7 +513,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                     />
                                   ) : (
                                     <div className="flex h-full items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      传入来源不存在（新增/删除冲突场景可能出现）。
+                                      {t('detail.gitDiffIncomingMissing')}
                                     </div>
                                   )}
                                 </div>
@@ -518,9 +523,9 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                             <div className="grid min-h-0 grid-rows-[58px_minmax(260px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
                                 <div className="min-w-0">
-                                  <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">结果（工作区，可编辑）</p>
+                                  <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffResultTitle')}</p>
                                   <p className="text-[10px] text-[color:var(--color-muted-foreground)]">
-                                    保存后写回工作区，标记解决会自动执行 `git add`
+                                    {t('detail.gitDiffResultDescription')}
                                   </p>
                                 </div>
                                 <div className="quiet-control flex flex-wrap items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
@@ -531,18 +536,18 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                         className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !activeConflictBlock}
                                         onClick={() => applyConflictBlockResolution('both-ours-first')}
-                                        title="接受组合：当前在前，传入在后（仅作用于当前冲突块）"
+                                        title={t('detail.gitDiffAcceptCombinedCurrentFirst')}
                                       >
-                                        接受组合（当前优先）
+                                        {t('detail.gitDiffAcceptCombinedCurrentFirst')}
                                       </button>
                                       <button
                                         type="button"
                                         className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !activeConflictBlock}
                                         onClick={() => applyConflictBlockResolution('both-theirs-first')}
-                                        title="接受组合：传入在前，当前在后（仅作用于当前冲突块）"
+                                        title={t('detail.gitDiffAcceptCombinedIncomingFirst')}
                                       >
-                                        接受组合（传入优先）
+                                        {t('detail.gitDiffAcceptCombinedIncomingFirst')}
                                       </button>
                                     </>
                                   ) : (
@@ -555,9 +560,9 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${oursStage?.output ?? ''}${theirsStage?.output ?? ''}`)
                                         }}
-                                        title={isOursStageTruncated || isTheirsStageTruncated ? '来源内容已截断，不能直接整份组合' : '接受组合：当前在前，传入在后（覆盖整份结果）'}
+                                        title={isOursStageTruncated || isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptWholeCurrentFirst')}
                                       >
-                                        组合整份（当前优先）
+                                        {t('detail.gitDiffAcceptWholeCurrentFirst')}
                                       </button>
                                       <button
                                         type="button"
@@ -567,9 +572,9 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${theirsStage?.output ?? ''}${oursStage?.output ?? ''}`)
                                         }}
-                                        title={isOursStageTruncated || isTheirsStageTruncated ? '来源内容已截断，不能直接整份组合' : '接受组合：传入在前，当前在后（覆盖整份结果）'}
+                                        title={isOursStageTruncated || isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptWholeIncomingFirst')}
                                       >
-                                        组合整份（传入优先）
+                                        {t('detail.gitDiffAcceptWholeIncomingFirst')}
                                       </button>
                                     </>
                                   )}
@@ -597,7 +602,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                 </div>
               ) : (
                 <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-[color:var(--color-border)] bg-[color:var(--color-background)]/55 text-xs text-[color:var(--color-muted-foreground)]">
-                  请选择文件查看改动
+                  {t('detail.gitDiffSelectFile')}
                 </div>
               )}
             </div>

@@ -1,3 +1,4 @@
+import { getCurrentLocale } from '../../i18n'
 import type { AiCommitRestoreResult, AiCommitStatus, AiStepKey, AiStepState, AiStepStatus } from './detail.types'
 
 export const FLOW_NODE_WIDTH = 236
@@ -7,14 +8,20 @@ export const FLOW_NODE_START_X = 36
 export const FLOW_NODE_START_Y = Math.round((FLOW_CANVAS_HEIGHT - FLOW_NODE_HEIGHT) / 2)
 export const FLOW_NODE_GAP_X = 278
 
-export const BASE_AI_STEPS: AiStepState[] = [
-  { key: 'start', label: '启动提交任务', status: 'pending' },
-  { key: 'stage', label: '暂存改动', status: 'pending' },
-  { key: 'ai', label: '调用 AI 生成提交信息', status: 'pending' },
-  { key: 'message', label: '确认提交信息', status: 'pending' },
-  { key: 'commit', label: '执行 git commit', status: 'pending' },
-  { key: 'done', label: '完成', status: 'pending' },
-]
+export function createBaseAiSteps(): AiStepState[] {
+  const locale = getCurrentLocale()
+  const isZh = locale === 'zh-CN'
+  return [
+    { key: 'start', label: isZh ? '启动提交任务' : 'Start commit task', status: 'pending' },
+    { key: 'stage', label: isZh ? '暂存改动' : 'Stage changes', status: 'pending' },
+    { key: 'ai', label: isZh ? '调用 AI 生成提交信息' : 'Generate commit message with AI', status: 'pending' },
+    { key: 'message', label: isZh ? '确认提交信息' : 'Confirm commit message', status: 'pending' },
+    { key: 'commit', label: isZh ? '执行 git commit' : 'Run git commit', status: 'pending' },
+    { key: 'done', label: isZh ? '完成' : 'Done', status: 'pending' },
+  ]
+}
+
+export const BASE_AI_STEPS: AiStepState[] = createBaseAiSteps()
 
 export function createDocLinkId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {

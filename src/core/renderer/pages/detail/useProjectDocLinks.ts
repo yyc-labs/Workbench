@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
 import type { ProjectDocLink, ProjectDocLinkTag, ProjectDocTagOption, ProjectInfo } from '../../../shared/types'
+import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { createDocLinkId, normalizeDocUrl } from './detail.aiFlow'
 import {
   PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
-  PROJECT_DOC_LINK_DEFAULT_TAG,
-  PROJECT_DOC_LINK_FALLBACK_TAG,
   normalizeProjectDocLinkTag,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
@@ -20,13 +19,15 @@ export function useProjectDocLinks({
   project,
   initialSettingsOpen = false,
 }: UseProjectDocLinksOptions) {
+  const locale = useLocale()
+  const { t } = useI18n()
   const setProjectDocLinks = useAppStore((s) => s.setProjectDocLinks)
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS)
   const setDocLinkTags = useAppStore((s) => s.setDocLinkTags)
   const [linkSettingsOpen, setLinkSettingsOpen] = useState(initialSettingsOpen)
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
-  const [docTagInput, setDocTagInput] = useState<ProjectDocLinkTag>(PROJECT_DOC_LINK_DEFAULT_TAG)
+  const [docTagInput, setDocTagInput] = useState<ProjectDocLinkTag>('')
   const [docNoteInput, setDocNoteInput] = useState('')
   const [docAccountInput, setDocAccountInput] = useState('')
   const [docSecretInput, setDocSecretInput] = useState('')
@@ -44,10 +45,10 @@ export function useProjectDocLinks({
         url: link.url,
         label: link.title,
         tag: normalizedTag,
-        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions, locale),
       }
     }),
-    [docLinkTagOptions, docLinks]
+    [docLinkTagOptions, docLinks, locale]
   )
 
   const normalizeDocTagOptions = useCallback((input: ProjectDocTagOption[]): ProjectDocTagOption[] => {
@@ -64,21 +65,14 @@ export function useProjectDocLinks({
         sortOrder: deduped.length,
       })
     }
-    if (!used.has(PROJECT_DOC_LINK_FALLBACK_TAG)) {
-      deduped.push({
-        value: PROJECT_DOC_LINK_FALLBACK_TAG,
-        label: '其他资料',
-        sortOrder: deduped.length,
-      })
-    }
     return deduped
   }, [])
 
   const handleAddDocTag = useCallback(async (labelInput: string): Promise<{ ok: boolean; message?: string }> => {
     const label = labelInput.trim()
-    if (!label) return { ok: false, message: '请输入分类名称' }
+    if (!label) return { ok: false, message: t('documentation.addCategoryEmpty') }
     const duplicateLabel = docLinkTagOptions.some((item) => item.label.toLowerCase() === label.toLowerCase())
-    if (duplicateLabel) return { ok: false, message: '分类名称已存在' }
+    if (duplicateLabel) return { ok: false, message: t('documentation.addCategoryDuplicate') }
 
     const base = label
       .toLowerCase()
@@ -98,43 +92,40 @@ export function useProjectDocLinks({
     ])
     await setDocLinkTags(next)
     return { ok: true }
-  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags])
+  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags, t])
 
   const handleRenameDocTag = useCallback(async (
     value: string,
     labelInput: string
   ): Promise<{ ok: boolean; message?: string }> => {
     const label = labelInput.trim()
-    if (!label) return { ok: false, message: '请输入分类名称' }
+    if (!label) return { ok: false, message: t('documentation.renameCategoryEmpty') }
     const target = docLinkTagOptions.find((item) => item.value === value)
-    if (!target) return { ok: false, message: '分类不存在' }
+    if (!target) return { ok: false, message: t('documentation.renameCategoryMissing') }
     const duplicateLabel = docLinkTagOptions.some(
       (item) => item.value !== value && item.label.toLowerCase() === label.toLowerCase()
     )
-    if (duplicateLabel) return { ok: false, message: '分类名称已存在' }
+    if (duplicateLabel) return { ok: false, message: t('documentation.renameCategoryDuplicate') }
 
     const next = normalizeDocTagOptions(
       docLinkTagOptions.map((item) => (item.value === value ? { ...item, label } : item))
     )
     await setDocLinkTags(next)
     return { ok: true }
-  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags])
+  }, [docLinkTagOptions, normalizeDocTagOptions, setDocLinkTags, t])
 
   const handleRemoveDocTag = useCallback(async (
     value: string
   ): Promise<{ ok: boolean; message?: string }> => {
-    if (value === PROJECT_DOC_LINK_FALLBACK_TAG) {
-      return { ok: false, message: '“其他资料”是兜底分类，不能删除' }
-    }
     if (!docLinkTagOptions.some((item) => item.value === value)) {
-      return { ok: false, message: '分类不存在' }
+      return { ok: false, message: t('documentation.removeCategoryMissing') }
     }
     if (project) {
       const hasTagInProject = docLinks.some((link) => normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value)
       if (hasTagInProject) {
         const migrated = docLinks.map((link) => (
           normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value
-            ? { ...link, tag: PROJECT_DOC_LINK_FALLBACK_TAG }
+            ? { ...link, tag: undefined }
             : link
         ))
         await setProjectDocLinks(project.id, migrated)
@@ -143,20 +134,20 @@ export function useProjectDocLinks({
     const next = normalizeDocTagOptions(docLinkTagOptions.filter((item) => item.value !== value))
     await setDocLinkTags(next)
     return { ok: true }
-  }, [docLinkTagOptions, docLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks])
+  }, [docLinkTagOptions, docLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks, t])
 
   const handleAddDocLink = useCallback(async () => {
     if (!project) return
 
     const normalizedUrl = normalizeDocUrl(docUrlInput)
     if (!normalizedUrl) {
-      setDocError('请输入有效的 http/https URL')
+      setDocError(t('documentation.invalidUrl'))
       return
     }
 
     const duplicate = docLinks.some((link) => link.url.toLowerCase() === normalizedUrl.toLowerCase())
     if (duplicate) {
-      setDocError('该文档链接已存在')
+      setDocError(t('documentation.duplicateUrl'))
       return
     }
 
@@ -165,7 +156,7 @@ export function useProjectDocLinks({
       try {
         title = new URL(normalizedUrl).hostname
       } catch {
-        title = 'Documentation'
+        title = t('documentation.generatedTitle')
       }
     }
 
@@ -188,13 +179,13 @@ export function useProjectDocLinks({
       try {
         await window.electronAPI.setDocLinkSecret(project.id, linkId, secret)
       } catch (error) {
-        setDocError(error instanceof Error ? error.message : '保存密码失败')
+        setDocError(error instanceof Error ? error.message : t('documentation.saveSecretFailed'))
         return
       }
     }
     setDocTitleInput('')
     setDocUrlInput('')
-    setDocTagInput(normalizeProjectDocLinkTag(PROJECT_DOC_LINK_DEFAULT_TAG, docLinkTagOptions))
+    setDocTagInput('')
     setDocNoteInput('')
     setDocAccountInput('')
     setDocSecretInput('')
@@ -210,6 +201,7 @@ export function useProjectDocLinks({
     project,
     setProjectDocLinks,
     docLinkTagOptions,
+    t,
   ])
 
   const handleRemoveDocLink = useCallback(async (linkId: string) => {
@@ -254,7 +246,7 @@ export function useProjectDocLinks({
 
     const normalizedUrl = normalizeDocUrl(nextUrlInput)
     if (!normalizedUrl) {
-      setDocError('请输入有效的 http/https URL')
+      setDocError(t('documentation.invalidUrl'))
       return false
     }
 
@@ -262,7 +254,7 @@ export function useProjectDocLinks({
       (link) => link.id !== linkId && link.url.toLowerCase() === normalizedUrl.toLowerCase()
     )
     if (duplicate) {
-      setDocError('该文档链接已存在')
+      setDocError(t('documentation.duplicateUrl'))
       return false
     }
 
@@ -271,7 +263,7 @@ export function useProjectDocLinks({
       try {
         title = new URL(normalizedUrl).hostname
       } catch {
-        title = 'Documentation'
+        title = t('documentation.generatedTitle')
       }
     }
 
@@ -290,7 +282,7 @@ export function useProjectDocLinks({
         await window.electronAPI.setDocLinkSecret(project.id, linkId, secret)
         hasSecret = true
       } catch (error) {
-        setDocError(error instanceof Error ? error.message : '保存密码失败')
+        setDocError(error instanceof Error ? error.message : t('documentation.saveSecretFailed'))
         return false
       }
     } else if (clearSecret) {
@@ -298,7 +290,7 @@ export function useProjectDocLinks({
         await window.electronAPI.deleteDocLinkSecret(project.id, linkId)
         hasSecret = false
       } catch (error) {
-        setDocError(error instanceof Error ? error.message : '清除密码失败')
+        setDocError(error instanceof Error ? error.message : t('documentation.clearSecretFailed'))
         return false
       }
     }
@@ -320,7 +312,7 @@ export function useProjectDocLinks({
     await setProjectDocLinks(project.id, nextLinks)
     setDocError(null)
     return true
-  }, [docLinks, project, setProjectDocLinks, docLinkTagOptions])
+  }, [docLinks, project, setProjectDocLinks, docLinkTagOptions, t])
 
   useEffect(() => {
     setDocTagInput((current) => normalizeProjectDocLinkTag(current, docLinkTagOptions))

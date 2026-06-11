@@ -22,6 +22,8 @@ import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../lib/projectDocLinks'
+import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
+import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
@@ -60,14 +62,18 @@ function readProjectHeaderCollapsed(): boolean {
 }
 
 function DetailPaneFallback() {
+  const { t } = useI18n()
+
   return (
     <div className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/50 text-xs text-[color:var(--color-muted-foreground)]">
-      Loading...
+      {t('common.loading')}
     </div>
   )
 }
 
 export function DetailPage() {
+  const locale = useLocale()
+  const { t } = useI18n()
   const { projectId, pane } = useParams<{ projectId: string; pane?: string }>()
   const navigate = useNavigate()
   const project = useAppStore((s) => {
@@ -96,8 +102,10 @@ export function DetailPage() {
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
   const processUrls = projectId ? useAppStore((s) => s.processUrls[projectId] || []) : ([] as string[])
   const session = projectId ? useAppStore((s) => s.sessions[projectId]) : undefined
+  const runtimeEntry = projectId ? useAppStore((s) => s.runtimeEntries[projectId]) : undefined
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
   const themeMode = useAppStore((s) => s.config.theme)
+  const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const startRuntime = useAppStore((s) => s.startRuntime)
@@ -120,7 +128,7 @@ export function DetailPage() {
 
   const projectPath = project?.path
   const environment = projectPath ? detectProjectEnvironment(projectPath) : 'unknown'
-  const environmentLabel = project ? projectEnvironmentLabel(environment) : 'Unknown'
+  const environmentLabel = project ? projectEnvironmentLabel(environment, locale) : t('common.unknown')
   const contentTopPaddingClass = projectHeaderCollapsed
     ? 'pt-5'
     : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
@@ -131,6 +139,7 @@ export function DetailPage() {
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
+  const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const docLinkState = useProjectDocLinks({ project })
   const {
@@ -267,13 +276,13 @@ export function DetailPage() {
   if (!project || !projectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
-        <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Project not found</h2>
+        <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('detail.projectNotFound')}</h2>
         <button
           className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
-          Back to Home
+          {t('detail.backToHome')}
         </button>
       </div>
     )
@@ -305,7 +314,9 @@ export function DetailPage() {
               <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={resolvedProjectPath}>
                 {middleTruncatePath(resolvedProjectPath)}
               </p>
-              <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">Environment: {environmentLabel}</p>
+              <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
+                {t('detail.environment')}: {environmentLabel}
+              </p>
             </div>
 
             {isActive ? (
@@ -322,10 +333,10 @@ export function DetailPage() {
                 ) : (
                   <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
                 )}
-                {isRunning ? 'Running' : isStopping ? 'Stopping...' : 'Session Available'}
+                {isRunning ? t('common.running') : isStopping ? t('common.stopping') : (usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady'))}
               </div>
             ) : (
-              <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">Stopped</span>
+              <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
             )}
           </div>
 
@@ -344,7 +355,7 @@ export function DetailPage() {
                 }}
               >
                 <Code2 className="h-3.5 w-3.5" />
-                Code
+                {t('detail.code')}
               </button>
               <button
                 type="button"
@@ -359,7 +370,7 @@ export function DetailPage() {
                 }}
               >
                 <Bot className="h-3.5 w-3.5" />
-                Git Commit
+                {t('detail.gitCommit')}
               </button>
             </div>
 
@@ -372,7 +383,7 @@ export function DetailPage() {
               }}
             >
               <FileText className="h-3.5 w-3.5" />
-              Transcript
+              {t('detail.transcript')}
             </button>
 
             {isRunning && processUrls.length > 0 && (
@@ -402,9 +413,10 @@ export function DetailPage() {
                 >
                   <BookOpen className="h-3 w-3" />
                   <span className="max-w-[200px] truncate">
-                    资料 · {projectDocLinkTagLabel(
+                    {t('common.docs')} · {projectDocLinkTagLabel(
                       normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
-                      docLinkTagOptions
+                      docLinkTagOptions,
+                      locale
                     )}: {defaultDocLink.title}
                   </span>
                 </button>
@@ -417,7 +429,7 @@ export function DetailPage() {
               onClick={openProjectLinksManager}
             >
               <Settings2 className="h-3.5 w-3.5" />
-              资料设置
+              {t('detail.docsSettings')}
             </button>
 
             <button
@@ -442,17 +454,17 @@ export function DetailPage() {
                 setRunConfigPos({ x: e.clientX, y: e.clientY })
               }}
               disabled={isStopping}
-              title="左键执行当前动作，右键配置 Run 命令"
+              title={t('common.leftClickRunRightClickConfig')}
             >
               {isActive ? (
                 <>
                   {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-                  {isStopping ? 'Stopping...' : 'Stop'}
+                  {isStopping ? t('common.stopping') : t('common.stop')}
                 </>
               ) : (
                 <>
                   <Play className="h-3.5 w-3.5" />
-                  Run
+                  {t('common.run')}
                 </>
               )}
             </button>
@@ -461,8 +473,8 @@ export function DetailPage() {
 
           <button
             type="button"
-            aria-label="收起项目栏"
-            title="收起项目栏"
+            aria-label={t('transcript.collapseProjectHeader')}
+            title={t('transcript.collapseProjectHeader')}
             className="absolute bottom-0 left-1/2 z-[87] inline-flex h-6 w-6 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={() => setProjectHeaderCollapsed(true)}
           >
@@ -474,10 +486,10 @@ export function DetailPage() {
       {projectHeaderCollapsed && (
         <button
           type="button"
-          aria-label="展开项目栏"
+          aria-label={t('transcript.expandProjectHeader')}
           className="app-chrome fixed left-1/2 top-[calc(var(--window-titlebar-height)+6px)] z-[86] inline-flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
           onClick={() => setProjectHeaderCollapsed(false)}
-          title="展开项目栏"
+          title={t('transcript.expandProjectHeader')}
         >
           <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
         </button>
@@ -489,6 +501,7 @@ export function DetailPage() {
           y={menuPos.y}
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
+          usesTmuxRuntime={usesTmuxRuntime}
           isDevRunning={isRunning}
           isDevStopping={isStopping}
           isOpeningTerminal={isOpeningTerminal}

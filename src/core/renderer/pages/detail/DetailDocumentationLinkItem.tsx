@@ -17,6 +17,7 @@ import {
   normalizeProjectDocLinkTag,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
+import { useI18n, useLocale } from '../../i18n'
 import type { DetailDocumentationEditState } from './detail.documentationCard.types'
 import { DetailDocumentationTagSelect } from './DetailDocumentationTagSelect'
 
@@ -61,6 +62,8 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
   onSetDefaultDocLink,
   onRemoveDocLink,
 }: DetailDocumentationLinkItemProps) {
+  const locale = useLocale()
+  const { t } = useI18n()
   const {
     attributes,
     listeners,
@@ -91,7 +94,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
             type="text"
             value={editing.title}
             onChange={(event) => editing.setTitle(event.target.value)}
-            placeholder="名称"
+            placeholder={t('documentation.namePlaceholder')}
             className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
           />
           <input
@@ -113,7 +116,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
           <textarea
             value={editing.note}
             onChange={(event) => editing.setNote(event.target.value)}
-            placeholder="备注（可选）"
+            placeholder={t('documentation.notePlaceholder')}
             rows={2}
             className="quiet-control block min-h-[64px] w-full rounded-[14px] border-0 px-3 py-2 text-xs text-[color:var(--color-foreground)]"
           />
@@ -121,7 +124,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
             type="text"
             value={editing.account}
             onChange={(event) => editing.setAccount(event.target.value)}
-            placeholder="账号 / 用户名（可选）"
+            placeholder={t('documentation.accountPlaceholder')}
             className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
           />
           <input
@@ -131,7 +134,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
               editing.setSecret(event.target.value)
               if (event.target.value.trim()) editing.setClearSecret(false)
             }}
-            placeholder={editing.secretLoading ? '密码加载中...' : '密码 / Token'}
+            placeholder={editing.secretLoading ? t('documentation.loadingPassword') : t('documentation.secretPlaceholder')}
             disabled={editing.secretLoading}
             className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
           />
@@ -146,7 +149,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                   if (event.target.checked) editing.setSecret('')
                 }}
               />
-              Clear saved password
+              {t('documentation.clearSavedPassword')}
             </label>
           )}
           <div className="flex items-center gap-2">
@@ -156,13 +159,13 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                 void editing.save()
               }}
             >
-              保存
+              {t('common.save')}
             </button>
             <button
               className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
               onClick={editing.cancel}
             >
-              取消
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -176,7 +179,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                 ? 'cursor-not-allowed opacity-50'
                 : 'cursor-grab active:cursor-grabbing hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
             }`}
-            title={dragDisabled ? 'Cannot drag while editing' : 'Drag to reorder'}
+            title={dragDisabled ? t('documentation.dragDisabled') : t('documentation.dragToReorder')}
             disabled={dragDisabled}
             onClick={(event) => {
               event.preventDefault()
@@ -204,7 +207,8 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                   <span className="inline-flex items-center rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                     {projectDocLinkTagLabel(
                       normalizeProjectDocLinkTag(link.tag, docTagOptions),
-                      docTagOptions
+                      docTagOptions,
+                      locale
                     )}
                   </span>
                 </div>
@@ -212,7 +216,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
               <div className="inline-flex items-center gap-1">
                 {isDefault && (
                   <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                    Default
+                    {t('documentation.defaultBadge')}
                   </span>
                 )}
                 <ChevronDown
@@ -236,7 +240,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                     <>
                       <span className="inline-flex max-w-[320px] items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                         <UserRound className="h-2.5 w-2.5 shrink-0" />
-                        <span className="truncate">Account: {link.account}</span>
+                        <span className="truncate">{t('documentation.accountLabel')}: {link.account}</span>
                       </span>
                       <button
                         className={`inline-flex h-7 items-center gap-1 rounded-full px-2 text-[11px] transition-all ${
@@ -247,10 +251,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                         onClick={() => {
                           void onCopyAccount(link.id)
                         }}
-                        title="Copy account"
+                        title={t('documentation.copyAccount')}
                       >
                         <Copy className="h-3 w-3" />
-                        {copiedAccount ? 'Copied' : 'Copy Account'}
+                        {copiedAccount ? t('common.copied') : t('documentation.copyAccount')}
                       </button>
                     </>
                   )}
@@ -259,7 +263,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       <span className="inline-flex max-w-[320px] items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                         <KeyRound className="h-2.5 w-2.5 shrink-0" />
                         <span className="truncate">
-                          Password: {secretPreviewLoading ? 'Loading...' : (secretPreview ?? '******')}
+                          {t('documentation.passwordLabel')}: {secretPreviewLoading ? t('common.loading') : (secretPreview ?? '******')}
                         </span>
                       </span>
                       {!secretPreview && !secretPreviewLoading && (
@@ -268,9 +272,9 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                           onClick={() => {
                             void onRevealSecret(link.id)
                           }}
-                          title="Show password"
+                          title={t('common.show')}
                         >
-                          Show
+                          {t('common.show')}
                         </button>
                       )}
                       <button
@@ -282,10 +286,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                         onClick={() => {
                           void onCopySecret(link.id)
                         }}
-                        title="Copy password"
+                        title={t('documentation.copyPassword')}
                       >
                         <Copy className="h-3 w-3" />
-                        {copiedSecret ? 'Copied' : 'Copy Password'}
+                        {copiedSecret ? t('common.copied') : t('documentation.copyPassword')}
                       </button>
                     </>
                   )}
@@ -300,19 +304,19 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                     {link.note?.trim() && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                         <StickyNote className="h-2.5 w-2.5" />
-                        Note
+                        {t('documentation.noteLabel')}
                       </span>
                     )}
                     {link.account?.trim() && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                         <UserRound className="h-2.5 w-2.5" />
-                        Account
+                        {t('documentation.accountLabel')}
                       </span>
                     )}
                     {link.hasSecret && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                         <KeyRound className="h-2.5 w-2.5" />
-                        Password
+                        {t('documentation.passwordLabel')}
                       </span>
                     )}
                   </div>
@@ -326,7 +330,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                     onClick={() => window.electronAPI.openExternal(link.url)}
                   >
                     <ExternalLink className="h-3 w-3" />
-                    打开
+                    {t('documentation.openLink')}
                   </button>
                   {link.account?.trim() && (
                     <button
@@ -338,10 +342,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       onClick={() => {
                         void onCopyAccount(link.id)
                       }}
-                      title="Copy account"
+                      title={t('documentation.copyAccount')}
                     >
                       <Copy className="h-3 w-3" />
-                      {copiedAccount ? 'Copied' : 'Account'}
+                      {copiedAccount ? t('common.copied') : t('documentation.accountLabel')}
                     </button>
                   )}
                   {link.hasSecret && (
@@ -354,10 +358,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       onClick={() => {
                         void onCopySecret(link.id)
                       }}
-                      title="Copy password"
+                      title={t('documentation.copyPassword')}
                     >
                       <KeyRound className="h-3 w-3" />
-                      {copiedSecret ? 'Copied' : 'Password'}
+                      {copiedSecret ? t('common.copied') : t('documentation.passwordLabel')}
                     </button>
                   )}
                   <button
@@ -365,10 +369,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                     onClick={() => {
                       void editing.start(link)
                     }}
-                    title="Edit"
+                    title={t('documentation.editLink')}
                   >
                     <Pencil className="h-3 w-3" />
-                    编辑
+                    {t('documentation.editLink')}
                   </button>
                   <button
                     className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -376,9 +380,9 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       void onSetDefaultDocLink(link.id)
                     }}
                     disabled={isDefault}
-                    title={isDefault ? '默认资料' : '设为默认资料'}
+                    title={isDefault ? t('documentation.currentDefaultTitle') : t('documentation.setDefaultTitle')}
                   >
-                    {isDefault ? '默认' : '设为默认'}
+                    {isDefault ? t('documentation.currentDefault') : t('documentation.setDefault')}
                   </button>
                   <button
                     className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
@@ -386,7 +390,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       if (isEditing) editing.cancel()
                       void onRemoveDocLink(link.id)
                     }}
-                    title="Remove"
+                    title={t('documentation.removeLink')}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

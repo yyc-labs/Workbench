@@ -7,10 +7,12 @@ import {
   clampMaxBullets,
   clampSplitMaxBatches,
   completePreviousSteps,
+  createBaseAiSteps,
   getFocusedStepKey,
   parseAiFlowLine,
   restoreAiState,
 } from './detail.aiFlow'
+import { translateCurrent } from '../../i18n'
 import type {
   AiCommitStatus,
   AiFlowNode,
@@ -49,7 +51,7 @@ export function useAiCommitFlow({
   aiCommitConfig,
 }: UseAiCommitFlowOptions) {
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
-  const [flowSteps, setFlowSteps] = useState<AiStepState[]>(BASE_AI_STEPS)
+  const [flowSteps, setFlowSteps] = useState<AiStepState[]>(createBaseAiSteps())
   const [aiRawText, setAiRawText] = useState('')
   const [jumpToAiLogToken, setJumpToAiLogToken] = useState(0)
   const [gitSnapshot, setGitSnapshot] = useState<DetailGitSnapshot | null>(null)
@@ -186,7 +188,7 @@ export function useAiCommitFlow({
       if (pid !== projectId) return
       setAiCommitStatus(status)
       if (status === 'running') {
-        setFlowSteps(BASE_AI_STEPS)
+        setFlowSteps(createBaseAiSteps())
         setAiRawText('')
         setAiCommitUndo(null)
         setAiCommitUndoRemainingMs(0)
@@ -492,7 +494,7 @@ export function useAiCommitFlow({
       undoAiCommit?: (projectId: string) => Promise<AiCommitUndoResult>
     }
     if (typeof api.undoAiCommit !== 'function') {
-      setAiCommitUndoError('撤回 API 不可用，请重启 Electron 应用。')
+      setAiCommitUndoError(translateCurrent('detail.operationConfirmUndoTitle'))
       return
     }
 
@@ -501,7 +503,7 @@ export function useAiCommitFlow({
     try {
       const result = await api.undoAiCommit(projectId)
       if (!result.ok) {
-        setAiCommitUndoError(result.error || result.output || '撤回提交失败')
+        setAiCommitUndoError(result.error || result.output || (translateCurrent('common.unknown')))
         applyUndoState(result.undo)
         return
       }
@@ -520,7 +522,7 @@ export function useAiCommitFlow({
       beginAiCommitUndoAuth?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
     }
     if (typeof api.beginAiCommitUndoAuth !== 'function') {
-      setAiCommitUndoError('撤回认证 API 不可用，请重启 Electron 应用。')
+      setAiCommitUndoError(translateCurrent('detail.operationConfirmUndoTitle'))
       return false
     }
 
@@ -529,7 +531,7 @@ export function useAiCommitFlow({
       const state = await api.beginAiCommitUndoAuth(projectId)
       applyUndoState(state?.undo)
       if (!state?.undo || state.undo.status !== 'available') {
-        setAiCommitUndoError('撤回窗口已失效，请重新执行 AI Commit 后再试。')
+        setAiCommitUndoError(translateCurrent('detail.operationConfirmUndoHelper'))
         return false
       }
       return true
@@ -576,7 +578,7 @@ export function useAiCommitFlow({
   }, [aiCommitConfig, quickMaxBulletsNumber, quickSplit, quickSplitMaxBatchesNumber])
 
   const statusText =
-    aiCommitStatus === 'running' ? 'Running' : aiCommitStatus === 'success' ? 'Success' : aiCommitStatus === 'error' ? 'Failed' : 'Idle'
+    aiCommitStatus === 'running' ? translateCurrent('common.running') : aiCommitStatus === 'success' ? translateCurrent('detail.gitStatusSuccess') : aiCommitStatus === 'error' ? translateCurrent('detail.gitStatusFailed') : translateCurrent('common.default')
   const statusClass =
     aiCommitStatus === 'running'
       ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'

@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
 import { Copy } from 'lucide-react'
 import { formatCommitDate } from './detail.aiFlow'
+import { translateCurrent } from '../../i18n'
 import type { DetailGitSnapshot } from './detail.types'
 
 type GitHistoryCommit = DetailGitSnapshot['recentCommits'][number]
@@ -14,8 +15,10 @@ export type CommitHistoryDisplayItem = GitHistoryCommit & {
 }
 
 export function formatFilesChangedLabel(count: number): string {
-  if (!Number.isFinite(count) || count <= 0) return '0 文件'
-  return `${count} 文件`
+  if (!Number.isFinite(count) || count <= 0) return translateCurrent('detail.commitHistoryFilesChanged', { count: 0 })
+  return count === 1
+    ? translateCurrent('detail.commitHistoryFilesChanged', { count })
+    : translateCurrent('detail.commitHistoryFilesChangedPlural', { count })
 }
 
 export function buildCommitHistoryDisplayItems(
@@ -34,18 +37,18 @@ export function buildCommitHistoryDisplayItems(
   const localHeadLower = options.localHead?.toLowerCase()
   const upstreamHeadLower = options.upstreamHead?.toLowerCase()
   const relationLabel = !options.hasUpstream
-    ? 'NO UPSTREAM'
+    ? translateCurrent('detail.commitHistoryRelationNoUpstream')
     : options.upstreamGone
-      ? 'UPSTREAM GONE'
+      ? translateCurrent('detail.commitHistoryRelationUpstreamGone')
       : options.branchAhead === 0 && options.branchBehind === 0
-        ? 'SYNCED'
+        ? translateCurrent('detail.commitHistoryRelationSynced')
         : options.branchAhead > 0 && options.branchBehind > 0
-          ? `AHEAD ${options.branchAhead} / BEHIND ${options.branchBehind}`
+          ? translateCurrent('detail.commitHistoryRelationAheadBehind', { ahead: options.branchAhead, behind: options.branchBehind })
           : options.branchAhead > 0
-            ? `AHEAD ${options.branchAhead}`
+            ? translateCurrent('detail.commitHistoryRelationAhead', { ahead: options.branchAhead })
             : options.branchBehind > 0
-              ? `BEHIND ${options.branchBehind}`
-              : 'UNKNOWN'
+              ? translateCurrent('detail.commitHistoryRelationBehind', { behind: options.branchBehind })
+              : translateCurrent('detail.commitHistoryRelationUnknown')
 
   return commits.map((commit, index) => {
     const currentTime = commitTimes[index]
@@ -125,7 +128,7 @@ export function CommitHistoryItem({
 }) {
   const active = activeCommitHash === commit.hash
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle')
-  const hashLabel = copyStatus === 'success' ? '已复制' : copyStatus === 'error' ? '复制失败' : commit.shortHash
+  const hashLabel = copyStatus === 'success' ? translateCurrent('detail.commitHistoryCopied') : copyStatus === 'error' ? translateCurrent('detail.commitHistoryCopyFailed') : commit.shortHash
   const showRelationBadge = commit.isLocalHead || commit.isUpstreamHead
 
   useEffect(() => {
@@ -174,7 +177,7 @@ export function CommitHistoryItem({
               event.stopPropagation()
               void handleCopyHash()
             }}
-            title="点击复制完整 hash"
+            title={translateCurrent('detail.commitHistoryCopyHashTooltip')}
           >
             <Copy className="h-3 w-3" />
             {hashLabel}
@@ -183,12 +186,12 @@ export function CommitHistoryItem({
             <>
               {commit.isLocalHead && (
                 <span className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/12 px-2 py-0.5 text-[color:var(--color-primary)]">
-                  LOCAL HEAD
+                  {translateCurrent('detail.commitHistoryLocalHead')}
                 </span>
               )}
               {commit.isUpstreamHead && (
                 <span className="rounded-full border border-[color:var(--color-success)]/45 bg-[color:var(--color-success-background)] px-2 py-0.5 text-[color:var(--color-success)]">
-                  UPSTREAM
+                  {translateCurrent('detail.commitHistoryUpstream')}
                 </span>
               )}
               <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]/80">
@@ -201,7 +204,7 @@ export function CommitHistoryItem({
           </span>
           {commit.withinRecentBatch && (
             <span className="rounded-full border border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">
-              同批（15s）
+              {translateCurrent('detail.commitHistorySameBatch')}
             </span>
           )}
           <span>{formatCommitDate(commit.committedAt)}</span>
@@ -211,7 +214,7 @@ export function CommitHistoryItem({
       {active && (
         <div className="mt-2 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2">
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            {commit.authorName || 'Unknown author'}
+            {commit.authorName || translateCurrent('detail.commitHistoryUnknownAuthor')}
             {commit.refs.length > 0 ? ` · ${commit.refs.join(', ')}` : ''}
           </p>
           {commit.bullets.length > 0 && (

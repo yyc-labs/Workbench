@@ -6,6 +6,7 @@ import { UrlPopover } from '../../components/UrlPopover'
 import { InfoCard } from './DetailInfoCard'
 import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
 import { useAppStore } from '../../stores/appStore'
+import { useI18n } from '../../i18n'
 
 type DetailWorkspaceCardProps = {
   project: ProjectInfo
@@ -26,6 +27,7 @@ function DetailWorkspaceCard({
   defaultDocLink,
   onOpenProjectLinksManager,
 }: DetailWorkspaceCardProps) {
+  const { t } = useI18n()
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
   const docMenuItems = useMemo(
     () => docLinks.map((link) => {
@@ -42,7 +44,7 @@ function DetailWorkspaceCard({
   return (
     <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
       <div className="relative">
-        <p className="section-label">Workspace Snapshot</p>
+        <p className="section-label">{t('detail.workspaceSnapshot')}</p>
         <h2 className="mt-1 text-[26px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">
           {projectDisplayName(project)}
         </h2>
@@ -52,8 +54,8 @@ function DetailWorkspaceCard({
 
         <div className="mt-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <InfoCard label="Environment" value={environmentLabel} icon={FolderOpen} />
-            <InfoCard label="Dev Status" value={isRunning ? 'Running' : 'Stopped'} icon={Play} />
+            <InfoCard label={t('detail.environment')} value={environmentLabel} icon={FolderOpen} />
+            <InfoCard label={t('detail.devStatus')} value={isRunning ? t('detail.running') : t('detail.stopped')} icon={Play} />
           </div>
         </div>
 
@@ -80,11 +82,11 @@ function DetailWorkspaceCard({
                     e.stopPropagation()
                     onOpenProjectLinksManager?.()
                   }}
-                  title="左键打开默认资料，右键打开资料管理"
+                  title={t('codeWorkspace.projectDocsTitle')}
                 >
                   <BookOpen className="h-3 w-3" />
                   <span className="max-w-[240px] truncate">
-                    资料 · {projectDocLinkTagLabel(
+                    {t('common.docs')} · {projectDocLinkTagLabel(
                       normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
                       docLinkTagOptions
                     )}: {defaultDocLink.title}
