@@ -13,11 +13,20 @@ export type ProjectType =
 export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
+export type AppLocale = 'system' | 'en-US' | 'zh-CN'
 
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 export type RunStartupMode = 'silent' | 'terminal'
 
 export type CliTool = 'claude' | 'codex'
+export type AiExecutionMode =
+  | 'windows-wsl'
+  | 'windows-native'
+  | 'linux-native'
+  | 'macos-native'
+  | 'custom-script'
+  | 'disabled'
+export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'cmd' | 'sh'
 export type StartupDefaultFilter =
   | { type: 'all' }
   | { type: 'pinned' }
@@ -35,6 +44,16 @@ export interface AiCommitConfig {
   split?: boolean
   splitMaxBatches?: number
   maxBullets?: number
+}
+
+export interface AiEnvironmentConfig {
+  mode: AiExecutionMode
+  wslDistro?: string
+  shell?: AiShell
+  runtimeEntrypoint?: string
+  runtimeEntrypointHistory?: string[]
+  runtimePassProjectPath?: boolean
+  aiCommitEntrypoint?: string
 }
 
 export interface ClaudeBashrcConfig {
@@ -599,6 +618,7 @@ export interface ManagedProcessSnapshot {
 export interface TerminalProcessInventory {
   checkedAt: number
   managedProcesses: ManagedProcessSnapshot[]
+  runtimeSessions: RuntimeSessionInfo[]
   tmuxSessions: TmuxSessionInfo[]
 }
 
@@ -611,6 +631,7 @@ export interface TerminalStopAllResult {
 export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
+  locale?: AppLocale
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
   removedProjects?: RemovedProjectSnapshot[]
   /** User-defined project folders */
@@ -621,7 +642,9 @@ export interface AppConfig {
   docLinkTags?: ProjectDocTagOption[]
   /** Sidebar filter selected by default when Home opens */
   startupDefaultFilter?: StartupDefaultFilter
-  /** WSL-side launcher script path for runtime boot */
+  /** AI Runtime / AI Commit execution environment selection */
+  aiEnvironment?: AiEnvironmentConfig
+  /** Legacy runtime launcher script path kept only for old-config migration */
   runtimeLauncherScript?: string
   /** Keep runtime tmux sessions alive when app quits */
   runtimeKeepAliveOnQuit?: boolean
@@ -683,6 +706,7 @@ export interface PtySize {
 }
 
 export interface Capability {
+  hostPlatform: 'windows' | 'linux' | 'macos'
   backend: BackendMode
   hasPty: boolean
   hasWsl: boolean
@@ -724,20 +748,39 @@ export interface RuntimeEntry {
   sessionName: string
   createdAt: number
   lastOpened: number
+  mode?: AiExecutionMode
+  /** Dedicated host process pid for providers like Windows Native. */
+  pid?: number | null
+  /** Host process start timestamp used to guard against pid reuse. */
+  pidStartedAt?: number | null
 }
 
 export interface RuntimeRegistry {
   entries: Record<string, RuntimeEntry>
 }
 
+export interface RuntimeSessionInfo {
+  sessionName: string
+  projectId: string
+  createdAt: number
+  status: 'attached' | 'detached' | 'dead'
+  mode: AiExecutionMode
+}
+
 export interface RuntimeDiagnostics {
   checkedAt: number
+  mode: AiExecutionMode
+  providerLabel: string
+  runtimeEntrypoint?: string
+  supported: boolean
   hasWsl: boolean
   hasTmux: boolean
   distro?: string
-  launcherScript: string
-  launcherScriptExists: boolean
-  launcherScriptExecutable: boolean
+  launcherScript?: string
+  launcherScriptExists?: boolean
+  launcherScriptExecutable?: boolean
+  shell?: AiShell
+  availableModes?: AiExecutionMode[]
   issues: string[]
 }
 

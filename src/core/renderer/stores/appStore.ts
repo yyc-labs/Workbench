@@ -21,6 +21,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     projects: [],
     removedProjects: [],
     theme: initialThemeMode,
+    locale: 'system',
     docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
   },
   searchQuery: '',

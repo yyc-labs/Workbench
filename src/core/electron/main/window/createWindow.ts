@@ -107,9 +107,6 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
     onWindowStateChange(false)
   })
   mainWindow.on('ready-to-show', () => {
-    if (!mainWindow.isMaximized()) {
-      mainWindow.maximize()
-    }
     mainWindow.show()
   })
   mainWindow.on('closed', onClosed)

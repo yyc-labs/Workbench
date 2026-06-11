@@ -392,6 +392,10 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
     return deps.runtimeService.listRuntimeEntries()
   })
 
+  ipcMain.handle(IPC.RUNTIME_LIST_SESSIONS, () => {
+    return deps.runtimeService.listRuntimeSessions()
+  })
+
   ipcMain.handle(IPC.RUNTIME_DIAGNOSTICS, async () => {
     return deps.runtimeService.diagnoseRuntime()
   })

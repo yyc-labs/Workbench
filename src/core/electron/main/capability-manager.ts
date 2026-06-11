@@ -10,8 +10,9 @@ class CapabilityManager {
     if (this.cache) return
 
     const hasPty = this.tryLoadNodePty()
+    const hostPlatform = this.resolveHostPlatform()
     const hasWsl = process.platform === 'win32' && wslBridge.isAvailable()
-    const hasTmux = hasWsl ? await wslBridge.hasTmux() : false
+    const hasTmux = await this.detectTmuxAvailability(hasWsl)
 
     let backend: BackendMode
     if (hasTmux) {
@@ -29,6 +30,7 @@ class CapabilityManager {
     const wslEnv = hasWsl ? await this.captureWslEnv(distro!) : undefined
 
     this.cache = {
+      hostPlatform,
       backend,
       hasPty,
       hasWsl,
@@ -54,6 +56,24 @@ class CapabilityManager {
   private tryLoadNodePty(): boolean {
     try {
       require('node-pty')
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private resolveHostPlatform(): Capability['hostPlatform'] {
+    if (process.platform === 'win32') return 'windows'
+    if (process.platform === 'darwin') return 'macos'
+    return 'linux'
+  }
+
+  private async detectTmuxAvailability(hasWsl: boolean): Promise<boolean> {
+    if (hasWsl) {
+      return wslBridge.hasTmux()
+    }
+    try {
+      execSync('tmux -V', { stdio: 'pipe', timeout: 5000 })
       return true
     } catch {
       return false

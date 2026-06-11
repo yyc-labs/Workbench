@@ -239,6 +239,9 @@ const api = {
   getRuntimeDiagnostics: () =>
     ipcRenderer.invoke(IPC.RUNTIME_DIAGNOSTICS),
 
+  listRuntimeSessions: () =>
+    ipcRenderer.invoke(IPC.RUNTIME_LIST_SESSIONS),
+
   listRuntimeEntries: () =>
     ipcRenderer.invoke(IPC.RUNTIME_LIST_ENTRIES),
 

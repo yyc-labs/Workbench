@@ -44,6 +44,9 @@ function runtimeEntriesEqual(
       || prevEntry.sessionName !== nextEntry.sessionName
       || prevEntry.createdAt !== nextEntry.createdAt
       || prevEntry.lastOpened !== nextEntry.lastOpened
+      || (prevEntry.pid ?? null) !== (nextEntry.pid ?? null)
+      || (prevEntry.pidStartedAt ?? null) !== (nextEntry.pidStartedAt ?? null)
+      || (prevEntry.mode ?? null) !== (nextEntry.mode ?? null)
     ) {
       return false
     }
@@ -148,7 +151,7 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
   refreshSessions: async () => {
     try {
       const { projects, runtimeEntries } = get()
-      const rawSessions = await runtimeManager.listTmuxSessions()
+      const rawSessions = await runtimeManager.listRuntimeSessions()
       const rawSessionNames = rawSessions.map((item) => item.sessionName)
       const rawSessionNameSet = new Set(rawSessionNames)
       const createdAtByName = new Map(rawSessions.map((item) => [item.sessionName, item.createdAt] as const))
@@ -162,15 +165,15 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
           rawSessionNameSet
         )
 
-        const tmux = rawSessions.find((s) => s.sessionName === sessionName)
+        const runtimeSession = rawSessions.find((s) => s.sessionName === sessionName)
 
         result[project.id] = {
           projectId: project.id,
           sessionName,
-          status: tmux
-            ? (tmux.status === 'attached' ? 'attached' : 'detached')
+          status: runtimeSession
+            ? (runtimeSession.status === 'attached' ? 'attached' : 'detached')
             : 'stopped',
-          createdAt: tmux?.createdAt ?? 0,
+          createdAt: runtimeSession?.createdAt ?? 0,
         }
       }
 

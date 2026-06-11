@@ -26,16 +26,16 @@ class RuntimeManager {
     await window.electronAPI.killTmuxSession(sessionName)
   }
 
-  /** Returns raw tmux session list. Caller (store) constructs SessionRuntime[]. */
-  async listTmuxSessions() {
-    return window.electronAPI.listTmuxSessions()
+  /** Returns provider-backed runtime sessions. */
+  async listRuntimeSessions() {
+    return window.electronAPI.listRuntimeSessions()
   }
 
   /** Wait until a session no longer exists (for restart safety). */
   async waitForSessionGone(sessionName: string, timeoutMs = 10000): Promise<void> {
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
-      const sessions = await window.electronAPI.listTmuxSessions()
+      const sessions = await window.electronAPI.listRuntimeSessions()
       if (!sessions.find((s) => s.sessionName === sessionName)) return
       await new Promise((r) => setTimeout(r, 300))
     }

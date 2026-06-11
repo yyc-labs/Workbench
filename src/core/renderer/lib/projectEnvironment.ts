@@ -1,3 +1,5 @@
+import type { ResolvedLocale } from '../i18n/messages'
+
 export type ProjectEnvironment = 'windows' | 'ubuntu' | 'unknown'
 
 /**
@@ -30,8 +32,8 @@ export function detectProjectEnvironment(pathValue: string): ProjectEnvironment 
   return 'unknown'
 }
 
-export function projectEnvironmentLabel(env: ProjectEnvironment): string {
+export function projectEnvironmentLabel(env: ProjectEnvironment, locale: ResolvedLocale = 'en-US'): string {
   if (env === 'windows') return 'Windows'
   if (env === 'ubuntu') return 'Ubuntu'
-  return 'Unknown'
+  return locale === 'zh-CN' ? '未知' : 'Unknown'
 }

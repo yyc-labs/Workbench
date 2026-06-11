@@ -44,6 +44,7 @@ export const IPC = {
   TERMINAL_STOP_ALL: 'terminal:stop-all',
   RUNTIME_START: 'runtime:start',
   RUNTIME_DIAGNOSTICS: 'runtime:diagnostics',
+  RUNTIME_LIST_SESSIONS: 'runtime:list-sessions',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   PROJECT_FILE_TREE: 'project-file:tree',
   PROJECT_FILE_TREE_DIRECTORY: 'project-file:tree-directory',

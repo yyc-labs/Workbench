@@ -1,7 +1,13 @@
+import { spawn } from 'child_process'
+import { readFile, writeFile } from 'fs/promises'
+import { homedir } from 'os'
+import { join } from 'path'
 import { wslBridge } from './wsl-bridge'
 import type { ClaudeBashrcConfig } from '../../shared/types'
 
-const BASHRC_PATH = '/home/ubuntu/.bashrc'
+const BASHRC_PATH = process.platform === 'win32'
+  ? '/home/ubuntu/.bashrc'
+  : join(homedir(), '.bashrc')
 
 const DEFAULT_CLAUDE_BASHRC_CONFIG: ClaudeBashrcConfig = {
   anthropicBaseUrl: 'https://api.deepseek.com/anthropic',
@@ -27,6 +33,12 @@ const FIELD_TO_ENV = {
 
 type ClaudeBashrcField = keyof ClaudeBashrcConfig
 
+function ensureShellRuntimeAvailable(): void {
+  if (process.platform === 'win32' && !wslBridge.isAvailable()) {
+    throw new Error('WSL is not available on this host')
+  }
+}
+
 function shellSingleQuote(input: string): string {
   return input.replace(/'/g, `'\\''`)
 }
@@ -36,10 +48,28 @@ function normalizeValue(value: string | undefined, fallback: string): string {
   return normalized || fallback
 }
 
+function decodeExportValue(rawValue: string): string {
+  const trimmed = rawValue.trim()
+  if (!trimmed) return ''
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+  }
+
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1)
+  }
+
+  return trimmed.replace(/\s+#.*$/, '').trim()
+}
+
 function matchExportValue(content: string, envName: string): string | null {
-  const pattern = new RegExp(`^\\s*export\\s+${envName}=(["'])(.*?)\\1\\s*$`, 'm')
+  const pattern = new RegExp(`^\\s*export\\s+${envName}=(.*)$`, 'm')
   const match = content.match(pattern)
-  return match ? match[2] : null
+  return match ? decodeExportValue(match[1]) : null
 }
 
 function replaceOrAppendExport(content: string, envName: string, value: string): string {
@@ -53,12 +83,52 @@ function replaceOrAppendExport(content: string, envName: string, value: string):
 }
 
 async function writeRawBashrc(content: string): Promise<void> {
-  const escaped = shellSingleQuote(BASHRC_PATH)
-  const payloadBase64 = Buffer.from(content, 'utf-8').toString('base64')
-  await wslBridge.exec(`printf '%s' '${payloadBase64}' | base64 -d > '${escaped}'`, 15000)
+  ensureShellRuntimeAvailable()
+  if (process.platform === 'win32') {
+    const escaped = shellSingleQuote(BASHRC_PATH)
+    const payloadBase64 = Buffer.from(content, 'utf-8').toString('base64')
+    await wslBridge.exec(`printf '%s' '${payloadBase64}' | base64 -d > '${escaped}'`, 15000)
+    return
+  }
+  await writeFile(BASHRC_PATH, content, 'utf-8')
+}
+
+async function readRawBashrc(): Promise<string> {
+  ensureShellRuntimeAvailable()
+  if (process.platform === 'win32') {
+    const escaped = shellSingleQuote(BASHRC_PATH)
+    return wslBridge.exec(`cat '${escaped}'`, 15000)
+  }
+  return readFile(BASHRC_PATH, 'utf-8')
+}
+
+async function execBashInteractiveLogin(command: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await wslBridge.execBashInteractiveLogin(command, 15000)
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('bash', ['-ilc', command], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stderr = ''
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+    child.on('error', (error) => reject(error))
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+      reject(new Error(stderr.trim() || `bash -ilc exited with code ${code}`))
+    })
+  })
 }
 
 async function validateBashrcLoad(expected: ClaudeBashrcConfig): Promise<void> {
+  ensureShellRuntimeAvailable()
   const checkCommand = [
     `source '${shellSingleQuote(BASHRC_PATH)}'`,
     '[ -n "$ANTHROPIC_BASE_URL" ]',
@@ -74,7 +144,7 @@ async function validateBashrcLoad(expected: ClaudeBashrcConfig): Promise<void> {
     'echo OK',
   ].join(' && ')
 
-  await wslBridge.execBashInteractiveLogin(checkCommand, 15000)
+  await execBashInteractiveLogin(checkCommand)
 }
 
 export function defaultClaudeBashrcConfig(): ClaudeBashrcConfig {
@@ -96,8 +166,7 @@ export function normalizeClaudeBashrcConfig(input: Record<string, unknown>): Cla
 }
 
 export async function readClaudeBashrcConfig(): Promise<ClaudeBashrcConfig> {
-  const escaped = shellSingleQuote(BASHRC_PATH)
-  const raw = await wslBridge.exec(`cat '${escaped}'`, 15000)
+  const raw = await readRawBashrc()
   const next = defaultClaudeBashrcConfig()
 
   ;(Object.entries(FIELD_TO_ENV) as Array<[ClaudeBashrcField, string]>).forEach(([field, envName]) => {
@@ -109,8 +178,7 @@ export async function readClaudeBashrcConfig(): Promise<ClaudeBashrcConfig> {
 }
 
 export async function writeClaudeBashrcConfig(config: ClaudeBashrcConfig): Promise<ClaudeBashrcConfig> {
-  const escaped = shellSingleQuote(BASHRC_PATH)
-  const raw = await wslBridge.exec(`cat '${escaped}'`, 15000)
+  const raw = await readRawBashrc()
   let nextContent = raw
   const normalized = defaultClaudeBashrcConfig()
 

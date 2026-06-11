@@ -5,6 +5,8 @@ import type { ProjectDocTagOption } from '../../shared/types'
 export type SettingsActionsSlice = Pick<
   AppState,
   | 'setTheme'
+  | 'setLocale'
+  | 'setAiEnvironmentConfig'
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
@@ -24,6 +26,26 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         theme: updated.theme,
+      },
+    }))
+  },
+
+  setLocale: async (locale) => {
+    const updated = await window.electronAPI.setConfig({ locale })
+    set((state) => ({
+      config: {
+        ...state.config,
+        locale: updated.locale,
+      },
+    }))
+  },
+
+  setAiEnvironmentConfig: async (aiEnvironment) => {
+    const updated = await window.electronAPI.setConfig({ aiEnvironment })
+    set((state) => ({
+      config: {
+        ...state.config,
+        aiEnvironment: updated.aiEnvironment,
       },
     }))
   },

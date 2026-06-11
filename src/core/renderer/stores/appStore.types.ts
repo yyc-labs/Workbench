@@ -15,6 +15,7 @@ import type {
   ProcessInfo,
   AppConfig,
   Capability,
+  RuntimeSessionInfo,
   TmuxSessionInfo,
   SessionRuntime,
   RuntimeEntry,
@@ -82,6 +83,7 @@ declare global {
       stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
       startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
       getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
+      listRuntimeSessions: () => Promise<RuntimeSessionInfo[]>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
       listProjectDirectoryFiles: (
@@ -192,6 +194,8 @@ export interface AppState {
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
+  setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
+  setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>

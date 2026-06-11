@@ -1,26 +1,21 @@
-export const SETTINGS_SECTION_LABELS = {
-  general: 'General',
-  runtime: 'Runtime',
-  transcripts: 'Transcripts',
-  hooks: 'Agent Hooks',
-  logs: 'Startup Logs',
-  ai: 'AI Commit',
-  rules: 'Rules',
-  about: 'About',
-} as const
+export const SETTINGS_SECTIONS = [
+  'general',
+  'runtime',
+  'ai-runtime',
+  'transcripts',
+  'hooks',
+  'logs',
+  'ai',
+  'rules',
+  'about',
+] as const
 
-export type Section = keyof typeof SETTINGS_SECTION_LABELS
+export type Section = (typeof SETTINGS_SECTIONS)[number]
 
 export const DEFAULT_SETTINGS_SECTION: Section = 'general'
 
-export const SETTINGS_SECTIONS = Object.keys(SETTINGS_SECTION_LABELS) as Section[]
-
 export function isSettingsSection(value: string | undefined): value is Section {
-  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(SETTINGS_SECTION_LABELS, value)
-}
-
-export function getSettingsSectionLabel(section: Section): string {
-  return SETTINGS_SECTION_LABELS[section]
+  return typeof value === 'string' && SETTINGS_SECTIONS.includes(value as Section)
 }
 
 export type ThemeMode = 'system' | 'light' | 'dark'

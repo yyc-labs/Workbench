@@ -3,7 +3,9 @@ import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import type { AppConfig } from '../../shared/types'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, PROJECT_DOC_LINK_FALLBACK_TAG } from '../../renderer/lib/projectDocLinks'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/projectDocLinks'
+import { capabilityManager } from './capability-manager'
+import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -37,12 +39,14 @@ function getConfigPath(): string {
 const DEFAULT_CONFIG: AppConfig = {
   projects: [],
   theme: 'system',
+  locale: 'system',
   removedProjects: [],
   folders: [],
   tags: [],
   docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
   startupDefaultFilter: undefined,
-  runtimeLauncherScript: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
+  aiEnvironment: undefined,
+  runtimeLauncherScript: undefined,
   runtimeKeepAliveOnQuit: false,
   aiCommit: {
     enabled: true,
@@ -63,8 +67,7 @@ let saveQueue: Promise<void> = Promise.resolve()
 function normalizeDocLinkTags(
   input: AppConfig['docLinkTags'] | unknown
 ): NonNullable<AppConfig['docLinkTags']> {
-  const defaults = PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item }))
-  if (!Array.isArray(input)) return defaults
+  if (!Array.isArray(input)) return []
 
   const deduped: NonNullable<AppConfig['docLinkTags']> = []
   const used = new Set<string>()
@@ -78,14 +81,6 @@ function normalizeDocLinkTags(
       value,
       label,
       sortOrder: Number.isFinite(item?.sortOrder as number) ? Number(item?.sortOrder) : deduped.length,
-    })
-  }
-
-  if (!used.has(PROJECT_DOC_LINK_FALLBACK_TAG)) {
-    deduped.push({
-      value: PROJECT_DOC_LINK_FALLBACK_TAG,
-      label: '其他资料',
-      sortOrder: deduped.length,
     })
   }
 
@@ -170,6 +165,18 @@ function normalizeAgentHookConfig(
   }
 }
 
+function normalizeAiEnvironmentConfig(config: AppConfig): AppConfig['aiEnvironment'] {
+  try {
+    const capability = capabilityManager.get()
+    return migrateLegacyEnvironment(config.aiEnvironment, capability, {
+      runtimeLauncherScript: config.runtimeLauncherScript,
+      aiCommitEntrypoint: config.aiEnvironment?.aiCommitEntrypoint,
+    })
+  } catch {
+    return config.aiEnvironment
+  }
+}
+
 export function loadConfig(): AppConfig {
   if (cachedConfig) return cachedConfig
 
@@ -230,6 +237,10 @@ export function loadConfig(): AppConfig {
       removedProjects: normalizedRemovedProjects,
       docLinkTags: normalizeDocLinkTags(parsed.docLinkTags),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
+      aiEnvironment: normalizeAiEnvironmentConfig({
+        ...DEFAULT_CONFIG,
+        ...parsed,
+      }),
     }
     if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
@@ -239,6 +250,7 @@ export function loadConfig(): AppConfig {
       ...DEFAULT_CONFIG,
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
+      aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
   }
   return cachedConfig!
@@ -267,6 +279,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
   }
+  updated.aiEnvironment = normalizeAiEnvironmentConfig(updated)
   await saveConfig(updated)
   return updated
 }

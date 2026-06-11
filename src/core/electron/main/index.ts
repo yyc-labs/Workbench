@@ -7,6 +7,7 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createTranscriptRepository } from './transcript/transcriptRepository'
 import { createTranscriptService } from './transcript/transcriptService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
@@ -19,6 +20,10 @@ import type { Capability, TranscriptImportedEvent } from '../../shared/types'
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+const aiEnvironmentController = new AiEnvironmentController(
+  () => bootCapability,
+  () => loadConfig(),
+)
 const GLOBAL_HOME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+H'
 const GLOBAL_THEME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+L'
 const gitService = createGitService({
@@ -27,11 +32,13 @@ const gitService = createGitService({
 const runtimeService = createRuntimeService({
   getCapability: () => bootCapability,
   getProcessManager: () => processManager,
+  aiEnvironmentController,
   emitRuntimeStateChanged,
 })
 const aiCommitService = createAiCommitService({
   getMainWindow: () => mainWindow,
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
+  aiEnvironmentController,
 })
 const transcriptRepository = createTranscriptRepository()
 const transcriptService = createTranscriptService({
