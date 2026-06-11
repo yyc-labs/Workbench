@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { useI18n } from '../../i18n'
 import { clampMaxBullets, clampSplitMaxBatches } from './settings.helpers'
 
 type AiCommitPanelProps = {
@@ -10,6 +11,7 @@ type AiCommitPanelProps = {
 }
 
 function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
+  const { t } = useI18n()
   const [enabled, setEnabled] = useState(Boolean(aiCommit.enabled ?? true))
   const [apiBaseUrl, setApiBaseUrl] = useState(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState(aiCommit.apiKey || '')
@@ -67,10 +69,10 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
   return (
     <div className="space-y-8">
       <div>
-        <p className="section-label mb-3">AI</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Auto Commit</h2>
+        <p className="section-label mb-3">{t('settingsAiCommit.kicker')}</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settingsAiCommit.title')}</h2>
         <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          Configure AI API for auto-commit in project detail page (Windows PowerShell and WSL supported).
+          {t('settingsAiCommit.description')}
         </p>
       </div>
 
@@ -81,7 +83,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />
-          Enable AI commit
+          {t('settingsAiCommit.enableAiCommit')}
         </label>
 
         <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
@@ -90,11 +92,11 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
             checked={split}
             onChange={(e) => setSplit(e.target.checked)}
           />
-          Enable split commit
+          {t('settingsAiCommit.enableSplitCommit')}
         </label>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">Split max batches (1-12)</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.splitMaxBatches')}</p>
           <Input
             type="number"
             min={1}
@@ -109,7 +111,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">Max bullets per commit (1-20)</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.maxBullets')}</p>
           <Input
             type="number"
             min={1}
@@ -123,7 +125,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">API Base URL</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.apiBaseUrl')}</p>
           <Input
             value={apiBaseUrl}
             onChange={(e) => setApiBaseUrl(e.target.value)}
@@ -133,7 +135,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">API Key</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.apiKey')}</p>
           <Input
             type="password"
             value={apiKey}
@@ -144,7 +146,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">Model</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.model')}</p>
           <Input
             value={model}
             onChange={(e) => setModel(e.target.value)}
@@ -154,13 +156,16 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">WSL pwsh path</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.wslPwshPath')}</p>
           <Input
             value={wslPwshPath}
             onChange={(e) => setWslPwshPath(e.target.value)}
             className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="/snap/bin/pwsh"
           />
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
+            {t('settingsAiCommit.wslPwshHint')}
+          </p>
         </div>
 
         <Button
@@ -168,7 +173,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
           disabled={saving}
           onClick={() => void handleSave()}
         >
-          {saving ? 'Saving...' : 'Save AI Config'}
+          {saving ? t('common.saving') : t('settingsAiCommit.save')}
         </Button>
       </div>
     </div>

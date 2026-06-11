@@ -1,5 +1,6 @@
 import { FolderPlus, Plus, Settings, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { useI18n } from '../../i18n'
 import { HomeDragOverlay } from './HomeDragOverlay'
 
 type HomeEmptyStateProps = {
@@ -9,6 +10,8 @@ type HomeEmptyStateProps = {
 }
 
 function HomeEmptyState({ isDragOver, onAddFolder, onOpenSettings }: HomeEmptyStateProps) {
+  const { t } = useI18n()
+
   return (
     <div className="h-full flex flex-col">
       {isDragOver && <HomeDragOverlay />}
@@ -22,7 +25,7 @@ function HomeEmptyState({ isDragOver, onAddFolder, onOpenSettings }: HomeEmptySt
           >
             <Zap className="w-4 h-4" strokeWidth={1.8} />
           </div>
-          <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">Runtime</span>
+          <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">{t('common.runtime')}</span>
         </div>
         <div className="flex-1" />
         <Button
@@ -43,15 +46,15 @@ function HomeEmptyState({ isDragOver, onAddFolder, onOpenSettings }: HomeEmptySt
             <FolderPlus className="w-11 h-11 text-[color:var(--color-muted-foreground)]" strokeWidth={1.35} />
           </div>
           <div>
-            <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)] mb-3">Add a project folder</h1>
-            <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">Drop a folder or browse to get started. The launcher will keep the workspace quiet and close at hand.</p>
+            <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)] mb-3">{t('home.emptyTitle')}</h1>
+            <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('home.emptyDescription')}</p>
           </div>
           <Button onClick={onAddFolder} className="gap-2 rounded-full h-11 px-6 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
             <Plus className="w-4 h-4" strokeWidth={1.8} />
-            Add Project Folder
+            {t('common.addProjectFolder')}
           </Button>
           <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-            Node.js &middot; Python &middot; Android &middot; Vite &middot; Next.js &middot; Django &middot; more
+            {t('home.supportedStacks')}
           </p>
         </div>
       </div>

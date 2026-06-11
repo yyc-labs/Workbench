@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { Check, FolderTree, GripVertical, Hash, Pin, PlayCircle, Tag } from 'lucide-react'
 import type { ProjectFolder, ProjectTag } from '../../shared/types'
+import { useI18n } from '../i18n'
 
 export type ClassifierFilter =
   | { type: 'all' }
@@ -126,6 +127,7 @@ function SidebarDefaultContextMenu({
   onClearDefault: () => void | Promise<void>
   onClose: () => void
 }) {
+  const { t } = useI18n()
   const handleClick = useCallback(
     async (action: () => void | Promise<void>) => {
       await action()
@@ -171,7 +173,7 @@ function SidebarDefaultContextMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="px-3 py-2 text-xs text-[color:var(--color-muted-foreground)]">
-        侧边栏: <span className="text-[color:var(--color-foreground)]">{label}</span>
+        {t('common.sidebarItem')}: <span className="text-[color:var(--color-foreground)]">{label}</span>
       </div>
       <button
         className="group flex w-full items-center gap-2.5 rounded-[14px] px-3 py-2 text-left text-[13px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]/70"
@@ -179,7 +181,7 @@ function SidebarDefaultContextMenu({
       >
         <Check className={`h-4 w-4 ${isDefault ? 'text-primary' : 'text-[color:var(--color-muted-foreground)]'}`} />
         <span className={isDefault ? 'text-primary font-medium' : ''}>
-          设为默认启动标签
+          {t('common.setAsDefaultStartupFilter')}
         </span>
       </button>
       {isDefault && (
@@ -188,7 +190,7 @@ function SidebarDefaultContextMenu({
           onClick={() => { void handleClick(onClearDefault) }}
         >
           <span className="h-4 w-4" />
-          <span>取消默认选择</span>
+          <span>{t('common.clearDefaultSelection')}</span>
         </button>
       )}
     </div>,
@@ -286,6 +288,7 @@ export function WorkspaceClassifierPanel({
   onSetStartupDefaultFilter,
 }: WorkspaceClassifierPanelProps) {
   const [defaultContextMenu, setDefaultContextMenu] = useState<SidebarDefaultContextMenuState | null>(null)
+  const { t } = useI18n()
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -332,48 +335,48 @@ export function WorkspaceClassifierPanel({
   return (
     <aside className="surface-card w-full rounded-[16px] p-3 md:w-[260px] md:min-w-[260px]">
       <div className="mb-3">
-        <p className="section-label mb-1">Workspace</p>
-        <h2 className="text-sm font-medium text-[color:var(--color-foreground)]">Project Views</h2>
+        <p className="section-label mb-1">{t('common.workspace')}</p>
+        <h2 className="text-sm font-medium text-[color:var(--color-foreground)]">{t('common.projectViews')}</h2>
       </div>
 
       <div className="space-y-1">
         <NavItem
           icon={<FolderTree className="h-4 w-4" />}
-          label="All Projects"
+          label={t('common.allProjects')}
           count={counts.all}
           active={isActiveFilter(activeFilter, { type: 'all' })}
           onClick={() => onChangeFilter({ type: 'all' })}
-          onContextMenu={(e) => openDefaultContextMenu('All Projects', { type: 'all' }, e)}
+          onContextMenu={(e) => openDefaultContextMenu(t('common.allProjects'), { type: 'all' }, e)}
         />
         <NavItem
           icon={<Pin className="h-4 w-4" />}
-          label="Pinned"
+          label={t('common.pinned')}
           count={counts.pinned}
           active={isActiveFilter(activeFilter, { type: 'pinned' })}
           onClick={() => onChangeFilter({ type: 'pinned' })}
-          onContextMenu={(e) => openDefaultContextMenu('Pinned', { type: 'pinned' }, e)}
+          onContextMenu={(e) => openDefaultContextMenu(t('common.pinned'), { type: 'pinned' }, e)}
         />
         <NavItem
           icon={<PlayCircle className="h-4 w-4" />}
-          label="Running"
+          label={t('common.running')}
           count={counts.running}
           active={isActiveFilter(activeFilter, { type: 'running' })}
           onClick={() => onChangeFilter({ type: 'running' })}
-          onContextMenu={(e) => openDefaultContextMenu('Running', { type: 'running' }, e)}
+          onContextMenu={(e) => openDefaultContextMenu(t('common.running'), { type: 'running' }, e)}
         />
         <NavItem
           icon={<Hash className="h-4 w-4" />}
-          label="Uncategorized"
+          label={t('common.uncategorized')}
           count={counts.uncategorized}
           active={isActiveFilter(activeFilter, { type: 'uncategorized' })}
           onClick={() => onChangeFilter({ type: 'uncategorized' })}
-          onContextMenu={(e) => openDefaultContextMenu('Uncategorized', { type: 'uncategorized' }, e)}
+          onContextMenu={(e) => openDefaultContextMenu(t('common.uncategorized'), { type: 'uncategorized' }, e)}
         />
       </div>
 
       <div className="mt-4">
         <div className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-          Folders
+          {t('common.folders')}
         </div>
         <div className="space-y-1">
           {folders.length > 0 ? (
@@ -401,14 +404,14 @@ export function WorkspaceClassifierPanel({
               </SortableContext>
             </DndContext>
           ) : (
-            <p className="px-2 py-1 text-xs text-[color:var(--color-muted-foreground)]">No folders</p>
+            <p className="px-2 py-1 text-xs text-[color:var(--color-muted-foreground)]">{t('common.noFolders')}</p>
           )}
         </div>
       </div>
 
       <div className="mt-4">
         <div className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-          Tags
+          {t('common.tags')}
         </div>
         <div className="space-y-1">
           {tags.length > 0 ? (
@@ -436,7 +439,7 @@ export function WorkspaceClassifierPanel({
               </SortableContext>
             </DndContext>
           ) : (
-            <p className="px-2 py-1 text-xs text-[color:var(--color-muted-foreground)]">No tags</p>
+            <p className="px-2 py-1 text-xs text-[color:var(--color-muted-foreground)]">{t('common.noTags')}</p>
           )}
         </div>
       </div>

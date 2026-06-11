@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Clock3, Star, Trash2, X } from 'lucide-react'
+import { useI18n } from '../../i18n'
 import { inferLanguageFromRelativePath } from './code.helpers'
 
 type CodeFileQuickDrawerProps = {
@@ -26,6 +27,7 @@ export function CodeFileQuickDrawer({
   onToggleFavorite,
   onRemovePath,
 }: CodeFileQuickDrawerProps) {
+  const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
@@ -73,7 +75,7 @@ export function CodeFileQuickDrawer({
           className={`fixed inset-0 z-[29] bg-[color:var(--color-background-sunken)]/46 backdrop-blur-[3px] transition-opacity duration-200 ${
             visible ? 'opacity-100' : 'opacity-0'
           }`}
-          aria-label="Close file drawer backdrop"
+          aria-label={t('codeWorkspace.fileDrawerBackdrop')}
           onClick={onClose}
         />
       )}
@@ -82,14 +84,14 @@ export function CodeFileQuickDrawer({
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="code-file-quick-drawer-header">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">File Drawer</p>
-              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">Favorites and recent files</p>
+              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('codeWorkspace.fileDrawer')}</p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.favoritesAndRecent')}</p>
             </div>
             <button
               type="button"
               className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('common.close')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -99,10 +101,10 @@ export function CodeFileQuickDrawer({
             <section className="code-file-quick-drawer-section">
               <div className="code-file-quick-drawer-section-title">
                 <Star className="h-3.5 w-3.5" />
-                Favorites
+                {t('codeWorkspace.favorites')}
               </div>
               {favorites.length === 0 ? (
-                <p className="code-file-quick-drawer-empty">No favorites yet.</p>
+                <p className="code-file-quick-drawer-empty">{t('codeWorkspace.noFavoritesYet')}</p>
               ) : (
                 <div className="code-file-quick-drawer-list">
                   {favorites.map((relativePath) => {
@@ -123,7 +125,7 @@ export function CodeFileQuickDrawer({
                             type="button"
                             className="code-file-quick-drawer-action is-starred"
                             onClick={() => onToggleFavorite(relativePath)}
-                            title="Remove from favorites"
+                            title={t('codeWorkspace.removeFavorite')}
                           >
                             <Star className="h-3.5 w-3.5 fill-current" />
                           </button>
@@ -131,7 +133,7 @@ export function CodeFileQuickDrawer({
                             type="button"
                             className="code-file-quick-drawer-action is-danger"
                             onClick={() => onRemovePath(relativePath)}
-                            title="Delete from drawer"
+                            title={t('codeWorkspace.deleteFromDrawer')}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -146,10 +148,10 @@ export function CodeFileQuickDrawer({
             <section className="code-file-quick-drawer-section">
               <div className="code-file-quick-drawer-section-title">
                 <Clock3 className="h-3.5 w-3.5" />
-                Recent
+                {t('codeWorkspace.recent')}
               </div>
               {recents.length === 0 ? (
-                <p className="code-file-quick-drawer-empty">No recent files yet.</p>
+                <p className="code-file-quick-drawer-empty">{t('codeWorkspace.noRecentFilesYet')}</p>
               ) : (
                 <div className="code-file-quick-drawer-list">
                   {recents.map((relativePath) => {
@@ -171,7 +173,7 @@ export function CodeFileQuickDrawer({
                             type="button"
                             className={`code-file-quick-drawer-action ${isFavorite ? 'is-starred' : ''}`}
                             onClick={() => onToggleFavorite(relativePath)}
-                            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            title={isFavorite ? t('codeWorkspace.removeFavorite') : t('codeWorkspace.addFavorite')}
                           >
                             <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-current' : ''}`} />
                           </button>
@@ -179,7 +181,7 @@ export function CodeFileQuickDrawer({
                             type="button"
                             className="code-file-quick-drawer-action is-danger"
                             onClick={() => onRemovePath(relativePath)}
-                            title="Delete from drawer"
+                            title={t('codeWorkspace.deleteFromDrawer')}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>

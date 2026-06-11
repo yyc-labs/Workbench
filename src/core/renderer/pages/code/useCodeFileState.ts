@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
 import type { ProjectFileReadResult } from '../../../shared/types'
+import { translateCurrent } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import type { SaveStatus } from './code.types'
 
@@ -244,16 +245,20 @@ export function useCodeFileState({
     }
   }, [activeFile, activeRelativePath, isDirty, openFile, projectPath])
 
-  const saveText = saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'
+  const saveText = saveStatus === 'saving'
+    ? translateCurrent('common.saving')
+    : saveStatus === 'saved'
+      ? translateCurrent('codeWorkspace.saved')
+      : translateCurrent('codeWorkspace.save')
   const saveIndicatorText = !activeRelativePath
-    ? 'No file selected'
+    ? translateCurrent('codeWorkspace.noFileSelected')
     : saveStatus === 'saving'
-      ? 'Saving...'
+      ? translateCurrent('common.saving')
       : saveStatus === 'saved'
-        ? 'Saved'
+        ? translateCurrent('codeWorkspace.saved')
         : isDirty
-          ? 'Unsaved changes'
-          : 'All changes saved'
+          ? translateCurrent('codeWorkspace.unsavedChanges')
+          : translateCurrent('codeWorkspace.allChangesSaved')
   const saveIndicatorToneClass = saveStatus === 'error'
     ? 'text-[color:var(--color-destructive)]'
     : saveStatus === 'saving' || isDirty

@@ -21,6 +21,7 @@ import {
 import type { TranscriptReference, TranscriptViewerMode } from '../../shared/types'
 import { ModalShell } from '../components/ModalShell'
 import { MonacoTextViewer } from '../components/MonacoTextViewer'
+import { formatStructuredBlockKind as formatStructuredBlockKindLabel, formatTranscriptSourceType, useI18n, useLocale } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { useAppStore } from '../stores/appStore'
 import { inferLanguageFromRelativePath } from './code/code.helpers'
@@ -90,57 +91,11 @@ function sliceMarkdownLines(markdown: string, startLine: number, endLine: number
   return lines.slice(safeStartLine - 1, safeEndLine).join('\n').trim()
 }
 
-function formatStructuredBlockKind(kind: MarkdownStructuredBlockClickPayload['kind']): string {
-  switch (kind) {
-    case 'box-flow':
-      return 'Flow'
-    case 'vertical-flow':
-      return 'Vertical Flow'
-    case 'table':
-      return 'Table'
-    default:
-      return 'Structured Block'
-  }
-}
-
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
-
-function formatTranscriptTimestamp(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return 'Unknown time'
-  const timestamp = Math.trunc(value)
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'Unknown time'
-  return DATE_TIME_FORMATTER.format(date)
-}
-
 function readProjectHeaderCollapsed(): boolean {
   try {
     return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
   } catch {
     return false
-  }
-}
-
-function formatSourceTypeLabel(value: string): string {
-  switch (value) {
-    case 'process-output':
-      return 'Process Output'
-    case 'tmux-capture':
-      return 'Tmux Capture'
-    case 'agent-hook':
-      return 'Agent Hook'
-    case 'manual-markdown':
-      return 'Manual Markdown'
-    case 'imported-file':
-      return 'Imported File'
-    default:
-      return 'Transcript'
   }
 }
 
@@ -176,6 +131,8 @@ function TranscriptModeButton({
 }
 
 export function TranscriptPage() {
+  const locale = useLocale()
+  const { t, formatDateTime } = useI18n()
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const project = useAppStore((s) => {
@@ -385,7 +342,13 @@ export function TranscriptPage() {
     try {
       const imported = await importCurrentProcessOutputTranscript(
         projectId,
-        `Process Output · ${formatTranscriptTimestamp(Date.now())}`
+        `${formatTranscriptSourceType(locale, 'process-output')} · ${formatDateTime(Date.now(), {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })}`
       )
       if (!imported) return
       await openTranscript({ projectId, transcriptId: imported.id, initialMode: 'preview' })
@@ -447,13 +410,13 @@ export function TranscriptPage() {
   if (!project || !projectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
-        <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Project not found</h2>
+        <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('transcript.projectNotFound')}</h2>
         <button
           className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
-          Back to Home
+          {t('transcript.backToHome')}
         </button>
       </div>
     )
@@ -486,7 +449,7 @@ export function TranscriptPage() {
                 {middleTruncatePath(project.path)}
               </p>
               <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
-                Transcript Viewer
+                {t('transcript.pageTitle')}
               </p>
             </div>
           </div>
@@ -525,21 +488,21 @@ export function TranscriptPage() {
                 void handleImportCurrentOutput()
               }}
               disabled={!hasTerminalOutput || isImporting}
-              title={hasTerminalOutput ? 'Import current process output' : 'Current process output is empty'}
+              title={hasTerminalOutput ? t('transcript.importCurrentOutputHint') : t('transcript.processOutputEmpty')}
             >
               {isImporting ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
               ) : (
                 <ArrowDownToLine className="h-4 w-4" />
               )}
-              Import Current Output
+              {t('transcript.importCurrentOutput')}
             </button>
           </div>
 
           <button
             type="button"
-            aria-label="收起项目栏"
-            title="收起项目栏"
+            aria-label={t('transcript.collapseProjectHeader')}
+            title={t('transcript.collapseProjectHeader')}
             className="absolute bottom-0 left-1/2 z-[87] inline-flex h-6 w-6 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={() => setProjectHeaderCollapsed(true)}
           >
@@ -551,10 +514,10 @@ export function TranscriptPage() {
       {projectHeaderCollapsed && (
         <button
           type="button"
-          aria-label="展开项目栏"
+          aria-label={t('transcript.expandProjectHeader')}
           className="app-chrome fixed left-1/2 top-[calc(var(--window-titlebar-height)+6px)] z-[86] inline-flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
           onClick={() => setProjectHeaderCollapsed(false)}
-          title="展开项目栏"
+          title={t('transcript.expandProjectHeader')}
         >
           <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
         </button>
@@ -566,9 +529,9 @@ export function TranscriptPage() {
             <div className="border-b border-[color:var(--color-border)] px-5 py-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-[color:var(--color-foreground)]">Transcripts</p>
+                  <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('transcript.listTitle')}</p>
                   <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                    {summaries.length} saved session{summaries.length === 1 ? '' : 's'}
+                    {t('transcript.savedSessions', { count: summaries.length })}
                   </p>
                 </div>
                 <button
@@ -577,7 +540,7 @@ export function TranscriptPage() {
                   onClick={() => {
                     void loadProjectTranscripts(projectId)
                   }}
-                  title="Refresh transcript list"
+                  title={t('settingsTranscript.refresh')}
                 >
                   <RefreshCw className="h-4 w-4" />
                 </button>
@@ -587,11 +550,11 @@ export function TranscriptPage() {
             <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
               {listStatus === 'loading' && summaries.length <= 0 ? (
                 <div className="flex h-full items-center justify-center text-xs text-[color:var(--color-muted-foreground)]">
-                  Loading transcripts...
+                  {t('transcript.loadingTranscripts')}
                 </div>
               ) : listStatus === 'error' && summaries.length <= 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
-                  <p className="text-sm text-[color:var(--color-destructive)]">Failed to load transcripts.</p>
+                  <p className="text-sm text-[color:var(--color-destructive)]">{t('transcript.failedToLoad')}</p>
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
@@ -600,16 +563,16 @@ export function TranscriptPage() {
                     }}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
-                    Retry
+                    {t('transcript.retry')}
                   </button>
                 </div>
               ) : summaries.length <= 0 ? (
                 <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
                   <FileText className="h-10 w-10 text-[color:var(--color-muted-foreground)]/70" />
                   <div>
-                    <p className="text-sm font-medium text-[color:var(--color-foreground)]">No transcript yet</p>
+                    <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('transcript.noTranscriptYet')}</p>
                     <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                      Import the current process output to create the first saved session.
+                      {t('transcript.firstTranscriptHint')}
                     </p>
                   </div>
                 </div>
@@ -639,15 +602,23 @@ export function TranscriptPage() {
                                 {summary.title}
                               </p>
                               <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                                {formatSourceTypeLabel(summary.sourceType)}
+                                {formatTranscriptSourceType(locale, summary.sourceType)}
                               </p>
                             </div>
                             <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                              {summary.referenceCount} refs
+                              {t('transcript.refs', { count: summary.referenceCount })}
                             </span>
                           </div>
                           <p className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            Updated {formatTranscriptTimestamp(summary.updatedAt)}
+                            {t('transcript.updatedAt', {
+                              value: formatDateTime(summary.updatedAt, {
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                              }),
+                            })}
                           </p>
                         </button>
                         <button
@@ -657,7 +628,7 @@ export function TranscriptPage() {
                             setDeleteConfirmTarget({ id: summary.id, title: summary.title })
                           }}
                           disabled={isDeleting || deletingTranscriptId !== null}
-                          title={isDeleting ? 'Deleting transcript...' : 'Delete transcript'}
+                          title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
                         >
                           {isDeleting ? (
                             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -678,15 +649,15 @@ export function TranscriptPage() {
               <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                 <FileText className="h-10 w-10 text-[color:var(--color-muted-foreground)]/70" />
                 <div>
-                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">Select or import a transcript</p>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('transcript.selectOrImport')}</p>
                   <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                    Saved sessions will appear here with Markdown preview and parsed references.
+                    {t('transcript.selectOrImportHint')}
                   </p>
                 </div>
               </div>
             ) : !session ? (
               <div className="flex h-full items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">
-                Loading transcript...
+                {t('transcript.loadingTranscript')}
               </div>
             ) : (
               <>
@@ -698,10 +669,10 @@ export function TranscriptPage() {
                           {session.title}
                         </h2>
                         <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {formatSourceTypeLabel(session.sourceType)}
+                          {formatTranscriptSourceType(locale, session.sourceType)}
                         </span>
                         <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {session.references.length} refs
+                          {t('transcript.refs', { count: session.references.length })}
                         </span>
                       </div>
                     </div>
@@ -710,20 +681,20 @@ export function TranscriptPage() {
                       <TranscriptModeButton
                         active={effectiveMode === 'preview'}
                         icon={<Eye className="h-3.5 w-3.5" />}
-                        label="Preview"
+                        label={t('transcript.preview')}
                         onClick={() => setTranscriptMode(session.id, 'preview')}
                       />
                       <TranscriptModeButton
                         active={effectiveMode === 'editor'}
                         icon={<Code2 className="h-3.5 w-3.5" />}
-                        label="Editor"
+                        label={t('transcript.editor')}
                         onClick={() => setTranscriptMode(session.id, 'editor')}
                       />
                       <TranscriptModeButton
                         active={effectiveMode === 'split'}
                         disabled={isNarrowViewport}
                         icon={<Columns2 className="h-3.5 w-3.5" />}
-                        label="Split"
+                        label={t('transcript.split')}
                         onClick={() => setTranscriptMode(session.id, 'split')}
                       />
                     </div>
@@ -791,33 +762,33 @@ export function TranscriptPage() {
         onClose={closeStructuredPreview}
         widthClassName="max-w-[min(1280px,calc(100vw-40px))]"
         baseZIndex={1180}
-        ariaLabel="Transcript structured preview"
+        ariaLabel={t('transcript.structuredPreview')}
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
         <div className="flex max-h-[min(88vh,980px)] min-h-0 flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="section-label mb-1">Transcript</p>
+              <p className="section-label mb-1">{t('transcript.listTitle')}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-                  {structuredPreview ? formatStructuredBlockKind(structuredPreview.kind) : 'Structured Block'}
+                  {structuredPreview ? formatStructuredBlockKindLabel(locale, structuredPreview.kind) : formatStructuredBlockKindLabel(locale, 'default')}
                 </p>
                 {structuredPreview && (
                   <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                    Lines {structuredPreview.startLine}-{structuredPreview.endLine}
+                    {t('transcript.lineRange', { start: structuredPreview.startLine, end: structuredPreview.endLine })}
                   </span>
                 )}
               </div>
               <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                原位内容保留在文档里，这里提供放大查看。
+                {t('transcript.structuredPreviewHint')}
               </p>
             </div>
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={closeStructuredPreview}
-              title="Close"
+              title={t('common.close')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -840,20 +811,20 @@ export function TranscriptPage() {
         }}
         widthClassName="max-w-[460px]"
         baseZIndex={1120}
-        ariaLabel="删除 transcript 确认"
+        ariaLabel={t('transcript.deleteConfirmLabel')}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <p className="section-label mb-1">Transcript</p>
+            <p className="section-label mb-1">{t('transcript.listTitle')}</p>
             <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-              删除这条 transcript？
+              {t('transcript.deleteThisTranscript')}
             </p>
           </div>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => setDeleteConfirmTarget(null)}
-            title="Close"
+            title={t('common.close')}
             disabled={Boolean(deletingTranscriptId)}
           >
             <X className="h-4 w-4" />
@@ -863,7 +834,7 @@ export function TranscriptPage() {
         <div className="rounded-[14px] border border-[color:var(--color-destructive)]/22 bg-[color:var(--color-destructive-background)] px-3 py-2.5">
           <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
             <AlertTriangle className="h-3.5 w-3.5" />
-            删除后将从列表和本地 transcript 存储中移除
+            {t('transcript.deleteThisTranscriptHint')}
           </p>
           <p className="mt-2 break-words text-[12px] text-[color:var(--color-foreground)]">
             {deleteConfirmTarget?.title}
@@ -871,7 +842,7 @@ export function TranscriptPage() {
         </div>
 
         <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          该操作不可撤销，但不会删除项目源码文件。
+          {t('transcript.deleteThisTranscriptIrreversible')}
         </p>
 
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -881,7 +852,7 @@ export function TranscriptPage() {
             onClick={() => setDeleteConfirmTarget(null)}
             disabled={Boolean(deletingTranscriptId)}
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -891,7 +862,7 @@ export function TranscriptPage() {
             }}
             disabled={Boolean(deletingTranscriptId)}
           >
-            {deletingTranscriptId ? '删除中...' : '确认删除'}
+            {deletingTranscriptId ? t('transcript.deleting') : t('transcript.confirmDelete')}
           </button>
         </div>
       </ModalShell>

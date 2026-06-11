@@ -1,6 +1,7 @@
 import { Search, Settings, Plus, Zap, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { useI18n } from '../../i18n'
 import type { EnvFilter } from './home.types'
 
 type HomeToolbarProps = {
@@ -24,6 +25,7 @@ function HomeToolbar({
   onManageWorkspace,
   searchRef,
 }: HomeToolbarProps) {
+  const { t } = useI18n()
   const filterButtonClass = (active: boolean): string =>
     active
       ? 'h-7 px-3 rounded-full text-xs font-medium text-[color:var(--color-foreground)] bg-[color:var(--color-card)] shadow-sm border border-[color:var(--color-border)]'
@@ -31,14 +33,16 @@ function HomeToolbar({
 
   return (
     <header className="app-chrome h-auto min-h-[68px] flex items-center px-8 py-3 gap-5 shrink-0">
-      <div className="flex items-center gap-3 mr-5">
+      <div className="mr-5 flex shrink-0 items-center gap-3">
         <div className="w-8 h-8 rounded-2xl flex items-center justify-center quiet-control" style={{ color: 'var(--color-primary)' }}>
           <Zap className="w-4 h-4" strokeWidth={1.8} />
         </div>
-        <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">Runtime</span>
+        <span className="whitespace-nowrap text-[15px] font-medium text-[color:var(--color-foreground)]">
+          {t('common.runtime')}
+        </span>
       </div>
 
-      <div className="w-full max-w-xl relative">
+      <div className="relative min-w-[220px] flex-1 max-w-[360px] xl:max-w-[420px]">
         <Search
           className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--color-muted-foreground)] pointer-events-none"
           strokeWidth={1.8}
@@ -47,7 +51,7 @@ function HomeToolbar({
           ref={searchRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search projects..."
+          placeholder={t('common.searchProjects')}
           className="quiet-control h-10 pl-11 pr-10 text-sm rounded-full border-0 text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0"
         />
         <button
@@ -61,8 +65,8 @@ function HomeToolbar({
             onSearchChange('')
             searchRef.current?.focus()
           }}
-          aria-label="Clear search"
-          title="Clear search"
+          aria-label={t('common.clearSearch')}
+          title={t('common.clearSearch')}
           tabIndex={searchQuery ? 0 : -1}
         >
           <X className="h-3.5 w-3.5" />
@@ -76,21 +80,21 @@ function HomeToolbar({
             onClick={() => onEnvFilterChange('all')}
             type="button"
           >
-            All
+            {t('common.allProjects')}
           </button>
           <button
             className={filterButtonClass(envFilter === 'ubuntu')}
             onClick={() => onEnvFilterChange('ubuntu')}
             type="button"
           >
-            Ubuntu
+            {t('common.ubuntu')}
           </button>
           <button
             className={filterButtonClass(envFilter === 'windows')}
             onClick={() => onEnvFilterChange('windows')}
             type="button"
           >
-            Windows
+            {t('common.windows')}
           </button>
         </div>
 
@@ -102,7 +106,7 @@ function HomeToolbar({
             size="icon"
             className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={onManageWorkspace}
-            title="Manage folders and tags"
+            title={t('common.manageFoldersAndTags')}
           >
             <SlidersHorizontal className="w-4 h-4" strokeWidth={1.8} />
           </Button>
@@ -116,7 +120,7 @@ function HomeToolbar({
           </Button>
           <Button size="sm" className="h-9 gap-1.5 text-sm rounded-full bg-primary hover:bg-primary-hover text-white shadow-sm" onClick={onAddFolder}>
             <Plus className="w-4 h-4" strokeWidth={1.8} />
-            New Project
+            {t('common.newProject')}
           </Button>
         </div>
       </div>

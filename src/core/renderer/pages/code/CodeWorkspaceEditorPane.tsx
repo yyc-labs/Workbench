@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { ChevronDown, ChevronUp, Code2, Columns2, Eye, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { useI18n } from '../../i18n'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { transformMarkdownUrl } from './code.markdown'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
@@ -127,15 +128,17 @@ export function CodeWorkspaceEditorPane({
   structuredPreviewComponents,
   viewMode,
 }: CodeWorkspaceEditorPaneProps) {
+  const { t } = useI18n()
+
   if (!activeRelativePath) {
     return (
       <div className="code-panel-empty">
         <div className="text-sm text-[color:var(--color-muted-foreground)]">
           {isNarrowViewport
-            ? (viewMode === 'search' ? 'Open Search to choose a match.' : 'Open Explorer to choose a file.')
+            ? (viewMode === 'search' ? t('codeWorkspace.emptySearchNarrow') : t('codeWorkspace.emptyExplorerNarrow'))
             : (viewMode === 'search'
-              ? 'Select a search result from the left panel to open and edit.'
-              : 'Select a file from the left panel to start editing.')}
+              ? t('codeWorkspace.emptySearchWide')
+              : t('codeWorkspace.emptyExplorerWide'))}
         </div>
       </div>
     )
@@ -145,7 +148,7 @@ export function CodeWorkspaceEditorPane({
     <div className="code-editor-shell">
       {isMarkdownFile && (
         <div className="code-editor-preview-toolbar">
-          <span className="text-[11px] text-[color:var(--color-muted-foreground)]">Markdown</span>
+          <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.markdown')}</span>
           <div className="code-editor-preview-mode-group">
             <button
               type="button"
@@ -156,10 +159,10 @@ export function CodeWorkspaceEditorPane({
                 onCaptureCurrentModeScroll()
                 onSetMarkdownPreviewMode('edit')
               }}
-              title="Editor"
+              title={t('codeWorkspace.editor')}
             >
               <Code2 className="h-3.5 w-3.5" />
-              Editor
+              {t('codeWorkspace.editor')}
             </button>
             <button
               type="button"
@@ -170,10 +173,10 @@ export function CodeWorkspaceEditorPane({
                 onCaptureCurrentModeScroll()
                 onSetMarkdownPreviewMode('preview')
               }}
-              title="Preview"
+              title={t('codeWorkspace.preview')}
             >
               <Eye className="h-3.5 w-3.5" />
-              Preview
+              {t('codeWorkspace.preview')}
             </button>
             <button
               type="button"
@@ -184,11 +187,11 @@ export function CodeWorkspaceEditorPane({
                 onCaptureCurrentModeScroll()
                 onSetMarkdownPreviewMode('split')
               }}
-              title={isNarrowViewport ? 'Split is only available on wide layout' : 'Split view'}
+              title={isNarrowViewport ? t('codeWorkspace.splitWideOnly') : t('codeWorkspace.splitView')}
               disabled={isNarrowViewport}
             >
               <Columns2 className="h-3.5 w-3.5" />
-              Split
+              {t('codeWorkspace.split')}
             </button>
           </div>
         </div>
@@ -236,7 +239,7 @@ export function CodeWorkspaceEditorPane({
                       onSetPreviewSearchQuery(event.target.value)
                       onSetActivePreviewSearchMatchIndex(0)
                     }}
-                    placeholder="Find in preview"
+                    placeholder={t('codeWorkspace.findInPreview')}
                     className="code-editor-findbar-input"
                     spellCheck={false}
                     onKeyDown={(event) => {
@@ -259,13 +262,13 @@ export function CodeWorkspaceEditorPane({
                   <span className="code-editor-findbar-count">
                     {previewSearchMatches.length > 0
                       ? `${previewSearchMatchIndex + 1}/${previewSearchMatches.length}`
-                      : 'No results'}
+                      : t('codeWorkspace.noResults')}
                   </span>
                   <button
                     type="button"
                     className="code-editor-findbar-icon-btn"
                     onClick={onGoToPreviousPreviewSearchMatch}
-                    title="Previous Match"
+                    title={t('codeWorkspace.previousMatch')}
                     disabled={previewSearchMatches.length <= 0}
                   >
                     <ChevronUp className="h-3.5 w-3.5" />
@@ -274,7 +277,7 @@ export function CodeWorkspaceEditorPane({
                     type="button"
                     className="code-editor-findbar-icon-btn"
                     onClick={onGoToNextPreviewSearchMatch}
-                    title="Next Match"
+                    title={t('codeWorkspace.nextMatch')}
                     disabled={previewSearchMatches.length <= 0}
                   >
                     <ChevronDown className="h-3.5 w-3.5" />
@@ -283,7 +286,7 @@ export function CodeWorkspaceEditorPane({
                     type="button"
                     className="code-editor-findbar-icon-btn"
                     onClick={onClosePreviewSearch}
-                    title="Close"
+                    title={t('common.close')}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -293,40 +296,40 @@ export function CodeWorkspaceEditorPane({
             <article className="code-markdown-content code-markdown-content--viewport-scroll">
               {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
                 <section className="code-mdc-meta-card">
-                  <h3 className="code-mdc-meta-title">Agent Rule Metadata</h3>
+                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.agentRuleMetadata')}</h3>
                   <div className="code-mdc-meta-grid">
-                    <span className="code-mdc-meta-key">Type</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataType')}</span>
                     <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
 
-                    <span className="code-mdc-meta-key">Always Apply</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataAlwaysApply')}</span>
                     <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
 
-                    <span className="code-mdc-meta-key">Description</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
                     <span className="code-mdc-meta-value">
-                      {parsedMarkdownDoc.ruleMetadata.description?.trim() || 'N/A'}
+                      {parsedMarkdownDoc.ruleMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}
                     </span>
 
-                    <span className="code-mdc-meta-key">Globs</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataGlobs')}</span>
                     <span className="code-mdc-meta-value">
                       {parsedMarkdownDoc.ruleMetadata.globs.length > 0
                         ? parsedMarkdownDoc.ruleMetadata.globs.join(', ')
-                        : 'N/A'}
+                        : t('codeWorkspace.metadataNotAvailable')}
                     </span>
                   </div>
                 </section>
               )}
               {!isMdcFile && parsedMarkdownDoc?.markdownMetadata && (
                 <section className="code-mdc-meta-card">
-                  <h3 className="code-mdc-meta-title">Document Metadata</h3>
+                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.documentMetadata')}</h3>
                   <div className="code-mdc-meta-grid">
-                    <span className="code-mdc-meta-key">Title</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataTitle')}</span>
                     <span className="code-mdc-meta-value">
-                      {parsedMarkdownDoc.markdownMetadata.title?.trim() || 'N/A'}
+                      {parsedMarkdownDoc.markdownMetadata.title?.trim() || t('codeWorkspace.metadataNotAvailable')}
                     </span>
 
-                    <span className="code-mdc-meta-key">Description</span>
+                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
                     <span className="code-mdc-meta-value">
-                      {parsedMarkdownDoc.markdownMetadata.description?.trim() || 'N/A'}
+                      {parsedMarkdownDoc.markdownMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}
                     </span>
                   </div>
                 </section>
@@ -348,33 +351,33 @@ export function CodeWorkspaceEditorPane({
         onClose={closeStructuredPreview}
         widthClassName="max-w-[min(1280px,calc(100vw-40px))]"
         baseZIndex={1180}
-        ariaLabel="Markdown structured preview"
+        ariaLabel={t('codeWorkspace.structuredPreviewAria')}
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
         <div className="flex max-h-[min(88vh,980px)] min-h-0 flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="section-label mb-1">Markdown</p>
+              <p className="section-label mb-1">{t('codeWorkspace.markdown')}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-                  {structuredPreview ? formatStructuredBlockKind(structuredPreview.kind) : 'Structured Block'}
+                  {structuredPreview ? formatStructuredBlockKind(structuredPreview.kind) : t('codeWorkspace.structuredPreviewTitle')}
                 </p>
                 {structuredPreview && (
                   <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                    Lines {structuredPreview.startLine}-{structuredPreview.endLine}
+                    {t('transcript.lineRange', { start: structuredPreview.startLine, end: structuredPreview.endLine })}
                   </span>
                 )}
               </div>
               <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                原位内容保留在文档里，这里提供放大查看。
+                {t('transcript.structuredPreviewHint')}
               </p>
             </div>
             <button
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={closeStructuredPreview}
-              title="Close"
+              title={t('common.close')}
             >
               <X className="h-4 w-4" />
             </button>

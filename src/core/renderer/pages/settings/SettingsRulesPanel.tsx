@@ -1,13 +1,16 @@
+import { useI18n } from '../../i18n'
 import { RULES } from '../../../shared/rules'
 
 function SettingsRulesPanel() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-6">
       <div>
-        <p className="section-label mb-3">Rules</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Detection Rules</h2>
+        <p className="section-label mb-3">{t('settingsRules.kicker')}</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settingsRules.title')}</h2>
         <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">
-          Projects are detected by matching files in the directory. Higher priority rules are checked first.
+          {t('settingsRules.description')}
         </p>
       </div>
 
@@ -27,7 +30,7 @@ function SettingsRulesPanel() {
               </p>
               <p className="text-xs text-[color:var(--color-muted-foreground)] font-mono truncate">
                 {rule.matchPatterns.join(', ')}
-                {rule.requiresAll ? ' (all required)' : ''}
+                {rule.requiresAll ? ` ${t('settingsRules.allRequired')}` : ''}
               </p>
             </div>
             <code className="quiet-control text-[11px] text-[color:var(--color-muted-foreground)] rounded-full px-3 py-1 font-mono shrink-0">

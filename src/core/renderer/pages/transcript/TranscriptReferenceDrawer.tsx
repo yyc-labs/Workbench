@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { AlertCircle, ExternalLink, FileCode2, LoaderCircle, TriangleAlert, X } from 'lucide-react'
 import type { ProjectCodeSession, TranscriptReference } from '../../../shared/types'
 import { MonacoTextViewer, type MonacoTextViewerHandle } from '../../components/MonacoTextViewer'
+import { useI18n } from '../../i18n'
 import { middleTruncatePath } from '../../lib/projectDisplay'
 import { inferLanguageFromRelativePath } from '../code/code.helpers'
 
@@ -76,6 +77,7 @@ export function TranscriptReferenceDrawer({
   onClose,
   onOpenInCodeWorkspace,
 }: TranscriptReferenceDrawerProps) {
+  const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
@@ -191,7 +193,7 @@ export function TranscriptReferenceDrawer({
         className={`absolute inset-0 bg-[color:var(--color-background-sunken)]/54 backdrop-blur-[5px] transition-opacity duration-200 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
-        aria-label="Close transcript reference drawer backdrop"
+        aria-label={t('referenceDrawer.closeBackdrop')}
         onClick={onClose}
       />
 
@@ -202,12 +204,12 @@ export function TranscriptReferenceDrawer({
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Transcript reference drawer"
+        aria-label={t('referenceDrawer.ariaLabel')}
       >
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-card)]/62 px-5 py-4 backdrop-blur-[14px]">
             <div className="min-w-0">
-              <p className="section-label">Reference Drawer</p>
+              <p className="section-label">{t('referenceDrawer.title')}</p>
               <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
                 {projectName} · {middleTruncatePath(projectPath, 20, 18)}
               </p>
@@ -216,7 +218,7 @@ export function TranscriptReferenceDrawer({
               type="button"
               className="flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/80 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('common.close')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -226,7 +228,7 @@ export function TranscriptReferenceDrawer({
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
                 <FileCode2 className="h-3.5 w-3.5" />
-                Project File Reference
+                {t('referenceDrawer.projectFileReference')}
               </div>
               <p className="mt-1 truncate text-base font-semibold text-[color:var(--color-foreground)]">
                 {filePathLabel}
@@ -249,10 +251,10 @@ export function TranscriptReferenceDrawer({
                   .finally(() => setIsOpeningCodeWorkspace(false))
               }}
               disabled={isOpeningCodeWorkspace}
-              title="Open in Code Workspace"
+              title={t('referenceDrawer.openInCodeWorkspace')}
             >
               <ExternalLink className="h-4 w-4" />
-              {isOpeningCodeWorkspace ? 'Opening...' : 'Open in Code Workspace'}
+              {isOpeningCodeWorkspace ? t('common.opening') : t('referenceDrawer.openInCodeWorkspace')}
             </button>
           </div>
 
@@ -265,13 +267,18 @@ export function TranscriptReferenceDrawer({
                   </p>
                   <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">
                     {status === 'ready'
-                      ? `${fileLanguage} · lines ${preview.previewStartLine}-${preview.previewEndLine} · target ${lineNumber}${reference.column ? `:${reference.column}` : ''}`
-                      : 'Loading project file preview'}
+                      ? t('referenceDrawer.previewMeta', {
+                        language: fileLanguage,
+                        start: preview.previewStartLine,
+                        end: preview.previewEndLine,
+                        target: `${lineNumber}${reference.column ? `:${reference.column}` : ''}`,
+                      })
+                      : t('referenceDrawer.filePreviewLoading')}
                   </p>
                 </div>
                 {knownOpenTabs.length > 0 && (
                   <span className="shrink-0 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                    {knownOpenTabs.length} code tab{knownOpenTabs.length === 1 ? '' : 's'} remembered
+                    {t('referenceDrawer.rememberedTabs', { count: knownOpenTabs.length })}
                   </span>
                 )}
               </div>
@@ -280,7 +287,7 @@ export function TranscriptReferenceDrawer({
                 {status === 'loading' && (
                   <div className="flex h-full items-center justify-center gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
                     <LoaderCircle className="h-4 w-4 animate-spin" />
-                    Loading file preview...
+                    {t('referenceDrawer.loadingPreview')}
                   </div>
                 )}
 
@@ -288,9 +295,9 @@ export function TranscriptReferenceDrawer({
                   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                     <TriangleAlert className="h-10 w-10 text-[color:var(--color-warning)]" />
                     <div>
-                      <p className="text-sm font-medium text-[color:var(--color-foreground)]">Referenced file was not found</p>
+                      <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('referenceDrawer.fileNotFound')}</p>
                       <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                        The transcript still contains this reference, but the file no longer exists at the project path.
+                        {t('referenceDrawer.fileNotFoundHint')}
                       </p>
                       {readError && (
                         <p className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
@@ -305,9 +312,9 @@ export function TranscriptReferenceDrawer({
                   <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
                     <AlertCircle className="h-10 w-10 text-[color:var(--color-destructive)]" />
                     <div>
-                      <p className="text-sm font-medium text-[color:var(--color-foreground)]">Failed to load reference file</p>
+                      <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('referenceDrawer.fileLoadError')}</p>
                       <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                        The reference was parsed correctly, but the file could not be opened for preview.
+                        {t('referenceDrawer.fileLoadErrorHint')}
                       </p>
                       {readError && (
                         <p className="mt-2 text-[11px] text-[color:var(--color-destructive)]">

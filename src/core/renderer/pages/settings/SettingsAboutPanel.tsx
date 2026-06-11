@@ -1,4 +1,8 @@
+import { useI18n } from '../../i18n'
+
 function SettingsAboutPanel() {
+  const { t } = useI18n()
+
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-5">
@@ -6,8 +10,8 @@ function SettingsAboutPanel() {
           <span className="text-lg font-semibold">L</span>
         </div>
         <div>
-          <p className="section-label mb-1">About</p>
-          <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Project Launcher</h2>
+          <p className="section-label mb-1">{t('settings.sections.about')}</p>
+          <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('appName')}</h2>
           <p className="text-sm text-[color:var(--color-muted-foreground)]">v1.0.0</p>
         </div>
       </div>

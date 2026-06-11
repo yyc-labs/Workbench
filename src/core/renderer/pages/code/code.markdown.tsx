@@ -8,6 +8,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import type { Element as HastElement } from 'hast'
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
+import { useI18n } from '../../i18n'
 
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
@@ -562,6 +563,7 @@ function MermaidBlock({
   themeMode,
   sourceLineProps,
 }: Pick<MarkdownCodeBlockProps, 'codeText' | 'themeMode' | 'sourceLineProps'>) {
+  const { t } = useI18n()
   const diagramId = useId().replace(/:/g, '-')
   const [svgMarkup, setSvgMarkup] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -580,7 +582,7 @@ function MermaidBlock({
       })
       .catch((error: unknown) => {
         if (cancelled) return
-        const message = error instanceof Error ? error.message : 'Unknown Mermaid render error'
+        const message = error instanceof Error ? error.message : t('codeMarkdown.unknownRenderError')
         setSvgMarkup('')
         setErrorMessage(message)
       })
@@ -597,9 +599,9 @@ function MermaidBlock({
   return (
     <div className="code-markdown-mermaid-wrap" {...sourceLineProps}>
       <div className="code-markdown-mermaid-header">
-        <span className="code-markdown-mermaid-badge">Mermaid</span>
-        {isRendering && <span className="code-markdown-mermaid-status">Rendering...</span>}
-        {!isRendering && errorMessage && <span className="code-markdown-mermaid-status is-error">Render failed</span>}
+        <span className="code-markdown-mermaid-badge">{t('codeMarkdown.mermaid')}</span>
+        {isRendering && <span className="code-markdown-mermaid-status">{t('codeMarkdown.rendering')}</span>}
+        {!isRendering && errorMessage && <span className="code-markdown-mermaid-status is-error">{t('codeMarkdown.renderFailed')}</span>}
       </div>
       {svgMarkup ? (
         <div
@@ -627,6 +629,7 @@ function StandardMarkdownCodeBlock({
   enableSyntaxHighlight,
   sourceLineProps,
 }: MarkdownCodeBlockProps) {
+  const { t } = useI18n()
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
   const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText) && isNearViewport
@@ -646,7 +649,7 @@ function StandardMarkdownCodeBlock({
     setCopyStatus(ok ? 'success' : 'error')
   }, [codeText])
 
-  const copyLabel = copyStatus === 'success' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy'
+  const copyLabel = copyStatus === 'success' ? t('codeMarkdown.copied') : copyStatus === 'error' ? t('codeMarkdown.copyFailed') : t('codeMarkdown.copy')
 
   return (
     <div ref={containerRef} className="code-markdown-syntax-wrap" {...sourceLineProps}>

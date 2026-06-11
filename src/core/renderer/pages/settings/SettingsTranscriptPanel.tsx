@@ -14,6 +14,7 @@ import type { RemovedProjectSnapshot, TranscriptSessionSummary } from '../../../
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { formatTranscriptSourceType, useI18n, useLocale } from '../../i18n'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { projectIdFromPath } from '../../../shared/rules'
 import { useAppStore } from '../../stores/appStore'
@@ -50,39 +51,6 @@ type TranscriptPanelProps = {
   removedProjects?: RemovedProjectSnapshot[]
 }
 
-const DATE_TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-})
-
-function formatTimestamp(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return 'Unknown time'
-  const date = new Date(Math.trunc(value))
-  if (Number.isNaN(date.getTime())) return 'Unknown time'
-  return DATE_TIME_FORMATTER.format(date)
-}
-
-function formatSourceTypeLabel(value: string): string {
-  switch (value) {
-    case 'process-output':
-      return 'Process Output'
-    case 'tmux-capture':
-      return 'Tmux Capture'
-    case 'agent-hook':
-      return 'Agent Hook'
-    case 'manual-markdown':
-      return 'Manual Markdown'
-    case 'imported-file':
-      return 'Imported File'
-    default:
-      return 'Transcript'
-  }
-}
-
 function buildProjectMeta(projects: ProjectListItem[], removedProjects?: RemovedProjectSnapshot[]) {
   const map = new Map<string, { projectName: string; projectPath: string; isArchivedProject: boolean }>()
 
@@ -116,6 +84,8 @@ function makeSelectionKey(projectId: string, transcriptId: string): string {
 }
 
 function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelProps) {
+  const locale = useLocale()
+  const { t, formatDateTime } = useI18n()
   const navigate = useNavigate()
   const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
   const openTranscript = useAppStore((s) => s.openTranscript)
@@ -146,7 +116,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
       await Promise.all(nextRecords.map((item) => loadProjectTranscripts(item.projectId)))
     } catch (error) {
       console.error('[SettingsTranscriptPanel] failed to load transcripts:', error)
-      setLoadError(error instanceof Error ? error.message : 'Failed to load transcripts')
+      setLoadError(error instanceof Error ? error.message : t('transcript.failedToLoad'))
     } finally {
       setIsLoading(false)
     }
@@ -185,7 +155,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
             : group.summaries.filter((item) => (
               item.title.toLowerCase().includes(filteredQuery)
               || item.id.toLowerCase().includes(filteredQuery)
-              || formatSourceTypeLabel(item.sourceType).toLowerCase().includes(filteredQuery)
+              || formatTranscriptSourceType(locale, item.sourceType).toLowerCase().includes(filteredQuery)
             )),
         }
       })
@@ -195,7 +165,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
         const bUpdatedAt = b.summaries[0]?.updatedAt ?? 0
         return bUpdatedAt - aUpdatedAt
       })
-  }, [filteredQuery, projects, records, removedProjects])
+  }, [filteredQuery, locale, projects, records, removedProjects])
 
   const totalCount = useMemo(
     () => groups.reduce((sum, group) => sum + group.summaries.length, 0),
@@ -324,10 +294,10 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
   return (
     <div className="space-y-8">
       <div>
-        <p className="section-label mb-3">Transcript Library</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Manage All Transcripts</h2>
+        <p className="section-label mb-3">{t('settingsTranscript.libraryTitle')}</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settingsTranscript.manageTitle')}</h2>
         <p className="mt-2 mb-6 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-          Projects are collapsed by default. Expand what you need, then select multiple transcript records to delete together.
+          {t('settingsTranscript.description')}
         </p>
       </div>
 
@@ -337,10 +307,10 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
       >
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[color:var(--color-foreground)]">Transcript records</p>
+            <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsTranscript.recordsTitle')}</p>
             <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-              {totalCount} saved transcript{totalCount === 1 ? '' : 's'}
-              {selectedCount > 0 ? ` · ${selectedCount} selected` : ''}
+              {t('settingsTranscript.savedTranscripts', { count: totalCount })}
+              {selectedCount > 0 ? ` · ${t('settingsTranscript.selectedCount', { count: selectedCount })}` : ''}
             </p>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -348,7 +318,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search by title, source, project, or transcript id"
+                placeholder={t('settingsTranscript.searchPlaceholder')}
                 className="h-11 min-w-0 pr-10"
               />
               <button
@@ -359,8 +329,8 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                     : 'pointer-events-none opacity-0'
                 }`}
                 onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                title="Clear search"
+                aria-label={t('common.clearSearch')}
+                title={t('common.clearSearch')}
                 tabIndex={searchQuery ? 0 : -1}
               >
                 <X className="h-3.5 w-3.5" />
@@ -374,7 +344,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
               disabled={isLoading}
             >
               <RefreshCw className={isLoading ? 'animate-spin' : ''} />
-              {isLoading ? 'Refreshing...' : 'Refresh'}
+              {isLoading ? t('settingsTranscript.refreshing') : t('settingsTranscript.refresh')}
             </Button>
           </div>
         </div>
@@ -407,7 +377,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                 }}
                 onChange={handleToggleSelectAllVisible}
               />
-              Select all visible transcripts
+              {t('settingsTranscript.selectAllVisible')}
             </label>
             <div className="flex items-center gap-2">
               <Button
@@ -417,7 +387,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                 onClick={() => setSelectedItems({})}
                 disabled={selectedCount === 0}
               >
-                Clear
+                {t('common.clear')}
               </Button>
               <Button
                 type="button"
@@ -427,7 +397,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                 disabled={selectedCount === 0}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete Selected
+                {t('settingsTranscript.deleteSelected')}
               </Button>
             </div>
           </div>
@@ -441,9 +411,9 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-[color:var(--color-muted-foreground)]">
               <FileText className="h-5 w-5" strokeWidth={1.8} />
             </div>
-            <p className="mt-4 text-sm font-medium text-[color:var(--color-foreground)]">No transcripts yet</p>
+            <p className="mt-4 text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsTranscript.noTranscriptsYet')}</p>
             <p className="mt-2 text-sm text-[color:var(--color-muted-foreground)]">
-              Imported transcript records will appear here after they are saved.
+              {t('settingsTranscript.noTranscriptsHint')}
             </p>
           </div>
         ) : null}
@@ -493,7 +463,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                                   color: 'var(--color-warning)',
                                 }}
                               >
-                                Archived project
+                                {t('settingsTranscript.archivedProject')}
                               </span>
                             ) : null}
                           </div>
@@ -507,7 +477,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                       </button>
                     </div>
                     <p className="shrink-0 text-xs text-[color:var(--color-muted-foreground)]">
-                      {group.summaries.length} record{group.summaries.length === 1 ? '' : 's'}
+                      {t('settingsTranscript.recordsCount', { count: group.summaries.length })}
                     </p>
                   </div>
 
@@ -536,16 +506,30 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                                       {item.title}
                                     </p>
                                     <span className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      {formatSourceTypeLabel(item.sourceType)}
+                                      {formatTranscriptSourceType(locale, item.sourceType)}
                                     </span>
                                     <span className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      {item.referenceCount} refs
+                                      {t('transcript.refs', { count: item.referenceCount })}
                                     </span>
                                   </div>
                                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[color:var(--color-muted-foreground)]">
-                                    <span>Updated {formatTimestamp(item.updatedAt)}</span>
-                                    <span>Created {formatTimestamp(item.createdAt)}</span>
-                                    <span title={item.id}>ID {item.id}</span>
+                                    <span>{t('transcript.updatedAt', { value: formatDateTime(item.updatedAt, {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: false,
+                                    }) })}</span>
+                                    <span>{t('transcript.createdAt', { value: formatDateTime(item.createdAt, {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: false,
+                                    }) })}</span>
+                                    <span title={item.id}>{t('settingsTranscript.idLabel', { value: item.id })}</span>
                                   </div>
                                 </div>
                               </div>
@@ -559,13 +543,13 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                                   disabled={group.isArchivedProject}
                                 >
                                   <ExternalLink className="h-4 w-4" />
-                                  Open
+                                  {t('settingsTranscript.open')}
                                 </Button>
                               </div>
                             </div>
                             {group.isArchivedProject ? (
                               <p className="mt-3 text-xs text-[color:var(--color-muted-foreground)]">
-                                This project is no longer in the workspace. Re-add it before opening this transcript.
+                                {t('settingsTranscript.archivedHint')}
                               </p>
                             ) : null}
                           </article>
@@ -587,7 +571,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
           setConfirmDeleteOpen(false)
         }}
         widthClassName="max-w-[560px]"
-        ariaLabel="Delete selected transcripts confirmation"
+        ariaLabel={t('settingsTranscript.deleteConfirmLabel')}
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3">
@@ -602,10 +586,10 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
             </div>
             <div className="min-w-0">
               <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
-                Delete selected transcripts
+                {t('settingsTranscript.deleteConfirm')}
               </h3>
               <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-                This will permanently remove {selectedCount} transcript record{selectedCount === 1 ? '' : 's'}.
+                {t('settingsTranscript.deleteConfirmHint', { count: selectedCount })}
               </p>
             </div>
           </div>
@@ -632,7 +616,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
               onClick={() => setConfirmDeleteOpen(false)}
               disabled={isDeletingSelection}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
@@ -641,7 +625,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
               onClick={() => void handleDeleteSelection()}
               disabled={isDeletingSelection || selectedCount === 0}
             >
-              {isDeletingSelection ? 'Deleting...' : 'Delete'}
+              {isDeletingSelection ? t('transcript.deleting') : t('common.delete')}
             </Button>
           </div>
         </div>

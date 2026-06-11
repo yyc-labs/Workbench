@@ -1,5 +1,6 @@
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { ThemeMode } from './settings.types'
+import { useI18n } from '../../i18n'
 
 const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: Monitor },
@@ -13,6 +14,8 @@ type ThemeSegmentedControlProps = {
 }
 
 function ThemeSegmentedControl({ value, onChange }: ThemeSegmentedControlProps) {
+  const { t } = useI18n()
+
   return (
     <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
       {THEME_OPTIONS.map((opt) => (
@@ -26,7 +29,11 @@ function ThemeSegmentedControl({ value, onChange }: ThemeSegmentedControlProps) 
           }`}
         >
           <opt.icon className="w-3.5 h-3.5" strokeWidth={1.8} />
-          {opt.label}
+          {opt.value === 'system'
+            ? t('settings.theme.system')
+            : opt.value === 'light'
+              ? t('settings.theme.light')
+              : t('settings.theme.dark')}
         </button>
       ))}
     </div>

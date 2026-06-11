@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Play, RotateCcw, Save, Terminal } from 'lucide-react'
 import type { ProjectInfo } from '../../shared/types'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
+import { useI18n } from '../i18n'
 import { projectDisplayName } from '../lib/projectDisplay'
 import { useAppStore } from '../stores/appStore'
 
@@ -34,6 +35,7 @@ export function RunCommandConfigPopover({
   y,
   onClose,
 }: RunCommandConfigPopoverProps) {
+  const { t } = useI18n()
   const setProjectCustomCommand = useAppStore((s) => s.setProjectCustomCommand)
   const setProjectRunStartupMode = useAppStore((s) => s.setProjectRunStartupMode)
   const startProject = useAppStore((s) => s.startProject)
@@ -47,10 +49,10 @@ export function RunCommandConfigPopover({
   const environment = detectProjectEnvironment(project.path)
   const environmentHint =
     environment === 'windows'
-      ? 'Windows 项目建议 PowerShell 写法: pwsh -File .\\start.ps1'
+      ? t('runCommand.environmentHintWindows')
       : environment === 'ubuntu'
-        ? 'Ubuntu/WSL 项目建议 shell 写法: bash ./start.sh'
-        : '可填写任意 shell 命令，留空则回退默认命令'
+        ? t('runCommand.environmentHintUbuntu')
+        : t('runCommand.environmentHintOther')
 
   const isUsingDefault = !project.customCommand?.trim()
 
@@ -67,39 +69,39 @@ export function RunCommandConfigPopover({
     const list: RunCommandTemplate[] = [
       {
         id: 'pm-dev',
-        label: 'Package Dev',
+        label: t('runCommand.templatePackageDev'),
         command: devCommand,
-        hint: '使用项目包管理器启动 dev',
+        hint: t('runCommand.templatePackageDevHint'),
       },
       {
         id: 'cmd',
-        label: 'CMD 脚本',
+        label: t('runCommand.templateCmd'),
         command: '.\\start.cmd',
-        hint: '执行项目目录下 start.cmd',
+        hint: t('runCommand.templateCmdHint'),
       },
       {
         id: 'ps1',
-        label: 'PowerShell 脚本',
+        label: t('runCommand.templatePowerShell'),
         command: 'pwsh -File .\\start.ps1',
-        hint: '执行项目目录下 start.ps1',
+        hint: t('runCommand.templatePowerShellHint'),
       },
       {
         id: 'bat',
-        label: 'Batch 脚本',
+        label: t('runCommand.templateBatch'),
         command: '.\\start.bat',
-        hint: '执行项目目录下 start.bat',
+        hint: t('runCommand.templateBatchHint'),
       },
       {
         id: 'bash',
-        label: 'Bash 脚本',
+        label: t('runCommand.templateBash'),
         command: 'bash ./start.sh',
-        hint: '执行项目目录下 start.sh',
+        hint: t('runCommand.templateBashHint'),
       },
       {
         id: 'dual',
-        label: '前后端双启动',
+        label: t('runCommand.templateDual'),
         command: `${devCommand} && ${pm === 'yarn' ? 'yarn api' : `${pm} run api`}`,
-        hint: '串行执行两段启动命令',
+        hint: t('runCommand.templateDualHint'),
       },
     ]
 
@@ -110,7 +112,7 @@ export function RunCommandConfigPopover({
       return [list[4], list[0], list[5], list[2], list[1], list[3]]
     }
     return list
-  }, [environment, project.packageManager])
+  }, [environment, project.packageManager, t])
 
   useEffect(() => {
     setDraftCommand(project.customCommand ?? project.command)
@@ -206,13 +208,13 @@ export function RunCommandConfigPopover({
     >
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="section-label">Run Command</p>
+          <p className="section-label">{t('runCommand.title')}</p>
           <p className="truncate text-[12px] text-[color:var(--color-muted-foreground)]" title={project.path}>
             {projectDisplayName(project)}
           </p>
         </div>
         <span className="rounded-full px-2 py-0.5 text-[10px] quiet-control">
-          {isUsingDefault ? 'Default' : 'Custom'}
+          {isUsingDefault ? t('runCommand.defaultState') : t('runCommand.customState')}
         </span>
       </div>
 
@@ -226,7 +228,7 @@ export function RunCommandConfigPopover({
           onClick={() => setActiveTab('command')}
           disabled={saving}
         >
-          命令
+          {t('runCommand.commandTab')}
         </button>
         <button
           className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
@@ -237,20 +239,20 @@ export function RunCommandConfigPopover({
           onClick={() => setActiveTab('template')}
           disabled={saving}
         >
-          模板
+          {t('runCommand.templateTab')}
         </button>
       </div>
 
       {activeTab === 'command' ? (
         <div className="space-y-2">
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            检测默认命令: <span className="font-mono text-[color:var(--color-foreground)]">{project.command}</span>
+            {t('runCommand.detectedDefaultCommand')} <span className="font-mono text-[color:var(--color-foreground)]">{project.command}</span>
           </p>
           <textarea
             value={draftCommand}
             onChange={(e) => setDraftCommand(e.target.value)}
             className="quiet-control h-[96px] w-full resize-y rounded-[12px] border-0 px-3 py-2 font-mono text-[12px] text-[color:var(--color-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="例如: npm run dev && npm run api"
+            placeholder={t('runCommand.commandPlaceholder')}
             spellCheck={false}
             disabled={saving}
           />
@@ -258,7 +260,7 @@ export function RunCommandConfigPopover({
             {environmentHint}
           </p>
           <div className="pt-1">
-            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">启动方式</p>
+            <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('runCommand.startupMode')}</p>
             <div className="inline-flex rounded-full p-1 quiet-control">
               <button
                 className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
@@ -269,7 +271,7 @@ export function RunCommandConfigPopover({
                 onClick={() => setRunStartupMode('silent')}
                 disabled={saving}
               >
-                静默（后台）
+                {t('runCommand.startupModeSilent')}
               </button>
               <button
                 className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
@@ -280,7 +282,7 @@ export function RunCommandConfigPopover({
                 onClick={() => setRunStartupMode('terminal')}
                 disabled={saving}
               >
-                非静默（终端执行）
+                {t('runCommand.startupModeTerminal')}
               </button>
             </div>
           </div>
@@ -288,7 +290,7 @@ export function RunCommandConfigPopover({
       ) : (
         <div className="space-y-2">
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            点模板会自动填充命令，省去前缀输入
+            {t('runCommand.templateHint')}
           </p>
           <div className="max-h-[220px] space-y-1.5 overflow-auto pr-0.5">
             {templates.map((item) => (
@@ -317,17 +319,17 @@ export function RunCommandConfigPopover({
           className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-60"
           onClick={() => void handleReset()}
           disabled={saving}
-          title="恢复项目类型检测到的默认命令"
+          title={t('runCommand.restoreDefaultTitle')}
         >
           <RotateCcw className="h-3.5 w-3.5" />
-          Restore Default
+          {t('runCommand.restoreDefault')}
         </button>
         <button
           className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-60"
           onClick={() => onClose()}
           disabled={saving}
         >
-          Close
+          {t('runCommand.close')}
         </button>
         <button
           className="ml-auto inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60"
@@ -335,7 +337,7 @@ export function RunCommandConfigPopover({
           disabled={saving || !hasChanges}
         >
           <Save className="h-3.5 w-3.5" />
-          Save
+          {t('common.save')}
         </button>
         <button
           className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
@@ -343,13 +345,13 @@ export function RunCommandConfigPopover({
           disabled={saving}
         >
           <Play className="h-3.5 w-3.5" />
-          Save & Run
+          {t('runCommand.saveAndRun')}
         </button>
       </div>
 
       <div className="mt-2 inline-flex items-center gap-1 text-[10px] text-[color:var(--color-muted-foreground)]">
         <Terminal className="h-3 w-3" />
-        命令会持久化到项目配置，后续 Run 会直接使用
+        {t('runCommand.persistedHint')}
       </div>
     </div>,
     document.body

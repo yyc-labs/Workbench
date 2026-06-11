@@ -1,6 +1,7 @@
 import type { Dispatch, Ref, SetStateAction } from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ChevronDown, ChevronUp, FileSearch, LocateFixed, RefreshCw, Search } from 'lucide-react'
+import { useI18n } from '../../i18n'
 import { DebouncedSearchInput } from './DebouncedSearchInput'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileTree } from './CodeFileTree'
@@ -107,6 +108,8 @@ export function CodeWorkspaceSidebar({
   viewMode,
   autoCollapseMatchThreshold = 10,
 }: CodeWorkspaceSidebarProps) {
+  const { t } = useI18n()
+
   if (viewMode === 'files') {
     return (
       <aside className="code-tree-panel surface-card">
@@ -115,7 +118,7 @@ export function CodeWorkspaceSidebar({
             <DebouncedSearchInput
               inputRef={fileSearchInputRef}
               leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-              placeholder="Search files (e.g. abvd)"
+              placeholder={t('codeWorkspace.searchFilesPlaceholder')}
               inputClassName="code-search-input"
               debounceMs={FILE_SEARCH_DEBOUNCE_MS}
               onQueryChange={onChangeFileSearchQuery}
@@ -130,7 +133,7 @@ export function CodeWorkspaceSidebar({
                 setLocateRequestToken((prev) => prev + 1)
               })
             }}
-            title={activeRelativePath ? 'Locate current file' : 'No active file'}
+            title={activeRelativePath ? t('codeWorkspace.locateCurrentFile') : t('codeWorkspace.noActiveFile')}
             disabled={!activeRelativePath}
           >
             <LocateFixed className="h-3.5 w-3.5" />
@@ -139,22 +142,22 @@ export function CodeWorkspaceSidebar({
             type="button"
             className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={onReloadTree}
-            title="Reload file tree"
+            title={t('codeWorkspace.reloadFileTree')}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
         {tree.status === 'loading' ? (
-          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Loading files...</div>
+          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.loadingFiles')}</div>
         ) : tree.status === 'error' ? (
-          <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? 'Failed to load file tree.'}</div>
+          <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? t('codeWorkspace.failedToLoadFileTree')}</div>
         ) : hasSearchQuery && isSearchingFiles ? (
-          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching files...</div>
+          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.searchingFiles')}</div>
         ) : hasSearchQuery && fileSearchError ? (
           <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{fileSearchError}</div>
         ) : hasSearchQuery && treeNodesForView.length === 0 ? (
-          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching files.</div>
+          <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.noMatchingFiles')}</div>
         ) : (
           <CodeFileTree
             nodes={treeNodesForView}
@@ -181,9 +184,9 @@ export function CodeWorkspaceSidebar({
               <FileSearch className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
-              <div className="code-search-title">Global search</div>
+              <div className="code-search-title">{t('codeWorkspace.globalSearch')}</div>
               <div className="code-search-subtitle">
-                {hasContentSearchScope ? `Scope: ${activeContentSearchScopeLabel}` : 'Search text across this project'}
+                {hasContentSearchScope ? t('codeWorkspace.scopeLabel', { value: activeContentSearchScopeLabel }) : t('codeWorkspace.searchAcrossProject')}
               </div>
             </div>
           </div>
@@ -191,7 +194,7 @@ export function CodeWorkspaceSidebar({
             type="button"
             className={`code-search-meta-action ${contentSearchCaseSensitive ? 'is-active' : ''}`}
             onClick={() => onSetContentSearchCaseSensitive((prev) => !prev)}
-            title={contentSearchCaseSensitive ? 'Case sensitive search: on' : 'Case sensitive search: off'}
+            title={contentSearchCaseSensitive ? t('codeWorkspace.caseSensitiveOn') : t('codeWorkspace.caseSensitiveOff')}
             aria-pressed={contentSearchCaseSensitive}
           >
             Aa
@@ -201,7 +204,7 @@ export function CodeWorkspaceSidebar({
           <DebouncedSearchInput
             inputRef={contentSearchInputRef}
             leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-            placeholder="Type text, symbol, or error message"
+            placeholder={t('codeWorkspace.contentSearchPlaceholder')}
             inputClassName="code-search-input code-search-input--hero"
             debounceMs={FILE_SEARCH_DEBOUNCE_MS}
             onQueryChange={onChangeContentSearchQuery}
@@ -209,7 +212,7 @@ export function CodeWorkspaceSidebar({
           />
         </div>
         <ScrollAreaPrimitive.Root className="code-search-scope-strip-root">
-          <ScrollAreaPrimitive.Viewport className="code-search-scope-strip-viewport" aria-label="Search scope presets">
+          <ScrollAreaPrimitive.Viewport className="code-search-scope-strip-viewport" aria-label={t('codeWorkspace.searchScopePresetsAria')}>
             <div className="code-search-scope-strip">
               {contentSearchScopePresets.map((preset) => {
                 const isActive = contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey
@@ -242,10 +245,10 @@ export function CodeWorkspaceSidebar({
             className="code-search-inline-toggle"
             onClick={() => onSetContentSearchAdvancedOpen((prev) => !prev)}
             aria-expanded={isContentSearchAdvancedOpen}
-            title="Open advanced glob scope"
+            title={t('codeWorkspace.openAdvancedScope')}
           >
             {isContentSearchAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            <span>Advanced scope</span>
+            <span>{t('codeWorkspace.advancedScope')}</span>
             {hasContentSearchScope && (
               <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>
             )}
@@ -263,20 +266,20 @@ export function CodeWorkspaceSidebar({
         {isContentSearchAdvancedOpen && (
           <div className="code-search-advanced-panel">
             <label className="code-search-advanced-label" htmlFor="code-content-search-scope-input">
-              Include globs
+              {t('codeWorkspace.includeGlobs')}
             </label>
             <input
               id="code-content-search-scope-input"
               type="text"
               value={contentSearchScopeInput}
               onChange={(event) => onSetContentSearchScopeInput(event.target.value)}
-              placeholder="src/**/*.ts, *.md, docs/**"
+              placeholder={t('codeWorkspace.advancedScopePlaceholder')}
               className="code-search-input code-search-scope-input"
               spellCheck={false}
               title={contentSearchScopeSummary}
             />
             <div className="code-search-advanced-help">
-              Separate scopes with space or comma. Short inputs like <code>ts</code> become <code>*.ts</code>.
+              {t('codeWorkspace.advancedScopeHelp')}
             </div>
           </div>
         )}
@@ -284,15 +287,15 @@ export function CodeWorkspaceSidebar({
           <div className="code-search-main-toolbar">
             <div className="code-search-main-meta">
               <span className="code-search-main-meta-text">
-                <span className="code-search-main-stat">{contentSearchResult.files.length} files</span>
+                <span className="code-search-main-stat">{t('codeWorkspace.filesStat', { count: contentSearchResult.files.length })}</span>
                 <span className="code-search-main-meta-sep">•</span>
-                <span className="code-search-main-stat">{contentSearchResult.totalMatches} matches</span>
+                <span className="code-search-main-stat">{t('codeWorkspace.matchesStat', { count: contentSearchResult.totalMatches })}</span>
                 <span className="code-search-main-meta-sep">•</span>
                 <span className="code-search-main-stat">
-                  {hasContentSearchScope ? `${contentSearchScopeGlobs.length} globs` : 'all files'}
+                  {hasContentSearchScope ? t('codeWorkspace.globsStat', { count: contentSearchScopeGlobs.length }) : t('codeWorkspace.allFiles')}
                 </span>
                 {contentSearchResult.limited && (
-                  <span className="code-search-main-limited">limited</span>
+                  <span className="code-search-main-limited">{t('codeWorkspace.limited')}</span>
                 )}
               </span>
             </div>
@@ -303,15 +306,15 @@ export function CodeWorkspaceSidebar({
       {contentSearchQuery.trim().length === 0 ? (
         <div className="code-panel-empty">
           <div className="text-sm text-[color:var(--color-muted-foreground)]">
-            Enter keywords to run global content search.
+            {t('codeWorkspace.globalSearchEmpty')}
           </div>
         </div>
       ) : isSearchingContent ? (
-        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">Searching content...</div>
+        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.searchingContent')}</div>
       ) : contentSearchError ? (
         <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{contentSearchError}</div>
       ) : contentSearchResult.files.length === 0 ? (
-        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">No matching text found.</div>
+        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.noMatchingText')}</div>
       ) : (
         <CodeContentSearchTree
           ref={contentSearchTreeRef}

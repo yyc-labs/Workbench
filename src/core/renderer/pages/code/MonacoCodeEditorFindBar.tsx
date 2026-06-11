@@ -1,5 +1,6 @@
 import type { MutableRefObject } from 'react'
 import { ChevronDown, ChevronUp, Replace, X } from 'lucide-react'
+import { useI18n } from '../../i18n'
 import type { EditorSearchMode } from './useMonacoSearchWidget'
 
 type MonacoCodeEditorFindBarProps = {
@@ -47,6 +48,8 @@ export function MonacoCodeEditorFindBar({
   searchRegex,
   searchWholeWord,
 }: MonacoCodeEditorFindBarProps) {
+  const { t } = useI18n()
+
   return (
     <div className="code-editor-findbar">
       <div className="code-editor-findbar-row">
@@ -59,7 +62,7 @@ export function MonacoCodeEditorFindBar({
           onChange={(event) => {
             onChangeSearchQuery(event.target.value)
           }}
-          placeholder="Find"
+          placeholder={t('codeWorkspace.find')}
           className="code-editor-findbar-input"
           spellCheck={false}
           onKeyDown={(event) => {
@@ -80,13 +83,13 @@ export function MonacoCodeEditorFindBar({
           }}
         />
         <span className="code-editor-findbar-count">
-          {searchMatchCount > 0 ? `${activeSearchMatchIndex}/${searchMatchCount}` : 'No results'}
+          {searchMatchCount > 0 ? `${activeSearchMatchIndex}/${searchMatchCount}` : t('codeWorkspace.noResults')}
         </span>
         <button
           type="button"
           className={`code-editor-findbar-toggle ${searchCaseSensitive ? 'is-active' : ''}`}
           onClick={onToggleSearchCaseSensitive}
-          title="Match Case"
+          title={t('common.matchCase')}
           aria-pressed={searchCaseSensitive}
         >
           Aa
@@ -95,7 +98,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className={`code-editor-findbar-toggle ${searchWholeWord ? 'is-active' : ''}`}
           onClick={onToggleSearchWholeWord}
-          title="Match Whole Word"
+          title={t('common.matchWholeWord')}
           aria-pressed={searchWholeWord}
         >
           ab
@@ -104,7 +107,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className={`code-editor-findbar-toggle ${searchRegex ? 'is-active' : ''}`}
           onClick={onToggleRegex}
-          title="Use Regular Expression"
+          title={t('common.useRegularExpression')}
           aria-pressed={searchRegex}
         >
           .*
@@ -113,7 +116,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className="code-editor-findbar-icon-btn"
           onClick={onGoToPreviousMatch}
-          title="Previous Match"
+          title={t('codeWorkspace.previousMatch')}
         >
           <ChevronUp className="h-3.5 w-3.5" />
         </button>
@@ -121,7 +124,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className="code-editor-findbar-icon-btn"
           onClick={onGoToNextMatch}
-          title="Next Match"
+          title={t('codeWorkspace.nextMatch')}
         >
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
@@ -129,7 +132,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className={`code-editor-findbar-icon-btn ${searchMode === 'replace' ? 'is-active' : ''}`}
           onClick={onToggleReplaceMode}
-          title={searchMode === 'replace' ? 'Hide Replace' : 'Show Replace'}
+          title={searchMode === 'replace' ? t('common.hideReplace') : t('common.showReplace')}
         >
           <Replace className="h-3.5 w-3.5" />
         </button>
@@ -137,7 +140,7 @@ export function MonacoCodeEditorFindBar({
           type="button"
           className="code-editor-findbar-icon-btn"
           onClick={onClose}
-          title="Close"
+          title={t('common.close')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -148,7 +151,7 @@ export function MonacoCodeEditorFindBar({
             type="text"
             value={replaceQuery}
             onChange={(event) => onChangeReplaceQuery(event.target.value)}
-            placeholder="Replace"
+            placeholder={t('codeWorkspace.replace')}
             className="code-editor-findbar-input"
             spellCheck={false}
             onKeyDown={(event) => {
@@ -174,7 +177,7 @@ export function MonacoCodeEditorFindBar({
             onClick={onReplaceCurrentMatch}
             disabled={searchMatchCount <= 0}
           >
-            Replace
+            {t('codeWorkspace.replace')}
           </button>
           <button
             type="button"
@@ -182,7 +185,7 @@ export function MonacoCodeEditorFindBar({
             onClick={onReplaceAllMatches}
             disabled={searchMatchCount <= 0}
           >
-            Replace All
+            {t('common.replaceAll')}
           </button>
         </div>
       )}

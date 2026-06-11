@@ -6,6 +6,8 @@ import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
+import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
+import { useI18n } from '../i18n'
 
 type RecentProjectDrawerCardProps = {
   project: RecentProjectListItem
@@ -46,21 +48,6 @@ type RecentProjectsMetaDialogHostProps = {
 const DRAWER_TRANSITION_MS = 220
 const DRAWER_CONTENT_REVEAL_MS = 70
 const EMPTY_RECENT_PROJECTS: RecentProjectListItem[] = []
-const LAST_OPENED_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-})
-
-function formatLastOpened(timestamp?: number): string {
-  if (!timestamp) return '未打开'
-  try {
-    return LAST_OPENED_FORMATTER.format(new Date(timestamp))
-  } catch {
-    return '最近打开'
-  }
-}
 
 function getProjectById(projects: ProjectInfo[], projectId?: string | null): ProjectInfo | undefined {
   if (!projectId) return undefined
@@ -74,6 +61,8 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
   onRemoveProject,
   onOpenContextMenu,
 }: RecentProjectDrawerCardProps) {
+  const { t, formatDateTime } = useI18n()
+
   return (
     <div
       className={`recent-project-drawer-item ${isContextActive ? 'is-context-active' : ''}`}
@@ -93,13 +82,13 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
         <span className="recent-project-drawer-meta">
           <span>{middleTruncatePath(project.path, 24, 18)}</span>
           <span>·</span>
-          <span>{formatLastOpened(project.lastOpened)}</span>
+          <span>{project.lastOpened ? formatDateTime(project.lastOpened) : t('common.notOpened')}</span>
         </span>
       </button>
       <button
         type="button"
         className="recent-project-drawer-remove"
-        title="从最近列表移除"
+        title={t('common.removeFromRecent')}
         onClick={() => onRemoveProject(project.id)}
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -123,6 +112,8 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const togglePin = useAppStore((s) => s.togglePin)
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const session = useAppStore((s) => s.sessions[project.id])
+  const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
+  const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
 
   const currentCli: CliTool = project.cli || 'claude'
@@ -131,6 +122,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
+  const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const aiCommitStatus: AiCommitStatus = 'idle'
 
   const handleSwitchCli = useCallback(() => {
@@ -153,6 +145,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
       y={contextMenu.y}
       onClose={onClose}
       isRuntimeActive={isRuntimeActive}
+      usesTmuxRuntime={usesTmuxRuntime}
       isDevRunning={isDevRunning}
       isDevStopping={isDevStopping}
       isOpeningTerminal={isOpeningTerminal}
@@ -212,6 +205,7 @@ export function RecentProjectsDrawer({
   onSelectProject,
   onRemoveProject,
 }: RecentProjectsDrawerProps) {
+  const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
@@ -295,7 +289,7 @@ export function RecentProjectsDrawer({
         className={`fixed inset-0 z-[89] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${
           visible ? 'opacity-100' : 'opacity-0'
         }`}
-        aria-label="Close recent project drawer backdrop"
+        aria-label={t('common.closeRecentProjectsBackdrop')}
         onClick={onClose}
       />
 
@@ -307,13 +301,13 @@ export function RecentProjectsDrawer({
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="recent-project-drawer-header">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">最近项目</p>
-              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">右键下滑快速开关，点击可切换</p>
+              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('common.recentProjects')}</p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('common.recentProjectsHint')}</p>
             </div>
             <div
               className="recent-project-drawer-current"
               title={currentProject?.path}
-              aria-label={currentProject ? `当前项目：${projectDisplayName(currentProject)}` : undefined}
+              aria-label={currentProject ? `${t('common.currentProject')}: ${projectDisplayName(currentProject)}` : undefined}
             >
               {currentProject ? projectDisplayName(currentProject) : null}
             </div>
@@ -321,7 +315,7 @@ export function RecentProjectsDrawer({
               type="button"
               className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
               onClick={onClose}
-              title="Close"
+              title={t('common.close')}
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -331,7 +325,7 @@ export function RecentProjectsDrawer({
             {recentProjects.length === 0 ? (
               <div className="recent-project-drawer-empty">
                 <Clock3 className="h-4 w-4" />
-                <span>暂无最近项目</span>
+                <span>{t('common.noRecentProjects')}</span>
               </div>
             ) : (
               <div className="recent-project-drawer-list">

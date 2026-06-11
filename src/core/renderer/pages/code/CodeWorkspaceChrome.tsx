@@ -1,5 +1,6 @@
 import { BookOpen, Bot, Code2, Files, FileText, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { useI18n } from '../../i18n'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
 import { fileNameFromRelativePath } from './code.markdown'
@@ -52,14 +53,16 @@ function EmptyStateSummary({
   activeRelativePath,
   activeLanguage,
   projectFileSize,
+  chooseFileLabel,
 }: {
   activeRelativePath: string | null
   activeLanguage: string | null
   projectFileSize: number
+  chooseFileLabel: string
 }) {
   const summaryText = activeRelativePath
     ? `${activeLanguage || 'plaintext'} • ${formatFileSize(projectFileSize)}`
-    : 'Choose a file to start editing'
+    : chooseFileLabel
 
   return (
     <p
@@ -127,6 +130,7 @@ export function CodeWorkspaceChrome({
   skippedFiles,
   viewMode,
 }: CodeWorkspaceChromeProps) {
+  const { t } = useI18n()
   const firstProjectLinkItem = projectLinkItems[0]
 
   return (
@@ -139,7 +143,7 @@ export function CodeWorkspaceChrome({
           {projectHeaderCollapsed ? (
             <div className="flex min-w-0 items-center gap-2.5">
               <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
-                {projectName || '当前项目'}
+                {projectName || t('codeWorkspace.currentProjectFallback')}
               </p>
               <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
                 <button
@@ -152,7 +156,7 @@ export function CodeWorkspaceChrome({
                   onClick={() => onSwitchPane?.('code')}
                 >
                   <Code2 className="h-3.5 w-3.5" />
-                  Code
+                  {t('codeWorkspace.codeTab')}
                 </button>
                 <button
                   type="button"
@@ -164,17 +168,17 @@ export function CodeWorkspaceChrome({
                   onClick={() => onSwitchPane?.('aicommit')}
                 >
                   <Bot className="h-3.5 w-3.5" />
-                  AI Commit
+                  {t('codeWorkspace.aiCommitTab')}
                 </button>
               </div>
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                 onClick={onOpenTranscript}
-                title="Open transcript viewer"
+                title={t('codeWorkspace.transcriptTitle')}
               >
                 <FileText className="h-3.5 w-3.5" />
-                Transcript
+                {t('detail.transcript')}
               </button>
               {firstProjectLinkItem && (
                 <UrlPopover items={projectLinkItems}>
@@ -187,7 +191,7 @@ export function CodeWorkspaceChrome({
                       event.stopPropagation()
                       onOpenProjectLinksManager?.()
                     }}
-                    title="左键打开首个链接，右键打开资料管理"
+                    title={t('codeWorkspace.projectDocsTitle')}
                   >
                     <BookOpen className="h-3.5 w-3.5 shrink-0" />
                   </button>
@@ -199,6 +203,7 @@ export function CodeWorkspaceChrome({
               activeRelativePath={activeRelativePath}
               activeLanguage={activeLanguage}
               projectFileSize={projectFileSize}
+              chooseFileLabel={t('codeWorkspace.chooseFileToStart')}
             />
           )}
         </div>
@@ -213,10 +218,10 @@ export function CodeWorkspaceChrome({
                   : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
               }`}
               onClick={() => onToggleFavorite(activeRelativePath)}
-              title={isActiveFileFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              title={isActiveFileFavorite ? t('codeWorkspace.removeFavorite') : t('codeWorkspace.addFavorite')}
             >
               <Star className={`h-3.5 w-3.5 ${isActiveFileFavorite ? 'fill-current' : ''}`} />
-              {isActiveFileFavorite ? 'Favorited' : 'Favorite'}
+              {isActiveFileFavorite ? t('codeWorkspace.favorited') : t('codeWorkspace.favorite')}
             </button>
           )}
           {activeRelativePath && (
@@ -225,19 +230,19 @@ export function CodeWorkspaceChrome({
                 type="button"
                 className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                 onClick={() => onOpenEditorSearch('find')}
-                title={showEditorSearchActions ? 'Find in current file (Ctrl/Cmd+F)' : 'Switch to editor mode first'}
+                title={showEditorSearchActions ? t('codeWorkspace.findTitle') : t('codeWorkspace.switchToEditorFirst')}
                 disabled={!showEditorSearchActions}
               >
-                Find
+                {t('codeWorkspace.find')}
               </button>
               <button
                 type="button"
                 className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
                 onClick={() => onOpenEditorSearch('replace')}
-                title={showEditorSearchActions ? 'Replace in current file (Ctrl/Cmd+H)' : 'Switch to editor mode first'}
+                title={showEditorSearchActions ? t('codeWorkspace.replaceTitle') : t('codeWorkspace.switchToEditorFirst')}
                 disabled={!showEditorSearchActions}
               >
-                Replace
+                {t('codeWorkspace.replace')}
               </button>
             </>
           )}
@@ -249,22 +254,22 @@ export function CodeWorkspaceChrome({
                 : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
             }`}
             onClick={() => onSetQuickDrawerOpen((prev) => !prev)}
-            title="Quick file drawer"
+            title={t('codeWorkspace.quickFileDrawer')}
           >
             <PanelLeftOpen className="h-3.5 w-3.5" />
-            Files
+            {t('codeWorkspace.files')}
           </button>
-          <div className="code-view-mode-switch" role="tablist" aria-label="Code workspace mode">
+          <div className="code-view-mode-switch" role="tablist" aria-label={t('codeWorkspace.modeAria')}>
             <button
               type="button"
               role="tab"
               aria-selected={viewMode === 'files'}
               className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`}
               onClick={() => onSetViewMode('files')}
-              title="File explorer and editor"
+              title={t('codeWorkspace.fileExplorerAndEditor')}
             >
               <Files className="h-3.5 w-3.5" />
-              Files
+              {t('codeWorkspace.files')}
             </button>
             <button
               type="button"
@@ -272,10 +277,10 @@ export function CodeWorkspaceChrome({
               aria-selected={viewMode === 'search'}
               className={`code-view-mode-btn ${viewMode === 'search' ? 'is-active' : ''}`}
               onClick={() => onSetViewMode('search')}
-              title="Global content search"
+              title={t('codeWorkspace.globalContentSearch')}
             >
               <TextSearch className="h-3.5 w-3.5" />
-              Search
+              {t('codeWorkspace.search')}
             </button>
           </div>
           {isNarrowViewport && (
@@ -283,10 +288,10 @@ export function CodeWorkspaceChrome({
               type="button"
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
               onClick={() => onSetExplorerOpen((prev) => !prev)}
-              title={isExplorerOpen ? 'Switch to editor' : (viewMode === 'search' ? 'Open search panel' : 'Open file explorer')}
+              title={isExplorerOpen ? t('codeWorkspace.switchToEditor') : (viewMode === 'search' ? t('codeWorkspace.openSearchPanel') : t('codeWorkspace.openFileExplorer'))}
             >
               <Code2 className="h-3.5 w-3.5" />
-              {isExplorerOpen ? 'Editor' : (viewMode === 'search' ? 'Search' : 'Explorer')}
+              {isExplorerOpen ? t('codeWorkspace.editor') : (viewMode === 'search' ? t('codeWorkspace.search') : t('codeWorkspace.explorer'))}
             </button>
           )}
           <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
@@ -326,7 +331,7 @@ export function CodeWorkspaceChrome({
                   role="button"
                   tabIndex={0}
                   className="code-open-tab-close"
-                  aria-label={`Close ${path}`}
+                  aria-label={t('codeWorkspace.closeTab', { path })}
                   onClick={(event) => {
                     event.stopPropagation()
                     onCloseOpenTab(path)
@@ -356,7 +361,7 @@ export function CodeWorkspaceChrome({
           }}
         >
           <span>
-            File changed on disk. Reload to view latest content, or keep your unsaved edits.
+            {t('codeWorkspace.externalChange')}
           </span>
           <div className="flex shrink-0 items-center gap-2">
             <button
@@ -364,14 +369,14 @@ export function CodeWorkspaceChrome({
               className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
               onClick={onKeepMyChanges}
             >
-              Keep My Changes
+              {t('codeWorkspace.keepMyChanges')}
             </button>
             <button
               type="button"
               className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover"
               onClick={onReloadFromDisk}
             >
-              Reload from Disk
+              {t('codeWorkspace.reloadFromDisk')}
             </button>
           </div>
         </div>
@@ -382,31 +387,31 @@ export function CodeWorkspaceChrome({
         onClose={() => onResolveDiscardUnsavedConfirm(false)}
         widthClassName="max-w-[440px]"
         baseZIndex={1100}
-        ariaLabel="Unsaved changes confirmation"
+        ariaLabel={t('codeWorkspace.unsavedAria')}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <p className="section-label mb-1">Unsaved Changes</p>
+            <p className="section-label mb-1">{t('codeWorkspace.unsavedTitle')}</p>
             <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-              当前文件有未保存修改
+              {t('codeWorkspace.unsavedCurrentFile')}
             </p>
           </div>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={() => onResolveDiscardUnsavedConfirm(false)}
-            title="Close"
+            title={t('common.close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
           {discardUnsavedConfirm?.forceReload
-            ? '重新加载后将丢弃当前未保存内容，是否继续？'
-            : `切换到 ${discardUnsavedConfirm?.nextRelativePath ?? '目标文件'} 后将丢弃当前未保存内容，是否继续？`}
+            ? t('codeWorkspace.unsavedForceReload')
+            : t('codeWorkspace.unsavedSwitchFile', { path: discardUnsavedConfirm?.nextRelativePath ?? t('codeWorkspace.chooseFileToStart') })}
         </p>
         <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          你也可以先保存当前文件，再执行切换或重载。
+          {t('codeWorkspace.unsavedHint')}
         </p>
         <div className="mt-4 flex items-center justify-end gap-2">
           <button
@@ -414,14 +419,14 @@ export function CodeWorkspaceChrome({
             className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
             onClick={() => onResolveDiscardUnsavedConfirm(false)}
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
             className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
             onClick={() => onResolveDiscardUnsavedConfirm(true)}
           >
-            丢弃并继续
+            {t('codeWorkspace.discardAndContinue')}
           </button>
         </div>
       </ModalShell>
@@ -429,13 +434,13 @@ export function CodeWorkspaceChrome({
       {(readError || saveError || isReading || isReloadingFromDisk || skippedDirectories > 0 || skippedFiles > 0) && (
         <div className="px-1 pb-1 pt-2">
           <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-muted-foreground)]">
-            {isReading && <span>Reading file...</span>}
-            {isReloadingFromDisk && <span>Reloading changed file from disk...</span>}
+            {isReading && <span>{t('codeWorkspace.readingFile')}</span>}
+            {isReloadingFromDisk && <span>{t('codeWorkspace.reloadingChangedFile')}</span>}
             {readError && <span className="text-[color:var(--color-destructive)]">{readError}</span>}
             {saveError && <span className="text-[color:var(--color-destructive)]">{saveError}</span>}
             {(skippedDirectories > 0 || skippedFiles > 0) && (
               <span>
-                Skipped {skippedDirectories} directories, {skippedFiles} files while listing folders.
+                {t('codeWorkspace.skippedListing', { directories: skippedDirectories, files: skippedFiles })}
               </span>
             )}
           </div>

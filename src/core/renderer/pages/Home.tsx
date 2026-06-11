@@ -8,9 +8,11 @@ import { HomeDragOverlay } from './home/HomeDragOverlay'
 import { HomeEmptyState } from './home/HomeEmptyState'
 import { HomeProjectsContent } from './home/HomeProjectsContent'
 import { HomeToolbar } from './home/HomeToolbar'
+import { useLocale } from '../i18n'
 import type { EnvGroup, EnvGroupKey } from './home/home.types'
 
 export function HomePage() {
+  const locale = useLocale()
   const location = useLocation()
   const projects = useAppStore((s) => s.projects)
   const folders = useAppStore((s) => s.folders)
@@ -266,9 +268,9 @@ export function HomePage() {
   const groupedRecentProjects = useMemo(() => {
     const groupOrder: EnvGroupKey[] = ['ubuntu', 'windows', 'other']
     const groups: Record<EnvGroupKey, EnvGroup> = {
-      ubuntu: { key: 'ubuntu', label: projectEnvironmentLabel('ubuntu'), projects: [] },
-      windows: { key: 'windows', label: projectEnvironmentLabel('windows'), projects: [] },
-      other: { key: 'other', label: 'Other', projects: [] },
+      ubuntu: { key: 'ubuntu', label: projectEnvironmentLabel('ubuntu', locale), projects: [] },
+      windows: { key: 'windows', label: projectEnvironmentLabel('windows', locale), projects: [] },
+      other: { key: 'other', label: locale === 'zh-CN' ? '其他' : 'Other', projects: [] },
     }
 
     for (const p of recentProjects) {
@@ -283,7 +285,7 @@ export function HomePage() {
     return groupOrder
       .map((k) => groups[k])
       .filter((g) => g.projects.length > 0)
-  }, [recentProjects, envByPath])
+  }, [recentProjects, envByPath, locale])
 
   const runningCount = useMemo(
     () => Object.values(sessions).filter((s) => s.status !== 'stopped').length,

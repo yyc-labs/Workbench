@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, FolderTree, Tag, X } from 'lucide-react'
 import type { ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
+import { useI18n } from '../i18n'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
@@ -29,6 +30,7 @@ export function ProjectMetaDialog({
   onSetProjectCustomName,
   onSetProjectCustomType,
 }: ProjectMetaDialogProps) {
+  const { t } = useI18n()
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(project.folderId)
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(project.tagIds ?? [])
   const [customName, setCustomName] = useState(project.customName ?? '')
@@ -45,8 +47,8 @@ export function ProjectMetaDialog({
   }, [onClose, open])
 
   const selectedFolderName = !selectedFolderId
-    ? 'Uncategorized'
-    : folders.find((folder) => folder.id === selectedFolderId)?.name ?? 'Uncategorized'
+    ? t('common.uncategorized')
+    : folders.find((folder) => folder.id === selectedFolderId)?.name ?? t('common.uncategorized')
 
   if (!open) return null
 
@@ -101,7 +103,7 @@ export function ProjectMetaDialog({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="section-label mb-1">Project Metadata</p>
+            <p className="section-label mb-1">{t('projectMeta.title')}</p>
             <h2 className="truncate text-lg font-semibold text-[color:var(--color-foreground)]">
               {projectDisplayName(project)}
             </h2>
@@ -111,7 +113,7 @@ export function ProjectMetaDialog({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={onClose}
-            title="Close"
+            title={t('common.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -120,13 +122,13 @@ export function ProjectMetaDialog({
         <section className="mb-5 space-y-3">
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">Title</p>
+              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">{t('projectMeta.titleLabel')}</p>
               <button
                 type="button"
                 className="text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
                 onClick={() => setCustomName('')}
               >
-                Use default ({project.name})
+                {t('projectMeta.useDefault', { value: project.name })}
               </button>
             </div>
             <Input
@@ -140,24 +142,24 @@ export function ProjectMetaDialog({
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">Project Type</p>
+              <p className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">{t('projectMeta.projectTypeLabel')}</p>
               <button
                 type="button"
                 className="text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
                 onClick={() => setCustomType('')}
               >
-                Use default ({project.type || 'unknown'})
+                {t('projectMeta.useDefault', { value: project.type || t('common.unknown') })}
               </button>
             </div>
             <Input
               value={customType}
               onChange={(e) => setCustomType(e.target.value)}
-              placeholder={projectDisplayType(project) || 'unknown'}
+              placeholder={projectDisplayType(project) || t('common.unknown')}
               className="h-9 rounded-[12px] px-3 text-sm"
               disabled={saving}
             />
             <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-              Auto-detected type falls back to <span className="font-mono">unknown</span>.
+              {t('projectMeta.autoDetectedTypeHint')}
             </p>
           </div>
         </section>
@@ -165,7 +167,7 @@ export function ProjectMetaDialog({
         <section className="mb-5">
           <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
             <FolderTree className="h-3.5 w-3.5" />
-            Folder
+            {t('projectMeta.folderLabel')}
           </div>
           <div className="rounded-[14px] border p-2" style={{ borderColor: 'var(--color-border)' }}>
             <button
@@ -177,7 +179,7 @@ export function ProjectMetaDialog({
               }`}
               onClick={() => setSelectedFolderId(undefined)}
             >
-              <span>Uncategorized</span>
+              <span>{t('common.uncategorized')}</span>
               {!selectedFolderId && <Check className="h-4 w-4 text-primary" />}
             </button>
             {folders.map((folder) => (
@@ -203,14 +205,14 @@ export function ProjectMetaDialog({
             ))}
           </div>
           <p className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
-            Current: {selectedFolderName}
+            {t('projectMeta.currentFolder', { value: selectedFolderName })}
           </p>
         </section>
 
         <section>
           <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
             <Tag className="h-3.5 w-3.5" />
-            Tags
+            {t('projectMeta.tagsLabel')}
           </div>
           {tags.length > 0 ? (
             <div className="flex flex-wrap gap-2 rounded-[14px] border p-2" style={{ borderColor: 'var(--color-border)' }}>
@@ -250,17 +252,17 @@ export function ProjectMetaDialog({
               className="rounded-[14px] border px-3 py-4 text-sm text-[color:var(--color-muted-foreground)]"
               style={{ borderColor: 'var(--color-border)' }}
             >
-              No tags yet. Create tags in workspace manager first.
+              {t('projectMeta.noTagsHint')}
             </div>
           )}
         </section>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" className="h-9 rounded-full px-4" onClick={onClose} disabled={saving}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button className="h-9 rounded-full px-4" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('common.saving') : t('common.save')}
           </Button>
         </div>
       </div>
@@ -295,6 +297,7 @@ function ManagerRow({
   onRename: (id: string, name: string) => Promise<void>
   onRemove: (id: string) => Promise<void>
 }) {
+  const { t } = useI18n()
   const [editing, setEditing] = useState(false)
   const [nextName, setNextName] = useState(name)
   const [saving, setSaving] = useState(false)
@@ -341,14 +344,14 @@ function ManagerRow({
           type="button"
           className="min-w-0 flex-1 truncate text-left text-sm text-[color:var(--color-foreground)]"
           onClick={() => setEditing(true)}
-          title="Rename"
+          title={t('common.rename')}
         >
           {name}
         </button>
       )}
       {editing ? (
         <Button size="sm" className="h-7 rounded-full px-2.5 text-xs" onClick={() => void handleSave()} disabled={saving}>
-          Save
+          {t('common.save')}
         </Button>
       ) : (
         <Button
@@ -357,7 +360,7 @@ function ManagerRow({
           className="h-7 rounded-full px-2.5 text-xs text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
           onClick={() => void onRemove(id)}
         >
-          Delete
+          {t('common.delete')}
         </Button>
       )}
     </div>
@@ -419,6 +422,7 @@ export function WorkspaceManagerDialog({
   onRenameTag,
   onRemoveTag,
 }: WorkspaceManagerDialogProps) {
+  const { t } = useI18n()
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -460,14 +464,14 @@ export function WorkspaceManagerDialog({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <p className="section-label mb-1">Workspace</p>
-            <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">Manage Folders & Tags</h2>
+            <p className="section-label mb-1">{t('workspaceManager.title')}</p>
+            <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('workspaceManager.heading')}</h2>
           </div>
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={onClose}
-            title="Close"
+            title={t('common.close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -477,7 +481,7 @@ export function WorkspaceManagerDialog({
           <section className="rounded-[16px] border p-3" style={{ borderColor: 'var(--color-border)' }}>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[color:var(--color-foreground)]">
               <FolderTree className="h-4 w-4 text-primary" />
-              Folders
+              {t('common.folders')}
             </div>
             <div className="max-h-[280px] space-y-1 overflow-auto pr-1">
               {folders.map((folder) => (
@@ -491,12 +495,12 @@ export function WorkspaceManagerDialog({
                 />
               ))}
               {folders.length === 0 && (
-                <p className="px-2 py-3 text-sm text-[color:var(--color-muted-foreground)]">No folders yet.</p>
+                <p className="px-2 py-3 text-sm text-[color:var(--color-muted-foreground)]">{t('workspaceManager.noFoldersYet')}</p>
               )}
             </div>
             <CreateRow
-              placeholder="New folder name"
-              buttonLabel="Add"
+              placeholder={t('workspaceManager.newFolderName')}
+              buttonLabel={t('common.add')}
               onCreate={(name) => onCreateFolder(name)}
             />
           </section>
@@ -504,7 +508,7 @@ export function WorkspaceManagerDialog({
           <section className="rounded-[16px] border p-3" style={{ borderColor: 'var(--color-border)' }}>
             <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[color:var(--color-foreground)]">
               <Tag className="h-4 w-4 text-primary" />
-              Tags
+              {t('common.tags')}
             </div>
             <div className="max-h-[280px] space-y-1 overflow-auto pr-1">
               {tags.map((tag) => (
@@ -518,12 +522,12 @@ export function WorkspaceManagerDialog({
                 />
               ))}
               {tags.length === 0 && (
-                <p className="px-2 py-3 text-sm text-[color:var(--color-muted-foreground)]">No tags yet.</p>
+                <p className="px-2 py-3 text-sm text-[color:var(--color-muted-foreground)]">{t('workspaceManager.noTagsYet')}</p>
               )}
             </div>
             <CreateRow
-              placeholder="New tag name"
-              buttonLabel="Add"
+              placeholder={t('workspaceManager.newTagName')}
+              buttonLabel={t('common.add')}
               onCreate={(name) => onCreateTag(name)}
             />
           </section>

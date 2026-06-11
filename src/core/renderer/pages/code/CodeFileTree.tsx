@@ -5,6 +5,7 @@ import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
+import { useI18n } from '../../i18n'
 
 const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
 
@@ -141,6 +142,7 @@ function FileTreeContextMenu({
   onCopyName,
   onClose,
 }: FileTreeContextMenuProps) {
+  const { t } = useI18n()
   const width = 210
   const height = 108
   const padding = 8
@@ -174,9 +176,9 @@ function FileTreeContextMenu({
     }
   }, [onClose])
 
-  const itemTypeLabel = nodeKind === 'directory' ? '目录' : '文件'
-  const openFolderLabel = nodeKind === 'directory' ? '打开该目录' : '打开当前文件夹'
-  const copyNameLabel = nodeKind === 'directory' ? '复制目录名' : '复制文件名'
+  const itemTypeLabel = nodeKind === 'directory' ? t('codeFileTree.directory') : t('codeFileTree.file')
+  const openFolderLabel = nodeKind === 'directory' ? t('codeFileTree.openDirectory') : t('codeFileTree.openCurrentFolder')
+  const copyNameLabel = nodeKind === 'directory' ? t('codeFileTree.copyDirectoryName') : t('codeFileTree.copyFileName')
 
   return createPortal(
     <div
@@ -309,6 +311,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   flatFileListMode = false,
   locateRequestToken = 0,
 }: CodeFileTreeProps) {
+  const { t } = useI18n()
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
   const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
   const handledLocateRequestTokenRef = useRef(0)
@@ -398,7 +401,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   if (!hasNodes) {
     return (
       <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
-        No files available.
+        {t('codeFileTree.noFilesAvailable')}
       </div>
     )
   }
@@ -407,7 +410,7 @@ export const CodeFileTree = memo(function CodeFileTree({
     <div ref={containerRef} className="code-tree-virtual-wrap">
       {isMeasuring ? (
         <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
-          Preparing file tree...
+          {t('codeFileTree.preparingFileTree')}
         </div>
       ) : (
         <Tree<ProjectFileNode>

@@ -6,14 +6,15 @@ import type { AppConfig } from '../shared/types'
 import { Clock3, Copy, Minus, Square, X } from 'lucide-react'
 import { GlobalTitleTooltipBridge } from './components/GlobalTitleTooltipBridge'
 import { RecentProjectsDrawer } from './components/RecentProjectsDrawer'
+import { useI18n } from './i18n'
 import {
   navigateHomeWithStartupDefaultReset,
   useMouseGestureNavigator,
 } from './hooks/useMouseGestureNavigator'
 import {
   DEFAULT_SETTINGS_SECTION,
-  getSettingsSectionLabel,
   isSettingsSection,
+  type Section,
 } from './pages/settings/settings.types'
 
 const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
@@ -36,14 +37,14 @@ function resolveWindowTitle(pathname: string, projects: Array<{
   id: string
   name: string
   customName?: string
-}>): string {
+}>, getSettingsSectionLabel: (section: Section) => string, appName: string, settingsLabel: string): string {
   const segments = pathname.split('/').filter(Boolean)
 
   if (segments[0] === 'settings') {
     if (isSettingsSection(segments[1])) {
-      return `Settings - ${getSettingsSectionLabel(segments[1])} - ${APP_DISPLAY_NAME}`
+      return `${settingsLabel} - ${getSettingsSectionLabel(segments[1])} - ${appName}`
     }
-    return `Settings - ${APP_DISPLAY_NAME}`
+    return `${settingsLabel} - ${appName}`
   }
 
   if (segments[0] === 'project' && segments[1]) {
@@ -51,11 +52,11 @@ function resolveWindowTitle(pathname: string, projects: Array<{
     const projectLabel = project?.customName?.trim() || project?.name || 'Project'
     const paneLabel = segments[2] ? toTitleCase(segments[2]) : null
     return paneLabel
-      ? `${projectLabel} - ${paneLabel} - ${APP_DISPLAY_NAME}`
-      : `${projectLabel} - ${APP_DISPLAY_NAME}`
+      ? `${projectLabel} - ${paneLabel} - ${appName}`
+      : `${projectLabel} - ${appName}`
   }
 
-  return APP_DISPLAY_NAME
+  return appName
 }
 
 function resolveTheme(theme: AppConfig['theme']): 'light' | 'dark' {
@@ -91,11 +92,33 @@ function ThemeSync() {
   return null
 }
 
+function LocaleSync() {
+  const { locale } = useI18n()
+
+  useEffect(() => {
+    if (document.documentElement.lang !== locale) {
+      document.documentElement.lang = locale
+    }
+  }, [locale])
+
+  return null
+}
+
 function useWindowTitleText(): string {
   const location = useLocation()
   const projects = useAppStore((s) => s.projects)
+  const { t, getSettingsSectionLabel } = useI18n()
 
-  return useMemo(() => resolveWindowTitle(location.pathname, projects), [location.pathname, projects])
+  return useMemo(
+    () => resolveWindowTitle(
+      location.pathname,
+      projects,
+      getSettingsSectionLabel,
+      t('appName'),
+      t('settings.title')
+    ),
+    [getSettingsSectionLabel, location.pathname, projects, t]
+  )
 }
 
 function WindowTitleSync() {
@@ -326,6 +349,7 @@ function GlobalRecentProjectsDrawerHost() {
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const clearProjectLastOpened = useAppStore((s) => s.clearProjectLastOpened)
   const [open, setOpen] = useState(false)
+  const { t } = useI18n()
 
   const currentProjectId = useMemo(() => {
     const segments = location.pathname.split('/').filter(Boolean)
@@ -361,10 +385,10 @@ function GlobalRecentProjectsDrawerHost() {
         type="button"
         className="fixed bottom-5 right-5 z-[91] quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
         onClick={() => setOpen(true)}
-        title="最近项目（右键下滑开关或 Ctrl/Cmd+Shift+P）"
+        title={`${t('common.recentProjects')} (${t('common.recentProjectsHint')})`}
       >
         <Clock3 className="h-3.5 w-3.5" />
-        最近项目
+        {t('common.recentProjects')}
       </button>
 
       <RecentProjectsDrawer
@@ -418,6 +442,7 @@ function AppInit() {
 function WindowTitleBar() {
   const [isMaximized, setIsMaximized] = useState(false)
   const title = useWindowTitleText()
+  const { t } = useI18n()
 
   useEffect(() => {
     let alive = true
@@ -447,7 +472,7 @@ function WindowTitleBar() {
       <div className="window-titlebar__drag drag flex h-full min-w-0 items-center px-3">
         <img
           src={WINDOW_ICON_SRC}
-          alt={`${APP_DISPLAY_NAME} icon`}
+          alt={`${t('appName')} icon`}
           className="mr-2 h-4 w-4 shrink-0 rounded-[4px]"
           draggable={false}
         />
@@ -456,8 +481,8 @@ function WindowTitleBar() {
       <div className="window-titlebar__controls nodrag">
         <button
           className="window-titlebar__button window-titlebar__button--neutral"
-          aria-label="Minimize window"
-          title="Minimize"
+          aria-label={t('common.minimize')}
+          title={t('common.minimize')}
           onClick={() => {
             void window.electronAPI.minimizeWindow()
           }}
@@ -466,8 +491,8 @@ function WindowTitleBar() {
         </button>
         <button
           className="window-titlebar__button window-titlebar__button--neutral"
-          aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-          title={isMaximized ? 'Restore' : 'Maximize'}
+          aria-label={isMaximized ? t('common.restore') : t('common.maximize')}
+          title={isMaximized ? t('common.restore') : t('common.maximize')}
           onClick={() => {
             void window.electronAPI.toggleMaximizeWindow()
           }}
@@ -478,8 +503,8 @@ function WindowTitleBar() {
         </button>
         <button
           className="window-titlebar__button window-titlebar__button--danger"
-          aria-label="Close window"
-          title="Close"
+          aria-label={t('common.closeWindow')}
+          title={t('common.closeWindow')}
           onClick={() => {
             void window.electronAPI.closeWindow()
           }}
@@ -492,9 +517,11 @@ function WindowTitleBar() {
 }
 
 function AppRouteFallback() {
+  const { t } = useI18n()
+
   return (
     <div className="flex h-full items-center justify-center text-xs text-[color:var(--color-muted-foreground)]">
-      Loading...
+      {t('common.loading')}
     </div>
   )
 }
@@ -504,6 +531,7 @@ export function App() {
     <Router>
       <AppInit />
       <ThemeSync />
+      <LocaleSync />
       <WindowTitleSync />
       <ProcessOutputListener />
       <TranscriptImportListener />

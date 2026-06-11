@@ -1,5 +1,6 @@
 import { Palette, Database, FileText, Info, Wrench, Bot, Terminal as TerminalIcon, RadioTower } from 'lucide-react'
-import { getSettingsSectionLabel, SETTINGS_SECTIONS, type Section } from './settings.types'
+import { useI18n } from '../../i18n'
+import { SETTINGS_SECTIONS, type Section } from './settings.types'
 
 type SettingsSidebarProps = {
   active: Section
@@ -7,9 +8,11 @@ type SettingsSidebarProps = {
 }
 
 function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
+  const { getSettingsSectionLabel } = useI18n()
   const icons: Record<Section, React.ComponentType<{ className?: string; strokeWidth?: string | number }>> = {
     general: Palette,
     runtime: Wrench,
+    'ai-runtime': Bot,
     transcripts: FileText,
     hooks: RadioTower,
     logs: TerminalIcon,

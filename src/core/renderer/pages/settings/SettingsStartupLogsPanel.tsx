@@ -3,6 +3,7 @@ import { projectDisplayName } from '../../lib/projectDisplay'
 import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
 import { Terminal as AppTerminal } from '../../components/Terminal'
 import { Button } from '../../components/ui/button'
+import { useI18n } from '../../i18n'
 import { backendLabel } from './settings.helpers'
 
 type StartupLogsPanelProps = {
@@ -10,6 +11,7 @@ type StartupLogsPanelProps = {
 }
 
 function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
+  const { t } = useI18n()
   const [inventoryLoading, setInventoryLoading] = useState(false)
   const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
@@ -63,19 +65,19 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
   return (
     <div className="space-y-8">
       <div>
-        <p className="section-label mb-3">Logs</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">Startup Command Logs</h2>
+        <p className="section-label mb-3">{t('startupLogs.kicker')}</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('startupLogs.title')}</h2>
         <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          Monitor all running non-tmux startup commands in one place. Useful for multi-service/script bootstrap projects.
+          {t('startupLogs.description')}
         </p>
       </div>
 
       <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center justify-between mb-2 gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-[color:var(--color-foreground)]">启动命令日志（非 tmux）</p>
+            <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('startupLogs.sectionTitle')}</p>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-              实时显示当前项目启动命令输出，复用内置终端组件渲染。
+              {t('startupLogs.sectionDescription')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -86,12 +88,12 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
               onClick={() => void refreshInventory()}
               disabled={inventoryLoading}
             >
-              {inventoryLoading ? 'Refreshing...' : 'Refresh'}
+              {inventoryLoading ? t('settingsRuntime.refreshing') : t('settingsRuntime.refresh')}
             </Button>
           </div>
         </div>
         {projectManaged.length === 0 ? (
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">暂无正在运行的非 tmux 项目终端。</p>
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('startupLogs.noRunningProcesses')}</p>
         ) : (
           <div className="space-y-2.5">
             <div className="flex flex-wrap gap-1.5">
@@ -128,7 +130,7 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
                 className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)]"
                 style={{ borderColor: 'var(--color-border)' }}
               >
-                请选择一个运行中的进程查看日志
+                {t('startupLogs.selectProcess')}
               </div>
             )}
           </div>

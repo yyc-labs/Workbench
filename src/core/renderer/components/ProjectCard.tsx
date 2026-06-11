@@ -10,6 +10,8 @@ import { RunCommandConfigPopover } from './RunCommandConfigPopover'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { normalizeProjectDocLinkTag } from '../lib/projectDocLinks'
 import { projectDocLinkTagLabel } from '../lib/projectDocLinks'
+import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
+import { useI18n } from '../i18n'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -20,6 +22,7 @@ interface ProjectCardProps {
 }
 
 function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 0 }: ProjectCardProps) {
+  const { t } = useI18n()
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
   const startProject = useAppStore((s) => s.startProject)
@@ -37,10 +40,13 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const currentCli: CliTool = project.cli || 'claude'
 
   const session = useAppStore((s) => s.sessions[project.id])
+  const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
+  const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
-  const runtimeLabel = isRuntimeAttached ? 'Active' : isRuntimeDetached ? 'Background' : 'Offline'
+  const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
+  const runtimeLabel = isRuntimeAttached ? t('common.active') : isRuntimeDetached ? t('common.background') : t('common.offline')
   const accentColor = isRuntimeAttached
     ? 'var(--color-success)'
     : isRuntimeDetached
@@ -74,7 +80,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
         return {
           url: link.url,
-          label: `资料 · ${link.title}`,
+          label: `${t('project.docCategoryPrefix')} · ${link.title}`,
           tag: normalizedTag,
           tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
         }
@@ -84,9 +90,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   )
   const firstLinkMenuItem = linkMenuItems[0]
   const hoverDocLabel = defaultDocLink
-    ? `资料: ${defaultDocLink.title}`
+    ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}`
     : docLinks.length > 0
-      ? `${docLinks.length} 项资料`
+      ? t('project.docsCount', { count: docLinks.length })
       : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -200,7 +206,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         <div className="flex min-w-0 items-center gap-2.5">
           <h3 className="text-[15px] font-medium text-[color:var(--color-foreground)] truncate">{projectDisplayName(project)}</h3>
           {project.pinned && (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-warning)]" title="Pinned" />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-warning)]" title={t('common.pinned')} />
           )}
           <span className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${runtimeColorClass}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${runtimeDotClass}`} />
@@ -209,7 +215,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           {isDevRunning && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              Dev
+              {t('common.dev')}
             </span>
           )}
         </div>
@@ -242,14 +248,14 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
           <p className="min-w-0 flex-1 truncate" title={project.path}>{middleTruncatePath(project.path)}</p>
           <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
-          <span className="shrink-0 capitalize">{projectDisplayType(project) || 'unknown'}</span>
+          <span className="shrink-0 capitalize">{projectDisplayType(project) || t('project.unknownType')}</span>
           {project.packageManager && (
             <>
               <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
               <span className="shrink-0">{project.packageManager}</span>
             </>
           )}
-          {isRuntimeActive && session && (
+          {isRuntimeActive && session && usesTmuxRuntime && (
             <>
               <span className="hidden shrink-0 text-[color:var(--color-muted-foreground)]/45 opacity-0 transition-opacity duration-300 group-hover:opacity-100 md:inline">/</span>
               <span className="hidden max-w-0 shrink items-center gap-1 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-300 group-hover:max-w-[220px] group-hover:opacity-100 md:inline-flex">
@@ -276,6 +282,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           y={menuPos.y}
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
+          usesTmuxRuntime={usesTmuxRuntime}
           isDevRunning={isDevRunning}
           isDevStopping={isDevStopping}
           isOpeningTerminal={isOpeningTerminal}
@@ -352,7 +359,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
                 e.stopPropagation()
                 setDocLinksDialogOpen(true)
               }}
-              title="左键打开首个链接，右键打开资料管理"
+              title={t('common.leftClickOpenFirstLink')}
             >
               <BookOpen className="h-3.5 w-3.5 shrink-0" />
             </button>
@@ -370,7 +377,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             disabled={isDevStopping}
           >
             {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
-            <span className="hidden sm:inline">{isDevStopping ? 'Stopping...' : 'Stop'}</span>
+            <span className="hidden sm:inline">{isDevStopping ? t('common.stopping') : t('common.stop')}</span>
           </button>
         ) : (
           <button
@@ -381,15 +388,15 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
               e.stopPropagation()
               setRunConfigPos({ x: e.clientX, y: e.clientY })
             }}
-            title="左键启动，右键配置 Run 命令"
+            title={t('common.leftClickRunRightClickConfig')}
           >
             <Play className="h-3 w-3" />
-            <span className="hidden sm:inline">Run</span>
+            <span className="hidden sm:inline">{t('common.run')}</span>
           </button>
         )}
         <button
           className="h-8 w-8 rounded-full flex items-center justify-center text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
-          title="More actions"
+          title={t('common.moreActions')}
           onClick={(e) => {
             e.stopPropagation()
             setMenuAllowRemove(true)

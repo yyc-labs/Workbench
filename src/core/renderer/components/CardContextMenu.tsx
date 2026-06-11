@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Play,
@@ -13,12 +13,14 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { CliTool } from '../../shared/types'
+import { useI18n } from '../i18n'
 
 interface CardContextMenuProps {
   x: number
   y: number
   onClose: () => void
   isRuntimeActive: boolean
+  usesTmuxRuntime: boolean
   isDevRunning: boolean
   isDevStopping: boolean
   isOpeningTerminal: boolean
@@ -127,6 +129,7 @@ export function CardContextMenu({
   y,
   onClose,
   isRuntimeActive,
+  usesTmuxRuntime,
   isDevRunning,
   isDevStopping,
   isOpeningTerminal,
@@ -147,10 +150,19 @@ export function CardContextMenu({
   onEditMetadata,
   onRemoveProject,
 }: CardContextMenuProps) {
+  const { t } = useI18n()
+  const [actionError, setActionError] = useState<string | null>(null)
+
   const handleClick = useCallback(
     async (action: () => void | Promise<void>) => {
-      await action()
-      onClose()
+      setActionError(null)
+      try {
+        await action()
+        onClose()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setActionError(message || 'Action failed')
+      }
     },
     [onClose]
   )
@@ -175,13 +187,17 @@ export function CardContextMenu({
   }, [onClose])
 
   const cliLabel = currentCli === 'codex' ? 'Codex' : 'Claude'
-  const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} Runtime 已连接` : 'Runtime 未连接'
-  const devStatusLabel = isDevStopping ? 'Dev stopping' : isDevRunning ? 'Dev running' : 'Dev stopped'
+  const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} ${t('common.runtime')} · ${t('common.active')}` : `${t('common.runtime')} · ${t('common.offline')}`
+  const devStatusLabel = isDevStopping ? `${t('common.dev')} ${t('common.stopping')}` : isDevRunning ? `${t('common.dev')} ${t('common.running')}` : `${t('common.dev')} ${t('common.offline')}`
+  const runtimeActionLabel = usesTmuxRuntime ? t('common.runtimeTerminal') : t('common.runtimeLaunch')
+  const runtimeActionCaption = isRuntimeActive
+    ? (isOpeningTerminal ? t('common.opening') : (usesTmuxRuntime ? t('common.openSession') : t('common.openTerminalLaunch')))
+    : t('common.connectAiRuntime')
 
   const primaryActionItems: MenuAction[] = [
     {
-      label: isRuntimeActive ? 'Runtime 终端' : `启动 ${cliLabel}`,
-      caption: isRuntimeActive ? (isOpeningTerminal ? '正在打开...' : '进入会话') : '连接 AI 运行时',
+      label: isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
+      caption: runtimeActionCaption,
       icon: isRuntimeActive
         ? isOpeningTerminal
           ? <RefreshCw className="h-4 w-4 animate-spin" />
@@ -192,8 +208,8 @@ export function CardContextMenu({
       tone: 'primary',
     },
     {
-      label: isDevStopping ? '停止中...' : isDevRunning ? '停止项目' : '启动项目',
-      caption: isDevStopping ? '等待进程退出' : isDevRunning ? '结束 dev 进程' : '运行开发服务',
+      label: isDevStopping ? t('common.stopping') : isDevRunning ? t('common.stopProject') : t('common.startProject'),
+      caption: isDevStopping ? t('common.waitForExit') : isDevRunning ? t('common.terminateDevProcess') : t('common.runDevService'),
       icon: isDevStopping
         ? <RefreshCw className="h-4 w-4 animate-spin" />
         : isDevRunning
@@ -204,8 +220,8 @@ export function CardContextMenu({
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
     },
     {
-      label: aiCommitStatus === 'running' ? 'AI 提交中...' : 'AI 自动提交',
-      caption: '默认参数',
+      label: aiCommitStatus === 'running' ? `AI ${t('common.stopping')}` : t('common.aiAutoCommit'),
+      caption: t('common.defaultParams'),
       icon: aiCommitStatus === 'running'
         ? <RefreshCw className="h-4 w-4 animate-spin" />
         : <Bot className="h-4 w-4" />,
@@ -219,22 +235,22 @@ export function CardContextMenu({
 
   const openActions: MenuAction[] = [
     {
-      label: '文件夹',
-      caption: '浏览',
+      label: t('common.folder'),
+      caption: t('common.browse'),
       icon: <FolderOpen className="h-4 w-4" />,
       action: onOpenFolder,
       tone: 'default',
     },
     {
-      label: '终端',
-      caption: '当前路径',
+      label: t('common.terminal'),
+      caption: t('common.currentPath'),
       icon: <Terminal className="h-4 w-4" />,
       action: onOpenPathTerminal,
       tone: 'primary',
     },
     {
       label: 'VS Code',
-      caption: '编辑',
+      caption: t('common.edit'),
       icon: <Code2 className="h-4 w-4" />,
       action: onOpenVsCode,
       tone: 'success',
@@ -243,20 +259,20 @@ export function CardContextMenu({
 
   const utilityActionItems: MenuAction[] = [
     {
-      label: `切到 ${currentCli === 'codex' ? 'Claude' : 'Codex'}`,
+      label: currentCli === 'codex' ? t('common.switchToClaude') : t('common.switchToCodex'),
       icon: <Bot className="h-3.5 w-3.5" />,
       action: onSwitchCli,
       tone: 'primary',
     },
     {
-      label: isPinned ? '取消固定' : '固定项目',
+      label: isPinned ? t('common.unpinProject') : t('common.pinProject'),
       icon: <Pin className="h-3.5 w-3.5" />,
       show: Boolean(onTogglePin),
       action: onTogglePin ?? (() => undefined),
       tone: isPinned ? 'warning' : 'default',
     },
     {
-      label: '分类标签',
+      label: t('common.classificationTags'),
       icon: <FolderOpen className="h-3.5 w-3.5" />,
       show: Boolean(onEditMetadata),
       action: onEditMetadata ?? (() => undefined),
@@ -267,14 +283,14 @@ export function CardContextMenu({
 
   const dangerActionItems: MenuAction[] = [
     {
-      label: '停止 Runtime',
+      label: t('common.stopRuntime'),
       icon: <Square className="h-3.5 w-3.5" />,
       show: isRuntimeActive,
       action: onStopRuntime,
       tone: 'danger',
     },
     {
-      label: '移除项目',
+      label: t('common.removeProject'),
       icon: <Trash2 className="h-3.5 w-3.5" />,
       show: Boolean(onRemoveProject),
       action: onRemoveProject ?? (() => undefined),
@@ -334,6 +350,19 @@ export function CardContextMenu({
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {actionError && (
+        <div
+          className="mb-2 rounded-[16px] border px-3 py-2 text-xs whitespace-pre-line"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-destructive) 35%, transparent)',
+            background: 'color-mix(in srgb, var(--color-destructive-background) 88%, transparent)',
+            color: 'var(--color-destructive)',
+          }}
+        >
+          {actionError}
+        </div>
+      )}
+
       {opensUpward && dangerActionsBlock}
 
       <div
@@ -351,7 +380,7 @@ export function CardContextMenu({
         <div className="relative flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-              Project actions
+              {t('common.projectActions')}
             </div>
             <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[color:var(--color-foreground)]">
               <span

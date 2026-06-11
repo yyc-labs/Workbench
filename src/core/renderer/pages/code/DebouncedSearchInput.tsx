@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useState, type ReactNode, type Ref } from 'react'
 import { X } from 'lucide-react'
+import { useI18n } from '../../i18n'
 
 interface DebouncedSearchInputProps {
   placeholder: string
@@ -25,6 +26,7 @@ export function DebouncedSearchInput({
   syncValue,
   syncNonce,
 }: DebouncedSearchInputProps) {
+  const { t } = useI18n()
   const [draft, setDraft] = useState(syncValue ?? '')
   const lastEmittedRef = useRef('')
   const lastSyncSignatureRef = useRef<string>('')
@@ -86,8 +88,8 @@ export function DebouncedSearchInput({
             setDraft('')
             emitQuery('')
           }}
-          title="Clear search"
-          aria-label="Clear search"
+          title={t('common.clearSearch')}
+          aria-label={t('common.clearSearch')}
           tabIndex={hasValue ? 0 : -1}
         >
           <X className="h-3 w-3" />
