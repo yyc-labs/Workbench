@@ -21,6 +21,20 @@ const ABSOLUTE_POSIX_REFERENCE_EXACT_PATTERN = new RegExp(`^${ABSOLUTE_POSIX_REF
 const RELATIVE_REFERENCE_EXACT_PATTERN = new RegExp(`^${RELATIVE_REFERENCE_PATTERN.source}$`)
 const WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN =
   /:(?:[ \t]*\n[ \t]*)?(\d+)(?:(?:[ \t]*\n[ \t]*)?\:(?:[ \t]*\n[ \t]*)?(\d+))?/g
+const MARKDOWN_FENCE_LINE_PATTERN = /^[ \t]{0,3}([`~]{3,})/
+const STRUCTURED_DATA_BRACKET_LINE_PATTERN = /^[\[\]{}]+,?$/
+const STRUCTURED_DATA_QUOTED_KEY_VALUE_PATTERN = /^["'][^"'\n]+["']\s*:\s*.+$/
+const STRUCTURED_DATA_ASSIGNMENT_PATTERN = /^(?:const|let|var\s+)?[A-Za-z_][\w-]*\s*=\s*[{\[]\s*,?$/
+const IMPLICIT_PYTHON_CODE_KEYWORD_PATTERN =
+  /^(?:async\s+def\b.+|def\b.+|class\b.+|if\s+.+:|elif\s+.+:|else:|for\s+.+:|while\s+.+:|try:|except\b.*:|finally:|with\s+.+:|match\s+.+:|case\s+.+:)$/
+const IMPLICIT_JAVASCRIPT_CODE_KEYWORD_PATTERN =
+  /^(?:const\s+.+|let\s+.+|var\s+.+|function\s+.+|async\s+function\s+.+|export\s+.+|import\s+.+\s+from\s+.+|if\s*\(.+|else\b.*|for\s*\(.+|while\s*\(.+|switch\s*\(.+|case\s+.+:)$/
+const IMPLICIT_CODE_ASSIGNMENT_PATTERN =
+  /^(?:[A-Za-z_][\w.\[\]"']*|self\.[A-Za-z_][\w]*)\s*=\s*.+$/
+const IMPLICIT_CODE_CALL_PATTERN = /^(?:(?:await|return)\s+)?(?:[A-Za-z_][\w]*|self\.[A-Za-z_][\w.]*|[A-Za-z_][\w.]*)\s*\(/
+const IMPLICIT_CODE_CLOSING_LINE_PATTERN = /^[)\]}],?$/
+const IMPLICIT_CODE_ELLIPSIS_LINE_PATTERN = /^(?:\.{3}|pass|break|continue)$/
+const IMPLICIT_CODE_TRAILING_DELIMITER_PATTERN = /[([{,]$/
 
 function isReferenceTokenChar(value: string): boolean {
   return /[\w./-]/.test(value)
@@ -46,6 +60,331 @@ function normalizeAbsolutePath(value: string): string {
 
 function escapeMarkdownLabel(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/\[/g, '\\[').replace(/\]/g, '\\]')
+}
+
+function isMarkdownFenceBoundary(
+  line: string,
+  activeFence: { marker: string; length: number } | null
+): { marker: string; length: number } | null {
+  const match = MARKDOWN_FENCE_LINE_PATTERN.exec(line)
+  if (!match) return null
+  const marker = match[1]?.[0]
+  const length = match[1]?.length ?? 0
+  if (!marker || length < 3) return null
+  if (!activeFence) {
+    return { marker, length }
+  }
+  if (marker === activeFence.marker && length >= activeFence.length) {
+    return { marker, length }
+  }
+  return null
+}
+
+function isStructuredDataLine(trimmedLine: string): boolean {
+  if (!trimmedLine) return false
+  return STRUCTURED_DATA_BRACKET_LINE_PATTERN.test(trimmedLine)
+    || STRUCTURED_DATA_QUOTED_KEY_VALUE_PATTERN.test(trimmedLine)
+    || STRUCTURED_DATA_ASSIGNMENT_PATTERN.test(trimmedLine)
+}
+
+function countLeadingIndent(line: string): number {
+  let count = 0
+  while (count < line.length) {
+    const char = line[count]
+    if (char !== ' ' && char !== '\t') break
+    count += 1
+  }
+  return count
+}
+
+function updateQuoteState(
+  line: string,
+  state: { inDoubleQuote: boolean; inSingleQuote: boolean }
+): { inDoubleQuote: boolean; inSingleQuote: boolean } {
+  let escaped = false
+  let inDoubleQuote = state.inDoubleQuote
+  let inSingleQuote = state.inSingleQuote
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      escaped = true
+      continue
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote
+      continue
+    }
+
+    if (char === '\'' && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote
+    }
+  }
+
+  return { inDoubleQuote, inSingleQuote }
+}
+
+function isStrongImplicitCodeLine(trimmedLine: string): boolean {
+  if (!trimmedLine) return false
+  return IMPLICIT_PYTHON_CODE_KEYWORD_PATTERN.test(trimmedLine)
+    || IMPLICIT_JAVASCRIPT_CODE_KEYWORD_PATTERN.test(trimmedLine)
+    || IMPLICIT_CODE_ASSIGNMENT_PATTERN.test(trimmedLine)
+    || IMPLICIT_CODE_CALL_PATTERN.test(trimmedLine)
+}
+
+function isImplicitIndentedContinuation(previousLine: string | null, line: string): boolean {
+  const trimmedLine = line.trim()
+  if (!trimmedLine || countLeadingIndent(line) <= 0) return false
+  if (/^(?:[-*+]\s+|\d+\.\s+)/.test(trimmedLine)) return false
+
+  const previousTrimmed = previousLine?.trim() ?? ''
+  if (!previousTrimmed) return false
+  return previousTrimmed.endsWith(':')
+    || /[([{,\\]$/.test(previousTrimmed)
+}
+
+function isImplicitCodeBodyLine(line: string, previousLine: string | null = null): boolean {
+  const trimmedLine = line.trim()
+  if (!trimmedLine) return false
+  if (isStrongImplicitCodeLine(trimmedLine)) return true
+  if (IMPLICIT_CODE_CLOSING_LINE_PATTERN.test(trimmedLine)) return true
+  if (IMPLICIT_CODE_ELLIPSIS_LINE_PATTERN.test(trimmedLine)) return true
+  if (IMPLICIT_CODE_TRAILING_DELIMITER_PATTERN.test(trimmedLine)) return true
+  return isImplicitIndentedContinuation(previousLine, line)
+}
+
+function inferStructuredDataLanguage(lines: string[]): string {
+  const blockText = lines.join('\n')
+  if (/\b(?:True|False|None)\b/.test(blockText) || /'[^'\n]*'/.test(blockText)) {
+    return 'python'
+  }
+  return 'json'
+}
+
+function mergeBrokenStructuredStringLines(lines: string[]): string[] {
+  if (lines.length <= 1) return lines
+
+  const merged: string[] = []
+  let index = 0
+  let quoteState = { inDoubleQuote: false, inSingleQuote: false }
+
+  while (index < lines.length) {
+    let currentLine = lines[index] ?? ''
+    let currentState = updateQuoteState(currentLine, quoteState)
+
+    while (
+      index + 1 < lines.length
+      && (currentState.inDoubleQuote || currentState.inSingleQuote)
+    ) {
+      const nextLine = lines[index + 1] ?? ''
+      const nextTrimmed = nextLine.trim()
+      if (!nextTrimmed) break
+
+      const joiner = currentLine.endsWith('-') ? '' : ' '
+      const nextContent = nextLine.slice(countLeadingIndent(nextLine))
+      currentLine = currentLine + joiner + nextContent
+      currentState = updateQuoteState(nextContent, currentState)
+      index += 1
+    }
+
+    merged.push(currentLine)
+    quoteState = currentState
+    index += 1
+  }
+
+  return merged
+}
+
+function collectStructuredDataBlock(
+  lines: string[],
+  startIndex: number
+): { endIndex: number; language: string } | null {
+  if (!isStructuredDataLine(lines[startIndex]?.trim() ?? '')) return null
+
+  let endIndex = startIndex
+  let keyValueLineCount = 0
+  let bracketTokenCount = 0
+  let quoteState = { inDoubleQuote: false, inSingleQuote: false }
+
+  while (endIndex < lines.length) {
+    const line = lines[endIndex] ?? ''
+    const trimmedLine = line.trim()
+    const isContinuationLine = (
+      (quoteState.inDoubleQuote || quoteState.inSingleQuote)
+      && countLeadingIndent(line) > 0
+      && trimmedLine.length > 0
+    )
+
+    if (!trimmedLine || (!isStructuredDataLine(trimmedLine) && !isContinuationLine)) break
+    if (STRUCTURED_DATA_QUOTED_KEY_VALUE_PATTERN.test(trimmedLine)) {
+      keyValueLineCount += 1
+    }
+    if (/[{}\[\]]/.test(trimmedLine)) {
+      bracketTokenCount += 1
+    }
+    quoteState = updateQuoteState(line, quoteState)
+    endIndex += 1
+  }
+
+  const blockLines = lines.slice(startIndex, endIndex)
+  if (blockLines.length < 2 || keyValueLineCount < 1 || bracketTokenCount < 2) {
+    return null
+  }
+
+  return {
+    endIndex: endIndex - 1,
+    language: inferStructuredDataLanguage(blockLines),
+  }
+}
+
+function inferImplicitCodeLanguage(lines: string[]): string {
+  const blockText = lines.join('\n')
+  if (
+    /\b(?:elif|await|async\s+def|self\.|None|True|False)\b/.test(blockText)
+    || lines.some((line, index) => {
+      const trimmed = line.trim()
+      if (!trimmed.endsWith(':')) return false
+      const nextLine = lines[index + 1]
+      return typeof nextLine === 'string' && countLeadingIndent(nextLine) > countLeadingIndent(line)
+    })
+  ) {
+    return 'python'
+  }
+
+  if (
+    /\b(?:const|let|var|function|=>|===|!==|import\s.+from|export)\b/.test(blockText)
+    || /;\s*$/.test(blockText)
+  ) {
+    return 'typescript'
+  }
+
+  return ''
+}
+
+function collectImplicitCodeBlock(
+  lines: string[],
+  startIndex: number
+): { endIndex: number; language: string } | null {
+  if (!isStrongImplicitCodeLine(lines[startIndex]?.trim() ?? '')) return null
+
+  let endIndex = startIndex
+  let codeLineCount = 0
+  let strongLineCount = 0
+  let indentedLineCount = 0
+  let previousCodeLine: string | null = null
+
+  while (endIndex < lines.length) {
+    const line = lines[endIndex] ?? ''
+    const trimmedLine = line.trim()
+
+    if (!trimmedLine) {
+      const nextLine = lines[endIndex + 1]
+      if (!nextLine || !isImplicitCodeBodyLine(nextLine, previousCodeLine)) break
+      endIndex += 1
+      continue
+    }
+
+    if (!isImplicitCodeBodyLine(line, previousCodeLine)) break
+
+    codeLineCount += 1
+    if (isStrongImplicitCodeLine(trimmedLine)) {
+      strongLineCount += 1
+    }
+    if (countLeadingIndent(line) > 0) {
+      indentedLineCount += 1
+    }
+    previousCodeLine = line
+    endIndex += 1
+  }
+
+  while (endIndex > startIndex && !(lines[endIndex - 1] ?? '').trim()) {
+    endIndex -= 1
+  }
+
+  const blockLines = lines.slice(startIndex, endIndex)
+  if (codeLineCount < 2) return null
+  if (strongLineCount < 2 && (strongLineCount < 1 || indentedLineCount < 1)) {
+    return null
+  }
+
+  return {
+    endIndex: endIndex - 1,
+    language: inferImplicitCodeLanguage(blockLines),
+  }
+}
+
+function normalizeImplicitMarkdownBlocks(markdownText: string): string {
+  if (!markdownText) return ''
+
+  const lines = markdownText.split('\n')
+  const result: string[] = []
+  let index = 0
+  let activeFence: { marker: string; length: number } | null = null
+
+  while (index < lines.length) {
+    const line = lines[index] ?? ''
+    const fenceBoundary = isMarkdownFenceBoundary(line, activeFence)
+
+    if (activeFence) {
+      result.push(line)
+      if (fenceBoundary) {
+        activeFence = null
+      }
+      index += 1
+      continue
+    }
+
+    if (fenceBoundary) {
+      activeFence = fenceBoundary
+      result.push(line)
+      index += 1
+      continue
+    }
+
+    const structuredBlock = collectStructuredDataBlock(lines, index)
+    if (structuredBlock) {
+      const structuredLines = mergeBrokenStructuredStringLines(
+        lines.slice(index, structuredBlock.endIndex + 1)
+      )
+      if (result.length > 0 && result[result.length - 1]?.trim()) {
+        result.push('')
+      }
+      result.push(`\`\`\`${structuredBlock.language}`)
+      result.push(...structuredLines)
+      result.push('```')
+      index = structuredBlock.endIndex + 1
+      if (index < lines.length && lines[index]?.trim()) {
+        result.push('')
+      }
+      continue
+    }
+
+    const implicitCodeBlock = collectImplicitCodeBlock(lines, index)
+    if (implicitCodeBlock) {
+      if (result.length > 0 && result[result.length - 1]?.trim()) {
+        result.push('')
+      }
+      result.push(implicitCodeBlock.language ? `\`\`\`${implicitCodeBlock.language}` : '```')
+      result.push(...lines.slice(index, implicitCodeBlock.endIndex + 1))
+      result.push('```')
+      index = implicitCodeBlock.endIndex + 1
+      if (index < lines.length && lines[index]?.trim()) {
+        result.push('')
+      }
+      continue
+    }
+
+    result.push(line)
+    index += 1
+  }
+
+  return result.join('\n')
 }
 
 function resolveProjectRelativePath(projectPath: string, rawPath: string): string | null {
@@ -167,7 +506,7 @@ function createMarkdownText(
   cleanedText: string,
   references: TranscriptReference[]
 ): string {
-  if (references.length === 0) return cleanedText
+  if (references.length === 0) return normalizeImplicitMarkdownBlocks(cleanedText)
 
   const sorted = [...references].sort((a, b) => {
     if (a.messageRange.startOffset !== b.messageRange.startOffset) {
@@ -188,7 +527,7 @@ function createMarkdownText(
   }
 
   result += cleanedText.slice(cursor)
-  return result
+  return normalizeImplicitMarkdownBlocks(result)
 }
 
 function collectReferences(

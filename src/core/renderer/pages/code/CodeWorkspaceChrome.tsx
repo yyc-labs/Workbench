@@ -138,7 +138,7 @@ export function CodeWorkspaceChrome({
         <div className="min-w-0">
           {projectHeaderCollapsed ? (
             <div className="flex min-w-0 items-center gap-2.5">
-              <p className="max-w-[150px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
+              <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
                 {projectName || '当前项目'}
               </p>
               <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">

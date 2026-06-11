@@ -32,7 +32,11 @@ function ModalShell({
       <button
         type="button"
         className={`absolute inset-0 bg-black/25 backdrop-blur-[1px] ${overlayClassName}`.trim()}
-        onClick={onClose}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClose()
+        }}
         aria-label="关闭弹窗"
       />
       <div

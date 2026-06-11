@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -27,7 +27,6 @@ import { inferLanguageFromRelativePath } from './code/code.helpers'
 import {
   createMarkdownComponents,
   type MarkdownStructuredBlockClickPayload,
-  revealMarkdownPreviewSourceLine,
   shouldDisableMarkdownSyntaxHighlight,
   transformMarkdownUrl,
 } from './code/code.markdown'
@@ -145,12 +144,6 @@ function formatSourceTypeLabel(value: string): string {
   }
 }
 
-function buildReferenceLocationLabel(reference: TranscriptReference): string {
-  const line = reference.lineNumber ?? 1
-  const column = reference.column ? `:${reference.column}` : ''
-  return `${reference.relativePath}:${line}${column}`
-}
-
 function TranscriptModeButton({
   active,
   disabled = false,
@@ -237,7 +230,6 @@ export function TranscriptPage() {
     () => window.matchMedia(TRANSCRIPT_SPLIT_QUERY).matches
   )
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
-  const previewScrollRef = useRef<HTMLDivElement | null>(null)
 
   const resolvedActiveTranscriptId = activeTranscriptId ?? summaries[0]?.id
   const session = useAppStore((s) => (
@@ -313,20 +305,6 @@ export function TranscriptPage() {
     if (!session || !activeReferenceId) return null
     return session.references.find((item) => item.id === activeReferenceId) ?? null
   }, [activeReferenceId, session])
-
-  useEffect(() => {
-    if (!activeReference || effectiveMode === 'editor') return
-    const preview = previewScrollRef.current
-    if (!preview) return
-
-    const timer = window.setTimeout(() => {
-      revealMarkdownPreviewSourceLine(preview, activeReference.messageRange.startLine)
-    }, 0)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [activeReference, effectiveMode, session?.markdownText])
 
   const enableMarkdownSyntaxHighlight = useMemo(
     () => !shouldDisableMarkdownSyntaxHighlight(session?.markdownText ?? ''),
@@ -760,7 +738,6 @@ export function TranscriptPage() {
                   >
                     {(effectiveMode === 'preview' || effectiveMode === 'split') && (
                       <div
-                        ref={previewScrollRef}
                         className="code-markdown-preview-scroll-root transcript-markdown-preview-scroll-root min-h-0 overflow-y-auto bg-[color:var(--color-card)]"
                       >
                         <article className="code-markdown-content code-markdown-content--viewport-scroll transcript-markdown-content px-6 py-6">

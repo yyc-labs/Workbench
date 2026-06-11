@@ -157,9 +157,8 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
       for (const project of projects) {
         const entry = runtimeEntries[project.id]
         const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName)
-        const fallbackSessionName = runtimeManager.getSessionName(project.id, project.name)
         const sessionName = pickBestSessionName(
-          [entry?.sessionName || '', inferredSessionName || '', fallbackSessionName],
+          [entry?.sessionName || '', inferredSessionName || ''],
           rawSessionNameSet
         )
 

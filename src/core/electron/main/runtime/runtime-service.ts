@@ -129,15 +129,13 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     }
   }
 
-  function focusTerminalWindow(sessionName: string): void {
-    const match = sessionName
-
-    console.log(`[focusTerminalWindow] sessionName="${sessionName}" match="${match}"`)
+  function focusTerminalWindow(sessionName: string): Promise<boolean> {
+    console.log(`[focusTerminalWindow] sessionName="${sessionName}"`)
 
     const ps1File = join(tmpdir(), `focus-terminal-${Date.now()}.ps1`).replace(/\\/g, '/')
     const ps = [
+      'param([string]$match)',
       '$ErrorActionPreference = "Stop"',
-      `$match = '${match}'`,
       '',
       'Add-Type -TypeDefinition @\'',
       'using System;',
@@ -186,36 +184,51 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
       '  [TF]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)',
       '  $fg = [TF]::SetForegroundWindow($script:found)',
       '  Write-Output "SetForegroundWindow=$fg"',
+      '  exit 0',
       '} else {',
       '  Write-Output "NOT FOUND"',
+      '  exit 2',
       '}',
     ].join('\r\n')
 
     writeFileSync(ps1File, ps, 'utf-8')
 
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1File], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    return new Promise<boolean>((resolve) => {
+      const child = spawn(
+        'powershell',
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1File, sessionName],
+        {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      )
+
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+
+      const finish = (ok: boolean) => {
+        if (settled) return
+        settled = true
+        try { unlinkSync(ps1File) } catch { /* best effort */ }
+        resolve(ok)
+      }
+
+      child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
+      child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+
+      child.on('error', (err) => {
+        console.error('[focusTerminalWindow] spawn failed:', err.message)
+        finish(false)
+      })
+
+      child.on('close', (code) => {
+        console.log(`[focusTerminalWindow] PS exited code=${code}`)
+        if (stdout.trim()) console.log('[focusTerminalWindow PS stdout]\n', stdout.trim())
+        else console.log('[focusTerminalWindow PS stdout] EMPTY')
+        if (stderr.trim()) console.log('[focusTerminalWindow PS stderr]\n', stderr.trim())
+        finish(code === 0)
+      })
     })
-
-    let stdout = ''
-    let stderr = ''
-
-    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
-    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
-
-    child.on('error', (err) => {
-      console.error('[focusTerminalWindow] spawn failed:', err.message)
-    })
-
-    child.on('close', (code) => {
-      console.log(`[focusTerminalWindow] PS exited code=${code}`)
-      if (stdout.trim()) console.log('[focusTerminalWindow PS stdout]\n', stdout.trim())
-      else console.log('[focusTerminalWindow PS stdout] EMPTY')
-      if (stderr.trim()) console.log('[focusTerminalWindow PS stderr]\n', stderr.trim())
-      try { unlinkSync(ps1File) } catch { /* best effort */ }
-    })
-
-    child.unref()
   }
 
   async function startRuntime(
@@ -280,9 +293,12 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
 
     if (statusHint === 'attached') {
       console.log('[open-terminal] fast path — skipping WSL, focusing directly')
-      focusTerminalWindow(sessionName)
-      deps.emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
-      return true
+      const focused = await focusTerminalWindow(sessionName)
+      if (focused) {
+        deps.emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
+        return true
+      }
+      console.warn('[open-terminal] focus fast path failed, falling back to tmux attach')
     }
 
     const exists = await tmuxManager.sessionExists(sessionName)
@@ -292,9 +308,12 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     const clients = await tmuxManager.countClients(sessionName)
     console.log(`[open-terminal] clients=${clients}`)
     if (clients > 0) {
-      focusTerminalWindow(sessionName)
-      deps.emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
-      return true
+      const focused = await focusTerminalWindow(sessionName)
+      if (focused) {
+        deps.emitRuntimeStateChanged({ reason: 'terminal-focused', sessionName })
+        return true
+      }
+      console.warn('[open-terminal] existing client focus failed, opening a new terminal window')
     }
 
     const distro = getCapability()?.wslDistro || 'Ubuntu'
