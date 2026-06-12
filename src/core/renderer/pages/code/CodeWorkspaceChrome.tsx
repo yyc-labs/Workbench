@@ -1,5 +1,6 @@
-import { BookOpen, Bot, Code2, Files, FileText, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
+import { BookOpen, Code2, Files, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
@@ -145,41 +146,16 @@ export function CodeWorkspaceChrome({
               <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectName}>
                 {projectName || t('codeWorkspace.currentProjectFallback')}
               </p>
-              <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activePane === 'code'
-                      ? 'bg-primary text-white'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                  onClick={() => onSwitchPane?.('code')}
-                >
-                  <Code2 className="h-3.5 w-3.5" />
-                  {t('codeWorkspace.codeTab')}
-                </button>
-                <button
-                  type="button"
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    activePane === 'aicommit'
-                      ? 'bg-primary text-white'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  }`}
-                  onClick={() => onSwitchPane?.('aicommit')}
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  {t('codeWorkspace.aiCommitTab')}
-                </button>
-              </div>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                onClick={onOpenTranscript}
-                title={t('codeWorkspace.transcriptTitle')}
-              >
-                <FileText className="h-3.5 w-3.5" />
-                {t('detail.transcript')}
-              </button>
+              <ProjectPaneTabs
+                activePane={activePane}
+                onSelectPane={(pane) => {
+                  if (pane === 'transcript') {
+                    onOpenTranscript?.()
+                    return
+                  }
+                  onSwitchPane?.(pane)
+                }}
+              />
               {firstProjectLinkItem && (
                 <UrlPopover items={projectLinkItems}>
                   <button

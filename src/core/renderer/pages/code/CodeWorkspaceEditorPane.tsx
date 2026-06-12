@@ -2,8 +2,9 @@ import { memo, type Ref } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
-import { ChevronDown, ChevronUp, Code2, Columns2, Eye, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, RefreshCw, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
+import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { transformMarkdownUrl } from './code.markdown'
@@ -12,21 +13,26 @@ import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
 
 type MarkdownStructuredPreviewState = {
-  kind: 'table' | 'box-flow' | 'vertical-flow'
+  kind: 'table' | 'box-flow' | 'vertical-flow' | 'box-diagram' | 'architecture-diagram'
   startLine: number
   endLine: number
   markdown: string
 }
 
 const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
+  contentRef,
   markdown,
   components,
 }: {
+  contentRef?: Ref<HTMLElement>
   markdown: string
   components: Components
 }) {
   return (
-    <article className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8">
+    <article
+      ref={contentRef}
+      className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8"
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
         components={components}
@@ -46,6 +52,10 @@ function formatStructuredBlockKind(kind: MarkdownStructuredPreviewState['kind'])
       return 'Vertical Flow'
     case 'table':
       return 'Table'
+    case 'box-diagram':
+      return 'Diagram'
+    case 'architecture-diagram':
+      return 'Architecture Diagram'
     default:
       return 'Structured Block'
   }
@@ -129,6 +139,15 @@ export function CodeWorkspaceEditorPane({
   viewMode,
 }: CodeWorkspaceEditorPaneProps) {
   const { t } = useI18n()
+  const structuredPreviewCapture = useScrollableContentCapture()
+
+  const structuredPreviewCaptureLabel = structuredPreviewCapture.status === 'running'
+    ? t('transcript.copyStructuredPreviewImageRunning')
+    : structuredPreviewCapture.status === 'success'
+      ? t('transcript.copyStructuredPreviewImageCopied')
+      : structuredPreviewCapture.status === 'error'
+        ? t('transcript.copyStructuredPreviewImageFailed')
+        : t('transcript.copyStructuredPreviewImage')
 
   if (!activeRelativePath) {
     return (
@@ -355,7 +374,7 @@ export function CodeWorkspaceEditorPane({
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
-        <div className="flex max-h-[min(88vh,980px)] min-h-0 flex-col">
+        <div className="relative flex max-h-[min(88vh,980px)] min-h-0 flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="section-label mb-1">{t('codeWorkspace.markdown')}</p>
@@ -373,18 +392,48 @@ export function CodeWorkspaceEditorPane({
                 {t('transcript.structuredPreviewHint')}
               </p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={closeStructuredPreview}
-              title={t('common.close')}
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`quiet-control inline-flex h-8 items-center gap-1.5 rounded-full border-0 px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  structuredPreviewCapture.status === 'success'
+                    ? 'text-[color:var(--color-success)]'
+                    : structuredPreviewCapture.status === 'error'
+                      ? 'text-[color:var(--color-destructive)]'
+                      : 'text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => {
+                  void structuredPreviewCapture.capture()
+                }}
+                title={structuredPreviewCaptureLabel}
+                disabled={structuredPreviewCapture.status === 'running'}
+              >
+                {structuredPreviewCapture.status === 'running' ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : structuredPreviewCapture.status === 'success' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                <span>{structuredPreviewCaptureLabel}</span>
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={closeStructuredPreview}
+                title={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]">
+          <div
+            ref={structuredPreviewCapture.targetRef}
+            className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]"
+          >
             <StructuredPreviewMarkdown
+              contentRef={structuredPreviewCapture.contentRef}
               markdown={structuredPreview?.markdown ?? ''}
               components={structuredPreviewComponents}
             />

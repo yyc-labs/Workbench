@@ -8,6 +8,11 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import type { Element as HastElement } from 'hast'
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
+import {
+  ArchitectureDiagramBlock,
+  parseArchitectureDiagramProp,
+} from './code.markdownArchitectureDiagram'
+import { BoxDiagramBlock, parseBoxDiagramLinesProp } from './code.markdownBoxDiagram'
 import { useI18n } from '../../i18n'
 
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
@@ -28,7 +33,12 @@ type SourceLineDataProps = {
   'data-source-end-line': number
 }
 
-export type MarkdownStructuredBlockKind = 'table' | 'box-flow' | 'vertical-flow'
+export type MarkdownStructuredBlockKind =
+  | 'table'
+  | 'box-flow'
+  | 'vertical-flow'
+  | 'box-diagram'
+  | 'architecture-diagram'
 
 export type MarkdownStructuredBlockClickPayload = {
   kind: MarkdownStructuredBlockKind
@@ -331,6 +341,12 @@ function resolveStructuredBlockKind(
   if (classNames.has('code-markdown-vertical-flow')) {
     return 'vertical-flow'
   }
+  if (classNames.has('code-markdown-architecture-diagram')) {
+    return 'architecture-diagram'
+  }
+  if (classNames.has('code-markdown-box-diagram')) {
+    return 'box-diagram'
+  }
   return null
 }
 
@@ -369,15 +385,49 @@ function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
   }: MarkdownBlockProps<TagName>) {
     const sourceLineProps = getSourceLineDataProps(node as HastElement | undefined, lineOffset)
     const rawClassName = (props as { className?: unknown }).className
-    const structuredBlockKind = onStructuredBlockClick
-      ? resolveStructuredBlockKind(tagName, rawClassName)
-      : null
+    const structuredBlockKind = resolveStructuredBlockKind(tagName, rawClassName)
 
     if (!structuredBlockKind || !sourceLineProps) {
       return createElement(tagName, { ...props, ...sourceLineProps }, children)
     }
 
     if (!onStructuredBlockClick) {
+      if (
+        tagName === 'div'
+        && structuredBlockKind === 'architecture-diagram'
+        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-architecture-diagram')
+      ) {
+        const diagram = parseArchitectureDiagramProp(
+          (props as { ['data-architecture-diagram']?: unknown })['data-architecture-diagram']
+        )
+        if (diagram) {
+          return (
+            <ArchitectureDiagramBlock
+              {...props}
+              {...sourceLineProps}
+              className={rawClassName as string | undefined}
+              diagram={diagram}
+            />
+          )
+        }
+      }
+      if (
+        tagName === 'div'
+        && structuredBlockKind === 'box-diagram'
+        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-diagram')
+      ) {
+        const diagramLines = parseBoxDiagramLinesProp(
+          (props as { ['data-diagram-lines']?: unknown })['data-diagram-lines']
+        )
+        return (
+          <BoxDiagramBlock
+            {...props}
+            {...sourceLineProps}
+            className={rawClassName as string | undefined}
+            lines={diagramLines}
+          />
+        )
+      }
       return createElement(tagName, { ...props, ...sourceLineProps }, children)
     }
 
@@ -397,6 +447,80 @@ function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
     const ariaLabel = `Open larger ${structuredBlockKind} preview`
     const title = (props as { title?: string }).title
     const resolvedTitle = [title, 'Click to enlarge'].filter(Boolean).join('\n')
+
+    if (
+      tagName === 'div'
+      && structuredBlockKind === 'architecture-diagram'
+      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-architecture-diagram')
+    ) {
+      const diagram = parseArchitectureDiagramProp(
+        (props as { ['data-architecture-diagram']?: unknown })['data-architecture-diagram']
+      )
+      if (diagram) {
+        return (
+          <ArchitectureDiagramBlock
+            {...props}
+            {...sourceLineProps}
+            className={resolvedClassName || undefined}
+            diagram={diagram}
+            tabIndex={0}
+            title={resolvedTitle || undefined}
+            aria-label={ariaLabel}
+            data-structured-block-kind={structuredBlockKind}
+            role="button"
+            onClick={(event) => {
+              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
+                return
+              }
+              activate()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              event.preventDefault()
+              activate()
+            }}
+          />
+        )
+      }
+    }
+
+    if (
+      tagName === 'div'
+      && structuredBlockKind === 'box-diagram'
+      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-diagram')
+    ) {
+      const diagramLines = parseBoxDiagramLinesProp(
+        (props as { ['data-diagram-lines']?: unknown })['data-diagram-lines']
+      )
+      return (
+        <BoxDiagramBlock
+          {...props}
+          {...sourceLineProps}
+          className={resolvedClassName || undefined}
+          lines={diagramLines}
+          tabIndex={0}
+          title={resolvedTitle || undefined}
+          aria-label={ariaLabel}
+          data-structured-block-kind={structuredBlockKind}
+          role="button"
+          onClick={(event) => {
+            if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
+              return
+            }
+            activate()
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') {
+              return
+            }
+            event.preventDefault()
+            activate()
+          }}
+        />
+      )
+    }
 
     return createElement(tagName, {
       ...props,

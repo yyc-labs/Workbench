@@ -148,7 +148,7 @@
   --shadow-card-hover: 0 1px 1px rgba(29, 29, 31, 0.03), 0 14px 36px rgba(29, 29, 31, 0.07);
   --shadow-popover: 0 18px 52px rgba(29, 29, 31, 0.16);
   --spring: cubic-bezier(0.16, 1, 0.3, 1);
-  --window-titlebar-height: 34px;
+  --window-titlebar-height: 36px;
 }
 
 [data-theme='dark'] {
