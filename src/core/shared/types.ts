@@ -263,6 +263,17 @@ export interface TranscriptImportPayload {
   capturedAt?: number
 }
 
+export interface TranscriptGatewayImportPayload {
+  projectId: string
+  rawText: string
+  title?: string
+  sourceType?: TranscriptSourceType
+  sourceLabel?: string
+  processId?: string
+  capturedAt?: number
+  openViewer?: boolean
+}
+
 export interface TranscriptExternalImportPayload {
   projectId?: string
   projectPath?: string

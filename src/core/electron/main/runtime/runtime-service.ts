@@ -36,6 +36,14 @@ function isWindows(): boolean {
   return process.platform === 'win32'
 }
 
+function isWindowsWslTmuxMode(mode?: RuntimeSessionInfo['mode'] | RuntimeDiagnostics['mode']): boolean {
+  return mode === 'windows-wsl'
+}
+
+function isPosixTmuxMode(mode?: RuntimeSessionInfo['mode'] | RuntimeDiagnostics['mode']): boolean {
+  return mode === 'linux-native' || mode === 'macos-native'
+}
+
 function openPosixTmuxTerminal(sessionName: string): Promise<boolean> {
   if (process.platform === 'darwin') {
     return new Promise((resolve) => {
@@ -193,7 +201,18 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
 
   async function openRuntimeTerminal(sessionName: string, statusHint?: string): Promise<boolean> {
     const diagnostics = await diagnoseRuntime()
-    if (diagnostics.mode === 'windows-wsl') {
+    let sessionMode: RuntimeSessionInfo['mode'] | undefined
+    try {
+      sessionMode = (await deps.aiEnvironmentController.listRuntimeSessions())
+        .find((item) => item.sessionName === sessionName)
+        ?.mode
+    } catch {
+      // Ignore lookup failures and fall back to the configured provider mode.
+    }
+
+    const resolvedMode = sessionMode ?? diagnostics.mode
+
+    if (isWindowsWslTmuxMode(resolvedMode)) {
       if (statusHint === 'attached') {
         const focused = await focusTerminalWindow(sessionName)
         if (focused) {
@@ -227,7 +246,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
       return false
     }
 
-    if (diagnostics.mode === 'linux-native' || diagnostics.mode === 'macos-native') {
+    if (isPosixTmuxMode(resolvedMode)) {
       const opened = await openPosixTmuxTerminal(sessionName)
       if (opened) {
         deps.emitRuntimeStateChanged({ reason: 'terminal-opened', sessionName })

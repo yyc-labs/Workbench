@@ -43,6 +43,7 @@ import type {
   ProjectCodeSession,
   AgentHookEnvelope,
   AgentHookGatewayStatus,
+  TranscriptGatewayImportPayload,
   TranscriptImportedEvent,
   TranscriptImportPayload,
   TranscriptSession,
@@ -68,6 +69,10 @@ declare global {
       selectDirectory: () => Promise<string | null>
       getPathForFile: (file: File) => string
       readClipboardImagePngBase64: () => string | null
+      captureWindowRectToPngBase64: (
+        rect: { x: number; y: number; width: number; height: number }
+      ) => Promise<string>
+      writeClipboardImagePngBase64: (pngBase64: string) => Promise<boolean>
       onProcessOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onProcessStatus: (cb: (d: { projectId: string; status: string }) => void) => () => void
       onProcessExit: (cb: (d: { projectId: string; code: number | null }) => void) => () => void
@@ -111,6 +116,14 @@ declare global {
         dataBase64: string
       ) => Promise<ProjectFileWriteImageResult>
       importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
+      importTranscriptViaGateway: (payload: TranscriptGatewayImportPayload) => Promise<{
+        ok: boolean
+        projectId: string
+        sessionId: string
+        title: string
+        sourceType: string
+        openViewer: boolean
+      }>
       listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
       listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
       getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>

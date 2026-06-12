@@ -19,6 +19,7 @@ import { windowsNativeProvider } from './providers/windows-native-provider'
 import { posixNativeProvider } from './providers/posix-native-provider'
 import { customScriptProvider } from './providers/custom-script-provider'
 import { disabledProvider } from './providers/disabled-provider'
+import { resolveWslVsCodeTarget } from '../shell/openers'
 
 const PROVIDERS: AiExecutionProvider[] = [
   windowsWslProvider,
@@ -85,7 +86,7 @@ export class AiEnvironmentController {
     aiCommitConfig?: AiCommitConfig
   }): Promise<AiCommitLaunchPlan> {
     const aiCommitConfig = normalizeAiCommitConfig(input.aiCommitConfig ?? this.getConfig().aiCommit)
-    const provider = await this.getProvider()
+    const provider = await this.getAiCommitProvider(input.repoRoot)
     return provider.resolveAiCommitLaunch(this.buildContext(), {
       ...input,
       cliConfig: {
@@ -111,6 +112,33 @@ export class AiEnvironmentController {
     const provider = await this.getProvider()
     if (!provider.stopRuntimeSession) return false
     return provider.stopRuntimeSession(this.buildContext(), sessionName)
+  }
+
+  private async getAiCommitProvider(repoRoot: string): Promise<AiExecutionProvider> {
+    const context = this.buildContext()
+    const explicitAiCommitEntrypoint = context.config.aiCommitEntrypoint?.trim()
+
+    if (explicitAiCommitEntrypoint) {
+      return customScriptProvider
+    }
+
+    if (context.capability.hostPlatform === 'windows') {
+      const defaultDistro = context.config.wslDistro || context.capability.wslDistro || 'Ubuntu'
+      const wslTarget = resolveWslVsCodeTarget(repoRoot, defaultDistro)
+      if (wslTarget) {
+        if (await windowsWslProvider.isSupported(context)) {
+          return windowsWslProvider
+        }
+        throw new Error(`WSL is required to run AI Commit for WSL repository: ${repoRoot}`)
+      }
+      return windowsNativeProvider
+    }
+
+    if (await posixNativeProvider.isSupported(context)) {
+      return posixNativeProvider
+    }
+
+    return this.getProvider()
   }
 
   private async getProvider(): Promise<AiExecutionProvider> {

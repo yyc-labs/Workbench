@@ -3,6 +3,7 @@ import { IPC } from '../main/ipc'
 import type {
   AgentHookEnvelope,
   AgentHookGatewayStatus,
+  TranscriptGatewayImportPayload,
   TranscriptImportedEvent,
   TranscriptImportPayload,
   TranscriptSession,
@@ -125,6 +126,12 @@ const api = {
       return null
     }
   },
+
+  captureWindowRectToPngBase64: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke(IPC.WINDOW_CAPTURE_RECT, rect) as Promise<string>,
+
+  writeClipboardImagePngBase64: (pngBase64: string) =>
+    ipcRenderer.invoke(IPC.CLIPBOARD_WRITE_IMAGE, pngBase64) as Promise<boolean>,
 
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
@@ -289,6 +296,16 @@ const api = {
 
   importTranscript: (payload: TranscriptImportPayload) =>
     ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT, payload) as Promise<TranscriptSession>,
+
+  importTranscriptViaGateway: (payload: TranscriptGatewayImportPayload) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT_VIA_GATEWAY, payload) as Promise<{
+      ok: boolean
+      projectId: string
+      sessionId: string
+      title: string
+      sourceType: string
+      openViewer: boolean
+    }>,
 
   listProjectTranscripts: (projectId: string) =>
     ipcRenderer.invoke(IPC.TRANSCRIPT_LIST, projectId) as Promise<TranscriptSessionSummary[]>,

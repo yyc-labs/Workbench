@@ -8,9 +8,7 @@ import type {
   Capability,
   ManagedProcessSnapshot,
   RuntimeEntry,
-  RuntimeSessionInfo,
   TerminalProcessInventory,
-  TmuxSessionInfo,
 } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -134,28 +132,11 @@ function SettingsRuntimePanel({
   }, [scriptHistoryOpen])
 
   const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
-  const runtimeSessionProjectNameMap = new Map(
-    Object.values(runtimeEntries).map((entry) => [entry.sessionName, projectNameMap.get(entry.projectId) || entry.projectId])
-  )
-
   const classifyManagedProcess = (item: ManagedProcessSnapshot): 'tmux' | 'project' | 'idle' => {
     if (item.processId.includes('::toolbox')) return 'idle'
     if (item.backend === 'tmux') return 'tmux'
     return 'project'
   }
-
-  const classifyTmuxSession = (
-    session: TmuxSessionInfo,
-    managedTmuxNames: Set<string>,
-    projectSessionNames: Set<string>
-  ): 'tmux' | 'project' | 'idle' => {
-    if (managedTmuxNames.has(session.sessionName)) return 'tmux'
-    if (projectSessionNames.has(session.sessionName)) return 'project'
-    if (session.sessionName.startsWith('lx_')) return 'project'
-    return 'idle'
-  }
-
-  const projectSessionNameSet = new Set(Object.values(runtimeEntries).map((entry) => entry.sessionName))
 
   const refreshInventory = async (silent = false) => {
     if (!silent) setInventoryLoading(true)
@@ -180,25 +161,67 @@ function SettingsRuntimePanel({
     }
   }, [])
 
-  const managedTmuxNames = new Set(
-    (inventory?.managedProcesses || [])
-      .filter((p) => p.backend === 'tmux' && p.sessionName)
-      .map((p) => p.sessionName as string)
-  )
-
   const projectManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project')
-  const tmuxManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'tmux')
   const idleManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'idle')
+  const sessionRows = (() => {
+    const rows = new Map<string, {
+      sessionName: string
+      projectLabel?: string
+      mode?: string
+      status?: string
+      createdAt?: number
+      startTime?: number
+      managedProcessId?: string
+      closeBy: 'session' | 'process'
+    }>()
 
-  const projectTmux = (inventory?.tmuxSessions || []).filter(
-    (s) => classifyTmuxSession(s, managedTmuxNames, projectSessionNameSet) === 'project'
-  )
-  const idleTmux = (inventory?.tmuxSessions || []).filter(
-    (s) => classifyTmuxSession(s, managedTmuxNames, projectSessionNameSet) === 'idle'
-  )
-  const runtimeSessions = inventory?.runtimeSessions || []
-  const projectRuntimeSessions = runtimeSessions.filter((item) => projectSessionNameSet.has(item.sessionName))
-  const idleRuntimeSessions = runtimeSessions.filter((item) => !projectSessionNameSet.has(item.sessionName))
+    const ensureRow = (sessionName: string) => {
+      let row = rows.get(sessionName)
+      if (!row) {
+        row = {
+          sessionName,
+          closeBy: 'process',
+        }
+        rows.set(sessionName, row)
+      }
+      return row
+    }
+
+    for (const item of inventory?.managedProcesses || []) {
+      if (!item.sessionName) continue
+      const row = ensureRow(item.sessionName)
+      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
+      row.startTime ||= item.startTime
+      row.managedProcessId ||= item.processId
+    }
+
+    for (const item of inventory?.runtimeSessions || []) {
+      if (!item.sessionName) continue
+      const row = ensureRow(item.sessionName)
+      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
+      row.mode ||= item.mode
+      row.status ||= item.status
+      row.createdAt ||= item.createdAt
+      row.closeBy = 'session'
+    }
+
+    for (const item of inventory?.tmuxSessions || []) {
+      if (!item.sessionName) continue
+      const row = ensureRow(item.sessionName)
+      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
+      row.status ||= item.status
+      row.createdAt ||= item.createdAt
+      row.closeBy = 'session'
+    }
+
+    return Array.from(rows.values()).sort((a, b) => {
+      const left = a.createdAt || a.startTime || 0
+      const right = b.createdAt || b.startTime || 0
+      return right - left
+    })
+  })()
+  const activeSessionRows = sessionRows.filter((item) => item.status === 'attached')
+  const inactiveSessionRows = sessionRows.filter((item) => item.status !== 'attached')
 
   const closeManagedProcess = async (processId: string) => {
     await window.electronAPI.stopProcess(processId)
@@ -574,13 +597,13 @@ function SettingsRuntimePanel({
         )}
         <div className="space-y-3">
           <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-[color:var(--color-foreground)]">
                 {usesTmuxRuntime ? t('settings.runtimePanel.managedProjectGroup') : t('settings.runtimePanel.unmanagedProjectGroup')}
               </p>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">{projectManaged.length + projectRuntimeSessions.length}</span>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{projectManaged.length}</span>
             </div>
-            {projectManaged.length === 0 && projectRuntimeSessions.length === 0 ? (
+            {projectManaged.length === 0 ? (
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
             ) : (
               <div className="space-y-1.5">
@@ -598,59 +621,74 @@ function SettingsRuntimePanel({
                     </Button>
                   </div>
                 ))}
-                {projectRuntimeSessions.map((item) => (
-                  <div key={`runtime-project-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                      {runtimeSessionProjectNameMap.get(item.sessionName) || item.sessionName} · {item.mode} · {item.status}
-                    </span>
-                    <Button
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => void closeTmuxSession(item.sessionName)}
-                    >
-                      {t('settingsRuntime.close')}
-                    </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.sessions')}</p>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{sessionRows.length}</span>
+            </div>
+            {sessionRows.length === 0 ? (
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
+            ) : (
+              <div className="space-y-3">
+                {[
+                  { key: 'active', label: t('common.active'), items: activeSessionRows },
+                  { key: 'inactive', label: t('common.background'), items: inactiveSessionRows },
+                ].map((group) => (
+                  <div key={group.key}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{group.label}</p>
+                      <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{group.items.length}</span>
+                    </div>
+                    {group.items.length === 0 ? (
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {group.items.map((item) => {
+                          const meta = [
+                            item.sessionName,
+                            item.mode,
+                            item.status,
+                            item.createdAt ? formatSince(item.createdAt) : item.startTime ? formatSince(item.startTime) : undefined,
+                          ].filter(Boolean)
+                          return (
+                            <div key={`session-${group.key}-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
+                              <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
+                                {item.projectLabel ? `${item.projectLabel} · ${meta.join(' · ')}` : meta.join(' · ')}
+                              </span>
+                              <Button
+                                variant="outline"
+                                className="h-7 rounded-full px-2 text-[11px]"
+                                onClick={() => void (
+                                  item.closeBy === 'session'
+                                    ? closeTmuxSession(item.sessionName)
+                                    : item.managedProcessId
+                                      ? closeManagedProcess(item.managedProcessId)
+                                      : Promise.resolve()
+                                )}
+                              >
+                                {t('settingsRuntime.close')}
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {usesTmuxRuntime && (
-            <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.tmuxTerminals')}</p>
-                <span className="text-xs text-[color:var(--color-muted-foreground)]">{tmuxManaged.length}</span>
-              </div>
-              {tmuxManaged.length === 0 ? (
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {tmuxManaged.map((item) => (
-                    <div key={`tmux-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
-                      <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                        {item.sessionName || item.processId} · {formatSince(item.startTime)}
-                      </span>
-                      <Button
-                        variant="outline"
-                        className="h-7 rounded-full px-2 text-[11px]"
-                        onClick={() => void closeManagedProcess(item.processId)}
-                      >
-                        {t('settingsRuntime.close')}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.cleanable')}</p>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">{idleManaged.length + idleTmux.length}</span>
+              <span className="text-xs text-[color:var(--color-muted-foreground)]">{idleManaged.length}</span>
             </div>
-            {idleManaged.length === 0 && idleTmux.length === 0 ? (
+            {idleManaged.length === 0 ? (
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
             ) : (
               <div className="space-y-1.5">
@@ -663,34 +701,6 @@ function SettingsRuntimePanel({
                       variant="outline"
                       className="h-7 rounded-full px-2 text-[11px]"
                       onClick={() => void closeManagedProcess(item.processId)}
-                    >
-                      {t('settingsRuntime.close')}
-                    </Button>
-                  </div>
-                ))}
-                {idleTmux.map((item) => (
-                  <div key={`idle-t-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                      {item.sessionName} · tmux · {item.status}
-                    </span>
-                    <Button
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => void closeTmuxSession(item.sessionName)}
-                    >
-                      {t('settingsRuntime.close')}
-                    </Button>
-                  </div>
-                ))}
-                {idleRuntimeSessions.map((item) => (
-                  <div key={`idle-runtime-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                      {item.sessionName} · {item.mode} · {item.status}
-                    </span>
-                    <Button
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => void closeTmuxSession(item.sessionName)}
                     >
                       {t('settingsRuntime.close')}
                     </Button>

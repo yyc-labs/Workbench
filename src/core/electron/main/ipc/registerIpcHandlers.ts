@@ -1,5 +1,6 @@
-import { dialog, ipcMain, nativeTheme, shell } from 'electron'
+import { clipboard, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
+import http from 'http'
 import { detectProject } from '../detector'
 import { loadConfig, updateConfig } from '../config'
 import { IPC } from '../ipc'
@@ -52,6 +53,7 @@ import type {
   ProjectFileContentSearchOptions,
   TerminalProcessInventory,
   TerminalStopAllResult,
+  TranscriptGatewayImportPayload,
   TranscriptImportPayload,
 } from '../../../shared/types'
 
@@ -98,6 +100,88 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
     repoRoot: typeof request?.repoRoot === 'string' ? request.repoRoot : '',
   })
 
+  const requestTranscriptImportViaGateway = async (payload: TranscriptGatewayImportPayload) => {
+    const agentHooks = loadConfig().agentHooks || {}
+    const transcriptImport = agentHooks.transcriptImport || {}
+    const enabled = transcriptImport.enabled ?? true
+    if (!enabled) {
+      throw new Error('Transcript import API is disabled.')
+    }
+
+    const host = (agentHooks.host && agentHooks.host !== '127.0.0.1' ? agentHooks.host : '127.0.0.1') || '127.0.0.1'
+    const port = Number.isFinite(agentHooks.port) ? Number(agentHooks.port) : 17373
+    const body = JSON.stringify({
+      projectId: payload.projectId,
+      rawText: payload.rawText,
+      title: payload.title,
+      sourceType: payload.sourceType ?? 'manual-markdown',
+      sourceLabel: payload.sourceLabel,
+      processId: payload.processId,
+      capturedAt: payload.capturedAt,
+      openViewer: payload.openViewer,
+    })
+
+    return new Promise<{
+      ok: boolean
+      projectId: string
+      sessionId: string
+      title: string
+      sourceType: string
+      openViewer: boolean
+    }>((resolve, reject) => {
+      const req = http.request({
+        host,
+        port,
+        path: '/transcripts/import',
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+          'content-length': Buffer.byteLength(body),
+          ...(transcriptImport.token
+            ? { 'x-ide-electron-transcript-token': transcriptImport.token }
+            : {}),
+        },
+      }, (res) => {
+        let responseBody = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => {
+          responseBody += chunk
+        })
+        res.on('end', () => {
+          const statusCode = res.statusCode ?? 500
+          try {
+            const parsed = responseBody.trim() ? JSON.parse(responseBody) : {}
+            if (statusCode >= 200 && statusCode < 300) {
+              resolve(parsed as {
+                ok: boolean
+                projectId: string
+                sessionId: string
+                title: string
+                sourceType: string
+                openViewer: boolean
+              })
+              return
+            }
+            reject(new Error(
+              typeof parsed?.error === 'string'
+                ? parsed.error
+                : `Transcript import API request failed with status ${statusCode}.`
+            ))
+          } catch {
+            reject(new Error(`Transcript import API request failed with status ${statusCode}.`))
+          }
+        })
+      })
+
+      req.on('error', (error) => {
+        reject(error)
+      })
+
+      req.write(body)
+      req.end()
+    })
+  }
+
   ipcMain.handle(IPC.DETECT_DIRECTORY, (_event, dirPath: string) => {
     return detectProject(dirPath)
   })
@@ -131,6 +215,39 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.PROCESS_RESIZE, (_event, projectId: string, cols: number, rows: number) => {
     deps.getProcessManager()?.resize(projectId, cols, rows)
+    return true
+  })
+
+  ipcMain.handle(
+    IPC.WINDOW_CAPTURE_RECT,
+    async (_event, rect: { x: number; y: number; width: number; height: number }) => {
+      const targetWindow = deps.getMainWindow()
+      if (!targetWindow || targetWindow.isDestroyed()) {
+        throw new Error('Main window is not available.')
+      }
+
+      const x = Math.max(0, Math.floor(Number(rect?.x) || 0))
+      const y = Math.max(0, Math.floor(Number(rect?.y) || 0))
+      const width = Math.max(1, Math.floor(Number(rect?.width) || 0))
+      const height = Math.max(1, Math.floor(Number(rect?.height) || 0))
+
+      const image = await targetWindow.webContents.capturePage({ x, y, width, height })
+      return image.toPNG().toString('base64')
+    }
+  )
+
+  ipcMain.handle(IPC.CLIPBOARD_WRITE_IMAGE, (_event, pngBase64: string) => {
+    const normalized = typeof pngBase64 === 'string' ? pngBase64.trim() : ''
+    if (!normalized) {
+      throw new Error('Clipboard image payload is empty.')
+    }
+
+    const image = nativeImage.createFromBuffer(Buffer.from(normalized, 'base64'))
+    if (image.isEmpty()) {
+      throw new Error('Clipboard image payload is invalid.')
+    }
+
+    clipboard.writeImage(image)
     return true
   })
 
@@ -355,6 +472,10 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.TRANSCRIPT_IMPORT, async (_event, payload: TranscriptImportPayload) => {
     return deps.transcriptService.importTranscript(payload)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_IMPORT_VIA_GATEWAY, async (_event, payload: TranscriptGatewayImportPayload) => {
+    return requestTranscriptImportViaGateway(payload)
   })
 
   ipcMain.handle(IPC.TRANSCRIPT_LIST, async (_event, projectId: string) => {
