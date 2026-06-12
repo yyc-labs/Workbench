@@ -17,8 +17,14 @@ const ABSOLUTE_POSIX_REFERENCE_PATTERN =
   /(?<![\w./-])(\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*)\:(\d+)(?:\:(\d+))?/g
 const RELATIVE_REFERENCE_PATTERN =
   /(?<![\w/.-])((?:\.\/)?(?:[\w-]+\/)*[\w.-]+\.[A-Za-z0-9_-]+)\:(\d+)(?:\:(\d+))?/g
+const ABSOLUTE_POSIX_PATH_REFERENCE_PATTERN =
+  /(?<![\w./:-])(\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*)(?!:\d)(?![\w./-])/g
+const RELATIVE_PATH_REFERENCE_PATTERN =
+  /(?<![\w/.-])((?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9_-]+)(?!:\d)(?![\w/.-])/g
 const ABSOLUTE_POSIX_REFERENCE_EXACT_PATTERN = new RegExp(`^${ABSOLUTE_POSIX_REFERENCE_PATTERN.source}$`)
 const RELATIVE_REFERENCE_EXACT_PATTERN = new RegExp(`^${RELATIVE_REFERENCE_PATTERN.source}$`)
+const ABSOLUTE_POSIX_PATH_LINE_EXACT_PATTERN = /^\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*$/
+const RELATIVE_PATH_LINE_EXACT_PATTERN = /^(?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9_-]+$/
 const WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN =
   /:(?:[ \t]*\n[ \t]*)?(\d+)(?:(?:[ \t]*\n[ \t]*)?\:(?:[ \t]*\n[ \t]*)?(\d+))?/g
 const MARKDOWN_FENCE_LINE_PATTERN = /^[ \t]{0,3}([`~]{3,})/
@@ -502,6 +508,26 @@ function parseNormalizedReferenceCandidate(
   }
 }
 
+function parseStandalonePathLineCandidate(
+  candidate: string
+): {
+  rawPath: string
+  lineNumber: number
+} | null {
+  if (!candidate) return null
+  if (
+    !ABSOLUTE_POSIX_PATH_LINE_EXACT_PATTERN.test(candidate)
+    && !RELATIVE_PATH_LINE_EXACT_PATTERN.test(candidate)
+  ) {
+    return null
+  }
+
+  return {
+    rawPath: candidate,
+    lineNumber: 1,
+  }
+}
+
 function createMarkdownText(
   cleanedText: string,
   references: TranscriptReference[]
@@ -571,6 +597,27 @@ function collectReferences(
   collectFromPattern(ABSOLUTE_POSIX_REFERENCE_PATTERN, 1)
   collectFromPattern(RELATIVE_REFERENCE_PATTERN, 1)
 
+  const collectPathOnlyFromPattern = (pattern: RegExp, pathGroup: number) => {
+    pattern.lastIndex = 0
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(cleanedText)) !== null) {
+      const rawText = match[0]
+      const rawPath = match[pathGroup] || ''
+      if (!rawPath) continue
+      candidates.push({
+        rawText,
+        rawPath,
+        label: rawText,
+        lineNumber: 1,
+        startOffset: match.index,
+        endOffset: match.index + rawText.length,
+      })
+    }
+  }
+
+  collectPathOnlyFromPattern(ABSOLUTE_POSIX_PATH_REFERENCE_PATTERN, 1)
+  collectPathOnlyFromPattern(RELATIVE_PATH_REFERENCE_PATTERN, 1)
+
   WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN.lastIndex = 0
   let wrappedSuffixMatch: RegExpExecArray | null
   while ((wrappedSuffixMatch = WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN.exec(cleanedText)) !== null) {
@@ -597,10 +644,38 @@ function collectReferences(
     })
   }
 
+  for (let index = 0; index < lineStarts.length; index += 1) {
+    const lineStartOffset = lineStarts[index]
+    const lineEndOffset = index + 1 < lineStarts.length ? lineStarts[index + 1] - 1 : cleanedText.length
+    const rawLine = cleanedText.slice(lineStartOffset, lineEndOffset)
+    const trimmedLine = rawLine.trim()
+    const parsedCandidate = parseStandalonePathLineCandidate(trimmedLine)
+    if (!parsedCandidate) continue
+
+    const leadingWhitespaceLength = rawLine.length - rawLine.trimStart().length
+    const trailingWhitespaceLength = rawLine.length - rawLine.trimEnd().length
+    const startOffset = lineStartOffset + leadingWhitespaceLength
+    const endOffset = lineEndOffset - trailingWhitespaceLength
+
+    candidates.push({
+      rawText: trimmedLine,
+      rawPath: parsedCandidate.rawPath,
+      label: trimmedLine,
+      lineNumber: parsedCandidate.lineNumber,
+      startOffset,
+      endOffset,
+    })
+  }
+
   const deduped: TranscriptReference[] = []
   const occupiedRanges: Array<{ start: number; end: number }> = []
 
-  for (const candidate of candidates.sort((a, b) => a.startOffset - b.startOffset)) {
+  for (const candidate of candidates.sort((a, b) => {
+    if (a.startOffset !== b.startOffset) {
+      return a.startOffset - b.startOffset
+    }
+    return b.endOffset - a.endOffset
+  })) {
     if (occupiedRanges.some((range) => candidate.startOffset < range.end && candidate.endOffset > range.start)) {
       continue
     }
