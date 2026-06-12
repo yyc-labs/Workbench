@@ -18,6 +18,7 @@ import { formatTranscriptSourceType, useI18n, useLocale } from '../../i18n'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { projectIdFromPath } from '../../../shared/rules'
 import { useAppStore } from '../../stores/appStore'
+import { ManualTranscriptImportModal } from '../transcript/ManualTranscriptImportModal'
 
 type ProjectListItem = {
   id: string
@@ -92,12 +93,14 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
   const removeTranscriptSession = useAppStore((s) => s.removeTranscriptSession)
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isImportingManual, setIsImportingManual] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [records, setRecords] = useState<TranscriptGroupRecord[]>([])
   const [expandedProjectIds, setExpandedProjectIds] = useState<Record<string, boolean>>({})
   const [selectedItems, setSelectedItems] = useState<Record<string, TranscriptSelectionItem>>({})
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [manualImportOpen, setManualImportOpen] = useState(false)
 
   const refresh = async () => {
     setIsLoading(true)
@@ -291,6 +294,33 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
     }
   }
 
+  const handleManualImport = async ({
+    projectId,
+    rawText,
+    title,
+  }: {
+    projectId: string
+    rawText: string
+    title?: string
+  }) => {
+    setIsImportingManual(true)
+    try {
+      await window.electronAPI.importTranscriptViaGateway({
+        projectId,
+        rawText,
+        title,
+        sourceType: 'manual-markdown',
+        capturedAt: Date.now(),
+      })
+      return true
+    } catch (error) {
+      console.error('[SettingsTranscriptPanel.handleManualImport] failed:', error)
+      return false
+    } finally {
+      setIsImportingManual(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -305,6 +335,27 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
         className="surface-card rounded-[24px] border px-5 py-5"
         style={{ borderColor: 'var(--color-border)' }}
       >
+        <div
+          className="mb-5 flex flex-col gap-3 rounded-[20px] border px-4 py-4 md:flex-row md:items-center md:justify-between"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsTranscript.manualImportTitle')}</p>
+            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+              {t('settingsTranscript.manualImportDescription')}
+            </p>
+          </div>
+          <Button
+            type="button"
+            className="h-11 px-4"
+            onClick={() => setManualImportOpen(true)}
+            disabled={projects.length <= 0}
+          >
+            <FileText className="h-4 w-4" />
+            {t('transcript.importPastedContent')}
+          </Button>
+        </div>
+
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsTranscript.recordsTitle')}</p>
@@ -630,6 +681,25 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
           </div>
         </div>
       </ModalShell>
+
+      <ManualTranscriptImportModal
+        open={manualImportOpen}
+        onClose={() => setManualImportOpen(false)}
+        onImport={handleManualImport}
+        projects={projects}
+        requireProjectSelection
+        submitting={isImportingManual}
+        title={t('settingsTranscript.manualImportTitle')}
+        description={t('settingsTranscript.manualImportDescription')}
+        onImported={async (projectId) => {
+          await loadProjectTranscripts(projectId)
+          const latestTranscriptId = useAppStore.getState().transcriptSummariesByProjectId[projectId]?.[0]?.id
+          if (latestTranscriptId) {
+            await openTranscript({ projectId, transcriptId: latestTranscriptId, initialMode: 'preview' })
+          }
+          navigate(`/project/${projectId}/transcript`)
+        }}
+      />
     </div>
   )
 }

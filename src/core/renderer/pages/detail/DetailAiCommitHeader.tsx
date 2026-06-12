@@ -1,6 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { BookOpen, Bot, Code2, FileText, Loader2, RotateCcw } from 'lucide-react'
+import { BookOpen, Bot, Loader2, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
+import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { UrlPopover } from '../../components/UrlPopover'
 import { useI18n } from '../../i18n'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
@@ -111,41 +112,16 @@ export function DetailAiCommitHeader({
               )}
               {projectHeaderCollapsed && (
                 <>
-                  <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-                    <button
-                      type="button"
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                        activePane === 'code'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                      }`}
-                      onClick={() => onSwitchPane?.('code')}
-                    >
-                      <Code2 className="h-3.5 w-3.5" />
-                      {t('codeWorkspace.codeTab')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                        activePane === 'aicommit'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                      }`}
-                      onClick={() => onSwitchPane?.('aicommit')}
-                    >
-                      <Bot className="h-3.5 w-3.5" />
-                      {t('codeWorkspace.aiCommitTab')}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                    onClick={onOpenTranscript}
-                    title={t('detail.openTranscriptViewer')}
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    {t('detail.transcript')}
-                  </button>
+                  <ProjectPaneTabs
+                    activePane={activePane}
+                    onSelectPane={(pane) => {
+                      if (pane === 'transcript') {
+                        onOpenTranscript?.()
+                        return
+                      }
+                      onSwitchPane?.(pane)
+                    }}
+                  />
                 </>
               )}
               {projectHeaderCollapsed && firstProjectLinkItem && (

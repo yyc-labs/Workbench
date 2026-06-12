@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, type Ref, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import ReactMarkdown, { type Components } from 'react-markdown'
@@ -7,11 +7,13 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   Bot,
+  Check,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
   Code2,
   Columns2,
+  Copy,
   Eye,
   FileText,
   RefreshCw,
@@ -20,6 +22,9 @@ import {
 } from 'lucide-react'
 import type { TranscriptReference, TranscriptViewerMode } from '../../shared/types'
 import { ModalShell } from '../components/ModalShell'
+import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
+import { Button } from '../components/ui/button'
+import { useScrollableContentCapture } from '../hooks/useScrollableContentCapture'
 import { MonacoTextViewer } from '../components/MonacoTextViewer'
 import { formatStructuredBlockKind as formatStructuredBlockKindLabel, formatTranscriptSourceType, useI18n, useLocale } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
@@ -32,6 +37,7 @@ import {
   transformMarkdownUrl,
 } from './code/code.markdown'
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
+import { ManualTranscriptImportModal } from './transcript/ManualTranscriptImportModal'
 import { TranscriptReferenceDrawer } from './transcript/TranscriptReferenceDrawer'
 
 const TRANSCRIPT_SPLIT_BREAKPOINT_PX = 960
@@ -47,14 +53,19 @@ type TranscriptStructuredPreviewState = {
 }
 
 const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
+  contentRef,
   markdown,
   components,
 }: {
+  contentRef?: Ref<HTMLElement>
   markdown: string
   components: Components
 }) {
   return (
-    <article className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8">
+    <article
+      ref={contentRef}
+      className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8"
+    >
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
         components={components}
@@ -177,6 +188,8 @@ export function TranscriptPage() {
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
   const [isImporting, setIsImporting] = useState(false)
+  const [isImportingManual, setIsImportingManual] = useState(false)
+  const [manualImportOpen, setManualImportOpen] = useState(false)
   const [deletingTranscriptId, setDeletingTranscriptId] = useState<string | null>(null)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string } | null>(null)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
@@ -187,6 +200,7 @@ export function TranscriptPage() {
     () => window.matchMedia(TRANSCRIPT_SPLIT_QUERY).matches
   )
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
+  const structuredPreviewCapture = useScrollableContentCapture()
 
   const resolvedActiveTranscriptId = activeTranscriptId ?? summaries[0]?.id
   const session = useAppStore((s) => (
@@ -288,6 +302,14 @@ export function TranscriptPage() {
     setStructuredPreview(null)
   }, [])
 
+  const structuredPreviewCaptureLabel = structuredPreviewCapture.status === 'running'
+    ? t('transcript.copyStructuredPreviewImageRunning')
+    : structuredPreviewCapture.status === 'success'
+      ? t('transcript.copyStructuredPreviewImageCopied')
+      : structuredPreviewCapture.status === 'error'
+        ? t('transcript.copyStructuredPreviewImageFailed')
+        : t('transcript.copyStructuredPreviewImage')
+
   const handleStructuredBlockClick = useCallback((payload: MarkdownStructuredBlockClickPayload) => {
     const markdown = sliceMarkdownLines(displayMarkdownText, payload.startLine, payload.endLine)
     if (!markdown) return
@@ -356,6 +378,33 @@ export function TranscriptPage() {
       setIsImporting(false)
     }
   }, [importCurrentProcessOutputTranscript, isImporting, openTranscript, projectId])
+
+  const handleManualImport = useCallback(async ({
+    projectId: targetProjectId,
+    rawText,
+    title,
+  }: {
+    projectId: string
+    rawText: string
+    title?: string
+  }) => {
+    setIsImportingManual(true)
+    try {
+      await window.electronAPI.importTranscriptViaGateway({
+        projectId: targetProjectId,
+        rawText,
+        title,
+        sourceType: 'manual-markdown',
+        capturedAt: Date.now(),
+      })
+      return true
+    } catch (error) {
+      console.error('[TranscriptPage.handleManualImport] failed:', error)
+      return false
+    } finally {
+      setIsImportingManual(false)
+    }
+  }, [])
 
   const handleSelectTranscript = useCallback((transcriptId: string) => {
     if (!projectId) return
@@ -455,33 +504,26 @@ export function TranscriptPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
-            <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
-                onClick={() => navigate(`/project/${projectId}/code`)}
-              >
-                <Code2 className="h-3.5 w-3.5" />
-                Code
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
-                onClick={() => navigate(`/project/${projectId}/aicommit`)}
-              >
-                <Bot className="h-3.5 w-3.5" />
-                AI Commit
-              </button>
-            </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-primary)]/30 bg-[color:var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[color:var(--color-primary)]">
-              <FileText className="h-3.5 w-3.5" />
-              Transcript
-            </div>
+            <ProjectPaneTabs
+              activePane="transcript"
+              onSelectPane={(pane) => {
+                if (pane === 'transcript') return
+                navigate(`/project/${projectId}/${pane}`)
+              }}
+            />
             <button
               type="button"
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+              onClick={() => setManualImportOpen(true)}
+            >
+              <FileText className="h-4 w-4" />
+              {t('transcript.importPastedContent')}
+            </button>
+            <button
+              type="button"
+              className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
                 hasTerminalOutput
-                  ? 'bg-primary text-white hover:bg-primary-hover'
+                  ? 'bg-primary text-white shadow-sm hover:bg-primary-hover'
                   : 'cursor-not-allowed border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'
               }`}
               onClick={() => {
@@ -491,9 +533,9 @@ export function TranscriptPage() {
               title={hasTerminalOutput ? t('transcript.importCurrentOutputHint') : t('transcript.processOutputEmpty')}
             >
               {isImporting ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <ArrowDownToLine className="h-4 w-4" />
+                <ArrowDownToLine className="h-3.5 w-3.5" />
               )}
               {t('transcript.importCurrentOutput')}
             </button>
@@ -524,6 +566,63 @@ export function TranscriptPage() {
       )}
 
       <div className={`flex-1 min-h-0 overflow-hidden px-8 pb-8 ${contentTopPaddingClass}`}>
+        {projectHeaderCollapsed && (
+          <div
+            className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[20px] border px-4 py-2"
+            style={{
+              borderColor: 'var(--color-border)',
+              background: 'color-mix(in srgb, var(--color-card) 95%, transparent)',
+            }}
+          >
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectDisplayName(project)}>
+                  {projectDisplayName(project)}
+                </p>
+                <ProjectPaneTabs
+                  activePane="transcript"
+                  onSelectPane={(pane) => {
+                    if (pane === 'transcript') return
+                    navigate(`/project/${projectId}/${pane}`)
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setManualImportOpen(true)}
+                title={t('transcript.importPastedContent')}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                {t('transcript.importPastedContent')}
+              </button>
+              <button
+                type="button"
+                className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                  hasTerminalOutput
+                    ? 'bg-primary text-white shadow-sm hover:bg-primary-hover'
+                    : 'cursor-not-allowed border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'
+                }`}
+                onClick={() => {
+                  void handleImportCurrentOutput()
+                }}
+                disabled={!hasTerminalOutput || isImporting}
+                title={hasTerminalOutput ? t('transcript.importCurrentOutputHint') : t('transcript.processOutputEmpty')}
+              >
+                {isImporting ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                )}
+                {t('transcript.importCurrentOutput')}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid h-full min-h-0 gap-6 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
             <div className="border-b border-[color:var(--color-border)] px-5 py-4">
@@ -575,6 +674,15 @@ export function TranscriptPage() {
                       {t('transcript.firstTranscriptHint')}
                     </p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-9 px-4"
+                    onClick={() => setManualImportOpen(true)}
+                  >
+                    <FileText className="h-4 w-4" />
+                    {t('transcript.importPastedContent')}
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -663,15 +771,15 @@ export function TranscriptPage() {
               <>
                 <div className="border-b border-[color:var(--color-border)] px-6 py-5">
                   <div className="flex flex-col gap-4 min-[960px]:flex-row min-[960px]:items-start min-[960px]:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="truncate text-lg font-semibold text-[color:var(--color-foreground)]">
+                    <div className="min-w-0 min-[960px]:max-w-[min(100%,560px)]">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h2 className="min-w-0 max-w-full flex-1 truncate whitespace-nowrap text-lg font-semibold text-[color:var(--color-foreground)] min-[960px]:max-w-[360px]">
                           {session.title}
                         </h2>
-                        <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+                        <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
                           {formatTranscriptSourceType(locale, session.sourceType)}
                         </span>
-                        <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+                        <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
                           {t('transcript.refs', { count: session.references.length })}
                         </span>
                       </div>
@@ -757,6 +865,29 @@ export function TranscriptPage() {
         onOpenInCodeWorkspace={handleOpenReferenceInCodeWorkspace}
       />
 
+      <ManualTranscriptImportModal
+        open={manualImportOpen}
+        onClose={() => setManualImportOpen(false)}
+        onImport={handleManualImport}
+        project={{
+          id: project.id,
+          path: project.path,
+          name: project.name,
+          customName: project.customName,
+        }}
+        initialProjectId={projectId}
+        submitting={isImportingManual}
+        title={t('transcript.manualImportCurrentProjectTitle')}
+        description={t('transcript.manualImportCurrentProjectDescription')}
+        onImported={async () => {
+          if (!projectId) return
+          await loadProjectTranscripts(projectId)
+          const latestTranscriptId = useAppStore.getState().transcriptSummariesByProjectId[projectId]?.[0]?.id
+          if (!latestTranscriptId) return
+          await openTranscript({ projectId, transcriptId: latestTranscriptId, initialMode: 'preview' })
+        }}
+      />
+
       <ModalShell
         open={Boolean(structuredPreview)}
         onClose={closeStructuredPreview}
@@ -766,7 +897,7 @@ export function TranscriptPage() {
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
-        <div className="flex max-h-[min(88vh,980px)] min-h-0 flex-col">
+        <div className="relative flex max-h-[min(88vh,980px)] min-h-0 flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="section-label mb-1">{t('transcript.listTitle')}</p>
@@ -784,18 +915,48 @@ export function TranscriptPage() {
                 {t('transcript.structuredPreviewHint')}
               </p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={closeStructuredPreview}
-              title={t('common.close')}
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`quiet-control inline-flex h-8 items-center gap-1.5 rounded-full border-0 px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  structuredPreviewCapture.status === 'success'
+                    ? 'text-[color:var(--color-success)]'
+                    : structuredPreviewCapture.status === 'error'
+                      ? 'text-[color:var(--color-destructive)]'
+                      : 'text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => {
+                  void structuredPreviewCapture.capture()
+                }}
+                title={structuredPreviewCaptureLabel}
+                disabled={structuredPreviewCapture.status === 'running'}
+              >
+                {structuredPreviewCapture.status === 'running' ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : structuredPreviewCapture.status === 'success' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                <span>{structuredPreviewCaptureLabel}</span>
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={closeStructuredPreview}
+                title={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]">
+          <div
+            ref={structuredPreviewCapture.targetRef}
+            className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]"
+          >
             <StructuredPreviewMarkdown
+              contentRef={structuredPreviewCapture.contentRef}
               markdown={structuredPreviewMarkdown}
               components={structuredPreviewComponents}
             />

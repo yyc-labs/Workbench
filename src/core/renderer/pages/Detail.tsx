@@ -4,18 +4,16 @@ import { shallow } from 'zustand/shallow'
 import {
   ArrowUpRight,
   BookOpen,
-  Bot,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
-  Code2,
-  FileText,
   Play,
   RefreshCw,
   Settings2,
   Square,
 } from 'lucide-react'
 import { CardContextMenu } from '../components/CardContextMenu'
+import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
 import { UrlPopover } from '../components/UrlPopover'
 import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
@@ -341,50 +339,13 @@ export function DetailPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
-            <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-              <button
-                type="button"
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  activePane === 'code'
-                    ? 'bg-primary text-white'
-                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                }`}
-                onClick={() => {
-                  if (!projectId || activePane === 'code') return
-                  navigate(`/project/${projectId}/code`)
-                }}
-              >
-                <Code2 className="h-3.5 w-3.5" />
-                {t('detail.code')}
-              </button>
-              <button
-                type="button"
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  activePane === 'aicommit'
-                    ? 'bg-primary text-white'
-                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                }`}
-                onClick={() => {
-                  if (!projectId || activePane === 'aicommit') return
-                  navigate(`/project/${projectId}/aicommit`)
-                }}
-              >
-                <Bot className="h-3.5 w-3.5" />
-                {t('detail.gitCommit')}
-              </button>
-            </div>
-
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => {
-                if (!projectId) return
-                navigate(`/project/${projectId}/transcript`)
+            <ProjectPaneTabs
+              activePane={activePane}
+              onSelectPane={(nextPane) => {
+                if (!projectId || nextPane === activePane) return
+                navigate(`/project/${projectId}/${nextPane}`)
               }}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              {t('detail.transcript')}
-            </button>
+            />
 
             {isRunning && processUrls.length > 0 && (
               <UrlPopover urls={processUrls}>
