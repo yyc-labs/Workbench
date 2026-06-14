@@ -1,0 +1,155 @@
+body.structured-capture-active .transcript-structured-preview-modal,
+body.structured-capture-active .transcript-structured-preview-modal * {
+  scroll-behavior: auto !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal {
+  background: var(--color-popover-solid) !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal [data-capture-surface='structured-preview'] {
+  background: var(--color-background-sunken-solid) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
+  background: var(--color-card-solid) !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure::after,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-transcript-ref,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:hover,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:focus-visible,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-toolbar,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-language,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-action-btn,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-copy-btn,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-box-flow-node-card,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-step,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-box-diagram-body,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-box-flow-connector-arrow,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-box-flow-connector-label,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-connector-arrow,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-connector-label {
+  transition: none !important;
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:hover,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:focus-visible {
+  transform: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure::after,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:hover::after,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:focus-visible::after,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-toolbar,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-language,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-code-action-btn,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-copy-btn {
+  opacity: 0 !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal {
+  contain: none !important;
+  container-type: normal !important;
+  width: max-content !important;
+  min-width: max-content !important;
+  max-width: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-box-diagram):not(.code-markdown-architecture-diagram):not(.code-markdown-mermaid-wrap) {
+  inline-size: auto !important;
+  max-inline-size: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal table,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal pre,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-flow,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-vertical-flow,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-diagram,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-architecture-diagram,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-mermaid-wrap,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-syntax-wrap,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-syntax-block,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-plain-block,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-mermaid-diagram {
+  max-width: none !important;
+  max-inline-size: none !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-flow,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-diagram,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-architecture-diagram,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-syntax-block,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-plain-block,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-mermaid-diagram,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal pre {
+  overflow: visible !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-architecture-diagram-body,
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-diagram-body {
+  min-width: max-content !important;
+}
+
+.code-markdown-search-highlight {
+  border-radius: 4px;
+  padding: 0 1px;
+  background: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  color: inherit;
+}
+
+.code-markdown-search-highlight.is-active {
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
+}
+
+.code-markdown-source-reveal {
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-warning-background));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 24%, transparent);
+  transition:
+    background-color 220ms var(--spring),
+    box-shadow 220ms var(--spring);
+}
+
+.code-mdc-meta-card {
+  margin: 0 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  padding: 12px 13px;
+}
+
+.code-mdc-meta-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-foreground);
+  letter-spacing: 0.01em;
+}
+
+.code-mdc-meta-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.code-mdc-meta-key {
+  color: var(--color-muted-foreground);
+}
+
+.code-mdc-meta-value {
+  color: var(--color-foreground);
+  word-break: break-word;
+}

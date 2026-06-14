@@ -1,0 +1,181 @@
+.code-markdown-syntax-block {
+  border: 1px solid var(--color-border);
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.code-markdown-syntax-wrap {
+  position: relative;
+  inline-size: min(100%, var(--code-markdown-block-max-inline-size, 100%));
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.code-markdown-code-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.code-markdown-code-language {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(50%, 180px);
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
+  background: color-mix(in srgb, var(--color-card) 90%, transparent);
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.code-markdown-code-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-markdown-mermaid-wrap {
+  margin: 0.85em 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  overflow: hidden;
+}
+
+.code-markdown-mermaid-diagram {
+  padding: 14px;
+  overflow: auto;
+}
+
+.code-markdown-mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.code-markdown-mermaid-wrap .code-markdown-plain-block {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-markdown-mermaid-error {
+  padding: 0 12px 12px;
+  color: var(--color-destructive);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.code-markdown-plain-block {
+  margin: 0;
+  inline-size: min(100%, var(--code-markdown-block-max-inline-size, 100%));
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-card) 92%, #000 8%);
+  padding: 44px 12px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.code-markdown-plain-block code {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.code-markdown-code-action-btn,
+.code-markdown-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 90%, transparent);
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  line-height: 1;
+  transition: background-color 120ms var(--spring), color 120ms var(--spring), border-color 120ms var(--spring);
+  backdrop-filter: blur(8px);
+}
+
+.code-markdown-code-action-btn {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+}
+
+.code-markdown-code-action-btn:hover,
+.code-markdown-copy-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+
+.code-markdown-code-action-btn:focus-visible,
+.code-markdown-copy-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-card) 100%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 28%, transparent);
+}
+
+.code-markdown-copy-btn.is-success {
+  border-color: color-mix(in srgb, var(--color-success) 56%, var(--color-border));
+  color: var(--color-success);
+}
+
+.code-markdown-copy-btn.is-error {
+  border-color: color-mix(in srgb, var(--color-destructive) 56%, var(--color-border));
+  color: var(--color-destructive);
+}
+
+.code-markdown-code-preview-modal {
+  contain: layout paint style;
+}
+
+.code-markdown-code-preview-content {
+  max-width: none;
+  padding: 16px;
+}
+
+.code-markdown-syntax-block--modal,
+.code-markdown-plain-block--modal {
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+.code-markdown-plain-block--modal {
+  min-height: 100%;
+  border-radius: 16px;
+  padding-top: 16px;
+}
+
+.code-markdown-plain-block--modal code {
+  font-size: 13px;
+  line-height: 1.7;
+}

@@ -34,6 +34,11 @@ type MarkdownStructuredPreviewState = {
   markdown: string
 }
 
+type MarkdownCodePreviewState = {
+  codeText: string
+  language: string
+}
+
 function sliceMarkdownLines(markdown: string, startLine: number, endLine: number): string {
   if (!markdown) return ''
   const lines = markdown.split('\n')
@@ -66,6 +71,7 @@ export function useMarkdownPreviewModeState({
     () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
   )
   const [structuredPreview, setStructuredPreview] = useState<MarkdownStructuredPreviewState | null>(null)
+  const [codePreview, setCodePreview] = useState<MarkdownCodePreviewState | null>(null)
 
   useEffect(() => {
     setMarkdownPreviewMode(normalizeMarkdownPreviewMode(persistedLastMarkdownPreviewMode))
@@ -149,6 +155,9 @@ export function useMarkdownPreviewModeState({
     activeRelativePath,
     enableMarkdownSyntaxHighlight,
     lineOffset: parsedMarkdownDoc?.markdownBodyLineOffset ?? 0,
+    onCodeBlockExpand: (payload) => {
+      setCodePreview(payload)
+    },
     onStructuredBlockClick: (payload) => {
       const markdownBodyLineOffset = parsedMarkdownDoc?.markdownBodyLineOffset ?? 0
       const bodyStartLine = Math.max(1, payload.startLine - markdownBodyLineOffset)
@@ -242,6 +251,10 @@ export function useMarkdownPreviewModeState({
     closeStructuredPreview: useCallback(() => {
       setStructuredPreview(null)
     }, []),
+    closeCodePreview: useCallback(() => {
+      setCodePreview(null)
+    }, []),
+    codePreview,
     effectiveMarkdownPreviewMode,
     effectiveTheme,
     handlePasteImage,

@@ -194,7 +194,9 @@ export function CodeWorkspacePanel({
     projectPath,
   })
   const {
+    closeCodePreview,
     closeStructuredPreview,
+    codePreview,
     effectiveMarkdownPreviewMode,
     handlePasteImage,
     isMarkdownFile,
@@ -703,7 +705,9 @@ export function CodeWorkspacePanel({
               <CodeWorkspaceEditorPane
                 activeLanguage={activeLanguage}
                 activeRelativePath={activeRelativePath}
+                closeCodePreview={closeCodePreview}
                 closeStructuredPreview={closeStructuredPreview}
+                codePreview={codePreview}
                 editorRef={editorRef}
                 editorValue={editorValue}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}

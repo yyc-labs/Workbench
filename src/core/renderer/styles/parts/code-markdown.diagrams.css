@@ -1,0 +1,975 @@
+.code-markdown-content table {
+  width: max-content;
+  border-collapse: collapse;
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 14%, var(--color-border));
+  background: var(--color-card);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.code-markdown-box-flow {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 4px;
+}
+
+.code-markdown-box-diagram {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 4px;
+}
+
+.code-markdown-architecture-diagram {
+  margin: 1em 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 4px;
+}
+
+.code-markdown-flow-lane,
+.code-markdown-flow-story,
+.code-markdown-flow-inline-shell {
+  border-radius: 26px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 98%, white 2%), color-mix(in srgb, var(--color-card) 92%, transparent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
+    0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.code-markdown-flow-lane {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 14px;
+  min-width: min(760px, 100%);
+  padding: 18px;
+}
+
+.code-markdown-flow-lane-node {
+  display: flex;
+  width: min(280px, 32vw);
+  min-width: 220px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code-markdown-flow-lane-node-eyebrow {
+  margin: 0;
+  padding-left: 4px;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.code-markdown-flow-lane-card {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, var(--color-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 97%, transparent));
+  padding: 14px 16px;
+}
+
+.code-markdown-flow-lane-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.code-markdown-flow-lane-row-text {
+  min-width: 0;
+  color: var(--color-foreground);
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.code-markdown-flow-inline-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 90%, white 10%);
+  color: color-mix(in srgb, var(--color-primary) 72%, var(--color-foreground));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.code-markdown-flow-lane-connector {
+  display: flex;
+  min-width: 108px;
+  flex: 0 0 108px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: center;
+  color: color-mix(in srgb, var(--color-primary) 66%, var(--color-foreground));
+}
+
+.code-markdown-flow-lane-connector-line {
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.code-markdown-flow-lane-connector-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  color: color-mix(in srgb, var(--color-foreground) 72%, var(--color-primary));
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.code-markdown-flow-lane-connector-orb,
+.code-markdown-flow-stage-connector-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  color: color-mix(in srgb, var(--color-primary) 78%, var(--color-foreground));
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 18px color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.code-markdown-flow-story {
+  display: flex;
+  min-width: min(720px, 100%);
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+}
+
+.code-markdown-flow-stage {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.code-markdown-flow-stage-index-rail {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.code-markdown-flow-stage-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 14%, white), color-mix(in srgb, var(--color-primary) 7%, var(--color-card)));
+  color: color-mix(in srgb, var(--color-primary) 82%, var(--color-foreground));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.code-markdown-flow-stage-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, var(--color-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, white 12%, var(--color-card)), color-mix(in srgb, var(--color-card) 98%, transparent));
+  padding: 16px 18px;
+}
+
+.code-markdown-flow-stage-card-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.code-markdown-flow-stage-title {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.code-markdown-flow-branch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+}
+
+.code-markdown-flow-branch-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 94%, white 6%);
+  padding: 14px;
+}
+
+.code-markdown-flow-branch-label {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-primary) 78%, var(--color-foreground));
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.code-markdown-flow-branch-text {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 13px;
+  line-height: 1.58;
+  overflow-wrap: anywhere;
+}
+
+.code-markdown-flow-branch-pipeline,
+.code-markdown-flow-detail-pipeline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-markdown-flow-detail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code-markdown-flow-detail-text {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-foreground) 84%, var(--color-muted-foreground));
+  font-size: 13px;
+  line-height: 1.62;
+  overflow-wrap: anywhere;
+}
+
+.code-markdown-flow-pipeline-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 93%, white 7%);
+  color: var(--color-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.code-markdown-flow-pipeline-arrow,
+.code-markdown-flow-inline-arrow {
+  color: color-mix(in srgb, var(--color-primary) 74%, var(--color-foreground));
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.code-markdown-flow-stage-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-left: 11px;
+  padding: 2px 0;
+  color: color-mix(in srgb, var(--color-primary) 66%, var(--color-foreground));
+}
+
+.code-markdown-flow-stage-connector-line {
+  width: 1px;
+  height: 18px;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+.code-markdown-flow-stage-connector-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: min(100%, 420px);
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  color: color-mix(in srgb, var(--color-foreground) 72%, var(--color-primary));
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.code-markdown-flow-inline-shell {
+  padding: 18px;
+}
+
+.code-markdown-flow-inline-track {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.code-markdown-flow-inline-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.code-markdown-flow-inline-node-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-card));
+  color: color-mix(in srgb, var(--color-primary) 80%, var(--color-foreground));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.code-markdown-flow-inline-node-title {
+  color: var(--color-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.code-markdown-zoomable-structure {
+  position: relative;
+  cursor: zoom-in;
+  transition:
+    transform 140ms var(--spring),
+    box-shadow 140ms var(--spring),
+    background-color 140ms var(--spring);
+}
+
+.code-markdown-zoomable-structure::after {
+  content: '放大';
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 90%, white 10%);
+  color: color-mix(in srgb, var(--color-primary) 76%, var(--color-foreground));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms var(--spring),
+    transform 140ms var(--spring);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.code-markdown-zoomable-structure:hover,
+.code-markdown-zoomable-structure:focus-visible {
+  transform: translateY(-1px);
+}
+
+.code-markdown-zoomable-structure:hover::after,
+.code-markdown-zoomable-structure:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.code-markdown-zoomable-structure:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-card) 100%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 34%, transparent);
+}
+
+.code-markdown-box-flow.code-markdown-zoomable-structure:hover .code-markdown-box-flow-node-card,
+.code-markdown-box-flow.code-markdown-zoomable-structure:focus-visible .code-markdown-box-flow-node-card,
+.code-markdown-vertical-flow.code-markdown-zoomable-structure:hover .code-markdown-vertical-flow-step,
+.code-markdown-vertical-flow.code-markdown-zoomable-structure:focus-visible .code-markdown-vertical-flow-step,
+.code-markdown-architecture-diagram.code-markdown-zoomable-structure:hover .code-markdown-architecture-diagram-body,
+.code-markdown-architecture-diagram.code-markdown-zoomable-structure:focus-visible .code-markdown-architecture-diagram-body,
+.code-markdown-box-diagram.code-markdown-zoomable-structure:hover .code-markdown-box-diagram-body,
+.code-markdown-box-diagram.code-markdown-zoomable-structure:focus-visible .code-markdown-box-diagram-body,
+.code-markdown-mermaid-wrap.code-markdown-zoomable-structure:hover,
+.code-markdown-mermaid-wrap.code-markdown-zoomable-structure:focus-visible,
+.code-markdown-content table.code-markdown-zoomable-structure:hover,
+.code-markdown-content table.code-markdown-zoomable-structure:focus-visible {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent),
+    0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.code-markdown-box-diagram-body {
+  display: inline-flex;
+  min-width: max-content;
+  flex-direction: column;
+  gap: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+}
+
+.code-markdown-box-diagram-svg {
+  display: block;
+  inline-size: calc(var(--diagram-columns) * 18px);
+  block-size: calc(var(--diagram-rows) * 28px);
+  overflow: visible;
+}
+
+.code-markdown-box-diagram-stroke {
+  stroke: color-mix(in srgb, var(--color-foreground) 70%, var(--color-muted-foreground));
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.9;
+}
+
+.code-markdown-box-diagram-arrow {
+  fill: color-mix(in srgb, var(--color-foreground) 72%, var(--color-muted-foreground));
+  opacity: 0.9;
+}
+
+.code-markdown-box-diagram-text {
+  fill: var(--color-foreground);
+  font-family: 'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0;
+  white-space: pre;
+}
+
+.code-markdown-architecture-diagram-body {
+  display: flex;
+  min-width: min(920px, 100%);
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 95%, white 5%), color-mix(in srgb, var(--color-card) 88%, transparent)),
+    radial-gradient(circle at top center, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 52%);
+  padding: 18px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    0 12px 32px rgba(15, 23, 42, 0.08);
+}
+
+.code-markdown-architecture-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  border-radius: 22px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 78%, transparent);
+  background: color-mix(in srgb, var(--color-card) 94%, white 6%);
+  padding: 18px 18px 16px;
+}
+
+.code-markdown-architecture-section-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.code-markdown-architecture-section-title {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.code-markdown-architecture-section-details,
+.code-markdown-architecture-node-card-details,
+.code-markdown-architecture-node-group-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.code-markdown-architecture-section-details p,
+.code-markdown-architecture-node-card-details p,
+.code-markdown-architecture-node-group-details p {
+  margin: 0;
+  color: color-mix(in srgb, var(--color-foreground) 80%, var(--color-muted-foreground));
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.code-markdown-architecture-section-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.code-markdown-architecture-section-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--architecture-columns, 1), minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.code-markdown-architecture-section-grid.is-single-expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-markdown-architecture-node-card,
+.code-markdown-architecture-node-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
+  padding: 16px;
+}
+
+.code-markdown-architecture-node-card.is-nested,
+.code-markdown-architecture-node-group.is-nested {
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 24%, transparent);
+}
+
+.code-markdown-architecture-node-card-title,
+.code-markdown-architecture-node-group-title {
+  margin: 0;
+  color: var(--color-foreground);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.code-markdown-architecture-node-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  text-align: center;
+}
+
+.code-markdown-architecture-node-card {
+  justify-content: center;
+  text-align: center;
+}
+
+.code-markdown-architecture-node-group-flow {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.code-markdown-architecture-node-group-flow > .code-markdown-architecture-node-card.is-nested,
+.code-markdown-architecture-node-group-flow > .code-markdown-architecture-node-group.is-nested {
+  flex: 1 1 0;
+}
+
+.code-markdown-architecture-inline-connector,
+.code-markdown-architecture-section-connector {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--color-primary) 72%, var(--color-foreground));
+}
+
+.code-markdown-architecture-inline-connector {
+  gap: 6px;
+  min-width: 52px;
+  flex: 0 0 auto;
+}
+
+.code-markdown-architecture-inline-connector-line {
+  width: 18px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.code-markdown-architecture-inline-connector-arrow,
+.code-markdown-architecture-section-connector-arrow {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.code-markdown-architecture-inline-connector-label {
+  color: color-mix(in srgb, var(--color-foreground) 72%, var(--color-muted-foreground));
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.code-markdown-architecture-section-connector {
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.code-markdown-architecture-section-connector-line {
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.4;
+}
+
+.code-markdown-box-flow-track {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.code-markdown-box-flow-node {
+  display: flex;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.code-markdown-box-flow-node-title {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--color-muted-foreground);
+  letter-spacing: 0.01em;
+}
+
+.code-markdown-box-flow-node-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-card) 96%, white 4%) 0%,
+      color-mix(in srgb, var(--color-card) 100%, transparent) 100%
+    );
+  padding: 14px 16px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.code-markdown-box-flow-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.code-markdown-box-flow-line-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--color-foreground);
+  white-space: pre;
+}
+
+.code-markdown-box-flow-line-note {
+  flex: 0 0 auto;
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.code-markdown-box-flow-connector {
+  position: relative;
+  display: flex;
+  min-width: 88px;
+  flex: 0 0 88px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: color-mix(in srgb, var(--color-primary) 55%, var(--color-foreground));
+}
+
+.code-markdown-box-flow-connector::before {
+  content: none;
+}
+
+.code-markdown-box-flow-connector-label,
+.code-markdown-box-flow-connector-arrow {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+}
+
+.code-markdown-box-flow-connector-label {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  color: color-mix(in srgb, var(--color-foreground) 70%, var(--color-primary));
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.code-markdown-box-flow-connector-arrow {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  color: color-mix(in srgb, var(--color-primary) 82%, var(--color-foreground));
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 18px color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-markdown-box-flow-connector.is-none .code-markdown-box-flow-connector-arrow {
+  font-size: 10px;
+}
+
+.code-markdown-vertical-flow {
+  margin: 1em 0;
+}
+
+.code-markdown-vertical-flow-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: min(100%, 860px);
+}
+
+.code-markdown-vertical-flow-step {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-card) 97%, white 3%) 0%,
+      color-mix(in srgb, var(--color-card) 100%, transparent) 100%
+    );
+  padding: 14px 16px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.code-markdown-vertical-flow-step-title {
+  color: var(--color-foreground);
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.code-markdown-vertical-flow-step-note {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 75%, transparent);
+  color: var(--color-muted-foreground);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.code-markdown-vertical-flow-step-details {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.code-markdown-vertical-flow-step-detail {
+  color: color-mix(in srgb, var(--color-foreground) 84%, var(--color-muted-foreground));
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.code-markdown-vertical-flow-connector {
+  position: relative;
+  display: flex;
+  min-height: 30px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--color-muted-foreground);
+}
+
+.code-markdown-vertical-flow-connector::before {
+  content: none;
+}
+
+.code-markdown-vertical-flow-connector-arrow,
+.code-markdown-vertical-flow-connector-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background);
+}
+
+.code-markdown-vertical-flow-connector-arrow {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  color: color-mix(in srgb, var(--color-primary) 74%, var(--color-foreground));
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 6px 18px color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.code-markdown-vertical-flow-connector-label {
+  max-width: min(100%, 420px);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+  background: color-mix(in srgb, var(--color-card) 92%, white 8%);
+  color: color-mix(in srgb, var(--color-foreground) 70%, var(--color-primary));
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.code-markdown-vertical-flow-connector.is-none .code-markdown-vertical-flow-connector-arrow {
+  font-size: 10px;
+}
+
+@media (max-width: 860px) {
+  .code-markdown-flow-lane {
+    min-width: 100%;
+    flex-direction: column;
+  }
+
+  .code-markdown-flow-lane-node {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .code-markdown-flow-lane-connector {
+    min-width: 0;
+    flex-basis: auto;
+    align-self: stretch;
+  }
+
+  .code-markdown-flow-lane-connector-line {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .code-markdown-flow-stage {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .code-markdown-flow-stage-index-rail {
+    justify-content: flex-start;
+  }
+
+  .code-markdown-flow-stage-connector {
+    margin-left: 0;
+  }
+
+  .code-markdown-box-flow-connector {
+    min-width: 72px;
+    flex-basis: 72px;
+  }
+
+  .code-markdown-box-flow-node-card {
+    padding: 12px 13px;
+  }
+
+  .code-markdown-vertical-flow-step {
+    padding: 12px 13px;
+  }
+}

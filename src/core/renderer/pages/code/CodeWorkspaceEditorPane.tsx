@@ -7,16 +7,23 @@ import { ModalShell } from '../../components/ModalShell'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
-import { transformMarkdownUrl } from './code.markdown'
+import { formatCodeLanguageLabel, transformMarkdownUrl } from './code.markdown'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 type MarkdownStructuredPreviewState = {
-  kind: 'table' | 'box-flow' | 'vertical-flow' | 'box-diagram' | 'architecture-diagram'
+  kind: 'table' | 'box-flow' | 'vertical-flow' | 'box-diagram' | 'mermaid' | 'architecture-diagram'
   startLine: number
   endLine: number
   markdown: string
+}
+
+type MarkdownCodePreviewState = {
+  codeText: string
+  language: string
 }
 
 const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
@@ -54,6 +61,8 @@ function formatStructuredBlockKind(kind: MarkdownStructuredPreviewState['kind'])
       return 'Table'
     case 'box-diagram':
       return 'Diagram'
+    case 'mermaid':
+      return 'Mermaid'
     case 'architecture-diagram':
       return 'Architecture Diagram'
     default:
@@ -64,7 +73,9 @@ function formatStructuredBlockKind(kind: MarkdownStructuredPreviewState['kind'])
 type CodeWorkspaceEditorPaneProps = {
   activeLanguage: string | null
   activeRelativePath: string | null
+  closeCodePreview: () => void
   closeStructuredPreview: () => void
+  codePreview: MarkdownCodePreviewState | null
   editorRef: Ref<MonacoCodeEditorHandle>
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
@@ -103,7 +114,9 @@ type CodeWorkspaceEditorPaneProps = {
 export function CodeWorkspaceEditorPane({
   activeLanguage,
   activeRelativePath,
+  closeCodePreview,
   closeStructuredPreview,
+  codePreview,
   editorRef,
   editorValue,
   effectiveMarkdownPreviewMode,
@@ -140,12 +153,21 @@ export function CodeWorkspaceEditorPane({
 }: CodeWorkspaceEditorPaneProps) {
   const { t } = useI18n()
   const structuredPreviewCapture = useScrollableContentCapture()
+  const codePreviewCapture = useScrollableContentCapture()
+  const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
 
   const structuredPreviewCaptureLabel = structuredPreviewCapture.status === 'running'
     ? t('transcript.copyStructuredPreviewImageRunning')
     : structuredPreviewCapture.status === 'success'
       ? t('transcript.copyStructuredPreviewImageCopied')
       : structuredPreviewCapture.status === 'error'
+        ? t('transcript.copyStructuredPreviewImageFailed')
+        : t('transcript.copyStructuredPreviewImage')
+  const codePreviewCaptureLabel = codePreviewCapture.status === 'running'
+    ? t('transcript.copyStructuredPreviewImageRunning')
+    : codePreviewCapture.status === 'success'
+      ? t('transcript.copyStructuredPreviewImageCopied')
+      : codePreviewCapture.status === 'error'
         ? t('transcript.copyStructuredPreviewImageFailed')
         : t('transcript.copyStructuredPreviewImage')
 
@@ -430,6 +452,7 @@ export function CodeWorkspaceEditorPane({
 
           <div
             ref={structuredPreviewCapture.targetRef}
+            data-capture-surface="structured-preview"
             className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]"
           >
             <StructuredPreviewMarkdown
@@ -437,6 +460,95 @@ export function CodeWorkspaceEditorPane({
               markdown={structuredPreview?.markdown ?? ''}
               components={structuredPreviewComponents}
             />
+          </div>
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        open={Boolean(codePreview)}
+        onClose={closeCodePreview}
+        widthClassName="max-w-[min(1280px,calc(100vw-40px))]"
+        baseZIndex={1180}
+        ariaLabel={t('codeMarkdown.previewAria')}
+        overlayClassName="backdrop-blur-0 bg-black/18"
+        panelClassName="code-markdown-code-preview-modal p-4 sm:p-5"
+      >
+        <div className="relative flex max-h-[min(88vh,980px)] min-h-0 flex-col">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="section-label mb-1">{t('codeWorkspace.markdown')}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
+                  {t('codeMarkdown.previewTitle')}
+                </p>
+                {codePreview && (
+                  <span className="rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+                    {codePreviewLanguageLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className={`quiet-control inline-flex h-8 items-center gap-1.5 rounded-full border-0 px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  codePreviewCapture.status === 'success'
+                    ? 'text-[color:var(--color-success)]'
+                    : codePreviewCapture.status === 'error'
+                      ? 'text-[color:var(--color-destructive)]'
+                      : 'text-[color:var(--color-foreground)]'
+                }`}
+                onClick={() => {
+                  void codePreviewCapture.capture()
+                }}
+                title={codePreviewCaptureLabel}
+                disabled={codePreviewCapture.status === 'running'}
+              >
+                {codePreviewCapture.status === 'running' ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : codePreviewCapture.status === 'success' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                <span>{codePreviewCaptureLabel}</span>
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                onClick={closeCodePreview}
+                title={t('common.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref={codePreviewCapture.targetRef}
+            className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]"
+          >
+            <article
+              ref={codePreviewCapture.contentRef}
+              className="code-markdown-content code-markdown-content--modal code-markdown-code-preview-content px-5 py-6"
+            >
+              {codePreview ? (
+                <SyntaxHighlighter
+                  language={codePreview.language}
+                  style={monacoTheme === 'vs-dark' ? oneDark : oneLight}
+                  PreTag="div"
+                  className="code-markdown-syntax-block code-markdown-syntax-block--modal"
+                  customStyle={{ margin: 0, borderRadius: 16, paddingTop: 16 }}
+                  codeTagProps={{
+                    style: {
+                      fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+                    },
+                  }}
+                >
+                  {codePreview.codeText}
+                </SyntaxHighlighter>
+              ) : null}
+            </article>
           </div>
         </div>
       </ModalShell>

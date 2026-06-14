@@ -1,0 +1,253 @@
+.code-markdown-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 20px 22px 28px;
+  color: var(--color-foreground);
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-x: visible;
+  overflow-y: hidden;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.code-markdown-content--viewport-scroll {
+  min-width: max-content;
+  width: max-content;
+}
+
+.code-markdown-content--viewport-scroll > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-box-diagram):not(.code-markdown-mermaid-wrap) {
+  inline-size: min(100%, min(860px, var(--code-markdown-block-max-inline-size, 100%)));
+  max-inline-size: min(860px, var(--code-markdown-block-max-inline-size, 100%));
+}
+
+.code-markdown-preview-scroll-root {
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  padding-bottom: calc(var(--scrollbar-size) + 6px);
+  container-type: inline-size;
+  --code-markdown-block-max-inline-size: max(0px, calc(100cqi - 44px));
+}
+
+.code-markdown-content--modal {
+  max-width: none;
+  font-size: 17px;
+  line-height: 1.85;
+  text-align: center;
+  min-width: 0;
+  width: auto;
+  contain: layout paint;
+  container-type: inline-size;
+  --code-markdown-block-max-inline-size: max(0px, calc(100cqi - 44px));
+}
+
+.code-markdown-content--modal > * {
+  text-align: left;
+}
+
+.code-markdown-content--modal > table,
+.code-markdown-content--modal > .code-markdown-box-flow,
+.code-markdown-content--modal > .code-markdown-vertical-flow,
+.code-markdown-content--modal > .code-markdown-box-diagram {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.code-markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.code-markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.code-markdown-content h1,
+.code-markdown-content h2,
+.code-markdown-content h3,
+.code-markdown-content h4,
+.code-markdown-content h5,
+.code-markdown-content h6 {
+  margin: 1.15em 0 0.55em;
+  line-height: 1.3;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.code-markdown-content h1 {
+  font-size: 1.8em;
+}
+
+.code-markdown-content h2 {
+  font-size: 1.45em;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.2em;
+}
+
+.code-markdown-content h3 {
+  font-size: 1.2em;
+}
+
+.code-markdown-content p,
+.code-markdown-content ul,
+.code-markdown-content ol,
+.code-markdown-content blockquote,
+.code-markdown-content pre,
+.code-markdown-content table {
+  margin: 0.75em 0;
+}
+
+.code-markdown-content ul,
+.code-markdown-content ol {
+  padding-left: 1.35em;
+  list-style-position: outside;
+}
+
+.code-markdown-content ul {
+  list-style-type: disc;
+}
+
+.code-markdown-content ol {
+  list-style-type: decimal;
+}
+
+.code-markdown-content li {
+  margin: 0.18em 0 0;
+}
+
+.code-markdown-content ul > li::marker,
+.code-markdown-content ol > li::marker {
+  color: color-mix(in srgb, var(--color-primary) 72%, var(--color-muted-foreground));
+  font-weight: 700;
+}
+
+.code-markdown-content li + li {
+  margin-top: 0.3em;
+}
+
+.code-markdown-content li > p:first-child {
+  margin-top: 0;
+}
+
+.code-markdown-content li > p:last-child {
+  margin-bottom: 0;
+}
+
+.code-markdown-content p,
+.code-markdown-content li,
+.code-markdown-content blockquote {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.code-markdown-content li > ul,
+.code-markdown-content li > ol {
+  margin-top: 0.35em;
+  margin-bottom: 0.12em;
+}
+
+.code-markdown-content ul.contains-task-list,
+.code-markdown-content ol.contains-task-list {
+  list-style: none;
+}
+
+.code-markdown-content .task-list-item {
+  list-style: none;
+  padding-left: 0.72em;
+}
+
+.code-markdown-content .task-list-item::marker {
+  content: '';
+}
+
+.code-markdown-content .task-list-item > input[type='checkbox'] {
+  margin-right: 0.55em;
+  vertical-align: text-bottom;
+}
+
+.code-markdown-content .task-list-item:has(> input[type='checkbox']:checked) {
+  color: color-mix(in srgb, var(--color-muted-foreground) 84%, var(--color-foreground));
+}
+
+.code-markdown-content a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.code-markdown-content a.code-markdown-transcript-ref,
+.code-markdown-content span.code-markdown-transcript-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0.08rem;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-card));
+  color: color-mix(in srgb, var(--color-primary) 78%, var(--color-foreground));
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  line-height: 1.45;
+  text-decoration: none;
+  vertical-align: baseline;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.code-markdown-content a.code-markdown-transcript-ref:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 42%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 11%, var(--color-card));
+  color: var(--color-foreground);
+  text-decoration: none;
+  box-shadow:
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.code-markdown-content a.code-markdown-transcript-ref:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-card) 100%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--color-ring) 34%, transparent);
+}
+
+.code-markdown-content a.code-markdown-transcript-ref.is-active,
+.code-markdown-content span.code-markdown-transcript-ref.is-active {
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-primary));
+  background: color-mix(in srgb, var(--color-warning-background) 88%, var(--color-card));
+  color: var(--color-foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-warning) 24%, transparent),
+    0 6px 18px rgba(15, 23, 42, 0.07);
+}
+
+.code-markdown-content blockquote {
+  border-left: 3px solid color-mix(in srgb, var(--color-primary) 48%, transparent);
+  padding: 0.1em 0 0.1em 0.85em;
+  color: var(--color-muted-foreground);
+}
+
+.code-markdown-content .code-markdown-inline-code {
+  background: color-mix(in srgb, var(--color-accent) 82%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.12em 0.34em;
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.code-markdown-content pre {
+  inline-size: min(100%, var(--code-markdown-block-max-inline-size, 100%));
+  max-inline-size: 100%;
+  min-inline-size: 0;
+  background: color-mix(in srgb, var(--color-card) 92%, #000 8%);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}

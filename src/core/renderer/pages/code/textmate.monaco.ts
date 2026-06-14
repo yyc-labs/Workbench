@@ -1,11 +1,10 @@
 import type * as Monaco from 'monaco-editor'
 import { loadWASM, OnigScanner, OnigString } from 'vscode-oniguruma'
 import { Registry, INITIAL, type IGrammar, type IRawGrammar, type IRawTheme, type StateStack } from 'vscode-textmate'
-import onigWasmUrl from 'vscode-oniguruma/release/onig.wasm?url'
-
 import { buildTextmateRegistry, resolveRootScopeForLanguage, type TextmateLanguageDescriptor } from './textmate.registry'
 
 const registryData = buildTextmateRegistry()
+const onigWasmPath = '/assets/onig.wasm'
 
 let onigasmBootPromise: Promise<void> | null = null
 let textmateRegistryPromise: Promise<Registry> | null = null
@@ -29,6 +28,7 @@ function ensureLanguageRegistered(monaco: typeof Monaco, languageId: string): vo
 function ensureOnigurumaReady(): Promise<void> {
   if (!onigasmBootPromise) {
     onigasmBootPromise = (async () => {
+      const onigWasmUrl = new globalThis.URL(onigWasmPath, document.baseURI).href
       const response = await fetch(onigWasmUrl)
       if (!response.ok) {
         throw new Error(`Failed to load onig.wasm: ${response.status}`)

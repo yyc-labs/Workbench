@@ -1,6 +1,6 @@
-import { Children, createElement, isValidElement, useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Children, createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Maximize2 } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -13,6 +13,13 @@ import {
   parseArchitectureDiagramProp,
 } from './code.markdownArchitectureDiagram'
 import { BoxDiagramBlock, parseBoxDiagramLinesProp } from './code.markdownBoxDiagram'
+import {
+  BoxFlowBlock,
+  parseBoxFlowProp,
+  parseVerticalFlowProp,
+  VerticalFlowBlock,
+} from './code.markdownFlowDiagram'
+import { MermaidBlock } from './code.markdownMermaid'
 import { useI18n } from '../../i18n'
 
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
@@ -20,7 +27,6 @@ const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD = 40_000
 const MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD = 700
 const MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN = '320px 0px'
-const MARKDOWN_MERMAID_RENDER_ID_PREFIX = 'code-markdown-mermaid'
 export const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
 const MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR = '[data-source-start-line][data-source-end-line]'
 const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS = 'code-markdown-source-reveal'
@@ -28,7 +34,7 @@ const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_DURATION_MS = 1800
 
 type SourceTrackedMarkdownNode = Pick<HastElement, 'position'>
 
-type SourceLineDataProps = {
+export type SourceLineDataProps = {
   'data-source-start-line': number
   'data-source-end-line': number
 }
@@ -38,12 +44,18 @@ export type MarkdownStructuredBlockKind =
   | 'box-flow'
   | 'vertical-flow'
   | 'box-diagram'
+  | 'mermaid'
   | 'architecture-diagram'
 
 export type MarkdownStructuredBlockClickPayload = {
   kind: MarkdownStructuredBlockKind
   startLine: number
   endLine: number
+}
+
+export type MarkdownCodeBlockExpandPayload = {
+  codeText: string
+  language: string
 }
 
 function normalizePathSegments(value: string): string[] {
@@ -264,6 +276,50 @@ function extractCodeBlockFromPreChildren(children: ReactNode): { codeText: strin
   return { codeText, language }
 }
 
+export function formatCodeLanguageLabel(language: string, t: ReturnType<typeof useI18n>['t']): string {
+  const normalized = normalizeSyntaxLanguage(language)
+  if (normalized === 'text') {
+    return t('codeMarkdown.plainText')
+  }
+  if (normalized === 'bash') {
+    return 'Bash'
+  }
+  if (normalized === 'javascript') {
+    return 'JavaScript'
+  }
+  if (normalized === 'typescript') {
+    return 'TypeScript'
+  }
+  if (normalized === 'jsx') {
+    return 'JSX'
+  }
+  if (normalized === 'tsx') {
+    return 'TSX'
+  }
+  if (normalized === 'json') {
+    return 'JSON'
+  }
+  if (normalized === 'yaml') {
+    return 'YAML'
+  }
+  if (normalized === 'markdown') {
+    return 'Markdown'
+  }
+  if (normalized === 'python') {
+    return 'Python'
+  }
+  if (normalized === 'csharp') {
+    return 'C#'
+  }
+  if (normalized === 'cpp') {
+    return 'C++'
+  }
+  if (normalized === 'plaintext') {
+    return t('codeMarkdown.plainText')
+  }
+  return normalized.toUpperCase()
+}
+
 function countTextLines(value: string): number {
   if (!value) return 0
   let count = 1
@@ -394,6 +450,44 @@ function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
     if (!onStructuredBlockClick) {
       if (
         tagName === 'div'
+        && structuredBlockKind === 'box-flow'
+        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-flow')
+      ) {
+        const flow = parseBoxFlowProp(
+          (props as { ['data-box-flow']?: unknown })['data-box-flow']
+        )
+        if (flow) {
+          return (
+            <BoxFlowBlock
+              {...props}
+              {...sourceLineProps}
+              className={rawClassName as string | undefined}
+              flow={flow}
+            />
+          )
+        }
+      }
+      if (
+        tagName === 'div'
+        && structuredBlockKind === 'vertical-flow'
+        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-vertical-flow')
+      ) {
+        const flow = parseVerticalFlowProp(
+          (props as { ['data-vertical-flow']?: unknown })['data-vertical-flow']
+        )
+        if (flow) {
+          return (
+            <VerticalFlowBlock
+              {...props}
+              {...sourceLineProps}
+              className={rawClassName as string | undefined}
+              flow={flow}
+            />
+          )
+        }
+      }
+      if (
+        tagName === 'div'
         && structuredBlockKind === 'architecture-diagram'
         && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-architecture-diagram')
       ) {
@@ -447,6 +541,82 @@ function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
     const ariaLabel = `Open larger ${structuredBlockKind} preview`
     const title = (props as { title?: string }).title
     const resolvedTitle = [title, 'Click to enlarge'].filter(Boolean).join('\n')
+
+    if (
+      tagName === 'div'
+      && structuredBlockKind === 'box-flow'
+      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-flow')
+    ) {
+      const flow = parseBoxFlowProp(
+        (props as { ['data-box-flow']?: unknown })['data-box-flow']
+      )
+      if (flow) {
+        return (
+          <BoxFlowBlock
+            {...props}
+            {...sourceLineProps}
+            className={resolvedClassName || undefined}
+            flow={flow}
+            tabIndex={0}
+            title={resolvedTitle || undefined}
+            aria-label={ariaLabel}
+            data-structured-block-kind={structuredBlockKind}
+            role="button"
+            onClick={(event) => {
+              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
+                return
+              }
+              activate()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              event.preventDefault()
+              activate()
+            }}
+          />
+        )
+      }
+    }
+
+    if (
+      tagName === 'div'
+      && structuredBlockKind === 'vertical-flow'
+      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-vertical-flow')
+    ) {
+      const flow = parseVerticalFlowProp(
+        (props as { ['data-vertical-flow']?: unknown })['data-vertical-flow']
+      )
+      if (flow) {
+        return (
+          <VerticalFlowBlock
+            {...props}
+            {...sourceLineProps}
+            className={resolvedClassName || undefined}
+            flow={flow}
+            tabIndex={0}
+            title={resolvedTitle || undefined}
+            aria-label={ariaLabel}
+            data-structured-block-kind={structuredBlockKind}
+            role="button"
+            onClick={(event) => {
+              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
+                return
+              }
+              activate()
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') {
+                return
+              }
+              event.preventDefault()
+              activate()
+            }}
+          />
+        )
+      }
+    }
 
     if (
       tagName === 'div'
@@ -651,99 +821,9 @@ type MarkdownCodeBlockProps = {
   language: string
   themeMode: 'light' | 'dark'
   enableSyntaxHighlight: boolean
+  onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
+  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
-}
-
-type MermaidModule = typeof import('mermaid')
-
-let mermaidModulePromise: Promise<MermaidModule> | null = null
-
-async function loadMermaid(): Promise<MermaidModule> {
-  if (!mermaidModulePromise) {
-    mermaidModulePromise = import('mermaid')
-  }
-  return mermaidModulePromise
-}
-
-async function renderMermaidDiagram(id: string, codeText: string, themeMode: 'light' | 'dark'): Promise<string> {
-  const mermaidModule = await loadMermaid()
-  const mermaid = mermaidModule.default
-
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: themeMode === 'dark' ? 'dark' : 'default',
-    flowchart: {
-      htmlLabels: false,
-    },
-  })
-
-  const { svg } = await mermaid.render(id, codeText)
-  return svg
-}
-
-function MermaidBlock({
-  codeText,
-  themeMode,
-  sourceLineProps,
-}: Pick<MarkdownCodeBlockProps, 'codeText' | 'themeMode' | 'sourceLineProps'>) {
-  const { t } = useI18n()
-  const diagramId = useId().replace(/:/g, '-')
-  const [svgMarkup, setSvgMarkup] = useState<string>('')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [isRendering, setIsRendering] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setIsRendering(true)
-    setErrorMessage(null)
-
-    void renderMermaidDiagram(`${MARKDOWN_MERMAID_RENDER_ID_PREFIX}-${diagramId}`, codeText, themeMode)
-      .then((svg) => {
-        if (cancelled) return
-        setSvgMarkup(svg)
-        setErrorMessage(null)
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        const message = error instanceof Error ? error.message : t('codeMarkdown.unknownRenderError')
-        setSvgMarkup('')
-        setErrorMessage(message)
-      })
-      .finally(() => {
-        if (cancelled) return
-        setIsRendering(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [codeText, diagramId, themeMode])
-
-  return (
-    <div className="code-markdown-mermaid-wrap" {...sourceLineProps}>
-      <div className="code-markdown-mermaid-header">
-        <span className="code-markdown-mermaid-badge">{t('codeMarkdown.mermaid')}</span>
-        {isRendering && <span className="code-markdown-mermaid-status">{t('codeMarkdown.rendering')}</span>}
-        {!isRendering && errorMessage && <span className="code-markdown-mermaid-status is-error">{t('codeMarkdown.renderFailed')}</span>}
-      </div>
-      {svgMarkup ? (
-        <div
-          className="code-markdown-mermaid-diagram"
-          dangerouslySetInnerHTML={{ __html: svgMarkup }}
-        />
-      ) : (
-        <pre className="code-markdown-plain-block">
-          <code className="language-mermaid">{codeText}</code>
-        </pre>
-      )}
-      {errorMessage && (
-        <div className="code-markdown-mermaid-error" title={errorMessage}>
-          {errorMessage}
-        </div>
-      )}
-    </div>
-  )
 }
 
 function StandardMarkdownCodeBlock({
@@ -751,6 +831,7 @@ function StandardMarkdownCodeBlock({
   language,
   themeMode,
   enableSyntaxHighlight,
+  onCodeBlockExpand,
   sourceLineProps,
 }: MarkdownCodeBlockProps) {
   const { t } = useI18n()
@@ -772,24 +853,48 @@ function StandardMarkdownCodeBlock({
     const ok = await copyTextToClipboard(codeText)
     setCopyStatus(ok ? 'success' : 'error')
   }, [codeText])
+  const handleExpand = useCallback(() => {
+    onCodeBlockExpand?.({ codeText, language })
+  }, [codeText, language, onCodeBlockExpand])
+  const canExpand = typeof onCodeBlockExpand === 'function'
 
   const copyLabel = copyStatus === 'success' ? t('codeMarkdown.copied') : copyStatus === 'error' ? t('codeMarkdown.copyFailed') : t('codeMarkdown.copy')
+  const expandLabel = t('codeMarkdown.expand')
+  const codeLanguageLabel = formatCodeLanguageLabel(language, t)
 
   return (
     <div ref={containerRef} className="code-markdown-syntax-wrap" {...sourceLineProps}>
-      <button
-        type="button"
-        className={`code-markdown-copy-btn ${
-          copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''
-        }`}
-        onClick={() => {
-          void handleCopy()
-        }}
-        title={copyLabel}
-      >
-        {copyStatus === 'success' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        <span>{copyLabel}</span>
-      </button>
+      <div className="code-markdown-code-toolbar">
+        <span className="code-markdown-code-language" title={codeLanguageLabel}>
+          {codeLanguageLabel}
+        </span>
+        <div className="code-markdown-code-actions">
+          {canExpand && (
+            <button
+              type="button"
+              className="code-markdown-code-action-btn"
+              onClick={handleExpand}
+              title={expandLabel}
+              aria-label={expandLabel}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            className={`code-markdown-copy-btn ${
+              copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''
+            }`}
+            onClick={() => {
+              void handleCopy()
+            }}
+            title={copyLabel}
+          >
+            {copyStatus === 'success' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            <span>{copyLabel}</span>
+          </button>
+        </div>
+      </div>
 
       {shouldRenderSyntax ? (
         <SyntaxHighlighter
@@ -797,7 +902,7 @@ function StandardMarkdownCodeBlock({
           style={themeMode === 'dark' ? oneDark : oneLight}
           PreTag="div"
           className="code-markdown-syntax-block"
-          customStyle={{ margin: 0, borderRadius: 10, paddingTop: 38 }}
+          customStyle={{ margin: 0, borderRadius: 10, paddingTop: 44 }}
           codeTagProps={{
             style: {
               fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
@@ -820,8 +925,10 @@ function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
     return (
       <MermaidBlock
         codeText={props.codeText}
+        onStructuredBlockClick={props.onStructuredBlockClick}
         themeMode={props.themeMode}
         sourceLineProps={props.sourceLineProps}
+        shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation}
       />
     )
   }
@@ -834,6 +941,7 @@ type CreateMarkdownComponentsOptions = {
   activeInternalHref?: string | null
   enableMarkdownSyntaxHighlight: boolean
   lineOffset?: number
+  onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onInternalLinkClick?: (href: string) => void
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   projectPath: string
@@ -849,6 +957,7 @@ export function createMarkdownComponents({
   activeInternalHref = null,
   enableMarkdownSyntaxHighlight,
   lineOffset = 0,
+  onCodeBlockExpand,
   onInternalLinkClick,
   onStructuredBlockClick,
   projectPath,
@@ -887,6 +996,8 @@ export function createMarkdownComponents({
           language={codeBlock.language}
           themeMode={themeMode}
           enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
+          onCodeBlockExpand={onCodeBlockExpand}
+          onStructuredBlockClick={onStructuredBlockClick}
           sourceLineProps={sourceLineProps}
         />
       )
