@@ -43,6 +43,12 @@ type DetailAiCommitHeaderProps = {
   onUndoAiCommit: () => void
   onOpenProjectLinksManager?: () => void
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  preflightItems?: Array<{
+    key: string
+    label: string
+    title: string
+    tone: 'success' | 'warning' | 'danger' | 'neutral'
+  }>
   projectHeaderCollapsed: boolean
   projectLinkItems: ProjectLinkItem[]
   projectName?: string
@@ -72,6 +78,7 @@ export function DetailAiCommitHeader({
   onUndoAiCommit,
   onOpenProjectLinksManager,
   onSwitchPane,
+  preflightItems = [],
   projectHeaderCollapsed,
   projectLinkItems,
   projectName,
@@ -98,6 +105,12 @@ export function DetailAiCommitHeader({
       ? t('detail.aiCommitButtonHintEnabled')
       : t('detail.aiCommitButtonHintDisabled')
   const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning
+  const preflightClassByTone: Record<NonNullable<DetailAiCommitHeaderProps['preflightItems']>[number]['tone'], string> = {
+    success: 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]',
+    warning: 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]',
+    danger: 'border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)]',
+    neutral: 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] text-[color:var(--color-muted-foreground)]',
+  }
 
   return (
     <div className="shrink-0 space-y-3">
@@ -194,6 +207,15 @@ export function DetailAiCommitHeader({
           <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] ${statusClass}`}>
             {statusText}
           </span>
+          {preflightItems.map((item) => (
+            <span
+              key={item.key}
+              className={`inline-flex max-w-[220px] items-center truncate rounded-full border px-2.5 py-0.5 text-[11px] ${preflightClassByTone[item.tone]}`}
+              title={item.title}
+            >
+              {item.label}
+            </span>
+          ))}
           {aiCommitUndoGraceActive && (
             <span className="inline-flex items-center rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-warning)]">
               {t('detail.aiCommitUndoAuthActive')} {aiCommitUndoGraceRemainingSeconds}s

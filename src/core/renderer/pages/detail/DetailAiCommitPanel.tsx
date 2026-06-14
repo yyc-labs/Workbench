@@ -86,6 +86,12 @@ type DetailAiCommitPanelProps = {
 }
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
+type PreflightItem = {
+  key: string
+  label: string
+  title: string
+  tone: 'success' | 'warning' | 'danger' | 'neutral'
+}
 
 const BRANCH_SEARCH_DEBOUNCE_MS = 140
 
@@ -210,6 +216,85 @@ function DetailAiCommitPanel({
   const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
   const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
   const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || gitSnapshotLoading
+  const preflightItems = useMemo<PreflightItem[]>(() => {
+    if (gitSnapshotLoading) {
+      return [{
+        key: 'loading',
+        label: t('detail.preflightLoading'),
+        title: t('detail.preflightLoading'),
+        tone: 'neutral',
+      }]
+    }
+    if (!gitSnapshot?.isGitRepository) {
+      return [{
+        key: 'not-git',
+        label: t('detail.preflightNotGit'),
+        title: t('detail.preflightNotGitTitle'),
+        tone: 'danger',
+      }]
+    }
+
+    const items: PreflightItem[] = []
+    if (!hasWorkingTreeChanges) {
+      items.push({
+        key: 'clean',
+        label: t('detail.preflightClean'),
+        title: t('detail.preflightCleanTitle'),
+        tone: 'neutral',
+      })
+    }
+    if (hasConflicts) {
+      items.push({
+        key: 'conflicts',
+        label: t('detail.preflightConflicts', { count: conflictedCount }),
+        title: t('detail.preflightConflictsTitle'),
+        tone: 'danger',
+      })
+    }
+    if (branchBehind > 0) {
+      items.push({
+        key: 'behind',
+        label: t('detail.preflightBehind', { count: branchBehind }),
+        title: t('detail.preflightBehindTitle'),
+        tone: 'warning',
+      })
+    }
+    if (branch?.detached) {
+      items.push({
+        key: 'detached',
+        label: t('detail.preflightDetached'),
+        title: t('detail.preflightDetachedTitle'),
+        tone: 'warning',
+      })
+    }
+    if (!hasUpstream && !branch?.detached) {
+      items.push({
+        key: 'no-upstream',
+        label: t('detail.preflightNoUpstream'),
+        title: t('detail.preflightNoUpstreamTitle'),
+        tone: 'warning',
+      })
+    }
+    if (items.length > 0) return items
+
+    return [{
+      key: 'ready',
+      label: t('detail.preflightReady', { count: changedFiles.length }),
+      title: t('detail.preflightReadyTitle'),
+      tone: 'success',
+    }]
+  }, [
+    branch?.detached,
+    branchBehind,
+    changedFiles.length,
+    conflictedCount,
+    gitSnapshot?.isGitRepository,
+    gitSnapshotLoading,
+    hasConflicts,
+    hasUpstream,
+    hasWorkingTreeChanges,
+    t,
+  ])
 
   const localMergeCandidates = useMemo<IndexedBranchCandidate[]>(
     () =>
@@ -961,6 +1046,7 @@ function DetailAiCommitPanel({
             projectHeaderCollapsed={projectHeaderCollapsed}
             projectLinkItems={projectLinkItems}
             projectName={projectName}
+            preflightItems={preflightItems}
             statusClass={statusClass}
             statusText={statusText}
           />

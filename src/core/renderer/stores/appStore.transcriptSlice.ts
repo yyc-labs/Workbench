@@ -21,6 +21,8 @@ export type TranscriptActionsSlice = Pick<
   | 'removeTranscriptSession'
 >
 
+const MAX_CACHED_TRANSCRIPT_SESSIONS = 12
+
 function mergeSummaries(
   current: TranscriptSessionSummary[],
   incoming: TranscriptSessionSummary
@@ -59,11 +61,34 @@ function buildUpsertTranscriptSessionState(
   | 'transcriptListStatusByProjectId'
 > {
   const activate = options?.activate ?? true
+  const nextTranscriptSessions = {
+    ...state.transcriptSessions,
+    [session.id]: session,
+  }
+  const transcriptSessionIds = Object.keys(nextTranscriptSessions)
+  if (transcriptSessionIds.length > MAX_CACHED_TRANSCRIPT_SESSIONS) {
+    const protectedIds = new Set<string>([
+      session.id,
+      ...Object.values(state.activeTranscriptIdByProjectId).filter((value): value is string => Boolean(value)),
+    ])
+
+    const removableIds = transcriptSessionIds
+      .filter((id) => !protectedIds.has(id))
+      .sort((left, right) => {
+        const leftUpdatedAt = nextTranscriptSessions[left]?.updatedAt ?? 0
+        const rightUpdatedAt = nextTranscriptSessions[right]?.updatedAt ?? 0
+        return leftUpdatedAt - rightUpdatedAt
+      })
+
+    while (Object.keys(nextTranscriptSessions).length > MAX_CACHED_TRANSCRIPT_SESSIONS && removableIds.length > 0) {
+      const removedId = removableIds.shift()
+      if (!removedId) break
+      delete nextTranscriptSessions[removedId]
+    }
+  }
+
   return {
-    transcriptSessions: {
-      ...state.transcriptSessions,
-      [session.id]: session,
-    },
+    transcriptSessions: nextTranscriptSessions,
     transcriptSummariesByProjectId: {
       ...state.transcriptSummariesByProjectId,
       [session.projectId]: mergeSummaries(
@@ -158,12 +183,7 @@ export const createTranscriptActionsSlice: StateCreator<AppState, [], [], Transc
     try {
       const session = await window.electronAPI.getTranscript(projectId, transcriptId)
       if (!session) return null
-      set((state) => ({
-        transcriptSessions: {
-          ...state.transcriptSessions,
-          [session.id]: session,
-        },
-      }))
+      set((state) => buildUpsertTranscriptSessionState(state, session, { activate: false }))
       return session
     } catch (error) {
       console.error('[appStore.loadTranscriptSession] failed:', error)
