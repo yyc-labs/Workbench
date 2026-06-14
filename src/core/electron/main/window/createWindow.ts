@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { IPC } from '../ipc'
+import { resolveAppResourcePath } from '../app-resource-path'
 import type { AppConfig } from '../../../shared/types'
 
 export type ThemeMode = AppConfig['theme']
@@ -58,8 +59,8 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
 
   const windowIcon =
     process.platform === 'win32'
-      ? join(__dirname, '../../icon/Y.ico')
-      : join(__dirname, '../../icon/Y.png')
+      ? resolveAppResourcePath('icon', 'Y.ico')
+      : resolveAppResourcePath('icon', 'Y.png')
 
   const mainWindow = new BrowserWindow({
     width: 1200,

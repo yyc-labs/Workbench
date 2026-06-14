@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
 import { join } from 'path'
 import { StringDecoder } from 'string_decoder'
+import { resolveAppResourcePath } from '../app-resource-path'
 import { loadConfig } from '../config'
 import {
   createGitCommandRunner,
@@ -285,7 +286,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
           : 8
       )
     )
-    const scriptPs1Path = join(__dirname, '../../script/auto-git-commit/auto_commit.ps1')
+    const scriptPs1Path = resolveAppResourcePath('script', 'auto-git-commit', 'auto_commit.ps1')
     const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
 
     sendAiCommitStatus(projectId, 'running')

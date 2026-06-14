@@ -59,6 +59,7 @@ export const IPC = {
   TRANSCRIPT_LIST: 'transcript:list',
   TRANSCRIPT_LIST_ALL: 'transcript:list-all',
   TRANSCRIPT_GET: 'transcript:get',
+  TRANSCRIPT_UPDATE: 'transcript:update',
   TRANSCRIPT_DELETE: 'transcript:delete',
   TRANSCRIPT_IMPORTED: 'transcript:imported',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',

@@ -83,6 +83,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   customName?: string
   customType?: string
   customCommand?: string
+  runWorkingDirectory?: string
   runStartupMode?: RunStartupMode
   pinned?: boolean
   lastOpened?: number
@@ -100,6 +101,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     customName: p.customName,
     customType: p.customType,
     customCommand: p.customCommand,
+    runWorkingDirectory: p.runWorkingDirectory,
     runStartupMode: p.runStartupMode,
     pinned: p.pinned,
     lastOpened: p.lastOpened,
@@ -120,6 +122,7 @@ export function toRemovedProjectSnapshot(project: ProjectInfo): RemovedProjectSn
     customName: project.customName,
     customType: project.customType,
     customCommand: project.customCommand,
+    runWorkingDirectory: project.runWorkingDirectory,
     runStartupMode: project.runStartupMode,
     pinned: project.pinned,
     lastOpened: project.lastOpened,
@@ -141,6 +144,7 @@ export function applySavedProjectSnapshot(
     customName?: string
     customType?: string
     customCommand?: string
+    runWorkingDirectory?: string
     runStartupMode?: RunStartupMode
     pinned?: boolean
     lastOpened?: number
@@ -159,6 +163,7 @@ export function applySavedProjectSnapshot(
   )
 
   if (hasSavedField('customCommand')) project.customCommand = saved.customCommand
+  if (hasSavedField('runWorkingDirectory')) project.runWorkingDirectory = saved.runWorkingDirectory
   if (hasSavedField('runStartupMode')) project.runStartupMode = saved.runStartupMode
   if (hasSavedField('customName')) project.customName = saved.customName?.trim()
   if (hasSavedField('customType')) project.customType = saved.customType?.trim()

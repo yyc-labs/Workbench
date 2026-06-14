@@ -10,3 +10,9 @@ build/Release/
 .env
 .DS_Store
 *.log
+release/
+.agents/
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md

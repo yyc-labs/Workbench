@@ -86,6 +86,7 @@ export function DetailPage() {
       customType: found.customType,
       command: found.command,
       customCommand: found.customCommand,
+      runWorkingDirectory: found.runWorkingDirectory,
       runStartupMode: found.runStartupMode,
       packageManager: found.packageManager,
       pinned: found.pinned,
@@ -119,7 +120,7 @@ export function DetailPage() {
 
   const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
-  const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
+  const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
@@ -133,6 +134,7 @@ export function DetailPage() {
   const isRunning = processStatus === 'running'
   const isStopping = processStatus === 'stopping'
   const isActive = isRunning || isStopping
+  const isDevReady = isRunning && processUrls.length > 0
   const currentCli: CliTool = project?.cli || 'claude'
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
@@ -178,10 +180,10 @@ export function DetailPage() {
   }, [setLinkSettingsOpen])
   const collapsedProjectLinkItems = useMemo(
     () => [
-      ...(isRunning ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
       ...docMenuItems,
     ],
-    [docMenuItems, isRunning, processUrls]
+    [docMenuItems, isDevReady, processUrls]
   )
 
   const handleSwitchCli = useCallback(() => {
@@ -320,7 +322,9 @@ export function DetailPage() {
             {isActive ? (
               <div
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
-                  ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                  ? isDevReady
+                    ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                    : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                   : isStopping
                     ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                     : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
@@ -329,9 +333,9 @@ export function DetailPage() {
                 {isStopping ? (
                   <RefreshCw className="h-3 w-3 animate-spin" />
                 ) : (
-                  <span className={`h-1.5 w-1.5 rounded-full ${isRunning ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
+                  <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
                 )}
-                {isRunning ? t('common.running') : isStopping ? t('common.stopping') : (usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady'))}
+                {isRunning ? (isDevReady ? t('common.running') : t('common.starting')) : isStopping ? t('common.stopping') : (usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady'))}
               </div>
             ) : (
               <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
@@ -347,7 +351,7 @@ export function DetailPage() {
               }}
             />
 
-            {isRunning && processUrls.length > 0 && (
+            {isDevReady && (
               <UrlPopover urls={processUrls}>
                 <button
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
@@ -397,14 +401,18 @@ export function DetailPage() {
               className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
                 ? isStopping
                   ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                  : 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                  : isDevReady
+                    ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                    : 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
                 : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
                 }`}
               style={
                 isActive
                   ? isStopping
                     ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
-                    : { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
+                    : isDevReady
+                      ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
+                      : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }
                   : undefined
               }
               onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
@@ -412,15 +420,15 @@ export function DetailPage() {
                 e.preventDefault()
                 e.stopPropagation()
                 setMenuPos(null)
-                setRunConfigPos({ x: e.clientX, y: e.clientY })
+                setRunConfigOpen(true)
               }}
               disabled={isStopping}
               title={t('common.leftClickRunRightClickConfig')}
             >
               {isActive ? (
                 <>
-                  {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
-                  {isStopping ? t('common.stopping') : t('common.stop')}
+                  {isStopping ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isDevReady ? <Square className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+                  {isStopping ? t('common.stopping') : isDevReady ? t('common.stop') : t('common.starting')}
                 </>
               ) : (
                 <>
@@ -502,14 +510,11 @@ export function DetailPage() {
         />
       )}
 
-      {runConfigPos && (
-        <RunCommandConfigPopover
-          project={project}
-          x={runConfigPos.x}
-          y={runConfigPos.y}
-          onClose={() => setRunConfigPos(null)}
-        />
-      )}
+      <RunCommandConfigPopover
+        project={project}
+        open={runConfigOpen}
+        onClose={() => setRunConfigOpen(false)}
+      />
 
       <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass} ${activePane === 'aicommit' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
         <div className={`mx-auto h-full min-h-0 w-full ${

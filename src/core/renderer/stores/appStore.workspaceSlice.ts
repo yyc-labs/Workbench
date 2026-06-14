@@ -11,6 +11,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectCustomName'
   | 'setProjectCustomType'
   | 'setProjectCustomCommand'
+  | 'setProjectRunWorkingDirectory'
   | 'setProjectRunStartupMode'
   | 'setProjectDocLinks'
   | 'setProjectLastCodeFile'
@@ -133,6 +134,18 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
           customCommand: shouldClear ? undefined : normalized,
         }
       }),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
+  },
+
+  setProjectRunWorkingDirectory: async (projectId, runWorkingDirectory) => {
+    const normalized = runWorkingDirectory?.trim()
+    set((state) => ({
+      projects: state.projects.map((project) =>
+        project.id === projectId
+          ? { ...project, runWorkingDirectory: normalized || undefined }
+          : project
+      ),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },

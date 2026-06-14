@@ -6,6 +6,10 @@ import {
   normalizeGitOperationOutput,
 } from './git-command'
 import { createGitFileOperations } from './git-file-operations'
+import {
+  isValidGitBranchName,
+  normalizeGitOperationRequest,
+} from './git-operation-request'
 import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
@@ -29,31 +33,14 @@ export function createGitService(deps: GitServiceDependencies) {
     readGitRepositorySnapshot,
   })
 
-  function normalizeRemoteName(input: string | undefined): string {
-    const normalized = (input || '').trim()
-    return normalized || 'origin'
-  }
-
-  function isValidGitBranchName(name: string): boolean {
-    if (!name || name.length > 255) return false
-    if (name.startsWith('/') || name.endsWith('/')) return false
-    if (name.includes('//')) return false
-    if (name.includes('\\')) return false
-    if (name.includes('..')) return false
-    if (name.includes('@{')) return false
-    if (name.endsWith('.')) return false
-    if (name.endsWith('.lock')) return false
-    if (/[\x00-\x20\x7f~^:?*\[]/.test(name)) return false
-    if (name.split('/').some((part) => part.length === 0 || part.startsWith('.') || part.endsWith('.'))) return false
-    return true
-  }
-
   async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
     const checkedAt = Date.now()
-    const operation = request.operation
-    const repoRoot = request.repoRoot.trim()
-    const targetBranch = request.targetBranch?.trim()
-    const remoteName = normalizeRemoteName(request.remoteName)
+    const {
+      operation,
+      remoteName,
+      repoRoot,
+      targetBranch,
+    } = normalizeGitOperationRequest(request)
 
     if (!repoRoot) {
       return {

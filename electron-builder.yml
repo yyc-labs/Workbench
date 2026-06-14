@@ -1,0 +1,38 @@
+appId: com.yaoyuchen.yyc
+productName: IDE Electron
+artifactName: ${productName}-${version}-${arch}-setup.${ext}
+
+directories:
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: icon
+    to: icon
+  - from: script
+    to: script
+
+asarUnpack:
+  - node_modules/node-pty/**
+
+npmRebuild: false
+electronDownload:
+  isVerifyChecksum: true
+
+win:
+  icon: icon/Y.ico
+  executableName: IDE Electron
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true

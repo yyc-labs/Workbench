@@ -55,6 +55,7 @@ import type {
   TerminalStopAllResult,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
+  TranscriptUpdatePayload,
 } from '../../../shared/types'
 
 type RuntimeStateChangedPayload = {
@@ -399,12 +400,13 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
     return deps.getMainWindow()?.isMaximized() ?? false
   })
 
-  ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async () => {
+  ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async (_event, defaultPath?: string) => {
     const currentWindow = deps.getMainWindow()
     if (!currentWindow) return null
 
     const result = await dialog.showOpenDialog(currentWindow, {
       properties: ['openDirectory'],
+      defaultPath: typeof defaultPath === 'string' && defaultPath.trim() ? defaultPath.trim() : undefined,
     })
     if (!result.canceled && result.filePaths.length > 0) {
       return result.filePaths[0]
@@ -488,6 +490,10 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.TRANSCRIPT_GET, async (_event, projectId: string, transcriptId: string) => {
     return deps.transcriptService.getTranscript(projectId, transcriptId)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_UPDATE, async (_event, payload: TranscriptUpdatePayload) => {
+    return deps.transcriptService.updateTranscript(payload)
   })
 
   ipcMain.handle(IPC.TRANSCRIPT_DELETE, async (_event, projectId: string, transcriptId: string) => {

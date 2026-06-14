@@ -82,6 +82,18 @@ function buildRuntimeLaunchEnv(input: Parameters<AiExecutionProvider['resolveRun
   }
 }
 
+function buildRuntimeScriptArgs(
+  input: Parameters<AiExecutionProvider['resolveRuntimeLaunch']>[1],
+  resolvedProjectPath: string,
+  passProjectPath: boolean,
+): string[] {
+  return [
+    ...(passProjectPath ? [resolvedProjectPath] : []),
+    '--cli',
+    normalizeRuntimeCli(input.cli),
+  ]
+}
+
 function buildBashWrappedExec(entrypoint: string, args: string[], env?: Record<string, string>): string {
   const envPrefix = env
     ? Object.entries(env)
@@ -243,7 +255,11 @@ export const customScriptProvider: AiExecutionProvider = {
       context.capability.hostPlatform,
       context.capability.hasWsl,
     )
-    const startArgs = context.config.runtimePassProjectPath ? [resolvedProjectPath] : []
+    const startArgs = buildRuntimeScriptArgs(
+      input,
+      resolvedProjectPath,
+      Boolean(context.config.runtimePassProjectPath),
+    )
     const launchEnv = buildRuntimeLaunchEnv(input, resolvedProjectPath)
     const sessionHint = launchEnv.AI_RUNTIME_SESSION_NAME
 

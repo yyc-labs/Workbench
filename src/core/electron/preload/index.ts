@@ -8,6 +8,7 @@ import type {
   TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
+  TranscriptUpdatePayload,
 } from '../../shared/types'
 
 type ThemeMode = 'system' | 'light' | 'dark'
@@ -107,7 +108,7 @@ const api = {
   deleteDocLinkSecret: (projectId: string, linkId: string) =>
     ipcRenderer.invoke(IPC.DOC_LINK_SECRET_DELETE, projectId, linkId),
 
-  selectDirectory: () => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY),
+  selectDirectory: (defaultPath?: string) => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY, defaultPath),
 
   getPathForFile: (file: File) => {
     try {
@@ -315,6 +316,9 @@ const api = {
 
   getTranscript: (projectId: string, transcriptId: string) =>
     ipcRenderer.invoke(IPC.TRANSCRIPT_GET, projectId, transcriptId) as Promise<TranscriptSession | null>,
+
+  updateTranscript: (payload: TranscriptUpdatePayload) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_UPDATE, payload) as Promise<TranscriptSession>,
 
   deleteTranscript: (projectId: string, transcriptId: string) =>
     ipcRenderer.invoke(IPC.TRANSCRIPT_DELETE, projectId, transcriptId) as Promise<boolean>,

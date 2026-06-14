@@ -1,15 +1,19 @@
 {
   "name": "ide-electron",
   "version": "1.0.0",
-  "description": "",
-  "license": "ISC",
-  "author": "",
+  "private": true,
+  "description": "Local Electron IDE workspace for managing projects, AI CLI runtimes, and transcript history.",
+  "license": "MIT",
+  "author": "yyc <yyc200501317710@gmail.com>",
   "type": "commonjs",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "dev:watch": "electron-vite dev --watch",
     "build": "electron-vite build",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win nsis",
     "preview": "electron-vite preview",
     "ai:commit": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi",
     "ai:commit:dry": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi -DryRun",
@@ -18,7 +22,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "postinstall": "electron-rebuild -f -w node-pty",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/**/*.test.mjs"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0",
@@ -29,6 +33,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^4.7.0",
     "electron": "^42.0.1",
+    "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3"

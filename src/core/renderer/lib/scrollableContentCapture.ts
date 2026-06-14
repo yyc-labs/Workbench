@@ -2,6 +2,7 @@ const DEFAULT_CAPTURE_BODY_CLASS = 'structured-capture-active'
 const DEFAULT_SETTLE_DELAY_MS = 40
 const DEFAULT_SETTLE_FRAME_COUNT = 2
 const CAPTURE_CONTENT_PADDING_CSS = 5
+const CAPTURE_STITCH_OVERLAP_CSS = 1
 const MAX_CANVAS_DIMENSION = 32_767
 const MAX_CANVAS_AREA = 268_000_000
 
@@ -240,9 +241,10 @@ export async function captureScrollableContentToClipboard(
     let context: CanvasRenderingContext2D | null = null
 
     while (logicalTopCss < captureEndCss) {
+      const stitchOverlapTopCss = logicalTopCss > captureStartCss ? CAPTURE_STITCH_OVERLAP_CSS : 0
       const desiredScrollTopCss = Math.max(
         0,
-        Math.min(logicalTopCss, totalHeightCss - viewportHeightCss)
+        Math.min(logicalTopCss - stitchOverlapTopCss, totalHeightCss - viewportHeightCss)
       )
       const visibleStartTopCss = Math.max(0, logicalTopCss - desiredScrollTopCss)
       const visibleHeightCss = Math.min(
@@ -253,9 +255,10 @@ export async function captureScrollableContentToClipboard(
 
       let logicalLeftCss = captureStartLeftCss
       while (logicalLeftCss < captureEndLeftCss) {
+        const stitchOverlapLeftCss = logicalLeftCss > captureStartLeftCss ? CAPTURE_STITCH_OVERLAP_CSS : 0
         const desiredScrollLeftCss = Math.max(
           0,
-          Math.min(logicalLeftCss, totalWidthCss - viewportWidthCss)
+          Math.min(logicalLeftCss - stitchOverlapLeftCss, totalWidthCss - viewportWidthCss)
         )
         const visibleStartLeftCss = Math.max(0, logicalLeftCss - desiredScrollLeftCss)
         const visibleWidthCss = Math.min(

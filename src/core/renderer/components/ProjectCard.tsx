@@ -71,11 +71,12 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const removeProject = useAppStore((s) => s.removeProject)
   const isDevRunning = devStatus === 'running'
   const isDevStopping = devStatus === 'stopping'
+  const isDevReady = isDevRunning && devUrls.length > 0
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
   const linkMenuItems = useMemo(
     () => [
-      ...(isDevRunning ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...(isDevReady ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
       ...docLinks.map((link) => {
         const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
         return {
@@ -86,7 +87,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, isDevRunning]
+    [devUrls, docLinkTagOptions, docLinks, isDevReady]
   )
   const firstLinkMenuItem = linkMenuItems[0]
   const hoverDocLabel = defaultDocLink
@@ -97,7 +98,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [menuAllowRemove, setMenuAllowRemove] = useState(false)
-  const [runConfigPos, setRunConfigPos] = useState<{ x: number; y: number } | null>(null)
+  const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
@@ -212,7 +213,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             <span className={`w-1.5 h-1.5 rounded-full ${runtimeDotClass}`} />
             {runtimeLabel}
           </span>
-          {isDevRunning && (
+          {isDevReady && (
             <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
               {t('common.dev')}
@@ -327,14 +328,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         />
       )}
 
-      {runConfigPos && (
-        <RunCommandConfigPopover
-          project={project}
-          x={runConfigPos.x}
-          y={runConfigPos.y}
-          onClose={() => setRunConfigPos(null)}
-        />
-      )}
+      <RunCommandConfigPopover
+        project={project}
+        open={runConfigOpen}
+        onClose={() => setRunConfigOpen(false)}
+      />
 
       <div className="relative z-10 flex items-center gap-1.5 shrink-0">
         <button
@@ -370,14 +368,20 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             className={`h-8 px-3 text-xs rounded-full border flex items-center gap-1 font-medium transition-colors shrink-0 ${
               isDevStopping
                 ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                : 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                : isDevReady
+                  ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                  : 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
             }`}
-            style={{ borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }}
+            style={{
+              borderColor: isDevStopping || !isDevReady
+                ? 'color-mix(in srgb, var(--color-warning) 34%, transparent)'
+                : 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
+            }}
             onClick={(e) => { e.stopPropagation(); if (!isDevStopping) stopProject(project.id) }}
             disabled={isDevStopping}
           >
-            {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Square className="h-3 w-3" />}
-            <span className="hidden sm:inline">{isDevStopping ? t('common.stopping') : t('common.stop')}</span>
+            {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : isDevReady ? <Square className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
+            <span className="hidden sm:inline">{isDevStopping ? t('common.stopping') : isDevReady ? t('common.stop') : t('common.starting')}</span>
           </button>
         ) : (
           <button
@@ -386,7 +390,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              setRunConfigPos({ x: e.clientX, y: e.clientY })
+              setRunConfigOpen(true)
             }}
             title={t('common.leftClickRunRightClickConfig')}
           >
