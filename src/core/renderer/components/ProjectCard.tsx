@@ -1,7 +1,13 @@
 import { memo, useState, useCallback, useEffect, useMemo } from 'react'
-import type { ProjectInfo, CliTool, ProjectFolder, ProjectTag, AiCommitTaskSnapshot } from '../../shared/types'
+import type {
+  AiCommitTaskSnapshot,
+  CliTool,
+  ProjectFolder,
+  ProjectInfo,
+  ProjectTag,
+} from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
 import { UrlPopover } from './UrlPopover'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
@@ -87,9 +93,10 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, isDevReady]
+    [devUrls, docLinkTagOptions, docLinks, isDevReady, t]
   )
-  const firstLinkMenuItem = linkMenuItems[0]
+  const firstDocLinkMenuItem = linkMenuItems.find((item) => item.label.startsWith(`${t('project.docCategoryPrefix')} · `))
+  const firstDevUrl = devUrls[0]
   const hoverDocLabel = defaultDocLink
     ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}`
     : docLinks.length > 0
@@ -103,6 +110,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+  const [pendingOpenDevUrl, setPendingOpenDevUrl] = useState(false)
 
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
@@ -153,6 +161,36 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       setAiCommitStatus('error')
     }
   }, [aiCommitStatus, project.id, project.path])
+
+  useEffect(() => {
+    if (!pendingOpenDevUrl) return
+    if (!firstDevUrl) return
+
+    void window.electronAPI.openExternal(firstDevUrl)
+    setPendingOpenDevUrl(false)
+  }, [firstDevUrl, pendingOpenDevUrl])
+
+  useEffect(() => {
+    if (!pendingOpenDevUrl) return
+    const timer = window.setTimeout(() => setPendingOpenDevUrl(false), 30_000)
+    return () => window.clearTimeout(timer)
+  }, [pendingOpenDevUrl])
+
+  const handleOpenFirstLink = useCallback(async () => {
+    if (firstDocLinkMenuItem?.url) {
+      await window.electronAPI.openExternal(firstDocLinkMenuItem.url)
+    }
+  }, [firstDocLinkMenuItem?.url])
+
+  const handleStartAndOpenDevUrl = useCallback(async () => {
+    if (firstDevUrl) {
+      await window.electronAPI.openExternal(firstDevUrl)
+      return
+    }
+    if (isDevRunning || isDevStopping || pendingOpenDevUrl) return
+    setPendingOpenDevUrl(true)
+    await startProject(project.id)
+  }, [firstDevUrl, isDevRunning, isDevStopping, pendingOpenDevUrl, project.id, startProject])
 
   return (
     <div
@@ -347,11 +385,14 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           )}
           {currentCli}
         </button>
-        {firstLinkMenuItem && (
+        {firstDocLinkMenuItem && (
           <UrlPopover items={linkMenuItems}>
             <button
               className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"
-              onClick={(e) => { e.stopPropagation(); window.electronAPI.openExternal(firstLinkMenuItem.url) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleOpenFirstLink()
+              }}
               onContextMenu={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
@@ -362,6 +403,29 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
               <BookOpen className="h-3.5 w-3.5 shrink-0" />
             </button>
           </UrlPopover>
+        )}
+        {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
+          <button
+            className={`quiet-control h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-60 ${
+              isDevReady || pendingOpenDevUrl ? 'inline-flex' : 'hidden group-hover:inline-flex'
+            }`}
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleStartAndOpenDevUrl()
+            }}
+            title={isDevReady
+              ? t('project.openDevUrl')
+              : pendingOpenDevUrl
+                ? t('project.waitingForDevUrl')
+                : t('project.startAndOpenDevUrl')}
+            disabled={pendingOpenDevUrl}
+          >
+            {pendingOpenDevUrl ? (
+              <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+            ) : (
+              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+          </button>
         )}
         {isDevRunning || isDevStopping ? (
           <button
