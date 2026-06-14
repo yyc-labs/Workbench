@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { shallow } from 'zustand/shallow'
-import type { ProjectFileNodeKind, ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
@@ -20,7 +20,7 @@ import {
   toggleFavoriteCodeFilePath,
 } from './code.helpers'
 import { copyTextToClipboard } from './code.clipboard'
-import { revealMarkdownPreviewSourceLine } from './code.markdown'
+import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
@@ -34,6 +34,23 @@ import {
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
+const MAX_PRELOADED_TRANSCRIPT_SESSIONS = 4
+const SMART_EMPTY_FILE_CANDIDATES = [
+  'README.md',
+  'readme.md',
+  'AGENTS.md',
+  'AGENT.md',
+  'package.json',
+  'src/main.tsx',
+  'src/main.ts',
+  'src/index.tsx',
+  'src/index.ts',
+  'src/App.tsx',
+  'src/App.ts',
+  'app/page.tsx',
+  'pages/index.tsx',
+  'main.py',
+]
 type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
@@ -50,6 +67,12 @@ type CodeWorkspacePanelProps = {
 type CodeViewMode = 'files' | 'search'
 
 type EditorSearchMode = 'find' | 'replace'
+
+type CodeTranscriptReferenceItem = {
+  transcriptId: string
+  transcriptTitle: string
+  reference: TranscriptReference
+}
 
 export function CodeWorkspacePanel({
   projectId,
@@ -86,6 +109,12 @@ export function CodeWorkspacePanel({
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
+  const transcriptSummaries = useAppStore((s) => s.transcriptSummariesByProjectId[projectId] ?? [], shallow)
+  const transcriptSessions = useAppStore((s) => s.transcriptSessions)
+  const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
+  const loadTranscriptSession = useAppStore((s) => s.loadTranscriptSession)
+  const openTranscript = useAppStore((s) => s.openTranscript)
+  const openTranscriptReference = useAppStore((s) => s.openTranscriptReference)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
@@ -276,6 +305,36 @@ export function CodeWorkspacePanel({
     persistedProjectCodeSession,
     tree.knownFilePaths,
   ])
+  const smartEmptyFiles = useMemo(() => {
+    const available = new Set(allProjectFilePathSet)
+    const candidates = SMART_EMPTY_FILE_CANDIDATES.filter((path) => available.has(path))
+    const fallback = Array.from(available)
+      .filter((path) => /\.(md|mdx|json|tsx?|jsx?|py|yml|yaml)$/i.test(path))
+      .sort((a, b) => a.length - b.length || a.localeCompare(b))
+    return Array.from(new Set([...candidates, ...fallback])).slice(0, 4)
+  }, [allProjectFilePathSet])
+  const transcriptReferencesByPath = useMemo(() => {
+    const map = new Map<string, CodeTranscriptReferenceItem[]>()
+    for (const summary of transcriptSummaries) {
+      const session = transcriptSessions[summary.id]
+      if (!session) continue
+      for (const reference of session.references) {
+        const relativePath = reference.relativePath.trim()
+        if (!relativePath) continue
+        const items = map.get(relativePath) ?? []
+        items.push({
+          transcriptId: session.id,
+          transcriptTitle: session.title,
+          reference,
+        })
+        map.set(relativePath, items)
+      }
+    }
+    return map
+  }, [transcriptSessions, transcriptSummaries])
+  const activeTranscriptReferences = useMemo(() => (
+    activeRelativePath ? transcriptReferencesByPath.get(activeRelativePath) ?? [] : []
+  ), [activeRelativePath, transcriptReferencesByPath])
   const {
     captureCurrentModeScroll,
     handleEditorScrollStateChange,
@@ -341,6 +400,23 @@ export function CodeWorkspacePanel({
     media.addEventListener('change', handleChange)
     return () => media.removeEventListener('change', handleChange)
   }, [])
+
+  useEffect(() => {
+    if (activePane !== 'code') return
+    void loadProjectTranscripts(projectId)
+  }, [activePane, loadProjectTranscripts, projectId])
+
+  useEffect(() => {
+    if (activePane !== 'code') return
+    let loadedCount = 0
+    for (const summary of transcriptSummaries) {
+      if (loadedCount >= MAX_PRELOADED_TRANSCRIPT_SESSIONS) break
+      if (summary.referenceCount <= 0) continue
+      if (transcriptSessions[summary.id]) continue
+      loadedCount += 1
+      void loadTranscriptSession(projectId, summary.id)
+    }
+  }, [activePane, loadTranscriptSession, projectId, transcriptSessions, transcriptSummaries])
 
   const toggleFavoriteForPath = useCallback((relativePath: string) => {
     setCodeFileDrawerState((prev) => toggleFavoriteCodeFilePath(prev, relativePath))
@@ -524,6 +600,24 @@ export function CodeWorkspacePanel({
       setIsExplorerOpen(false)
     }
   }, [isNarrowViewport, openContentSearchMatch])
+
+  const handleOpenSmartEmptyFile = useCallback((relativePath: string) => {
+    void openFile(relativePath)
+    if (isNarrowViewport) {
+      setIsExplorerOpen(false)
+    }
+  }, [isNarrowViewport, openFile])
+
+  const handleOpenTranscriptReference = useCallback((item: CodeTranscriptReferenceItem) => {
+    void openTranscript({
+      projectId,
+      transcriptId: item.transcriptId,
+      initialMode: 'preview',
+    }).then(() => {
+      openTranscriptReference(item.transcriptId, item.reference.id)
+    })
+    onOpenTranscript?.()
+  }, [onOpenTranscript, openTranscript, openTranscriptReference, projectId])
 
   const handleToggleContentSearchTree = useCallback(() => {
     const tree = contentSearchTreeRef.current
@@ -733,6 +827,8 @@ export function CodeWorkspacePanel({
                 onSetCursorPosition={handleEditorCursorPositionChange}
                 onSetMarkdownPreviewMode={setMarkdownPreviewMode}
                 onSetPreviewSearchQuery={setPreviewSearchQuery}
+                onOpenSmartEmptyFile={handleOpenSmartEmptyFile}
+                onOpenTranscriptReference={handleOpenTranscriptReference}
                 parsedMarkdownDoc={parsedMarkdownDoc}
                 previewScrollRef={previewScrollRef}
                 previewSearchInputRef={previewSearchInputRef}
@@ -742,6 +838,8 @@ export function CodeWorkspacePanel({
                 previewSearchMatchIndex={activePreviewSearchMatchIndex}
                 structuredPreview={structuredPreview}
                 structuredPreviewComponents={structuredPreviewComponents}
+                smartEmptyFiles={smartEmptyFiles}
+                transcriptReferences={activeTranscriptReferences}
                 viewMode={viewMode}
               />
             </section>

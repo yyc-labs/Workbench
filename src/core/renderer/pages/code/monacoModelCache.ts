@@ -1,6 +1,6 @@
 import type { editor as MonacoEditor } from 'monaco-editor'
 
-const MAX_CACHED_MODELS = 8
+const MAX_CACHED_MODELS = 4
 
 export function createMonacoModelUri(filePath: string | null): string {
   if (filePath && filePath.trim()) {

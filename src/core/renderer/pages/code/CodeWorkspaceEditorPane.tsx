@@ -2,7 +2,8 @@ import { memo, type Ref } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
-import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, RefreshCw, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
+import type { TranscriptReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
@@ -24,6 +25,12 @@ type MarkdownStructuredPreviewState = {
 type MarkdownCodePreviewState = {
   codeText: string
   language: string
+}
+
+type CodeTranscriptReferenceItem = {
+  transcriptId: string
+  transcriptTitle: string
+  reference: TranscriptReference
 }
 
 const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
@@ -99,6 +106,8 @@ type CodeWorkspaceEditorPaneProps = {
   onSetCursorPosition: (position: { lineNumber: number; column: number }) => void
   onSetMarkdownPreviewMode: React.Dispatch<React.SetStateAction<MarkdownPreviewMode>>
   onSetPreviewSearchQuery: React.Dispatch<React.SetStateAction<string>>
+  onOpenSmartEmptyFile: (relativePath: string) => void
+  onOpenTranscriptReference: (item: CodeTranscriptReferenceItem) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
   previewScrollRef: Ref<HTMLDivElement>
   previewSearchInputRef: Ref<HTMLInputElement>
@@ -106,8 +115,10 @@ type CodeWorkspaceEditorPaneProps = {
   previewSearchQuery: string
   previewSearchVisible: boolean
   previewSearchMatchIndex: number
+  smartEmptyFiles: string[]
   structuredPreview: MarkdownStructuredPreviewState | null
   structuredPreviewComponents: Components
+  transcriptReferences: CodeTranscriptReferenceItem[]
   viewMode: 'files' | 'search'
 }
 
@@ -140,6 +151,8 @@ export function CodeWorkspaceEditorPane({
   onSetCursorPosition,
   onSetMarkdownPreviewMode,
   onSetPreviewSearchQuery,
+  onOpenSmartEmptyFile,
+  onOpenTranscriptReference,
   parsedMarkdownDoc,
   previewScrollRef,
   previewSearchInputRef,
@@ -147,8 +160,10 @@ export function CodeWorkspaceEditorPane({
   previewSearchQuery,
   previewSearchVisible,
   previewSearchMatchIndex,
+  smartEmptyFiles,
   structuredPreview,
   structuredPreviewComponents,
+  transcriptReferences,
   viewMode,
 }: CodeWorkspaceEditorPaneProps) {
   const { t } = useI18n()
@@ -173,20 +188,70 @@ export function CodeWorkspaceEditorPane({
 
   if (!activeRelativePath) {
     return (
-      <div className="code-panel-empty">
-        <div className="text-sm text-[color:var(--color-muted-foreground)]">
+      <div className="code-panel-empty px-6">
+        <div className="text-center text-sm text-[color:var(--color-muted-foreground)]">
           {isNarrowViewport
             ? (viewMode === 'search' ? t('codeWorkspace.emptySearchNarrow') : t('codeWorkspace.emptyExplorerNarrow'))
             : (viewMode === 'search'
               ? t('codeWorkspace.emptySearchWide')
               : t('codeWorkspace.emptyExplorerWide'))}
         </div>
+        {smartEmptyFiles.length > 0 && (
+          <div className="mt-5 w-full max-w-[520px]">
+            <p className="mb-2 text-center text-[11px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
+              {t('codeWorkspace.smartOpen')}
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {smartEmptyFiles.map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  className="min-w-0 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 py-2 text-left transition-colors hover:bg-[color:var(--color-accent)]"
+                  onClick={() => onOpenSmartEmptyFile(path)}
+                  title={path}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                    <span className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]">{path}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
     <div className="code-editor-shell">
+      {transcriptReferences.length > 0 && (
+        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/78 px-3 py-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
+            <MessageSquareText className="h-3.5 w-3.5" />
+            {t('codeWorkspace.transcriptRefs', { count: transcriptReferences.length })}
+          </span>
+          {transcriptReferences.slice(0, 3).map((item) => (
+            <button
+              key={`${item.transcriptId}:${item.reference.id}`}
+              type="button"
+              className="inline-flex max-w-[240px] items-center gap-1.5 truncate rounded-full border border-[color:var(--color-border)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+              onClick={() => onOpenTranscriptReference(item)}
+              title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
+            >
+              <span className="truncate">{item.transcriptTitle}</span>
+              <span className="shrink-0 text-[color:var(--color-muted-foreground)]">
+                :{item.reference.lineNumber ?? 1}
+              </span>
+            </button>
+          ))}
+          {transcriptReferences.length > 3 && (
+            <span className="text-[11px] text-[color:var(--color-muted-foreground)]">
+              +{transcriptReferences.length - 3}
+            </span>
+          )}
+        </div>
+      )}
       {isMarkdownFile && (
         <div className="code-editor-preview-toolbar">
           <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.markdown')}</span>

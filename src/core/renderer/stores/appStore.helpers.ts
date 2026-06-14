@@ -7,7 +7,7 @@ import type {
 } from '../../shared/types'
 import { projectIdFromPath } from '../../shared/rules'
 
-const MAX_TERMINAL_OUTPUT_CHARS = 300_000
+const MAX_TERMINAL_OUTPUT_CHARS = 120_000
 const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
 const PROCESS_URLS_STORAGE_KEY = 'launcher:process-urls:v1'
 

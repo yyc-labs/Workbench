@@ -4,7 +4,7 @@ import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import { UrlPopover } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
-import { fileNameFromRelativePath } from './code.markdown'
+import { fileNameFromRelativePath } from './code.markdownShared'
 
 type CodeWorkspaceChromeProps = {
   activeLanguage: string | null
