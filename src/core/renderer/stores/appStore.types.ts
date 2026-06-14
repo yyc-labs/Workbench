@@ -48,6 +48,7 @@ import type {
   TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
+  TranscriptUpdatePayload,
   TranscriptViewerMode,
   TranscriptViewerRequest,
 } from '../../shared/types'
@@ -66,7 +67,7 @@ declare global {
       setDocLinkSecret: (projectId: string, linkId: string, secret: string) => Promise<boolean>
       getDocLinkSecret: (projectId: string, linkId: string) => Promise<{ secret: string | null }>
       deleteDocLinkSecret: (projectId: string, linkId: string) => Promise<boolean>
-      selectDirectory: () => Promise<string | null>
+      selectDirectory: (defaultPath?: string) => Promise<string | null>
       getPathForFile: (file: File) => string
       readClipboardImagePngBase64: () => string | null
       captureWindowRectToPngBase64: (
@@ -127,6 +128,7 @@ declare global {
       listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
       listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
       getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
+      updateTranscript: (payload: TranscriptUpdatePayload) => Promise<TranscriptSession>
       deleteTranscript: (projectId: string, transcriptId: string) => Promise<boolean>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
@@ -221,7 +223,9 @@ export interface AppState {
     projectId: string,
     commandOverride?: string,
     processId?: string,
-    useWsl?: boolean
+    useWsl?: boolean,
+    cwdOverride?: string,
+    runStartupModeOverride?: 'silent' | 'terminal'
   ) => Promise<void>
   stopProject: (projectId: string) => Promise<void>
   loadRuntimeEntries: () => Promise<void>
@@ -259,6 +263,7 @@ export interface AppState {
   setProjectCustomName: (projectId: string, customName?: string) => Promise<void>
   setProjectCustomType: (projectId: string, customType?: string) => Promise<void>
   setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>
+  setProjectRunWorkingDirectory: (projectId: string, runWorkingDirectory?: string) => Promise<void>
   setProjectRunStartupMode: (projectId: string, mode: 'silent' | 'terminal') => Promise<void>
   setProjectDocLinks: (projectId: string, docLinks: ProjectDocLink[]) => Promise<void>
   setProjectLastCodeFile: (projectId: string, relativePath?: string) => Promise<void>

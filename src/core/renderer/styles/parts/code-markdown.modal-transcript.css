@@ -1,0 +1,444 @@
+.code-markdown-content th {
+  background: color-mix(in srgb, var(--color-foreground) 4%, var(--color-card));
+  font-weight: 700;
+}
+
+.code-markdown-content th,
+.code-markdown-content td {
+  border: 1px solid color-mix(in srgb, var(--color-foreground) 14%, var(--color-border));
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.code-markdown-content img {
+  max-width: min(100%, var(--code-markdown-block-max-inline-size, 100%));
+  height: auto;
+}
+
+.code-markdown-content--modal a.code-markdown-transcript-ref,
+.code-markdown-content--modal span.code-markdown-transcript-ref {
+  gap: 0.45rem;
+  padding: 0.22rem 0.75rem;
+  font-size: 0.98em;
+  line-height: 1.5;
+}
+
+.code-markdown-content--modal table {
+  font-size: 15px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.code-markdown-content--modal th,
+.code-markdown-content--modal td {
+  padding: 12px 16px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-track {
+  gap: 22px;
+  justify-content: center;
+}
+
+.code-markdown-content--modal .code-markdown-box-diagram-body {
+  padding: 0;
+}
+
+.code-markdown-content--modal .code-markdown-box-diagram-svg {
+  inline-size: calc(var(--diagram-columns) * 24px);
+  block-size: calc(var(--diagram-rows) * 36px);
+}
+
+.code-markdown-content--modal .code-markdown-box-diagram-text {
+  font-size: 22px;
+}
+
+.code-markdown-content--modal .code-markdown-architecture-diagram-body {
+  min-width: min(1080px, 100%);
+  padding: 22px;
+}
+
+.code-markdown-content--modal .code-markdown-architecture-section-title {
+  font-size: 20px;
+}
+
+.code-markdown-content--modal .code-markdown-architecture-node-card-title,
+.code-markdown-content--modal .code-markdown-architecture-node-group-title {
+  font-size: 17px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-lane,
+.code-markdown-content--modal .code-markdown-flow-story,
+.code-markdown-content--modal .code-markdown-flow-inline-shell {
+  border-radius: 30px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-lane {
+  gap: 18px;
+  min-width: min(1080px, 100%);
+  padding: 24px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-lane-node-eyebrow,
+.code-markdown-content--modal .code-markdown-flow-branch-label,
+.code-markdown-content--modal .code-markdown-flow-inline-pill,
+.code-markdown-content--modal .code-markdown-flow-stage-connector-label,
+.code-markdown-content--modal .code-markdown-flow-lane-connector-label {
+  font-size: 12px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-lane-card,
+.code-markdown-content--modal .code-markdown-flow-stage-card,
+.code-markdown-content--modal .code-markdown-flow-branch-card {
+  border-radius: 22px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-lane-row-text,
+.code-markdown-content--modal .code-markdown-flow-branch-text,
+.code-markdown-content--modal .code-markdown-flow-detail-text,
+.code-markdown-content--modal .code-markdown-flow-inline-node-title {
+  font-size: 15px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-stage-title {
+  font-size: 20px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-pipeline-chip {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.code-markdown-content--modal .code-markdown-flow-inline-shell {
+  min-width: min(1080px, 100%);
+  padding: 24px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-node {
+  gap: 12px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-node-title {
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-node-card {
+  gap: 14px;
+  border-radius: 20px;
+  padding: 22px 24px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-line {
+  gap: 14px;
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-line-note {
+  font-size: 13px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-connector {
+  min-width: 124px;
+  flex-basis: 124px;
+  gap: 10px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-connector-label {
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
+.code-markdown-content--modal .code-markdown-box-flow-connector-arrow {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-stack {
+  gap: 14px;
+  max-width: min(100%, 1360px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-step {
+  gap: 10px;
+  border-radius: 20px;
+  padding: 20px 22px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-step-title {
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-step-note {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-step-details {
+  gap: 9px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-step-detail {
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-connector {
+  min-height: 42px;
+  gap: 6px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-connector-arrow {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+
+.code-markdown-content--modal .code-markdown-vertical-flow-connector-label {
+  max-width: min(100%, 560px);
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.transcript-structured-preview-modal {
+  contain: layout paint style;
+  box-shadow: none !important;
+}
+
+.transcript-structured-preview-modal .code-markdown-content--modal {
+  padding: 8px 12px 18px;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content.code-markdown-content--viewport-scroll,
+.transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
+  min-width: 0;
+  width: auto;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content,
+.transcript-structured-preview-modal .transcript-markdown-content {
+  max-width: 100%;
+  color: color-mix(in srgb, var(--color-foreground) 94%, var(--color-muted-foreground));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h1,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h2,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h3,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h4,
+.transcript-structured-preview-modal .transcript-markdown-content h1,
+.transcript-structured-preview-modal .transcript-markdown-content h2,
+.transcript-structured-preview-modal .transcript-markdown-content h3,
+.transcript-structured-preview-modal .transcript-markdown-content h4 {
+  color: var(--color-foreground);
+  letter-spacing: -0.015em;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h1,
+.transcript-structured-preview-modal .transcript-markdown-content h1 {
+  color: color-mix(in srgb, var(--color-foreground) 88%, white 12%);
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h2,
+.transcript-structured-preview-modal .transcript-markdown-content h2 {
+  color: color-mix(in srgb, var(--color-foreground) 82%, var(--color-primary));
+  border-bottom-color: color-mix(in srgb, var(--color-primary) 16%, var(--color-border));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h3,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content h4,
+.transcript-structured-preview-modal .transcript-markdown-content h3,
+.transcript-structured-preview-modal .transcript-markdown-content h4 {
+  color: color-mix(in srgb, var(--color-foreground) 74%, var(--color-primary));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content p,
+.transcript-structured-preview-modal .transcript-markdown-content p {
+  color: color-mix(in srgb, var(--color-foreground) 92%, var(--color-muted-foreground));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content strong,
+.transcript-structured-preview-modal .transcript-markdown-content strong {
+  color: color-mix(in srgb, var(--color-foreground) 84%, white 16%);
+  font-weight: 800;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content em,
+.transcript-structured-preview-modal .transcript-markdown-content em {
+  color: color-mix(in srgb, var(--color-primary) 48%, var(--color-foreground));
+  font-style: italic;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content blockquote,
+.transcript-structured-preview-modal .transcript-markdown-content blockquote {
+  border-left-color: color-mix(in srgb, var(--color-primary) 58%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  color: color-mix(in srgb, var(--color-muted-foreground) 88%, var(--color-foreground));
+  border-radius: 0 12px 12px 0;
+  padding: 0.55em 0.9em 0.55em 1em;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ul > li::marker,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ol > li::marker,
+.transcript-structured-preview-modal .transcript-markdown-content ul > li::marker,
+.transcript-structured-preview-modal .transcript-markdown-content ol > li::marker {
+  color: color-mix(in srgb, var(--color-primary) 84%, #6bb7ff);
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content ol > li,
+.transcript-structured-preview-modal .transcript-markdown-content ol > li {
+  color: color-mix(in srgb, var(--color-foreground) 94%, var(--color-primary));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-inline-code,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-inline-code {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-accent));
+  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  color: color-mix(in srgb, var(--color-primary) 62%, var(--color-foreground));
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content p,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content li,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content blockquote,
+.transcript-structured-preview-modal .transcript-markdown-content p,
+.transcript-structured-preview-modal .transcript-markdown-content li,
+.transcript-structured-preview-modal .transcript-markdown-content blockquote {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-stack,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-stack {
+  max-width: 100%;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-box-flow-line-text,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-box-flow-line-note,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-step-title,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-step-detail,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-connector-label,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-box-flow-line-text,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-box-flow-line-note,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-step-title,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-step-detail,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-connector-label {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-box-flow-line-text,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-box-flow-line-note,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-step-title,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-step-detail,
+.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-vertical-flow-connector-label,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-box-flow-line-text,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-box-flow-line-note,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-step-title,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-step-detail,
+.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-connector-label {
+  white-space: pre-wrap;
+}
+
+.transcript-structured-preview-modal .code-markdown-box-flow,
+.transcript-structured-preview-modal .code-markdown-vertical-flow,
+.transcript-structured-preview-modal .code-markdown-architecture-diagram,
+.transcript-structured-preview-modal .code-markdown-box-diagram,
+.transcript-structured-preview-modal .code-markdown-content--modal table,
+.transcript-structured-preview-modal .code-markdown-content--modal pre,
+.transcript-structured-preview-modal .code-markdown-mermaid-wrap {
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
+}
+
+.transcript-structured-preview-modal .code-markdown-box-flow-node-card,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-step,
+.transcript-structured-preview-modal .code-markdown-architecture-diagram-body,
+.transcript-structured-preview-modal .code-markdown-box-diagram-body,
+.transcript-structured-preview-modal .code-markdown-content--modal table,
+.transcript-structured-preview-modal .code-markdown-mermaid-wrap,
+.transcript-structured-preview-modal .code-markdown-flow-lane,
+.transcript-structured-preview-modal .code-markdown-flow-story,
+.transcript-structured-preview-modal .code-markdown-flow-inline-shell,
+.transcript-structured-preview-modal .code-markdown-flow-stage-card,
+.transcript-structured-preview-modal .code-markdown-flow-branch-card,
+.transcript-structured-preview-modal .code-markdown-content a.code-markdown-transcript-ref,
+.transcript-structured-preview-modal .code-markdown-content span.code-markdown-transcript-ref,
+.transcript-structured-preview-modal .code-markdown-box-flow-connector-arrow,
+.transcript-structured-preview-modal .code-markdown-box-flow-connector-label,
+.transcript-structured-preview-modal .code-markdown-flow-lane-connector-orb,
+.transcript-structured-preview-modal .code-markdown-flow-stage-connector-orb,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-connector-arrow,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-connector-label {
+  box-shadow: none;
+}
+
+.transcript-structured-preview-modal .code-markdown-box-flow-node-card,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-step,
+.transcript-structured-preview-modal .code-markdown-architecture-diagram-body,
+.transcript-structured-preview-modal .code-markdown-box-diagram-body,
+.transcript-structured-preview-modal .code-markdown-content--modal table,
+.transcript-structured-preview-modal .code-markdown-flow-lane,
+.transcript-structured-preview-modal .code-markdown-flow-story,
+.transcript-structured-preview-modal .code-markdown-flow-inline-shell,
+.transcript-structured-preview-modal .code-markdown-flow-stage-card,
+.transcript-structured-preview-modal .code-markdown-flow-branch-card,
+.transcript-structured-preview-modal .code-markdown-box-flow-connector-arrow,
+.transcript-structured-preview-modal .code-markdown-box-flow-connector-label,
+.transcript-structured-preview-modal .code-markdown-flow-lane-connector-orb,
+.transcript-structured-preview-modal .code-markdown-flow-stage-connector-orb,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-connector-arrow,
+.transcript-structured-preview-modal .code-markdown-vertical-flow-connector-label {
+  background-image: none;
+}
+
+body.gesture-active .transcript-structured-preview-modal,
+body.gesture-active .transcript-structured-preview-modal * {
+  scroll-behavior: auto !important;
+}
+
+body.gesture-active .transcript-structured-preview-modal {
+  box-shadow: none !important;
+}
+
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure::after,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-code-toolbar,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-code-language,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-code-action-btn,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-copy-btn,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-box-flow-node-card,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-step,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-box-diagram-body,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-box-flow-connector-arrow,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-box-flow-connector-label,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-connector-arrow,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-vertical-flow-connector-label {
+  transition: none !important;
+  animation: none !important;
+}
+
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:hover,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:focus-visible {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure::after,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:hover::after,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-zoomable-structure:focus-visible::after {
+  opacity: 0 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:hover,
+body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:focus-visible {
+  box-shadow: none !important;
+}

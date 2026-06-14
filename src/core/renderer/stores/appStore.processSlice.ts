@@ -8,6 +8,23 @@ import {
   trimTerminalBuffer,
 } from './appStore.helpers'
 
+function normalizePathForJoin(value: string): string {
+  return value.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function resolveRunWorkingDirectory(projectPath: string, runWorkingDirectory?: string): string {
+  const raw = runWorkingDirectory?.trim()
+  if (!raw) return projectPath
+  if (/^[a-z]:[\\/]/i.test(raw) || raw.startsWith('/') || raw.startsWith('\\\\') || raw.startsWith('//')) {
+    return raw
+  }
+
+  const normalizedProjectPath = normalizePathForJoin(projectPath)
+  const normalizedRelativePath = raw.replace(/^[\\/]+/, '').replace(/[\\/]+/g, '/')
+  if (!normalizedRelativePath || normalizedRelativePath === '.') return projectPath
+  return `${normalizedProjectPath}/${normalizedRelativePath}`
+}
+
 export type ProcessActionsSlice = Pick<
   AppState,
   | 'startProject'
@@ -23,20 +40,21 @@ export type ProcessActionsSlice = Pick<
 >
 
 export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessActionsSlice> = (set, get) => ({
-  startProject: async (projectId, commandOverride, processId, useWsl) => {
+  startProject: async (projectId, commandOverride, processId, useWsl, cwdOverride, runStartupModeOverride) => {
     const project = get().projects.find((p) => p.id === projectId)
     if (!project) return
 
     const command = commandOverride || project.customCommand || project.command
     const pid = processId || projectId
     const isPrimaryProjectRun = pid === projectId
-    const runStartupMode = project.runStartupMode || 'silent'
-    const projectEnv = detectProjectEnvironment(project.path)
+    const runStartupMode = runStartupModeOverride ?? project.runStartupMode ?? 'silent'
+    const cwd = resolveRunWorkingDirectory(project.path, cwdOverride ?? project.runWorkingDirectory)
+    const projectEnv = detectProjectEnvironment(cwd)
     const resolvedUseWsl =
       useWsl ?? (projectEnv === 'ubuntu' ? true : projectEnv === 'windows' ? false : undefined)
 
     if (isPrimaryProjectRun && runStartupMode === 'terminal') {
-      const opened = await window.electronAPI.openPathTerminal(project.path, command)
+      const opened = await window.electronAPI.openPathTerminal(cwd, command)
       if (opened) {
         return
       }
@@ -58,7 +76,7 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
       },
     }))
 
-    const started = await window.electronAPI.startProcess(pid, command, project.path, resolvedUseWsl)
+    const started = await window.electronAPI.startProcess(pid, command, cwd, resolvedUseWsl)
     if (!started) {
       await get().syncManagedProcesses()
       return

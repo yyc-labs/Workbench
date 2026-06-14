@@ -263,6 +263,13 @@ export interface TranscriptImportPayload {
   capturedAt?: number
 }
 
+export interface TranscriptUpdatePayload {
+  projectId: string
+  transcriptId: string
+  rawText: string
+  title?: string
+}
+
 export interface TranscriptGatewayImportPayload {
   projectId: string
   rawText: string
@@ -583,6 +590,8 @@ export interface ProjectInfo {
   customType?: string
   command: string
   customCommand?: string
+  /** Optional cwd used by Run actions. Empty/missing means project root. */
+  runWorkingDirectory?: string
   /** Run button startup behavior — defaults to 'silent' when absent. */
   runStartupMode?: RunStartupMode
   packageManager?: PackageManager
@@ -674,6 +683,8 @@ export interface SavedProject {
   /** Optional user-defined display type; falls back to detected type when absent. */
   customType?: string
   customCommand?: string
+  /** Optional cwd used by Run actions. Empty/missing means project root. */
+  runWorkingDirectory?: string
   /** Run button startup behavior — defaults to 'silent' when absent. */
   runStartupMode?: RunStartupMode
   pinned?: boolean

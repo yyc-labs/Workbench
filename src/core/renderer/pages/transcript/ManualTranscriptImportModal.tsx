@@ -8,6 +8,37 @@ import { useI18n } from '../../i18n'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 
 type ManualTranscriptImportProject = Pick<ProjectInfo, 'id' | 'name' | 'customName' | 'path' | 'lastOpened'>
+type ManualTranscriptImportWrapMode = 'none' | 'typescript' | 'tsx' | 'javascript' | 'json' | 'bash' | 'mermaid'
+
+const MANUAL_TRANSCRIPT_IMPORT_WRAP_MODES: readonly ManualTranscriptImportWrapMode[] = [
+  'none',
+  'typescript',
+  'tsx',
+  'javascript',
+  'json',
+  'bash',
+  'mermaid',
+] as const
+
+const SINGLE_FENCED_BLOCK_PATTERN = /^(`{3,})([^\n`]*)\r?\n[\s\S]*\r?\n\1$/
+
+function createFenceMarker(text: string): string {
+  const matches = text.match(/`{3,}/g)
+  const longestFence = matches?.reduce((max, item) => Math.max(max, item.length), 2) ?? 2
+  return '`'.repeat(Math.max(3, longestFence + 1))
+}
+
+function wrapManualImportContent(rawText: string, wrapMode: ManualTranscriptImportWrapMode): string {
+  if (wrapMode === 'none') return rawText
+
+  const normalized = rawText.replace(/\r\n/g, '\n')
+  if (!normalized.trim()) return rawText
+  if (SINGLE_FENCED_BLOCK_PATTERN.test(normalized.trim())) return rawText
+
+  const fenceMarker = createFenceMarker(normalized)
+  const body = normalized.endsWith('\n') ? normalized : `${normalized}\n`
+  return `${fenceMarker}${wrapMode}\n${body}${fenceMarker}`
+}
 
 type ManualTranscriptImportModalProps = {
   open: boolean
@@ -46,6 +77,7 @@ export function ManualTranscriptImportModal({
   const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftText, setDraftText] = useState('')
+  const [wrapMode, setWrapMode] = useState<ManualTranscriptImportWrapMode>('none')
   const [error, setError] = useState<string | null>(null)
   const dropdownRef = useRef<HTMLDivElement | null>(null)
 
@@ -56,6 +88,7 @@ export function ManualTranscriptImportModal({
     setProjectDropdownOpen(false)
     setDraftTitle('')
     setDraftText('')
+    setWrapMode('none')
     setError(null)
   }, [initialProjectId, open])
 
@@ -131,6 +164,7 @@ export function ManualTranscriptImportModal({
     }
 
     setError(null)
+    const preparedText = wrapManualImportContent(draftText, wrapMode)
     const fallbackTitle = `${t('transcript.sourceTypes.manual-markdown')} · ${formatDateTime(Date.now(), {
       month: '2-digit',
       day: '2-digit',
@@ -141,7 +175,7 @@ export function ManualTranscriptImportModal({
 
     const ok = await onImport({
       projectId,
-      rawText: draftText,
+      rawText: preparedText,
       title: draftTitle.trim() || fallbackTitle,
     })
 
@@ -353,6 +387,43 @@ export function ManualTranscriptImportModal({
             placeholder={t('transcript.manualImportTitlePlaceholder')}
             disabled={submitting}
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('transcript.manualImportWrapLabel')}</p>
+            {wrapMode !== 'none' ? (
+              <code className="quiet-control rounded-full px-3 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]">
+                {` \`\`\`${wrapMode} `}
+              </code>
+            ) : null}
+          </div>
+          <div className="quiet-control flex flex-wrap gap-1 rounded-[18px] p-1">
+            {MANUAL_TRANSCRIPT_IMPORT_WRAP_MODES.map((option) => {
+              const active = option === wrapMode
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
+                    active
+                      ? 'bg-[color:var(--color-primary)] text-white'
+                      : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                  onClick={() => setWrapMode(option)}
+                  aria-pressed={active}
+                  disabled={submitting}
+                >
+                  {t(`transcript.manualImportWrapOptions.${option}`)}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+            {wrapMode === 'none'
+              ? t('transcript.manualImportWrapHint')
+              : t('transcript.manualImportWrapSelection', { value: wrapMode })}
+          </p>
         </div>
 
         <div className="space-y-1.5">

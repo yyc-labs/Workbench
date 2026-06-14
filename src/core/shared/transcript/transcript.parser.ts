@@ -8,6 +8,7 @@ type BuildTranscriptSessionOptions = {
   sessionId: string
   projectPath: string
   createdAt: number
+  updatedAt?: number
   isProjectFilePath: (relativePath: string) => boolean
   title: string
 }
@@ -732,6 +733,6 @@ export function buildTranscriptSession(
     markdownText,
     references,
     createdAt: options.createdAt,
-    updatedAt: options.createdAt,
+    updatedAt: options.updatedAt ?? options.createdAt,
   }
 }

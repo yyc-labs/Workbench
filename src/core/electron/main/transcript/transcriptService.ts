@@ -8,6 +8,7 @@ import type {
   TranscriptSession,
   TranscriptSessionSummary,
   TranscriptSourceType,
+  TranscriptUpdatePayload,
 } from '../../../shared/types'
 import type { TranscriptRepository } from './transcriptRepository'
 
@@ -23,6 +24,7 @@ export interface TranscriptService {
   listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
   listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
   getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
+  updateTranscript: (payload: TranscriptUpdatePayload) => Promise<TranscriptSession>
   deleteTranscript: (projectId: string, transcriptId: string) => Promise<boolean>
 }
 
@@ -93,6 +95,30 @@ function validateImportPayload(payload: TranscriptImportPayload): TranscriptImpo
     ...payload,
     projectId,
     rawText,
+  }
+}
+
+function validateUpdatePayload(payload: TranscriptUpdatePayload): TranscriptUpdatePayload {
+  const projectId = typeof payload.projectId === 'string' ? payload.projectId.trim() : ''
+  const transcriptId = typeof payload.transcriptId === 'string' ? payload.transcriptId.trim() : ''
+  const rawText = typeof payload.rawText === 'string' ? payload.rawText : ''
+  const title = typeof payload.title === 'string' ? payload.title.trim() : undefined
+
+  if (!projectId) {
+    throw new Error('Transcript update requires a project id.')
+  }
+  if (!transcriptId) {
+    throw new Error('Transcript update requires a transcript id.')
+  }
+  if (!rawText.trim()) {
+    throw new Error('Transcript update requires non-empty raw text.')
+  }
+
+  return {
+    projectId,
+    transcriptId,
+    rawText,
+    title,
   }
 }
 
@@ -171,6 +197,37 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
 
     getTranscript: async (projectId, transcriptId) => {
       return deps.repository.getSession(projectId, transcriptId)
+    },
+
+    updateTranscript: async (inputPayload) => {
+      const payload = validateUpdatePayload(inputPayload)
+      const existing = await deps.repository.getSession(payload.projectId, payload.transcriptId)
+      if (!existing) {
+        throw new Error(`Unknown transcript id: ${payload.transcriptId}`)
+      }
+
+      const projectPath = deps.getProjectPathById(payload.projectId)
+      if (!projectPath) {
+        throw new Error(`Unknown project id: ${payload.projectId}`)
+      }
+
+      const nextTitle = payload.title || existing.title
+      const nextSession = buildTranscriptSession({
+        projectId: payload.projectId,
+        sourceType: existing.sourceType,
+        rawText: payload.rawText,
+        title: nextTitle,
+      }, {
+        sessionId: existing.id,
+        projectPath,
+        createdAt: existing.createdAt,
+        updatedAt: Date.now(),
+        isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
+        title: nextTitle,
+      })
+
+      await deps.repository.saveSession(nextSession)
+      return nextSession
     },
 
     deleteTranscript: async (projectId, transcriptId) => {
