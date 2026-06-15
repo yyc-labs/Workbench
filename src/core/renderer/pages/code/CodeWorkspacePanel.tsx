@@ -58,8 +58,12 @@ type CodeWorkspacePanelProps = {
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  projectDevUrlActionVisible?: boolean
+  projectDevUrlPending?: boolean
+  projectDevUrlReady?: boolean
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
 }
@@ -81,8 +85,12 @@ export function CodeWorkspacePanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  projectDevUrlActionVisible = false,
+  projectDevUrlPending = false,
+  projectDevUrlReady = false,
   activePane = 'code',
   onSwitchPane,
+  onStartAndOpenDevUrl,
   onOpenTranscript,
   onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
@@ -352,6 +360,7 @@ export function CodeWorkspacePanel({
   })
   const {
     handleOpenedCodeFile,
+    isRestoringCodeSession,
     openContentSearchMatch,
   } = useCodeWorkspaceRestoreState({
     activeRelativePath,
@@ -373,6 +382,18 @@ export function CodeWorkspacePanel({
     },
     treeStatus: tree.status,
   })
+  const hasRestorableCodeSession = useMemo(() => {
+    const persistedTabs = persistedProjectCodeSession?.tabs ?? []
+    return Boolean(
+      persistedLastCodeFile?.trim()
+      || persistedProjectCodeSession?.activePath?.trim()
+      || persistedTabs.some((path) => path.trim().length > 0)
+    )
+  }, [persistedLastCodeFile, persistedProjectCodeSession])
+  const isInitialRestoring = !activeRelativePath && (
+    isReading
+    || (tree.status !== 'error' && (tree.status !== 'ready' || (isRestoringCodeSession && hasRestorableCodeSession)))
+  )
   captureCurrentModeScrollRef.current = captureCurrentModeScroll
   markOpenedFileInExplorerRef.current = markFilePathKnown
   handleOpenedCodeFileRef.current = handleOpenedCodeFile
@@ -701,6 +722,7 @@ export function CodeWorkspacePanel({
           if (!firstLink) return
           void window.electronAPI.openExternal(firstLink.url)
         }}
+        onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         onReloadFromDisk={() => {
@@ -716,6 +738,9 @@ export function CodeWorkspacePanel({
         openTabs={visibleOpenTabs}
         projectFileSize={activeFileSize}
         projectHeaderCollapsed={projectHeaderCollapsed}
+        projectDevUrlActionVisible={projectDevUrlActionVisible}
+        projectDevUrlPending={projectDevUrlPending}
+        projectDevUrlReady={projectDevUrlReady}
         projectLinkItems={projectLinkItems}
         projectName={projectName}
         readError={readError}
@@ -806,6 +831,7 @@ export function CodeWorkspacePanel({
                 editorValue={editorValue}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
                 handlePasteImage={handlePasteImage}
+                isInitialRestoring={isInitialRestoring}
                 isMdcFile={isMdcFile}
                 isMarkdownFile={isMarkdownFile}
                 isNarrowViewport={isNarrowViewport}

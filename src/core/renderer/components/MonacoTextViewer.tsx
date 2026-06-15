@@ -20,6 +20,7 @@ type MonacoTextViewerProps = {
   lineHeight?: number
   padding?: { top: number; bottom: number }
   stickyScroll?: boolean
+  focusOnReveal?: boolean
 }
 
 export interface MonacoTextViewerHandle {
@@ -44,6 +45,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
   lineHeight = 20,
   padding = { top: 10, bottom: 10 },
   stickyScroll = false,
+  focusOnReveal = true,
 }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRuntimeRef = useRef({
@@ -69,7 +71,9 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     const safeColumn = Math.min(Math.max(1, Math.floor(column)), model.getLineMaxColumn(safeLine))
     editor.setPosition({ lineNumber: safeLine, column: safeColumn })
     editor.revealPositionInCenter({ lineNumber: safeLine, column: safeColumn })
-    editor.focus()
+    if (focusOnReveal) {
+      editor.focus()
+    }
     return true
   }
 

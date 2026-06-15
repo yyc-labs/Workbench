@@ -75,6 +75,42 @@ test('sanitizeMermaidSvgMarkup only allows local fragment references', () => {
   assert.doesNotMatch(sanitized, /filter=/)
 })
 
+test('sanitizeMermaidSvgMarkup keeps safe ER diagram SVG structure', () => {
+  const svg = [
+    '<svg id="er" class="er" viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg">',
+    '<style>.entityBox{fill:#ececff;stroke:#5b5bd6}.relationshipLine{stroke:#4b5563;marker-end:url(#ONLY_ONE_END)}</style>',
+    '<defs>',
+    '<marker id="ONLY_ONE_END" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">',
+    '<path d="M 1 6 L 11 6" />',
+    '<polygon points="7,2 11,6 7,10" />',
+    '</marker>',
+    '</defs>',
+    '<g class="node default">',
+    '<rect class="entityBox" x="10" y="16" width="84" height="44" rx="4" ry="4" />',
+    '<text x="52" y="36" text-anchor="middle">USER</text>',
+    '<text x="20" y="52">id PK</text>',
+    '</g>',
+    '<g class="node default">',
+    '<rect class="entityBox" x="146" y="16" width="84" height="44" rx="4" ry="4" />',
+    '<text x="188" y="36" text-anchor="middle">ORDER</text>',
+    '<text x="156" y="52">user_id FK</text>',
+    '</g>',
+    '<path class="relationshipLine" d="M 94 38 L 146 38" marker-end="url(#ONLY_ONE_END)" />',
+    '<text x="120" y="30" text-anchor="middle">places</text>',
+    '</svg>',
+  ].join('')
+
+  const sanitized = sanitizeMermaidSvgMarkup(svg)
+
+  assert.match(sanitized, /<svg id="er" class="er" viewBox="0 0 240 120"/)
+  assert.match(sanitized, /<rect class="entityBox" x="10" y="16" width="84" height="44" rx="4" ry="4" \/>/)
+  assert.match(sanitized, /<marker id="ONLY_ONE_END" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">/)
+  assert.match(sanitized, /<polygon points="7,2 11,6 7,10" \/>/)
+  assert.match(sanitized, /marker-end="url\(#ONLY_ONE_END\)"/)
+  assert.match(sanitized, /<text x="52" y="36" text-anchor="middle">USER<\/text>/)
+  assert.match(sanitized, /<text x="120" y="30" text-anchor="middle">places<\/text>/)
+})
+
 test('sanitizeMermaidSvgCssText drops dangerous CSS while preserving local paint servers', () => {
   assert.equal(
     sanitizeMermaidSvgCssText('.edge{marker-end:url(#arrow);stroke:#333}'),

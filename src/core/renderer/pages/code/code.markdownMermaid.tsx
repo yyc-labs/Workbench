@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { useI18n } from '../../i18n'
 import { sanitizeMermaidSvgMarkup } from './code.markdownMermaid.sanitize'
 import type { MarkdownStructuredBlockClickPayload, SourceLineDataProps } from './code.markdown'
+import { createMermaidRenderConfig } from './code.markdownMermaid.config'
 
 const MARKDOWN_MERMAID_RENDER_ID_PREFIX = 'code-markdown-mermaid'
 
@@ -25,14 +26,7 @@ export async function renderMermaidDiagram(
   const mermaidModule = await loadMermaid()
   const mermaid = mermaidModule.default
 
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: themeMode === 'dark' ? 'dark' : 'default',
-    flowchart: {
-      htmlLabels: false,
-    },
-  })
+  mermaid.initialize(createMermaidRenderConfig(themeMode))
 
   const { svg } = await mermaid.render(id, codeText)
   return sanitizeMermaidSvgMarkup(svg)

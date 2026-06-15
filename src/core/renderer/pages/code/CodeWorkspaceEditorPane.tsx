@@ -87,6 +87,7 @@ type CodeWorkspaceEditorPaneProps = {
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
   handlePasteImage: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
+  isInitialRestoring: boolean
   isMdcFile: boolean
   isMarkdownFile: boolean
   isNarrowViewport: boolean
@@ -132,6 +133,7 @@ export function CodeWorkspaceEditorPane({
   editorValue,
   effectiveMarkdownPreviewMode,
   handlePasteImage,
+  isInitialRestoring,
   isMdcFile,
   isMarkdownFile,
   isNarrowViewport,
@@ -185,6 +187,16 @@ export function CodeWorkspaceEditorPane({
       : codePreviewCapture.status === 'error'
         ? t('transcript.copyStructuredPreviewImageFailed')
         : t('transcript.copyStructuredPreviewImage')
+
+  if (isInitialRestoring) {
+    return (
+      <div className="code-panel-empty px-6">
+        <div className="text-center text-sm text-[color:var(--color-muted-foreground)]">
+          {t('codeWorkspace.readingFile')}
+        </div>
+      </div>
+    )
+  }
 
   if (!activeRelativePath) {
     return (

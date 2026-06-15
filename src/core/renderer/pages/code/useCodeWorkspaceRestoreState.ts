@@ -43,6 +43,7 @@ export function useCodeWorkspaceRestoreState({
   treeStatus,
 }: UseCodeWorkspaceRestoreStateOptions) {
   const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
+  const [isRestoringCodeSession, setIsRestoringCodeSession] = useState(true)
   const pendingRevealRef = useRef<RevealLocation | null>(null)
   const pendingCursorRevealRef = useRef<RevealLocation | null>(null)
   const revealInEditor = useCallback((location: RevealLocation | null): boolean => {
@@ -67,6 +68,7 @@ export function useCodeWorkspaceRestoreState({
 
   useEffect(() => {
     setHasAttemptedInitialRestore(false)
+    setIsRestoringCodeSession(true)
     pendingRevealRef.current = null
     pendingCursorRevealRef.current = null
   }, [projectId])
@@ -88,6 +90,7 @@ export function useCodeWorkspaceRestoreState({
 
     if (restoreCandidates.length <= 0) {
       isRestoringCodeSessionRef.current = false
+      setIsRestoringCodeSession(false)
       return
     }
 
@@ -104,6 +107,7 @@ export function useCodeWorkspaceRestoreState({
     })()
       .finally(() => {
         isRestoringCodeSessionRef.current = false
+        setIsRestoringCodeSession(false)
       })
   }, [
     allProjectFilePathSet,
@@ -168,6 +172,7 @@ export function useCodeWorkspaceRestoreState({
 
   return {
     handleOpenedCodeFile,
+    isRestoringCodeSession,
     openContentSearchMatch,
   }
 }

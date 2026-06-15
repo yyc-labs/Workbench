@@ -1,4 +1,4 @@
-import { BookOpen, Code2, Files, PanelLeftOpen, Save, Star, TextSearch, X } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Code2, Files, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
@@ -24,6 +24,7 @@ type CodeWorkspaceChromeProps = {
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
   onOpenFileFromTab: (relativePath: string) => void
   onOpenFirstProjectLink: () => void
+  onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   onReloadFromDisk: () => void
@@ -36,6 +37,9 @@ type CodeWorkspaceChromeProps = {
   openTabs: string[]
   projectFileSize: number
   projectHeaderCollapsed: boolean
+  projectDevUrlActionVisible?: boolean
+  projectDevUrlPending?: boolean
+  projectDevUrlReady?: boolean
   projectLinkItems: { url: string; label: string; tag?: string; tagLabel?: string }[]
   projectName?: string
   readError: string | null
@@ -106,6 +110,7 @@ export function CodeWorkspaceChrome({
   onOpenEditorSearch,
   onOpenFileFromTab,
   onOpenFirstProjectLink,
+  onStartAndOpenDevUrl,
   onOpenTranscript,
   onOpenProjectLinksManager,
   onReloadFromDisk,
@@ -118,6 +123,9 @@ export function CodeWorkspaceChrome({
   openTabs,
   projectFileSize,
   projectHeaderCollapsed,
+  projectDevUrlActionVisible = false,
+  projectDevUrlPending = false,
+  projectDevUrlReady = false,
   projectLinkItems,
   projectName,
   readError,
@@ -172,6 +180,26 @@ export function CodeWorkspaceChrome({
                     <BookOpen className="h-3.5 w-3.5 shrink-0" />
                   </button>
                 </UrlPopover>
+              )}
+              {projectDevUrlActionVisible && onStartAndOpenDevUrl && (
+                <button
+                  type="button"
+                  className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+                    projectDevUrlReady
+                      ? 'text-primary hover:text-primary'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                  onClick={() => { void onStartAndOpenDevUrl() }}
+                  disabled={projectDevUrlPending}
+                  title={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                  aria-label={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                >
+                  {projectDevUrlPending ? (
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  ) : (
+                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                </button>
               )}
             </div>
           ) : (
