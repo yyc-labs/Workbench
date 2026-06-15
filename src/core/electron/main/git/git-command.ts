@@ -1,5 +1,6 @@
 import { spawn } from 'child_process'
 import { StringDecoder } from 'string_decoder'
+import { toHostAccessiblePath } from '../host-path'
 import { resolveWslVsCodeTarget } from '../shell/openers'
 import { wslBridge } from '../wsl-bridge'
 import type { GitOutputLimitInfo } from '../../../shared/types'
@@ -25,6 +26,10 @@ type GitCommandLimits = {
   stdoutLimitBytes?: number
   stderrLimitBytes?: number
   timeoutMs?: number
+}
+
+type GitLineListOptions = GitCommandLimits & {
+  maxLines?: number
 }
 
 type GitCommandSequenceResult = {
@@ -138,6 +143,9 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
       const wslTarget = process.platform === 'win32'
         ? resolveWslVsCodeTarget(cwd, getDefaultWslDistro())
         : null
+      const hostCwd = process.platform === 'win32'
+        ? toHostAccessiblePath(cwd, getDefaultWslDistro())
+        : cwd
       const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
       let settled = false
       let timedOut = false
@@ -175,7 +183,7 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
             stdio: ['ignore', 'pipe', 'pipe'],
           })
           : spawn('git', args, {
-            cwd,
+            cwd: hostCwd,
             shell: false,
             stdio: ['ignore', 'pipe', 'pipe'],
           })
@@ -224,14 +232,16 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
     })
   }
 
-  function listGitLines(cwd: string, args: string[]): Promise<string[]> {
-    return runGitCommand(cwd, args).then((result) => {
+  function listGitLines(cwd: string, args: string[], options?: GitLineListOptions): Promise<string[]> {
+    return runGitCommand(cwd, args, options).then((result) => {
       if (result.code !== 0) return []
-      return result.stdout
+      const lines = result.stdout
         .replace(/\r/g, '')
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)
+      if (!Number.isFinite(options?.maxLines)) return lines
+      return lines.slice(0, Math.max(0, options?.maxLines ?? 0))
     })
   }
 

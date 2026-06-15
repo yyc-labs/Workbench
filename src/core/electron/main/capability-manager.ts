@@ -27,7 +27,6 @@ class CapabilityManager {
 
     const distro = hasWsl ? wslBridge.getDistro() : undefined
     const shell = hasWsl ? wslBridge.getShell() : 'bash'
-    const wslEnv = hasWsl ? await this.captureWslEnv(distro!) : undefined
 
     this.cache = {
       hostPlatform,
@@ -37,7 +36,8 @@ class CapabilityManager {
       hasTmux,
       wslDistro: distro,
       wslShell: shell,
-      wslEnv,
+      // Avoid waking WSL with an interactive login shell during app boot.
+      wslEnv: undefined,
     }
   }
 
@@ -77,27 +77,6 @@ class CapabilityManager {
       return true
     } catch {
       return false
-    }
-  }
-
-  /** Capture full WSL environment via interactive login shell.
-   *  bash -ilc ensures .bashrc is sourced (nvm, API keys, proxy, PATH). */
-  private async captureWslEnv(distro: string): Promise<Record<string, string>> {
-    try {
-      const buf = execSync(`wsl.exe -d ${distro} -e bash -ilc env`, {
-        timeout: 15000,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-      const env: Record<string, string> = {}
-      for (const line of buf.toString().split('\n')) {
-        const eq = line.indexOf('=')
-        if (eq > 0) {
-          env[line.slice(0, eq)] = line.slice(eq + 1)
-        }
-      }
-      return env
-    } catch {
-      return {}
     }
   }
 }

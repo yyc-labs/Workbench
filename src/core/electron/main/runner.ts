@@ -3,6 +3,7 @@ import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
 import type { BackendMode, Capability, ManagedProcessSnapshot, PtySize } from '../../shared/types'
+import { toHostAccessiblePath } from './host-path'
 import { wslBridge } from './wsl-bridge'
 import { tmuxManager, getSessionName } from './tmux-manager'
 import { ResizeController } from './resize-controller'
@@ -107,6 +108,10 @@ class ProcessManager {
 
   setOutputWindow(win: BrowserWindow | null): void {
     this.outputWindow = win
+  }
+
+  private getDefaultWslDistro(): string {
+    return this.capability.wslDistro || 'Ubuntu'
   }
 
   // ── public API ──────────────────────────────────────────
@@ -253,7 +258,8 @@ class ProcessManager {
   private wslShellArgs(cmd: string): string[] {
     const distro = this.capability.wslDistro || 'Ubuntu'
     const shell = this.capability.wslShell || 'bash'
-    const flag = shell === 'bash' ? '-lc' : '-c'
+    const useLoginShell = !this.capability.wslEnv && shell === 'bash'
+    const flag = shell === 'bash' ? (useLoginShell ? '-ilc' : '-lc') : '-c'
     return ['-d', distro, '-e', shell, flag, cmd]
   }
 
@@ -274,15 +280,16 @@ class ProcessManager {
   // ── backend: host-native (Windows cmd.exe) ──────────────
 
   private startHostNative(projectId: string, command: string, cwd: string): boolean {
+    const hostCwd = toHostAccessiblePath(cwd, this.getDefaultWslDistro())
     if (!this.capability.hasPty) {
-      return this.startWithSpawn(projectId, command, cwd)
+      return this.startWithSpawn(projectId, command, hostCwd)
     }
     const ptySpawn = this.getPtySpawn()
     const pty = ptySpawn('cmd.exe', ['/c', command], {
       name: 'xterm-color',
       cols: 80,
       rows: 24,
-      cwd,
+      cwd: hostCwd,
       env: process.env as Record<string, string>,
     })
     return this.finalizePtyStart(projectId, pty, 'direct-pty')
@@ -389,8 +396,11 @@ class ProcessManager {
   // ── backend: spawn fallback ─────────────────────────────
 
   private startWithSpawn(projectId: string, command: string, cwd: string): boolean {
+    const hostCwd = process.platform === 'win32'
+      ? toHostAccessiblePath(cwd, this.getDefaultWslDistro())
+      : cwd
     const child = spawnChild(command, {
-      cwd,
+      cwd: hostCwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: true,
       env: { ...process.env },

@@ -13,6 +13,9 @@ import type {
   GitRepositorySnapshot,
 } from '../../../shared/types'
 
+const GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES = 256 * 1024
+const MAX_GIT_BRANCH_LIST_ITEMS = 500
+
 export function emptyGitBranchInfo(): GitBranchInfo {
   return {
     current: '',
@@ -340,8 +343,16 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     }
 
     const [localBranches, remoteBranches, recentCommits] = await Promise.all([
-      listGitLines(effectiveRepoRoot, ['branch', '--format=%(refname:short)']),
-      listGitLines(effectiveRepoRoot, ['branch', '--remotes', '--format=%(refname:short)']),
+      listGitLines(effectiveRepoRoot, ['branch', '--format=%(refname:short)'], {
+        stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+        maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
+      }),
+      listGitLines(effectiveRepoRoot, ['branch', '--remotes', '--format=%(refname:short)'], {
+        stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+        maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
+      }),
       readGitCommitHistory(effectiveRepoRoot, 10),
     ])
 

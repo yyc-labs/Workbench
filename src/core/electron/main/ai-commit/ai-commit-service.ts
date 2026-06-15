@@ -4,6 +4,7 @@ import { join } from 'path'
 import { StringDecoder } from 'string_decoder'
 import { resolveAppResourcePath } from '../app-resource-path'
 import { loadConfig } from '../config'
+import { toHostAccessiblePath } from '../host-path'
 import {
   createGitCommandRunner,
   DEFAULT_GIT_OPERATION_TIMEOUT_MS,
@@ -254,7 +255,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     })
     activeAiCommitProjects.add(projectId)
 
-    const config = loadConfig()
+      const config = loadConfig()
     const aiCfgRaw = config.aiCommit || {}
     const aiCfg = {
       ...aiCfgRaw,
@@ -288,6 +289,9 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     )
     const scriptPs1Path = resolveAppResourcePath('script', 'auto-git-commit', 'auto_commit.ps1')
     const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
+    const hostRepoRoot = process.platform === 'win32'
+      ? toHostAccessiblePath(repoRoot, deps.getDefaultWslDistro())
+      : repoRoot
 
     sendAiCommitStatus(projectId, 'running')
     sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${repoRoot}\r\n`)
@@ -431,7 +435,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
               ...(aiCfg.apiKey && aiCfg.apiKey.trim() ? ['-ApiKey', aiCfg.apiKey.trim()] : []),
               ...(aiCfg.model && aiCfg.model.trim() ? ['-Model', aiCfg.model.trim()] : []),
             ], {
-              cwd: repoRoot,
+              cwd: hostRepoRoot,
               shell: false,
               stdio: ['ignore', 'pipe', 'pipe'],
             })
