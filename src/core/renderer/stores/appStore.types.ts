@@ -226,7 +226,7 @@ export interface AppState {
     useWsl?: boolean,
     cwdOverride?: string,
     runStartupModeOverride?: 'silent' | 'terminal'
-  ) => Promise<void>
+  ) => Promise<boolean>
   stopProject: (projectId: string) => Promise<void>
   loadRuntimeEntries: () => Promise<void>
   appendOutput: (projectId: string, data: string) => void

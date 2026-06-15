@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { resolveProjectDetailGestureTarget } from '../lib/projectPaneNavigation'
 
 type GesturePoint = { x: number; y: number }
 
@@ -470,15 +471,15 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (hadGestureMovement && passedHorizontal) {
         hideHintImmediately()
-        const currentPane = isDetailRoute ? (segments[2] ?? 'code') : null
-        const projectId = isDetailRoute ? segments[1] : null
         const isBack = dx < 0
         const isForward = dx > 0
 
-        if (projectId && isForward && currentPane === 'code') {
-          navigate(`/project/${projectId}/aicommit`, { replace: true })
-        } else if (projectId && isBack && currentPane === 'aicommit') {
-          navigate(`/project/${projectId}/code`, { replace: true })
+        const gestureTarget = isDetailRoute
+          ? resolveProjectDetailGestureTarget(location.pathname, isForward ? 'forward' : 'back')
+          : null
+
+        if (gestureTarget) {
+          navigate(gestureTarget, { replace: true })
         } else if (isBack) {
           navigate(-1)
         } else {

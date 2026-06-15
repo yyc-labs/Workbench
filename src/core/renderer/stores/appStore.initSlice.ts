@@ -45,7 +45,9 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       })
 
       await get().loadRuntimeEntries()
-      await get().refreshSessions()
+      if (config.aiEnvironment?.mode === 'windows-wsl') {
+        await get().refreshSessions()
+      }
       await get().syncManagedProcesses()
       get().rehydrateProcessUrlsFromStorage()
       set({ isAppReady: true })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
@@ -216,6 +216,8 @@ export function TranscriptPage() {
   const [isSavingTranscript, setIsSavingTranscript] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccessAt, setSaveSuccessAt] = useState<number | null>(null)
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const previewScrollPositionRef = useRef({ top: 0, left: 0 })
   const structuredPreviewCapture = useScrollableContentCapture()
   const codePreviewCapture = useScrollableContentCapture()
 
@@ -305,6 +307,13 @@ export function TranscriptPage() {
 
   const handleInternalLinkClick = useCallback((href: string) => {
     if (!session) return
+    const previewScroller = previewScrollRef.current
+    if (previewScroller) {
+      previewScrollPositionRef.current = {
+        top: previewScroller.scrollTop,
+        left: previewScroller.scrollLeft,
+      }
+    }
     const reference = session.references.find((item) => item.href === href)
     if (!reference) return
     openTranscriptReference(session.id, reference.id)
@@ -540,6 +549,20 @@ export function TranscriptPage() {
     setSaveSuccessAt(null)
     setIsSavingTranscript(false)
   }, [session?.id, session?.rawText])
+
+  useEffect(() => {
+    if (!activeReference) return
+    const previewScroller = previewScrollRef.current
+    if (!previewScroller) return
+    const { top, left } = previewScrollPositionRef.current
+    const restoreId = window.requestAnimationFrame(() => {
+      previewScroller.scrollTop = top
+      previewScroller.scrollLeft = left
+    })
+    return () => {
+      window.cancelAnimationFrame(restoreId)
+    }
+  }, [activeReference])
 
   if (!project || !projectId) {
     return (
@@ -1038,6 +1061,7 @@ export function TranscriptPage() {
                     >
                       {(effectiveMode === 'preview' || effectiveMode === 'split') && (
                         <div
+                          ref={previewScrollRef}
                           className="code-markdown-preview-scroll-root transcript-markdown-preview-scroll-root min-h-0 overflow-y-auto bg-[color:var(--color-card)]"
                         >
                           <article className="code-markdown-content code-markdown-content--viewport-scroll transcript-markdown-content px-6 py-6">

@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
+import { translateCurrent } from '../i18n'
 
 function sessionsEqual(
   prev: AppState['sessions'],
@@ -202,11 +203,16 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
     const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
     if (diagnostics.issues.length > 0) {
       const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
-      throw new Error(`Runtime preflight checks failed:\n${message}`)
+      throw new Error(translateCurrent('settingsRuntime.preflightFailed', { message }))
     }
     const ok = await runtimeManager.startRuntime(projectId, project.path, project.cli)
     if (!ok) {
-      throw new Error('Runtime failed to start. Please run Runtime diagnostics in Settings.')
+      throw new Error(
+        translateCurrent('settingsRuntime.startFailed', {
+          diagnostics: translateCurrent('settingsRuntime.diagnostics'),
+          settings: translateCurrent('common.settings'),
+        })
+      )
     }
     await get().loadRuntimeEntries()
     await get().refreshSessions()

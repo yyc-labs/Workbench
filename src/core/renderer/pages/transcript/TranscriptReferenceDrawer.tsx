@@ -332,6 +332,7 @@ export function TranscriptReferenceDrawer({
                     filePath={reference.relativePath}
                     language={fileLanguage}
                     readOnly
+                    focusOnReveal={false}
                     modelNamespace="transcript-reference-drawer"
                     stickyScroll
                   />

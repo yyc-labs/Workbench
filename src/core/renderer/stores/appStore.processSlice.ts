@@ -42,7 +42,7 @@ export type ProcessActionsSlice = Pick<
 export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessActionsSlice> = (set, get) => ({
   startProject: async (projectId, commandOverride, processId, useWsl, cwdOverride, runStartupModeOverride) => {
     const project = get().projects.find((p) => p.id === projectId)
-    if (!project) return
+    if (!project) return false
 
     const command = commandOverride || project.customCommand || project.command
     const pid = processId || projectId
@@ -56,7 +56,7 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
     if (isPrimaryProjectRun && runStartupMode === 'terminal') {
       const opened = await window.electronAPI.openPathTerminal(cwd, command)
       if (opened) {
-        return
+        return true
       }
       // Fall back to managed/background mode if external terminal launch fails.
     }
@@ -78,9 +78,28 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
     const started = await window.electronAPI.startProcess(pid, command, cwd, resolvedUseWsl)
     if (!started) {
+      set((state) => ({
+        processes: {
+          ...state.processes,
+          [pid]: {
+            pid: null,
+            status: 'stopped',
+          },
+        },
+        terminalOutputs: {
+          ...state.terminalOutputs,
+          [pid]: '',
+        },
+        processUrls: {
+          ...state.processUrls,
+          [pid]: [],
+        },
+      }))
+      persistProcessUrls(get().processUrls)
       await get().syncManagedProcesses()
-      return
+      return false
     }
+    return true
   },
 
   stopProject: async (projectId) => {
