@@ -34,21 +34,6 @@ function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'):
   return `${basename(projectPath)}-${normalizedCli}-${cliAwareMd5}`
 }
 
-function expandWslHomePath(pathValue: string, context: ProviderContext): string {
-  const normalized = pathValue.trim()
-  if (!normalized) return normalized
-
-  const wslHome = context.capability.wslEnv?.HOME
-  if (!wslHome) return normalized
-  if (normalized === '~') return wslHome
-  if (normalized.startsWith('~/')) return `${wslHome}/${normalized.slice(2)}`
-  if (normalized === '$HOME') return wslHome
-  if (normalized.startsWith('$HOME/')) return `${wslHome}/${normalized.slice(6)}`
-  if (normalized === '${HOME}') return wslHome
-  if (normalized.startsWith('${HOME}/')) return `${wslHome}/${normalized.slice(8)}`
-  return normalized
-}
-
 function buildManagedRuntimeCommand(projectPath: string, cli: 'claude' | 'codex', context: ProviderContext): string {
   const sessionName = buildRuntimeSessionName(projectPath, cli)
   const projectWslPath = wslBridge.toWslPath(projectPath)
@@ -78,45 +63,14 @@ export const windowsWslProvider: AiExecutionProvider = {
     if (!hasWsl) issues.push('WSL is not available')
     if (!hasTmux) issues.push('tmux is not available in WSL')
 
-    const launcherScript = context.config.runtimeEntrypoint
-      ? expandWslHomePath(context.config.runtimeEntrypoint, context)
-      : undefined
-
-    let launcherScriptExists: boolean | undefined
-    let launcherScriptExecutable: boolean | undefined
-
-    if (launcherScript && hasWsl) {
-      try {
-        const escaped = quoteBashSingle(launcherScript)
-        const flags = await wslBridge.exec(
-          `[ -e '${escaped}' ] && [ -x '${escaped}' ] && echo EXISTS_EXEC || ([ -e '${escaped}' ] && echo EXISTS_NOEXEC) || echo MISSING`
-        )
-        launcherScriptExists = flags.includes('EXISTS_EXEC') || flags.includes('EXISTS_NOEXEC')
-        launcherScriptExecutable = flags.includes('EXISTS_EXEC')
-        if (flags.includes('EXISTS_NOEXEC')) {
-          issues.push(`Runtime launcher script is not executable: ${launcherScript}`)
-        }
-        if (flags.includes('MISSING')) {
-          issues.push(`Runtime launcher script not found: ${launcherScript}`)
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        issues.push(`Failed to check runtime entrypoint: ${message}`)
-      }
-    }
-
     return {
       checkedAt: Date.now(),
       mode: 'windows-wsl',
       providerLabel: this.label,
-      runtimeEntrypoint: launcherScript,
       supported: hasWsl,
       hasWsl,
       hasTmux,
       distro,
-      launcherScript,
-      launcherScriptExists,
-      launcherScriptExecutable,
       shell: normalizeWslShell(context.capability.wslShell),
       issues,
     }

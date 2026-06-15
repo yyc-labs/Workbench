@@ -2,6 +2,7 @@ import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { basename } from 'path'
 import type { AiExecutionMode, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
+import { normalizeWindowsHostPath } from '../../host-path'
 import type { AiExecutionProvider } from '../provider-types'
 import { wslBridge } from '../../wsl-bridge'
 import { tmuxManager } from '../../tmux-manager'
@@ -25,7 +26,30 @@ function expandCustomEntrypoint(pathValue: string, hasWsl: boolean, wslHome?: st
 }
 
 function isLikelyWslPath(pathValue: string): boolean {
-  return pathValue.startsWith('/') || pathValue.startsWith('~/') || pathValue === '~'
+  return pathValue.startsWith('/')
+    || pathValue.startsWith('~/')
+    || pathValue === '~'
+    || pathValue === '$HOME'
+    || pathValue.startsWith('$HOME/')
+    || pathValue === '${HOME}'
+    || pathValue.startsWith('${HOME}/')
+}
+
+async function resolveWslHome(hasWsl: boolean, wslHome?: string): Promise<string | undefined> {
+  if (wslHome) return wslHome
+  if (!hasWsl) return undefined
+  try {
+    const resolved = await wslBridge.exec('printf %s "$HOME"', 5000)
+    return resolved.trim() || undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function resolveCustomEntrypoint(pathValue: string | undefined, hasWsl: boolean, wslHome?: string): Promise<string> {
+  const normalized = pathValue?.trim() || ''
+  if (!normalized) return ''
+  return expandCustomEntrypoint(normalized, hasWsl, await resolveWslHome(hasWsl, wslHome))
 }
 
 function isPowerShellScript(pathValue: string): boolean {
@@ -49,9 +73,15 @@ function checkPosixEntrypoint(pathValue: string): { exists: boolean; executable:
   }
 }
 
-function resolveProjectPathArg(projectPath: string, hostPlatform: 'windows' | 'linux' | 'macos', hasWsl: boolean): string {
-  if (hostPlatform === 'windows' && hasWsl) {
-    return wslBridge.toWslPath(projectPath)
+function resolveProjectPathArg(
+  projectPath: string,
+  hostPlatform: 'windows' | 'linux' | 'macos',
+  targetEnvironment: 'host' | 'wsl',
+  wslDistro?: string
+): string {
+  if (hostPlatform === 'windows') {
+    if (targetEnvironment === 'wsl') return wslBridge.toWslPath(projectPath)
+    return normalizeWindowsHostPath(projectPath, wslDistro)
   }
   return projectPath
 }
@@ -189,7 +219,7 @@ export const customScriptProvider: AiExecutionProvider = {
     const issues: string[] = []
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
     const expandedEntrypoint = rawEntrypoint
-      ? expandCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
       : undefined
     let launcherScriptExists: boolean | undefined
     let launcherScriptExecutable: boolean | undefined
@@ -248,12 +278,17 @@ export const customScriptProvider: AiExecutionProvider = {
   async resolveRuntimeLaunch(context, input) {
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
     const entrypoint = rawEntrypoint
-      ? expandCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
       : ''
+    const targetEnvironment: 'host' | 'wsl' =
+      context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)
+        ? 'wsl'
+        : 'host'
     const resolvedProjectPath = resolveProjectPathArg(
       input.projectPath,
       context.capability.hostPlatform,
-      context.capability.hasWsl,
+      targetEnvironment,
+      context.config.wslDistro || context.capability.wslDistro,
     )
     const startArgs = buildRuntimeScriptArgs(
       input,
@@ -328,9 +363,12 @@ export const customScriptProvider: AiExecutionProvider = {
   async resolveAiCommitLaunch(context, input) {
     const rawEntrypoint = context.config.aiCommitEntrypoint?.trim()
     const entrypoint = rawEntrypoint
-      ? expandCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
       : input.scriptPath
     const scriptArgs = buildAiCommitScriptArgs(input)
+    const hostRepoRoot = context.capability.hostPlatform === 'windows'
+      ? normalizeWindowsHostPath(input.repoRoot, context.capability.wslDistro)
+      : input.repoRoot
 
     if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)) {
       if (!context.capability.hasWsl) {
@@ -358,7 +396,7 @@ export const customScriptProvider: AiExecutionProvider = {
           '-lc',
           command,
         ],
-        cwd: input.repoRoot,
+        cwd: hostRepoRoot,
         shell: false,
         outputLabel: isPowerShellScript(entrypoint) ? 'custom-script-wsl-pwsh' : 'custom-script-wsl',
       }
@@ -370,7 +408,7 @@ export const customScriptProvider: AiExecutionProvider = {
         providerLabel: this.label,
         command: 'pwsh',
         args: buildPowerShellFileArgs(entrypoint, input),
-        cwd: input.repoRoot,
+        cwd: hostRepoRoot,
         shell: false,
         env: context.capability.hostPlatform === 'windows'
           ? undefined
@@ -388,7 +426,7 @@ export const customScriptProvider: AiExecutionProvider = {
         providerLabel: this.label,
         command: 'cmd.exe',
         args: ['/d', '/c', entrypoint, ...scriptArgs],
-        cwd: input.repoRoot,
+        cwd: hostRepoRoot,
         shell: false,
         outputLabel: 'custom-script-cmd',
       }
@@ -415,7 +453,7 @@ export const customScriptProvider: AiExecutionProvider = {
       providerLabel: this.label,
       command: entrypoint,
       args: scriptArgs,
-      cwd: input.repoRoot,
+      cwd: hostRepoRoot,
       shell: false,
       outputLabel: 'custom-script-direct',
     }

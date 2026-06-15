@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { basename } from 'path'
 import type { RuntimeDiagnostics } from '../../../../shared/types'
+import { normalizeWindowsHostPath } from '../../host-path'
 import type { AiExecutionProvider } from '../provider-types'
 
 function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
@@ -36,6 +37,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
   },
 
   async resolveRuntimeLaunch(context, input) {
+    const hostProjectPath = normalizeWindowsHostPath(input.projectPath, context.capability.wslDistro)
     const sessionName = buildRuntimeSessionName(input.projectPath, input.cli)
     const runtimeCommand = input.cli === 'codex' ? 'codex' : 'claude'
     const title = input.cli === 'codex' ? 'Codex Runtime' : 'Claude Runtime'
@@ -57,7 +59,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
         '/k',
         runtimeCommand,
       ],
-      cwd: input.projectPath,
+      cwd: hostProjectPath,
       detached: false,
       windowsHide: true,
       shell: false,
@@ -67,6 +69,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
   },
 
   async resolveAiCommitLaunch(_context, input) {
+    const hostRepoRoot = normalizeWindowsHostPath(input.repoRoot)
     const args = [
       '-NoProfile',
       '-ExecutionPolicy',
@@ -87,7 +90,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
       providerLabel: this.label,
       command: 'pwsh',
       args,
-      cwd: input.repoRoot,
+      cwd: hostRepoRoot,
       shell: false,
       outputLabel: 'pwsh',
     }
