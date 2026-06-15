@@ -40,7 +40,7 @@ export function DetailGitRepositorySelector({
   const [query, setQuery] = useState('')
   const containerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const selectedRepository = repositories.find((repo) => repo.id === selectedRepositoryId) ?? repositories[0]
+  const selectedRepository = repositories.find((repo) => repo.id === selectedRepositoryId) ?? snapshot?.repository ?? repositories[0]
   const changeCount = snapshot?.changedFiles.length ?? 0
   const branchName = snapshot?.branch.current || t('detail.repositorySelectorLoading')
   const statusText = loading
@@ -87,10 +87,6 @@ export function DetailGitRepositorySelector({
     }
   }, [open])
 
-  useEffect(() => {
-    if (repositories.length <= 0 || repositoriesLoading) setOpen(false)
-  }, [repositories.length, repositoriesLoading])
-
   const controlHeightClass = variant === 'inline' ? 'h-7' : 'h-8'
   const buttonMaxWidthClass = variant === 'inline' ? 'max-w-[260px]' : 'max-w-[300px]'
   const controls = (
@@ -132,8 +128,13 @@ export function DetailGitRepositorySelector({
                 className={`group flex ${controlHeightClass} ${buttonMaxWidthClass} items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/72 px-3 text-left text-xs outline-none transition-all hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-popover)]/82 disabled:cursor-not-allowed disabled:opacity-60`}
                 aria-haspopup="listbox"
                 aria-expanded={open}
-                onClick={() => setOpen(true)}
-                disabled={repositoriesLoading || repositories.length <= 0}
+                onClick={() => {
+                  if (!open && repositories.length <= 0 && !repositoriesLoading) {
+                    onRefreshRepositories()
+                  }
+                  setOpen(true)
+                }}
+                disabled={repositoriesLoading}
                 title={t('detail.repositorySelectorSwitch')}
               >
                 <span className="min-w-0 flex-1 truncate text-[color:var(--color-foreground)]">
@@ -151,7 +152,9 @@ export function DetailGitRepositorySelector({
                 aria-label={t('detail.repositorySelectorListAria')}
               >
                 <div className="max-h-[260px] overflow-auto">
-                  {filteredRepositories.length > 0 ? (
+                  {repositoriesLoading ? (
+                    <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.repositorySelectorLoading')}</p>
+                  ) : filteredRepositories.length > 0 ? (
                     filteredRepositories.map((repo) => {
                       const selected = repo.id === selectedRepository?.id
                       return (

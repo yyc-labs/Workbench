@@ -44,8 +44,12 @@ type DetailAiCommitPanelProps = {
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: ProjectLinkItem[]
+  projectDevUrlActionVisible?: boolean
+  projectDevUrlPending?: boolean
+  projectDevUrlReady?: boolean
   activePane?: 'code' | 'aicommit'
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
+  onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
@@ -99,8 +103,12 @@ function DetailAiCommitPanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  projectDevUrlActionVisible = false,
+  projectDevUrlPending = false,
+  projectDevUrlReady = false,
   activePane = 'aicommit',
   onSwitchPane,
+  onStartAndOpenDevUrl,
   onOpenTranscript,
   onOpenProjectLinksManager,
   jumpToAiLogToken,
@@ -1038,12 +1046,16 @@ function DetailAiCommitPanel({
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
             onOpenTranscript={onOpenTranscript}
+            onStartAndOpenDevUrl={onStartAndOpenDevUrl}
             onUndoAiCommit={() => {
               void requestUndoAiCommit()
             }}
             onOpenProjectLinksManager={onOpenProjectLinksManager}
             onSwitchPane={onSwitchPane}
             projectHeaderCollapsed={projectHeaderCollapsed}
+            projectDevUrlActionVisible={projectDevUrlActionVisible}
+            projectDevUrlPending={projectDevUrlPending}
+            projectDevUrlReady={projectDevUrlReady}
             projectLinkItems={projectLinkItems}
             projectName={projectName}
             preflightItems={preflightItems}

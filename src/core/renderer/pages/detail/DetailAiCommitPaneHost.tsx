@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
 import { useAppStore } from '../../stores/appStore'
 import { useI18n } from '../../i18n'
@@ -13,9 +13,13 @@ type DetailAiCommitPaneHostProps = {
   projectHeaderCollapsed: boolean
   projectName: string
   projectLinkItems: ProjectLinkItem[]
+  projectDevUrlActionVisible?: boolean
+  projectDevUrlPending?: boolean
+  projectDevUrlReady?: boolean
   aiCommitConfig: AiCommitConfig | undefined
   activePane: 'code' | 'aicommit'
   onSwitchPane: (pane: 'code' | 'aicommit') => void
+  onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript: () => void
   onOpenProjectLinksManager: () => void
   onCloseProjectContextMenu: () => void
@@ -27,9 +31,13 @@ export function DetailAiCommitPaneHost({
   projectHeaderCollapsed,
   projectName,
   projectLinkItems,
+  projectDevUrlActionVisible = false,
+  projectDevUrlPending = false,
+  projectDevUrlReady = false,
   aiCommitConfig,
   activePane,
   onSwitchPane,
+  onStartAndOpenDevUrl,
   onOpenTranscript,
   onOpenProjectLinksManager,
   onCloseProjectContextMenu,
@@ -41,6 +49,7 @@ export function DetailAiCommitPaneHost({
   const stopProject = useAppStore((s) => s.stopProject)
   const clearOutput = useAppStore((s) => s.clearOutput)
   const environment = detectProjectEnvironment(projectPath)
+  const toolboxAutoStartKeyRef = useRef<string | null>(null)
   const aiCommitFlow = useAiCommitFlow({
     projectId,
     projectPath,
@@ -104,6 +113,9 @@ export function DetailAiCommitPaneHost({
 
   useEffect(() => {
     if (toolProcessStatus !== 'stopped') return
+    const autoStartKey = `${projectId}\n${projectPath}\n${environment}`
+    if (toolboxAutoStartKeyRef.current === autoStartKey) return
+    toolboxAutoStartKeyRef.current = autoStartKey
     const toolCommand = environment === 'ubuntu' ? 'exec bash -i' : 'powershell -NoLogo -NoExit'
     const useWsl = environment === 'ubuntu'
     clearOutput(toolProcessId)
@@ -229,8 +241,12 @@ export function DetailAiCommitPaneHost({
         projectHeaderCollapsed={projectHeaderCollapsed}
         projectName={projectName}
         projectLinkItems={projectLinkItems}
+        projectDevUrlActionVisible={projectDevUrlActionVisible}
+        projectDevUrlPending={projectDevUrlPending}
+        projectDevUrlReady={projectDevUrlReady}
         activePane={activePane}
         onSwitchPane={onSwitchPane}
+        onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         jumpToAiLogToken={jumpToAiLogToken}

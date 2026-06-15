@@ -24,6 +24,7 @@ import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
+import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 
@@ -141,6 +142,17 @@ export function DetailPage() {
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
+  const {
+    firstDevUrl,
+    pendingOpenDevUrl,
+    startAndOpenDevUrl,
+  } = useProjectDevUrlLauncher({
+    projectId: projectId ?? '',
+    processStatus,
+    processUrls,
+    runStartupMode: project?.runStartupMode,
+    startProject,
+  })
   const docLinkState = useProjectDocLinks({ project })
   const {
     docLinks,
@@ -351,14 +363,27 @@ export function DetailPage() {
               }}
             />
 
-            {isDevReady && (
+            {(isDevReady || pendingOpenDevUrl || !isActive) && (
               <UrlPopover urls={processUrls}>
                 <button
-                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
-                  onClick={() => window.electronAPI.openExternal(processUrls[0])}
+                  className={`quiet-control inline-flex items-center gap-1.5 rounded-full border-0 py-1.5 text-xs transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+                    isDevReady
+                      ? 'text-primary hover:text-primary'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  } ${
+                    firstDevUrl || pendingOpenDevUrl ? 'px-3' : 'px-2.5'
+                  }`}
+                  onClick={() => { void startAndOpenDevUrl() }}
+                  disabled={pendingOpenDevUrl}
+                  title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                  aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                 >
-                  <ArrowUpRight className="h-3 w-3" />
-                  <span className="max-w-[180px] truncate">{processUrls[0]}</span>
+                  {pendingOpenDevUrl ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
+                  {(firstDevUrl || pendingOpenDevUrl) && (
+                    <span className="max-w-[180px] truncate">
+                      {firstDevUrl ?? t('project.waitingForDevUrl')}
+                    </span>
+                  )}
                 </button>
               </UrlPopover>
             )}
@@ -532,7 +557,11 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                projectDevUrlPending={pendingOpenDevUrl}
+                projectDevUrlReady={isDevReady}
                 activePane={activePane}
+                onStartAndOpenDevUrl={startAndOpenDevUrl}
                 onSwitchPane={(nextPane) => {
                   if (!projectId || nextPane === activePane) return
                   navigate(`/project/${projectId}/${nextPane}`)
@@ -550,12 +579,16 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                projectDevUrlPending={pendingOpenDevUrl}
+                projectDevUrlReady={isDevReady}
                 aiCommitConfig={aiCommitConfig}
                 activePane={activePane}
                 onSwitchPane={(nextPane) => {
                   if (!projectId || nextPane === activePane) return
                   navigate(`/project/${projectId}/${nextPane}`)
                 }}
+                onStartAndOpenDevUrl={startAndOpenDevUrl}
                 onOpenTranscript={() => {
                   if (!projectId) return
                   navigate(`/project/${projectId}/transcript`)

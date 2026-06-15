@@ -64,7 +64,7 @@ function DetailWorkspaceCard({
             {processUrls.length > 0 && (
               <UrlPopover urls={processUrls}>
                 <button
-                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)]"
+                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-primary transition-colors hover:bg-[color:var(--color-accent)] hover:text-primary"
                   onClick={() => window.electronAPI.openExternal(processUrls[0])}
                 >
                   <ArrowUpRight className="h-3 w-3" />

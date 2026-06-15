@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { BookOpen, Bot, Loader2, RotateCcw } from 'lucide-react'
+import { ArrowUpRight, BookOpen, Bot, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { UrlPopover } from '../../components/UrlPopover'
@@ -40,6 +40,10 @@ type DetailAiCommitHeaderProps = {
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
   onOpenTranscript?: () => void
+  onStartAndOpenDevUrl?: () => void | Promise<unknown>
+  projectDevUrlActionVisible?: boolean
+  projectDevUrlPending?: boolean
+  projectDevUrlReady?: boolean
   onUndoAiCommit: () => void
   onOpenProjectLinksManager?: () => void
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
@@ -75,6 +79,10 @@ export function DetailAiCommitHeader({
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
   onOpenTranscript,
+  onStartAndOpenDevUrl,
+  projectDevUrlActionVisible = false,
+  projectDevUrlPending = false,
+  projectDevUrlReady = false,
   onUndoAiCommit,
   onOpenProjectLinksManager,
   onSwitchPane,
@@ -153,6 +161,26 @@ export function DetailAiCommitHeader({
                     <BookOpen className="h-3.5 w-3.5 shrink-0" />
                   </button>
                 </UrlPopover>
+              )}
+              {projectHeaderCollapsed && projectDevUrlActionVisible && onStartAndOpenDevUrl && (
+                <button
+                  type="button"
+                  className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+                    projectDevUrlReady
+                      ? 'text-primary hover:text-primary'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                  onClick={() => { void onStartAndOpenDevUrl() }}
+                  disabled={projectDevUrlPending}
+                  title={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                  aria-label={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                >
+                  {projectDevUrlPending ? (
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  ) : (
+                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                </button>
               )}
             </div>
           </div>

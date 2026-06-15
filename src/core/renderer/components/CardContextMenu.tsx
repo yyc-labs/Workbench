@@ -26,20 +26,20 @@ interface CardContextMenuProps {
   isOpeningTerminal: boolean
   currentCli: CliTool
   isPinned?: boolean
-  onStartRuntime: () => void | Promise<void>
-  onStopRuntime: () => void | Promise<void>
-  onOpenTerminal: () => void | Promise<void>
-  onSwitchCli: () => void | Promise<void>
-  onStartProject: () => void | Promise<void>
-  onStopProject: () => void | Promise<void>
-  onAiAutoCommit?: () => void | Promise<void>
+  onStartRuntime: () => void | Promise<unknown>
+  onStopRuntime: () => void | Promise<unknown>
+  onOpenTerminal: () => void | Promise<unknown>
+  onSwitchCli: () => void | Promise<unknown>
+  onStartProject: () => void | Promise<unknown>
+  onStopProject: () => void | Promise<unknown>
+  onAiAutoCommit?: () => void | Promise<unknown>
   aiCommitStatus?: 'idle' | 'running' | 'success' | 'error'
-  onOpenFolder: () => void | Promise<void>
-  onOpenPathTerminal: () => void | Promise<void>
-  onOpenVsCode: () => void | Promise<void>
-  onTogglePin?: () => void | Promise<void>
-  onEditMetadata?: () => void | Promise<void>
-  onRemoveProject?: () => void | Promise<void>
+  onOpenFolder: () => void | Promise<unknown>
+  onOpenPathTerminal: () => void | Promise<unknown>
+  onOpenVsCode: () => void | Promise<unknown>
+  onTogglePin?: () => void | Promise<unknown>
+  onEditMetadata?: () => void | Promise<unknown>
+  onRemoveProject?: () => void | Promise<unknown>
 }
 
 type MenuTone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
@@ -49,7 +49,7 @@ interface MenuAction {
   caption?: string
   icon: React.ReactNode
   show?: boolean
-  action: () => void | Promise<void>
+  action: () => void | Promise<unknown>
   disabled?: boolean
   tone?: MenuTone
 }
@@ -154,7 +154,7 @@ export function CardContextMenu({
   const [actionError, setActionError] = useState<string | null>(null)
 
   const handleClick = useCallback(
-    async (action: () => void | Promise<void>) => {
+    async (action: () => void | Promise<unknown>) => {
       setActionError(null)
       try {
         await action()

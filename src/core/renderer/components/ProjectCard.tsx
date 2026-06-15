@@ -18,6 +18,7 @@ import { normalizeProjectDocLinkTag } from '../lib/projectDocLinks'
 import { projectDocLinkTagLabel } from '../lib/projectDocLinks'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
+import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -96,7 +97,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     [devUrls, docLinkTagOptions, docLinks, isDevReady, t]
   )
   const firstDocLinkMenuItem = linkMenuItems.find((item) => item.label.startsWith(`${t('project.docCategoryPrefix')} · `))
-  const firstDevUrl = devUrls[0]
   const hoverDocLabel = defaultDocLink
     ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}`
     : docLinks.length > 0
@@ -110,8 +110,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
-  const [pendingOpenDevUrl, setPendingOpenDevUrl] = useState(false)
-
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
     setIsOpeningTerminal(true)
@@ -162,35 +160,22 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
   }, [aiCommitStatus, project.id, project.path])
 
-  useEffect(() => {
-    if (!pendingOpenDevUrl) return
-    if (!firstDevUrl) return
-
-    void window.electronAPI.openExternal(firstDevUrl)
-    setPendingOpenDevUrl(false)
-  }, [firstDevUrl, pendingOpenDevUrl])
-
-  useEffect(() => {
-    if (!pendingOpenDevUrl) return
-    const timer = window.setTimeout(() => setPendingOpenDevUrl(false), 30_000)
-    return () => window.clearTimeout(timer)
-  }, [pendingOpenDevUrl])
+  const {
+    pendingOpenDevUrl,
+    startAndOpenDevUrl,
+  } = useProjectDevUrlLauncher({
+    projectId: project.id,
+    processStatus: devStatus,
+    processUrls: devUrls,
+    runStartupMode: project.runStartupMode,
+    startProject,
+  })
 
   const handleOpenFirstLink = useCallback(async () => {
     if (firstDocLinkMenuItem?.url) {
       await window.electronAPI.openExternal(firstDocLinkMenuItem.url)
     }
   }, [firstDocLinkMenuItem?.url])
-
-  const handleStartAndOpenDevUrl = useCallback(async () => {
-    if (firstDevUrl) {
-      await window.electronAPI.openExternal(firstDevUrl)
-      return
-    }
-    if (isDevRunning || isDevStopping || pendingOpenDevUrl) return
-    setPendingOpenDevUrl(true)
-    await startProject(project.id)
-  }, [firstDevUrl, isDevRunning, isDevStopping, pendingOpenDevUrl, project.id, startProject])
 
   return (
     <div
@@ -406,18 +391,25 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         )}
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button
-            className={`quiet-control h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-60 ${
-              isDevReady || pendingOpenDevUrl ? 'inline-flex' : 'hidden group-hover:inline-flex'
+            className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+              isDevReady
+                ? 'text-primary hover:text-primary'
+                : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
             onClick={(e) => {
               e.stopPropagation()
-              void handleStartAndOpenDevUrl()
+              void startAndOpenDevUrl()
             }}
             title={isDevReady
               ? t('project.openDevUrl')
               : pendingOpenDevUrl
                 ? t('project.waitingForDevUrl')
-                : t('project.startAndOpenDevUrl')}
+                : t('project.startAndOpenDevUrlShort')}
+            aria-label={isDevReady
+              ? t('project.openDevUrl')
+              : pendingOpenDevUrl
+                ? t('project.waitingForDevUrl')
+                : t('project.startAndOpenDevUrlShort')}
             disabled={pendingOpenDevUrl}
           >
             {pendingOpenDevUrl ? (

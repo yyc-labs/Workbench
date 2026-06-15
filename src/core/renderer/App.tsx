@@ -249,14 +249,32 @@ function SessionPoller() {
     s.projects.map((p) => p.id).sort().join(',')
   )
   const projects = useAppStore((s) => s.projects)
+  const runtimeEntriesKey = useAppStore((s) =>
+    Object.values(s.runtimeEntries)
+      .map((entry) => `${entry.projectId}:${entry.sessionName}:${entry.mode ?? ''}`)
+      .sort()
+      .join('|')
+  )
+  const processStatusesKey = useAppStore((s) =>
+    Object.entries(s.processes)
+      .map(([projectId, process]) => `${projectId}:${process.status}`)
+      .sort()
+      .join('|')
+  )
   const loadRuntimeEntries = useAppStore((s) => s.loadRuntimeEntries)
   const refreshSessions = useAppStore((s) => s.refreshSessions)
+  const hasRuntimeEntries = runtimeEntriesKey.length > 0
+  const hasLiveProcesses = processStatusesKey.includes(':running') || processStatusesKey.includes(':stopping')
+  const shouldPollSessions = hasRuntimeEntries || hasLiveProcesses
 
   useEffect(() => {
-    if (projects.length === 0) return
+    if (projects.length === 0 || !shouldPollSessions) {
+      runtimeManager.stopPolling()
+      return
+    }
     runtimeManager.startPolling(() => { refreshSessions() }, 10000)
     return () => runtimeManager.stopPolling()
-  }, [projectIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectIds, shouldPollSessions]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (projects.length === 0) return

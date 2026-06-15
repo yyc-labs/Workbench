@@ -113,7 +113,7 @@ export function useAiCommitFlow({
     if (gitRepositories.length <= 0) return null
     return gitRepositories.find((repo) => repo.id === selectedGitRepositoryId) ?? gitRepositories[0]
   }, [gitRepositories, selectedGitRepositoryId])
-  const activeRepoRoot = selectedGitRepository?.repoRoot
+  const activeRepoRoot = selectedGitRepository?.repoRoot || (gitSnapshot?.isGitRepository ? gitSnapshot.repoRoot : undefined)
   const selectGitRepository = useCallback((repoId: string) => {
     setSelectedGitRepositoryId(repoId || null)
   }, [])
@@ -434,8 +434,9 @@ export function useAiCommitFlow({
   }, [refreshGitRepositories])
 
   useEffect(() => {
+    if (aiCommitStatus === 'running') return
     void refreshGitSnapshot()
-  }, [refreshGitSnapshot, aiCommitStatus, selectedGitRepositoryId])
+  }, [refreshGitSnapshot, aiCommitStatus])
 
   const handleAiCommit = useCallback(async (override?: AiCommitRunOverride) => {
     if (!projectId || !activeRepoRoot) return
