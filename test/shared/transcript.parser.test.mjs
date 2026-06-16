@@ -3,6 +3,7 @@ import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
 const { buildTranscriptSession } = loadTsModule('src/core/shared/transcript/transcript.parser.ts')
+const { parseBoxTable } = loadTsModule('src/core/renderer/pages/code/code.markdownBoxTables.parsers.ts')
 
 function buildSession(rawText, overrides = {}) {
   const existingPaths = new Set(overrides.paths ?? ['src/app.ts', 'docs/guide.md', 'src/utils/math.ts'])
@@ -80,4 +81,68 @@ test('buildTranscriptSession fences implicit structured data and code blocks', (
 
   assert.match(session.markdownText, /```json\n\{\n"name": "demo",\n"enabled": true\n\}\n```/)
   assert.match(session.markdownText, /```typescript\nconst value = compute\(input\)\nreturn compute\(value\)\n```/)
+})
+
+test('buildTranscriptSession keeps indented standalone table references on their own lines', () => {
+  const rawText = [
+    '项目                                       当前是否可改            代码来源            说明                                     前端建议',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━',
+    'Size (TEM)                                 可改                    nanopct_inf/        页面滑块输入                             暴露',
+    '                                                                      app.py:120',
+  ].join('\n')
+
+  const session = buildSession(rawText, {
+    projectPath: '/repo/project',
+    paths: ['app.py'],
+  })
+
+  assert.match(session.markdownText, /\n\s*\[app\.py:120\]\(transcript-ref:\/\/session-1-ref-1\)$/)
+  const parsedTable = parseBoxTable(session.markdownText, 1)
+  assert.deepEqual(parsedTable?.rows.map((row) => row.cells), [
+    ['项目', '当前是否可改', '代码来源', '说明', '前端建议'],
+    ['Size (TEM)', '可改', '[nanopct_inf/app.py:120](transcript-ref://session-1-ref-1)', '页面滑块输入', '暴露'],
+  ])
+})
+
+test('buildTranscriptSession infers path prefixes for indented table continuations', () => {
+  const rawText = [
+    '分类参数候选项                             不可在页面改            nanopct_inf/        下拉选项集合由配置文件固定               不暴露为高级参数',
+    '                                                                      model/',
+    '                                                                      data_config.json',
+    '                                                                      :20',
+    '模型结构超参数                             不可改                  nanopct_inf/        embedding dim、层数、dropout 等都写死    不暴露',
+    '                                                                      inf.py:61,',
+    '                                                                      nanopct_inf/',
+    '                                                                      inf.py:451',
+  ].join('\n')
+
+  const session = buildSession(rawText, {
+    projectPath: '/repo/project',
+    paths: ['nanopct_inf/model/data_config.json', 'nanopct_inf/inf.py'],
+  })
+
+  assert.deepEqual(
+    session.references.map((reference) => ({
+      label: reference.label,
+      relativePath: reference.relativePath,
+      lineNumber: reference.lineNumber,
+    })),
+    [
+      {
+        label: 'model/data_config.json:20',
+        relativePath: 'nanopct_inf/model/data_config.json',
+        lineNumber: 20,
+      },
+      {
+        label: 'inf.py:61',
+        relativePath: 'nanopct_inf/inf.py',
+        lineNumber: 61,
+      },
+      {
+        label: 'nanopct_inf/inf.py:451',
+        relativePath: 'nanopct_inf/inf.py',
+        lineNumber: 451,
+      },
+    ]
+  )
 })

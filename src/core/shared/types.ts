@@ -67,6 +67,12 @@ export interface ClaudeBashrcConfig {
   claudeCodeEffortLevel: string
 }
 
+export interface ClaudeRuntimeProfile {
+  id: string
+  name: string
+  config: ClaudeBashrcConfig
+}
+
 export type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
 
 export interface AiCommitRunOverride {
@@ -667,6 +673,10 @@ export interface AppConfig {
   startupDefaultFilter?: StartupDefaultFilter
   /** AI Runtime / AI Commit execution environment selection */
   aiEnvironment?: AiEnvironmentConfig
+  /** Saved Claude runtime shell profiles for quick switching */
+  claudeRuntimeProfiles?: ClaudeRuntimeProfile[]
+  /** Active Claude runtime profile id */
+  activeClaudeRuntimeProfileId?: string
   /** Legacy runtime launcher script path kept only for old-config migration */
   runtimeLauncherScript?: string
   /** Keep runtime tmux sessions alive when app quits */

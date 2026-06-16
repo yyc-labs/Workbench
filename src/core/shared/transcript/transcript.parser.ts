@@ -28,6 +28,7 @@ const ABSOLUTE_POSIX_PATH_LINE_EXACT_PATTERN = /^\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'
 const RELATIVE_PATH_LINE_EXACT_PATTERN = /^(?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9_-]+$/
 const WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN =
   /:(?:[ \t]*\n[ \t]*)?(\d+)(?:(?:[ \t]*\n[ \t]*)?\:(?:[ \t]*\n[ \t]*)?(\d+))?/g
+const RELATIVE_PATH_PREFIX_TOKEN_PATTERN = /(?:\.\/)?(?:[\w.-]+\/)+/g
 const MARKDOWN_FENCE_LINE_PATTERN = /^[ \t]{0,3}([`~]{3,})/
 const STRUCTURED_DATA_BRACKET_LINE_PATTERN = /^[\[\]{}]+,?$/
 const STRUCTURED_DATA_QUOTED_KEY_VALUE_PATTERN = /^["'][^"'\n]+["']\s*:\s*.+$/
@@ -440,12 +441,94 @@ function findLineNumber(lineStarts: number[], offset: number): number {
   return lineStarts.length
 }
 
+function getLineTextByIndex(text: string, lineStarts: number[], lineIndex: number): string {
+  const lineStartOffset = lineStarts[lineIndex] ?? 0
+  const lineEndOffset = lineIndex + 1 < lineStarts.length ? lineStarts[lineIndex + 1] - 1 : text.length
+  return text.slice(lineStartOffset, lineEndOffset)
+}
+
+function countTrailingSpaces(value: string): number {
+  let count = 0
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    if (value[index] !== ' ') break
+    count += 1
+  }
+  return count
+}
+
+function inferContextualRelativePathPrefix(
+  text: string,
+  lineStarts: number[],
+  candidate: {
+    rawPath: string
+    startOffset: number
+  }
+): string | null {
+  if (!candidate.rawPath || candidate.rawPath.startsWith('/')) return null
+  if (candidate.rawPath.startsWith('./')) return null
+
+  const startLineIndex = Math.max(0, findLineNumber(lineStarts, candidate.startOffset) - 1)
+
+  for (let lineIndex = startLineIndex - 1; lineIndex >= 0 && lineIndex >= startLineIndex - 4; lineIndex -= 1) {
+    const previousLine = getLineTextByIndex(text, lineStarts, lineIndex)
+    const trimmed = previousLine.trim()
+    if (!trimmed) continue
+
+    const candidateLine = getLineTextByIndex(text, lineStarts, Math.max(lineIndex + 1, startLineIndex))
+    const candidateLineOffset = lineStarts[Math.max(lineIndex + 1, startLineIndex)] ?? 0
+    const candidateColumn = Math.max(0, candidate.startOffset - candidateLineOffset)
+    const leadingIndent = countLeadingIndent(candidateLine)
+    const spacesBeforeCandidate = countTrailingSpaces(candidateLine.slice(0, candidateColumn))
+    const isContinuationLike = leadingIndent >= 8 || spacesBeforeCandidate >= 8
+    if (!isContinuationLike) continue
+
+    const matches = [...trimmed.matchAll(RELATIVE_PATH_PREFIX_TOKEN_PATTERN)]
+    const lastMatch = matches[matches.length - 1]
+    const prefix = lastMatch?.[0]
+    if (prefix) return prefix
+  }
+
+  return null
+}
+
+function applyContextualRelativePathPrefix(
+  text: string,
+  lineStarts: number[],
+  candidate: {
+    rawPath: string
+    startOffset: number
+  }
+): string {
+  const inferredPrefix = inferContextualRelativePathPrefix(text, lineStarts, candidate)
+  if (!inferredPrefix || candidate.rawPath.startsWith(inferredPrefix)) {
+    return candidate.rawPath
+  }
+  return `${inferredPrefix}${candidate.rawPath}`.replace(/\/{2,}/g, '/')
+}
+
 function createReferenceId(sessionId: string, index: number): string {
   return `${sessionId}-ref-${index + 1}`
 }
 
 function normalizeWrappedReferenceCandidate(rawText: string): string {
   return rawText.replace(/\n[ \t]*/g, '')
+}
+
+function trimLeadingWhitespace(value: string): { trimmed: string; offsetDelta: number } {
+  const match = /^\s+/.exec(value)
+  const offsetDelta = match?.[0]?.length ?? 0
+  return {
+    trimmed: value.slice(offsetDelta),
+    offsetDelta,
+  }
+}
+
+function countNonEmptyWrappedReferenceLines(rawText: string): number {
+  return rawText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .length
 }
 
 function findWrappedReferenceStart(text: string, suffixStartOffset: number): number | null {
@@ -628,19 +711,25 @@ function collectReferences(
     if (candidateStartOffset == null) continue
 
     const rawText = cleanedText.slice(candidateStartOffset, suffixEndOffset)
-    if (!rawText.includes('\n')) continue
+    const trimmedWrapped = trimLeadingWhitespace(rawText)
+    if (!trimmedWrapped.trimmed.includes('\n')) continue
+    if (countNonEmptyWrappedReferenceLines(trimmedWrapped.trimmed) < 2) continue
 
-    const normalizedCandidate = normalizeWrappedReferenceCandidate(rawText)
+    const normalizedCandidate = normalizeWrappedReferenceCandidate(trimmedWrapped.trimmed)
     const parsedCandidate = parseNormalizedReferenceCandidate(normalizedCandidate)
     if (!parsedCandidate) continue
+    const contextualRawPath = applyContextualRelativePathPrefix(cleanedText, lineStarts, {
+      rawPath: parsedCandidate.rawPath,
+      startOffset: candidateStartOffset + trimmedWrapped.offsetDelta,
+    })
 
     candidates.push({
-      rawText,
-      rawPath: parsedCandidate.rawPath,
+      rawText: trimmedWrapped.trimmed,
+      rawPath: contextualRawPath,
       label: normalizedCandidate,
       lineNumber: parsedCandidate.lineNumber,
       column: parsedCandidate.column,
-      startOffset: candidateStartOffset,
+      startOffset: candidateStartOffset + trimmedWrapped.offsetDelta,
       endOffset: suffixEndOffset,
     })
   }
@@ -680,7 +769,12 @@ function collectReferences(
     if (occupiedRanges.some((range) => candidate.startOffset < range.end && candidate.endOffset > range.start)) {
       continue
     }
-    const relativePath = resolveProjectRelativePath(projectPath, candidate.rawPath)
+    const resolvedRawPath = applyContextualRelativePathPrefix(cleanedText, lineStarts, candidate)
+
+    let relativePath = resolveProjectRelativePath(projectPath, resolvedRawPath)
+    if (!relativePath || !isProjectFilePath(relativePath)) {
+      relativePath = resolveProjectRelativePath(projectPath, candidate.rawPath)
+    }
     if (!relativePath) continue
     if (!isProjectFilePath(relativePath)) continue
 

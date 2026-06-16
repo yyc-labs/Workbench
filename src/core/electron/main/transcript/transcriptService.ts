@@ -36,6 +36,34 @@ function isProjectFilePath(projectPath: string, relativePath: string): boolean {
   }
 }
 
+function rebuildSessionIfNeeded(
+  session: TranscriptSession,
+  projectPath: string
+): TranscriptSession {
+  const rebuilt = buildTranscriptSession({
+    projectId: session.projectId,
+    sourceType: session.sourceType,
+    rawText: session.rawText,
+    title: session.title,
+  }, {
+    sessionId: session.id,
+    projectPath,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
+    title: session.title,
+  })
+
+  if (
+    rebuilt.markdownText === session.markdownText
+    && JSON.stringify(rebuilt.references) === JSON.stringify(session.references)
+  ) {
+    return session
+  }
+
+  return rebuilt
+}
+
 function createSessionId(): string {
   const random = Math.random().toString(36).slice(2, 10)
   return `ts-${Date.now().toString(36)}-${random}`
@@ -196,7 +224,21 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
     },
 
     getTranscript: async (projectId, transcriptId) => {
-      return deps.repository.getSession(projectId, transcriptId)
+      const session = await deps.repository.getSession(projectId, transcriptId)
+      if (!session) return null
+
+      const projectPath = deps.getProjectPathById(projectId)
+      if (!projectPath) {
+        return session
+      }
+
+      const rebuilt = rebuildSessionIfNeeded(session, projectPath)
+      if (rebuilt === session) {
+        return session
+      }
+
+      await deps.repository.saveSession(rebuilt)
+      return rebuilt
     },
 
     updateTranscript: async (inputPayload) => {

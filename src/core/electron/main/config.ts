@@ -2,10 +2,11 @@ import { app } from 'electron'
 import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
-import type { AppConfig } from '../../shared/types'
+import type { AppConfig, ClaudeRuntimeProfile, ClaudeBashrcConfig } from '../../shared/types'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/projectDocLinks'
 import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
+import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -32,6 +33,9 @@ const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
   },
 }
 
+const DEFAULT_CLAUDE_RUNTIME_PROFILE_ID = 'default'
+const DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME = 'DeepSeek Default'
+
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
 }
@@ -46,6 +50,12 @@ const DEFAULT_CONFIG: AppConfig = {
   docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
   startupDefaultFilter: undefined,
   aiEnvironment: undefined,
+  claudeRuntimeProfiles: [{
+    id: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
+    name: DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME,
+    config: defaultClaudeBashrcConfig(),
+  }],
+  activeClaudeRuntimeProfileId: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
   runtimeLauncherScript: undefined,
   runtimeKeepAliveOnQuit: false,
   aiCommit: {
@@ -59,6 +69,59 @@ const DEFAULT_CONFIG: AppConfig = {
     maxBullets: 8,
   },
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+}
+
+function normalizeClaudeRuntimeProfiles(
+  profiles: AppConfig['claudeRuntimeProfiles'] | unknown,
+  activeProfileId: unknown
+): { profiles: ClaudeRuntimeProfile[]; activeProfileId: string } {
+  const normalizedProfiles = Array.isArray(profiles)
+    ? profiles
+      .map((item, index) => {
+        if (!item || typeof item !== 'object') return null
+        const raw = item as Partial<ClaudeRuntimeProfile>
+        const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+        const name = typeof raw.name === 'string' ? raw.name.trim() : ''
+        const config = raw.config && typeof raw.config === 'object'
+          ? normalizeClaudeBashrcConfig(raw.config as unknown as Record<string, unknown>)
+          : defaultClaudeBashrcConfig()
+        if (!id || !name) return null
+        return {
+          id,
+          name,
+          config,
+          sortOrder: index,
+        }
+      })
+      .filter((item): item is ClaudeRuntimeProfile & { sortOrder: number } => Boolean(item))
+    : []
+
+  const dedupedProfiles: ClaudeRuntimeProfile[] = []
+  const usedIds = new Set<string>()
+  for (const profile of normalizedProfiles) {
+    if (usedIds.has(profile.id)) continue
+    usedIds.add(profile.id)
+    dedupedProfiles.push({
+      id: profile.id,
+      name: profile.name,
+      config: profile.config,
+    })
+  }
+
+  if (dedupedProfiles.length === 0) {
+    dedupedProfiles.push({
+      id: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
+      name: DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME,
+      config: defaultClaudeBashrcConfig(),
+    })
+  }
+
+  const normalizedActiveProfileId = typeof activeProfileId === 'string' ? activeProfileId.trim() : ''
+  const active = dedupedProfiles.some((profile) => profile.id === normalizedActiveProfileId)
+    ? normalizedActiveProfileId
+    : dedupedProfiles[0]!.id
+
+  return { profiles: dedupedProfiles, activeProfileId: active }
 }
 
 let cachedConfig: AppConfig | undefined
@@ -242,6 +305,14 @@ export function loadConfig(): AppConfig {
         ...parsed,
       }),
     }
+    {
+      const runtimeProfiles = normalizeClaudeRuntimeProfiles(
+        parsed.claudeRuntimeProfiles,
+        parsed.activeClaudeRuntimeProfileId
+      )
+      cachedConfig.claudeRuntimeProfiles = runtimeProfiles.profiles
+      cachedConfig.activeClaudeRuntimeProfileId = runtimeProfiles.activeProfileId
+    }
     if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
     }
@@ -279,6 +350,16 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
   }
+  const runtimeProfiles = normalizeClaudeRuntimeProfiles(
+    Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles')
+      ? partial.claudeRuntimeProfiles
+      : current.claudeRuntimeProfiles,
+    Object.prototype.hasOwnProperty.call(partial, 'activeClaudeRuntimeProfileId')
+      ? partial.activeClaudeRuntimeProfileId
+      : current.activeClaudeRuntimeProfileId
+  )
+  updated.claudeRuntimeProfiles = runtimeProfiles.profiles
+  updated.activeClaudeRuntimeProfileId = runtimeProfiles.activeProfileId
   updated.aiEnvironment = normalizeAiEnvironmentConfig(updated)
   await saveConfig(updated)
   return updated

@@ -32,6 +32,7 @@ export function SettingsPage() {
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
+  const setClaudeRuntimeProfiles = useAppStore((s) => s.setClaudeRuntimeProfiles)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const section = isSettingsSection(sectionParam) ? sectionParam : DEFAULT_SETTINGS_SECTION
@@ -106,6 +107,9 @@ export function SettingsPage() {
                 <SettingsAiRuntimePanel
                   capability={capability}
                   mode={config.aiEnvironment?.mode}
+                  profiles={config.claudeRuntimeProfiles ?? []}
+                  activeProfileId={config.activeClaudeRuntimeProfileId}
+                  onProfilesSave={setClaudeRuntimeProfiles}
                 />
               )}
               {section === 'transcripts' && (

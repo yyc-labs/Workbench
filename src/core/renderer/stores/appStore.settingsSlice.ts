@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import type { ProjectDocTagOption } from '../../shared/types'
+import type { ClaudeRuntimeProfile, ProjectDocTagOption } from '../../shared/types'
 
 export type SettingsActionsSlice = Pick<
   AppState,
@@ -11,6 +11,7 @@ export type SettingsActionsSlice = Pick<
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
   | 'setAgentHookConfig'
+  | 'setClaudeRuntimeProfiles'
   | 'setDocLinkTags'
   | 'setStartupDefaultFilter'
   | 'setSearchQuery'
@@ -86,6 +87,20 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         agentHooks: updated.agentHooks,
+      },
+    }))
+  },
+
+  setClaudeRuntimeProfiles: async (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => {
+    const updated = await window.electronAPI.setConfig({
+      claudeRuntimeProfiles: profiles,
+      activeClaudeRuntimeProfileId: activeProfileId,
+    })
+    set((state) => ({
+      config: {
+        ...state.config,
+        claudeRuntimeProfiles: updated.claudeRuntimeProfiles,
+        activeClaudeRuntimeProfileId: updated.activeClaudeRuntimeProfileId,
       },
     }))
   },

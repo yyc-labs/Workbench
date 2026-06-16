@@ -3,6 +3,7 @@ import type {
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
   ClaudeBashrcConfig,
+  ClaudeRuntimeProfile,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchOptions,
   ProjectFileNode,
@@ -215,6 +216,7 @@ export interface AppState {
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
+  setClaudeRuntimeProfiles: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
   setDocLinkTags: (tags: ProjectDocTagOption[]) => Promise<void>
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
