@@ -11,6 +11,8 @@ type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
 
 type DetailAiCommitWorkingTreePanelProps = {
   changedFiles: DetailGitSnapshot['changedFiles']
+  changedFileCount: number
+  changedFilesSuppressed: boolean
   conflictedCount: number
   fileActionError: string | null
   gitSnapshotLoading: boolean
@@ -124,6 +126,8 @@ function WorkingTreeFileItem({
 
 export function DetailAiCommitWorkingTreePanel({
   changedFiles,
+  changedFileCount,
+  changedFilesSuppressed,
   conflictedCount,
   fileActionError,
   gitSnapshotLoading,
@@ -165,7 +169,7 @@ export function DetailAiCommitWorkingTreePanel({
           colorClassName="bg-[color:var(--color-background-sunken)]/60"
           label={t('detail.workingTreeAll')}
           loading={gitSnapshotLoading}
-          value={formatGitBadgeCount(changedFiles.length)}
+          value={formatGitBadgeCount(changedFileCount)}
         />
         <WorkingTreeStatCard
           colorClassName="bg-[color:var(--color-success-background)]"
@@ -205,6 +209,15 @@ export function DetailAiCommitWorkingTreePanel({
           <div className="git-panel-skeleton h-[68px] w-full rounded-[12px]" />
           <div className="git-panel-skeleton h-[68px] w-full rounded-[12px]" />
           <div className="git-panel-skeleton h-[68px] w-[86%] rounded-[12px]" />
+        </div>
+      ) : changedFilesSuppressed ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-5 text-center">
+          <div>
+            <p className="text-base font-semibold text-[color:var(--color-foreground)]">{t('detail.workingTreeSuppressedTitle')}</p>
+            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+              {t('detail.workingTreeSuppressedDescription')}
+            </p>
+          </div>
         </div>
       ) : changedFiles.length > 0 ? (
         <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">

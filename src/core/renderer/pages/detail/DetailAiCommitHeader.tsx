@@ -25,6 +25,7 @@ type DetailAiCommitHeaderProps = {
   activePane: 'code' | 'aicommit'
   aiAutoCommitButtonRef: MutableRefObject<HTMLButtonElement | null>
   aiCommitStatus: AiCommitStatus
+  aiCommitBlockedReason?: string | null
   aiCommitUndo: AiCommitUndoState | null
   aiCommitUndoAuthActive: boolean
   aiCommitUndoAvailable: boolean
@@ -64,6 +65,7 @@ export function DetailAiCommitHeader({
   activePane,
   aiAutoCommitButtonRef,
   aiCommitStatus,
+  aiCommitBlockedReason,
   aiCommitUndo,
   aiCommitUndoAuthActive,
   aiCommitUndoAvailable,
@@ -102,6 +104,8 @@ export function DetailAiCommitHeader({
     : `${undoButtonLabel} ${aiCommitUndoRemainingSeconds}s`
   const primaryButtonLabel = aiCommitUndoAvailable
     ? undoCountdownLabel
+    : aiCommitBlockedReason
+      ? t('detail.aiCommitBlockedTitle')
     : aiCommitStatus === 'running'
       ? t('detail.aiCommitRunning')
       : t('common.aiAutoCommit')
@@ -109,10 +113,12 @@ export function DetailAiCommitHeader({
     ? aiCommitUndoAuthActive
       ? t('detail.aiCommitUndoAuthActive')
       : t('detail.aiCommitUndoCurrent')
+    : aiCommitBlockedReason
+      ? t('detail.aiCommitButtonHintBlocked')
     : isAiEnabled
       ? t('detail.aiCommitButtonHintEnabled')
       : t('detail.aiCommitButtonHintDisabled')
-  const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning
+  const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning || Boolean(aiCommitBlockedReason)
   const preflightClassByTone: Record<NonNullable<DetailAiCommitHeaderProps['preflightItems']>[number]['tone'], string> = {
     success: 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]',
     warning: 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]',
@@ -193,6 +199,8 @@ export function DetailAiCommitHeader({
                 ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 : aiCommitUndoAvailable
                   ? 'border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)] hover:bg-[color:var(--color-warning-background)]/80'
+                : aiCommitBlockedReason
+                  ? 'border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 : aiCommitStatus === 'error'
                   ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
                   : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
@@ -200,13 +208,15 @@ export function DetailAiCommitHeader({
               style={
                 aiCommitStatus === 'running'
                   ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                  : aiCommitBlockedReason
+                    ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
                   : aiCommitStatus === 'error'
                     ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
                     : undefined
               }
               onClick={aiCommitUndoAvailable ? onUndoAiCommit : onAiAutoCommit}
               onContextMenu={(event) => {
-                if (aiCommitUndoAvailable) {
+                if (aiCommitUndoAvailable || aiCommitBlockedReason) {
                   event.preventDefault()
                   event.stopPropagation()
                   return
@@ -220,6 +230,8 @@ export function DetailAiCommitHeader({
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : aiCommitUndoAvailable ? (
                 <RotateCcw className="h-3.5 w-3.5" />
+              ) : aiCommitBlockedReason ? (
+                <RefreshCw className="h-3.5 w-3.5" />
               ) : (
                 <Bot className="h-3.5 w-3.5" />
               )}
@@ -255,19 +267,25 @@ export function DetailAiCommitHeader({
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {flowNodes.map((node, index) => (
-            <div
-              key={node.id}
-              className={`inline-flex max-w-[190px] items-center gap-2 rounded-full border px-3 py-1.5 text-[11.5px] font-medium ${getStepClass(node.data.status)}`}
-              title={node.data.detail || node.data.label}
-            >
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getStepDotClass(node.data.status)}`} />
-              <span className="shrink-0 font-mono text-[10px] opacity-70">{index + 1}</span>
-              <span className="truncate">{node.data.label}</span>
-            </div>
-          ))}
-        </div>
+        {aiCommitBlockedReason ? (
+          <div className="rounded-[16px] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-3 py-3 text-[12px] text-[color:var(--color-warning)]">
+            {aiCommitBlockedReason}
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {flowNodes.map((node, index) => (
+              <div
+                key={node.id}
+                className={`inline-flex max-w-[190px] items-center gap-2 rounded-full border px-3 py-1.5 text-[11.5px] font-medium ${getStepClass(node.data.status)}`}
+                title={node.data.detail || node.data.label}
+              >
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${getStepDotClass(node.data.status)}`} />
+                <span className="shrink-0 font-mono text-[10px] opacity-70">{index + 1}</span>
+                <span className="truncate">{node.data.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )

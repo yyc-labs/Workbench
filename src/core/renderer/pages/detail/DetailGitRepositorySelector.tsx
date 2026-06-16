@@ -41,7 +41,7 @@ export function DetailGitRepositorySelector({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const selectedRepository = repositories.find((repo) => repo.id === selectedRepositoryId) ?? snapshot?.repository ?? repositories[0]
-  const changeCount = snapshot?.changedFiles.length ?? 0
+  const changeCount = snapshot?.changedFileCount ?? 0
   const branchName = snapshot?.branch.current || t('detail.repositorySelectorLoading')
   const statusText = loading
     ? t('detail.repositorySelectorLoading')

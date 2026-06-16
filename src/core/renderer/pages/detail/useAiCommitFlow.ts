@@ -51,6 +51,7 @@ export function useAiCommitFlow({
   aiCommitConfig,
 }: UseAiCommitFlowOptions) {
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
+  const [aiCommitStatusResolved, setAiCommitStatusResolved] = useState(false)
   const [flowSteps, setFlowSteps] = useState<AiStepState[]>(createBaseAiSteps())
   const [aiRawText, setAiRawText] = useState('')
   const [jumpToAiLogToken, setJumpToAiLogToken] = useState(0)
@@ -145,6 +146,8 @@ export function useAiCommitFlow({
     setAiCommitUndoRemainingMs(0)
     setAiCommitUndoEffectiveRemainingMs(0)
     setAiCommitUndoError(null)
+    setAiCommitStatus('idle')
+    setAiCommitStatusResolved(false)
   }, [projectPath])
 
   useEffect(() => {
@@ -186,6 +189,7 @@ export function useAiCommitFlow({
 
     const cleanupStatus = api.onAiCommitStatus(({ projectId: pid, status }) => {
       if (pid !== projectId) return
+      setAiCommitStatusResolved(true)
       setAiCommitStatus(status)
       if (status === 'running') {
         setFlowSteps(createBaseAiSteps())
@@ -222,6 +226,7 @@ export function useAiCommitFlow({
       if (typeof api.getAiCommitState !== 'function') return
       try {
         const state = await api.getAiCommitState(projectId)
+        setAiCommitStatusResolved(true)
         if (!state) return
         const restored = restoreAiState({ status: state.status, output: state.output })
         setAiCommitStatus(restored.status)
@@ -235,6 +240,7 @@ export function useAiCommitFlow({
           )
         }
       } catch {
+        setAiCommitStatusResolved(true)
         // ignore restore failures
       }
     })()
@@ -579,9 +585,11 @@ export function useAiCommitFlow({
   }, [aiCommitConfig, quickMaxBulletsNumber, quickSplit, quickSplitMaxBatchesNumber])
 
   const statusText =
-    aiCommitStatus === 'running' ? translateCurrent('common.running') : aiCommitStatus === 'success' ? translateCurrent('detail.gitStatusSuccess') : aiCommitStatus === 'error' ? translateCurrent('detail.gitStatusFailed') : translateCurrent('common.default')
+    !aiCommitStatusResolved ? translateCurrent('common.loading') : aiCommitStatus === 'running' ? translateCurrent('common.running') : aiCommitStatus === 'success' ? translateCurrent('detail.gitStatusSuccess') : aiCommitStatus === 'error' ? translateCurrent('detail.gitStatusFailed') : translateCurrent('detail.aiStatusIdle')
   const statusClass =
-    aiCommitStatus === 'running'
+    !aiCommitStatusResolved
+      ? 'text-[color:var(--color-muted-foreground)] bg-[color:var(--color-background-sunken)]'
+      : aiCommitStatus === 'running'
       ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
       : aiCommitStatus === 'success'
         ? 'text-[color:var(--color-success)] bg-[color:var(--color-success-background)]'

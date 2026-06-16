@@ -15,6 +15,7 @@ import type {
 
 const GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES = 256 * 1024
 const MAX_GIT_BRANCH_LIST_ITEMS = 500
+const MAX_GIT_CHANGED_FILES_FOR_DETAIL = 99
 
 export function emptyGitBranchInfo(): GitBranchInfo {
   return {
@@ -293,6 +294,8 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
         isGitRepository: false,
         branch: emptyGitBranchInfo(),
         changedFiles: [],
+        changedFileCount: 0,
+        conflictedFileCount: 0,
         recentCommits: [],
         checkedAt: Date.now(),
         error: 'Repository root is required.',
@@ -333,6 +336,8 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
         repository,
         branch: emptyBranch,
         changedFiles: [],
+        changedFileCount: 0,
+        conflictedFileCount: 0,
         recentCommits: [],
         checkedAt: Date.now(),
         error: normalizeGitOperationOutput(statusResult.stdout, statusResult.stderr, {
@@ -357,6 +362,9 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     ])
 
     const parsed = parseGitStatus(statusResult.stdout)
+    const changedFileCount = parsed.changedFiles.length
+    const conflictedFileCount = parsed.changedFiles.filter((file) => file.scope === 'conflicted').length
+    const changedFilesSuppressed = changedFileCount > MAX_GIT_CHANGED_FILES_FOR_DETAIL
     const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
     const remoteBranchSet = new Set(filteredRemoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
@@ -376,7 +384,10 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       isGitRepository: true,
       repository,
       branch,
-      changedFiles: parsed.changedFiles,
+      changedFiles: changedFilesSuppressed ? [] : parsed.changedFiles,
+      changedFileCount,
+      conflictedFileCount,
+      changedFilesSuppressed,
       recentCommits,
       checkedAt: Date.now(),
     }

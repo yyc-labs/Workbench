@@ -19,6 +19,7 @@ asarUnpack:
   - node_modules/node-pty/**
 
 npmRebuild: false
+electronDist: C:/Users/yyc20/AppData/Local/electron/Cache/electron-v42.1.0-win32-x64.zip
 electronDownload:
   isVerifyChecksum: true
 

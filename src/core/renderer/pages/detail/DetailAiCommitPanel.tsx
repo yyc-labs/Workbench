@@ -190,6 +190,8 @@ function DetailAiCommitPanel({
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
+  const changedFileCount = gitSnapshot?.changedFileCount ?? changedFiles.length
+  const changedFilesSuppressed = gitSnapshot?.changedFilesSuppressed ?? false
   const changedFilesMap = useMemo(() => {
     const map = new Map<string, GitChangedFile>()
     for (const item of changedFiles) map.set(item.path, item)
@@ -211,11 +213,13 @@ function DetailAiCommitPanel({
   const upstreamBranch = branch?.upstream || t('detail.noUpstream')
   const remoteBranches = branch?.remoteBranches ?? []
   const localBranches = branch?.localBranches ?? []
-  const conflictedCount = changedFiles.filter((file) => file.scope === 'conflicted').length
-  const hasWorkingTreeChanges = changedFiles.length > 0
+  const conflictedCount = gitSnapshot?.conflictedFileCount ?? changedFiles.filter((file) => file.scope === 'conflicted').length
+  const hasWorkingTreeChanges = changedFileCount > 0
   const hasConflicts = conflictedCount > 0
-  const showBranchRemoteLoading = gitSnapshotLoading || runningOperation === 'switch'
-  const showCommitHistoryLoading = gitSnapshotLoading
+  const gitSnapshotPending = gitRepositoriesLoading || (!gitSnapshot && !gitSnapshotError)
+  const isGitSnapshotChecking = gitSnapshotLoading || gitSnapshotPending
+  const showBranchRemoteLoading = isGitSnapshotChecking || runningOperation === 'switch'
+  const showCommitHistoryLoading = isGitSnapshotChecking
   const branchAhead = branch?.ahead ?? 0
   const branchBehind = branch?.behind ?? 0
   const hasUpstream = Boolean(branch?.upstream)
@@ -223,9 +227,10 @@ function DetailAiCommitPanel({
   const activeDiffFile = activeDiffFilePath ? changedFilesMap.get(activeDiffFilePath) ?? null : null
   const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
   const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
-  const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || gitSnapshotLoading
+  const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || isGitSnapshotChecking || changedFilesSuppressed
+  const aiCommitBlockedReason = changedFilesSuppressed ? t('detail.aiCommitBlockedDescription') : null
   const preflightItems = useMemo<PreflightItem[]>(() => {
-    if (gitSnapshotLoading) {
+    if (isGitSnapshotChecking) {
       return [{
         key: 'loading',
         label: t('detail.preflightLoading'),
@@ -239,6 +244,14 @@ function DetailAiCommitPanel({
         label: t('detail.preflightNotGit'),
         title: t('detail.preflightNotGitTitle'),
         tone: 'danger',
+      }]
+    }
+    if (changedFilesSuppressed) {
+      return [{
+        key: 'suppressed',
+        label: t('detail.repositorySelectorChanges', { count: changedFileCount }),
+        title: t('detail.gitSnapshotSuppressed'),
+        tone: 'warning',
       }]
     }
 
@@ -287,17 +300,18 @@ function DetailAiCommitPanel({
 
     return [{
       key: 'ready',
-      label: t('detail.preflightReady', { count: changedFiles.length }),
+      label: t('detail.preflightReady', { count: changedFileCount }),
       title: t('detail.preflightReadyTitle'),
       tone: 'success',
     }]
   }, [
     branch?.detached,
     branchBehind,
-    changedFiles.length,
+    changedFileCount,
+    changedFilesSuppressed,
     conflictedCount,
     gitSnapshot?.isGitRepository,
-    gitSnapshotLoading,
+    isGitSnapshotChecking,
     hasConflicts,
     hasUpstream,
     hasWorkingTreeChanges,
@@ -1031,6 +1045,7 @@ function DetailAiCommitPanel({
             activePane={activePane}
             aiAutoCommitButtonRef={aiAutoCommitButtonRef}
             aiCommitStatus={aiCommitStatus}
+            aiCommitBlockedReason={aiCommitBlockedReason}
             aiCommitUndo={aiCommitUndo}
             aiCommitUndoAuthActive={aiCommitUndoAuthActive}
             aiCommitUndoAvailable={aiCommitUndoAvailable}
@@ -1078,9 +1093,11 @@ function DetailAiCommitPanel({
         <section className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(360px,1.1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(320px,0.95fr)_minmax(460px,1.2fr)_340px]">
           <DetailAiCommitWorkingTreePanel
             changedFiles={changedFiles}
+            changedFileCount={changedFileCount}
+            changedFilesSuppressed={changedFilesSuppressed}
             conflictedCount={conflictedCount}
             fileActionError={fileActionError}
-            gitSnapshotLoading={gitSnapshotLoading}
+            gitSnapshotLoading={isGitSnapshotChecking}
             onOpenDiff={openDiffDrawerForFile}
             onRefresh={onRefreshGitSnapshot}
             onSetFileStaged={setFileStaged}

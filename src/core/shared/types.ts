@@ -397,6 +397,9 @@ export interface GitRepositorySnapshot {
   repository?: GitRepositorySummary
   branch: GitBranchInfo
   changedFiles: GitChangedFile[]
+  changedFileCount: number
+  conflictedFileCount: number
+  changedFilesSuppressed?: boolean
   recentCommits: GitHistoryCommitInfo[]
   checkedAt: number
   error?: string
