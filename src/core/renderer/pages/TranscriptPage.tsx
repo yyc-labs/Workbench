@@ -1131,7 +1131,7 @@ export function TranscriptPage() {
                     <div className="flex flex-col gap-4 min-[960px]:flex-row min-[960px]:items-start min-[960px]:justify-between">
                       <div className="min-w-0 min-[960px]:max-w-[min(100%,560px)]">
                         <div className="flex min-w-0 items-center gap-2">
-                          <h2 className="min-w-0 max-w-full flex-1 truncate whitespace-nowrap text-lg font-semibold text-[color:var(--color-foreground)] min-[960px]:max-w-[360px]">
+                          <h2 className="min-w-0 max-w-full flex-1 truncate whitespace-nowrap text-lg font-semibold text-[color:var(--color-foreground)] min-[960px]:max-w-[300px]">
                             {session.title}
                           </h2>
                           <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
