@@ -38,6 +38,7 @@ import type { GitService } from '../git/git-service'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
+import type { TranscriptShareService } from '../transcript/transcriptShareService'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
@@ -55,6 +56,7 @@ import type {
   TerminalStopAllResult,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
+  TranscriptShareStartPayload,
   TranscriptUpdatePayload,
 } from '../../../shared/types'
 
@@ -74,6 +76,7 @@ type RegisterIpcHandlersDependencies = {
   gitService: GitService
   runtimeService: RuntimeService
   transcriptService: TranscriptService
+  transcriptShareService: TranscriptShareService
 }
 
 type GitRequestWithRepoRoot = {
@@ -498,6 +501,18 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.TRANSCRIPT_DELETE, async (_event, projectId: string, transcriptId: string) => {
     return deps.transcriptService.deleteTranscript(projectId, transcriptId)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_SHARE_START, async (_event, payload: TranscriptShareStartPayload) => {
+    return deps.transcriptShareService.start(payload)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_SHARE_STOP, (_event, token: string) => {
+    return deps.transcriptShareService.stop(token)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_SHARE_LIST, () => {
+    return deps.transcriptShareService.list()
   })
 
   ipcMain.handle(

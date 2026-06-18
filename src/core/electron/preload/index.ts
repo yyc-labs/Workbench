@@ -8,6 +8,9 @@ import type {
   TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
+  TranscriptShareListResult,
+  TranscriptShareStartPayload,
+  TranscriptShareStartResult,
   TranscriptUpdatePayload,
 } from '../../shared/types'
 
@@ -322,6 +325,15 @@ const api = {
 
   deleteTranscript: (projectId: string, transcriptId: string) =>
     ipcRenderer.invoke(IPC.TRANSCRIPT_DELETE, projectId, transcriptId) as Promise<boolean>,
+
+  startTranscriptShare: (payload: TranscriptShareStartPayload) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_SHARE_START, payload) as Promise<TranscriptShareStartResult>,
+
+  stopTranscriptShare: (token: string) =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_SHARE_STOP, token) as Promise<TranscriptShareListResult>,
+
+  listTranscriptShares: () =>
+    ipcRenderer.invoke(IPC.TRANSCRIPT_SHARE_LIST) as Promise<TranscriptShareListResult>,
 
   openTerminal: (sessionName: string, statusHint?: string) => {
     console.log('[preload.openTerminal] invoking IPC SHELL_OPEN_TERMINAL sessionName=', sessionName, 'statusHint=', statusHint)

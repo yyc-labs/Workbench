@@ -821,6 +821,7 @@ type MarkdownCodeBlockProps = {
   language: string
   themeMode: 'light' | 'dark'
   enableSyntaxHighlight: boolean
+  forceRenderAllBlocks?: boolean
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
@@ -831,13 +832,19 @@ function StandardMarkdownCodeBlock({
   language,
   themeMode,
   enableSyntaxHighlight,
+  forceRenderAllBlocks = false,
   onCodeBlockExpand,
   sourceLineProps,
 }: MarkdownCodeBlockProps) {
   const { t } = useI18n()
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
-  const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText) && isNearViewport
+  // forceRenderAllBlocks bypasses the viewport gate so a snapshot/share capture
+  // gets the inline-styled SyntaxHighlighter DOM for every block, not the
+  // class-dependent plain-block fallback that loses its background/padding when cloned.
+  const shouldRenderSyntax = enableSyntaxHighlight
+    && canHighlightMarkdownCodeBlock(codeText)
+    && (isNearViewport || forceRenderAllBlocks)
 
   useEffect(() => {
     if (copyStatus === 'idle') return
@@ -940,6 +947,7 @@ type CreateMarkdownComponentsOptions = {
   activeRelativePath: string | null
   activeInternalHref?: string | null
   enableMarkdownSyntaxHighlight: boolean
+  forceRenderAllBlocks?: boolean
   lineOffset?: number
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onInternalLinkClick?: (href: string) => void
@@ -956,6 +964,7 @@ export function createMarkdownComponents({
   activeRelativePath,
   activeInternalHref = null,
   enableMarkdownSyntaxHighlight,
+  forceRenderAllBlocks = false,
   lineOffset = 0,
   onCodeBlockExpand,
   onInternalLinkClick,
@@ -996,6 +1005,7 @@ export function createMarkdownComponents({
           language={codeBlock.language}
           themeMode={themeMode}
           enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
+          forceRenderAllBlocks={forceRenderAllBlocks}
           onCodeBlockExpand={onCodeBlockExpand}
           onStructuredBlockClick={onStructuredBlockClick}
           sourceLineProps={sourceLineProps}

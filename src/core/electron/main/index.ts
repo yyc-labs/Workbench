@@ -10,6 +10,7 @@ import { createAiCommitService } from './ai-commit/ai-commit-service'
 import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createTranscriptRepository } from './transcript/transcriptRepository'
 import { createTranscriptService } from './transcript/transcriptService'
+import { createTranscriptShareService } from './transcript/transcriptShareService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
@@ -56,6 +57,7 @@ const transcriptService = createTranscriptService({
 const feishuNotifier = new FeishuNotifier({
   getConfig: () => loadConfig().agentHooks,
 })
+const transcriptShareService = createTranscriptShareService()
 
 function listTranscriptImportProjects() {
   return loadConfig().projects.map((project) => {
@@ -189,6 +191,7 @@ app.on('before-quit', async (e) => {
 
   processManager?.stopAll()
   await agentHookGateway.stop()
+  await transcriptShareService.shutdown()
 
   setTimeout(() => {
     app.quit()
@@ -231,6 +234,7 @@ app.whenReady().then(async () => {
     gitService,
     runtimeService,
     transcriptService,
+    transcriptShareService,
   })
   createMainWindow()
   registerGlobalShortcuts()

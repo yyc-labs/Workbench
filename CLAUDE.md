@@ -32,19 +32,6 @@ Permission errors will corrupt node_modules. Code edits from WSL are fine; all n
 - Forbidden in WSL: `npm i`, `npm install`, `pnpm i`, `pnpm install`, `yarn install`, `electron-rebuild`, `node-gyp`, `npx electron-rebuild`.
 - If dependency changes are needed, stop and ask the user first, then only provide Windows PowerShell commands for the user to run manually.
 
-## AI auto commit
-
-Use the repository auto-commit script after AI edits:
-- `npm run ai:commit` -> run `git add -A` + auto-generated commit message + commit
-- `npm run ai:commit:dry` -> preview commit message only, no commit
-
-For custom message:
-- `pwsh -File script/auto-git-commit/auto_commit.ps1 -All -Type fix -Subject 修复xxx -Bullet 说明1 -Bullet 说明2`
-
-Notes:
-- Script path: `script/auto-git-commit/auto_commit.ps1`
-- Default `ai:commit` stages all tracked/untracked/deleted changes in repo (`git add -A`).
-
 ## Key files
 
 | File | Role |

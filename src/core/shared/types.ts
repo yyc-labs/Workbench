@@ -329,6 +329,56 @@ export interface TranscriptSessionSummary {
   referenceCount: number
 }
 
+export interface TranscriptShareImage {
+  /** Placeholder token embedded in the snapshot HTML, replaced with a data URI in main. */
+  placeholder: string
+  /** Resolved file:// URL captured from the rendered preview. */
+  fileUrl: string
+}
+
+export interface TranscriptShareStartPayload {
+  projectId: string
+  transcriptId: string
+  title: string
+  /** Self-contained HTML built in the renderer (styles inlined, file images as placeholders). */
+  html: string
+  /** file:// images that main must read and inline as data URIs before serving. */
+  images?: TranscriptShareImage[]
+}
+
+export interface TranscriptShareEntry {
+  token: string
+  projectId: string
+  transcriptId: string
+  title: string
+  url: string
+  createdAt: number
+}
+
+export type TranscriptShareHostKind = 'wifi' | 'ethernet' | 'vpn' | 'virtual' | 'other'
+
+export interface TranscriptShareHost {
+  host: string
+  interfaceName: string
+  kind: TranscriptShareHostKind
+}
+
+export interface TranscriptShareStartResult {
+  entry: TranscriptShareEntry
+  /** Host:port the share server is listening on (LAN-reachable). */
+  host: string
+  port: number
+  hosts: TranscriptShareHost[]
+}
+
+export interface TranscriptShareListResult {
+  running: boolean
+  host: string
+  port: number
+  hosts: TranscriptShareHost[]
+  entries: TranscriptShareEntry[]
+}
+
 export type GitChangeKind =
   | 'added'
   | 'modified'

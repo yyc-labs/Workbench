@@ -16,10 +16,11 @@ import {
   Eye,
   FileText,
   RefreshCw,
+  Share2,
   Trash2,
   X,
 } from 'lucide-react'
-import type { TranscriptReference, TranscriptViewerMode } from '../../shared/types'
+import type { TranscriptReference, TranscriptShareEntry, TranscriptShareHost, TranscriptViewerMode } from '../../shared/types'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ModalShell } from '../components/ModalShell'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
@@ -44,6 +45,8 @@ import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 import { ManualTranscriptImportModal } from './transcript/ManualTranscriptImportModal'
+import { TranscriptShareModal } from './transcript/TranscriptShareModal'
+import { buildTranscriptShareSnapshot } from './transcript/transcriptShareSnapshot'
 import {
   TranscriptPreviewModals,
   type TranscriptCodePreviewState,
@@ -56,6 +59,26 @@ import {
   sliceMarkdownLines,
 } from './transcript/transcriptPage.utils'
 import { useTranscriptPageChromeState } from './transcript/useTranscriptPageChromeState'
+
+function filterPreferredShareHosts(hosts: TranscriptShareHost[]): TranscriptShareHost[] {
+  const preferred = hosts.filter((item) => item.host.startsWith('192.'))
+  return preferred.length > 0 ? preferred : hosts
+}
+
+/**
+ * Wait for React to commit a state-driven re-render and for the browser to paint
+ * it. Two rAFs straddle a commit + paint; the trailing timeout gives async
+ * renderers (SyntaxHighlighter) a beat to flush their inline styles into the DOM.
+ */
+function waitForRenderSettle(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.setTimeout(resolve, 32)
+      })
+    })
+  })
+}
 
 function TranscriptModeButton({
   active,
@@ -216,6 +239,15 @@ export function TranscriptPage() {
   const [isSavingTranscript, setIsSavingTranscript] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveSuccessAt, setSaveSuccessAt] = useState<number | null>(null)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [shareEntries, setShareEntries] = useState<TranscriptShareEntry[]>([])
+  const [shareHosts, setShareHosts] = useState<TranscriptShareHost[]>([])
+  const [sharePort, setSharePort] = useState<number>(17374)
+  const [isGeneratingShare, setIsGeneratingShare] = useState(false)
+  const [shareError, setShareError] = useState<string | null>(null)
+  // When true, the preview forces every code block to its inline-styled
+  // SyntaxHighlighter DOM so the share snapshot clone is stable regardless of scroll.
+  const [forceRenderAllForShare, setForceRenderAllForShare] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const previewScrollPositionRef = useRef({ top: 0, left: 0 })
   const structuredPreviewCapture = useScrollableContentCapture()
@@ -384,6 +416,7 @@ export function TranscriptPage() {
       activeRelativePath: null,
       activeInternalHref: activeReference?.href ?? null,
       enableMarkdownSyntaxHighlight,
+      forceRenderAllBlocks: forceRenderAllForShare,
       onCodeBlockExpand: (payload) => {
         setCodePreview(payload)
       },
@@ -396,6 +429,7 @@ export function TranscriptPage() {
     activeReference?.href,
     effectiveTheme,
     enableMarkdownSyntaxHighlight,
+    forceRenderAllForShare,
     handleInternalLinkClick,
     handleStructuredBlockClick,
     project,
@@ -497,6 +531,85 @@ export function TranscriptPage() {
       setIsSavingTranscript(false)
     }
   }, [editorValue, isDirty, isSavingTranscript, session, t])
+
+  const refreshShareEntries = useCallback(async () => {
+    if (!session) return
+    try {
+      const result = await window.electronAPI.listTranscriptShares()
+      setShareHosts(filterPreferredShareHosts(result.hosts))
+      setSharePort(result.port)
+      setShareEntries(result.entries.filter((entry) => entry.transcriptId === session.id))
+    } catch (error) {
+      console.error('[TranscriptPage.refreshShareEntries] failed:', error)
+    }
+  }, [session])
+
+  const handleOpenShareModal = useCallback(() => {
+    setShareError(null)
+    setShareModalOpen(true)
+    void refreshShareEntries()
+  }, [refreshShareEntries])
+
+  const handleGenerateShare = useCallback(async () => {
+    if (!session || isGeneratingShare) return
+    const previewNode = previewScrollRef.current
+    if (!previewNode) {
+      setShareError(t('transcript.shareFailed'))
+      return
+    }
+    setIsGeneratingShare(true)
+    setShareError(null)
+    // Force every code block into its inline-styled SyntaxHighlighter form before
+    // cloning. Without this, off-screen blocks are still the class-dependent plain
+    // fallback whose background/padding break once detached from the live document.
+    setForceRenderAllForShare(true)
+    try {
+      // Let React commit the forced render, then give SyntaxHighlighter a frame to
+      // apply its inline styles before we snapshot the DOM.
+      await waitForRenderSettle()
+      const snapshot = buildTranscriptShareSnapshot(previewNode, session.title)
+      const result = await window.electronAPI.startTranscriptShare({
+        projectId: session.projectId,
+        transcriptId: session.id,
+        title: session.title,
+        html: snapshot.html,
+        images: snapshot.images,
+      })
+      setShareHosts(filterPreferredShareHosts(result.hosts))
+      setSharePort(result.port)
+      setShareEntries((current) => [result.entry, ...current.filter((entry) => entry.token !== result.entry.token)])
+    } catch (error) {
+      console.error('[TranscriptPage.handleGenerateShare] failed:', error)
+      setShareError(error instanceof Error ? error.message : t('transcript.shareFailed'))
+    } finally {
+      setForceRenderAllForShare(false)
+      setIsGeneratingShare(false)
+    }
+  }, [isGeneratingShare, session, t])
+
+  const handleRevokeShare = useCallback(async (token: string) => {
+    try {
+      const result = await window.electronAPI.stopTranscriptShare(token)
+      setShareHosts(filterPreferredShareHosts(result.hosts))
+      setSharePort(result.port)
+      const activeId = session?.id
+      setShareEntries(result.entries.filter((entry) => !activeId || entry.transcriptId === activeId))
+    } catch (error) {
+      console.error('[TranscriptPage.handleRevokeShare] failed:', error)
+    }
+  }, [session?.id])
+
+  const handleRevokeAllShares = useCallback(async () => {
+    const tokens = shareEntries.map((entry) => entry.token)
+    for (const token of tokens) {
+      try {
+        await window.electronAPI.stopTranscriptShare(token)
+      } catch (error) {
+        console.error('[TranscriptPage.handleRevokeAllShares] failed:', error)
+      }
+    }
+    setShareEntries([])
+  }, [shareEntries])
 
   const handleDeleteTranscript = useCallback(async () => {
     if (!projectId || deletingTranscriptId || !deleteConfirmTarget) return
@@ -1029,26 +1142,38 @@ export function TranscriptPage() {
                         </div>
                       </div>
 
-                      <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-                        <TranscriptModeButton
-                          active={effectiveMode === 'preview'}
-                          icon={<Eye className="h-3.5 w-3.5" />}
-                          label={t('transcript.preview')}
-                          onClick={() => setTranscriptMode(session.id, 'preview')}
-                        />
-                        <TranscriptModeButton
-                          active={effectiveMode === 'editor'}
-                          icon={<Code2 className="h-3.5 w-3.5" />}
-                          label={t('transcript.editor')}
-                          onClick={() => setTranscriptMode(session.id, 'editor')}
-                        />
-                        <TranscriptModeButton
-                          active={effectiveMode === 'split'}
-                          disabled={isNarrowViewport}
-                          icon={<Columns2 className="h-3.5 w-3.5" />}
-                          label={t('transcript.split')}
-                          onClick={() => setTranscriptMode(session.id, 'split')}
-                        />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3.5 text-xs font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                          onClick={handleOpenShareModal}
+                          disabled={effectiveMode === 'editor'}
+                          title={effectiveMode === 'editor' ? t('transcript.preview') : t('transcript.shareTitle')}
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          {t('transcript.share')}
+                        </button>
+                        <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
+                          <TranscriptModeButton
+                            active={effectiveMode === 'preview'}
+                            icon={<Eye className="h-3.5 w-3.5" />}
+                            label={t('transcript.preview')}
+                            onClick={() => setTranscriptMode(session.id, 'preview')}
+                          />
+                          <TranscriptModeButton
+                            active={effectiveMode === 'editor'}
+                            icon={<Code2 className="h-3.5 w-3.5" />}
+                            label={t('transcript.editor')}
+                            onClick={() => setTranscriptMode(session.id, 'editor')}
+                          />
+                          <TranscriptModeButton
+                            active={effectiveMode === 'split'}
+                            disabled={isNarrowViewport}
+                            icon={<Columns2 className="h-3.5 w-3.5" />}
+                            label={t('transcript.split')}
+                            onClick={() => setTranscriptMode(session.id, 'split')}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1175,6 +1300,19 @@ export function TranscriptPage() {
           if (!latestTranscriptId) return
           await openTranscript({ projectId, transcriptId: latestTranscriptId, initialMode: 'preview' })
         }}
+      />
+
+      <TranscriptShareModal
+        open={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        entries={shareEntries}
+        hosts={shareHosts}
+        port={sharePort}
+        generating={isGeneratingShare}
+        error={shareError}
+        onGenerate={() => void handleGenerateShare()}
+        onRevoke={(token) => void handleRevokeShare(token)}
+        onRevokeAll={() => void handleRevokeAllShares()}
       />
 
       <DetailDocumentationCard

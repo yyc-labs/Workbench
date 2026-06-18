@@ -49,6 +49,9 @@ import type {
   TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
+  TranscriptShareListResult,
+  TranscriptShareStartPayload,
+  TranscriptShareStartResult,
   TranscriptUpdatePayload,
   TranscriptViewerMode,
   TranscriptViewerRequest,
@@ -131,6 +134,9 @@ declare global {
       getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
       updateTranscript: (payload: TranscriptUpdatePayload) => Promise<TranscriptSession>
       deleteTranscript: (projectId: string, transcriptId: string) => Promise<boolean>
+      startTranscriptShare: (payload: TranscriptShareStartPayload) => Promise<TranscriptShareStartResult>
+      stopTranscriptShare: (token: string) => Promise<TranscriptShareListResult>
+      listTranscriptShares: () => Promise<TranscriptShareListResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
       openFolder: (folderPath: string, revealPath?: string) => Promise<void>
