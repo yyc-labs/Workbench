@@ -25,4 +25,10 @@ export type ProjectLinkItem = {
   label: string
   tag?: string
   tagLabel?: string
+  onOpen?: () => void | Promise<void>
+  kind?: 'url' | 'ssh'
+  description?: string
+  copyValue?: string
+  copyLabel?: string
+  copyValueResolver?: () => Promise<string>
 }

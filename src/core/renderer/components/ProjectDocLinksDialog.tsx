@@ -16,6 +16,8 @@ export function ProjectDocLinksDialog({
 }: ProjectDocLinksDialogProps) {
   const {
     docLinks,
+    docKindInput,
+    setDocKindInput,
     docTitleInput,
     setDocTitleInput,
     docUrlInput,
@@ -29,6 +31,16 @@ export function ProjectDocLinksDialog({
     setDocAccountInput,
     docSecretInput,
     setDocSecretInput,
+    docSshHostInput,
+    setDocSshHostInput,
+    docSshPortInput,
+    setDocSshPortInput,
+    docSshUsernameInput,
+    setDocSshUsernameInput,
+    docSshShortcutInput,
+    setDocSshShortcutInput,
+    docSshRouteInput,
+    setDocSshRouteInput,
     docError,
     setDocError,
     handleAddDocLink,
@@ -42,6 +54,7 @@ export function ProjectDocLinksDialog({
     handleCopyDocLinkAccount,
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
+    handleOpenDocLink,
     linkSettingsOpen,
     setLinkSettingsOpen,
   } = useProjectDocLinks({ project, initialSettingsOpen: open })
@@ -57,6 +70,8 @@ export function ProjectDocLinksDialog({
   return (
     <DetailDocumentationCard
       docLinks={docLinks}
+      docKindInput={docKindInput}
+      setDocKindInput={setDocKindInput}
       docTitleInput={docTitleInput}
       setDocTitleInput={setDocTitleInput}
       docUrlInput={docUrlInput}
@@ -70,6 +85,16 @@ export function ProjectDocLinksDialog({
       setDocAccountInput={setDocAccountInput}
       docSecretInput={docSecretInput}
       setDocSecretInput={setDocSecretInput}
+      docSshHostInput={docSshHostInput}
+      setDocSshHostInput={setDocSshHostInput}
+      docSshPortInput={docSshPortInput}
+      setDocSshPortInput={setDocSshPortInput}
+      docSshUsernameInput={docSshUsernameInput}
+      setDocSshUsernameInput={setDocSshUsernameInput}
+      docSshShortcutInput={docSshShortcutInput}
+      setDocSshShortcutInput={setDocSshShortcutInput}
+      docSshRouteInput={docSshRouteInput}
+      setDocSshRouteInput={setDocSshRouteInput}
       docError={docError}
       setDocError={setDocError}
       onAddDocLink={handleAddDocLink}
@@ -83,6 +108,7 @@ export function ProjectDocLinksDialog({
       onCopyDocLinkAccount={handleCopyDocLinkAccount}
       onCopyDocLinkSecret={handleCopyDocLinkSecret}
       onGetDocLinkSecret={handleGetDocLinkSecret}
+      onOpenDocLink={handleOpenDocLink}
       settingsOpen={linkSettingsOpen}
       setSettingsOpen={setLinkSettingsOpen}
       hideCard

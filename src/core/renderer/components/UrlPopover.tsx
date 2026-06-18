@@ -1,18 +1,43 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ExternalLink } from 'lucide-react'
+import { Check, Copy, ExternalLink, Link2 } from 'lucide-react'
+import { useI18n } from '../i18n'
+import { copyTextToClipboard } from '../pages/code/code.clipboard'
 
 interface UrlPopoverProps {
   urls?: string[]
-  items?: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  items?: {
+    url: string
+    label: string
+    tag?: string
+    tagLabel?: string
+    onOpen?: () => void | Promise<void>
+    kind?: 'url' | 'ssh'
+    description?: string
+    copyValue?: string
+    copyLabel?: string
+    copyValueResolver?: () => Promise<string>
+  }[]
   children: React.ReactNode
 }
 
-type UrlPopoverEntry = { url: string; label: string; tag?: string; tagLabel?: string }
+type UrlPopoverEntry = {
+  url: string
+  label: string
+  tag?: string
+  tagLabel?: string
+  onOpen?: () => void | Promise<void>
+  kind?: 'url' | 'ssh'
+  description?: string
+  copyValue?: string
+  copyLabel?: string
+  copyValueResolver?: () => Promise<string>
+}
 type PreparedUrlPopoverEntry = UrlPopoverEntry & {
   key: string
   normalizedLabel: string
   normalizedUrl: string
+  normalizedDescription: string
   normalizedTag: string
   normalizedTagLabel: string
   searchText: string
@@ -30,8 +55,9 @@ function isFuzzySubsequence(query: string, candidate: string): boolean {
 }
 
 export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
+  const { t } = useI18n()
   const [show, setShow] = useState(false)
-  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320 })
+  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 280 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -53,6 +79,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     () => entries.map((entry) => {
       const normalizedLabel = entry.label.toLowerCase()
       const normalizedUrl = entry.url.toLowerCase()
+      const normalizedDescription = (entry.description ?? '').toLowerCase()
       const normalizedTag = (entry.tag ?? '').toLowerCase()
       const normalizedTagLabel = (entry.tagLabel ?? '').toLowerCase()
       return {
@@ -60,9 +87,10 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         key: `${entry.label}:${entry.url}`,
         normalizedLabel,
         normalizedUrl,
+        normalizedDescription,
         normalizedTag,
         normalizedTagLabel,
-        searchText: `${normalizedLabel} ${normalizedUrl} ${normalizedTag} ${normalizedTagLabel}`,
+        searchText: `${normalizedLabel} ${normalizedUrl} ${normalizedDescription} ${normalizedTag} ${normalizedTagLabel}`,
       }
     }),
     [entries]
@@ -78,6 +106,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       return (
         isFuzzySubsequence(deferredQuery, entry.normalizedLabel)
         || isFuzzySubsequence(deferredQuery, entry.normalizedUrl)
+        || isFuzzySubsequence(deferredQuery, entry.normalizedDescription)
         || isFuzzySubsequence(deferredQuery, entry.normalizedTag)
         || isFuzzySubsequence(deferredQuery, entry.normalizedTagLabel)
       )
@@ -91,7 +120,11 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       const triggerGap = 6
       const minVisibleHeight = 140
       const maxPopoverHeight = 420
-      const minPopoverWidth = 220
+      const idealPopoverWidth = 280
+      const availableWidth = window.innerWidth - viewportPadding * 2
+      const width = availableWidth > 220
+        ? Math.min(idealPopoverWidth, availableWidth)
+        : availableWidth
 
       const preferredTop = rect.bottom + triggerGap
       const highestTopForMinHeight = window.innerHeight - viewportPadding - minVisibleHeight
@@ -100,10 +133,10 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       const maxHeight = Math.max(96, Math.min(maxPopoverHeight, availableHeight))
       const left = Math.max(
         viewportPadding,
-        Math.min(rect.left, window.innerWidth - viewportPadding - minPopoverWidth),
+        Math.min(rect.left, window.innerWidth - viewportPadding - width),
       )
 
-      setLayout({ top, left, maxHeight })
+      setLayout({ top, left, maxHeight, width })
     }
   }
 
@@ -171,16 +204,26 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     scheduleHide({ forceClose: true })
   }
 
-  const handleCopy = (key: string, url: string) => {
-    void navigator.clipboard.writeText(url)
-    setCopiedKey(key)
-    if (copiedTimerRef.current) {
-      clearTimeout(copiedTimerRef.current)
-      copiedTimerRef.current = null
+  const handleCopy = async (entry: PreparedUrlPopoverEntry) => {
+    try {
+      const value = entry.copyValueResolver
+        ? await entry.copyValueResolver()
+        : (entry.copyValue ?? entry.url)
+      if (!value) return
+      const copied = await copyTextToClipboard(value)
+      if (!copied) return
+      const key = entry.key
+      setCopiedKey(key)
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current)
+        copiedTimerRef.current = null
+      }
+      copiedTimerRef.current = setTimeout(() => {
+        setCopiedKey((current) => (current === key ? null : current))
+      }, 1200)
+    } catch {
+      return
     }
-    copiedTimerRef.current = setTimeout(() => {
-      setCopiedKey((current) => (current === key ? null : current))
-    }, 700)
   }
 
   useEffect(() => {
@@ -209,11 +252,12 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
   const popover = show && (
     <div
       ref={popoverRef}
-      className="fixed z-[9999] min-w-[220px] overflow-y-auto rounded-[20px] px-1.5 py-2"
+      className="fixed z-[9999] overflow-y-auto rounded-[20px] px-1.5 py-2"
       style={{
         top: layout.top,
         left: layout.left,
         maxHeight: layout.maxHeight,
+        width: layout.width,
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
         boxShadow: 'var(--shadow-popover)',
@@ -256,14 +300,14 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
               setQuery('')
             }
           }}
-          placeholder="输入关键字模糊筛选链接"
+          placeholder={t('common.searchLinks')}
           className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]"
         />
       </div>
 
       {filteredEntries.length === 0 ? (
         <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)]">
-          没有匹配的链接
+          {t('common.noMatches')}
         </div>
       ) : (
         filteredEntries.map((entry) => {
@@ -274,31 +318,52 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
               className="group/item flex cursor-pointer items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
               role="button"
               tabIndex={0}
-              onClick={() => window.electronAPI.openExternal(entry.url)}
+              onClick={() => {
+                if (entry.onOpen) {
+                  void entry.onOpen()
+                  return
+                }
+                void window.electronAPI.openExternal(entry.url)
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  window.electronAPI.openExternal(entry.url)
+                  if (entry.onOpen) {
+                    void entry.onOpen()
+                    return
+                  }
+                  void window.electronAPI.openExternal(entry.url)
                 }
               }}
-              title={entry.url}
+              aria-label={entry.label}
             >
               <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]">
-                <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                <span className="truncate">{entry.label}</span>
+                {entry.kind === 'ssh'
+                  ? <Link2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                  : <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate">{entry.label}</span>
+                  {entry.description && (
+                    <span className="block truncate text-[11px] text-[color:var(--color-muted-foreground)]">
+                      {entry.description}
+                    </span>
+                  )}
+                </div>
               </div>
               <button
-                className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] opacity-0 transition-all duration-300 group-hover/item:opacity-100 cursor-pointer active:scale-95 ${
+                type="button"
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${
                   isCopied
-                    ? 'scale-105 bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-                    : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                    ? 'scale-105 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] opacity-100'
+                    : 'opacity-0 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100'
                 }`}
                 onClick={(e) => {
                   e.stopPropagation()
-                  handleCopy(entry.key, entry.url)
+                  void handleCopy(entry)
                 }}
               >
-                {isCopied ? '已复制' : '复制'}
+                {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {isCopied ? t('common.copied') : (entry.copyLabel ?? t('common.copy'))}
               </button>
             </div>
           )

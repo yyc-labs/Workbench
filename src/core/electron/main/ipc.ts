@@ -67,6 +67,7 @@ export const IPC = {
   TRANSCRIPT_SHARE_LIST: 'transcript:share-list',
   SHELL_OPEN_TERMINAL: 'shell:open-terminal',
   SHELL_OPEN_PATH_TERMINAL: 'shell:openPathTerminal',
+  SHELL_OPEN_SSH_TERMINAL: 'shell:open-ssh-terminal',
   SHELL_OPEN_FOLDER: 'shell:openFolder',
   SHELL_OPEN_VSCODE: 'shell:openVsCode',
   WINDOW_MINIMIZE: 'window:minimize',

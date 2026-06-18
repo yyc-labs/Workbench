@@ -14,11 +14,11 @@ import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { RunCommandConfigPopover } from './RunCommandConfigPopover'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
-import { normalizeProjectDocLinkTag } from '../lib/projectDocLinks'
-import { projectDocLinkTagLabel } from '../lib/projectDocLinks'
+import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../lib/projectDocLinks'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -43,6 +43,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
+  const { handleGetDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
 
   const currentCli: CliTool = project.cli || 'claude'
 
@@ -86,17 +87,26 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       ...(isDevReady ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
       ...docLinks.map((link) => {
         const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+        const isSsh = (link.kind ?? 'url') === 'ssh'
         return {
-          url: link.url,
-          label: `${t('project.docCategoryPrefix')} · ${link.title}`,
+          url: link.url ?? '',
+          label: `${isSsh ? t('documentation.connectSsh') : t('project.docCategoryPrefix')} · ${link.title}`,
           tag: normalizedTag,
           tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+          onOpen: () => handleOpenDocLink(link),
+          kind: link.kind ?? 'url',
+          description: projectDocLinkTarget(link),
+          copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
+          copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
+          copyValueResolver: isSsh && link.hasSecret
+            ? async () => await handleGetDocLinkSecret(link.id) || ''
+            : undefined,
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, isDevReady, t]
+    [devUrls, docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, isDevReady, t]
   )
-  const firstDocLinkMenuItem = linkMenuItems.find((item) => item.label.startsWith(`${t('project.docCategoryPrefix')} · `))
+  const hasProjectDocLinks = docLinks.length > 0
   const hoverDocLabel = defaultDocLink
     ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}`
     : docLinks.length > 0
@@ -172,10 +182,10 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   })
 
   const handleOpenFirstLink = useCallback(async () => {
-    if (firstDocLinkMenuItem?.url) {
-      await window.electronAPI.openExternal(firstDocLinkMenuItem.url)
+    if (defaultDocLink) {
+      await handleOpenDocLink(defaultDocLink)
     }
-  }, [firstDocLinkMenuItem?.url])
+  }, [defaultDocLink, handleOpenDocLink])
 
   return (
     <div
@@ -370,7 +380,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           )}
           {currentCli}
         </button>
-        {firstDocLinkMenuItem && (
+        {hasProjectDocLinks && (
           <UrlPopover items={linkMenuItems}>
             <button
               className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"

@@ -9,6 +9,7 @@ import {
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useMemo } from 'react'
 import { useI18n } from '../../i18n'
+import { projectDocLinkTarget } from '../../lib/projectDocLinks'
 import type { UseDetailDocumentationCardStateResult } from './useDetailDocumentationCardState'
 import { DetailDocumentationLinkItem } from './DetailDocumentationLinkItem'
 
@@ -90,6 +91,7 @@ function DetailDocumentationLinkList({
                 onCopySecret={links.copySecret}
                 onRevealSecret={links.revealSecret}
                 onToggleExpand={links.toggleExpand}
+                onOpenDocLink={links.open}
                 onSetDefaultDocLink={links.setDefault}
                 onRemoveDocLink={links.remove}
               />
@@ -102,7 +104,7 @@ function DetailDocumentationLinkList({
           <div className="quiet-control w-[min(620px,calc(100vw-96px))] rounded-[16px] px-4 py-3 shadow-lg">
             <p className="truncate text-sm text-[color:var(--color-foreground)]">{draggingLink.title}</p>
             <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-              {draggingLink.url.replace(/^https?:\/\//, '')}
+              {projectDocLinkTarget(draggingLink)}
             </p>
           </div>
         ) : null}

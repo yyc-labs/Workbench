@@ -218,6 +218,7 @@ export function TranscriptPage() {
     handleCopyDocLinkAccount,
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
+    handleOpenDocLink,
   } = docLinkState
   const [isImporting, setIsImporting] = useState(false)
   const [isImportingManual, setIsImportingManual] = useState(false)
@@ -1317,6 +1318,8 @@ export function TranscriptPage() {
 
       <DetailDocumentationCard
         docLinks={docLinks}
+        docKindInput={docLinkState.docKindInput}
+        setDocKindInput={docLinkState.setDocKindInput}
         docTitleInput={docTitleInput}
         setDocTitleInput={setDocTitleInput}
         docUrlInput={docUrlInput}
@@ -1330,6 +1333,16 @@ export function TranscriptPage() {
         setDocAccountInput={setDocAccountInput}
         docSecretInput={docSecretInput}
         setDocSecretInput={setDocSecretInput}
+        docSshHostInput={docLinkState.docSshHostInput}
+        setDocSshHostInput={docLinkState.setDocSshHostInput}
+        docSshPortInput={docLinkState.docSshPortInput}
+        setDocSshPortInput={docLinkState.setDocSshPortInput}
+        docSshUsernameInput={docLinkState.docSshUsernameInput}
+        setDocSshUsernameInput={docLinkState.setDocSshUsernameInput}
+        docSshShortcutInput={docLinkState.docSshShortcutInput}
+        setDocSshShortcutInput={docLinkState.setDocSshShortcutInput}
+        docSshRouteInput={docLinkState.docSshRouteInput}
+        setDocSshRouteInput={docLinkState.setDocSshRouteInput}
         docError={docError}
         setDocError={setDocError}
         onAddDocLink={handleAddDocLink}
@@ -1343,6 +1356,7 @@ export function TranscriptPage() {
         onCopyDocLinkAccount={handleCopyDocLinkAccount}
         onCopyDocLinkSecret={handleCopyDocLinkSecret}
         onGetDocLinkSecret={handleGetDocLinkSecret}
+        onOpenDocLink={handleOpenDocLink}
         settingsOpen={linkSettingsOpen}
         setSettingsOpen={setLinkSettingsOpen}
         hideCard

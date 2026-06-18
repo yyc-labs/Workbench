@@ -139,6 +139,28 @@ declare global {
       listTranscriptShares: () => Promise<TranscriptShareListResult>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
+      openSshTerminal: (
+        payload: {
+          host: string
+          port?: number
+          username: string
+          password?: string | null
+          route?: 'wsl' | 'windows'
+        }
+      ) => Promise<{
+        ok: boolean
+        mode: 'wsl-expect' | 'native-ssh'
+        autoLogin: boolean
+        message?: string
+        reason?:
+          | 'invalid-input'
+          | 'windows-host-required'
+          | 'wsl-not-installed'
+          | 'wsl-distro-unavailable'
+          | 'wsl-bash-unavailable'
+          | 'wsl-expect-unavailable'
+          | 'terminal-launch-failed'
+      }>
       openFolder: (folderPath: string, revealPath?: string) => Promise<void>
       openInVsCode: (folderPath: string) => Promise<void>
       minimizeWindow: () => Promise<boolean>

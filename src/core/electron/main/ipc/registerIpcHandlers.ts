@@ -29,6 +29,7 @@ import {
 import { applyWindowBackground } from '../window/createWindow'
 import {
   openFolder,
+  openSshTerminal,
   openTerminalAtPath,
   openVsCode,
 } from '../shell/openers'
@@ -529,6 +530,22 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string, command?: string) => {
     return openTerminalAtPath(folderPath, getBootDistro(), command)
   })
+
+  ipcMain.handle(
+    IPC.SHELL_OPEN_SSH_TERMINAL,
+    async (
+      _event,
+      payload: {
+        host: string
+        port?: number
+        username: string
+        password?: string | null
+        route?: 'wsl' | 'windows'
+      }
+    ) => {
+      return openSshTerminal(getBootDistro(), payload)
+    }
+  )
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {
     return deps.runtimeService.listRuntimeEntries()

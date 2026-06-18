@@ -1,11 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
-import type { ProjectDocLink, ProjectDocLinkTag, ProjectDocTagOption, ProjectInfo } from '../../../shared/types'
+import type {
+  ProjectDocLink,
+  ProjectDocLinkKind,
+  ProjectDocLinkSshRoute,
+  ProjectDocLinkTag,
+  ProjectDocTagOption,
+  ProjectInfo,
+} from '../../../shared/types'
 import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
-import { createDocLinkId, normalizeDocUrl } from './detail.aiFlow'
+import {
+  buildSshDocLinkTarget,
+  createDocLinkId,
+  normalizeDocLinkPort,
+  normalizeDocUrl,
+  normalizeSshHost,
+  parseSshShortcutInput,
+} from './detail.aiFlow'
 import {
   PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
+  normalizeProjectDocLinkKind,
+  projectDocLinkCopyValue,
   normalizeProjectDocLinkTag,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
@@ -13,6 +29,24 @@ import {
 type UseProjectDocLinksOptions = {
   project: ProjectInfo | undefined
   initialSettingsOpen?: boolean
+}
+
+export type ProjectDocMenuItem = {
+  url: string
+  label: string
+  tag?: string
+  tagLabel?: string
+  onOpen?: () => void | Promise<void>
+  kind?: ProjectDocLinkKind
+  description?: string
+  copyValue?: string
+  copyLabel?: string
+  copyValueResolver?: () => Promise<string>
+  linkId?: string
+}
+
+function normalizeProjectDocLinkSshRoute(value: ProjectDocLinkSshRoute | string | null | undefined): ProjectDocLinkSshRoute {
+  return value === 'windows' ? 'windows' : 'wsl'
 }
 
 export function useProjectDocLinks({
@@ -25,31 +59,41 @@ export function useProjectDocLinks({
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS)
   const setDocLinkTags = useAppStore((s) => s.setDocLinkTags)
   const [linkSettingsOpen, setLinkSettingsOpen] = useState(initialSettingsOpen)
+  const [docKindInput, setDocKindInput] = useState<ProjectDocLinkKind>('url')
   const [docTitleInput, setDocTitleInput] = useState('')
   const [docUrlInput, setDocUrlInput] = useState('')
   const [docTagInput, setDocTagInput] = useState<ProjectDocLinkTag>('')
   const [docNoteInput, setDocNoteInput] = useState('')
   const [docAccountInput, setDocAccountInput] = useState('')
   const [docSecretInput, setDocSecretInput] = useState('')
+  const [docSshHostInput, setDocSshHostInput] = useState('')
+  const [docSshPortInput, setDocSshPortInput] = useState('22')
+  const [docSshUsernameInput, setDocSshUsernameInput] = useState('')
+  const [docSshShortcutInput, setDocSshShortcutInput] = useState('')
+  const [docSshRouteInput, setDocSshRouteInput] = useState<ProjectDocLinkSshRoute>('wsl')
   const [docError, setDocError] = useState<string | null>(null)
 
   const docLinks = useMemo(
-    () => (project?.docLinks ?? []).map((link) => ({ ...link, tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) })),
+    () => (project?.docLinks ?? []).map((link) => {
+      const kind: ProjectDocLinkKind = normalizeProjectDocLinkKind(link.kind)
+      const normalizedPort = normalizeDocLinkPort(link.sshPort)
+      return {
+        ...link,
+        kind,
+        url: kind === 'url' ? link.url : undefined,
+        sshHost: kind === 'ssh' ? (link.sshHost?.trim() || '') : undefined,
+        sshPort: kind === 'ssh' ? (normalizedPort ?? 22) : undefined,
+        sshUsername: kind === 'ssh' ? (link.sshUsername?.trim() || link.account?.trim() || '') : undefined,
+        sshRoute: kind === 'ssh' ? normalizeProjectDocLinkSshRoute(link.sshRoute) : undefined,
+        account: kind === 'ssh'
+          ? (link.sshUsername?.trim() || link.account?.trim() || undefined)
+          : (link.account?.trim() || undefined),
+        tag: normalizeProjectDocLinkTag(link.tag, docLinkTagOptions),
+      }
+    }),
     [docLinkTagOptions, project?.docLinks]
   )
   const defaultDocLink = docLinks[0]
-  const docMenuItems = useMemo(
-    () => docLinks.map((link) => {
-      const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
-      return {
-        url: link.url,
-        label: link.title,
-        tag: normalizedTag,
-        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions, locale),
-      }
-    }),
-    [docLinkTagOptions, docLinks, locale]
-  )
 
   const normalizeDocTagOptions = useCallback((input: ProjectDocTagOption[]): ProjectDocTagOption[] => {
     const deduped: ProjectDocTagOption[] = []
@@ -67,6 +111,20 @@ export function useProjectDocLinks({
     }
     return deduped
   }, [])
+
+  const applySshShortcutInput = useCallback((value: string) => {
+    setDocSshShortcutInput(value)
+    const parsed = parseSshShortcutInput(value)
+    if (!parsed) return
+    setDocSshUsernameInput(parsed.username)
+    setDocSshHostInput(parsed.host)
+    setDocSshPortInput(String(parsed.port))
+  }, [])
+
+  const handleSetDocSshShortcutInput = useCallback((value: SetStateAction<string>) => {
+    const nextValue = typeof value === 'function' ? value(docSshShortcutInput) : value
+    applySshShortcutInput(nextValue)
+  }, [applySshShortcutInput, docSshShortcutInput])
 
   const handleAddDocTag = useCallback(async (labelInput: string): Promise<{ ok: boolean; message?: string }> => {
     const label = labelInput.trim()
@@ -137,21 +195,91 @@ export function useProjectDocLinks({
   }, [docLinkTagOptions, docLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks, t])
 
   const handleAddDocLink = useCallback(async () => {
-    if (!project) return
+    if (!project) return false
+
+    let title = docTitleInput.trim()
+    const note = docNoteInput.trim() || undefined
+    const secret = docSecretInput.trim()
+    const linkId = createDocLinkId()
+
+    if (docKindInput === 'ssh') {
+      const sshHost = normalizeSshHost(docSshHostInput)
+      const sshPort = normalizeDocLinkPort(docSshPortInput) ?? 22
+      const sshUsername = docSshUsernameInput.trim()
+      if (!sshHost) {
+        setDocError(t('documentation.invalidSshHost'))
+        return false
+      }
+      if (!sshUsername) {
+        setDocError(t('documentation.invalidSshUsername'))
+        return false
+      }
+      const duplicate = docLinks.some((link) => (
+        link.kind === 'ssh'
+        && link.sshHost?.toLowerCase() === sshHost.toLowerCase()
+        && (link.sshPort ?? 22) === sshPort
+        && (link.sshUsername ?? link.account ?? '').toLowerCase() === sshUsername.toLowerCase()
+      ))
+      if (duplicate) {
+        setDocError(t('documentation.duplicateSsh'))
+        return false
+      }
+      if (!title) {
+        title = sshUsername
+      }
+      const nextLink: ProjectDocLink = {
+        id: linkId,
+        kind: 'ssh',
+        title,
+        tag: normalizeProjectDocLinkTag(docTagInput, docLinkTagOptions),
+        sshHost,
+        sshPort,
+        sshUsername,
+        sshRoute: docSshRouteInput,
+        account: sshUsername,
+        ...(note ? { note } : {}),
+        ...(secret ? { hasSecret: true } : {}),
+      }
+      const nextLinks = [...docLinks, nextLink]
+      await setProjectDocLinks(project.id, nextLinks)
+      if (secret) {
+        try {
+          await window.electronAPI.setDocLinkSecret(project.id, linkId, secret)
+        } catch (error) {
+          setDocError(error instanceof Error ? error.message : t('documentation.saveSecretFailed'))
+          return false
+        }
+      }
+      setDocKindInput('url')
+      setDocTitleInput('')
+      setDocUrlInput('')
+      setDocTagInput('')
+      setDocNoteInput('')
+      setDocAccountInput('')
+      setDocSecretInput('')
+      setDocSshHostInput('')
+      setDocSshPortInput('22')
+      setDocSshUsernameInput('')
+      setDocSshShortcutInput('')
+      setDocSshRouteInput('wsl')
+      setDocError(null)
+      return true
+    }
 
     const normalizedUrl = normalizeDocUrl(docUrlInput)
     if (!normalizedUrl) {
       setDocError(t('documentation.invalidUrl'))
-      return
+      return false
     }
 
-    const duplicate = docLinks.some((link) => link.url.toLowerCase() === normalizedUrl.toLowerCase())
+    const duplicate = docLinks.some((link) => (
+      (link.kind ?? 'url') === 'url' && (link.url ?? '').toLowerCase() === normalizedUrl.toLowerCase()
+    ))
     if (duplicate) {
       setDocError(t('documentation.duplicateUrl'))
-      return
+      return false
     }
 
-    let title = docTitleInput.trim()
     if (!title) {
       try {
         title = new URL(normalizedUrl).hostname
@@ -160,12 +288,10 @@ export function useProjectDocLinks({
       }
     }
 
-    const note = docNoteInput.trim() || undefined
     const account = docAccountInput.trim() || undefined
-    const secret = docSecretInput.trim()
-    const linkId = createDocLinkId()
     const nextLink: ProjectDocLink = {
       id: linkId,
+      kind: 'url',
       title,
       url: normalizedUrl,
       tag: normalizeProjectDocLinkTag(docTagInput, docLinkTagOptions),
@@ -180,22 +306,35 @@ export function useProjectDocLinks({
         await window.electronAPI.setDocLinkSecret(project.id, linkId, secret)
       } catch (error) {
         setDocError(error instanceof Error ? error.message : t('documentation.saveSecretFailed'))
-        return
+        return false
       }
     }
+    setDocKindInput('url')
     setDocTitleInput('')
     setDocUrlInput('')
     setDocTagInput('')
     setDocNoteInput('')
     setDocAccountInput('')
     setDocSecretInput('')
+    setDocSshHostInput('')
+    setDocSshPortInput('22')
+    setDocSshUsernameInput('')
+    setDocSshShortcutInput('')
+    setDocSshRouteInput('wsl')
     setDocError(null)
+    return true
   }, [
+    docKindInput,
     docTagInput,
     docAccountInput,
     docLinks,
     docNoteInput,
     docSecretInput,
+    docSshHostInput,
+    docSshPortInput,
+    docSshRouteInput,
+    docSshShortcutInput,
+    docSshUsernameInput,
     docTitleInput,
     docUrlInput,
     project,
@@ -234,45 +373,91 @@ export function useProjectDocLinks({
 
   const handleUpdateDocLink = useCallback(async (
     linkId: string,
+    nextKindInput: ProjectDocLinkKind,
     nextTitleInput: string,
     nextUrlInput: string,
     nextTagInput: ProjectDocLinkTag,
     nextNoteInput: string,
     nextAccountInput: string,
+    nextSshHostInput: string,
+    nextSshPortInput: string,
+    nextSshUsernameInput: string,
+    nextSshRouteInput: ProjectDocLinkSshRoute,
     nextSecretInput: string,
     clearSecret: boolean
   ): Promise<boolean> => {
     if (!project) return false
 
-    const normalizedUrl = normalizeDocUrl(nextUrlInput)
-    if (!normalizedUrl) {
-      setDocError(t('documentation.invalidUrl'))
-      return false
-    }
-
-    const duplicate = docLinks.some(
-      (link) => link.id !== linkId && link.url.toLowerCase() === normalizedUrl.toLowerCase()
-    )
-    if (duplicate) {
-      setDocError(t('documentation.duplicateUrl'))
-      return false
-    }
-
     let title = nextTitleInput.trim()
-    if (!title) {
-      try {
-        title = new URL(normalizedUrl).hostname
-      } catch {
-        title = t('documentation.generatedTitle')
-      }
-    }
-
     const note = nextNoteInput.trim() || undefined
-    const account = nextAccountInput.trim() || undefined
     const secret = nextSecretInput.trim()
+    const targetLink = docLinks.find((link) => link.id === linkId)
+
+    let normalizedUrl: string | undefined
+    let account: string | undefined
+    let sshHost: string | undefined
+    let sshPort: number | undefined
+    let sshUsername: string | undefined
+    let sshRoute: ProjectDocLinkSshRoute | undefined
+
+    if (nextKindInput === 'ssh') {
+      const normalizedHost = normalizeSshHost(nextSshHostInput)
+      const normalizedPort = normalizeDocLinkPort(nextSshPortInput) ?? 22
+      const normalizedUsername = nextSshUsernameInput.trim()
+      if (!normalizedHost) {
+        setDocError(t('documentation.invalidSshHost'))
+        return false
+      }
+      if (!normalizedUsername) {
+        setDocError(t('documentation.invalidSshUsername'))
+        return false
+      }
+      const duplicate = docLinks.some(
+        (link) => link.id !== linkId
+          && link.kind === 'ssh'
+          && link.sshHost?.toLowerCase() === normalizedHost.toLowerCase()
+          && (link.sshPort ?? 22) === normalizedPort
+          && (link.sshUsername ?? link.account ?? '').toLowerCase() === normalizedUsername.toLowerCase()
+      )
+      if (duplicate) {
+        setDocError(t('documentation.duplicateSsh'))
+        return false
+      }
+      if (!title) {
+        title = normalizedUsername
+      }
+      sshHost = normalizedHost
+      sshPort = normalizedPort
+      sshUsername = normalizedUsername
+      sshRoute = normalizeProjectDocLinkSshRoute(nextSshRouteInput)
+      account = normalizedUsername
+    } else {
+      const nextNormalizedUrl = normalizeDocUrl(nextUrlInput)
+      if (!nextNormalizedUrl) {
+        setDocError(t('documentation.invalidUrl'))
+        return false
+      }
+      normalizedUrl = nextNormalizedUrl
+      const duplicate = docLinks.some(
+        (link) => link.id !== linkId
+          && (link.kind ?? 'url') === 'url'
+          && (link.url ?? '').toLowerCase() === nextNormalizedUrl.toLowerCase()
+      )
+      if (duplicate) {
+        setDocError(t('documentation.duplicateUrl'))
+        return false
+      }
+      if (!title && normalizedUrl) {
+        try {
+          title = new URL(normalizedUrl).hostname
+        } catch {
+          title = t('documentation.generatedTitle')
+        }
+      }
+      account = nextAccountInput.trim() || undefined
+    }
 
     let hasSecret = false
-    const targetLink = docLinks.find((link) => link.id === linkId)
     if (targetLink?.hasSecret) {
       hasSecret = true
     }
@@ -299,11 +484,25 @@ export function useProjectDocLinks({
       link.id === linkId
         ? {
           ...link,
+          kind: nextKindInput,
           title,
-          url: normalizedUrl,
+          url: nextKindInput === 'url' ? normalizedUrl : undefined,
           tag: normalizeProjectDocLinkTag(nextTagInput, docLinkTagOptions),
           ...(note ? { note } : { note: undefined }),
           ...(account ? { account } : { account: undefined }),
+          ...(nextKindInput === 'ssh'
+            ? {
+              sshHost,
+              sshPort,
+              sshUsername,
+              sshRoute,
+            }
+            : {
+              sshHost: undefined,
+              sshPort: undefined,
+              sshUsername: undefined,
+              sshRoute: undefined,
+            }),
           ...(hasSecret ? { hasSecret: true } : { hasSecret: undefined }),
         }
         : link
@@ -320,7 +519,7 @@ export function useProjectDocLinks({
 
   const handleCopyDocLinkAccount = useCallback(async (linkId: string): Promise<boolean> => {
     const link = docLinks.find((item) => item.id === linkId)
-    const account = link?.account?.trim()
+    const account = (link?.kind === 'ssh' ? (link.sshUsername ?? link.account) : link?.account)?.trim()
     if (!account) return false
     try {
       await navigator.clipboard.writeText(account)
@@ -354,6 +553,82 @@ export function useProjectDocLinks({
     }
   }, [project])
 
+  const handleOpenDocLink = useCallback(async (link: ProjectDocLink): Promise<void> => {
+    if ((link.kind ?? 'url') === 'ssh') {
+      const host = link.sshHost?.trim()
+      const username = (link.sshUsername ?? link.account)?.trim()
+      const port = normalizeDocLinkPort(link.sshPort) ?? 22
+      if (!host) {
+        setDocError(t('documentation.invalidSshHost'))
+        return
+      }
+      if (!username) {
+        setDocError(t('documentation.invalidSshUsername'))
+        return
+      }
+      let password: string | null = null
+      if (project && link.hasSecret) {
+        password = await handleGetDocLinkSecret(link.id)
+      }
+      const result = await window.electronAPI.openSshTerminal({
+        host,
+        port,
+        username,
+        password,
+        route: normalizeProjectDocLinkSshRoute(link.sshRoute),
+      })
+      if (!result.ok) {
+        setDocError(result.message ?? t('documentation.openSshFailed'))
+        return
+      }
+      setDocError(null)
+      if (result.message) {
+        console.info('[doc-link][ssh]', result.message)
+      }
+      return
+    }
+
+    const target = link.url?.trim()
+    if (!target) {
+      setDocError(t('documentation.invalidUrl'))
+      return
+    }
+    await window.electronAPI.openExternal(target)
+    setDocError(null)
+  }, [handleGetDocLinkSecret, project, t])
+
+  const handleOpenDocMenuItem = useCallback(async (linkId: string): Promise<void> => {
+    const link = docLinks.find((item) => item.id === linkId)
+    if (!link) return
+    await handleOpenDocLink(link)
+  }, [docLinks, handleOpenDocLink])
+
+  const docMenuItems = useMemo<ProjectDocMenuItem[]>(
+    () => docLinks.map((link) => {
+      const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+      const isSsh = link.kind === 'ssh'
+      const sshTarget = buildSshDocLinkTarget(link.sshHost || '', link.sshPort)
+      return {
+        url: link.url ?? '',
+        label: isSsh ? `${t('documentation.connectSsh')} · ${link.title}` : link.title,
+        tag: normalizedTag,
+        tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions, locale),
+        onOpen: () => handleOpenDocLink(link),
+        kind: link.kind ?? 'url',
+        description: isSsh
+          ? `${link.sshUsername || link.account || ''}@${sshTarget}`
+          : link.url ?? '',
+        copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
+        copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
+        copyValueResolver: isSsh && link.hasSecret
+          ? async () => await handleGetDocLinkSecret(link.id) || ''
+          : undefined,
+        linkId: link.id,
+      }
+    }),
+    [docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, locale, t]
+  )
+
   useEffect(() => {
     if (!linkSettingsOpen) return
 
@@ -372,6 +647,8 @@ export function useProjectDocLinks({
     docLinks,
     defaultDocLink,
     docMenuItems,
+    docKindInput,
+    setDocKindInput,
     docLinkTagOptions,
     linkSettingsOpen,
     setLinkSettingsOpen,
@@ -387,6 +664,16 @@ export function useProjectDocLinks({
     setDocAccountInput,
     docSecretInput,
     setDocSecretInput,
+    docSshHostInput,
+    setDocSshHostInput,
+    docSshPortInput,
+    setDocSshPortInput,
+    docSshUsernameInput,
+    setDocSshUsernameInput,
+    docSshShortcutInput,
+    setDocSshShortcutInput: handleSetDocSshShortcutInput,
+    docSshRouteInput,
+    setDocSshRouteInput,
     docError,
     setDocError,
     handleAddDocLink,
@@ -400,5 +687,7 @@ export function useProjectDocLinks({
     handleCopyDocLinkAccount,
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
+    handleOpenDocLink,
+    handleOpenDocMenuItem,
   }
 }

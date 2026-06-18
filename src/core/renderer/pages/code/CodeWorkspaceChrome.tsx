@@ -40,7 +40,18 @@ type CodeWorkspaceChromeProps = {
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
-  projectLinkItems: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  projectLinkItems: {
+    url: string
+    label: string
+    tag?: string
+    tagLabel?: string
+    onOpen?: () => void | Promise<void>
+    kind?: 'url' | 'ssh'
+    description?: string
+    copyValue?: string
+    copyLabel?: string
+    copyValueResolver?: () => Promise<string>
+  }[]
   projectName?: string
   readError: string | null
   saveError: string | null

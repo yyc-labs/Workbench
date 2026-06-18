@@ -6,6 +6,7 @@ import {
   ExternalLink,
   GripVertical,
   KeyRound,
+  Link2,
   Pencil,
   StickyNote,
   Trash2,
@@ -14,7 +15,9 @@ import {
 import { memo } from 'react'
 import type { ProjectDocLink, ProjectDocTagOption } from '../../../shared/types'
 import {
+  isSshProjectDocLink,
   normalizeProjectDocLinkTag,
+  projectDocLinkTarget,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
 import { useI18n, useLocale } from '../../i18n'
@@ -38,6 +41,7 @@ type DetailDocumentationLinkItemProps = {
   onCopySecret: (linkId: string) => Promise<void>
   onRevealSecret: (linkId: string) => Promise<void>
   onToggleExpand: (linkId: string) => void
+  onOpenDocLink: (link: ProjectDocLink) => Promise<void>
   onSetDefaultDocLink: (linkId: string) => Promise<void>
   onRemoveDocLink: (linkId: string) => Promise<void>
 }
@@ -59,6 +63,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
   onCopySecret,
   onRevealSecret,
   onToggleExpand,
+  onOpenDocLink,
   onSetDefaultDocLink,
   onRemoveDocLink,
 }: DetailDocumentationLinkItemProps) {
@@ -99,14 +104,84 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
           />
           <input
             type="text"
-            value={editing.url}
-            onChange={(event) => editing.setUrl(event.target.value)}
-            placeholder="https://..."
+            value={editing.kind === 'ssh' ? editing.sshHost : editing.url}
+            onChange={(event) => (
+              editing.kind === 'ssh'
+                ? editing.setSshHost(event.target.value)
+                : editing.setUrl(event.target.value)
+            )}
+            placeholder={editing.kind === 'ssh' ? t('documentation.sshHostPlaceholder') : 'https://...'}
             className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
             onKeyDown={(event) => {
               if (event.key === 'Enter') void editing.save()
             }}
           />
+          {editing.kind === 'ssh' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_104px]">
+                <input
+                  type="text"
+                  value={editing.sshUsername}
+                  onChange={(event) => editing.setSshUsername(event.target.value)}
+                  placeholder={t('documentation.sshUsernamePlaceholder')}
+                  className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+                />
+                <input
+                  type="text"
+                  value={editing.sshHost}
+                  onChange={(event) => editing.setSshHost(event.target.value)}
+                  placeholder={t('documentation.sshHostPlaceholder')}
+                  className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+                />
+                <input
+                  type="text"
+                  value={editing.sshPort}
+                  onChange={(event) => editing.setSshPort(event.target.value)}
+                  placeholder={t('documentation.sshPortPlaceholder')}
+                  className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+                />
+              </div>
+              <input
+                type="text"
+                value={editing.sshShortcut}
+                onChange={(event) => editing.setSshShortcut(event.target.value)}
+                placeholder={t('documentation.sshShortcutPlaceholder')}
+                className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+              />
+              <p className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
+                {t('documentation.sshShortcutHint')}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
+                  {t('documentation.sshRouteLabel')}
+                </span>
+                <div className="inline-flex rounded-full border border-[color:var(--color-border)] p-1">
+                  <button
+                    type="button"
+                    className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
+                      editing.sshRoute === 'wsl'
+                        ? 'bg-primary text-white'
+                        : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                    onClick={() => editing.setSshRoute('wsl')}
+                  >
+                    {t('documentation.sshRouteWsl')}
+                  </button>
+                  <button
+                    type="button"
+                    className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
+                      editing.sshRoute === 'windows'
+                        ? 'bg-primary text-white'
+                        : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                    }`}
+                    onClick={() => editing.setSshRoute('windows')}
+                  >
+                    {t('documentation.sshRouteWindows')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <DetailDocumentationTagSelect
             value={editing.tag}
             onChange={editing.setTag}
@@ -120,13 +195,15 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
             rows={2}
             className="quiet-control block min-h-[64px] w-full rounded-[14px] border-0 px-3 py-2 text-xs text-[color:var(--color-foreground)]"
           />
-          <input
-            type="text"
-            value={editing.account}
-            onChange={(event) => editing.setAccount(event.target.value)}
-            placeholder={t('documentation.accountPlaceholder')}
-            className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
-          />
+          {editing.kind !== 'ssh' && (
+            <input
+              type="text"
+              value={editing.account}
+              onChange={(event) => editing.setAccount(event.target.value)}
+              placeholder={t('documentation.accountPlaceholder')}
+              className="quiet-control block h-9 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
+            />
+          )}
           <input
             type="text"
             value={editing.secret}
@@ -201,7 +278,7 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm text-[color:var(--color-foreground)]">{link.title}</p>
                 <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-                  {isExpanded ? link.url : link.url.replace(/^https?:\/\//, '')}
+                  {projectDocLinkTarget(link)}
                 </p>
                 <div className="mt-1 flex items-center gap-1.5">
                   <span className="inline-flex items-center rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
@@ -211,6 +288,11 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                       locale
                     )}
                   </span>
+                  {isSshProjectDocLink(link) && (
+                    <span className="inline-flex items-center rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+                      SSH
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="inline-flex items-center gap-1">
@@ -327,10 +409,10 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     className="inline-flex h-8 items-center gap-1 rounded-full px-2 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-primary"
-                    onClick={() => window.electronAPI.openExternal(link.url)}
+                    onClick={() => { void onOpenDocLink(link) }}
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    {t('documentation.openLink')}
+                    {isSshProjectDocLink(link) ? <Link2 className="h-3 w-3" /> : <ExternalLink className="h-3 w-3" />}
+                    {isSshProjectDocLink(link) ? t('documentation.connectSsh') : t('documentation.openLink')}
                   </button>
                   {link.account?.trim() && (
                     <button
@@ -407,10 +489,16 @@ const DetailDocumentationLinkItem = memo(function DetailDocumentationLinkItem({
     ? (
       prev.editing.linkId === next.editing.linkId &&
       prev.editing.title === next.editing.title &&
+      prev.editing.kind === next.editing.kind &&
       prev.editing.url === next.editing.url &&
       prev.editing.tag === next.editing.tag &&
       prev.editing.note === next.editing.note &&
       prev.editing.account === next.editing.account &&
+      prev.editing.sshHost === next.editing.sshHost &&
+      prev.editing.sshPort === next.editing.sshPort &&
+      prev.editing.sshUsername === next.editing.sshUsername &&
+      prev.editing.sshShortcut === next.editing.sshShortcut &&
+      prev.editing.sshRoute === next.editing.sshRoute &&
       prev.editing.secret === next.editing.secret &&
       prev.editing.secretLoading === next.editing.secretLoading &&
       prev.editing.clearSecret === next.editing.clearSecret

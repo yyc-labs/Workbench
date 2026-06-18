@@ -1,11 +1,13 @@
 import type { DragCancelEvent, DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { ProjectDocLink, ProjectDocTagOption } from '../../../shared/types'
+import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocTagOption } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import {
   PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
   normalizeProjectDocLinkTag,
+  normalizeProjectDocLinkKind,
 } from '../../lib/projectDocLinks'
+import { buildSshDocLinkTarget, parseSshShortcutInput } from './detail.aiFlow'
 import type {
   DetailDocumentationCardProps,
   DetailDocumentationEditState,
@@ -29,6 +31,7 @@ type UseDetailDocumentationCardStateOptions = Pick<
   | 'onCopyDocLinkAccount'
   | 'onCopyDocLinkSecret'
   | 'onGetDocLinkSecret'
+  | 'onOpenDocLink'
   | 'settingsOpen'
   | 'setSettingsOpen'
 >
@@ -38,8 +41,9 @@ export type UseDetailDocumentationCardStateResult = {
     open: boolean
     setOpen: Dispatch<SetStateAction<boolean>>
     close: () => void
-    advancedOptionsOpen: boolean
-    toggleAdvancedOptions: () => void
+    addDialogOpen: boolean
+    openAddDialog: () => void
+    closeAddDialog: () => void
   }
   tags: {
     options: ReadonlyArray<ProjectDocTagOption>
@@ -72,6 +76,7 @@ export type UseDetailDocumentationCardStateResult = {
     copySecret: (linkId: string) => Promise<void>
     revealSecret: (linkId: string) => Promise<void>
     toggleExpand: (linkId: string) => void
+    open: (link: ProjectDocLink) => Promise<void>
     startDrag: (event: DragStartEvent) => void
     cancelDrag: (event: DragCancelEvent) => void
     endDrag: (event: DragEndEvent) => void
@@ -97,6 +102,7 @@ function useDetailDocumentationCardState({
   onCopyDocLinkAccount,
   onCopyDocLinkSecret,
   onGetDocLinkSecret,
+  onOpenDocLink,
   settingsOpen: settingsOpenProp,
   setSettingsOpen: setSettingsOpenProp,
 }: UseDetailDocumentationCardStateOptions): UseDetailDocumentationCardStateResult {
@@ -109,11 +115,17 @@ function useDetailDocumentationCardState({
   const settingsOpen = settingsOpenProp ?? settingsOpenState
   const setSettingsOpen = setSettingsOpenProp ?? setSettingsOpenState
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null)
+  const [editingKind, setEditingKind] = useState<ProjectDocLinkKind>('url')
   const [editingTitle, setEditingTitle] = useState('')
   const [editingUrl, setEditingUrl] = useState('')
   const [editingTag, setEditingTag] = useState('')
   const [editingNote, setEditingNote] = useState('')
   const [editingAccount, setEditingAccount] = useState('')
+  const [editingSshHost, setEditingSshHost] = useState('')
+  const [editingSshPort, setEditingSshPort] = useState('22')
+  const [editingSshUsername, setEditingSshUsername] = useState('')
+  const [editingSshShortcut, setEditingSshShortcut] = useState('')
+  const [editingSshRoute, setEditingSshRoute] = useState<ProjectDocLinkSshRoute>('wsl')
   const [editingSecret, setEditingSecret] = useState('')
   const [editingSecretLoading, setEditingSecretLoading] = useState(false)
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null)
@@ -127,7 +139,7 @@ function useDetailDocumentationCardState({
   const [renamingTagValue, setRenamingTagValue] = useState<string | null>(null)
   const [renamingTagLabel, setRenamingTagLabel] = useState('')
   const [tagSaving, setTagSaving] = useState(false)
-  const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(false)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
   const editSecretRequestRef = useRef(0)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -152,13 +164,22 @@ function useDetailDocumentationCardState({
 
   const startEdit = useCallback(async (link: ProjectDocLink) => {
     const requestId = ++editSecretRequestRef.current
+    const normalizedKind = normalizeProjectDocLinkKind(link.kind)
     setEditingLinkId(link.id)
     setExpandedLinkId(link.id)
+    setEditingKind(normalizedKind)
     setEditingTitle(link.title)
-    setEditingUrl(link.url)
+    setEditingUrl(link.url ?? '')
     setEditingTag(normalizeProjectDocLinkTag(link.tag, safeTagOptions))
     setEditingNote(link.note ?? '')
     setEditingAccount(link.account ?? '')
+    setEditingSshHost(link.sshHost ?? '')
+    setEditingSshPort(String(link.sshPort ?? 22))
+    setEditingSshUsername(link.sshUsername ?? link.account ?? '')
+    setEditingSshRoute(link.sshRoute === 'windows' ? 'windows' : 'wsl')
+    const username = link.sshUsername ?? link.account ?? ''
+    const target = buildSshDocLinkTarget(link.sshHost ?? '', link.sshPort)
+    setEditingSshShortcut(username && target ? `${username}@${target}` : '')
     setEditingSecret('')
     setClearEditingSecret(false)
     if (!link.hasSecret) {
@@ -180,26 +201,47 @@ function useDetailDocumentationCardState({
   const cancelEdit = useCallback(() => {
     editSecretRequestRef.current += 1
     setEditingLinkId(null)
+    setEditingKind('url')
     setEditingTitle('')
     setEditingUrl('')
     setEditingTag('')
     setEditingNote('')
     setEditingAccount('')
+    setEditingSshHost('')
+    setEditingSshPort('22')
+    setEditingSshUsername('')
+    setEditingSshShortcut('')
+    setEditingSshRoute('wsl')
     setEditingSecret('')
     setEditingSecretLoading(false)
     setClearEditingSecret(false)
     selectTagFilter('all')
   }, [safeTagOptions, selectTagFilter])
 
+  useEffect(() => {
+    if (editingKind !== 'ssh') return
+    const parsed = parseSshShortcutInput(editingSshShortcut)
+    if (!parsed) return
+    if (parsed.username !== editingSshUsername) setEditingSshUsername(parsed.username)
+    if (parsed.host !== editingSshHost) setEditingSshHost(parsed.host)
+    const nextPort = String(parsed.port)
+    if (nextPort !== editingSshPort) setEditingSshPort(nextPort)
+  }, [editingKind, editingSshHost, editingSshPort, editingSshShortcut, editingSshUsername])
+
   const saveEdit = useCallback(async () => {
     if (!editingLinkId) return
     const ok = await onUpdateDocLink(
       editingLinkId,
+      editingKind,
       editingTitle,
       editingUrl,
       editingTag,
       editingNote,
       editingAccount,
+      editingSshHost,
+      editingSshPort,
+      editingSshUsername,
+      editingSshRoute,
       editingSecret,
       clearEditingSecret
     )
@@ -210,9 +252,14 @@ function useDetailDocumentationCardState({
     cancelEdit,
     clearEditingSecret,
     editingAccount,
+    editingKind,
     editingLinkId,
     editingNote,
     editingSecret,
+    editingSshHost,
+    editingSshPort,
+    editingSshRoute,
+    editingSshUsername,
     editingTag,
     editingTitle,
     editingUrl,
@@ -221,6 +268,7 @@ function useDetailDocumentationCardState({
 
   const closeSettings = useCallback(() => {
     setSettingsOpen(false)
+    setAddDialogOpen(false)
     cancelEdit()
   }, [cancelEdit, setSettingsOpen])
 
@@ -272,6 +320,10 @@ function useDetailDocumentationCardState({
   const handleToggleExpand = useCallback((linkId: string) => {
     setExpandedLinkId((current) => (current === linkId ? null : linkId))
   }, [])
+
+  const handleOpenLink = useCallback(async (link: ProjectDocLink) => {
+    await onOpenDocLink(link)
+  }, [onOpenDocLink])
 
   const handleCreateTag = useCallback(async () => {
     if (tagSaving) return
@@ -354,6 +406,10 @@ function useDetailDocumentationCardState({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        if (addDialogOpen) {
+          setAddDialogOpen(false)
+          return
+        }
         closeSettings()
       }
     }
@@ -362,11 +418,11 @@ function useDetailDocumentationCardState({
     return () => {
       window.removeEventListener('keydown', onKeyDown)
     }
-  }, [closeSettings, settingsOpen])
+  }, [addDialogOpen, closeSettings, settingsOpen])
 
   useEffect(() => {
     if (settingsOpen) return
-    setAdvancedOptionsOpen(false)
+    setAddDialogOpen(false)
   }, [settingsOpen])
 
   useEffect(() => {
@@ -388,8 +444,9 @@ function useDetailDocumentationCardState({
       open: settingsOpen,
       setOpen: setSettingsOpen,
       close: closeSettings,
-      advancedOptionsOpen,
-      toggleAdvancedOptions: () => setAdvancedOptionsOpen((prev) => !prev),
+      addDialogOpen,
+      openAddDialog: () => setAddDialogOpen(true),
+      closeAddDialog: () => setAddDialogOpen(false),
     },
     tags: {
       options: safeTagOptions,
@@ -422,6 +479,7 @@ function useDetailDocumentationCardState({
       copySecret: handleCopySecret,
       revealSecret: handleRevealSecret,
       toggleExpand: handleToggleExpand,
+      open: handleOpenLink,
       startDrag: handleDragStart,
       cancelDrag: handleDragCancel,
       endDrag: handleDragEnd,
@@ -430,6 +488,8 @@ function useDetailDocumentationCardState({
     },
     editing: {
       linkId: editingLinkId,
+      kind: editingKind,
+      setKind: setEditingKind,
       title: editingTitle,
       setTitle: setEditingTitle,
       url: editingUrl,
@@ -440,6 +500,16 @@ function useDetailDocumentationCardState({
       setNote: setEditingNote,
       account: editingAccount,
       setAccount: setEditingAccount,
+      sshHost: editingSshHost,
+      setSshHost: setEditingSshHost,
+      sshPort: editingSshPort,
+      setSshPort: setEditingSshPort,
+      sshUsername: editingSshUsername,
+      setSshUsername: setEditingSshUsername,
+      sshShortcut: editingSshShortcut,
+      setSshShortcut: setEditingSshShortcut,
+      sshRoute: editingSshRoute,
+      setSshRoute: setEditingSshRoute,
       secret: editingSecret,
       setSecret: setEditingSecret,
       secretLoading: editingSecretLoading,

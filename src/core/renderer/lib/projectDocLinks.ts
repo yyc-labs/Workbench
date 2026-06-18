@@ -1,7 +1,16 @@
-import type { ProjectDocLinkTag, ProjectDocTagOption } from '../../shared/types'
+import type {
+  ProjectDocLink,
+  ProjectDocLinkKind,
+  ProjectDocLinkTag,
+  ProjectDocTagOption,
+} from '../../shared/types'
 import type { ResolvedLocale } from '../i18n/messages'
 
 export const PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS: ReadonlyArray<ProjectDocTagOption> = []
+
+export function normalizeProjectDocLinkKind(value: ProjectDocLinkKind | string | null | undefined): ProjectDocLinkKind {
+  return value === 'ssh' ? 'ssh' : 'url'
+}
 
 export function normalizeProjectDocLinkTag(
   value: ProjectDocLinkTag | string | null | undefined,
@@ -14,6 +23,49 @@ export function normalizeProjectDocLinkTag(
     return trimmed
   }
   return ''
+}
+
+export function projectDocLinkAccount(link: Pick<ProjectDocLink, 'kind' | 'account' | 'sshUsername'>): string {
+  const kind = normalizeProjectDocLinkKind(link.kind)
+  if (kind === 'ssh') {
+    return link.sshUsername?.trim() || link.account?.trim() || ''
+  }
+  return link.account?.trim() || ''
+}
+
+export function projectDocLinkSshPort(link: Pick<ProjectDocLink, 'sshPort'>): number {
+  const port = Number(link.sshPort)
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return 22
+  return port
+}
+
+export function projectDocLinkTarget(link: Pick<ProjectDocLink, 'kind' | 'url' | 'sshHost' | 'sshPort' | 'sshUsername' | 'account'>): string {
+  const kind = normalizeProjectDocLinkKind(link.kind)
+  if (kind === 'ssh') {
+    const host = link.sshHost?.trim() || ''
+    const username = projectDocLinkAccount(link)
+    const port = projectDocLinkSshPort(link)
+    if (!host) return ''
+    const hostWithPort = port !== 22 ? `${host}:${port}` : host
+    return username ? `${username}@${hostWithPort}` : hostWithPort
+  }
+  return link.url?.trim() || ''
+}
+
+export function projectDocLinkCopyValue(link: Pick<ProjectDocLink, 'kind' | 'url' | 'sshHost' | 'sshPort' | 'sshUsername' | 'account'>): string {
+  const kind = normalizeProjectDocLinkKind(link.kind)
+  if (kind === 'ssh') {
+    const host = link.sshHost?.trim() || ''
+    const username = projectDocLinkAccount(link)
+    const port = projectDocLinkSshPort(link)
+    if (!host || !username) return ''
+    return port !== 22 ? `ssh -p ${port} ${username}@${host}` : `ssh ${username}@${host}`
+  }
+  return link.url?.trim() || ''
+}
+
+export function isSshProjectDocLink(link: Pick<ProjectDocLink, 'kind'>): boolean {
+  return normalizeProjectDocLinkKind(link.kind) === 'ssh'
 }
 
 export function projectDocLinkTagLabel(

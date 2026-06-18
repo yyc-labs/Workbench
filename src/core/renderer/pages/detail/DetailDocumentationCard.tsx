@@ -1,6 +1,8 @@
 import { ExternalLink, Settings2 } from 'lucide-react'
 import {
+  isSshProjectDocLink,
   normalizeProjectDocLinkTag,
+  projectDocLinkTarget,
   projectDocLinkTagLabel,
 } from '../../lib/projectDocLinks'
 import { useI18n, useLocale } from '../../i18n'
@@ -10,6 +12,8 @@ import { useDetailDocumentationCardState } from './useDetailDocumentationCardSta
 
 function DetailDocumentationCard({
   docLinks,
+  docKindInput,
+  setDocKindInput,
   docTitleInput,
   setDocTitleInput,
   docUrlInput,
@@ -23,6 +27,16 @@ function DetailDocumentationCard({
   setDocAccountInput,
   docSecretInput,
   setDocSecretInput,
+  docSshHostInput,
+  setDocSshHostInput,
+  docSshPortInput,
+  setDocSshPortInput,
+  docSshUsernameInput,
+  setDocSshUsernameInput,
+  docSshShortcutInput,
+  setDocSshShortcutInput,
+  docSshRouteInput,
+  setDocSshRouteInput,
   docError,
   setDocError,
   onAddDocLink,
@@ -36,6 +50,7 @@ function DetailDocumentationCard({
   onCopyDocLinkAccount,
   onCopyDocLinkSecret,
   onGetDocLinkSecret,
+  onOpenDocLink,
   settingsOpen,
   setSettingsOpen,
   hideCard = false,
@@ -58,6 +73,7 @@ function DetailDocumentationCard({
     onCopyDocLinkAccount,
     onCopyDocLinkSecret,
     onGetDocLinkSecret,
+    onOpenDocLink,
     settingsOpen,
     setSettingsOpen,
   })
@@ -83,8 +99,8 @@ function DetailDocumentationCard({
             {defaultLink ? (
               <button
                 className="quiet-control flex w-full min-w-0 items-center gap-2 rounded-[16px] px-4 py-3 text-left"
-                onClick={() => window.electronAPI.openExternal(defaultLink.url)}
-                title={defaultLink.url}
+                onClick={() => { void onOpenDocLink(defaultLink) }}
+                title={projectDocLinkTarget(defaultLink)}
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-[color:var(--color-foreground)]">{defaultLink.title}</p>
@@ -95,12 +111,17 @@ function DetailDocumentationCard({
                       locale
                     )}
                   </p>
-                  <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{defaultLink.url}</p>
+                  <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{projectDocLinkTarget(defaultLink)}</p>
                 </div>
                 <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                   {t('documentation.defaultBadge')}
                 </span>
                 <ExternalLink className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />
+                {isSshProjectDocLink(defaultLink) && (
+                  <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+                    {t('documentation.kindSsh')}
+                  </span>
+                )}
               </button>
             ) : (
               <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-4 text-xs text-[color:var(--color-muted-foreground)]">
@@ -119,6 +140,8 @@ function DetailDocumentationCard({
       )}
 
       <DetailDocumentationSettingsModal
+        docKindInput={docKindInput}
+        setDocKindInput={setDocKindInput}
         docTitleInput={docTitleInput}
         setDocTitleInput={setDocTitleInput}
         docUrlInput={docUrlInput}
@@ -131,7 +154,18 @@ function DetailDocumentationCard({
         setDocAccountInput={setDocAccountInput}
         docSecretInput={docSecretInput}
         setDocSecretInput={setDocSecretInput}
+        docSshHostInput={docSshHostInput}
+        setDocSshHostInput={setDocSshHostInput}
+        docSshPortInput={docSshPortInput}
+        setDocSshPortInput={setDocSshPortInput}
+        docSshUsernameInput={docSshUsernameInput}
+        setDocSshUsernameInput={setDocSshUsernameInput}
+        docSshShortcutInput={docSshShortcutInput}
+        setDocSshShortcutInput={setDocSshShortcutInput}
+        docSshRouteInput={docSshRouteInput}
+        setDocSshRouteInput={setDocSshRouteInput}
         docError={docError}
+        setDocError={setDocError}
         onAddDocLink={onAddDocLink}
         state={state}
       />

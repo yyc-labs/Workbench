@@ -46,6 +46,52 @@ export function normalizeDocUrl(value: string): string | null {
   }
 }
 
+export function normalizeDocLinkPort(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value <= 0 || value > 65535) return null
+    return value
+  }
+  const trimmed = typeof value === 'string' ? value.trim() : ''
+  if (!trimmed) return null
+  if (!/^\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 65535) return null
+  return parsed
+}
+
+export function normalizeSshHost(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+export function parseSshShortcutInput(value: string): {
+  username: string
+  host: string
+  port: number
+} | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const match = trimmed.match(/^([^@\s]+)@([^:\s]+)(?::(\d+))?$/)
+  if (!match) return null
+
+  const username = match[1]?.trim() || ''
+  const host = normalizeSshHost(match[2] ?? '')
+  const port = normalizeDocLinkPort(match[3]) ?? 22
+
+  if (!username || !host) return null
+
+  return {
+    username,
+    host,
+    port,
+  }
+}
+
+export function buildSshDocLinkTarget(host: string, port?: number): string {
+  return port && port !== 22 ? `${host}:${port}` : host
+}
+
 function stepRank(status: AiStepStatus): number {
   if (status === 'error') return 3
   if (status === 'success') return 2

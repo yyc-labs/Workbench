@@ -579,16 +579,28 @@ export interface GitResolveConflictResult {
 
 export type ProjectDocLinkTag = string
 
+export type ProjectDocLinkKind = 'url' | 'ssh'
+export type ProjectDocLinkSshRoute = 'wsl' | 'windows'
+
 export interface ProjectDocLink {
   id: string
   title: string
-  url: string
+  url?: string
+  kind?: ProjectDocLinkKind
   /** Resource type tag for this project material link. */
   tag?: ProjectDocLinkTag
   /** Optional plain-text note for this documentation link. */
   note?: string
   /** Optional account/username hint associated with this link. */
   account?: string
+  /** SSH host when this doc link represents an SSH connection. */
+  sshHost?: string
+  /** SSH port when this doc link represents an SSH connection. */
+  sshPort?: number
+  /** SSH username when this doc link represents an SSH connection. */
+  sshUsername?: string
+  /** Preferred SSH route when opening this connection. */
+  sshRoute?: ProjectDocLinkSshRoute
   /** True when a password/secret is saved in OS secure storage for this link. */
   hasSecret?: boolean
 }

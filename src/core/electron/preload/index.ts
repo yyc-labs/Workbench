@@ -345,6 +345,29 @@ const api = {
   openPathTerminal: (folderPath: string, command?: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_PATH_TERMINAL, folderPath, command),
 
+  openSshTerminal: (
+    payload: {
+      host: string
+      port?: number
+      username: string
+      password?: string | null
+      route?: 'wsl' | 'windows'
+    }
+  ) => ipcRenderer.invoke(IPC.SHELL_OPEN_SSH_TERMINAL, payload) as Promise<{
+    ok: boolean
+    mode: 'wsl-expect' | 'native-ssh'
+    autoLogin: boolean
+    message?: string
+    reason?:
+      | 'invalid-input'
+      | 'windows-host-required'
+      | 'wsl-not-installed'
+      | 'wsl-distro-unavailable'
+      | 'wsl-bash-unavailable'
+      | 'wsl-expect-unavailable'
+      | 'terminal-launch-failed'
+  }>,
+
   onProcessOutput: (
     cb: (data: { projectId: string; data: string }) => void
   ) => {

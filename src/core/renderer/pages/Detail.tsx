@@ -186,6 +186,7 @@ export function DetailPage() {
     handleCopyDocLinkAccount,
     handleCopyDocLinkSecret,
     handleGetDocLinkSecret,
+    handleOpenDocLink,
   } = docLinkState
   const openProjectLinksManager = useCallback(() => {
     setLinkSettingsOpen(true)
@@ -393,7 +394,7 @@ export function DetailPage() {
                 <button
                   type="button"
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                  onClick={() => { void handleOpenDocLink(defaultDocLink) }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -603,6 +604,8 @@ export function DetailPage() {
 
       <DetailDocumentationCard
         docLinks={docLinks}
+        docKindInput={docLinkState.docKindInput}
+        setDocKindInput={docLinkState.setDocKindInput}
         docTitleInput={docTitleInput}
         setDocTitleInput={setDocTitleInput}
         docUrlInput={docUrlInput}
@@ -616,6 +619,16 @@ export function DetailPage() {
         setDocAccountInput={setDocAccountInput}
         docSecretInput={docSecretInput}
         setDocSecretInput={setDocSecretInput}
+        docSshHostInput={docLinkState.docSshHostInput}
+        setDocSshHostInput={docLinkState.setDocSshHostInput}
+        docSshPortInput={docLinkState.docSshPortInput}
+        setDocSshPortInput={docLinkState.setDocSshPortInput}
+        docSshUsernameInput={docLinkState.docSshUsernameInput}
+        setDocSshUsernameInput={docLinkState.setDocSshUsernameInput}
+        docSshShortcutInput={docLinkState.docSshShortcutInput}
+        setDocSshShortcutInput={docLinkState.setDocSshShortcutInput}
+        docSshRouteInput={docLinkState.docSshRouteInput}
+        setDocSshRouteInput={docLinkState.setDocSshRouteInput}
         docError={docError}
         setDocError={setDocError}
         onAddDocLink={handleAddDocLink}
@@ -629,6 +642,7 @@ export function DetailPage() {
         onCopyDocLinkAccount={handleCopyDocLinkAccount}
         onCopyDocLinkSecret={handleCopyDocLinkSecret}
         onGetDocLinkSecret={handleGetDocLinkSecret}
+        onOpenDocLink={handleOpenDocLink}
         settingsOpen={linkSettingsOpen}
         setSettingsOpen={setLinkSettingsOpen}
         hideCard

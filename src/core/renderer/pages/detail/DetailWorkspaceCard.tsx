@@ -4,9 +4,10 @@ import type { ProjectDocLink, ProjectInfo } from '../../../shared/types'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { UrlPopover } from '../../components/UrlPopover'
 import { InfoCard } from './DetailInfoCard'
-import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
+import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../../lib/projectDocLinks'
 import { useAppStore } from '../../stores/appStore'
 import { useI18n } from '../../i18n'
+import { useProjectDocLinks } from './useProjectDocLinks'
 
 type DetailWorkspaceCardProps = {
   project: ProjectInfo
@@ -29,17 +30,27 @@ function DetailWorkspaceCard({
 }: DetailWorkspaceCardProps) {
   const { t } = useI18n()
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
+  const { handleGetDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
   const docMenuItems = useMemo(
     () => docLinks.map((link) => {
       const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
+      const isSsh = (link.kind ?? 'url') === 'ssh'
       return {
-        url: link.url,
+        url: link.url ?? '',
         label: `${projectDocLinkTagLabel(normalizedTag, docLinkTagOptions)}: ${link.title}`,
         tag: normalizedTag,
         tagLabel: projectDocLinkTagLabel(normalizedTag, docLinkTagOptions),
+        onOpen: () => handleOpenDocLink(link),
+        kind: link.kind ?? 'url',
+        description: projectDocLinkTarget(link),
+        copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
+        copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
+        copyValueResolver: isSsh && link.hasSecret
+          ? async () => await handleGetDocLinkSecret(link.id) || ''
+          : undefined,
       }
     }),
-    [docLinkTagOptions, docLinks]
+    [docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, t]
   )
   return (
     <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">
@@ -76,13 +87,13 @@ function DetailWorkspaceCard({
               <UrlPopover items={docMenuItems}>
                 <button
                   className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => window.electronAPI.openExternal(defaultDocLink.url)}
+                  onClick={() => { void handleOpenDocLink(defaultDocLink) }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                     onOpenProjectLinksManager?.()
                   }}
-                  title={t('codeWorkspace.projectDocsTitle')}
+                  title={projectDocLinkTarget(defaultDocLink)}
                 >
                   <BookOpen className="h-3 w-3" />
                   <span className="max-w-[240px] truncate">
