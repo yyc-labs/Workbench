@@ -24,6 +24,8 @@ interface CardContextMenuProps {
   isDevRunning: boolean
   isDevStopping: boolean
   isOpeningTerminal: boolean
+  isStartingRuntime: boolean
+  isStoppingRuntime: boolean
   currentCli: CliTool
   isPinned?: boolean
   onStartRuntime: () => void | Promise<unknown>
@@ -133,6 +135,8 @@ export function CardContextMenu({
   isDevRunning,
   isDevStopping,
   isOpeningTerminal,
+  isStartingRuntime,
+  isStoppingRuntime,
   currentCli,
   isPinned,
   onStartRuntime,
@@ -196,15 +200,21 @@ export function CardContextMenu({
 
   const primaryActionItems: MenuAction[] = [
     {
-      label: isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
-      caption: runtimeActionCaption,
-      icon: isRuntimeActive
-        ? isOpeningTerminal
-          ? <RefreshCw className="h-4 w-4 animate-spin" />
-          : <Terminal className="h-4 w-4" />
-        : <Zap className="h-4 w-4" />,
+      label: isStartingRuntime
+        ? `${t('common.run')} ${cliLabel}`
+        : isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
+      caption: isStartingRuntime
+        ? t('common.starting')
+        : runtimeActionCaption,
+      icon: isStartingRuntime
+        ? <RefreshCw className="h-4 w-4 animate-spin" />
+        : isRuntimeActive
+          ? isOpeningTerminal
+            ? <RefreshCw className="h-4 w-4 animate-spin" />
+            : <Terminal className="h-4 w-4" />
+          : <Zap className="h-4 w-4" />,
       action: isRuntimeActive ? onOpenTerminal : onStartRuntime,
-      disabled: isRuntimeActive && isOpeningTerminal,
+      disabled: isStartingRuntime || (isRuntimeActive && isOpeningTerminal),
       tone: 'primary',
     },
     {
@@ -283,10 +293,13 @@ export function CardContextMenu({
 
   const dangerActionItems: MenuAction[] = [
     {
-      label: t('common.stopRuntime'),
-      icon: <Square className="h-3.5 w-3.5" />,
+      label: isStoppingRuntime ? t('common.stopping') : t('common.stopRuntime'),
+      icon: isStoppingRuntime
+        ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        : <Square className="h-3.5 w-3.5" />,
       show: isRuntimeActive,
       action: onStopRuntime,
+      disabled: isStoppingRuntime,
       tone: 'danger',
     },
     {
@@ -322,7 +335,8 @@ export function CardContextMenu({
       {dangerActions.map((item) => (
         <button
           key={item.label}
-          className="group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)]"
+          disabled={item.disabled}
+          className={`group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)] ${item.disabled ? 'cursor-not-allowed opacity-60' : ''}`}
           onClick={() => { void handleClick(item.action) }}
         >
           <span className="shrink-0">{item.icon}</span>

@@ -103,7 +103,7 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
                 return (
                   <button
                     key={`log-tab-${item.processId}`}
-                    className={`px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
+                    className={`button-interactive px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
                       selected
                         ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
                         : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'

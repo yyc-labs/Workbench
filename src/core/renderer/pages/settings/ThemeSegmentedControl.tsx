@@ -22,7 +22,7 @@ function ThemeSegmentedControl({ value, onChange }: ThemeSegmentedControlProps) 
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+          className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
             value === opt.value
               ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'

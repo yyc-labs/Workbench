@@ -170,7 +170,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
 
         <Button
           className="h-10 rounded-full px-5 text-sm disabled:opacity-60"
-          disabled={saving}
+          loading={saving}
           onClick={() => void handleSave()}
         >
           {saving ? t('common.saving') : t('settingsAiCommit.save')}

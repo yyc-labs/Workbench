@@ -117,6 +117,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [menuAllowRemove, setMenuAllowRemove] = useState(false)
   const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+  const [isStartingRuntime, setIsStartingRuntime] = useState(false)
+  const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
@@ -129,6 +131,26 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       setTimeout(() => setIsOpeningTerminal(false), 400)
     }
   }, [isOpeningTerminal, openTerminal, project.id, session?.status])
+
+  const handleStartRuntime = useCallback(async () => {
+    if (isStartingRuntime) return
+    setIsStartingRuntime(true)
+    try {
+      await startRuntime(project.id)
+    } finally {
+      setIsStartingRuntime(false)
+    }
+  }, [isStartingRuntime, startRuntime, project.id])
+
+  const handleStopRuntime = useCallback(async () => {
+    if (isStoppingRuntime) return
+    setIsStoppingRuntime(true)
+    try {
+      await stopRuntime(project.id)
+    } finally {
+      setIsStoppingRuntime(false)
+    }
+  }, [isStoppingRuntime, stopRuntime, project.id])
 
   useEffect(() => {
     const api = window.electronAPI as unknown as {
@@ -320,10 +342,12 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           isDevRunning={isDevRunning}
           isDevStopping={isDevStopping}
           isOpeningTerminal={isOpeningTerminal}
+          isStartingRuntime={isStartingRuntime}
+          isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
           isPinned={project.pinned}
-          onStartRuntime={() => startRuntime(project.id)}
-          onStopRuntime={() => stopRuntime(project.id)}
+          onStartRuntime={handleStartRuntime}
+          onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id)}

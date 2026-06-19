@@ -158,8 +158,8 @@ export function SettingsAgentHooksPanel() {
               {t('settings.agentHooks.description')}
             </p>
           </div>
-          <Button onClick={() => void refresh()} disabled={loading} className="rounded-full gap-2">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} strokeWidth={1.8} />
+          <Button onClick={() => void refresh()} loading={loading} className="rounded-full gap-2">
+            <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
             {t('settings.agentHooks.refresh')}
           </Button>
         </div>
@@ -286,7 +286,7 @@ export function SettingsAgentHooksPanel() {
           <div className="text-xs text-[color:var(--color-muted-foreground)]">
             {t('settings.agentHooks.authHeaders')}: `Authorization: Bearer ...` or `x-ide-electron-transcript-token`
           </div>
-          <Button onClick={() => void handleSaveTranscriptImport()} disabled={savingTranscriptImport}>
+          <Button onClick={() => void handleSaveTranscriptImport()} loading={savingTranscriptImport}>
             {savingTranscriptImport ? t('common.saving') : t('settings.agentHooks.saveTranscriptImportConfig')}
           </Button>
         </div>
@@ -366,7 +366,7 @@ export function SettingsAgentHooksPanel() {
           <div className="text-xs text-[color:var(--color-muted-foreground)]">
             {t('settings.agentHooks.currentTriggers')}: `Stop`, `PermissionRequest`
           </div>
-          <Button onClick={() => void handleSaveFeishu()} disabled={savingFeishu}>
+          <Button onClick={() => void handleSaveFeishu()} loading={savingFeishu}>
             {savingFeishu ? t('common.saving') : t('settings.agentHooks.saveFeishuConfig')}
           </Button>
         </div>
@@ -387,7 +387,7 @@ export function SettingsAgentHooksPanel() {
               <button
                 key={event.eventId}
                 onClick={() => setSelectedEventId(event.eventId)}
-                className={`w-full rounded-[16px] px-3 py-3 text-left transition-colors ${
+                className={`button-interactive w-full rounded-[16px] px-3 py-3 text-left transition-colors ${
                   selectedEvent?.eventId === event.eventId
                     ? 'bg-[color:var(--color-card)] shadow-sm'
                     : 'hover:bg-[color:var(--color-accent)]/70'

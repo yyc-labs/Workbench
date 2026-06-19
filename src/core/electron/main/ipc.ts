@@ -32,6 +32,7 @@ export const IPC = {
   CONFIG_SET: 'config:set',
   CLAUDE_BASHRC_GET: 'claude-bashrc:get',
   CLAUDE_BASHRC_SET: 'claude-bashrc:set',
+  WINDOWS_USER_ENV_SET: 'windows-user-env:set',
   DOC_LINK_SECRET_SET: 'doc-link-secret:set',
   DOC_LINK_SECRET_GET: 'doc-link-secret:get',
   DOC_LINK_SECRET_DELETE: 'doc-link-secret:delete',

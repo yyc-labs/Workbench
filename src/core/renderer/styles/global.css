@@ -3,3 +3,25 @@
 @import "./parts/app-shell.css";
 @import "./parts/legacy-pages.css";
 @import "./parts/code-workspace.css";
+
+.button-interactive {
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+  will-change: transform;
+}
+
+.button-interactive:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.button-interactive:disabled {
+  cursor: not-allowed;
+}
+
+.button-interactive[aria-busy='true'] {
+  cursor: progress;
+}

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Loader2,
   RefreshCw,
   Trash2,
   X,
@@ -101,6 +102,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
   const [isDeletingSelection, setIsDeletingSelection] = useState(false)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const [manualImportOpen, setManualImportOpen] = useState(false)
+  const [openingTranscriptKey, setOpeningTranscriptKey] = useState<string | null>(null)
 
   const refresh = async () => {
     setIsLoading(true)
@@ -269,8 +271,14 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
   }
 
   const handleOpenTranscript = async (projectId: string, transcriptId: string) => {
-    await openTranscript({ projectId, transcriptId, initialMode: 'preview' })
-    navigate(`/project/${projectId}/transcript`)
+    const nextKey = makeSelectionKey(projectId, transcriptId)
+    setOpeningTranscriptKey(nextKey)
+    try {
+      await openTranscript({ projectId, transcriptId, initialMode: 'preview' })
+      navigate(`/project/${projectId}/transcript`)
+    } finally {
+      setOpeningTranscriptKey((current) => current === nextKey ? null : current)
+    }
   }
 
   const handleDeleteSelection = async () => {
@@ -374,7 +382,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
               />
               <button
                 type="button"
-                className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
+                className={`button-interactive absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
                   searchQuery
                     ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                     : 'pointer-events-none opacity-0'
@@ -495,7 +503,7 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                       />
                       <button
                         type="button"
-                        className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                        className="button-interactive flex min-w-0 flex-1 items-start gap-3 text-left rounded-[16px]"
                         onClick={() => toggleProjectExpanded(group.projectId)}
                       >
                         <span className="mt-0.5 text-[color:var(--color-muted-foreground)]">
@@ -591,9 +599,10 @@ function SettingsTranscriptPanel({ projects, removedProjects }: TranscriptPanelP
                                   variant="outline"
                                   className="h-9 px-3.5"
                                   onClick={() => void handleOpenTranscript(group.projectId, item.id)}
-                                  disabled={group.isArchivedProject}
+                                  disabled={group.isArchivedProject || openingTranscriptKey !== null}
+                                  loading={openingTranscriptKey === selectionKey}
                                 >
-                                  <ExternalLink className="h-4 w-4" />
+                                  {openingTranscriptKey === selectionKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
                                   {t('settingsTranscript.open')}
                                 </Button>
                               </div>

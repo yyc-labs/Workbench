@@ -48,7 +48,8 @@
       "Bash(bash -n /home/ubuntu/tools/claude-code-script/start_codex.sh)",
       "Bash(bash -n /home/ubuntu/tools/claude-code-script/start-claude-with-env.sh)",
       "Bash(npm test *)",
-      "Bash(node --test test/electron/transcript.share-service.test.mjs)"
+      "Bash(node --test test/electron/transcript.share-service.test.mjs)",
+      "Read(//home/ubuntu/tools/claude-code-script/**)"
     ]
   }
 }

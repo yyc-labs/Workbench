@@ -102,6 +102,9 @@ const api = {
   setClaudeBashrcConfig: (config: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC.CLAUDE_BASHRC_SET, config),
 
+  setWindowsUserEnv: (config: Record<string, unknown>) =>
+    ipcRenderer.invoke(IPC.WINDOWS_USER_ENV_SET, config),
+
   setDocLinkSecret: (projectId: string, linkId: string, secret: string) =>
     ipcRenderer.invoke(IPC.DOC_LINK_SECRET_SET, projectId, linkId, secret),
 

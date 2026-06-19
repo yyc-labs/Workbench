@@ -21,6 +21,7 @@ import {
   readClaudeBashrcConfig,
   writeClaudeBashrcConfig,
 } from '../claude-bashrc'
+import { applyWindowsUserEnvToCurrentProcess, writeWindowsUserEnv } from '../windows-env'
 import {
   deleteDocLinkSecret,
   getDocLinkSecret,
@@ -282,7 +283,19 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   })
 
   ipcMain.handle(IPC.CLAUDE_BASHRC_SET, async (_event, config: Record<string, unknown>) => {
-    return writeClaudeBashrcConfig(normalizeClaudeBashrcConfig(config))
+    const normalized = normalizeClaudeBashrcConfig(config)
+    const saved = await writeClaudeBashrcConfig(normalized)
+    // Also persist to Windows User env vars so native terminals pick them up
+    await writeWindowsUserEnv(saved).catch(() => { /* non-fatal on non-Windows */ })
+    return process.platform === 'win32'
+      ? applyWindowsUserEnvToCurrentProcess(saved)
+      : saved
+  })
+
+  ipcMain.handle(IPC.WINDOWS_USER_ENV_SET, async (_event, config: Record<string, unknown>) => {
+    const normalized = normalizeClaudeBashrcConfig(config)
+    await writeWindowsUserEnv(normalized)
+    return applyWindowsUserEnvToCurrentProcess(normalized)
   })
 
   ipcMain.handle(IPC.DOC_LINK_SECRET_SET, (_event, projectId: string, linkId: string, secret: string) => {

@@ -39,7 +39,7 @@ function SettingsGeneralPanel({ theme, locale, onThemeChange, onLocaleChange }: 
             <button
               key={opt.value}
               onClick={() => onLocaleChange(opt.value as NonNullable<AppLocale>)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+              className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                 locale === opt.value
                   ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
                   : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'

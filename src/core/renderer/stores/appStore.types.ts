@@ -68,6 +68,7 @@ declare global {
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
       getClaudeBashrcConfig: () => Promise<ClaudeBashrcConfig>
       setClaudeBashrcConfig: (config: ClaudeBashrcConfig) => Promise<ClaudeBashrcConfig>
+      setWindowsUserEnv: (config: ClaudeBashrcConfig) => Promise<ClaudeBashrcConfig>
       setDocLinkSecret: (projectId: string, linkId: string, secret: string) => Promise<boolean>
       getDocLinkSecret: (projectId: string, linkId: string) => Promise<{ secret: string | null }>
       deleteDocLinkSecret: (projectId: string, linkId: string) => Promise<boolean>

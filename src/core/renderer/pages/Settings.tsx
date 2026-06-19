@@ -64,7 +64,7 @@ export function SettingsPage() {
     <div className="h-full flex flex-col">
       <header className="app-chrome flex min-h-[84px] items-center gap-4 px-8 py-4 shrink-0">
         <button
-          className="p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
+          className="button-interactive p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
           onClick={() => navigate('/')}
         >
           <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />

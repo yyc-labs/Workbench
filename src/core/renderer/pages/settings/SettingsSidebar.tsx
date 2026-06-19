@@ -30,7 +30,7 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
         <button
           key={section}
           onClick={() => onSelect(section)}
-          className={`settings-sidebar-item flex items-center gap-2.5 px-4 py-3 rounded-[18px] text-sm font-medium text-left ${
+          className={`button-interactive settings-sidebar-item flex items-center gap-2.5 px-4 py-3 rounded-[18px] text-sm font-medium text-left ${
             active === section
               ? 'is-active bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
               : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]/60'

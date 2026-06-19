@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type {
@@ -72,6 +72,7 @@ function SettingsRuntimePanel({
   const [runtimeEntrypointHistory, setRuntimeEntrypointHistory] = useState<string[]>(aiEnvironment?.runtimeEntrypointHistory ?? [])
   const [runtimePassProjectPath, setRuntimePassProjectPath] = useState(aiEnvironment?.runtimePassProjectPath ?? true)
   const [historyMutationPending, setHistoryMutationPending] = useState(false)
+  const [historyPendingTarget, setHistoryPendingTarget] = useState<string | 'clear-all' | null>(null)
   const [historyMutationError, setHistoryMutationError] = useState<string | null>(null)
   const [diag, setDiag] = useState<{
     mode: AiExecutionMode
@@ -89,6 +90,10 @@ function SettingsRuntimePanel({
   const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [stopAllLoading, setStopAllLoading] = useState(false)
   const [stopSummary, setStopSummary] = useState<string | null>(null)
+  const [saveModeLoading, setSaveModeLoading] = useState(false)
+  const [keepAliveEnabled, setKeepAliveEnabled] = useState(runtimeKeepAliveOnQuit)
+  const [keepAliveSaving, setKeepAliveSaving] = useState(false)
+  const [activeTerminalActionKey, setActiveTerminalActionKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (skipNextScriptPathSyncRef.current) {
@@ -109,6 +114,10 @@ function SettingsRuntimePanel({
   useEffect(() => {
     setRuntimePassProjectPath(aiEnvironment?.runtimePassProjectPath ?? true)
   }, [aiEnvironment?.runtimePassProjectPath])
+
+  useEffect(() => {
+    setKeepAliveEnabled(runtimeKeepAliveOnQuit)
+  }, [runtimeKeepAliveOnQuit])
 
   useEffect(() => {
     if (!scriptHistoryOpen) return
@@ -224,13 +233,25 @@ function SettingsRuntimePanel({
   const inactiveSessionRows = sessionRows.filter((item) => item.status !== 'attached')
 
   const closeManagedProcess = async (processId: string) => {
-    await window.electronAPI.stopProcess(processId)
-    await refreshInventory()
+    const actionKey = `process:${processId}`
+    setActiveTerminalActionKey(actionKey)
+    try {
+      await window.electronAPI.stopProcess(processId)
+      await refreshInventory()
+    } finally {
+      setActiveTerminalActionKey((current) => current === actionKey ? null : current)
+    }
   }
 
   const closeTmuxSession = async (sessionName: string) => {
-    await window.electronAPI.killTmuxSession(sessionName)
-    await refreshInventory()
+    const actionKey = `session:${sessionName}`
+    setActiveTerminalActionKey(actionKey)
+    try {
+      await window.electronAPI.killTmuxSession(sessionName)
+      await refreshInventory()
+    } finally {
+      setActiveTerminalActionKey((current) => current === actionKey ? null : current)
+    }
   }
 
   const closeAllTerminals = async () => {
@@ -299,10 +320,15 @@ function SettingsRuntimePanel({
 
   const handleSaveMode = async () => {
     const nextRuntimeEntrypoint = executionMode === 'custom-script' ? normalizedScriptPath : aiEnvironment?.runtimeEntrypoint
-    await onAiEnvironmentSave(buildAiEnvironmentPayload(
-      nextRuntimeEntrypoint || '',
-      executionMode === 'custom-script' ? mergedRuntimeEntrypointHistory : (aiEnvironment?.runtimeEntrypointHistory ?? []),
-    ))
+    setSaveModeLoading(true)
+    try {
+      await onAiEnvironmentSave(buildAiEnvironmentPayload(
+        nextRuntimeEntrypoint || '',
+        executionMode === 'custom-script' ? mergedRuntimeEntrypointHistory : (aiEnvironment?.runtimeEntrypointHistory ?? []),
+      ))
+    } finally {
+      setSaveModeLoading(false)
+    }
   }
 
   const handleSelectRuntimeEntrypoint = (value: string) => {
@@ -317,6 +343,7 @@ function SettingsRuntimePanel({
     const nextPersistedEntrypoint = persistedRuntimeEntrypoint === value ? (nextHistory[0] || '') : persistedRuntimeEntrypoint
     const nextDraftPath = scriptPath.trim() === value ? (nextHistory[0] || '') : scriptPath
     setHistoryMutationPending(true)
+    setHistoryPendingTarget(value)
     setHistoryMutationError(null)
     skipNextScriptPathSyncRef.current = true
     void onAiEnvironmentSave(buildAiEnvironmentPayload(nextPersistedEntrypoint, nextHistory))
@@ -332,6 +359,7 @@ function SettingsRuntimePanel({
       })
       .finally(() => {
         setHistoryMutationPending(false)
+        setHistoryPendingTarget(null)
       })
   }
 
@@ -340,6 +368,7 @@ function SettingsRuntimePanel({
     const persistedRuntimeEntrypoint = aiEnvironment?.runtimeEntrypoint?.trim() || ''
     const nextDraftPath = scriptPath
     setHistoryMutationPending(true)
+    setHistoryPendingTarget('clear-all')
     setHistoryMutationError(null)
     skipNextScriptPathSyncRef.current = true
     void onAiEnvironmentSave(buildAiEnvironmentPayload(persistedRuntimeEntrypoint, []))
@@ -355,7 +384,20 @@ function SettingsRuntimePanel({
       })
       .finally(() => {
         setHistoryMutationPending(false)
+        setHistoryPendingTarget(null)
       })
+  }
+
+  const handleKeepAliveToggle = async (enabled: boolean) => {
+    setKeepAliveEnabled(enabled)
+    setKeepAliveSaving(true)
+    try {
+      await onRuntimeKeepAliveToggle(enabled)
+    } catch {
+      setKeepAliveEnabled(runtimeKeepAliveOnQuit)
+    } finally {
+      setKeepAliveSaving(false)
+    }
   }
 
   const allModeOptions: Array<{ value: AiExecutionMode; label: string }> = [
@@ -428,7 +470,7 @@ function SettingsRuntimePanel({
                     />
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                      className="button-interactive absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
                       onClick={() => setScriptHistoryOpen((open) => !open)}
                       title={t('settingsRuntime.showSavedPaths')}
                     >
@@ -446,10 +488,12 @@ function SettingsRuntimePanel({
                         </span>
                         <button
                           type="button"
-                          className="inline-flex h-7 items-center justify-center rounded-full px-2 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
+                          className="button-interactive inline-flex h-7 items-center justify-center rounded-full px-2 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
                           disabled={runtimeEntrypointHistory.length === 0 || historyMutationPending}
                           onClick={handleClearRuntimeEntrypointHistory}
+                          aria-busy={historyPendingTarget === 'clear-all' || undefined}
                         >
+                          {historyPendingTarget === 'clear-all' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                           {historyMutationPending ? t('settingsRuntime.clearing') : t('settingsRuntime.clearAll')}
                         </button>
                       </div>
@@ -466,20 +510,22 @@ function SettingsRuntimePanel({
                               >
                                 <button
                                   type="button"
-                                  className="flex min-w-0 flex-1 items-center gap-2 rounded-[11px] px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-[color:var(--color-accent)]"
+                                  className="button-interactive flex min-w-0 flex-1 items-center gap-2 rounded-[11px] px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60"
                                   onClick={() => handleSelectRuntimeEntrypoint(item)}
+                                  disabled={historyMutationPending}
                                 >
                                   <span className="min-w-0 flex-1 truncate text-[12px]">{item}</span>
                                   {selected && <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
                                 </button>
                                 <button
                                   type="button"
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-50"
+                                  className="button-interactive inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-50"
                                   onClick={() => handleDeleteRuntimeEntrypoint(item)}
                                   title={t('settingsRuntime.deleteSavedPath')}
                                   disabled={historyMutationPending}
+                                  aria-busy={historyPendingTarget === item || undefined}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  {historyPendingTarget === item ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                 </button>
                               </div>
                             )
@@ -515,7 +561,9 @@ function SettingsRuntimePanel({
           <Button
             className="h-11 rounded-full px-5 text-sm"
             onClick={() => void handleSaveMode()}
+            loading={saveModeLoading}
           >
+            <Save className="h-4 w-4" />
             {t('settingsRuntime.saveMode')}
           </Button>
         </div>
@@ -532,11 +580,12 @@ function SettingsRuntimePanel({
         <label className="inline-flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
           <input
             type="checkbox"
-            checked={runtimeKeepAliveOnQuit}
-            onChange={(e) => void onRuntimeKeepAliveToggle(e.target.checked)}
-            disabled={!usesTmuxRuntime}
+            checked={keepAliveEnabled}
+            onChange={(e) => void handleKeepAliveToggle(e.target.checked)}
+            disabled={!usesTmuxRuntime || keepAliveSaving}
           />
           {usesTmuxRuntime ? t('settings.runtimePanel.managedQuitLabel') : t('settings.runtimePanel.unmanagedQuitLabel')}
+          {keepAliveSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--color-muted-foreground)]" /> : null}
         </label>
       </div>
 
@@ -547,7 +596,7 @@ function SettingsRuntimePanel({
             variant="outline"
             className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
             onClick={() => void runDiagnostics()}
-            disabled={loading}
+            loading={loading}
           >
             {loading ? t('settingsRuntime.checking') : t('settingsRuntime.runCheck')}
           </Button>
@@ -578,7 +627,8 @@ function SettingsRuntimePanel({
               variant="outline"
               className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
               onClick={() => void refreshInventory()}
-              disabled={inventoryLoading || stopAllLoading}
+              disabled={stopAllLoading}
+              loading={inventoryLoading}
             >
               {inventoryLoading ? t('settingsRuntime.refreshing') : t('settingsRuntime.refresh')}
             </Button>
@@ -586,7 +636,7 @@ function SettingsRuntimePanel({
               variant="outline"
               className="h-8 rounded-full px-3 text-xs"
               onClick={() => void closeAllTerminals()}
-              disabled={stopAllLoading}
+              loading={stopAllLoading}
             >
               {stopAllLoading ? t('settingsRuntime.stopping') : t('settingsRuntime.closeAllTerminals')}
             </Button>
@@ -616,6 +666,8 @@ function SettingsRuntimePanel({
                       variant="outline"
                       className="h-7 rounded-full px-2 text-[11px]"
                       onClick={() => void closeManagedProcess(item.processId)}
+                      disabled={activeTerminalActionKey !== null}
+                      loading={activeTerminalActionKey === `process:${item.processId}`}
                     >
                       {t('settingsRuntime.close')}
                     </Button>
@@ -669,6 +721,14 @@ function SettingsRuntimePanel({
                                       ? closeManagedProcess(item.managedProcessId)
                                       : Promise.resolve()
                                 )}
+                                disabled={activeTerminalActionKey !== null}
+                                loading={activeTerminalActionKey === (
+                                  item.closeBy === 'session'
+                                    ? `session:${item.sessionName}`
+                                    : item.managedProcessId
+                                      ? `process:${item.managedProcessId}`
+                                      : null
+                                )}
                               >
                                 {t('settingsRuntime.close')}
                               </Button>
@@ -701,6 +761,8 @@ function SettingsRuntimePanel({
                       variant="outline"
                       className="h-7 rounded-full px-2 text-[11px]"
                       onClick={() => void closeManagedProcess(item.processId)}
+                      disabled={activeTerminalActionKey !== null}
+                      loading={activeTerminalActionKey === `process:${item.processId}`}
                     >
                       {t('settingsRuntime.close')}
                     </Button>

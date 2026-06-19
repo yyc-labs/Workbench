@@ -1,4 +1,4 @@
-import { ExternalLink, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   AiExecutionMode,
@@ -6,6 +6,7 @@ import type {
   ClaudeBashrcConfig,
   ClaudeRuntimeProfile,
 } from '../../../shared/types'
+import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
@@ -75,25 +76,37 @@ function SettingsAiRuntimePanel({
   const [profileDrafts, setProfileDrafts] = useState<ClaudeRuntimeProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<string>('')
   const [profileNameDraft, setProfileNameDraft] = useState('')
+  const [profileAction, setProfileAction] = useState<'select' | 'create' | 'rename' | 'delete' | 'docs' | null>(null)
+  const [pendingProfileId, setPendingProfileId] = useState<string | null>(null)
+  const [deleteConfirmProfileId, setDeleteConfirmProfileId] = useState<string | null>(null)
 
   const capabilityReady = capability !== null
+  const isWindowsNativeMode = mode === 'windows-native'
   const supportsShellEnvConfig = Boolean(
     capability && (
       capability.hostPlatform === 'linux'
       || capability.hostPlatform === 'macos'
       || (capability.hostPlatform === 'windows' && capability.hasWsl)
+      || mode === 'custom-script'
     )
   )
+  const supportsWindowsEnvConfig = isWindowsNativeMode && capability?.hostPlatform === 'windows'
   const isCustomScriptMode = mode === 'custom-script'
-  const inputDisabled = !capabilityReady || !loaded || saving || !supportsShellEnvConfig
-  const shellConfigReadOnly = capabilityReady && !supportsShellEnvConfig
-  const shellScopeLabel = capability?.hostPlatform === 'windows'
-    ? t('settings.aiRuntime.shellScopeWsl')
-    : t('settings.aiRuntime.shellScopePosix')
+  const inputDisabled = !capabilityReady || !loaded || saving || (!supportsShellEnvConfig && !supportsWindowsEnvConfig)
+  const shellConfigReadOnly = capabilityReady && !supportsShellEnvConfig && !supportsWindowsEnvConfig
+  const shellScopeLabel = supportsWindowsEnvConfig
+    ? t('settings.aiRuntime.shellScopeWindowsNative')
+    : capability?.hostPlatform === 'windows'
+      ? t('settings.aiRuntime.shellScopeWsl')
+      : t('settings.aiRuntime.shellScopePosix')
 
   const activeProfile = useMemo(
     () => profileDrafts.find((profile) => profile.id === selectedProfileId) ?? profileDrafts[0] ?? null,
     [profileDrafts, selectedProfileId]
+  )
+  const deleteConfirmProfile = useMemo(
+    () => profileDrafts.find((profile) => profile.id === deleteConfirmProfileId) ?? null,
+    [deleteConfirmProfileId, profileDrafts]
   )
 
   const currentConfig = useMemo<ClaudeBashrcConfig>(() => ({
@@ -153,6 +166,12 @@ function SettingsAiRuntimePanel({
   }, [activeProfileId, profiles])
 
   useEffect(() => {
+    if (!activeProfile || !supportsWindowsEnvConfig) return
+    applyConfig(activeProfile.config)
+    setLoaded(true)
+  }, [activeProfile, supportsWindowsEnvConfig])
+
+  useEffect(() => {
     let mounted = true
     setLoaded(false)
     setSavedHint(null)
@@ -164,7 +183,14 @@ function SettingsAiRuntimePanel({
       }
     }
 
-    if (!supportsShellEnvConfig) {
+    if (!supportsShellEnvConfig && !supportsWindowsEnvConfig) {
+      setLoaded(true)
+      return () => {
+        mounted = false
+      }
+    }
+
+    if (supportsWindowsEnvConfig) {
       setLoaded(true)
       return () => {
         mounted = false
@@ -187,7 +213,7 @@ function SettingsAiRuntimePanel({
     return () => {
       mounted = false
     }
-  }, [capabilityReady, supportsShellEnvConfig, t])
+  }, [capabilityReady, supportsShellEnvConfig, supportsWindowsEnvConfig, t])
 
   useEffect(() => {
     if (!activeProfile) return
@@ -207,9 +233,9 @@ function SettingsAiRuntimePanel({
       label: 'ANTHROPIC_AUTH_TOKEN',
       value: anthropicAuthToken,
       onChange: setAnthropicAuthToken,
-      placeholder: loaded ? 'sk-...' : 'Loading ~/.bashrc...',
+      placeholder: loaded ? 'sk-...' : (supportsWindowsEnvConfig ? 'Loading...' : 'Loading ~/.bashrc...'),
       type: 'password' as const,
-      hint: t('settings.aiRuntime.tokenHint'),
+      hint: t(supportsWindowsEnvConfig ? 'settings.aiRuntime.tokenHintWindows' : 'settings.aiRuntime.tokenHint'),
     },
     {
       key: 'anthropicModel',
@@ -267,15 +293,24 @@ function SettingsAiRuntimePanel({
   ])
 
   const shellCommand = useMemo(() => ([
-    'export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic',
-    'export ANTHROPIC_AUTH_TOKEN=<YOUR_DEEPSEEK_API_KEY>',
-    'export ANTHROPIC_MODEL=deepseek-v4-pro[1m]',
-    'export ANTHROPIC_DEFAULT_OPUS_MODEL=deepseek-v4-pro[1m]',
-    'export ANTHROPIC_DEFAULT_SONNET_MODEL=deepseek-v4-pro[1m]',
-    'export ANTHROPIC_DEFAULT_HAIKU_MODEL=deepseek-v4-flash',
-    'export CLAUDE_CODE_SUBAGENT_MODEL=deepseek-v4-flash',
-    'export CLAUDE_CODE_EFFORT_LEVEL=max',
-  ].join('\n')), [])
+    `export ANTHROPIC_BASE_URL=${anthropicBaseUrl || 'https://api.deepseek.com/anthropic'}`,
+    `export ANTHROPIC_AUTH_TOKEN=${anthropicAuthToken || '<YOUR_DEEPSEEK_API_KEY>'}`,
+    `export ANTHROPIC_MODEL=${anthropicModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_OPUS_MODEL=${anthropicDefaultOpusModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_SONNET_MODEL=${anthropicDefaultSonnetModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_HAIKU_MODEL=${anthropicDefaultHaikuModel || 'deepseek-v4-flash'}`,
+    `export CLAUDE_CODE_SUBAGENT_MODEL=${claudeCodeSubagentModel || 'deepseek-v4-flash'}`,
+    `export CLAUDE_CODE_EFFORT_LEVEL=${claudeCodeEffortLevel || 'max'}`,
+  ].join('\n')), [
+    anthropicBaseUrl,
+    anthropicAuthToken,
+    anthropicModel,
+    anthropicDefaultOpusModel,
+    anthropicDefaultSonnetModel,
+    anthropicDefaultHaikuModel,
+    claudeCodeSubagentModel,
+    claudeCodeEffortLevel,
+  ])
 
   const launchCommand = useMemo(() => ([
     'cd /path/to/my-project',
@@ -291,16 +326,21 @@ function SettingsAiRuntimePanel({
 
   const handleSelectProfile = async (profileId: string) => {
     const nextProfile = profileDrafts.find((profile) => profile.id === profileId)
-    if (!nextProfile || !supportsShellEnvConfig) {
+    if (!nextProfile || (!supportsShellEnvConfig && !supportsWindowsEnvConfig)) {
       setSelectedProfileId(profileId)
       return
     }
 
+    setProfileAction('select')
+    setPendingProfileId(profileId)
     setSaving(true)
     setSavedHint(null)
     setError(null)
     try {
-      const saved = await window.electronAPI.setClaudeBashrcConfig(nextProfile.config)
+      const saveApi = supportsWindowsEnvConfig
+        ? window.electronAPI.setWindowsUserEnv
+        : window.electronAPI.setClaudeBashrcConfig
+      const saved = await saveApi(nextProfile.config)
       applyConfig(saved)
       const nextProfiles = profileDrafts.map((profile) => (
         profile.id === nextProfile.id
@@ -316,10 +356,13 @@ function SettingsAiRuntimePanel({
       setError(message || t('settings.aiRuntime.saveError'))
     } finally {
       setSaving(false)
+      setProfileAction(null)
+      setPendingProfileId(null)
     }
   }
 
   const handleCreateProfile = async () => {
+    setProfileAction('create')
     const nextProfileName = t('settings.aiRuntime.newProfileName', { value: profileDrafts.length + 1 })
     const nextProfile: ClaudeRuntimeProfile = {
       id: createProfileId(),
@@ -332,22 +375,33 @@ function SettingsAiRuntimePanel({
     setProfileNameDraft(nextProfile.name)
     setSavedHint(null)
     setError(null)
-    await onProfilesSave(nextProfiles, nextProfile.id)
+    try {
+      await onProfilesSave(nextProfiles, nextProfile.id)
+    } finally {
+      setProfileAction(null)
+    }
   }
 
   const handleDeleteProfile = async () => {
-    if (!activeProfile || profileDrafts.length <= 1) return
-    const nextProfiles = profileDrafts.filter((profile) => profile.id !== activeProfile.id)
+    if (profileDrafts.length <= 1 || !deleteConfirmProfile) return
+    setProfileAction('delete')
+    const nextProfiles = profileDrafts.filter((profile) => profile.id !== deleteConfirmProfile.id)
     const nextActiveProfileId = nextProfiles[0]!.id
     setProfileDrafts(nextProfiles)
     setSelectedProfileId(nextActiveProfileId)
     setSavedHint(null)
     setError(null)
-    await onProfilesSave(nextProfiles, nextActiveProfileId)
+    try {
+      await onProfilesSave(nextProfiles, nextActiveProfileId)
+      setDeleteConfirmProfileId(null)
+    } finally {
+      setProfileAction(null)
+    }
   }
 
   const handleRenameProfile = async () => {
     if (!activeProfile) return
+    setProfileAction('rename')
     const nextName = sanitizeProfileName(profileNameDraft, activeProfile.name)
     const nextProfiles = profileDrafts.map((profile) => (
       profile.id === activeProfile.id ? { ...profile, name: nextName } : profile
@@ -356,7 +410,11 @@ function SettingsAiRuntimePanel({
     setProfileNameDraft(nextName)
     setSavedHint(null)
     setError(null)
-    await onProfilesSave(nextProfiles, selectedProfileId)
+    try {
+      await onProfilesSave(nextProfiles, selectedProfileId)
+    } finally {
+      setProfileAction(null)
+    }
   }
 
   const handleSaveCurrentIntoProfile = async () => {
@@ -365,7 +423,7 @@ function SettingsAiRuntimePanel({
     setSavedHint(null)
     setError(null)
     try {
-      const saved = await window.electronAPI.setClaudeBashrcConfig({
+      const payload = {
         anthropicBaseUrl: anthropicBaseUrl.trim(),
         anthropicAuthToken: anthropicAuthToken.trim(),
         anthropicModel: anthropicModel.trim(),
@@ -374,7 +432,11 @@ function SettingsAiRuntimePanel({
         anthropicDefaultHaikuModel: anthropicDefaultHaikuModel.trim(),
         claudeCodeSubagentModel: claudeCodeSubagentModel.trim(),
         claudeCodeEffortLevel: claudeCodeEffortLevel.trim(),
-      })
+      }
+      const saveApi = supportsWindowsEnvConfig
+        ? window.electronAPI.setWindowsUserEnv
+        : window.electronAPI.setClaudeBashrcConfig
+      const saved = await saveApi(payload)
       applyConfig(saved)
       const nextProfiles = profileDrafts.map((profile) => (
         profile.id === activeProfile.id
@@ -383,7 +445,7 @@ function SettingsAiRuntimePanel({
       ))
       setProfileDrafts(nextProfiles)
       await onProfilesSave(nextProfiles, activeProfile.id)
-      setSavedHint(t('settings.aiRuntime.savedHint'))
+      setSavedHint(t(supportsWindowsEnvConfig ? 'settings.aiRuntime.savedHintWindows' : 'settings.aiRuntime.savedHint'))
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
       setError(message || t('settings.aiRuntime.saveError'))
@@ -393,7 +455,12 @@ function SettingsAiRuntimePanel({
   }
 
   const handleOpenDocs = async () => {
-    await window.electronAPI.openExternal(DEEPSEEK_CLAUDE_CODE_DOC_URL)
+    setProfileAction('docs')
+    try {
+      await window.electronAPI.openExternal(DEEPSEEK_CLAUDE_CODE_DOC_URL)
+    } finally {
+      setProfileAction(null)
+    }
   }
 
   return (
@@ -421,6 +488,7 @@ function SettingsAiRuntimePanel({
           variant="outline"
           className="h-10 rounded-full px-4 text-sm"
           onClick={() => void handleOpenDocs()}
+          loading={profileAction === 'docs'}
         >
           <ExternalLink className="h-4 w-4" />
           {t('settings.aiRuntime.openDocs')}
@@ -444,19 +512,22 @@ function SettingsAiRuntimePanel({
                 key={profile.id}
                 onClick={() => void handleSelectProfile(profile.id)}
                 disabled={saving}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-50 ${
+                className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-50 ${
                   selectedProfileId === profile.id
                     ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
                     : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                 }`}
+                aria-busy={profileAction === 'select' && pendingProfileId === profile.id || undefined}
               >
+                {profileAction === 'select' && pendingProfileId === profile.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {profile.name}
               </button>
             ))}
             <button
               onClick={() => void handleCreateProfile()}
               disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-[color:var(--color-muted-foreground)] transition-all hover:text-[color:var(--color-foreground)] disabled:opacity-50"
+              className="button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium text-[color:var(--color-muted-foreground)] transition-all hover:text-[color:var(--color-foreground)] disabled:opacity-50"
+              aria-busy={profileAction === 'create' || undefined}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
               {t('settings.aiRuntime.addProfile')}
@@ -477,6 +548,7 @@ function SettingsAiRuntimePanel({
                 className="h-11 rounded-full px-4 text-sm"
                 onClick={() => void handleRenameProfile()}
                 disabled={saving}
+                loading={profileAction === 'rename'}
               >
                 <Pencil className="h-4 w-4" />
                 {t('settings.aiRuntime.renameProfile')}
@@ -484,8 +556,9 @@ function SettingsAiRuntimePanel({
               <Button
                 variant="outline"
                 className="h-11 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
-                onClick={() => void handleDeleteProfile()}
+                onClick={() => setDeleteConfirmProfileId(activeProfile.id)}
                 disabled={saving || profileDrafts.length <= 1}
+                loading={profileAction === 'delete'}
               >
                 <Trash2 className="h-4 w-4" />
                 {t('settings.aiRuntime.deleteProfile')}
@@ -546,7 +619,7 @@ function SettingsAiRuntimePanel({
             onClick={() => void handleSaveCurrentIntoProfile()}
           >
             <Save className="h-4 w-4" />
-            {saving ? t('common.saving') : t('settings.aiRuntime.save')}
+            {saving ? t('common.saving') : t(supportsWindowsEnvConfig ? 'settings.aiRuntime.saveWindows' : 'settings.aiRuntime.save')}
           </Button>
         </div>
         {shellConfigReadOnly && (
@@ -584,6 +657,70 @@ function SettingsAiRuntimePanel({
           </pre>
         </div>
       </div>
+
+      <ModalShell
+        open={Boolean(deleteConfirmProfile)}
+        onClose={() => {
+          if (profileAction === 'delete') return
+          setDeleteConfirmProfileId(null)
+        }}
+        widthClassName="max-w-[560px]"
+        ariaLabel={t('settings.aiRuntime.deleteConfirmLabel')}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div
+              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{
+                background: 'var(--color-destructive-background)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
+                {t('settings.aiRuntime.deleteConfirmTitle')}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {t('settings.aiRuntime.deleteConfirmHint', {
+                  value: deleteConfirmProfile?.name ?? '',
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="rounded-[18px] border px-4 py-3"
+            style={{ borderColor: 'var(--color-border)' }}
+          >
+            <p className="text-sm text-[color:var(--color-foreground)]">
+              {deleteConfirmProfile?.name}
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4"
+              onClick={() => setDeleteConfirmProfileId(null)}
+              disabled={profileAction === 'delete'}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-10 px-4"
+              onClick={() => void handleDeleteProfile()}
+              disabled={profileAction === 'delete' || !deleteConfirmProfile}
+            >
+              {t('common.delete')}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
     </div>
   )
 }
