@@ -405,7 +405,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           {currentCli}
         </button>
         {hasProjectDocLinks && (
-          <UrlPopover items={linkMenuItems}>
+          <UrlPopover items={linkMenuItems} tagOptions={docLinkTagOptions}>
             <button
               className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"
               onClick={(e) => {
