@@ -115,6 +115,8 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+  const [isStartingRuntime, setIsStartingRuntime] = useState(false)
+  const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
 
   const currentCli: CliTool = project.cli || 'claude'
   const isDevRunning = devStatus === 'running'
@@ -139,6 +141,26 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
     }
   }, [isOpeningTerminal, openTerminal, project.id, session?.status])
 
+  const handleStartRuntime = useCallback(async () => {
+    if (isStartingRuntime) return
+    setIsStartingRuntime(true)
+    try {
+      await startRuntime(project.id)
+    } finally {
+      setIsStartingRuntime(false)
+    }
+  }, [isStartingRuntime, project.id, startRuntime])
+
+  const handleStopRuntime = useCallback(async () => {
+    if (isStoppingRuntime) return
+    setIsStoppingRuntime(true)
+    try {
+      await stopRuntime(project.id)
+    } finally {
+      setIsStoppingRuntime(false)
+    }
+  }, [isStoppingRuntime, project.id, stopRuntime])
+
   return (
     <CardContextMenu
       x={contextMenu.x}
@@ -149,10 +171,12 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
       isDevRunning={isDevRunning}
       isDevStopping={isDevStopping}
       isOpeningTerminal={isOpeningTerminal}
+      isStartingRuntime={isStartingRuntime}
+      isStoppingRuntime={isStoppingRuntime}
       currentCli={currentCli}
       isPinned={project.pinned}
-      onStartRuntime={() => startRuntime(project.id)}
-      onStopRuntime={() => stopRuntime(project.id)}
+      onStartRuntime={handleStartRuntime}
+      onStopRuntime={handleStopRuntime}
       onOpenTerminal={handleOpenTerminal}
       onSwitchCli={handleSwitchCli}
       onStartProject={() => startProject(project.id)}

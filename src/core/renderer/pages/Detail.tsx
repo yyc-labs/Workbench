@@ -123,6 +123,8 @@ export function DetailPage() {
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+  const [isStartingRuntime, setIsStartingRuntime] = useState(false)
+  const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
 
@@ -213,6 +215,26 @@ export function DetailPage() {
       setTimeout(() => setIsOpeningTerminal(false), 400)
     }
   }, [projectId, isOpeningTerminal, openTerminal, session?.status])
+
+  const handleStartRuntime = useCallback(async () => {
+    if (!project || isStartingRuntime) return
+    setIsStartingRuntime(true)
+    try {
+      await startRuntime(project.id)
+    } finally {
+      setIsStartingRuntime(false)
+    }
+  }, [isStartingRuntime, project, startRuntime])
+
+  const handleStopRuntime = useCallback(async () => {
+    if (!project || isStoppingRuntime) return
+    setIsStoppingRuntime(true)
+    try {
+      await stopRuntime(project.id)
+    } finally {
+      setIsStoppingRuntime(false)
+    }
+  }, [isStoppingRuntime, project, stopRuntime])
 
   const handleAiAutoCommit = useCallback(async () => {
     if (!project || aiCommitStatus === 'running') return
@@ -500,10 +522,12 @@ export function DetailPage() {
           isDevRunning={isRunning}
           isDevStopping={isStopping}
           isOpeningTerminal={isOpeningTerminal}
+          isStartingRuntime={isStartingRuntime}
+          isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
           isPinned={project.pinned}
-          onStartRuntime={() => startRuntime(project.id)}
-          onStopRuntime={() => stopRuntime(project.id)}
+          onStartRuntime={handleStartRuntime}
+          onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id)}

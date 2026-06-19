@@ -227,6 +227,8 @@ export function TranscriptPage() {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string } | null>(null)
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
+  const [isStartingRuntime, setIsStartingRuntime] = useState(false)
+  const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const {
     projectHeaderCollapsed,
@@ -373,6 +375,26 @@ export function TranscriptPage() {
       setTimeout(() => setIsOpeningTerminal(false), 400)
     }
   }, [isOpeningTerminal, openTerminal, projectId, runtimeSession?.status])
+
+  const handleStartRuntime = useCallback(async () => {
+    if (!project || isStartingRuntime) return
+    setIsStartingRuntime(true)
+    try {
+      await startRuntime(project.id)
+    } finally {
+      setIsStartingRuntime(false)
+    }
+  }, [isStartingRuntime, project, startRuntime])
+
+  const handleStopRuntime = useCallback(async () => {
+    if (!project || isStoppingRuntime) return
+    setIsStoppingRuntime(true)
+    try {
+      await stopRuntime(project.id)
+    } finally {
+      setIsStoppingRuntime(false)
+    }
+  }, [isStoppingRuntime, project, stopRuntime])
 
   const handleSwitchCli = useCallback(() => {
     if (!project) return
@@ -1234,10 +1256,12 @@ export function TranscriptPage() {
           isDevRunning={isDevRunning}
           isDevStopping={isDevStopping}
           isOpeningTerminal={isOpeningTerminal}
+          isStartingRuntime={isStartingRuntime}
+          isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
           isPinned={project.pinned}
-          onStartRuntime={() => startRuntime(project.id)}
-          onStopRuntime={() => stopRuntime(project.id)}
+          onStartRuntime={handleStartRuntime}
+          onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id)}
