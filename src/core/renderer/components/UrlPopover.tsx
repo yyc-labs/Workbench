@@ -18,6 +18,7 @@ interface UrlPopoverProps {
     copyLabel?: string
     copyValueResolver?: () => Promise<string>
   }[]
+  tagOptions?: ReadonlyArray<{ value: string; label: string }>
   children: React.ReactNode
 }
 
@@ -54,12 +55,13 @@ function isFuzzySubsequence(query: string, candidate: string): boolean {
   return queryIndex === query.length
 }
 
-export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 280 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -96,12 +98,22 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     [entries]
   )
   const hasPopover = preparedEntries.length > 1
+  const showCategorySelect = Boolean(tagOptions && tagOptions.length > 0)
+  const hasSshEntries = preparedEntries.some((e) => e.kind === 'ssh')
+  const hasTagEntries = preparedEntries.some((e) => e.tag)
+  const hasUncategorized = hasTagEntries && preparedEntries.some((e) => !e.tag)
+  const categoryFilteredEntries = useMemo(() => {
+    if (selectedCategory === 'all') return preparedEntries
+    if (selectedCategory === 'ssh') return preparedEntries.filter((e) => e.kind === 'ssh')
+    if (selectedCategory === 'uncategorized') return preparedEntries.filter((e) => !e.tag)
+    return preparedEntries.filter((e) => e.tag === selectedCategory)
+  }, [selectedCategory, preparedEntries])
   const normalizedQuery = query.trim().toLowerCase()
   const deferredQuery = useDeferredValue(normalizedQuery)
   const filteredEntries = useMemo(() => {
-    if (!deferredQuery) return preparedEntries
+    if (!deferredQuery) return categoryFilteredEntries
 
-    return preparedEntries.filter((entry) => {
+    return categoryFilteredEntries.filter((entry) => {
       if (entry.searchText.includes(deferredQuery)) return true
       return (
         isFuzzySubsequence(deferredQuery, entry.normalizedLabel)
@@ -111,7 +123,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
         || isFuzzySubsequence(deferredQuery, entry.normalizedTagLabel)
       )
     })
-  }, [deferredQuery, preparedEntries])
+  }, [deferredQuery, categoryFilteredEntries])
 
   const updatePos = () => {
     if (triggerRef.current) {
@@ -237,6 +249,7 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
     if (!show) {
       setQuery('')
       setCopiedKey(null)
+      setSelectedCategory('all')
       return
     }
     const rafId = window.requestAnimationFrame(() => {
@@ -285,24 +298,52 @@ export function UrlPopover({ urls, items, children }: UrlPopoverProps) {
       onClick={(e) => e.stopPropagation()}
     >
       <div className="sticky top-0 z-[1] px-1.5 pb-2">
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => {
-            focusWithinRef.current = true
-            clearHideTimer()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              setQuery('')
-            }
-          }}
-          placeholder={t('common.searchLinks')}
-          className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]"
-        />
+        <div className={showCategorySelect ? 'flex items-center gap-1.5' : undefined}>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => {
+              focusWithinRef.current = true
+              clearHideTimer()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setQuery('')
+              }
+            }}
+            placeholder={t('common.searchLinks')}
+            className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 flex-1' : ' w-full'}`}
+          />
+          {showCategorySelect && (
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="quiet-control h-8 shrink-0 cursor-pointer rounded-full border-0 px-2 text-xs text-[color:var(--color-foreground)]"
+            >
+              <option value="all">{t('common.allCategories')}</option>
+              {hasSshEntries && (
+                <>
+                  <option disabled>──────────</option>
+                  <option value="ssh">{t('common.sshConnections')}</option>
+                </>
+              )}
+              {hasTagEntries && (
+                <>
+                  <option disabled>──────────</option>
+                  {hasUncategorized && (
+                    <option value="uncategorized">{t('common.uncategorized')}</option>
+                  )}
+                  {tagOptions!.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </>
+              )}
+            </select>
+          )}
+        </div>
       </div>
 
       {filteredEntries.length === 0 ? (
