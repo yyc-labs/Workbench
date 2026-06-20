@@ -590,7 +590,11 @@ export function TranscriptPage() {
       // Let React commit the forced render, then give SyntaxHighlighter a frame to
       // apply its inline styles before we snapshot the DOM.
       await waitForRenderSettle()
-      const snapshot = buildTranscriptShareSnapshot(previewNode, session.title)
+      const snapshot = buildTranscriptShareSnapshot(previewNode, session.title, {
+        copied: t('common.copied'),
+        copyFailed: t('codeMarkdown.copyFailed'),
+        transcriptRefDisabled: t('transcript.shareSnapshotTranscriptRefDisabled'),
+      })
       const result = await window.electronAPI.startTranscriptShare({
         projectId: session.projectId,
         transcriptId: session.id,

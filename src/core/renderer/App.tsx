@@ -536,6 +536,20 @@ function WindowTitleBar() {
 
 function AppRouteFallback() {
   const { t } = useI18n()
+  const location = useLocation()
+  const isProjectRoute = location.pathname.startsWith('/project/')
+
+  if (isProjectRoute) {
+    return (
+      <div className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1360px]">
+          <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/50 text-xs text-[color:var(--color-muted-foreground)]">
+            {t('common.loading')}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full items-center justify-center text-xs text-[color:var(--color-muted-foreground)]">

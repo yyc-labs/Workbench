@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Copy, Link2, QrCode, RefreshCw, ShieldAlert, Trash2, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, Link2, QrCode, RefreshCw, ShieldAlert, Trash2, X } from 'lucide-react'
 import QRCode from 'react-qr-code'
 import type { TranscriptShareEntry, TranscriptShareHost } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
@@ -79,6 +79,10 @@ function ShareLinkRow({
     setCopied(ok)
   }, [entry.url])
 
+  const handleOpen = useCallback(() => {
+    void window.electronAPI.openExternal(entry.url)
+  }, [entry.url])
+
   return (
     <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
@@ -88,6 +92,14 @@ function ShareLinkRow({
             {entry.url}
           </code>
         </div>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+          onClick={handleOpen}
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          {t('common.open')}
+        </button>
         <button
           type="button"
           className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
@@ -124,6 +136,17 @@ function ShareLinkRow({
               <code className="min-w-0 flex-1 truncate text-[11px] text-[color:var(--color-muted-foreground)]" title={item.url}>
                 {item.url}
               </code>
+              <button
+                type="button"
+                className="inline-flex h-7 items-center gap-1 rounded-full border border-[color:var(--color-border)] px-2.5 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                onClick={() => {
+                  void window.electronAPI.openExternal(item.url)
+                }}
+                title={item.label}
+              >
+                <ExternalLink className="h-3 w-3" />
+                {t('common.open')}
+              </button>
               <button
                 type="button"
                 className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
@@ -181,12 +204,12 @@ export function TranscriptShareModal({
       <ModalShell
         open={open}
         onClose={onClose}
-        widthClassName="max-w-[600px]"
+        widthClassName="max-w-[min(700px,calc(100vw-40px))]"
         baseZIndex={1160}
         ariaLabel={t('transcript.shareTitle')}
-        panelClassName="max-h-[min(88vh,920px)] overflow-hidden p-0"
+        panelClassName="flex max-h-[min(88vh,920px)] flex-col overflow-hidden p-0"
       >
-        <div className="flex max-h-[min(88vh,920px)] min-h-0 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="border-b border-[color:var(--color-border)] px-5 py-5">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -223,7 +246,7 @@ export function TranscriptShareModal({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-5">
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 py-3">
               <p className="text-xs font-medium text-[color:var(--color-foreground)]">
                 {t('transcript.shareReachableHosts')}
