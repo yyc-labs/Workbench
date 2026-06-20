@@ -30,7 +30,6 @@ type CodeWorkspaceSidebarProps = {
   contentSearchScopeSummary: string
   contentSearchToggleLabel: string
   contentSearchTreeRef: Ref<CodeContentSearchTreeHandle>
-  ensureTreePathLoaded: (relativePath: string) => Promise<void>
   expandedDirectories: Set<string>
   fileSearchError: string | null
   fileSearchInputRef: Ref<HTMLInputElement>
@@ -43,7 +42,9 @@ type CodeWorkspaceSidebarProps = {
   onApplyContentSearchScopePreset: (preset: ContentSearchScopePreset) => void
   onChangeContentSearchQuery: (nextValue: string) => void
   onChangeFileSearchQuery: (nextValue: string) => void
-  onCopyTreeNodeName: (nodeName: string) => void
+  onCopyTreeNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyTreeNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyTreeNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenContentSearchResult: (relativePath: string, lineNumber: number, column: number) => void
   onOpenTreeNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onReloadTree: () => void
@@ -53,7 +54,7 @@ type CodeWorkspaceSidebarProps = {
   onSetContentSearchAdvancedOpen: Dispatch<SetStateAction<boolean>>
   onToggleContentSearchTree: () => void
   onToggleTreeDirectory: (relativePath: string) => void
-  setLocateRequestToken: Dispatch<SetStateAction<number>>
+  onLocateFileInTree: (relativePath: string) => void | Promise<void>
   tree: FileTreeState
   treeNodesForView: FileTreeState['nodes']
   viewMode: 'files' | 'search'
@@ -79,7 +80,6 @@ export function CodeWorkspaceSidebar({
   contentSearchScopeSummary,
   contentSearchToggleLabel,
   contentSearchTreeRef,
-  ensureTreePathLoaded,
   expandedDirectories,
   fileSearchError,
   fileSearchInputRef,
@@ -93,6 +93,8 @@ export function CodeWorkspaceSidebar({
   onChangeContentSearchQuery,
   onChangeFileSearchQuery,
   onCopyTreeNodeName,
+  onCopyTreeNodeRelativePath,
+  onCopyTreeNodeRelativePathWithoutSlashes,
   onOpenContentSearchResult,
   onOpenTreeNodeFolder,
   onReloadTree,
@@ -102,7 +104,7 @@ export function CodeWorkspaceSidebar({
   onSetContentSearchAdvancedOpen,
   onToggleContentSearchTree,
   onToggleTreeDirectory,
-  setLocateRequestToken,
+  onLocateFileInTree,
   tree,
   treeNodesForView,
   viewMode,
@@ -129,9 +131,7 @@ export function CodeWorkspaceSidebar({
             className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
             onClick={() => {
               if (!activeRelativePath) return
-              void ensureTreePathLoaded(activeRelativePath).then(() => {
-                setLocateRequestToken((prev) => prev + 1)
-              })
+              void onLocateFileInTree(activeRelativePath)
             }}
             title={activeRelativePath ? t('codeWorkspace.locateCurrentFile') : t('codeWorkspace.noActiveFile')}
             disabled={!activeRelativePath}
@@ -169,6 +169,8 @@ export function CodeWorkspaceSidebar({
             onSelectFile={onSelectTreeFile}
             onOpenNodeFolder={onOpenTreeNodeFolder}
             onCopyNodeName={onCopyTreeNodeName}
+            onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
+            onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
           />
         )}
       </aside>
@@ -322,6 +324,10 @@ export function CodeWorkspaceSidebar({
           activeLocation={activeContentSearchLocation}
           autoCollapseMatchThreshold={autoCollapseMatchThreshold}
           onOpenMatch={onOpenContentSearchResult}
+          onOpenNodeFolder={onOpenTreeNodeFolder}
+          onCopyNodeName={onCopyTreeNodeName}
+          onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
+          onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
         />
       )}
     </aside>

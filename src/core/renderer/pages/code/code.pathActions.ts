@@ -9,6 +9,14 @@ function splitRelativePath(relativePath: string): string[] {
     .filter(Boolean)
 }
 
+export function normalizeRelativePathForCopy(relativePath: string): string {
+  return splitRelativePath(relativePath).join('/')
+}
+
+export function removeRelativePathSlashes(relativePath: string): string {
+  return normalizeRelativePathForCopy(relativePath).replace(/[\\/]/g, '')
+}
+
 function trimTrailingPathSeparators(pathValue: string): string {
   const trimmed = pathValue.trim()
   if (!trimmed) return ''

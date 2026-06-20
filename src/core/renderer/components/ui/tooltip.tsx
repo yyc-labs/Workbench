@@ -5,13 +5,20 @@ import { cn } from "@/lib/utils"
 
 type TooltipSide = "top" | "bottom"
 type TooltipAlign = "start" | "center" | "end"
+type TooltipPlacementMode = "anchor" | "pointer"
 
 const VIEWPORT_PADDING = 8
+const DEFAULT_POINTER_OFFSET: TooltipPointerOffset = { x: 14, y: 18 }
 
 interface TooltipPosition {
   top: number
   left: number
   side: TooltipSide
+}
+
+interface TooltipPointerOffset {
+  x: number
+  y: number
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -65,10 +72,37 @@ function resolveTooltipPosition(
   }
 }
 
+function resolvePointerTooltipPosition(
+  pointerX: number,
+  pointerY: number,
+  tooltipRect: DOMRect,
+  offset: TooltipPointerOffset
+): TooltipPosition {
+  const preferredLeft = pointerX + offset.x
+  const preferredTop = pointerY + offset.y
+  const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - tooltipRect.width - VIEWPORT_PADDING)
+  const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - tooltipRect.height - VIEWPORT_PADDING)
+
+  return {
+    top: clamp(preferredTop, VIEWPORT_PADDING, maxTop),
+    left: clamp(preferredLeft, VIEWPORT_PADDING, maxLeft),
+    side: "bottom",
+  }
+}
+
 function hasRenderableContent(content: React.ReactNode): boolean {
   if (content === null || content === undefined || content === false) return false
   if (typeof content === "string") return content.trim().length > 0
   return true
+}
+
+function isSamePosition(left: TooltipPosition | null, right: TooltipPosition): boolean {
+  return Boolean(
+    left
+    && left.top === right.top
+    && left.left === right.left
+    && left.side === right.side
+  )
 }
 
 export interface TooltipProps {
@@ -78,6 +112,9 @@ export interface TooltipProps {
   side?: TooltipSide
   align?: TooltipAlign
   offset?: number
+  placementMode?: TooltipPlacementMode
+  pointerOffset?: TooltipPointerOffset
+  interactive?: boolean
   delayMs?: number
   hideDelayMs?: number
   maxWidth?: number
@@ -92,6 +129,9 @@ export function Tooltip({
   side = "top",
   align = "center",
   offset = 8,
+  placementMode = "anchor",
+  pointerOffset = DEFAULT_POINTER_OFFSET,
+  interactive = true,
   delayMs = 180,
   hideDelayMs = 90,
   maxWidth = 460,
@@ -100,6 +140,7 @@ export function Tooltip({
 }: TooltipProps) {
   const triggerRef = React.useRef<HTMLSpanElement | null>(null)
   const tooltipRef = React.useRef<HTMLDivElement | null>(null)
+  const pointerRef = React.useRef<{ x: number; y: number } | null>(null)
   const showTimerRef = React.useRef<number | null>(null)
   const hideTimerRef = React.useRef<number | null>(null)
   const [open, setOpen] = React.useState(false)
@@ -125,11 +166,21 @@ export function Tooltip({
   }, [clearHideTimer, clearShowTimer])
 
   const updatePosition = React.useCallback(() => {
-    if (!triggerRef.current || !tooltipRef.current) return
-    const triggerRect = triggerRef.current.getBoundingClientRect()
+    if (!tooltipRef.current) return
     const tooltipRect = tooltipRef.current.getBoundingClientRect()
-    setPosition(resolveTooltipPosition(triggerRect, tooltipRect, side, align, offset))
-  }, [align, offset, side])
+    if (placementMode === "pointer") {
+      const pointer = pointerRef.current
+      if (pointer) {
+        const next = resolvePointerTooltipPosition(pointer.x, pointer.y, tooltipRect, pointerOffset)
+        setPosition((prev) => (isSamePosition(prev, next) ? prev : next))
+        return
+      }
+    }
+    if (!triggerRef.current) return
+    const triggerRect = triggerRef.current.getBoundingClientRect()
+    const next = resolveTooltipPosition(triggerRect, tooltipRect, side, align, offset)
+    setPosition((prev) => (isSamePosition(prev, next) ? prev : next))
+  }, [align, offset, placementMode, pointerOffset, side])
 
   const requestOpen = React.useCallback(() => {
     if (!enabled) return
@@ -230,13 +281,26 @@ export function Tooltip({
         top: position?.top ?? 0,
         left: position?.left ?? 0,
         maxWidth: `${maxWidth}px`,
+        pointerEvents: interactive ? "auto" : "none",
       }}
-      onMouseEnter={requestOpen}
-      onMouseLeave={requestClose}
+      onMouseEnter={interactive ? requestOpen : undefined}
+      onMouseLeave={interactive ? requestClose : undefined}
     >
       {content}
     </div>
   ) : null
+
+  const handlePointerEnter = React.useCallback((event: React.PointerEvent<HTMLSpanElement>) => {
+    pointerRef.current = { x: event.clientX, y: event.clientY }
+    requestOpen()
+  }, [requestOpen])
+
+  const handlePointerMove = React.useCallback((event: MouseEvent | React.PointerEvent<HTMLSpanElement>) => {
+    pointerRef.current = { x: event.clientX, y: event.clientY }
+    if (open && placementMode === "pointer") {
+      updatePosition()
+    }
+  }, [open, placementMode, updatePosition])
 
   return (
     <span
@@ -246,6 +310,10 @@ export function Tooltip({
       aria-describedby={open ? tooltipId : undefined}
       onMouseEnter={requestOpen}
       onMouseLeave={requestClose}
+      onPointerEnter={handlePointerEnter}
+      onPointerMove={(event) => {
+        handlePointerMove(event)
+      }}
       onFocusCapture={requestOpen}
       onBlurCapture={requestClose}
     >

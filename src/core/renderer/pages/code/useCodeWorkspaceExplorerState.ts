@@ -136,58 +136,89 @@ export function useCodeWorkspaceExplorerState({
   const treeLoadRequestSeqRef = useRef(0)
   const searchRequestSeqRef = useRef(0)
   const contentSearchRequestSeqRef = useRef(0)
+  const treeNodesRef = useRef<ProjectFileNode[]>([])
+  const directoryLoadGenerationRef = useRef(0)
+  const directoryLoadPromisesRef = useRef<Map<string, Promise<boolean>>>(new Map())
+
+  useEffect(() => {
+    treeNodesRef.current = tree.nodes
+  }, [tree.nodes])
 
   const loadDirectory = useCallback(async (directoryRelativePath: string | null): Promise<boolean> => {
     const loadingKey = directoryRelativePath ?? ''
     if (directoryRelativePath) {
-      const targetNode = findDirectoryNode(tree.nodes, directoryRelativePath)
+      const targetNode = findDirectoryNode(treeNodesRef.current, directoryRelativePath)
       if (targetNode?.isLoaded) return true
     }
-    setTree((prev) => {
-      if (prev.loadingDirectories.has(loadingKey)) return prev
-      const nextLoadingDirectories = new Set(prev.loadingDirectories)
-      nextLoadingDirectories.add(loadingKey)
-      return {
-        ...prev,
-        loadingDirectories: nextLoadingDirectories,
-      }
-    })
 
-    try {
-      const result = await window.electronAPI.listProjectDirectoryFiles(projectPath, directoryRelativePath)
-      const sortedNodes = sortProjectNodes(result.nodes)
+    const existingLoad = directoryLoadPromisesRef.current.get(loadingKey)
+    if (existingLoad) return existingLoad
+
+    const loadGeneration = directoryLoadGenerationRef.current
+    const loadPromise = (async () => {
       setTree((prev) => {
-        const nextLoadingDirectories = new Set(prev.loadingDirectories)
-        nextLoadingDirectories.delete(loadingKey)
-        return {
-          status: 'ready',
-          nodes: replaceDirectoryNodes(prev.nodes, result.directoryRelativePath, sortedNodes),
-          error: null,
-          knownFilePaths: mergeKnownFilePaths(prev.knownFilePaths, sortedNodes),
-          loadingDirectories: nextLoadingDirectories,
-          skippedDirectories: prev.skippedDirectories + result.skipped.directories,
-          skippedFiles: prev.skippedFiles + result.skipped.files,
+        if (directoryRelativePath) {
+          const targetNode = findDirectoryNode(prev.nodes, directoryRelativePath)
+          if (targetNode?.isLoaded) return prev
         }
-      })
-      return true
-    } catch (error) {
-      setTree((prev) => {
+        if (prev.loadingDirectories.has(loadingKey)) return prev
         const nextLoadingDirectories = new Set(prev.loadingDirectories)
-        nextLoadingDirectories.delete(loadingKey)
+        nextLoadingDirectories.add(loadingKey)
         return {
           ...prev,
-          status: prev.nodes.length > 0 ? 'ready' : 'error',
-          error: error instanceof Error ? error.message : String(error),
           loadingDirectories: nextLoadingDirectories,
         }
       })
-      return false
+
+      try {
+        const result = await window.electronAPI.listProjectDirectoryFiles(projectPath, directoryRelativePath)
+        const sortedNodes = sortProjectNodes(result.nodes)
+        if (directoryLoadGenerationRef.current !== loadGeneration) return false
+        setTree((prev) => {
+          const nextLoadingDirectories = new Set(prev.loadingDirectories)
+          nextLoadingDirectories.delete(loadingKey)
+          return {
+            status: 'ready',
+            nodes: replaceDirectoryNodes(prev.nodes, result.directoryRelativePath, sortedNodes),
+            error: null,
+            knownFilePaths: mergeKnownFilePaths(prev.knownFilePaths, sortedNodes),
+            loadingDirectories: nextLoadingDirectories,
+            skippedDirectories: prev.skippedDirectories + result.skipped.directories,
+            skippedFiles: prev.skippedFiles + result.skipped.files,
+          }
+        })
+        return true
+      } catch (error) {
+        if (directoryLoadGenerationRef.current !== loadGeneration) return false
+        setTree((prev) => {
+          const nextLoadingDirectories = new Set(prev.loadingDirectories)
+          nextLoadingDirectories.delete(loadingKey)
+          return {
+            ...prev,
+            status: prev.nodes.length > 0 ? 'ready' : 'error',
+            error: error instanceof Error ? error.message : String(error),
+            loadingDirectories: nextLoadingDirectories,
+          }
+        })
+        return false
+      }
+    })()
+
+    directoryLoadPromisesRef.current.set(loadingKey, loadPromise)
+    try {
+      return await loadPromise
+    } finally {
+      if (directoryLoadPromisesRef.current.get(loadingKey) === loadPromise) {
+        directoryLoadPromisesRef.current.delete(loadingKey)
+      }
     }
-  }, [projectPath, tree.nodes])
+  }, [projectPath])
 
   const loadTree = useCallback(async () => {
     const requestSeq = treeLoadRequestSeqRef.current + 1
     treeLoadRequestSeqRef.current = requestSeq
+    directoryLoadGenerationRef.current += 1
+    directoryLoadPromisesRef.current.clear()
     setTree({
       status: 'loading',
       nodes: [],
@@ -204,14 +235,17 @@ export function useCodeWorkspaceExplorerState({
       const result = await window.electronAPI.listProjectFiles(projectPath)
       const sortedNodes = sortProjectNodes(result.nodes)
       if (treeLoadRequestSeqRef.current !== requestSeq) return
-      setTree({
-        status: 'ready',
-        nodes: sortedNodes,
-        error: null,
-        knownFilePaths: mergeKnownFilePaths(new Set(), sortedNodes),
-        loadingDirectories: new Set(),
-        skippedDirectories: result.skipped.directories,
-        skippedFiles: result.skipped.files,
+      setTree((prev) => {
+        const mergedNodes = replaceDirectoryNodes(prev.nodes, null, sortedNodes)
+        return {
+          status: 'ready',
+          nodes: mergedNodes,
+          error: null,
+          knownFilePaths: mergeKnownFilePaths(new Set(), mergedNodes),
+          loadingDirectories: new Set(),
+          skippedDirectories: result.skipped.directories,
+          skippedFiles: result.skipped.files,
+        }
       })
     } catch (error) {
       if (treeLoadRequestSeqRef.current !== requestSeq) return

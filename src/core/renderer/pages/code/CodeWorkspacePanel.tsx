@@ -21,7 +21,12 @@ import {
 } from './code.helpers'
 import { copyTextToClipboard } from './code.clipboard'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
-import { joinProjectPath, resolveTreeNodeFolderPath } from './code.pathActions'
+import {
+  joinProjectPath,
+  normalizeRelativePathForCopy,
+  removeRelativePathSlashes,
+  resolveTreeNodeFolderPath,
+} from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
@@ -145,6 +150,7 @@ export function CodeWorkspacePanel({
   const markOpenedFileInExplorerRef = useRef<(relativePath: string) => void>(() => {})
   const handleOpenedCodeFileRef = useRef<(relativePath: string) => void>(() => {})
   const resetScrollSyncStateRef = useRef<() => void>(() => {})
+  const pendingLocateAfterTreeReloadRef = useRef<string | null>(null)
   const pushOpenTabPath = useCallback((tabs: string[], relativePath: string): string[] => {
     const normalizedPath = relativePath.trim()
     if (!normalizedPath) return tabs
@@ -343,6 +349,22 @@ export function CodeWorkspacePanel({
   const activeTranscriptReferences = useMemo(() => (
     activeRelativePath ? transcriptReferencesByPath.get(activeRelativePath) ?? [] : []
   ), [activeRelativePath, transcriptReferencesByPath])
+  const locateFileInTree = useCallback(async (relativePath: string) => {
+    const normalizedPath = relativePath.trim()
+    if (!normalizedPath) return
+    await ensureTreePathLoaded(normalizedPath)
+    setLocateRequestToken((prev) => prev + 1)
+  }, [ensureTreePathLoaded])
+  const openFileWithTreeLocate = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
+    const normalizedPath = relativePath.trim()
+    if (!normalizedPath) return false
+
+    const opened = await openFile(normalizedPath, forceReload)
+    if (!opened) return false
+
+    await locateFileInTree(normalizedPath)
+    return true
+  }, [locateFileInTree, openFile])
   const {
     captureCurrentModeScroll,
     handleEditorScrollStateChange,
@@ -371,7 +393,7 @@ export function CodeWorkspacePanel({
     isShowingPreview,
     isShowingEditor,
     isRestoringCodeSessionRef,
-    openFile,
+    openFile: openFileWithTreeLocate,
     persistedLastCodeFile,
     persistedProjectCodeSession,
     projectId,
@@ -439,6 +461,20 @@ export function CodeWorkspacePanel({
     }
   }, [activePane, loadTranscriptSession, projectId, transcriptSessions, transcriptSummaries])
 
+  useEffect(() => {
+    const pendingPath = pendingLocateAfterTreeReloadRef.current
+    if (!pendingPath) return
+
+    if (tree.status === 'error') {
+      pendingLocateAfterTreeReloadRef.current = null
+      return
+    }
+
+    if (tree.status !== 'ready') return
+    pendingLocateAfterTreeReloadRef.current = null
+    void locateFileInTree(pendingPath)
+  }, [locateFileInTree, tree.status])
+
   const toggleFavoriteForPath = useCallback((relativePath: string) => {
     setCodeFileDrawerState((prev) => toggleFavoriteCodeFilePath(prev, relativePath))
   }, [])
@@ -446,6 +482,11 @@ export function CodeWorkspacePanel({
   const removePathFromQuickDrawer = useCallback((relativePath: string) => {
     setCodeFileDrawerState((prev) => removeCodeFilePathFromDrawerState(prev, relativePath))
   }, [])
+  const handleReloadTree = useCallback(() => {
+    const normalizedPath = activeRelativePath?.trim() ?? ''
+    pendingLocateAfterTreeReloadRef.current = normalizedPath || null
+    void loadTree()
+  }, [activeRelativePath, loadTree])
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
@@ -605,14 +646,20 @@ export function CodeWorkspacePanel({
   const handleCopyTreeNodeName = useCallback((nodeName: string) => {
     void copyTextToClipboard(nodeName)
   }, [])
+  const handleCopyTreeNodeRelativePath = useCallback((relativePath: string) => {
+    void copyTextToClipboard(normalizeRelativePathForCopy(relativePath))
+  }, [])
+  const handleCopyTreeNodeRelativePathWithoutSlashes = useCallback((relativePath: string) => {
+    void copyTextToClipboard(removeRelativePathSlashes(relativePath))
+  }, [])
 
   const openFileFromQuickDrawer = useCallback((relativePath: string) => {
-    void openFile(relativePath)
+    void openFileWithTreeLocate(relativePath)
     if (isNarrowViewport) {
       setIsExplorerOpen(false)
     }
     setIsQuickDrawerOpen(false)
-  }, [isNarrowViewport, openFile])
+  }, [isNarrowViewport, openFileWithTreeLocate])
 
   const handleOpenContentSearchResult = useCallback((relativePath: string, lineNumber: number, column: number) => {
     void openContentSearchMatch(relativePath, lineNumber, column)
@@ -623,11 +670,11 @@ export function CodeWorkspacePanel({
   }, [isNarrowViewport, openContentSearchMatch])
 
   const handleOpenSmartEmptyFile = useCallback((relativePath: string) => {
-    void openFile(relativePath)
+    void openFileWithTreeLocate(relativePath)
     if (isNarrowViewport) {
       setIsExplorerOpen(false)
     }
-  }, [isNarrowViewport, openFile])
+  }, [isNarrowViewport, openFileWithTreeLocate])
 
   const handleOpenTranscriptReference = useCallback((item: CodeTranscriptReferenceItem) => {
     void openTranscript({
@@ -655,8 +702,8 @@ export function CodeWorkspacePanel({
   }, [isContentSearchAllExpanded])
 
   const handleSelectOpenTab = useCallback((relativePath: string) => {
-    void ensureTreePathLoaded(relativePath).then(() => openFile(relativePath))
-  }, [ensureTreePathLoaded, openFile])
+    void openFileWithTreeLocate(relativePath)
+  }, [openFileWithTreeLocate])
 
   const handleCloseOpenTab = useCallback((relativePath: string) => {
     const normalizedPath = relativePath.trim()
@@ -674,9 +721,9 @@ export function CodeWorkspacePanel({
     if (activeRelativePath !== normalizedPath) return
     const nextActivePath = nextTabs[0]
     if (nextActivePath) {
-      void openFile(nextActivePath)
+      void openFileWithTreeLocate(nextActivePath)
     }
-  }, [activeRelativePath, openFile, openTabPaths])
+  }, [activeRelativePath, openFileWithTreeLocate, openTabPaths])
   const handleEditorCursorPositionChange = useCallback((position: { lineNumber: number; column: number }) => {
     if (!activeRelativePath) return
     setCursorPositionsByPath((prev) => {
@@ -787,7 +834,6 @@ export function CodeWorkspacePanel({
               contentSearchScopeSummary={contentSearchScopeSummary}
               contentSearchToggleLabel={contentSearchToggleLabel}
               contentSearchTreeRef={contentSearchTreeRef}
-              ensureTreePathLoaded={ensureTreePathLoaded}
               expandedDirectories={expandedDirectories}
               fileSearchError={fileSearchError}
               fileSearchInputRef={fileSearchInputRef}
@@ -801,18 +847,18 @@ export function CodeWorkspacePanel({
               onChangeContentSearchQuery={handleContentSearchQueryChange}
               onChangeFileSearchQuery={handleFileSearchQueryChange}
               onCopyTreeNodeName={handleCopyTreeNodeName}
+              onCopyTreeNodeRelativePath={handleCopyTreeNodeRelativePath}
+              onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
               onOpenContentSearchResult={handleOpenContentSearchResult}
               onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
-              onReloadTree={() => {
-                void loadTree()
-              }}
+              onReloadTree={handleReloadTree}
               onSelectTreeFile={handleSelectTreeFile}
               onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
               onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
               onSetContentSearchScopeInput={setContentSearchScopeInput}
               onToggleContentSearchTree={handleToggleContentSearchTree}
               onToggleTreeDirectory={handleToggleTreeDirectory}
-              setLocateRequestToken={setLocateRequestToken}
+              onLocateFileInTree={locateFileInTree}
               tree={tree}
               treeNodesForView={treeNodesForView}
               viewMode={viewMode}

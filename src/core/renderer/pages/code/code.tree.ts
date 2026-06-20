@@ -24,6 +24,159 @@ export function mergeKnownFilePaths(previous: Set<string>, nodes: ProjectFileNod
   return next
 }
 
+function directoryPathSegments(relativePath: string): string[] {
+  return relativePath.replace(/\\/g, '/').split('/').map((item) => item.trim()).filter(Boolean)
+}
+
+function createDirectoryBranch(
+  segments: string[],
+  depth: number,
+  sortedChildren: ProjectFileNode[]
+): ProjectFileNode {
+  const relativePath = segments.slice(0, depth + 1).join('/')
+  const isTargetDirectory = depth === segments.length - 1
+  const children = isTargetDirectory
+    ? sortedChildren
+    : [createDirectoryBranch(segments, depth + 1, sortedChildren)]
+
+  return {
+    name: segments[depth],
+    relativePath,
+    kind: 'directory',
+    hasChildren: children.length > 0,
+    isLoaded: isTargetDirectory,
+    children,
+  }
+}
+
+function mergeLoadedDirectoryChildren(
+  nextChildren: ProjectFileNode[],
+  previousChildren: ProjectFileNode[] | undefined
+): ProjectFileNode[] {
+  if (!previousChildren || previousChildren.length <= 0) return sortProjectNodes(nextChildren)
+
+  const previousDirectories = new Map<string, ProjectFileNode>()
+  for (const previousChild of previousChildren) {
+    if (previousChild.kind === 'directory') {
+      previousDirectories.set(previousChild.relativePath, previousChild)
+    }
+  }
+
+  return sortProjectNodes(nextChildren.map((nextChild) => {
+    if (nextChild.kind !== 'directory') return nextChild
+
+    const previousChild = previousDirectories.get(nextChild.relativePath)
+    if (!previousChild || previousChild.kind !== 'directory') return nextChild
+
+    const previousGrandChildren = previousChild.children ?? []
+    if (previousGrandChildren.length <= 0) return nextChild
+
+    if (previousChild.isLoaded) {
+      return {
+        ...nextChild,
+        hasChildren: previousGrandChildren.length > 0,
+        isLoaded: true,
+        children: previousGrandChildren,
+      }
+    }
+
+    const nextGrandChildren = nextChild.children ?? []
+    if (nextGrandChildren.length <= 0) {
+      return {
+        ...nextChild,
+        hasChildren: true,
+        children: previousGrandChildren,
+      }
+    }
+
+    return {
+      ...nextChild,
+      hasChildren: true,
+      children: mergeLoadedDirectoryChildren(nextGrandChildren, previousGrandChildren),
+    }
+  }))
+}
+
+function upsertDirectoryBranch(
+  nodes: ProjectFileNode[],
+  directoryRelativePath: string,
+  sortedChildren: ProjectFileNode[]
+): ProjectFileNode[] {
+  const segments = directoryPathSegments(directoryRelativePath)
+  if (segments.length <= 0) return sortedChildren
+
+  const upsertAtDepth = (items: ProjectFileNode[], depth: number): ProjectFileNode[] => {
+    const currentRelativePath = segments.slice(0, depth + 1).join('/')
+    let found = false
+    const nextItems = items.map((item) => {
+      if (item.kind !== 'directory' || item.relativePath !== currentRelativePath) return item
+
+      found = true
+      if (depth === segments.length - 1) {
+        const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, item.children)
+        return {
+          ...item,
+          hasChildren: mergedChildren.length > 0,
+          isLoaded: true,
+          children: mergedChildren,
+        }
+      }
+
+      const children = upsertAtDepth(item.children ?? [], depth + 1)
+      return {
+        ...item,
+        hasChildren: true,
+        children,
+      }
+    })
+
+    if (!found) {
+      nextItems.push(createDirectoryBranch(segments, depth, sortedChildren))
+    }
+
+    return sortProjectNodes(nextItems)
+  }
+
+  return upsertAtDepth(nodes, 0)
+}
+
+function replaceDirectoryNodesInTree(
+  nodes: ProjectFileNode[],
+  directoryRelativePath: string,
+  sortedChildren: ProjectFileNode[]
+): { nodes: ProjectFileNode[]; found: boolean } {
+  let found = false
+  const nextNodes = nodes.map((node) => {
+    if (node.kind !== 'directory') return node
+    if (node.relativePath === directoryRelativePath) {
+      found = true
+      const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, node.children)
+      return {
+        ...node,
+        hasChildren: mergedChildren.length > 0,
+        isLoaded: true,
+        children: mergedChildren,
+      }
+    }
+    if (!node.children || node.children.length <= 0) return node
+
+    const replaced = replaceDirectoryNodesInTree(node.children, directoryRelativePath, sortedChildren)
+    if (!replaced.found) return node
+
+    found = true
+    return {
+      ...node,
+      hasChildren: true,
+      children: replaced.nodes,
+    }
+  })
+
+  return {
+    nodes: sortProjectNodes(nextNodes),
+    found,
+  }
+}
+
 export function replaceDirectoryNodes(
   nodes: ProjectFileNode[],
   directoryRelativePath: string | null,
@@ -31,25 +184,13 @@ export function replaceDirectoryNodes(
 ): ProjectFileNode[] {
   const sortedChildren = sortProjectNodes(nextChildren)
   if (directoryRelativePath == null) {
-    return sortedChildren
+    return mergeLoadedDirectoryChildren(sortedChildren, nodes)
   }
 
-  return sortProjectNodes(nodes.map((node) => {
-    if (node.kind !== 'directory') return node
-    if (node.relativePath === directoryRelativePath) {
-      return {
-        ...node,
-        hasChildren: sortedChildren.length > 0,
-        isLoaded: true,
-        children: sortedChildren,
-      }
-    }
-    if (!node.children || node.children.length <= 0) return node
-    return {
-      ...node,
-      children: replaceDirectoryNodes(node.children, directoryRelativePath, sortedChildren),
-    }
-  }))
+  const replaced = replaceDirectoryNodesInTree(nodes, directoryRelativePath, sortedChildren)
+  return replaced.found
+    ? replaced.nodes
+    : upsertDirectoryBranch(nodes, directoryRelativePath, sortedChildren)
 }
 
 export function findDirectoryNode(nodes: ProjectFileNode[], relativePath: string): ProjectFileNode | null {
@@ -110,7 +251,7 @@ export async function expandTreePath(
     setExpandedDirectories: Dispatch<SetStateAction<Set<string>>>
   }
 ): Promise<void> {
-  for (const parent of parentDirectories.reverse()) {
+  for (const parent of [...parentDirectories].reverse()) {
     await options.loadDirectory(parent)
     options.setExpandedDirectories((prev) => {
       if (prev.has(parent)) return prev

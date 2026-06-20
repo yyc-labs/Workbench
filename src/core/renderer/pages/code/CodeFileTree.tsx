@@ -1,21 +1,14 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronRight, Copy, FileText, Folder, FolderOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
 import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
 import { useI18n } from '../../i18n'
+import { CodeTreeContextMenu, type CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 
 const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
-
-interface FileTreeContextMenuPayload {
-  x: number
-  y: number
-  relativePath: string
-  nodeName: string
-  nodeKind: ProjectFileNodeKind
-}
+const MAX_LOCATE_SCROLL_ATTEMPTS = 6
 
 interface CodeFileTreeProps {
   nodes: ProjectFileNode[]
@@ -25,6 +18,8 @@ interface CodeFileTreeProps {
   onSelectFile: (relativePath: string) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   flatFileListMode?: boolean
   locateRequestToken?: number
 }
@@ -34,22 +29,12 @@ interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   flatFileListMode: boolean
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
-  onOpenFileContextMenu: (payload: FileTreeContextMenuPayload) => void
+  onOpenFileContextMenu: (payload: CodeTreeContextMenuPayload) => void
 }
 
 interface TreeSize {
   width: number
   height: number
-}
-
-interface FileTreeContextMenuProps {
-  x: number
-  y: number
-  nodeName: string
-  nodeKind: ProjectFileNodeKind
-  onOpenFolder: () => void | Promise<void>
-  onCopyName: () => void | Promise<void>
-  onClose: () => void
 }
 
 function useContainerSize() {
@@ -133,89 +118,34 @@ function getTreeChildren(item: ProjectFileNode): ProjectFileNode[] | null {
   return []
 }
 
-function FileTreeContextMenu({
-  x,
-  y,
-  nodeName,
-  nodeKind,
-  onOpenFolder,
-  onCopyName,
-  onClose,
-}: FileTreeContextMenuProps) {
-  const { t } = useI18n()
-  const width = 210
-  const height = 108
-  const padding = 8
-  const left = Math.min(Math.max(padding, x), window.innerWidth - width - padding)
-  const top = Math.min(Math.max(padding, y), window.innerHeight - height - padding)
+function centerTreeNodeInViewport(tree: TreeApi<ProjectFileNode>, relativePath: string): boolean {
+  const index = tree.indexOf(relativePath)
+  const scrollElement = tree.listEl.current
+  if (index == null || !scrollElement) return false
 
-  const handleAction = useCallback(
-    async (action: () => void | Promise<void>) => {
-      await action()
-      onClose()
-    },
-    [onClose]
-  )
+  const viewportHeight = scrollElement.clientHeight
+  if (viewportHeight <= 0) return false
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
+  const rowHeight = tree.rowHeight
+  const rowTop = index * rowHeight
+  const rowBottom = rowTop + rowHeight
+  const currentScrollTop = scrollElement.scrollTop
+  const isVisible = rowBottom > currentScrollTop && rowTop < currentScrollTop + viewportHeight
+  const centeredScrollTop = rowTop - (viewportHeight - rowHeight) / 2
+  const maxScrollTop = Math.max(0, scrollElement.scrollHeight - viewportHeight)
 
-  useEffect(() => {
-    const onPointerDown = () => onClose()
-    const timer = window.setTimeout(() => {
-      document.addEventListener('pointerdown', onPointerDown)
-    }, 0)
-    return () => {
-      window.clearTimeout(timer)
-      document.removeEventListener('pointerdown', onPointerDown)
-    }
-  }, [onClose])
+  let nextScrollTop = centeredScrollTop
+  if (centeredScrollTop < 0) {
+    nextScrollTop = isVisible ? currentScrollTop : 0
+  } else if (centeredScrollTop > maxScrollTop) {
+    nextScrollTop = maxScrollTop
+  }
 
-  const itemTypeLabel = nodeKind === 'directory' ? t('codeFileTree.directory') : t('codeFileTree.file')
-  const openFolderLabel = nodeKind === 'directory' ? t('codeFileTree.openDirectory') : t('codeFileTree.openCurrentFolder')
-  const copyNameLabel = nodeKind === 'directory' ? t('codeFileTree.copyDirectoryName') : t('codeFileTree.copyFileName')
-
-  return createPortal(
-    <div
-      className="fixed z-[9998] min-w-[210px] rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)] p-1.5 shadow-[var(--shadow-popover)]"
-      style={{ top, left }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className="px-2.5 py-1.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-        <span className="inline-flex items-center gap-1">
-          {nodeKind === 'directory'
-            ? <Folder className="h-3.5 w-3.5 text-[color:var(--color-warning)]" />
-            : <FileText className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />}
-          <span>{itemTypeLabel}:</span>
-        </span>{' '}
-        <span className="font-medium text-[color:var(--color-foreground)]">{nodeName}</span>
-      </div>
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => { void handleAction(onOpenFolder) }}
-      >
-        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-warning)]" />
-        {openFolderLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => { void handleAction(onCopyName) }}
-      >
-        <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {copyNameLabel}
-      </button>
-    </div>,
-    document.body
-  )
+  const roundedScrollTop = Math.round(Math.max(0, nextScrollTop))
+  if (Math.abs(currentScrollTop - roundedScrollTop) > 1) {
+    scrollElement.scrollTop = roundedScrollTop
+  }
+  return true
 }
 
 function FileTreeNodeRenderer({
@@ -290,6 +220,8 @@ function FileTreeNodeRenderer({
         <Tooltip
           content={data.relativePath}
           align="start"
+          placementMode="pointer"
+          interactive={false}
           className="w-0 min-w-0 flex-1"
           contentClassName="font-mono text-[10.5px] leading-[1.4]"
         >
@@ -308,6 +240,8 @@ export const CodeFileTree = memo(function CodeFileTree({
   onSelectFile,
   onOpenNodeFolder,
   onCopyNodeName,
+  onCopyNodeRelativePath,
+  onCopyNodeRelativePathWithoutSlashes,
   flatFileListMode = false,
   locateRequestToken = 0,
 }: CodeFileTreeProps) {
@@ -317,7 +251,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   const handledLocateRequestTokenRef = useRef(0)
   const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
   const { containerRef, size } = useContainerSize()
-  const [contextMenu, setContextMenu] = useState<FileTreeContextMenuPayload | null>(null)
+  const [contextMenu, setContextMenu] = useState<CodeTreeContextMenuPayload | null>(null)
   const directoryPaths = useMemo(() => collectDirectoryPaths(nodes), [nodes])
   const isMeasuring = size.width <= 0 || size.height <= 0
   const initialOpenState = useMemo(() => {
@@ -334,19 +268,27 @@ export const CodeFileTree = memo(function CodeFileTree({
     if (locateRequestToken === handledLocateRequestTokenRef.current) return
     handledLocateRequestTokenRef.current = locateRequestToken
     if (!activeRelativePath) return
-    const tree = treeRef.current
-    if (!tree) return
+    let cancelled = false
+    let frameId = 0
+    let attempts = 0
 
-    const activeIndex = tree.indexOf(activeRelativePath)
-    if (
-      activeIndex != null
-      && activeIndex >= tree.visibleStartIndex
-      && activeIndex <= tree.visibleStopIndex
-    ) {
-      return
+    const revealActiveFile = () => {
+      if (cancelled) return
+      const tree = treeRef.current
+      if (!tree) return
+      if (centerTreeNodeInViewport(tree, activeRelativePath)) return
+
+      attempts += 1
+      void tree.scrollTo(activeRelativePath, 'center')
+      if (attempts >= MAX_LOCATE_SCROLL_ATTEMPTS) return
+      frameId = window.requestAnimationFrame(revealActiveFile)
     }
 
-    void tree.scrollTo(activeRelativePath, 'smart')
+    revealActiveFile()
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frameId)
+    }
   }, [locateRequestToken, activeRelativePath])
 
   useEffect(() => {
@@ -390,7 +332,7 @@ export const CodeFileTree = memo(function CodeFileTree({
     previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
   }, [directoryPaths, expandedDirectories, flatFileListMode])
 
-  const handleOpenFileContextMenu = useCallback((payload: FileTreeContextMenuPayload) => {
+  const handleOpenFileContextMenu = useCallback((payload: CodeTreeContextMenuPayload) => {
     setContextMenu(payload)
   }, [])
 
@@ -444,13 +386,17 @@ export const CodeFileTree = memo(function CodeFileTree({
         </Tree>
       )}
       {contextMenu && (
-        <FileTreeContextMenu
+        <CodeTreeContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
           nodeName={contextMenu.nodeName}
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
+          onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyRelativePathWithoutSlashes={() => (
+            onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)
+          )}
           onClose={closeContextMenu}
         />
       )}
