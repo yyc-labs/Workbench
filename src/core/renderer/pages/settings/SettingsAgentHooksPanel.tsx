@@ -28,7 +28,7 @@ function providerLabel(provider: AgentHookEnvelope['provider']): string {
 }
 
 export function SettingsAgentHooksPanel() {
-  const { t } = useI18n()
+  const { t, tHtml } = useI18n()
   const [agentHookConfig, setAgentHookConfig] = useState<NonNullable<AppConfig['agentHooks']> | null>(null)
   const [status, setStatus] = useState<AgentHookGatewayStatus | null>(null)
   const [events, setEvents] = useState<AgentHookEnvelope[]>([])
@@ -296,9 +296,7 @@ export function SettingsAgentHooksPanel() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.agentHooks.feishuTitle')}</div>
-            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
-              {t('settings.agentHooks.feishuDescription')}
-            </div>
+            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settings.agentHooks.feishuDescription')} />
           </div>
           <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
             <input

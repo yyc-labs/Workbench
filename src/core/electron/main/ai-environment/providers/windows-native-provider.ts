@@ -2,6 +2,11 @@ import { createHash } from 'crypto'
 import { basename } from 'path'
 import type { RuntimeDiagnostics } from '../../../../shared/types'
 import { normalizeWindowsHostPath } from '../../host-path'
+import {
+  buildWindowsTerminalShellLaunch,
+  preferredWindowsShellForDiagnostics,
+  resolveWindowsPowerShell,
+} from '../../shell/windows-shell'
 import type { AiExecutionProvider } from '../provider-types'
 
 function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
@@ -31,7 +36,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
       supported: context.capability.hostPlatform === 'windows',
       hasWsl: context.capability.hasWsl,
       hasTmux: false,
-      shell: context.config.shell || 'cmd',
+      shell: preferredWindowsShellForDiagnostics(context.config.shell),
       issues: [],
     }
   },
@@ -41,6 +46,9 @@ export const windowsNativeProvider: AiExecutionProvider = {
     const sessionName = buildRuntimeSessionName(input.projectPath, input.cli)
     const runtimeCommand = input.cli === 'codex' ? 'codex' : 'claude'
     const title = input.cli === 'codex' ? 'Codex Runtime' : 'Claude Runtime'
+    const terminalLaunch = buildWindowsTerminalShellLaunch(runtimeCommand, {
+      preferredShell: context.config.shell,
+    })
     return {
       mode: 'windows-native',
       sessionName,
@@ -54,10 +62,8 @@ export const windowsNativeProvider: AiExecutionProvider = {
         '/c',
         'start',
         title,
-        'cmd.exe',
-        '/d',
-        '/k',
-        runtimeCommand,
+        terminalLaunch.shell.command,
+        ...terminalLaunch.args,
       ],
       cwd: hostProjectPath,
       detached: false,
@@ -68,7 +74,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
     }
   },
 
-  async resolveAiCommitLaunch(_context, input) {
+  async resolveAiCommitLaunch(context, input) {
     const hostRepoRoot = normalizeWindowsHostPath(input.repoRoot)
     const args = [
       '-NoProfile',
@@ -85,14 +91,15 @@ export const windowsNativeProvider: AiExecutionProvider = {
       ...(input.cliConfig.apiKey ? ['-ApiKey', input.cliConfig.apiKey] : []),
       ...(input.cliConfig.model ? ['-Model', input.cliConfig.model] : []),
     ]
+    const resolvedShell = resolveWindowsPowerShell(context.config.shell)
     return {
       mode: 'windows-native',
       providerLabel: this.label,
-      command: 'pwsh',
+      command: resolvedShell.command,
       args,
       cwd: hostRepoRoot,
       shell: false,
-      outputLabel: 'pwsh',
+      outputLabel: resolvedShell.kind,
     }
   },
 }

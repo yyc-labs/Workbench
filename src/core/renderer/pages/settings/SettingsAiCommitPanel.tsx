@@ -11,7 +11,7 @@ type AiCommitPanelProps = {
 }
 
 function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
-  const { t } = useI18n()
+  const { t, tHtml } = useI18n()
   const [enabled, setEnabled] = useState(Boolean(aiCommit.enabled ?? true))
   const [apiBaseUrl, setApiBaseUrl] = useState(aiCommit.apiBaseUrl || 'https://api.openai.com/v1')
   const [apiKey, setApiKey] = useState(aiCommit.apiKey || '')
@@ -163,9 +163,7 @@ function SettingsAiCommitPanel({ aiCommit, onSave }: AiCommitPanelProps) {
             className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
             placeholder="/snap/bin/pwsh"
           />
-          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            {t('settingsAiCommit.wslPwshHint')}
-          </p>
+          <p className="text-[11px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settingsAiCommit.wslPwshHint')} />
         </div>
 
         <Button

@@ -12,7 +12,7 @@ export const aiAndRuntimeMessages = {
       apiKey: 'API Key',
       model: 'Model',
       wslPwshPath: 'WSL pwsh path',
-      wslPwshHint: 'Only used when execution mode is `windows-wsl`.',
+      wslPwshHint: 'Only used when execution mode is <strong>windows-wsl</strong>.',
       save: 'Save AI Config',
     },
     startupLogs: {
@@ -97,7 +97,7 @@ export const aiAndRuntimeMessages = {
       apiKey: 'API Key',
       model: '模型',
       wslPwshPath: 'WSL pwsh 路径',
-      wslPwshHint: '仅在执行模式为 `windows-wsl` 时使用。',
+      wslPwshHint: '仅在执行模式为 <strong>windows-wsl</strong> 时使用。',
       save: '保存 AI 配置',
     },
     startupLogs: {

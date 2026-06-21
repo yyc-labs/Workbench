@@ -7,6 +7,7 @@ import { toHostAccessiblePath } from './host-path'
 import { wslBridge } from './wsl-bridge'
 import { tmuxManager, getSessionName } from './tmux-manager'
 import { ResizeController } from './resize-controller'
+import { buildWindowsAutomationShellLaunch } from './shell/windows-shell'
 
 export const IPC_CHANNELS = {
   PROCESS_OUTPUT: 'process:output',
@@ -277,7 +278,7 @@ class ProcessManager {
     return parts.join(' && ') + ' && '
   }
 
-  // ── backend: host-native (Windows cmd.exe) ──────────────
+  // ── backend: host-native (Windows cmd-first shell fallback) ───────────
 
   private startHostNative(projectId: string, command: string, cwd: string): boolean {
     const hostCwd = toHostAccessiblePath(cwd, this.getDefaultWslDistro())
@@ -285,7 +286,8 @@ class ProcessManager {
       return this.startWithSpawn(projectId, command, hostCwd)
     }
     const ptySpawn = this.getPtySpawn()
-    const pty = ptySpawn('cmd.exe', ['/c', command], {
+    const launch = buildWindowsAutomationShellLaunch(command)
+    const pty = ptySpawn(launch.shell.command, launch.args, {
       name: 'xterm-color',
       cols: 80,
       rows: 24,

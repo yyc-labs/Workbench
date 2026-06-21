@@ -85,6 +85,13 @@ export function translateCurrent(
   return translate(getCurrentLocale(), key, values)
 }
 
+export function translateCurrentHtml(
+  key: MessageKey | SettingsSectionMessageKey,
+  values?: InterpolationValues
+): { __html: string } {
+  return { __html: `<span class="i18n-rich">${translate(getCurrentLocale(), key, values)}</span>` }
+}
+
 export function useI18n() {
   const locale = useLocale()
 
@@ -107,12 +114,20 @@ export function useI18n() {
       return new Intl.DateTimeFormat(locale, options).format(date)
     }
 
+    const tHtml = (
+      key: MessageKey | SettingsSectionMessageKey,
+      values?: InterpolationValues
+    ): { __html: string } => ({
+      __html: `<span class="i18n-rich">${translate(locale, key, values)}</span>`,
+    })
+
     const getSettingsSectionLabel = (section: Section): string =>
       t(settingsSectionKeyBySection[section])
 
     return {
       locale,
       t,
+      tHtml,
       formatDateTime,
       getSettingsSectionLabel,
     }

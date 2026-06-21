@@ -169,6 +169,16 @@ test('windows-native runtime launch normalizes /mnt path to Windows host cwd', a
   })
 
   assert.equal(plan.cwd, 'D:\\work\\demo')
+  assert.equal(plan.startCommand, 'cmd.exe')
+  assert.equal(plan.startArgs[0], '/d')
+  assert.equal(plan.startArgs[1], '/c')
+  assert.equal(plan.startArgs[2], 'start')
+  assert.ok(['pwsh.exe', 'powershell.exe', 'cmd.exe'].includes(plan.startArgs[4]))
+  if (plan.startArgs[4] === 'cmd.exe') {
+    assert.deepEqual(plan.startArgs.slice(5), ['/d', '/k', 'codex'])
+  } else {
+    assert.deepEqual(plan.startArgs.slice(5), ['-NoLogo', '-NoExit', '-Command', 'codex'])
+  }
 })
 
 test('windows-native ai commit launch normalizes /mnt path to Windows host cwd', async () => {
@@ -212,6 +222,8 @@ test('windows-native ai commit launch normalizes /mnt path to Windows host cwd',
   })
 
   assert.equal(plan.cwd, 'D:\\work\\demo')
+  assert.ok(['pwsh.exe', 'powershell.exe'].includes(plan.command))
+  assert.ok(['pwsh', 'powershell'].includes(plan.outputLabel))
 })
 
 test('custom-script runtime launch keeps WSL path for WSL entrypoint on Windows', async () => {

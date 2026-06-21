@@ -4,6 +4,7 @@ import { shell } from 'electron'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { wslBridge } from '../wsl-bridge'
+import { buildWindowsTerminalTabArgs } from './windows-shell'
 
 const SSH_TERMINAL_DEBUG_LOG = join(tmpdir(), 'ide-electron-open-ssh.log')
 const SSH_TERMINAL_DEBUG_TEXT_LIMIT = 240
@@ -718,9 +719,7 @@ export function openTerminalAtPath(
     }
 
     const localPath = resolveLocalVsCodePath(folderPath)
-    const localArgs = trimmedCommand
-      ? ['-d', localPath, 'cmd.exe', '/k', trimmedCommand]
-      : ['-d', localPath]
+    const localArgs = buildWindowsTerminalTabArgs(localPath, trimmedCommand)
     const child = spawn('wt.exe', localArgs, {
       detached: true,
       stdio: 'ignore',
@@ -928,7 +927,7 @@ export async function openSshTerminal(
     }
   }
 
-  const localArgs = ['-d', '.', 'cmd.exe', '/k', sshCommand]
+  const localArgs = buildWindowsTerminalTabArgs('.', sshCommand)
   appendSshTerminalDebugLog('openSshTerminal:native-launch', {
     sshCommand,
     wtArgs: localArgs,

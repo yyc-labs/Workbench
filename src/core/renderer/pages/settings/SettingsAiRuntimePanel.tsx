@@ -28,7 +28,7 @@ type RuntimeEnvField = {
   onChange: (value: string) => void
   placeholder: string
   type?: 'password'
-  hint?: string
+  hint?: { __html: string }
 }
 
 function cloneConfig(config: ClaudeBashrcConfig): ClaudeBashrcConfig {
@@ -59,7 +59,7 @@ function SettingsAiRuntimePanel({
   activeProfileId,
   onProfilesSave,
 }: SettingsAiRuntimePanelProps) {
-  const { t } = useI18n()
+  const { t, tHtml } = useI18n()
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.deepseek.com/anthropic')
   const [anthropicAuthToken, setAnthropicAuthToken] = useState('')
   const [anthropicModel, setAnthropicModel] = useState('deepseek-v4-pro[1m]')
@@ -93,10 +93,10 @@ function SettingsAiRuntimePanel({
   const inputDisabled = !capabilityReady || !loaded || saving || (!supportsShellEnvConfig && !supportsWindowsEnvConfig)
   const shellConfigReadOnly = capabilityReady && !supportsShellEnvConfig && !supportsWindowsEnvConfig
   const shellScopeLabel = supportsWindowsEnvConfig
-    ? t('settings.aiRuntime.shellScopeWindowsNative')
+    ? tHtml('settings.aiRuntime.shellScopeWindowsNative')
     : capability?.hostPlatform === 'windows'
-      ? t('settings.aiRuntime.shellScopeWsl')
-      : t('settings.aiRuntime.shellScopePosix')
+      ? tHtml('settings.aiRuntime.shellScopeWsl')
+      : tHtml('settings.aiRuntime.shellScopePosix')
 
   const activeProfile = useMemo(
     () => profileDrafts.find((profile) => profile.id === selectedProfileId) ?? profileDrafts[0] ?? null,
@@ -229,7 +229,7 @@ function SettingsAiRuntimePanel({
       onChange: setAnthropicAuthToken,
       placeholder: loaded ? 'sk-...' : (supportsWindowsEnvConfig ? 'Loading...' : 'Loading ~/.bashrc...'),
       type: 'password' as const,
-      hint: t(supportsWindowsEnvConfig ? 'settings.aiRuntime.tokenHintWindows' : 'settings.aiRuntime.tokenHint'),
+      hint: tHtml(supportsWindowsEnvConfig ? 'settings.aiRuntime.tokenHintWindows' : 'settings.aiRuntime.tokenHint'),
     },
     {
       key: 'anthropicModel',
@@ -459,9 +459,9 @@ function SettingsAiRuntimePanel({
         <div className="mb-6 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
           <p>{t('settings.aiRuntime.runtimeModelSummary')}</p>
           <p className="mt-2">{t('settings.aiRuntime.runtimeModelShell')}</p>
-          <p className="mt-2">{t('settings.aiRuntime.runtimeModelClaude')}</p>
+          <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.runtimeModelClaude')} />
           {isCustomScriptMode && (
-            <p className="mt-2">{t('settings.aiRuntime.customScriptHint')}</p>
+            <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.customScriptHint')} />
           )}
           {capabilityReady && !supportsShellEnvConfig && (
             <p className="mt-2 text-[color:var(--color-destructive)]">{t('settings.aiRuntime.unsupportedHostHint')}</p>
@@ -560,9 +560,7 @@ function SettingsAiRuntimePanel({
             {t('settings.aiRuntime.shellDescription')}
           </p>
           {capabilityReady && (
-            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-              {shellScopeLabel}
-            </p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={shellScopeLabel} />
           )}
           <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
             {t('settings.aiRuntime.restartHint')}
@@ -590,11 +588,16 @@ function SettingsAiRuntimePanel({
               disabled={inputDisabled}
             />
             {field.hint && (
-              <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{field.hint}</p>
+              <p className="text-[11px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={field.hint} />
             )}
           </div>
         ))}
 
+        {supportsWindowsEnvConfig && (
+          <div className="rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3">
+            <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.effortLevelNotice')} />
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button
             className="h-10 rounded-full px-5 text-sm disabled:opacity-60"
@@ -621,9 +624,7 @@ function SettingsAiRuntimePanel({
           <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
             {t('settings.aiRuntime.claudeTitle')}
           </h3>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-            {t('settings.aiRuntime.claudeDescription')}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.claudeDescription')} />
         </div>
 
         <div className="space-y-2">

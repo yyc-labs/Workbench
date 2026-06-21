@@ -26,7 +26,7 @@ export type AiExecutionMode =
   | 'macos-native'
   | 'custom-script'
   | 'disabled'
-export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'cmd' | 'sh'
+export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
 export type StartupDefaultFilter =
   | { type: 'all' }
   | { type: 'pinned' }

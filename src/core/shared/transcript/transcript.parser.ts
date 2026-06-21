@@ -16,15 +16,21 @@ type BuildTranscriptSessionOptions = {
 const ANSI_ESCAPE_PATTERN = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g
 const ABSOLUTE_POSIX_REFERENCE_PATTERN =
   /(?<![\w./-])(\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*)\:(\d+)(?:\:(\d+))?/g
+const ABSOLUTE_WINDOWS_REFERENCE_PATTERN =
+  /(?<![\w./-])((?:\/)?[A-Za-z]:[\\/][^\s`"'()[\]{}:]+(?:[\\/][^\s`"'()[\]{}:]+)*)\:(\d+)(?:\:(\d+))?/g
 const RELATIVE_REFERENCE_PATTERN =
   /(?<![\w/.-])((?:\.\/)?(?:[\w-]+\/)*[\w.-]+\.[A-Za-z0-9_-]+)\:(\d+)(?:\:(\d+))?/g
 const ABSOLUTE_POSIX_PATH_REFERENCE_PATTERN =
   /(?<![\w./:-])(\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*)(?!:\d)(?![\w./-])/g
+const ABSOLUTE_WINDOWS_PATH_REFERENCE_PATTERN =
+  /(?<![\w./:-])((?:\/)?[A-Za-z]:[\\/][^\s`"'()[\]{}:]+(?:[\\/][^\s`"'()[\]{}:]+)*)(?!:\d)(?![\w./-])/g
 const RELATIVE_PATH_REFERENCE_PATTERN =
   /(?<![\w/.-])((?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9_-]+)(?!:\d)(?![\w/.-])/g
 const ABSOLUTE_POSIX_REFERENCE_EXACT_PATTERN = new RegExp(`^${ABSOLUTE_POSIX_REFERENCE_PATTERN.source}$`)
+const ABSOLUTE_WINDOWS_REFERENCE_EXACT_PATTERN = new RegExp(`^${ABSOLUTE_WINDOWS_REFERENCE_PATTERN.source}$`)
 const RELATIVE_REFERENCE_EXACT_PATTERN = new RegExp(`^${RELATIVE_REFERENCE_PATTERN.source}$`)
 const ABSOLUTE_POSIX_PATH_LINE_EXACT_PATTERN = /^\/[^\s`"'()[\]{}:]+(?:\/[^\s`"'()[\]{}:]+)*$/
+const ABSOLUTE_WINDOWS_PATH_LINE_EXACT_PATTERN = /^\/?[A-Za-z]:[\\/][^\s`"'()[\]{}:]+(?:[\\/][^\s`"'()[\]{}:]+)*$/
 const RELATIVE_PATH_LINE_EXACT_PATTERN = /^(?:\.\/)?(?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9_-]+$/
 const WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN =
   /:(?:[ \t]*\n[ \t]*)?(\d+)(?:(?:[ \t]*\n[ \t]*)?\:(?:[ \t]*\n[ \t]*)?(\d+))?/g
@@ -43,9 +49,25 @@ const IMPLICIT_CODE_CALL_PATTERN = /^(?:(?:await|return)\s+)?(?:[A-Za-z_][\w]*|s
 const IMPLICIT_CODE_CLOSING_LINE_PATTERN = /^[)\]}],?$/
 const IMPLICIT_CODE_ELLIPSIS_LINE_PATTERN = /^(?:\.{3}|pass|break|continue)$/
 const IMPLICIT_CODE_TRAILING_DELIMITER_PATTERN = /[([{,]$/
+const WINDOWS_DRIVE_ABSOLUTE_PATH_PREFIX_PATTERN = /^\/?[A-Za-z]:[\\/]/
 
 function isReferenceTokenChar(value: string): boolean {
-  return /[\w./-]/.test(value)
+  return /[\w./\\-]/.test(value)
+}
+
+function isWindowsDriveSeparatorAt(text: string, index: number): boolean {
+  return text[index] === ':'
+    && /[A-Za-z]/.test(text[index - 1] ?? '')
+    && /[\\/]/.test(text[index + 1] ?? '')
+}
+
+function isWindowsDriveAbsolutePath(value: string): boolean {
+  return WINDOWS_DRIVE_ABSOLUTE_PATH_PREFIX_PATTERN.test(value.trim())
+}
+
+function isAbsolutePathLike(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed.startsWith('/') || isWindowsDriveAbsolutePath(trimmed)
 }
 
 function normalizeLineEndings(input: string): string {
@@ -61,7 +83,10 @@ function normalizeRelativePath(value: string): string {
 }
 
 function normalizeAbsolutePath(value: string): string {
-  const normalized = value.replace(/\\/g, '/').replace(/\/{2,}/g, '/').trim()
+  let normalized = value.replace(/\\/g, '/').replace(/\/{2,}/g, '/').trim()
+  if (/^\/[A-Za-z]:\//.test(normalized)) {
+    normalized = normalized.slice(1)
+  }
   if (!normalized.startsWith('/')) return normalized
   return normalized.length > 1 ? normalized.replace(/\/+$/, '') : normalized
 }
@@ -399,10 +424,10 @@ function resolveProjectRelativePath(projectPath: string, rawPath: string): strin
   const normalizedProjectPath = normalizeAbsolutePath(projectPath)
   if (!rawPath) return null
 
-  if (rawPath.startsWith('/')) {
-    const resolved = normalizeAbsolutePath(rawPath)
+  const resolved = normalizeAbsolutePath(rawPath)
+  if (isAbsolutePathLike(resolved)) {
     if (resolved === normalizedProjectPath) return null
-    const prefix = `${normalizedProjectPath}/`
+    const prefix = normalizedProjectPath.endsWith('/') ? normalizedProjectPath : `${normalizedProjectPath}/`
     if (!resolved.startsWith(prefix)) return null
     return normalizeRelativePath(resolved.slice(prefix.length))
   }
@@ -464,7 +489,7 @@ function inferContextualRelativePathPrefix(
     startOffset: number
   }
 ): string | null {
-  if (!candidate.rawPath || candidate.rawPath.startsWith('/')) return null
+  if (!candidate.rawPath || isAbsolutePathLike(candidate.rawPath)) return null
   if (candidate.rawPath.startsWith('./')) return null
 
   const startLineIndex = Math.max(0, findLineNumber(lineStarts, candidate.startOffset) - 1)
@@ -538,7 +563,7 @@ function findWrappedReferenceStart(text: string, suffixStartOffset: number): num
 
   while (index >= 0) {
     const current = text[index]
-    if (isReferenceTokenChar(current)) {
+    if (isReferenceTokenChar(current) || isWindowsDriveSeparatorAt(text, index)) {
       sawPathChar = true
       index -= 1
       continue
@@ -577,6 +602,7 @@ function parseNormalizedReferenceCandidate(
   column?: number
 } | null {
   const exactMatch = ABSOLUTE_POSIX_REFERENCE_EXACT_PATTERN.exec(candidate)
+    ?? ABSOLUTE_WINDOWS_REFERENCE_EXACT_PATTERN.exec(candidate)
     ?? RELATIVE_REFERENCE_EXACT_PATTERN.exec(candidate)
   if (!exactMatch) return null
 
@@ -601,6 +627,7 @@ function parseStandalonePathLineCandidate(
   if (!candidate) return null
   if (
     !ABSOLUTE_POSIX_PATH_LINE_EXACT_PATTERN.test(candidate)
+    && !ABSOLUTE_WINDOWS_PATH_LINE_EXACT_PATTERN.test(candidate)
     && !RELATIVE_PATH_LINE_EXACT_PATTERN.test(candidate)
   ) {
     return null
@@ -679,6 +706,7 @@ function collectReferences(
   }
 
   collectFromPattern(ABSOLUTE_POSIX_REFERENCE_PATTERN, 1)
+  collectFromPattern(ABSOLUTE_WINDOWS_REFERENCE_PATTERN, 1)
   collectFromPattern(RELATIVE_REFERENCE_PATTERN, 1)
 
   const collectPathOnlyFromPattern = (pattern: RegExp, pathGroup: number) => {
@@ -700,6 +728,7 @@ function collectReferences(
   }
 
   collectPathOnlyFromPattern(ABSOLUTE_POSIX_PATH_REFERENCE_PATTERN, 1)
+  collectPathOnlyFromPattern(ABSOLUTE_WINDOWS_PATH_REFERENCE_PATTERN, 1)
   collectPathOnlyFromPattern(RELATIVE_PATH_REFERENCE_PATTERN, 1)
 
   WRAPPED_REFERENCE_LINE_SUFFIX_PATTERN.lastIndex = 0

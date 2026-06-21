@@ -49,6 +49,36 @@ test('buildTranscriptSession normalizes line endings, strips ANSI, and links pro
   assert.doesNotMatch(session.markdownText, /transcript-ref:\/\/.*other\.ts/)
 })
 
+test('buildTranscriptSession links windows absolute references with a leading slash', () => {
+  const session = buildSession(
+    'Inspect /D:/repo/project/src/app.ts:283 in parser.',
+    {
+      projectPath: 'D:/repo/project',
+      paths: ['src/app.ts'],
+    }
+  )
+
+  assert.equal(session.references.length, 1)
+  assert.deepEqual(
+    session.references.map((reference) => ({
+      relativePath: reference.relativePath,
+      lineNumber: reference.lineNumber,
+      rawText: reference.rawText,
+    })),
+    [
+      {
+        relativePath: 'src/app.ts',
+        lineNumber: 283,
+        rawText: '/D:/repo/project/src/app.ts:283',
+      },
+    ]
+  )
+  assert.match(
+    session.markdownText,
+    /\[\/D:\/repo\/project\/src\/app\.ts:283\]\(transcript-ref:\/\/session-1-ref-1\)/
+  )
+})
+
 test('buildTranscriptSession detects wrapped references and standalone project paths', () => {
   const session = buildSession([
     'Open this wrapped file:',

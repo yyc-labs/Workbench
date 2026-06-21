@@ -25,3 +25,7 @@
 .button-interactive[aria-busy='true'] {
   cursor: progress;
 }
+
+.i18n-rich strong {
+  color: var(--color-foreground);
+}

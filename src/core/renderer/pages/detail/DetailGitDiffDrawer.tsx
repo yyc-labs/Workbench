@@ -59,7 +59,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   onLoadConflict,
   onSaveConflict,
 }: DetailGitDiffDrawerProps) {
-  const { t } = useI18n()
+  const { t, tHtml } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
@@ -524,9 +524,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
                                 <div className="min-w-0">
                                   <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffResultTitle')}</p>
-                                  <p className="text-[10px] text-[color:var(--color-muted-foreground)]">
-                                    {t('detail.gitDiffResultDescription')}
-                                  </p>
+                                  <p className="text-[10px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('detail.gitDiffResultDescription')} />
                                 </div>
                                 <div className="quiet-control flex flex-wrap items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
                                   {hasConflictBlocks ? (

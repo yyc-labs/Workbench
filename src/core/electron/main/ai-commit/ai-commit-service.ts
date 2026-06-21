@@ -17,6 +17,7 @@ import {
   getAiCommitTask,
   upsertAiCommitTask,
 } from '../ai-commit-registry'
+import { resolveWindowsPowerShell } from '../shell/windows-shell'
 import { wslBridge } from '../wsl-bridge'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
 import type {
@@ -419,8 +420,9 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         child.on('error', (err) => {
           if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
             switchedToWindowsPowerShell = true
-            sendAiCommitOutput(projectId, `[AI Commit] pwsh unavailable, fallback to powershell.exe (${err.message})\r\n`)
-            child = spawn('powershell.exe', [
+            const fallbackShell = resolveWindowsPowerShell('powershell')
+            sendAiCommitOutput(projectId, `[AI Commit] shell launch failed, fallback to ${fallbackShell.command} (${err.message})\r\n`)
+            child = spawn(fallbackShell.command, [
               '-NoProfile',
               '-ExecutionPolicy',
               'Bypass',
@@ -440,7 +442,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
               stdio: ['ignore', 'pipe', 'pipe'],
             })
             child.on('spawn', () => {
-              sendAiCommitOutput(projectId, '[AI Commit] shell: powershell.exe\r\n')
+              sendAiCommitOutput(projectId, `[AI Commit] shell: ${fallbackShell.kind}\r\n`)
               attachStreams(child!)
             })
             child.on('error', (fallbackErr) => fail(fallbackErr.message))
