@@ -19,6 +19,7 @@ import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
+import { preloadProjectPane } from '../lib/projectPagePreload'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -209,6 +210,10 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
   }, [defaultDocLink, handleOpenDocLink])
 
+  const handlePreloadDefaultProjectPane = useCallback(() => {
+    preloadProjectPane('code')
+  }, [])
+
   return (
     <div
       className="group relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 overflow-hidden rounded-[18px] px-4 py-3 cursor-pointer card-enter surface-card surface-card-hover"
@@ -221,6 +226,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         boxShadow: 'var(--shadow-card)',
       }}
       onMouseEnter={(e) => {
+        handlePreloadDefaultProjectPane()
         e.currentTarget.style.background = 'color-mix(in srgb, var(--color-card) 88%, var(--color-primary) 5%)'
         e.currentTarget.style.borderColor = 'var(--color-border-hover)'
         e.currentTarget.style.transform = 'translateY(-2px)'
@@ -232,7 +238,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         e.currentTarget.style.transform = 'translateY(0)'
         e.currentTarget.style.boxShadow = 'var(--shadow-card)'
       }}
-      onClick={() => onSelect(project.id)}
+      onFocus={handlePreloadDefaultProjectPane}
+      onClick={() => {
+        handlePreloadDefaultProjectPane()
+        onSelect(project.id)
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         setMenuAllowRemove(false)

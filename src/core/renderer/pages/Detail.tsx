@@ -23,14 +23,19 @@ import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import {
+  loadCodeWorkspacePanelModule,
+  loadDetailAiCommitPaneHostModule,
+  preloadProjectPane,
+} from '../lib/projectPagePreload'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 
 const CodeWorkspacePanel = lazy(() =>
-  import('./code/CodeWorkspacePanel').then((module) => ({ default: module.CodeWorkspacePanel }))
+  loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel }))
 )
 const DetailAiCommitPaneHost = lazy(() =>
-  import('./detail/DetailAiCommitPaneHost').then((module) => ({ default: module.DetailAiCommitPaneHost }))
+  loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost }))
 )
 
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
@@ -377,6 +382,7 @@ export function DetailPage() {
           <div className="flex shrink-0 items-center gap-3">
             <ProjectPaneTabs
               activePane={activePane}
+              onPreloadPane={preloadProjectPane}
               onSelectPane={(nextPane) => {
                 if (!projectId || nextPane === activePane) return
                 navigate(`/project/${projectId}/${nextPane}`)
@@ -559,6 +565,7 @@ export function DetailPage() {
                 projectDevUrlPending={pendingOpenDevUrl}
                 projectDevUrlReady={isDevReady}
                 activePane={activePane}
+                onPreloadPane={preloadProjectPane}
                 onStartAndOpenDevUrl={startAndOpenDevUrl}
                 onSwitchPane={(nextPane) => {
                   if (!projectId || nextPane === activePane) return
@@ -583,6 +590,7 @@ export function DetailPage() {
                 projectDevUrlReady={isDevReady}
                 aiCommitConfig={aiCommitConfig}
                 activePane={activePane}
+                onPreloadPane={preloadProjectPane}
                 onSwitchPane={(nextPane) => {
                   if (!projectId || nextPane === activePane) return
                   navigate(`/project/${projectId}/${nextPane}`)

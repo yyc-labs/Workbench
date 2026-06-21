@@ -16,11 +16,18 @@ import {
   isSettingsSection,
   type Section,
 } from './pages/settings/settings.types'
+import {
+  loadDetailPageModule,
+  loadHomePageModule,
+  loadSettingsPageModule,
+  loadTranscriptPageModule,
+  preloadProjectPane,
+} from './lib/projectPagePreload'
 
-const HomePage = lazy(() => import('./pages/Home').then((module) => ({ default: module.HomePage })))
-const DetailPage = lazy(() => import('./pages/Detail').then((module) => ({ default: module.DetailPage })))
-const TranscriptPage = lazy(() => import('./pages/TranscriptPage').then((module) => ({ default: module.TranscriptPage })))
-const SettingsPage = lazy(() => import('./pages/Settings').then((module) => ({ default: module.SettingsPage })))
+const HomePage = lazy(() => loadHomePageModule().then((module) => ({ default: module.HomePage })))
+const DetailPage = lazy(() => loadDetailPageModule().then((module) => ({ default: module.DetailPage })))
+const TranscriptPage = lazy(() => loadTranscriptPageModule().then((module) => ({ default: module.TranscriptPage })))
+const SettingsPage = lazy(() => loadSettingsPageModule().then((module) => ({ default: module.SettingsPage })))
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
 const APP_DISPLAY_NAME = 'IDE Electron'
@@ -438,6 +445,18 @@ function GlobalHomeShortcutListener() {
   return null
 }
 
+function ProjectRoutePreloader() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const segments = location.pathname.split('/').filter(Boolean)
+    if (segments[0] !== 'project' || !segments[1]) return
+    preloadProjectPane(segments[2])
+  }, [location.pathname])
+
+  return null
+}
+
 function GlobalThemeShortcutListener() {
   const setTheme = useAppStore((s) => s.setTheme)
 
@@ -571,6 +590,7 @@ export function App() {
       <SessionPoller />
       <MouseGestureNavigator />
       <GlobalHomeShortcutListener />
+      <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
       <GlobalRecentProjectsDrawerHost />
       <GlobalTitleTooltipBridge />
@@ -580,7 +600,7 @@ export function App() {
           <Suspense fallback={<AppRouteFallback />}>
             <Routes>
               <Route path="/" element={<HomePage />} />
-              <Route path="/project/:projectId" element={<DetailPage />} />
+              <Route path="/project/:projectId" element={<Navigate to="code" replace />} />
               <Route path="/project/:projectId/transcript" element={<TranscriptPage />} />
               <Route path="/project/:projectId/:pane" element={<DetailPage />} />
               <Route

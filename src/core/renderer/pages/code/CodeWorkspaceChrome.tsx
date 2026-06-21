@@ -2,6 +2,7 @@ import { ArrowUpRight, Code2, Files, PanelLeftOpen, RefreshCw, Save, Star, TextS
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
+import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import type { UrlPopoverItem } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
@@ -25,6 +26,7 @@ type CodeWorkspaceChromeProps = {
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
   onOpenFileFromTab: (relativePath: string) => void
   onOpenFirstProjectLink?: () => void
+  onPreloadPane?: (pane: ProjectPaneTab) => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
@@ -112,6 +114,7 @@ export function CodeWorkspaceChrome({
   onOpenEditorSearch,
   onOpenFileFromTab,
   onOpenFirstProjectLink,
+  onPreloadPane,
   onStartAndOpenDevUrl,
   onOpenTranscript,
   onOpenProjectLinksManager,
@@ -159,6 +162,7 @@ export function CodeWorkspaceChrome({
               </p>
               <ProjectPaneTabs
                 activePane={activePane}
+                onPreloadPane={onPreloadPane}
                 onSelectPane={(pane) => {
                   if (pane === 'transcript') {
                     onOpenTranscript?.()

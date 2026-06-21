@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
+import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { useAppStore } from '../../stores/appStore'
 import { useI18n } from '../../i18n'
 import { detectProjectEnvironment } from '../../lib/projectEnvironment'
@@ -19,6 +20,7 @@ type DetailAiCommitPaneHostProps = {
   projectDevUrlReady?: boolean
   aiCommitConfig: AiCommitConfig | undefined
   activePane: 'code' | 'aicommit'
+  onPreloadPane?: (pane: ProjectPaneTab) => void
   onSwitchPane: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript: () => void
@@ -38,6 +40,7 @@ export function DetailAiCommitPaneHost({
   projectDevUrlReady = false,
   aiCommitConfig,
   activePane,
+  onPreloadPane,
   onSwitchPane,
   onStartAndOpenDevUrl,
   onOpenTranscript,
@@ -248,6 +251,7 @@ export function DetailAiCommitPaneHost({
         projectDevUrlPending={projectDevUrlPending}
         projectDevUrlReady={projectDevUrlReady}
         activePane={activePane}
+        onPreloadPane={onPreloadPane}
         onSwitchPane={onSwitchPane}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenTranscript={onOpenTranscript}

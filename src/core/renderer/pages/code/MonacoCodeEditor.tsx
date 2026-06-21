@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { editor as MonacoEditor } from 'monaco-editor'
-import { ensureMonacoEnvironmentConfigured, installMonacoFindWidgetHoverGuard } from '../../lib/monacoEnvironment'
+import { installMonacoFindWidgetHoverGuard } from '../../lib/monacoEnvironment'
+import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import {
   createMonacoModelUri,
@@ -180,8 +181,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       if (!container) return
       const removeFindWidgetHoverGuard = installMonacoFindWidgetHoverGuard(container)
 
-      ensureMonacoEnvironmentConfigured()
-      const monaco = await import('monaco-editor')
+      const monaco = await loadMonacoEditorModule()
       if (disposed) return
 
       monacoRef.current = monaco

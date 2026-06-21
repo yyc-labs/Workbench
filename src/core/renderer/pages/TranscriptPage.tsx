@@ -39,6 +39,7 @@ import { useScrollableContentCapture } from '../hooks/useScrollableContentCaptur
 import { MonacoTextViewer } from '../components/MonacoTextViewer'
 import { formatStructuredBlockKind as formatStructuredBlockKindLabel, formatTranscriptSourceType, useI18n, useLocale } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
+import { preloadProjectPane } from '../lib/projectPagePreload'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useAppStore } from '../stores/appStore'
 import { inferLanguageFromRelativePath } from './code/code.helpers'
@@ -829,6 +830,7 @@ export function TranscriptPage() {
           <div className="flex shrink-0 items-center gap-3">
             <ProjectPaneTabs
               activePane="transcript"
+              onPreloadPane={preloadProjectPane}
               onSelectPane={(pane) => {
                 if (pane === 'transcript') return
                 navigate(`/project/${projectId}/${pane}`)
@@ -915,6 +917,7 @@ export function TranscriptPage() {
                     </p>
                     <ProjectPaneTabs
                       activePane="transcript"
+                      onPreloadPane={preloadProjectPane}
                       onSelectPane={(pane) => {
                         if (pane === 'transcript') return
                         navigate(`/project/${projectId}/${pane}`)

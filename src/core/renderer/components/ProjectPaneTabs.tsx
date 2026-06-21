@@ -5,10 +5,11 @@ export type ProjectPaneTab = 'code' | 'aicommit' | 'transcript'
 
 type ProjectPaneTabsProps = {
   activePane: ProjectPaneTab
+  onPreloadPane?: (pane: ProjectPaneTab) => void
   onSelectPane: (pane: ProjectPaneTab) => void
 }
 
-export function ProjectPaneTabs({ activePane, onSelectPane }: ProjectPaneTabsProps) {
+export function ProjectPaneTabs({ activePane, onPreloadPane, onSelectPane }: ProjectPaneTabsProps) {
   const { t } = useI18n()
 
   return (
@@ -26,6 +27,8 @@ export function ProjectPaneTabs({ activePane, onSelectPane }: ProjectPaneTabsPro
             ? 'bg-primary text-white'
             : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
         }`}
+        onFocus={() => onPreloadPane?.('code')}
+        onMouseEnter={() => onPreloadPane?.('code')}
         onClick={() => onSelectPane('code')}
       >
         <Code2 className="h-3.5 w-3.5" />
@@ -40,6 +43,8 @@ export function ProjectPaneTabs({ activePane, onSelectPane }: ProjectPaneTabsPro
             ? 'bg-primary text-white'
             : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
         }`}
+        onFocus={() => onPreloadPane?.('aicommit')}
+        onMouseEnter={() => onPreloadPane?.('aicommit')}
         onClick={() => onSelectPane('aicommit')}
       >
         <Bot className="h-3.5 w-3.5" />
@@ -54,6 +59,8 @@ export function ProjectPaneTabs({ activePane, onSelectPane }: ProjectPaneTabsPro
             ? 'bg-primary text-white'
             : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
         }`}
+        onFocus={() => onPreloadPane?.('transcript')}
+        onMouseEnter={() => onPreloadPane?.('transcript')}
         onClick={() => onSelectPane('transcript')}
       >
         <FileText className="h-3.5 w-3.5" />

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
+import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
@@ -69,6 +70,7 @@ type CodeWorkspacePanelProps = {
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
   activePane?: 'code' | 'aicommit'
+  onPreloadPane?: (pane: ProjectPaneTab) => void
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
@@ -97,6 +99,7 @@ export function CodeWorkspacePanel({
   projectDevUrlPending = false,
   projectDevUrlReady = false,
   activePane = 'code',
+  onPreloadPane,
   onSwitchPane,
   onStartAndOpenDevUrl,
   onOpenTranscript,
@@ -772,6 +775,7 @@ export function CodeWorkspacePanel({
           if (!firstLink) return
           void openUrlPopoverItem(firstLink)
         }}
+        onPreloadPane={onPreloadPane}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}

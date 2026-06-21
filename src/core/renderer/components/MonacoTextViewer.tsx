@@ -1,11 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import {
-  ensureMonacoEnvironmentConfigured,
   installMonacoFindWidgetHoverGuard,
   resolveMonacoTheme,
   type MonacoThemeName,
 } from '../lib/monacoEnvironment'
+import { loadMonacoEditorModule } from '../lib/monacoPreload'
 
 type MonacoTextViewerProps = {
   value: string
@@ -158,8 +158,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     const removeHoverGuard = installMonacoFindWidgetHoverGuard(container)
 
     const setup = async () => {
-      ensureMonacoEnvironmentConfigured()
-      const monaco = await import('monaco-editor')
+      const monaco = await loadMonacoEditorModule()
       if (disposed) return
 
       await prepareMonacoRef.current?.(monaco)
