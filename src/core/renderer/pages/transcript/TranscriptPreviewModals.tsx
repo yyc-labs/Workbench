@@ -14,8 +14,8 @@ import type {
 import {
   type MarkdownCodeBlockExpandPayload,
   type MarkdownStructuredBlockClickPayload,
-  transformMarkdownUrl,
 } from '../code/code.markdown'
+import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { remarkBoxDrawingTables } from '../code/code.markdownBoxTables'
 
 export type TranscriptStructuredPreviewState = {

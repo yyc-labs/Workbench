@@ -1,7 +1,7 @@
 import { Children, createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react'
 import { Check, Copy, Maximize2 } from 'lucide-react'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -20,6 +20,11 @@ import {
   VerticalFlowBlock,
 } from './code.markdownFlowDiagram'
 import { MermaidBlock } from './code.markdownMermaid'
+import {
+  isWindowsAbsolutePath,
+  normalizeAbsoluteMarkdownFileUrl,
+  toFileUrlFromAbsolutePath,
+} from './code.markdownUrls'
 import { useI18n } from '../../i18n'
 
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
@@ -147,28 +152,14 @@ function stripMarkdownImageDestinationSuffix(rawDestination: string): string {
   return compact
 }
 
-function isWindowsAbsolutePath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)
-}
-
-function toFileUrlFromAbsolutePath(absolutePath: string): string {
-  const normalized = absolutePath.trim().replace(/\\/g, '/')
-  if (!normalized) return ''
-  if (normalized.startsWith('//')) {
-    return `file:${encodeURI(normalized)}`
-  }
-  if (/^[A-Za-z]:\//.test(normalized)) {
-    return `file:///${encodeURI(normalized)}`
-  }
-  if (normalized.startsWith('/')) {
-    return `file://${encodeURI(normalized)}`
-  }
-  return ''
-}
-
 export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string, activeFilePath: string | null): string {
   const trimmed = stripMarkdownImageDestinationSuffix(trimMarkdownUrlWrapper(rawSrc))
   if (!trimmed) return ''
+
+  const absoluteFileUrl = normalizeAbsoluteMarkdownFileUrl(trimmed)
+  if (absoluteFileUrl) {
+    return absoluteFileUrl
+  }
 
   const lower = trimmed.toLowerCase()
   if (
@@ -182,8 +173,8 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
   }
 
   if (isWindowsAbsolutePath(trimmed) || trimmed.startsWith('/')) {
-    const absoluteFileUrl = toFileUrlFromAbsolutePath(trimmed)
-    return absoluteFileUrl || trimmed
+    const directAbsoluteFileUrl = toFileUrlFromAbsolutePath(trimmed)
+    return directAbsoluteFileUrl || trimmed
   }
 
   if (!projectRootPath) return trimmed
@@ -194,19 +185,8 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
     : joinPosixPaths(trimmed)
 
   const absolutePath = joinProjectPath(projectRootPath, relativeToProject)
-  const absoluteFileUrl = toFileUrlFromAbsolutePath(absolutePath)
-  return absoluteFileUrl || trimmed
-}
-
-export function transformMarkdownUrl(url: string): string {
-  const trimmed = url.trim()
-  if (trimmed.toLowerCase().startsWith('transcript-ref://')) {
-    return trimmed
-  }
-  if (isWindowsAbsolutePath(trimmed)) {
-    return trimmed
-  }
-  return defaultUrlTransform(trimmed)
+  const projectAbsoluteFileUrl = toFileUrlFromAbsolutePath(absolutePath)
+  return projectAbsoluteFileUrl || trimmed
 }
 
 export function resolveMonacoTheme(themeMode: 'system' | 'light' | 'dark'): 'vs' | 'vs-dark' {
@@ -811,9 +791,70 @@ function shouldOpenInSystemBrowser(href: string): boolean {
   return (
     value.startsWith('http://') ||
     value.startsWith('https://') ||
+    value.startsWith('file://') ||
     value.startsWith('mailto:') ||
     value.startsWith('tel:')
   )
+}
+
+function AsyncMarkdownImage({
+  resolvedSrc,
+  alt,
+  props,
+}: {
+  resolvedSrc: string
+  alt: string
+  props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'>
+}) {
+  const [displaySrc, setDisplaySrc] = useState(() => (
+    resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://')
+      ? resolvedSrc
+      : ''
+  ))
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (
+      resolvedSrc.startsWith('data:')
+      || resolvedSrc.startsWith('blob:')
+      || resolvedSrc.startsWith('http://')
+      || resolvedSrc.startsWith('https://')
+    ) {
+      setDisplaySrc(resolvedSrc)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    if (!resolvedSrc) {
+      setDisplaySrc('')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setDisplaySrc('')
+    void window.electronAPI.readLocalImageAsDataUrl(resolvedSrc)
+      .then((dataUrl) => {
+        if (cancelled) return
+        setDisplaySrc(dataUrl)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDisplaySrc('')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [resolvedSrc])
+
+  if (!displaySrc) {
+    return <span className="text-xs text-[color:var(--color-muted-foreground)]">[image unavailable]</span>
+  }
+
+  return <img {...props} src={displaySrc} alt={alt} loading="lazy" />
 }
 
 type MarkdownCodeBlockProps = {
@@ -1018,7 +1059,7 @@ export function createMarkdownComponents({
       if (!resolvedSrc) {
         return null
       }
-      return <img {...props} src={resolvedSrc} alt={alt || ''} loading="lazy" />
+      return <AsyncMarkdownImage resolvedSrc={resolvedSrc} alt={alt || ''} props={props} />
     },
     a({ href, children, className, ...props }) {
       const link = typeof href === 'string' ? href.trim() : ''

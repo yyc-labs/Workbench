@@ -6,23 +6,12 @@ import { copyTextToClipboard } from '../pages/code/code.clipboard'
 
 interface UrlPopoverProps {
   urls?: string[]
-  items?: {
-    url: string
-    label: string
-    tag?: string
-    tagLabel?: string
-    onOpen?: () => void | Promise<void>
-    kind?: 'url' | 'ssh'
-    description?: string
-    copyValue?: string
-    copyLabel?: string
-    copyValueResolver?: () => Promise<string>
-  }[]
+  items?: UrlPopoverItem[]
   tagOptions?: ReadonlyArray<{ value: string; label: string }>
   children: React.ReactNode
 }
 
-type UrlPopoverEntry = {
+export type UrlPopoverItem = {
   url: string
   label: string
   tag?: string
@@ -34,6 +23,7 @@ type UrlPopoverEntry = {
   copyLabel?: string
   copyValueResolver?: () => Promise<string>
 }
+type UrlPopoverEntry = UrlPopoverItem
 type PreparedUrlPopoverEntry = UrlPopoverEntry & {
   key: string
   normalizedLabel: string
@@ -282,6 +272,14 @@ function isFuzzySubsequence(query: string, candidate: string): boolean {
     }
   }
   return queryIndex === query.length
+}
+
+export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
+  if (entry.onOpen) {
+    await entry.onOpen()
+    return
+  }
+  await window.electronAPI.openExternal(entry.url)
 }
 
 export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProps) {
@@ -618,21 +616,11 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                 className="group/item flex cursor-pointer items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
                 role="button"
                 tabIndex={0}
-                onClick={() => {
-                  if (entry.onOpen) {
-                    void entry.onOpen()
-                    return
-                  }
-                  void window.electronAPI.openExternal(entry.url)
-                }}
+                onClick={() => { void openUrlPopoverItem(entry) }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    if (entry.onOpen) {
-                      void entry.onOpen()
-                      return
-                    }
-                    void window.electronAPI.openExternal(entry.url)
+                    void openUrlPopoverItem(entry)
                   }
                 }}
                 aria-label={entry.label}

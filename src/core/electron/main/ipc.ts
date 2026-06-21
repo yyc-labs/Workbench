@@ -78,6 +78,7 @@ export const IPC = {
   WINDOW_STATE: 'window:state',
   WINDOW_CAPTURE_RECT: 'window:capture-rect',
   CLIPBOARD_WRITE_IMAGE: 'clipboard:write-image',
+  LOCAL_IMAGE_READ_DATA_URL: 'local-image:read-data-url',
   CODE_FOCUS_SEARCH: 'code:focus-search',
   CODE_TOGGLE_VIEW_MODE: 'code:toggle-view-mode',
   GLOBAL_HOME_SHORTCUT: 'global-shortcut:home',

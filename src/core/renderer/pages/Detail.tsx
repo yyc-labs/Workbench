@@ -3,23 +3,21 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import {
   ArrowUpRight,
-  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronUp,
   Play,
   RefreshCw,
-  Settings2,
   Square,
 } from 'lucide-react'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
+import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
 import { UrlPopover } from '../components/UrlPopover'
 import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
-import { normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../lib/projectDocLinks'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
@@ -117,7 +115,6 @@ export function DetailPage() {
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
   const togglePin = useAppStore((s) => s.togglePin)
-  const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags ?? [])
 
   const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -411,39 +408,14 @@ export function DetailPage() {
               </UrlPopover>
             )}
 
-            {defaultDocLink && (
-              <UrlPopover items={docMenuItems}>
-                <button
-                  type="button"
-                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => { void handleOpenDocLink(defaultDocLink) }}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    openProjectLinksManager()
-                  }}
-                  title={defaultDocLink.url}
-                >
-                  <BookOpen className="h-3 w-3" />
-                  <span className="max-w-[200px] truncate">
-                    {t('common.docs')} · {projectDocLinkTagLabel(
-                      normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
-                      docLinkTagOptions,
-                      locale
-                    )}: {defaultDocLink.title}
-                  </span>
-                </button>
-              </UrlPopover>
-            )}
-
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={openProjectLinksManager}
-            >
-              <Settings2 className="h-3.5 w-3.5" />
-              {t('detail.docsSettings')}
-            </button>
+            <ProjectLinksTrigger
+              items={docMenuItems}
+              tagOptions={docLinkTagOptionsFromHook}
+              onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined}
+              onOpenManager={openProjectLinksManager}
+              size="icon"
+              title={defaultDocLink ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')}
+            />
 
             <button
               className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
@@ -582,6 +554,7 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                projectLinkTagOptions={docLinkTagOptionsFromHook}
                 projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
                 projectDevUrlPending={pendingOpenDevUrl}
                 projectDevUrlReady={isDevReady}
@@ -604,6 +577,7 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                projectLinkTagOptions={docLinkTagOptionsFromHook}
                 projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
                 projectDevUrlPending={pendingOpenDevUrl}
                 projectDevUrlReady={isDevReady}

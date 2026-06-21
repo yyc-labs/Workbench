@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm'
 import {
   AlertTriangle,
   ArrowDownToLine,
-  BookOpen,
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -20,13 +20,21 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import type { TranscriptReference, TranscriptShareEntry, TranscriptShareHost, TranscriptViewerMode } from '../../shared/types'
+import type {
+  AiCommitStatus,
+  AiCommitTaskSnapshot,
+  TranscriptReference,
+  TranscriptShareEntry,
+  TranscriptShareHost,
+  TranscriptViewerMode,
+} from '../../shared/types'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ModalShell } from '../components/ModalShell'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
+import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
-import { UrlPopover } from '../components/UrlPopover'
 import { Button } from '../components/ui/button'
+import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useScrollableContentCapture } from '../hooks/useScrollableContentCapture'
 import { MonacoTextViewer } from '../components/MonacoTextViewer'
 import { formatStructuredBlockKind as formatStructuredBlockKindLabel, formatTranscriptSourceType, useI18n, useLocale } from '../i18n'
@@ -39,8 +47,8 @@ import {
   formatCodeLanguageLabel,
   type MarkdownStructuredBlockClickPayload,
   shouldDisableMarkdownSyntaxHighlight,
-  transformMarkdownUrl,
 } from './code/code.markdown'
+import { transformMarkdownUrl } from './code/code.markdownUrls'
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
@@ -220,6 +228,7 @@ export function TranscriptPage() {
     handleGetDocLinkSecret,
     handleOpenDocLink,
   } = docLinkState
+  const defaultDocLink = docLinks[0]
   const [isImporting, setIsImporting] = useState(false)
   const [isImportingManual, setIsImportingManual] = useState(false)
   const [manualImportOpen, setManualImportOpen] = useState(false)
@@ -229,6 +238,7 @@ export function TranscriptPage() {
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
+  const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const {
     projectHeaderCollapsed,
@@ -273,6 +283,35 @@ export function TranscriptPage() {
   }, [loadProjectTranscripts, projectId])
 
   useEffect(() => {
+    if (!projectId) return
+    const api = window.electronAPI as unknown as {
+      onAiCommitStatus?: (
+        cb: (d: { projectId: string; status: Exclude<AiCommitStatus, 'idle'> }) => void
+      ) => () => void
+      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
+    }
+
+    const cleanup = typeof api.onAiCommitStatus === 'function'
+      ? api.onAiCommitStatus(({ projectId: pid, status }) => {
+        if (pid !== projectId) return
+        setAiCommitStatus(status)
+      })
+      : undefined
+
+    void (async () => {
+      if (typeof api.getAiCommitState !== 'function') return
+      try {
+        const state = await api.getAiCommitState(projectId)
+        setAiCommitStatus(state?.status ?? 'idle')
+      } catch {
+        // ignore restore failures
+      }
+    })()
+
+    return cleanup
+  }, [projectId])
+
+  useEffect(() => {
     if (!projectId || !resolvedActiveTranscriptId) return
     void openTranscript({ projectId, transcriptId: resolvedActiveTranscriptId })
   }, [openTranscript, projectId, resolvedActiveTranscriptId])
@@ -292,13 +331,25 @@ export function TranscriptPage() {
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const isDevRunning = processStatus === 'running'
   const isDevStopping = processStatus === 'stopping'
+  const isActive = isDevRunning || isDevStopping
   const currentCli = project?.cli || 'claude'
+  const {
+    isDevReady,
+    pendingOpenDevUrl,
+    startAndOpenDevUrl,
+  } = useProjectDevUrlLauncher({
+    projectId: projectId ?? '',
+    processStatus,
+    processUrls,
+    runStartupMode: project?.runStartupMode,
+    startProject,
+  })
   const projectLinkItems = useMemo(
     () => [
-      ...(isDevRunning ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
       ...docMenuItems,
     ],
-    [docMenuItems, isDevRunning, processUrls]
+    [docMenuItems, isDevReady, processUrls]
   )
   const firstProjectLinkItem = projectLinkItems[0]
   const projectDocsCountLabel = t('project.docsCount', { count: docLinks.length })
@@ -358,14 +409,6 @@ export function TranscriptPage() {
     setLinkSettingsOpen(true)
   }, [setLinkSettingsOpen])
 
-  const handleOpenFirstProjectLink = useCallback(() => {
-    if (firstProjectLinkItem) {
-      void window.electronAPI.openExternal(firstProjectLinkItem.url)
-      return
-    }
-    openProjectLinksManager()
-  }, [firstProjectLinkItem, openProjectLinksManager])
-
   const handleOpenTerminal = useCallback(async () => {
     if (!projectId || isOpeningTerminal) return
     setIsOpeningTerminal(true)
@@ -400,6 +443,17 @@ export function TranscriptPage() {
     if (!project) return
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
   }, [currentCli, project, setProjectCli])
+
+  const handleAiAutoCommit = useCallback(async () => {
+    if (!project || aiCommitStatus === 'running') return
+    try {
+      setAiCommitStatus('running')
+      const ok = await window.electronAPI.runAiCommit(project.id, project.path)
+      if (!ok) setAiCommitStatus('error')
+    } catch {
+      setAiCommitStatus('error')
+    }
+  }, [aiCommitStatus, project])
 
   const closeStructuredPreview = useCallback(() => {
     setStructuredPreview(null)
@@ -725,47 +779,16 @@ export function TranscriptPage() {
     : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
   const transcriptCountLabel = t('transcript.savedSessions', { count: summaries.length })
-  const renderProjectLinksButton = (compact: boolean) => {
-    const className = compact
-      ? 'inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
-      : 'inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
-    const title = firstProjectLinkItem ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')
-    const content = (
-      <>
-        <BookOpen className={compact ? 'h-3.5 w-3.5 shrink-0' : 'h-4 w-4 shrink-0'} />
-        <span>{projectDocsCountLabel}</span>
-      </>
-    )
-
-    if (firstProjectLinkItem) {
-      return (
-        <UrlPopover items={projectLinkItems}>
-          <button
-            type="button"
-            className={className}
-            onClick={handleOpenFirstProjectLink}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              openProjectLinksManager()
-            }}
-            title={title}
-          >
-            {content}
-          </button>
-        </UrlPopover>
-      )
-    }
-
+  const renderProjectLinksButton = () => {
     return (
-      <button
-        type="button"
-        className={className}
-        onClick={openProjectLinksManager}
-        title={title}
-      >
-        {content}
-      </button>
+      <ProjectLinksTrigger
+        items={projectLinkItems}
+        tagOptions={docLinkTagOptionsFromHook}
+        onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined}
+        onOpenManager={openProjectLinksManager}
+        size="icon"
+        title={firstProjectLinkItem ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')}
+      />
     )
   }
 
@@ -811,7 +834,7 @@ export function TranscriptPage() {
                 navigate(`/project/${projectId}/${pane}`)
               }}
             />
-            {renderProjectLinksButton(false)}
+            {renderProjectLinksButton()}
             <button
               type="button"
               className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
@@ -897,6 +920,27 @@ export function TranscriptPage() {
                         navigate(`/project/${projectId}/${pane}`)
                       }}
                     />
+                    {firstProjectLinkItem && renderProjectLinksButton()}
+                    {(isDevReady || pendingOpenDevUrl || !isActive) && (
+                      <button
+                        type="button"
+                        className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
+                          isDevReady
+                            ? 'text-primary hover:text-primary'
+                            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                        }`}
+                        onClick={() => { void startAndOpenDevUrl() }}
+                        disabled={pendingOpenDevUrl}
+                        title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                        aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+                      >
+                        {pendingOpenDevUrl ? (
+                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                        ) : (
+                          <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="min-w-0">
@@ -934,7 +978,6 @@ export function TranscriptPage() {
               <div className="flex min-w-0 shrink-0 items-center justify-end gap-3">
                 {projectHeaderCollapsed ? (
                   <>
-                    {renderProjectLinksButton(true)}
                     <button
                       type="button"
                       className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
@@ -1270,6 +1313,10 @@ export function TranscriptPage() {
           onSwitchCli={handleSwitchCli}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
+          onAiAutoCommit={() => {
+            void handleAiAutoCommit()
+          }}
+          aiCommitStatus={aiCommitStatus}
           onOpenFolder={() => window.electronAPI.openFolder(project.path)}
           onOpenPathTerminal={async () => {
             await window.electronAPI.openPathTerminal(project.path)

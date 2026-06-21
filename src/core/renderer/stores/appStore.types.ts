@@ -79,6 +79,7 @@ declare global {
         rect: { x: number; y: number; width: number; height: number }
       ) => Promise<string>
       writeClipboardImagePngBase64: (pngBase64: string) => Promise<boolean>
+      readLocalImageAsDataUrl: (source: string) => Promise<string>
       onProcessOutput: (cb: (d: { projectId: string; data: string }) => void) => () => void
       onProcessStatus: (cb: (d: { projectId: string; status: string }) => void) => () => void
       onProcessExit: (cb: (d: { projectId: string; code: number | null }) => void) => () => void

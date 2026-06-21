@@ -8,7 +8,7 @@ import type {
 } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
-import { UrlPopover } from './UrlPopover'
+import { ProjectLinksTrigger } from './ProjectLinksTrigger'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
@@ -405,23 +405,14 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           {currentCli}
         </button>
         {hasProjectDocLinks && (
-          <UrlPopover items={linkMenuItems} tagOptions={docLinkTagOptions}>
-            <button
-              className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer"
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleOpenFirstLink()
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setDocLinksDialogOpen(true)
-              }}
-              title={t('common.leftClickOpenFirstLink')}
-            >
-              <BookOpen className="h-3.5 w-3.5 shrink-0" />
-            </button>
-          </UrlPopover>
+          <ProjectLinksTrigger
+            items={linkMenuItems}
+            tagOptions={docLinkTagOptions}
+            onOpenDefault={handleOpenFirstLink}
+            onOpenManager={() => setDocLinksDialogOpen(true)}
+            size="icon"
+            title={t('common.leftClickOpenFirstLink')}
+          />
         )}
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button

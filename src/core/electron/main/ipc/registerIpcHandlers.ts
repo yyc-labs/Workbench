@@ -4,6 +4,7 @@ import http from 'http'
 import { detectProject } from '../detector'
 import { loadConfig, updateConfig } from '../config'
 import { IPC } from '../ipc'
+import { readLocalImageAsDataUrl } from '../local-image-service'
 import { tmuxManager } from '../tmux-manager'
 import {
   listProjectDirectoryFiles,
@@ -255,6 +256,10 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
     clipboard.writeImage(image)
     return true
+  })
+
+  ipcMain.handle(IPC.LOCAL_IMAGE_READ_DATA_URL, async (_event, source: string) => {
+    return readLocalImageAsDataUrl(source)
   })
 
   ipcMain.handle(IPC.CONFIG_GET, () => {

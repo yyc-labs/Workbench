@@ -113,7 +113,12 @@ function scoreHost(candidate: TranscriptShareHost): number {
 }
 
 function listLanHosts(readNetworkInterfaces: () => NodeJS.Dict<NetworkInterfaceInfo[]>): TranscriptShareHost[] {
-  const interfaces = readNetworkInterfaces()
+  let interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>
+  try {
+    interfaces = readNetworkInterfaces()
+  } catch {
+    return [{ host: '127.0.0.1', interfaceName: 'loopback', kind: 'other' }]
+  }
   const candidates: CandidateHost[] = []
   const seen = new Set<string>()
   for (const [interfaceName, list] of Object.entries(interfaces)) {

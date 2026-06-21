@@ -1,8 +1,9 @@
-import { ArrowUpRight, BookOpen, Code2, Files, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
+import { ArrowUpRight, Code2, Files, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
+import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
-import { UrlPopover } from '../../components/UrlPopover'
+import type { UrlPopoverItem } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
 import { fileNameFromRelativePath } from './code.markdownShared'
 
@@ -23,7 +24,7 @@ type CodeWorkspaceChromeProps = {
   onKeepMyChanges: () => void
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
   onOpenFileFromTab: (relativePath: string) => void
-  onOpenFirstProjectLink: () => void
+  onOpenFirstProjectLink?: () => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
@@ -40,18 +41,8 @@ type CodeWorkspaceChromeProps = {
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
-  projectLinkItems: {
-    url: string
-    label: string
-    tag?: string
-    tagLabel?: string
-    onOpen?: () => void | Promise<void>
-    kind?: 'url' | 'ssh'
-    description?: string
-    copyValue?: string
-    copyLabel?: string
-    copyValueResolver?: () => Promise<string>
-  }[]
+  projectLinkItems: UrlPopoverItem[]
+  projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectName?: string
   readError: string | null
   saveError: string | null
@@ -138,6 +129,7 @@ export function CodeWorkspaceChrome({
   projectDevUrlPending = false,
   projectDevUrlReady = false,
   projectLinkItems,
+  projectLinkTagOptions = [],
   projectName,
   readError,
   saveError,
@@ -176,21 +168,14 @@ export function CodeWorkspaceChrome({
                 }}
               />
               {firstProjectLinkItem && (
-                <UrlPopover items={projectLinkItems}>
-                  <button
-                    type="button"
-                    className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                    onClick={onOpenFirstProjectLink}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onOpenProjectLinksManager?.()
-                    }}
-                    title={t('codeWorkspace.projectDocsTitle')}
-                  >
-                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                  </button>
-                </UrlPopover>
+                <ProjectLinksTrigger
+                  items={projectLinkItems}
+                  tagOptions={projectLinkTagOptions}
+                  onOpenDefault={onOpenFirstProjectLink}
+                  onOpenManager={onOpenProjectLinksManager}
+                  size="icon"
+                  title={t('codeWorkspace.projectDocsTitle')}
+                />
               )}
               {projectDevUrlActionVisible && onStartAndOpenDevUrl && (
                 <button

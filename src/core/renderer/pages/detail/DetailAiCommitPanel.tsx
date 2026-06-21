@@ -44,6 +44,7 @@ type DetailAiCommitPanelProps = {
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: ProjectLinkItem[]
+  projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
@@ -103,6 +104,7 @@ function DetailAiCommitPanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  projectLinkTagOptions = [],
   projectDevUrlActionVisible = false,
   projectDevUrlPending = false,
   projectDevUrlReady = false,
@@ -1072,6 +1074,7 @@ function DetailAiCommitPanel({
             projectDevUrlPending={projectDevUrlPending}
             projectDevUrlReady={projectDevUrlReady}
             projectLinkItems={projectLinkItems}
+            projectLinkTagOptions={projectLinkTagOptions}
             projectName={projectName}
             preflightItems={preflightItems}
             statusClass={statusClass}

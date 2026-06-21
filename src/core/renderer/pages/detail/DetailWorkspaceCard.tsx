@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { ArrowUpRight, BookOpen, FolderOpen, Play } from 'lucide-react'
+import { ArrowUpRight, FolderOpen, Play } from 'lucide-react'
 import type { ProjectDocLink, ProjectInfo } from '../../../shared/types'
+import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { UrlPopover } from '../../components/UrlPopover'
 import { InfoCard } from './DetailInfoCard'
@@ -84,26 +85,14 @@ function DetailWorkspaceCard({
               </UrlPopover>
             )}
             {defaultDocLink && (
-              <UrlPopover items={docMenuItems}>
-                <button
-                  className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => { void handleOpenDocLink(defaultDocLink) }}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onOpenProjectLinksManager?.()
-                  }}
-                  title={projectDocLinkTarget(defaultDocLink)}
-                >
-                  <BookOpen className="h-3 w-3" />
-                  <span className="max-w-[240px] truncate">
-                    {t('common.docs')} · {projectDocLinkTagLabel(
-                      normalizeProjectDocLinkTag(defaultDocLink.tag, docLinkTagOptions),
-                      docLinkTagOptions
-                    )}: {defaultDocLink.title}
-                  </span>
-                </button>
-              </UrlPopover>
+              <ProjectLinksTrigger
+                items={docMenuItems}
+                tagOptions={docLinkTagOptions}
+                onOpenDefault={() => handleOpenDocLink(defaultDocLink)}
+                onOpenManager={onOpenProjectLinksManager}
+                size="icon"
+                title={projectDocLinkTarget(defaultDocLink)}
+              />
             )}
           </div>
         )}

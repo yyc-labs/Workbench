@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
+import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
@@ -62,7 +63,8 @@ type CodeWorkspacePanelProps = {
   themeMode: 'system' | 'light' | 'dark'
   projectHeaderCollapsed?: boolean
   projectName?: string
-  projectLinkItems?: { url: string; label: string; tag?: string; tagLabel?: string }[]
+  projectLinkItems?: UrlPopoverItem[]
+  projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
@@ -90,6 +92,7 @@ export function CodeWorkspacePanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  projectLinkTagOptions = [],
   projectDevUrlActionVisible = false,
   projectDevUrlPending = false,
   projectDevUrlReady = false,
@@ -767,7 +770,7 @@ export function CodeWorkspacePanel({
         onOpenFirstProjectLink={() => {
           const firstLink = projectLinkItems[0]
           if (!firstLink) return
-          void window.electronAPI.openExternal(firstLink.url)
+          void openUrlPopoverItem(firstLink)
         }}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
         onOpenTranscript={onOpenTranscript}
@@ -789,6 +792,7 @@ export function CodeWorkspacePanel({
         projectDevUrlPending={projectDevUrlPending}
         projectDevUrlReady={projectDevUrlReady}
         projectLinkItems={projectLinkItems}
+        projectLinkTagOptions={projectLinkTagOptions}
         projectName={projectName}
         readError={readError}
         saveError={saveError}

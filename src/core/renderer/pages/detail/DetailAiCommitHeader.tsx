@@ -1,8 +1,8 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { ArrowUpRight, BookOpen, Bot, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
+import { ArrowUpRight, Bot, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
+import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
-import { UrlPopover } from '../../components/UrlPopover'
 import { useI18n } from '../../i18n'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
@@ -56,6 +56,7 @@ type DetailAiCommitHeaderProps = {
   }>
   projectHeaderCollapsed: boolean
   projectLinkItems: ProjectLinkItem[]
+  projectLinkTagOptions: ReadonlyArray<{ value: string; label: string }>
   projectName?: string
   statusClass: string
   statusText: string
@@ -91,6 +92,7 @@ export function DetailAiCommitHeader({
   preflightItems = [],
   projectHeaderCollapsed,
   projectLinkItems,
+  projectLinkTagOptions,
   projectName,
   statusClass,
   statusText,
@@ -152,21 +154,14 @@ export function DetailAiCommitHeader({
                 </>
               )}
               {projectHeaderCollapsed && firstProjectLinkItem && (
-                <UrlPopover items={projectLinkItems}>
-                  <button
-                    type="button"
-                    className="quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                    onClick={() => window.electronAPI.openExternal(firstProjectLinkItem.url)}
-                    onContextMenu={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onOpenProjectLinksManager?.()
-                    }}
-                    title={t('common.leftClickOpenFirstLink')}
-                  >
-                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                  </button>
-                </UrlPopover>
+                <ProjectLinksTrigger
+                  items={projectLinkItems}
+                  tagOptions={projectLinkTagOptions}
+                  onOpenDefault={firstProjectLinkItem.onOpen}
+                  onOpenManager={onOpenProjectLinksManager}
+                  size="icon"
+                  title={t('common.leftClickOpenFirstLink')}
+                />
               )}
               {projectHeaderCollapsed && projectDevUrlActionVisible && onStartAndOpenDevUrl && (
                 <button

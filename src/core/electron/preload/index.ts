@@ -140,6 +140,9 @@ const api = {
   writeClipboardImagePngBase64: (pngBase64: string) =>
     ipcRenderer.invoke(IPC.CLIPBOARD_WRITE_IMAGE, pngBase64) as Promise<boolean>,
 
+  readLocalImageAsDataUrl: (source: string) =>
+    ipcRenderer.invoke(IPC.LOCAL_IMAGE_READ_DATA_URL, source) as Promise<string>,
+
   openExternal: (url: string) =>
     ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
 
