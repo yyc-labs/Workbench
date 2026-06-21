@@ -17,7 +17,6 @@ const DEFAULT_CLAUDE_BASHRC_CONFIG: ClaudeBashrcConfig = {
   anthropicDefaultSonnetModel: 'deepseek-v4-pro[1m]',
   anthropicDefaultHaikuModel: 'deepseek-v4-flash',
   claudeCodeSubagentModel: 'deepseek-v4-flash',
-  claudeCodeEffortLevel: 'max',
 }
 
 const FIELD_TO_ENV = {
@@ -28,7 +27,6 @@ const FIELD_TO_ENV = {
   anthropicDefaultSonnetModel: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
   anthropicDefaultHaikuModel: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   claudeCodeSubagentModel: 'CLAUDE_CODE_SUBAGENT_MODEL',
-  claudeCodeEffortLevel: 'CLAUDE_CODE_EFFORT_LEVEL',
 } as const satisfies Record<keyof ClaudeBashrcConfig, string>
 
 type ClaudeBashrcField = keyof ClaudeBashrcConfig
@@ -140,7 +138,6 @@ async function validateBashrcLoad(expected: ClaudeBashrcConfig): Promise<void> {
     `[ "$ANTHROPIC_DEFAULT_SONNET_MODEL" = '${shellSingleQuote(expected.anthropicDefaultSonnetModel)}' ]`,
     `[ "$ANTHROPIC_DEFAULT_HAIKU_MODEL" = '${shellSingleQuote(expected.anthropicDefaultHaikuModel)}' ]`,
     `[ "$CLAUDE_CODE_SUBAGENT_MODEL" = '${shellSingleQuote(expected.claudeCodeSubagentModel)}' ]`,
-    `[ "$CLAUDE_CODE_EFFORT_LEVEL" = '${shellSingleQuote(expected.claudeCodeEffortLevel)}' ]`,
     'echo OK',
   ].join(' && ')
 
@@ -161,7 +158,6 @@ export function normalizeClaudeBashrcConfig(input: Record<string, unknown>): Cla
     anthropicDefaultSonnetModel: normalizeValue(typeof input.anthropicDefaultSonnetModel === 'string' ? input.anthropicDefaultSonnetModel : undefined, defaults.anthropicDefaultSonnetModel),
     anthropicDefaultHaikuModel: normalizeValue(typeof input.anthropicDefaultHaikuModel === 'string' ? input.anthropicDefaultHaikuModel : undefined, defaults.anthropicDefaultHaikuModel),
     claudeCodeSubagentModel: normalizeValue(typeof input.claudeCodeSubagentModel === 'string' ? input.claudeCodeSubagentModel : undefined, defaults.claudeCodeSubagentModel),
-    claudeCodeEffortLevel: normalizeValue(typeof input.claudeCodeEffortLevel === 'string' ? input.claudeCodeEffortLevel : undefined, defaults.claudeCodeEffortLevel),
   }
 }
 

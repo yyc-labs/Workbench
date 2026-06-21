@@ -64,7 +64,6 @@ export interface ClaudeBashrcConfig {
   anthropicDefaultSonnetModel: string
   anthropicDefaultHaikuModel: string
   claudeCodeSubagentModel: string
-  claudeCodeEffortLevel: string
 }
 
 export interface ClaudeRuntimeProfile {

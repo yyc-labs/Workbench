@@ -9,7 +9,6 @@ const FIELD_TO_ENV: Record<keyof ClaudeBashrcConfig, string> = {
   anthropicDefaultSonnetModel: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
   anthropicDefaultHaikuModel: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
   claudeCodeSubagentModel: 'CLAUDE_CODE_SUBAGENT_MODEL',
-  claudeCodeEffortLevel: 'CLAUDE_CODE_EFFORT_LEVEL',
 }
 
 function psEscape(value: string): string {

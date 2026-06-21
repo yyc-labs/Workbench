@@ -40,7 +40,6 @@ function cloneConfig(config: ClaudeBashrcConfig): ClaudeBashrcConfig {
     anthropicDefaultSonnetModel: config.anthropicDefaultSonnetModel,
     anthropicDefaultHaikuModel: config.anthropicDefaultHaikuModel,
     claudeCodeSubagentModel: config.claudeCodeSubagentModel,
-    claudeCodeEffortLevel: config.claudeCodeEffortLevel,
   }
 }
 
@@ -68,7 +67,6 @@ function SettingsAiRuntimePanel({
   const [anthropicDefaultSonnetModel, setAnthropicDefaultSonnetModel] = useState('deepseek-v4-pro[1m]')
   const [anthropicDefaultHaikuModel, setAnthropicDefaultHaikuModel] = useState('deepseek-v4-flash')
   const [claudeCodeSubagentModel, setClaudeCodeSubagentModel] = useState('deepseek-v4-flash')
-  const [claudeCodeEffortLevel, setClaudeCodeEffortLevel] = useState('max')
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedHint, setSavedHint] = useState<string | null>(null)
@@ -117,7 +115,6 @@ function SettingsAiRuntimePanel({
     anthropicDefaultSonnetModel,
     anthropicDefaultHaikuModel,
     claudeCodeSubagentModel,
-    claudeCodeEffortLevel,
   }), [
     anthropicAuthToken,
     anthropicBaseUrl,
@@ -125,7 +122,6 @@ function SettingsAiRuntimePanel({
     anthropicDefaultOpusModel,
     anthropicDefaultSonnetModel,
     anthropicModel,
-    claudeCodeEffortLevel,
     claudeCodeSubagentModel,
   ])
 
@@ -137,7 +133,6 @@ function SettingsAiRuntimePanel({
     setAnthropicDefaultSonnetModel(result.anthropicDefaultSonnetModel)
     setAnthropicDefaultHaikuModel(result.anthropicDefaultHaikuModel)
     setClaudeCodeSubagentModel(result.claudeCodeSubagentModel)
-    setClaudeCodeEffortLevel(result.claudeCodeEffortLevel)
   }
 
   useEffect(() => {
@@ -154,7 +149,6 @@ function SettingsAiRuntimePanel({
           anthropicDefaultSonnetModel: 'deepseek-v4-pro[1m]',
           anthropicDefaultHaikuModel: 'deepseek-v4-flash',
           claudeCodeSubagentModel: 'deepseek-v4-flash',
-          claudeCodeEffortLevel: 'max',
         }),
       }]
     const nextActiveProfileId = normalizedProfiles.some((profile) => profile.id === activeProfileId)
@@ -272,13 +266,6 @@ function SettingsAiRuntimePanel({
       onChange: setClaudeCodeSubagentModel,
       placeholder: 'deepseek-v4-flash',
     },
-    {
-      key: 'claudeCodeEffortLevel',
-      label: 'CLAUDE_CODE_EFFORT_LEVEL',
-      value: claudeCodeEffortLevel,
-      onChange: setClaudeCodeEffortLevel,
-      placeholder: 'max',
-    },
   ]), [
     anthropicAuthToken,
     anthropicBaseUrl,
@@ -286,7 +273,6 @@ function SettingsAiRuntimePanel({
     anthropicDefaultOpusModel,
     anthropicDefaultSonnetModel,
     anthropicModel,
-    claudeCodeEffortLevel,
     claudeCodeSubagentModel,
     loaded,
     t,
@@ -300,7 +286,6 @@ function SettingsAiRuntimePanel({
     `export ANTHROPIC_DEFAULT_SONNET_MODEL=${anthropicDefaultSonnetModel || 'deepseek-v4-pro[1m]'}`,
     `export ANTHROPIC_DEFAULT_HAIKU_MODEL=${anthropicDefaultHaikuModel || 'deepseek-v4-flash'}`,
     `export CLAUDE_CODE_SUBAGENT_MODEL=${claudeCodeSubagentModel || 'deepseek-v4-flash'}`,
-    `export CLAUDE_CODE_EFFORT_LEVEL=${claudeCodeEffortLevel || 'max'}`,
   ].join('\n')), [
     anthropicBaseUrl,
     anthropicAuthToken,
@@ -309,7 +294,6 @@ function SettingsAiRuntimePanel({
     anthropicDefaultSonnetModel,
     anthropicDefaultHaikuModel,
     claudeCodeSubagentModel,
-    claudeCodeEffortLevel,
   ])
 
   const launchCommand = useMemo(() => ([
@@ -431,7 +415,6 @@ function SettingsAiRuntimePanel({
         anthropicDefaultSonnetModel: anthropicDefaultSonnetModel.trim(),
         anthropicDefaultHaikuModel: anthropicDefaultHaikuModel.trim(),
         claudeCodeSubagentModel: claudeCodeSubagentModel.trim(),
-        claudeCodeEffortLevel: claudeCodeEffortLevel.trim(),
       }
       const saveApi = supportsWindowsEnvConfig
         ? window.electronAPI.setWindowsUserEnv
