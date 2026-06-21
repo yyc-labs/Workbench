@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useMemo } from 'react'
+import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type {
   AiCommitTaskSnapshot,
   CliTool,
@@ -20,6 +20,7 @@ import { useI18n } from '../i18n'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { preloadProjectPane } from '../lib/projectPagePreload'
+import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -123,6 +124,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [docLinksDialogOpen, setDocLinksDialogOpen] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle')
+  const projectPanePreloadHandleRef = useRef<ProjectPanePreloadHandle | null>(null)
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
     setIsOpeningTerminal(true)
@@ -210,9 +212,33 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
   }, [defaultDocLink, handleOpenDocLink])
 
-  const handlePreloadDefaultProjectPane = useCallback(() => {
-    preloadProjectPane('code')
+  const cancelPreloadDefaultProjectPane = useCallback(() => {
+    projectPanePreloadHandleRef.current?.cancel()
+    projectPanePreloadHandleRef.current = null
   }, [])
+
+  const handlePreloadDefaultProjectPaneIntent = useCallback(() => {
+    cancelPreloadDefaultProjectPane()
+    projectPanePreloadHandleRef.current = preloadProjectPane('code', { intent: 'intent' })
+  }, [cancelPreloadDefaultProjectPane])
+
+  const handlePreloadDefaultProjectPaneNavigate = useCallback(() => {
+    cancelPreloadDefaultProjectPane()
+    preloadProjectPane('code', { intent: 'navigate' })
+  }, [cancelPreloadDefaultProjectPane])
+
+  useEffect(() => {
+    return cancelPreloadDefaultProjectPane
+  }, [cancelPreloadDefaultProjectPane])
+
+  const handleSelectProject = useCallback(() => {
+    handlePreloadDefaultProjectPaneNavigate()
+    onSelect(project.id)
+  }, [handlePreloadDefaultProjectPaneNavigate, onSelect, project.id])
+
+  const handleCardFocus = useCallback(() => {
+    handlePreloadDefaultProjectPaneIntent()
+  }, [handlePreloadDefaultProjectPaneIntent])
 
   return (
     <div
@@ -226,23 +252,22 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         boxShadow: 'var(--shadow-card)',
       }}
       onMouseEnter={(e) => {
-        handlePreloadDefaultProjectPane()
+        handlePreloadDefaultProjectPaneIntent()
         e.currentTarget.style.background = 'color-mix(in srgb, var(--color-card) 88%, var(--color-primary) 5%)'
         e.currentTarget.style.borderColor = 'var(--color-border-hover)'
         e.currentTarget.style.transform = 'translateY(-2px)'
         e.currentTarget.style.boxShadow = 'var(--shadow-card-hover)'
       }}
       onMouseLeave={(e) => {
+        cancelPreloadDefaultProjectPane()
         e.currentTarget.style.background = 'var(--color-card)'
         e.currentTarget.style.borderColor = 'var(--color-border)'
         e.currentTarget.style.transform = 'translateY(0)'
         e.currentTarget.style.boxShadow = 'var(--shadow-card)'
       }}
-      onFocus={handlePreloadDefaultProjectPane}
-      onClick={() => {
-        handlePreloadDefaultProjectPane()
-        onSelect(project.id)
-      }}
+      onFocus={handleCardFocus}
+      onBlur={cancelPreloadDefaultProjectPane}
+      onClick={handleSelectProject}
       onContextMenu={(e) => {
         e.preventDefault()
         setMenuAllowRemove(false)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { AiCommitConfig } from '../../../shared/types'
-import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
+import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useAppStore } from '../../stores/appStore'
 import { useI18n } from '../../i18n'
 import { detectProjectEnvironment } from '../../lib/projectEnvironment'
@@ -20,7 +20,7 @@ type DetailAiCommitPaneHostProps = {
   projectDevUrlReady?: boolean
   aiCommitConfig: AiCommitConfig | undefined
   activePane: 'code' | 'aicommit'
-  onPreloadPane?: (pane: ProjectPaneTab) => void
+  onPreloadPane?: ProjectPanePreload
   onSwitchPane: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript: () => void

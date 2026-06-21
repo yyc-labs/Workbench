@@ -3,7 +3,7 @@ import { ArrowUpRight, Bot, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
-import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
+import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import type { AiCommitStatus, AiFlowNode } from './detail.types'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
@@ -42,7 +42,7 @@ type DetailAiCommitHeaderProps = {
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
   onOpenTranscript?: () => void
-  onPreloadPane?: (pane: ProjectPaneTab) => void
+  onPreloadPane?: ProjectPanePreload
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean

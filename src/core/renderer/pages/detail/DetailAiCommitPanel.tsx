@@ -1,7 +1,7 @@
 import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
-import type { ProjectPaneTab } from '../../components/ProjectPaneTabs'
+import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
@@ -50,7 +50,7 @@ type DetailAiCommitPanelProps = {
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
   activePane?: 'code' | 'aicommit'
-  onPreloadPane?: (pane: ProjectPaneTab) => void
+  onPreloadPane?: ProjectPanePreload
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
   onOpenTranscript?: () => void
