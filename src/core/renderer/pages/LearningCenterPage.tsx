@@ -31,6 +31,11 @@ import {
   shouldDisableMarkdownSyntaxHighlight,
 } from './code/code.markdown'
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
+import { LearningMarkdownContextMenu } from './learning/LearningMarkdownContextMenu'
+import {
+  applyLearningMarkdownInsert,
+  type LearningMarkdownInsertRequest,
+} from './learning/learningMarkdownTemplates'
 
 type SaveState = 'idle' | 'saved' | 'error'
 type LearningSelectOption = {
@@ -39,6 +44,12 @@ type LearningSelectOption = {
 }
 
 type FrontmatterDialogMode = 'create' | 'edit'
+type LearningEditorContextMenuState = {
+  x: number
+  y: number
+  selectionStart: number
+  selectionEnd: number
+}
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
@@ -231,6 +242,7 @@ export function LearningCenterPage() {
   const [frontmatterStatus, setFrontmatterStatus] = useState<LearningNoteStatus>('draft')
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
+  const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
@@ -239,6 +251,7 @@ export function LearningCenterPage() {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
   })
+  const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const enableMarkdownSyntaxHighlight = useMemo(
     () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
@@ -494,6 +507,40 @@ export function LearningCenterPage() {
     }
   }
 
+  const closeEditorContextMenu = () => {
+    setEditorContextMenu(null)
+  }
+
+  const handleEditorContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
+    event.preventDefault()
+    const target = event.currentTarget
+    setEditorContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      selectionStart: target.selectionStart ?? 0,
+      selectionEnd: target.selectionEnd ?? 0,
+    })
+  }
+
+  const handleApplyMarkdownInsert = (request: LearningMarkdownInsertRequest) => {
+    const textarea = editorTextareaRef.current
+    if (!textarea) {
+      closeEditorContextMenu()
+      return
+    }
+
+    const selectionStart = editorContextMenu?.selectionStart ?? textarea.selectionStart ?? 0
+    const selectionEnd = editorContextMenu?.selectionEnd ?? textarea.selectionEnd ?? selectionStart
+    const result = applyLearningMarkdownInsert(editorContent, selectionStart, selectionEnd, request)
+    setEditorContent(result.value)
+    closeEditorContextMenu()
+
+    window.setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
+    }, 0)
+  }
+
   const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
   const categoryOptions: LearningSelectOption[] = useMemo(
     () => [
@@ -713,10 +760,12 @@ export function LearningCenterPage() {
                   </div>
                   <div className="min-h-0 flex-1 px-5 py-4">
                     <textarea
+                      ref={editorTextareaRef}
                       value={editorContent}
                       onChange={(event) => setEditorContent(event.target.value)}
+                      onContextMenu={handleEditorContextMenu}
                       className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
-                      placeholder="开始记录今天学习到的内容..."
+                      placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"
                     />
                   </div>
                 </div>
@@ -863,6 +912,14 @@ export function LearningCenterPage() {
           ) : null}
         </div>
       </div>
+      {editorContextMenu ? (
+        <LearningMarkdownContextMenu
+          x={editorContextMenu.x}
+          y={editorContextMenu.y}
+          onApply={handleApplyMarkdownInsert}
+          onClose={closeEditorContextMenu}
+        />
+      ) : null}
       <ModalShell
         open={frontmatterDialogOpen}
         onClose={() => {
