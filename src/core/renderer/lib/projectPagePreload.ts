@@ -8,6 +8,7 @@ type HomePageModule = typeof import('../pages/Home')
 type DetailPageModule = typeof import('../pages/Detail')
 type TranscriptPageModule = typeof import('../pages/TranscriptPage')
 type SettingsPageModule = typeof import('../pages/Settings')
+type LearningCenterPageModule = typeof import('../pages/LearningCenterPage')
 type CodeWorkspacePanelModule = typeof import('../pages/code/CodeWorkspacePanel')
 type DetailAiCommitPaneHostModule = typeof import('../pages/detail/DetailAiCommitPaneHost')
 type MonacoPreloadModule = typeof import('./monacoPreload')
@@ -21,6 +22,7 @@ let homePageModulePromise: Promise<HomePageModule> | null = null
 let detailPageModulePromise: Promise<DetailPageModule> | null = null
 let transcriptPageModulePromise: Promise<TranscriptPageModule> | null = null
 let settingsPageModulePromise: Promise<SettingsPageModule> | null = null
+let learningCenterPageModulePromise: Promise<LearningCenterPageModule> | null = null
 let codeWorkspacePanelModulePromise: Promise<CodeWorkspacePanelModule> | null = null
 let detailAiCommitPaneHostModulePromise: Promise<DetailAiCommitPaneHostModule> | null = null
 let monacoPreloadModulePromise: Promise<MonacoPreloadModule> | null = null
@@ -45,6 +47,11 @@ export function loadTranscriptPageModule(): Promise<TranscriptPageModule> {
 export function loadSettingsPageModule(): Promise<SettingsPageModule> {
   settingsPageModulePromise ??= import('../pages/Settings')
   return settingsPageModulePromise
+}
+
+export function loadLearningCenterPageModule(): Promise<LearningCenterPageModule> {
+  learningCenterPageModulePromise ??= import('../pages/LearningCenterPage')
+  return learningCenterPageModulePromise
 }
 
 export function loadCodeWorkspacePanelModule(): Promise<CodeWorkspacePanelModule> {

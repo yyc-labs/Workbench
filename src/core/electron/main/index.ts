@@ -11,6 +11,8 @@ import { AiEnvironmentController } from './ai-environment/environment-controller
 import { createTranscriptRepository } from './transcript/transcriptRepository'
 import { createTranscriptService } from './transcript/transcriptService'
 import { createTranscriptShareService } from './transcript/transcriptShareService'
+import { createLearningRepository } from './learning/learningRepository'
+import { createLearningService } from './learning/learningService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
@@ -58,6 +60,10 @@ const feishuNotifier = new FeishuNotifier({
   getConfig: () => loadConfig().agentHooks,
 })
 const transcriptShareService = createTranscriptShareService()
+const learningRepository = createLearningRepository()
+const learningService = createLearningService({
+  repository: learningRepository,
+})
 
 function listTranscriptImportProjects() {
   return loadConfig().projects.map((project) => {
@@ -233,6 +239,7 @@ app.whenReady().then(async () => {
     agentHookGateway,
     gitService,
     runtimeService,
+    learningService,
     transcriptService,
     transcriptShareService,
   })

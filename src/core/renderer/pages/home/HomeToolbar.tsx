@@ -1,4 +1,4 @@
-import { Search, Settings, Plus, Zap, SlidersHorizontal, X } from 'lucide-react'
+import { Search, Settings, Plus, Zap, SlidersHorizontal, X, BookOpenText } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
@@ -10,6 +10,7 @@ type HomeToolbarProps = {
   envFilter: EnvFilter
   onEnvFilterChange: (value: EnvFilter) => void
   onAddFolder: () => void
+  onLearningCenterClick: () => void
   onSettingsClick: () => void
   onManageWorkspace: () => void
   searchRef: React.RefObject<HTMLInputElement>
@@ -21,6 +22,7 @@ function HomeToolbar({
   envFilter,
   onEnvFilterChange,
   onAddFolder,
+  onLearningCenterClick,
   onSettingsClick,
   onManageWorkspace,
   searchRef,
@@ -101,6 +103,15 @@ function HomeToolbar({
         <div className="h-6 w-px" style={{ background: 'var(--color-border)' }} />
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            onClick={onLearningCenterClick}
+            title={t('common.learningCenter')}
+          >
+            <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

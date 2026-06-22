@@ -19,6 +19,7 @@ import {
 import {
   loadDetailPageModule,
   loadHomePageModule,
+  loadLearningCenterPageModule,
   loadSettingsPageModule,
   loadTranscriptPageModule,
   preloadProjectPane,
@@ -28,6 +29,7 @@ const HomePage = lazy(() => loadHomePageModule().then((module) => ({ default: mo
 const DetailPage = lazy(() => loadDetailPageModule().then((module) => ({ default: module.DetailPage })))
 const TranscriptPage = lazy(() => loadTranscriptPageModule().then((module) => ({ default: module.TranscriptPage })))
 const SettingsPage = lazy(() => loadSettingsPageModule().then((module) => ({ default: module.SettingsPage })))
+const LearningCenterPage = lazy(() => loadLearningCenterPageModule().then((module) => ({ default: module.LearningCenterPage })))
 
 const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
 const APP_DISPLAY_NAME = 'IDE Electron'
@@ -61,6 +63,10 @@ function resolveWindowTitle(pathname: string, projects: Array<{
     return paneLabel
       ? `${projectLabel} - ${paneLabel} - ${appName}`
       : `${projectLabel} - ${appName}`
+  }
+
+  if (segments[0] === 'learning') {
+    return `Learning Center - ${appName}`
   }
 
   return appName
@@ -587,6 +593,10 @@ function ProjectTranscriptRoute() {
   return <TranscriptPage key={projectId ?? 'unknown-project'} />
 }
 
+function LearningCenterRoute() {
+  return <LearningCenterPage />
+}
+
 export function App() {
   return (
     <Router>
@@ -610,6 +620,7 @@ export function App() {
           <Suspense fallback={<AppRouteFallback />}>
             <Routes>
               <Route path="/" element={<HomePage />} />
+              <Route path="/learning" element={<LearningCenterRoute />} />
               <Route path="/project/:projectId" element={<Navigate to="code" replace />} />
               <Route path="/project/:projectId/transcript" element={<ProjectTranscriptRoute />} />
               <Route path="/project/:projectId/:pane" element={<ProjectDetailRoute />} />

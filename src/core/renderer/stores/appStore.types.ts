@@ -55,6 +55,12 @@ import type {
   TranscriptUpdatePayload,
   TranscriptViewerMode,
   TranscriptViewerRequest,
+  LearningCategory,
+  LearningCreateCategoryPayload,
+  LearningCreateNotePayload,
+  LearningNote,
+  LearningNoteSummary,
+  LearningUpdateNotePayload,
 } from '../../shared/types'
 
 declare global {
@@ -139,6 +145,13 @@ declare global {
       startTranscriptShare: (payload: TranscriptShareStartPayload) => Promise<TranscriptShareStartResult>
       stopTranscriptShare: (token: string) => Promise<TranscriptShareListResult>
       listTranscriptShares: () => Promise<TranscriptShareListResult>
+      listLearningCategories: () => Promise<LearningCategory[]>
+      createLearningCategory: (payload: LearningCreateCategoryPayload) => Promise<LearningCategory[]>
+      listLearningNotes: () => Promise<LearningNoteSummary[]>
+      getLearningNote: (noteId: string) => Promise<LearningNote | null>
+      createLearningNote: (payload?: LearningCreateNotePayload) => Promise<LearningNote>
+      updateLearningNote: (payload: LearningUpdateNotePayload) => Promise<LearningNote>
+      deleteLearningNote: (noteId: string) => Promise<boolean>
       openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
       openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
       openSshTerminal: (

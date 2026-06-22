@@ -38,6 +38,7 @@ import {
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
 import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
+import type { LearningService } from '../learning/learningService'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
@@ -57,6 +58,9 @@ import type {
   ProjectFileContentSearchOptions,
   TerminalProcessInventory,
   TerminalStopAllResult,
+  LearningCreateCategoryPayload,
+  LearningCreateNotePayload,
+  LearningUpdateNotePayload,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
   TranscriptShareStartPayload,
@@ -78,6 +82,7 @@ type RegisterIpcHandlersDependencies = {
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService
+  learningService: LearningService
   transcriptService: TranscriptService
   transcriptShareService: TranscriptShareService
 }
@@ -532,6 +537,34 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.TRANSCRIPT_SHARE_LIST, () => {
     return deps.transcriptShareService.list()
+  })
+
+  ipcMain.handle(IPC.LEARNING_LIST_CATEGORIES, async () => {
+    return deps.learningService.listCategories()
+  })
+
+  ipcMain.handle(IPC.LEARNING_CREATE_CATEGORY, async (_event, payload: LearningCreateCategoryPayload) => {
+    return deps.learningService.createCategory(payload)
+  })
+
+  ipcMain.handle(IPC.LEARNING_LIST_NOTES, async () => {
+    return deps.learningService.listNotes()
+  })
+
+  ipcMain.handle(IPC.LEARNING_GET_NOTE, async (_event, noteId: string) => {
+    return deps.learningService.getNote(noteId)
+  })
+
+  ipcMain.handle(IPC.LEARNING_CREATE_NOTE, async (_event, payload?: LearningCreateNotePayload) => {
+    return deps.learningService.createNote(payload)
+  })
+
+  ipcMain.handle(IPC.LEARNING_UPDATE_NOTE, async (_event, payload: LearningUpdateNotePayload) => {
+    return deps.learningService.updateNote(payload)
+  })
+
+  ipcMain.handle(IPC.LEARNING_DELETE_NOTE, async (_event, noteId: string) => {
+    return deps.learningService.deleteNote(noteId)
   })
 
   ipcMain.handle(

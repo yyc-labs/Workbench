@@ -1,0 +1,1008 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import {
+  ArrowLeft,
+  BookOpenText,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Pencil,
+  FolderPlus,
+  NotebookPen,
+  Plus,
+  Save,
+  Search,
+  Tags,
+  Trash2,
+  X,
+} from 'lucide-react'
+import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
+import { ModalShell } from '../components/ModalShell'
+import { Button } from '../components/ui/button'
+import { Card } from '../components/ui/card'
+import { Input } from '../components/ui/input'
+import { ScrollArea } from '../components/ui/scroll-area'
+import { useI18n } from '../i18n'
+import {
+  createMarkdownComponents,
+  shouldDisableMarkdownSyntaxHighlight,
+} from './code/code.markdown'
+import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
+
+type SaveState = 'idle' | 'saved' | 'error'
+type LearningSelectOption = {
+  value: string
+  label: string
+}
+
+type FrontmatterDialogMode = 'create' | 'edit'
+
+const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
+const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
+
+function normalizeTagInput(value: string): string[] {
+  return [...new Set(
+    value
+      .split(/[,\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  )]
+}
+
+function emptySelectionState(): LearningNote | null {
+  return null
+}
+
+function defaultNoteContent(title: string): string {
+  const normalizedTitle = title.trim() || '新学习记录'
+  return [
+    `# ${normalizedTitle}`,
+    '',
+    '今天学习到：',
+    '',
+    '1. ',
+    '2. ',
+    '3. ',
+  ].join('\n')
+}
+
+function LearningInlineSelect({
+  ariaLabel,
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  ariaLabel: string
+  value: string
+  options: LearningSelectOption[]
+  onChange: (value: string) => void
+  disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (containerRef.current?.contains(target)) return
+      setOpen(false)
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [ariaLabel, open])
+
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        className={`quiet-control flex h-10 w-full items-center justify-between rounded-full border-0 px-4 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
+          open ? 'bg-[color:var(--color-popover)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]' : ''
+        }`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span>{selectedLabel}</span>
+        <ChevronDown
+          className={`h-4 w-4 text-[color:var(--color-muted-foreground)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]"
+          style={{ WebkitBackdropFilter: 'saturate(170%) blur(22px)' }}
+          role="listbox"
+          aria-label={ariaLabel}
+        >
+          <div className="max-h-[220px] overflow-auto">
+            {options.map((option) => {
+              const selected = option.value === value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-sm outline-none transition-colors ${
+                    selected
+                      ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
+                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                  }`}
+                  role="option"
+                  aria-selected={selected}
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(option.value)
+                    setOpen(false)
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {selected ? <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" /> : null}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LearningSidebarRailButton({
+  side,
+  collapsed,
+  onClick,
+  className,
+}: {
+  side: 'left' | 'right'
+  collapsed: boolean
+  onClick: () => void
+  className: string
+}) {
+  const label = side === 'left'
+    ? (collapsed ? '展开左侧学习目录' : '收起左侧学习目录')
+    : (collapsed ? '展开右侧笔记信息' : '收起右侧笔记信息')
+  const Icon = side === 'left'
+    ? (collapsed ? ChevronRight : ChevronLeft)
+    : (collapsed ? ChevronLeft : ChevronRight)
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={`h-8 w-8 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/96 shadow-[0_8px_20px_rgba(15,23,42,0.10)] backdrop-blur-md ${className}`}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      <Icon className="h-3.5 w-3.5" />
+    </Button>
+  )
+}
+
+export function LearningCenterPage() {
+  const navigate = useNavigate()
+  const { t, formatDateTime } = useI18n()
+  const [notes, setNotes] = useState<LearningNoteSummary[]>([])
+  const [categories, setCategories] = useState<LearningCategory[]>([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
+  const [selectedNote, setSelectedNote] = useState<LearningNote | null>(emptySelectionState)
+  const [editorTitle, setEditorTitle] = useState('')
+  const [editorTags, setEditorTags] = useState('')
+  const [editorCategoryId, setEditorCategoryId] = useState<string>('')
+  const [editorStatus, setEditorStatus] = useState<LearningNoteStatus>('draft')
+  const [editorContent, setEditorContent] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [categoryInput, setCategoryInput] = useState('')
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [frontmatterDialogOpen, setFrontmatterDialogOpen] = useState(false)
+  const [frontmatterDialogMode, setFrontmatterDialogMode] = useState<FrontmatterDialogMode>('create')
+  const [frontmatterTitle, setFrontmatterTitle] = useState('')
+  const [frontmatterTags, setFrontmatterTags] = useState('')
+  const [frontmatterCategoryId, setFrontmatterCategoryId] = useState<string>('')
+  const [frontmatterStatus, setFrontmatterStatus] = useState<LearningNoteStatus>('draft')
+  const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
+  const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
+  })
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
+  })
+
+  const enableMarkdownSyntaxHighlight = useMemo(
+    () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
+    [editorContent]
+  )
+
+  const markdownComponents = useMemo(() => createMarkdownComponents({
+    activeRelativePath: null,
+    enableMarkdownSyntaxHighlight,
+    projectPath: '',
+    themeMode: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
+  }), [enableMarkdownSyntaxHighlight])
+
+  const filteredNotes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return notes.filter((note) => {
+      if (selectedCategoryId !== 'all' && note.categoryId !== selectedCategoryId) return false
+      if (!q) return true
+      const haystack = [
+        note.title,
+        note.excerpt,
+        note.tags.join(' '),
+      ].join(' ').toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [notes, searchQuery, selectedCategoryId])
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selectedNote) return false
+    return (
+      editorTitle !== selectedNote.title
+      || editorContent !== selectedNote.contentMd
+      || editorCategoryId !== (selectedNote.categoryId ?? '')
+      || editorStatus !== selectedNote.status
+      || editorTags !== selectedNote.tags.join(', ')
+    )
+  }, [editorCategoryId, editorContent, editorStatus, editorTags, editorTitle, selectedNote])
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [nextCategories, nextNotes] = await Promise.all([
+          window.electronAPI.listLearningCategories(),
+          window.electronAPI.listLearningNotes(),
+        ])
+        setCategories(nextCategories)
+        setNotes(nextNotes)
+        const firstNoteId = nextNotes[0]?.id ?? null
+        setSelectedNoteId(firstNoteId)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void load()
+  }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, leftSidebarCollapsed ? '1' : '0')
+  }, [leftSidebarCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY, rightSidebarCollapsed ? '1' : '0')
+  }, [rightSidebarCollapsed])
+
+  useEffect(() => {
+    if (!selectedNoteId) {
+      setSelectedNote(null)
+      setEditorTitle('')
+      setEditorTags('')
+      setEditorCategoryId('')
+      setEditorStatus('draft')
+      setEditorContent('')
+      return
+    }
+
+    let active = true
+    const loadNote = async () => {
+      const note = await window.electronAPI.getLearningNote(selectedNoteId)
+      if (!active || !note) return
+      setSelectedNote(note)
+      setEditorTitle(note.title)
+      setEditorTags(note.tags.join(', '))
+      setEditorCategoryId(note.categoryId ?? '')
+      setEditorStatus(note.status)
+      setEditorContent(note.contentMd)
+      setSaveState('idle')
+      setSaveError(null)
+    }
+
+    void loadNote()
+    return () => {
+      active = false
+    }
+  }, [selectedNoteId])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        if (!selectedNoteId || !hasUnsavedChanges || saving) return
+        void handleSave()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [hasUnsavedChanges, saving, selectedNoteId, editorTitle, editorContent, editorCategoryId, editorStatus, editorTags])
+
+  useEffect(() => {
+    if (!selectedNote || !hasUnsavedChanges) return
+    if (saveState !== 'idle') {
+      setSaveState('idle')
+    }
+    if (saveError) {
+      setSaveError(null)
+    }
+  }, [hasUnsavedChanges, saveError, saveState, selectedNote])
+
+  const syncUpdatedNote = (updated: LearningNote) => {
+    setSelectedNote(updated)
+    setEditorTitle(updated.title)
+    setEditorTags(updated.tags.join(', '))
+    setEditorCategoryId(updated.categoryId ?? '')
+    setEditorStatus(updated.status)
+    setEditorContent(updated.contentMd)
+    setNotes((current) => [updated, ...current.filter((item) => item.id !== updated.id)])
+  }
+
+  const resetFrontmatterDialog = () => {
+    setFrontmatterDialogOpen(false)
+    setFrontmatterSubmitting(false)
+    setFrontmatterError(null)
+  }
+
+  const openCreateDialog = () => {
+    setFrontmatterDialogMode('create')
+    setFrontmatterTitle('')
+    setFrontmatterTags('')
+    setFrontmatterCategoryId(selectedCategoryId !== 'all' ? selectedCategoryId : '')
+    setFrontmatterStatus('draft')
+    setFrontmatterError(null)
+    setFrontmatterDialogOpen(true)
+  }
+
+  const openEditDialog = () => {
+    if (!selectedNote) return
+    setFrontmatterDialogMode('edit')
+    setFrontmatterTitle(editorTitle)
+    setFrontmatterTags(editorTags)
+    setFrontmatterCategoryId(editorCategoryId)
+    setFrontmatterStatus(editorStatus)
+    setFrontmatterError(null)
+    setFrontmatterDialogOpen(true)
+  }
+
+  const handleSubmitFrontmatter = async () => {
+    const nextTitle = frontmatterTitle.trim()
+    if (!nextTitle) {
+      setFrontmatterError('标题不能为空')
+      return
+    }
+
+    setFrontmatterSubmitting(true)
+    setFrontmatterError(null)
+    try {
+      if (frontmatterDialogMode === 'create') {
+        const created = await window.electronAPI.createLearningNote({
+          title: nextTitle,
+          categoryId: frontmatterCategoryId || undefined,
+          tags: normalizeTagInput(frontmatterTags),
+          status: frontmatterStatus,
+          contentMd: defaultNoteContent(nextTitle),
+        })
+        setNotes((current) => [created, ...current.filter((item) => item.id !== created.id)])
+        setSelectedNoteId(created.id)
+        resetFrontmatterDialog()
+        return
+      }
+
+      if (!selectedNoteId) return
+      const updated = await window.electronAPI.updateLearningNote({
+        noteId: selectedNoteId,
+        title: nextTitle,
+        categoryId: frontmatterCategoryId || undefined,
+        tags: normalizeTagInput(frontmatterTags),
+        status: frontmatterStatus,
+        contentMd: editorContent,
+      })
+      syncUpdatedNote(updated)
+      setSaveState('saved')
+      resetFrontmatterDialog()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '保存失败'
+      setFrontmatterError(message)
+      if (frontmatterDialogMode === 'edit') {
+        setSaveState('error')
+        setSaveError(message)
+      }
+    } finally {
+      setFrontmatterSubmitting(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!selectedNoteId) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const updated = await window.electronAPI.updateLearningNote({
+        noteId: selectedNoteId,
+        title: editorTitle,
+        categoryId: editorCategoryId || undefined,
+        tags: normalizeTagInput(editorTags),
+        status: editorStatus,
+        contentMd: editorContent,
+      })
+      syncUpdatedNote(updated)
+      setSaveState('saved')
+    } catch (error) {
+      setSaveState('error')
+      setSaveError(error instanceof Error ? error.message : 'Save failed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCreateCategory = async () => {
+    const name = categoryInput.trim()
+    if (!name) return
+    setIsCreatingCategory(true)
+    try {
+      const next = await window.electronAPI.createLearningCategory({ name })
+      setCategories(next)
+      setCategoryInput('')
+    } finally {
+      setIsCreatingCategory(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedNoteId) return
+    setIsDeleting(true)
+    try {
+      const ok = await window.electronAPI.deleteLearningNote(selectedNoteId)
+      if (!ok) return
+      const nextNotes = notes.filter((item) => item.id !== selectedNoteId)
+      setNotes(nextNotes)
+      setSelectedNoteId(nextNotes[0]?.id ?? null)
+      setDeleteConfirmOpen(false)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
+  const categoryOptions: LearningSelectOption[] = useMemo(
+    () => [
+      { value: '', label: '未分类' },
+      ...categories.map((category) => ({ value: category.id, label: category.name })),
+    ],
+    [categories]
+  )
+  const statusOptions: LearningSelectOption[] = useMemo(
+    () => [
+      { value: 'draft', label: '草稿' },
+      { value: 'organized', label: '已整理' },
+    ],
+    []
+  )
+  const layoutGridColumns = useMemo(() => {
+    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 320px'
+    if (!leftSidebarCollapsed && rightSidebarCollapsed) return '280px minmax(0,1fr)'
+    if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 320px'
+    return 'minmax(0,1fr)'
+  }, [leftSidebarCollapsed, rightSidebarCollapsed])
+  const editorPreviewGridColumns = 'minmax(0,1fr) minmax(0,1fr)'
+  const bothSidebarsCollapsed = leftSidebarCollapsed && rightSidebarCollapsed
+
+  return (
+    <div className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
+        <header className="quiet-control flex items-center gap-3 rounded-[24px] px-5 py-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-full"
+            onClick={() => navigate('/')}
+            title={t('common.projects')}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--color-primary)]/12 text-[color:var(--color-primary)]">
+            <BookOpenText className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-semibold text-[color:var(--color-foreground)]">{t('common.learningCenter')}</div>
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">
+              用 Markdown 长期保存和整理你的学习记录
+            </div>
+          </div>
+          <Button size="sm" className="gap-1.5" onClick={openCreateDialog}>
+            <Plus className="h-4 w-4" />
+            新建笔记
+          </Button>
+        </header>
+
+        <div
+          className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200"
+          style={{ gridTemplateColumns: layoutGridColumns }}
+        >
+          {leftSidebarCollapsed ? (
+            <LearningSidebarRailButton
+              side="left"
+              collapsed
+              onClick={() => setLeftSidebarCollapsed(false)}
+              className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
+            />
+          ) : null}
+          {rightSidebarCollapsed ? (
+            <LearningSidebarRailButton
+              side="right"
+              collapsed
+              onClick={() => setRightSidebarCollapsed(false)}
+              className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2"
+            />
+          ) : null}
+
+          {!leftSidebarCollapsed ? (
+            <div className="relative flex h-full min-h-0">
+              <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
+                <div className="border-b border-[color:var(--color-border)] px-4 py-4">
+                  <div className="relative">
+                    <Search
+                      className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]"
+                    />
+                    <Input
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="搜索学习记录..."
+                      className="h-10 rounded-full pl-11 pr-10"
+                    />
+                    <button
+                      type="button"
+                      className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
+                        searchQuery
+                          ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                          : 'pointer-events-none opacity-0'
+                      }`}
+                      onClick={() => setSearchQuery('')}
+                      aria-label={t('common.clearSearch')}
+                      title={t('common.clearSearch')}
+                      tabIndex={searchQuery ? 0 : -1}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="border-b border-[color:var(--color-border)] px-4 py-4">
+                  <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">分类</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+                        selectedCategoryId === 'all'
+                          ? 'bg-[color:var(--color-primary)] text-white'
+                          : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
+                      }`}
+                      onClick={() => setSelectedCategoryId('all')}
+                    >
+                      全部
+                    </button>
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+                          selectedCategoryId === category.id
+                            ? 'bg-[color:var(--color-primary)] text-white'
+                            : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
+                        }`}
+                        onClick={() => setSelectedCategoryId(category.id)}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <Input
+                      value={categoryInput}
+                      onChange={(event) => setCategoryInput(event.target.value)}
+                      placeholder="新分类"
+                      className="h-9"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-9 w-9 rounded-full"
+                      onClick={() => void handleCreateCategory()}
+                      loading={isCreatingCategory}
+                      title="新增分类"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="px-4 pb-2 pt-4">
+                  <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">笔记</div>
+                </div>
+                <ScrollArea className="min-h-0 flex-1">
+                  <div className="space-y-2 p-3">
+                    {loading ? (
+                      <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">{t('common.loading')}</div>
+                    ) : filteredNotes.length > 0 ? (
+                      filteredNotes.map((note) => (
+                        <button
+                          key={note.id}
+                          type="button"
+                          className={`flex w-full flex-col gap-1 rounded-[18px] border px-3 py-3 text-left transition-colors ${
+                            selectedNoteId === note.id
+                              ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8'
+                              : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
+                          }`}
+                          onClick={() => setSelectedNoteId(note.id)}
+                        >
+                          <div className="line-clamp-1 text-sm font-medium text-[color:var(--color-foreground)]">{note.title}</div>
+                          <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{note.excerpt || '暂无摘要'}</div>
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
+                            <span>{formatDateTime(note.updatedAt)}</span>
+                            <span>{note.status === 'organized' ? '已整理' : '草稿'}</span>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">还没有学习记录</div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </Card>
+              <LearningSidebarRailButton
+                side="left"
+                collapsed={false}
+                onClick={() => setLeftSidebarCollapsed(true)}
+                className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
+              />
+            </div>
+          ) : null}
+
+          <Card className={`min-h-0 overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/94 ${
+            bothSidebarsCollapsed ? 'mx-auto w-full max-w-[1360px]' : ''
+          }`}>
+            {selectedNote ? (
+              <div
+                className="grid h-full min-h-0"
+                style={{ gridTemplateColumns: editorPreviewGridColumns }}
+              >
+                <div className="flex min-h-0 flex-col border-r border-[color:var(--color-border)]">
+                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
+                    <div className="min-w-0">
+                      <div className="line-clamp-1 text-sm font-semibold text-[color:var(--color-foreground)]">
+                        {editorTitle || '未命名笔记'}
+                      </div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                        先编辑 frontmatter，再专注写正文和预览
+                      </div>
+                    </div>
+                    <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} loading={saving}>
+                      <Save className="h-4 w-4" />
+                      {saving ? t('common.saving') : t('common.save')}
+                    </Button>
+                  </div>
+                  <div className="min-h-0 flex-1 px-5 py-4">
+                    <textarea
+                      value={editorContent}
+                      onChange={(event) => setEditorContent(event.target.value)}
+                      className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
+                      placeholder="开始记录今天学习到的内容..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex min-h-0 flex-col">
+                  <div className="border-b border-[color:var(--color-border)] px-5 py-4">
+                    <div className="text-sm font-semibold text-[color:var(--color-foreground)]">预览</div>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                      Markdown 渲染结果
+                    </div>
+                  </div>
+                  <ScrollArea className="h-full">
+                    <article
+                      className="code-markdown-content code-markdown-content--viewport-scroll px-3 py-4 sm:px-4"
+                      style={{ margin: 0, maxWidth: 'none', minWidth: 0, width: '100%' }}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
+                        components={markdownComponents}
+                      >
+                        {editorContent}
+                      </ReactMarkdown>
+                    </article>
+                  </ScrollArea>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">
+                先新建一篇学习记录
+              </div>
+            )}
+          </Card>
+
+          {!rightSidebarCollapsed ? (
+            <div className="relative flex h-full min-h-0">
+              <Card className="h-full min-h-0 w-full overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
+                <div className="border-b border-[color:var(--color-border)] px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-[color:var(--color-foreground)]">笔记信息</div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">frontmatter、状态和保存状态</div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={openEditDialog}
+                      disabled={!selectedNote}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      编辑信息
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-5 p-5">
+                  <section className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+                      <NotebookPen className="h-3.5 w-3.5" />
+                      标题
+                    </div>
+                    <div className="text-sm font-medium text-[color:var(--color-foreground)]">
+                      {editorTitle || selectedNote?.title || '未命名笔记'}
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+                      <FolderPlus className="h-3.5 w-3.5" />
+                      分类
+                    </div>
+                    <div className="text-sm text-[color:var(--color-foreground)]">{selectedCategoryName}</div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+                      <Tags className="h-3.5 w-3.5" />
+                      标签
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {normalizeTagInput(editorTags).length > 0 ? normalizeTagInput(editorTags).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-xs text-[color:var(--color-foreground)]"
+                        >
+                          {tag}
+                        </span>
+                      )) : (
+                        <span className="text-sm text-[color:var(--color-muted-foreground)]">暂无标签</span>
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">状态</div>
+                    <div className="text-sm text-[color:var(--color-foreground)]">{editorStatus === 'organized' ? '已整理' : '草稿'}</div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">时间</div>
+                    <div className="space-y-1 text-sm text-[color:var(--color-foreground)]">
+                      <div>创建：{selectedNote ? formatDateTime(selectedNote.createdAt) : '--'}</div>
+                      <div>更新：{selectedNote ? formatDateTime(selectedNote.updatedAt) : '--'}</div>
+                    </div>
+                  </section>
+
+                  <section className="space-y-2">
+                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">保存状态</div>
+                    <div className={`text-sm ${
+                      saveState === 'error'
+                        ? 'text-[color:var(--color-destructive)]'
+                        : saveState === 'saved'
+                          ? 'text-[color:var(--color-success)]'
+                          : 'text-[color:var(--color-muted-foreground)]'
+                    }`}>
+                      {saveState === 'error'
+                        ? (saveError || '保存失败')
+                        : saveState === 'saved'
+                          ? '已保存'
+                          : hasUnsavedChanges
+                            ? '有未保存修改'
+                            : '未修改'}
+                    </div>
+                  </section>
+
+                  <Button
+                    variant="destructive"
+                    className="mt-4 w-full gap-1.5"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    loading={false}
+                    disabled={!selectedNoteId}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    删除笔记
+                  </Button>
+                </div>
+              </Card>
+              <LearningSidebarRailButton
+                side="right"
+                collapsed={false}
+                onClick={() => setRightSidebarCollapsed(true)}
+                className="absolute -left-4 top-1/2 z-20 -translate-y-1/2"
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <ModalShell
+        open={frontmatterDialogOpen}
+        onClose={() => {
+          if (frontmatterSubmitting) return
+          resetFrontmatterDialog()
+        }}
+        widthClassName="max-w-[640px]"
+        ariaLabel={frontmatterDialogMode === 'create' ? '新建学习记录' : '编辑笔记信息'}
+        panelClassName="p-0 overflow-hidden"
+      >
+        <div className="flex flex-col">
+          <div className="border-b border-[color:var(--color-border)] px-5 py-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-base font-semibold text-[color:var(--color-foreground)]">
+                  {frontmatterDialogMode === 'create' ? '先填写 frontmatter' : '编辑 frontmatter'}
+                </div>
+                <div className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                  {frontmatterDialogMode === 'create'
+                    ? '先确定标题、分类、标签和状态，再进入正文编辑与预览分栏。'
+                    : '元信息单独维护，主区域继续专注 Markdown 正文。'}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => resetFrontmatterDialog()}
+                title={t('common.close')}
+                disabled={frontmatterSubmitting}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标题</div>
+              <Input
+                value={frontmatterTitle}
+                onChange={(event) => setFrontmatterTitle(event.target.value)}
+                placeholder="例如：DNS 与 Nginx 基础整理"
+                disabled={frontmatterSubmitting}
+              />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">分类</div>
+              <LearningInlineSelect
+                ariaLabel="learning-frontmatter-category"
+                value={frontmatterCategoryId}
+                options={categoryOptions}
+                onChange={setFrontmatterCategoryId}
+                disabled={frontmatterSubmitting}
+              />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">状态</div>
+              <LearningInlineSelect
+                ariaLabel="learning-frontmatter-status"
+                value={frontmatterStatus}
+                options={statusOptions}
+                onChange={(value) => setFrontmatterStatus(value as LearningNoteStatus)}
+                disabled={frontmatterSubmitting}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标签</div>
+              <Input
+                value={frontmatterTags}
+                onChange={(event) => setFrontmatterTags(event.target.value)}
+                placeholder="例如：dns, nginx, web"
+                disabled={frontmatterSubmitting}
+              />
+              <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
+                使用逗号分隔，会写入 Markdown frontmatter。
+              </div>
+            </div>
+            {frontmatterError ? (
+              <div className="sm:col-span-2 text-sm text-[color:var(--color-destructive)]">{frontmatterError}</div>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-[color:var(--color-border)] px-5 py-4">
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => resetFrontmatterDialog()}
+              disabled={frontmatterSubmitting}
+            >
+              取消
+            </Button>
+            <Button
+              className="rounded-full"
+              onClick={() => void handleSubmitFrontmatter()}
+              loading={frontmatterSubmitting}
+            >
+              {frontmatterDialogMode === 'create' ? '创建并开始编辑' : '保存 frontmatter'}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
+      <ModalShell
+        open={deleteConfirmOpen}
+        onClose={() => {
+          if (isDeleting) return
+          setDeleteConfirmOpen(false)
+        }}
+        widthClassName="max-w-[420px]"
+        ariaLabel="删除学习记录"
+      >
+        <div className="space-y-5">
+          <div>
+            <div className="text-base font-semibold text-[color:var(--color-foreground)]">删除这篇学习记录？</div>
+            <div className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+              删除后不可恢复。当前笔记：
+              <span className="ml-1 font-medium text-[color:var(--color-foreground)]">
+                {selectedNote?.title || '未命名笔记'}
+              </span>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => setDeleteConfirmOpen(false)}
+              disabled={isDeleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-full"
+              onClick={() => void handleDelete()}
+              loading={isDeleting}
+            >
+              删除
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
+    </div>
+  )
+}

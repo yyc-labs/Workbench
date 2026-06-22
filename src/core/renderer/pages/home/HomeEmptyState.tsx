@@ -1,4 +1,4 @@
-import { FolderPlus, Plus, Settings, Zap } from 'lucide-react'
+import { BookOpenText, FolderPlus, Plus, Settings, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
 import { HomeDragOverlay } from './HomeDragOverlay'
@@ -6,10 +6,11 @@ import { HomeDragOverlay } from './HomeDragOverlay'
 type HomeEmptyStateProps = {
   isDragOver: boolean
   onAddFolder: () => void
+  onOpenLearningCenter: () => void
   onOpenSettings: () => void
 }
 
-function HomeEmptyState({ isDragOver, onAddFolder, onOpenSettings }: HomeEmptyStateProps) {
+function HomeEmptyState({ isDragOver, onAddFolder, onOpenLearningCenter, onOpenSettings }: HomeEmptyStateProps) {
   const { t } = useI18n()
 
   return (
@@ -28,6 +29,15 @@ function HomeEmptyState({ isDragOver, onAddFolder, onOpenSettings }: HomeEmptySt
           <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">{t('common.runtime')}</span>
         </div>
         <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="mr-2 h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+          onClick={onOpenLearningCenter}
+          title={t('common.learningCenter')}
+        >
+          <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
+        </Button>
         <Button
           variant="ghost"
           size="icon"

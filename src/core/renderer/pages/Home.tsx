@@ -336,15 +336,16 @@ export function HomePage() {
   }
 
   if (projects.length === 0) {
-    return (
-      <HomeEmptyState
-        isDragOver={isDragOver}
-        onAddFolder={() => {
-          void handleAddFolder()
-        }}
-        onOpenSettings={() => navigate('/settings')}
-      />
-    )
+      return (
+        <HomeEmptyState
+          isDragOver={isDragOver}
+          onAddFolder={() => {
+            void handleAddFolder()
+          }}
+          onOpenLearningCenter={() => navigate('/learning')}
+          onOpenSettings={() => navigate('/settings')}
+        />
+      )
   }
 
   return (
@@ -358,6 +359,7 @@ export function HomePage() {
         onAddFolder={() => {
           void handleAddFolder()
         }}
+        onLearningCenterClick={() => navigate('/learning')}
         onSettingsClick={() => navigate('/settings')}
         onManageWorkspace={() => setWorkspaceDialogOpen(true)}
         searchRef={searchRef}
