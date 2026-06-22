@@ -202,6 +202,7 @@ export function DetailPage() {
     ],
     [docMenuItems, isDevReady, processUrls]
   )
+  const hasProjectDocLinks = docMenuItems.length > 0
 
   const handleSwitchCli = useCallback(() => {
     if (!project) return
@@ -560,6 +561,7 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                hasProjectDocLinks={hasProjectDocLinks}
                 projectLinkTagOptions={docLinkTagOptionsFromHook}
                 projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
                 projectDevUrlPending={pendingOpenDevUrl}
@@ -584,6 +586,7 @@ export function DetailPage() {
                 projectHeaderCollapsed={projectHeaderCollapsed}
                 projectName={projectDisplayName(project)}
                 projectLinkItems={collapsedProjectLinkItems}
+                hasProjectDocLinks={hasProjectDocLinks}
                 projectLinkTagOptions={docLinkTagOptionsFromHook}
                 projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
                 projectDevUrlPending={pendingOpenDevUrl}

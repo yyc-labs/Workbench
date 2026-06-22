@@ -44,6 +44,7 @@ type CodeWorkspaceChromeProps = {
   projectDevUrlPending?: boolean
   projectDevUrlReady?: boolean
   projectLinkItems: UrlPopoverItem[]
+  hasProjectDocLinks?: boolean
   projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectName?: string
   readError: string | null
@@ -132,6 +133,7 @@ export function CodeWorkspaceChrome({
   projectDevUrlPending = false,
   projectDevUrlReady = false,
   projectLinkItems,
+  hasProjectDocLinks = false,
   projectLinkTagOptions = [],
   projectName,
   readError,
@@ -146,8 +148,6 @@ export function CodeWorkspaceChrome({
   viewMode,
 }: CodeWorkspaceChromeProps) {
   const { t } = useI18n()
-  const firstProjectLinkItem = projectLinkItems[0]
-
   return (
     <>
       <div
@@ -171,14 +171,14 @@ export function CodeWorkspaceChrome({
                   onSwitchPane?.(pane)
                 }}
               />
-              {firstProjectLinkItem && (
+              {hasProjectDocLinks && (
                 <ProjectLinksTrigger
                   items={projectLinkItems}
                   tagOptions={projectLinkTagOptions}
                   onOpenDefault={onOpenFirstProjectLink}
                   onOpenManager={onOpenProjectLinksManager}
                   size="icon"
-                  title={t('codeWorkspace.projectDocsTitle')}
+                  title={t('common.leftClickOpenFirstLink')}
                 />
               )}
               {projectDevUrlActionVisible && onStartAndOpenDevUrl && (

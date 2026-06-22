@@ -65,6 +65,7 @@ type CodeWorkspacePanelProps = {
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: UrlPopoverItem[]
+  hasProjectDocLinks?: boolean
   projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
@@ -94,6 +95,7 @@ export function CodeWorkspacePanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  hasProjectDocLinks = false,
   projectLinkTagOptions = [],
   projectDevUrlActionVisible = false,
   projectDevUrlPending = false,
@@ -771,9 +773,10 @@ export function CodeWorkspacePanel({
         onOpenEditorSearch={openEditorSearchByMode}
         onOpenFileFromTab={handleSelectOpenTab}
         onOpenFirstProjectLink={() => {
-          const firstLink = projectLinkItems[0]
-          if (!firstLink) return
-          void openUrlPopoverItem(firstLink)
+          if (!hasProjectDocLinks) return
+          const firstDocLink = projectLinkItems.find((item) => item.kind === 'url' || item.kind === 'ssh')
+          if (!firstDocLink) return
+          void openUrlPopoverItem(firstDocLink)
         }}
         onPreloadPane={onPreloadPane}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
@@ -796,6 +799,7 @@ export function CodeWorkspacePanel({
         projectDevUrlPending={projectDevUrlPending}
         projectDevUrlReady={projectDevUrlReady}
         projectLinkItems={projectLinkItems}
+        hasProjectDocLinks={hasProjectDocLinks}
         projectLinkTagOptions={projectLinkTagOptions}
         projectName={projectName}
         readError={readError}

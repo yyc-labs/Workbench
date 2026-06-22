@@ -45,6 +45,7 @@ type DetailAiCommitPanelProps = {
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: ProjectLinkItem[]
+  hasProjectDocLinks?: boolean
   projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
@@ -106,6 +107,7 @@ function DetailAiCommitPanel({
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
+  hasProjectDocLinks = false,
   projectLinkTagOptions = [],
   projectDevUrlActionVisible = false,
   projectDevUrlPending = false,
@@ -153,7 +155,10 @@ function DetailAiCommitPanel({
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
   const { t } = useI18n()
-  const firstProjectLinkItem = projectLinkItems[0]
+  const firstProjectLinkItem = useMemo(
+    () => projectLinkItems.find((item) => item.kind === 'url' || item.kind === 'ssh'),
+    [projectLinkItems]
+  )
   const gitOperationItems = getGitOperationItems()
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
@@ -1060,6 +1065,7 @@ function DetailAiCommitPanel({
             aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
             aiCommitUndoRunning={aiCommitUndoRunning}
             firstProjectLinkItem={firstProjectLinkItem}
+            hasProjectDocLinks={hasProjectDocLinks}
             flowNodes={flowNodes}
             gitRepositoryControls={gitRepositoryControls}
             isAiEnabled={isAiEnabled}

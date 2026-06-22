@@ -137,6 +137,63 @@ test('custom-script diagnostics expand HOME through WSL when boot capability ski
   }
 })
 
+test('custom-script diagnostics still check $HOME entrypoint when WSL home probe fails', async () => {
+  const originalExec = wslBridge.exec
+  const calls = []
+  wslBridge.exec = async (cmd) => {
+    calls.push(cmd)
+    if (cmd === 'printf %s "$HOME"') {
+      throw new Error('WSL command exited with code 1: printf %s "$HOME"')
+    }
+    assert.equal(
+      cmd,
+      `[ -e "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && [ -x "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && echo EXISTS_EXEC || ([ -e "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && echo EXISTS_NOEXEC) || echo MISSING`
+    )
+    return 'EXISTS_EXEC'
+  }
+
+  try {
+    const diagnostics = await customScriptProvider.diagnose({
+      capability: {
+        hostPlatform: 'windows',
+        backend: 'wsl-pty',
+        hasPty: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslDistro: 'Ubuntu',
+        wslShell: 'bash',
+        wslEnv: undefined,
+      },
+      config: {
+        mode: 'custom-script',
+        runtimeEntrypoint: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
+        runtimePassProjectPath: true,
+      },
+      aiCommitConfig: {
+        enabled: true,
+        apiBaseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o-mini',
+        wslPwshPath: '/snap/bin/pwsh',
+        split: false,
+        splitMaxBatches: 4,
+        maxBullets: 8,
+      },
+    })
+
+    assert.equal(diagnostics.runtimeEntrypoint, '$HOME/tools/claude-code-script/start-claude-with-env.sh')
+    assert.equal(diagnostics.launcherScriptExists, true)
+    assert.equal(diagnostics.launcherScriptExecutable, true)
+    assert.deepEqual(diagnostics.issues, [])
+    assert.deepEqual(calls, [
+      'printf %s "$HOME"',
+      `[ -e "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && [ -x "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && echo EXISTS_EXEC || ([ -e "$HOME"'/tools/claude-code-script/start-claude-with-env.sh' ] && echo EXISTS_NOEXEC) || echo MISSING`,
+    ])
+  } finally {
+    wslBridge.exec = originalExec
+  }
+})
+
 test('windows-native runtime launch normalizes /mnt path to Windows host cwd', async () => {
   const plan = await windowsNativeProvider.resolveRuntimeLaunch({
     capability: {

@@ -14,6 +14,7 @@ type DetailAiCommitPaneHostProps = {
   projectHeaderCollapsed: boolean
   projectName: string
   projectLinkItems: ProjectLinkItem[]
+  hasProjectDocLinks?: boolean
   projectLinkTagOptions: ReadonlyArray<{ value: string; label: string }>
   projectDevUrlActionVisible?: boolean
   projectDevUrlPending?: boolean
@@ -34,6 +35,7 @@ export function DetailAiCommitPaneHost({
   projectHeaderCollapsed,
   projectName,
   projectLinkItems,
+  hasProjectDocLinks = false,
   projectLinkTagOptions,
   projectDevUrlActionVisible = false,
   projectDevUrlPending = false,
@@ -246,6 +248,7 @@ export function DetailAiCommitPaneHost({
         projectHeaderCollapsed={projectHeaderCollapsed}
         projectName={projectName}
         projectLinkItems={projectLinkItems}
+        hasProjectDocLinks={hasProjectDocLinks}
         projectLinkTagOptions={projectLinkTagOptions}
         projectDevUrlActionVisible={projectDevUrlActionVisible}
         projectDevUrlPending={projectDevUrlPending}

@@ -1,5 +1,6 @@
 import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
+import { homedir } from 'os'
 import { basename } from 'path'
 import type { AiExecutionMode, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
 import { normalizeWindowsHostPath } from '../../host-path'
@@ -11,17 +12,17 @@ function quoteBashSingle(input: string): string {
   return input.replace(/'/g, "'\\''")
 }
 
-function expandCustomEntrypoint(pathValue: string, hasWsl: boolean, wslHome?: string): string {
+function expandHomeRelativePath(pathValue: string, homeDir?: string): string {
   const normalized = pathValue.trim()
   if (!normalized) return normalized
-  if (!hasWsl || !wslHome) return normalized
+  if (!homeDir) return normalized
 
-  if (normalized === '~') return wslHome
-  if (normalized.startsWith('~/')) return `${wslHome}/${normalized.slice(2)}`
-  if (normalized === '$HOME') return wslHome
-  if (normalized.startsWith('$HOME/')) return `${wslHome}/${normalized.slice(6)}`
-  if (normalized === '${HOME}') return wslHome
-  if (normalized.startsWith('${HOME}/')) return `${wslHome}/${normalized.slice(8)}`
+  if (normalized === '~') return homeDir
+  if (normalized.startsWith('~/')) return `${homeDir}/${normalized.slice(2)}`
+  if (normalized === '$HOME') return homeDir
+  if (normalized.startsWith('$HOME/')) return `${homeDir}/${normalized.slice(6)}`
+  if (normalized === '${HOME}') return homeDir
+  if (normalized.startsWith('${HOME}/')) return `${homeDir}/${normalized.slice(8)}`
   return normalized
 }
 
@@ -46,10 +47,36 @@ async function resolveWslHome(hasWsl: boolean, wslHome?: string): Promise<string
   }
 }
 
-async function resolveCustomEntrypoint(pathValue: string | undefined, hasWsl: boolean, wslHome?: string): Promise<string> {
+async function resolveCustomEntrypoint(
+  pathValue: string | undefined,
+  hostPlatform: 'windows' | 'linux' | 'macos',
+  hasWsl: boolean,
+  wslHome?: string,
+): Promise<string> {
   const normalized = pathValue?.trim() || ''
   if (!normalized) return ''
-  return expandCustomEntrypoint(normalized, hasWsl, await resolveWslHome(hasWsl, wslHome))
+  const homeDir = hostPlatform === 'windows'
+    ? await resolveWslHome(hasWsl, wslHome)
+    : process.env.HOME || homedir()
+  return expandHomeRelativePath(normalized, homeDir)
+}
+
+function quotePosixPathForShell(pathValue: string): string {
+  const normalized = pathValue.trim()
+  if (!normalized) return "''"
+  if (normalized === '~' || normalized === '$HOME' || normalized === '${HOME}') {
+    return '"$HOME"'
+  }
+  if (normalized.startsWith('~/')) {
+    return `"$HOME"'${quoteBashSingle(normalized.slice(1))}'`
+  }
+  if (normalized.startsWith('$HOME/')) {
+    return `"$HOME"'${quoteBashSingle(normalized.slice(5))}'`
+  }
+  if (normalized.startsWith('${HOME}/')) {
+    return `"$HOME"'${quoteBashSingle(normalized.slice(7))}'`
+  }
+  return `'${quoteBashSingle(normalized)}'`
 }
 
 function isPowerShellScript(pathValue: string): boolean {
@@ -61,7 +88,8 @@ function isCmdScript(pathValue: string): boolean {
 }
 
 function checkPosixEntrypoint(pathValue: string): { exists: boolean; executable: boolean } {
-  const result = spawnSync('bash', ['-lc', `[ -e '${quoteBashSingle(pathValue)}' ] && [ -x '${quoteBashSingle(pathValue)}' ] && echo EXISTS_EXEC || ([ -e '${quoteBashSingle(pathValue)}' ] && echo EXISTS_NOEXEC) || echo MISSING`], {
+  const shellPath = quotePosixPathForShell(pathValue)
+  const result = spawnSync('bash', ['-lc', `[ -e ${shellPath} ] && [ -x ${shellPath} ] && echo EXISTS_EXEC || ([ -e ${shellPath} ] && echo EXISTS_NOEXEC) || echo MISSING`], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'ignore'],
     timeout: 5000,
@@ -130,9 +158,10 @@ function buildBashWrappedExec(entrypoint: string, args: string[], env?: Record<s
       .map(([key, value]) => `${key}='${quoteBashSingle(value)}'`)
       .join(' ')
     : ''
-  const argv = [entrypoint, ...args]
-    .map((item) => `'${quoteBashSingle(item)}'`)
-    .join(' ')
+  const argv = [
+    quotePosixPathForShell(entrypoint),
+    ...args.map((item) => `'${quoteBashSingle(item)}'`),
+  ].join(' ')
   return envPrefix ? `${envPrefix} exec ${argv}` : `exec ${argv}`
 }
 
@@ -192,9 +221,14 @@ function buildWslPwshCommand(
   repoRoot: string,
   input: Parameters<AiExecutionProvider['resolveAiCommitLaunch']>[1],
 ): string {
-  const quotedArgs = buildPowerShellFileArgs(scriptPath, input)
-    .map((item) => `'${quoteBashSingle(item)}'`)
-    .join(' ')
+  const quotedArgs = [
+    "'-NoProfile'",
+    "'-ExecutionPolicy'",
+    "'Bypass'",
+    "'-File'",
+    quotePosixPathForShell(scriptPath),
+    ...buildAiCommitScriptArgs(input).map((item) => `'${quoteBashSingle(item)}'`),
+  ].join(' ')
   const preferredPwsh = quoteBashSingle(input.cliConfig.wslPwshPath)
   return [
     'set -euo pipefail',
@@ -219,7 +253,12 @@ export const customScriptProvider: AiExecutionProvider = {
     const issues: string[] = []
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
     const expandedEntrypoint = rawEntrypoint
-      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(
+        rawEntrypoint,
+        context.capability.hostPlatform,
+        context.capability.hasWsl,
+        context.capability.wslEnv?.HOME,
+      )
       : undefined
     let launcherScriptExists: boolean | undefined
     let launcherScriptExecutable: boolean | undefined
@@ -231,9 +270,9 @@ export const customScriptProvider: AiExecutionProvider = {
         issues.push('WSL is required to run a POSIX custom runtime entrypoint on Windows')
       } else {
         try {
-          const escaped = quoteBashSingle(expandedEntrypoint)
+          const shellPath = quotePosixPathForShell(expandedEntrypoint)
           const flags = await wslBridge.exec(
-            `[ -e '${escaped}' ] && [ -x '${escaped}' ] && echo EXISTS_EXEC || ([ -e '${escaped}' ] && echo EXISTS_NOEXEC) || echo MISSING`
+            `[ -e ${shellPath} ] && [ -x ${shellPath} ] && echo EXISTS_EXEC || ([ -e ${shellPath} ] && echo EXISTS_NOEXEC) || echo MISSING`
           )
           launcherScriptExists = flags.includes('EXISTS_EXEC') || flags.includes('EXISTS_NOEXEC')
           launcherScriptExecutable = flags.includes('EXISTS_EXEC')
@@ -278,7 +317,12 @@ export const customScriptProvider: AiExecutionProvider = {
   async resolveRuntimeLaunch(context, input) {
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
     const entrypoint = rawEntrypoint
-      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(
+        rawEntrypoint,
+        context.capability.hostPlatform,
+        context.capability.hasWsl,
+        context.capability.wslEnv?.HOME,
+      )
       : ''
     const targetEnvironment: 'host' | 'wsl' =
       context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)
@@ -363,7 +407,12 @@ export const customScriptProvider: AiExecutionProvider = {
   async resolveAiCommitLaunch(context, input) {
     const rawEntrypoint = context.config.aiCommitEntrypoint?.trim()
     const entrypoint = rawEntrypoint
-      ? await resolveCustomEntrypoint(rawEntrypoint, context.capability.hasWsl, context.capability.wslEnv?.HOME)
+      ? await resolveCustomEntrypoint(
+        rawEntrypoint,
+        context.capability.hostPlatform,
+        context.capability.hasWsl,
+        context.capability.wslEnv?.HOME,
+      )
       : input.scriptPath
     const scriptArgs = buildAiCommitScriptArgs(input)
     const hostRepoRoot = context.capability.hostPlatform === 'windows'

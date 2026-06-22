@@ -38,6 +38,7 @@ type DetailAiCommitHeaderProps = {
   firstProjectLinkItem?: ProjectLinkItem
   flowNodes: AiFlowNode[]
   gitRepositoryControls?: ReactNode
+  hasProjectDocLinks?: boolean
   isAiEnabled: boolean
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
@@ -80,6 +81,7 @@ export function DetailAiCommitHeader({
   firstProjectLinkItem,
   flowNodes,
   gitRepositoryControls,
+  hasProjectDocLinks = false,
   isAiEnabled,
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
@@ -157,7 +159,7 @@ export function DetailAiCommitHeader({
                   />
                 </>
               )}
-              {projectHeaderCollapsed && firstProjectLinkItem && (
+              {projectHeaderCollapsed && hasProjectDocLinks && firstProjectLinkItem && (
                 <ProjectLinksTrigger
                   items={projectLinkItems}
                   tagOptions={projectLinkTagOptions}
