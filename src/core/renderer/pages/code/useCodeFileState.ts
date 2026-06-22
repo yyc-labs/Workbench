@@ -63,6 +63,8 @@ export function useCodeFileState({
   const [savedContentFingerprint, setSavedContentFingerprint] = useState(0)
   const [savedContentLength, setSavedContentLength] = useState(0)
   const discardUnsavedResolverRef = useRef<((proceed: boolean) => void) | null>(null)
+  const openRequestSeqRef = useRef(0)
+  const mountedRef = useRef(true)
 
   const isDirty = hasUnsavedChanges
 
@@ -90,7 +92,10 @@ export function useCodeFileState({
   }, [])
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      openRequestSeqRef.current += 1
       const resolve = discardUnsavedResolverRef.current
       discardUnsavedResolverRef.current = null
       resolve?.(false)
@@ -105,6 +110,8 @@ export function useCodeFileState({
     }
 
     onBeforeOpenFile?.()
+    const requestSeq = openRequestSeqRef.current + 1
+    openRequestSeqRef.current = requestSeq
 
     setIsReading(true)
     setReadError(null)
@@ -113,6 +120,7 @@ export function useCodeFileState({
 
     try {
       const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
+      if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
       const contentFingerprint = hashTextContent(result.content)
       setActiveFile(toActiveCodeFile(result))
       setActiveRelativePath(result.relativePath)
@@ -125,13 +133,16 @@ export function useCodeFileState({
       void setProjectLastCodeFile(projectId, result.relativePath)
       return true
     } catch (error) {
+      if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
       setReadError(error instanceof Error ? error.message : String(error))
       if (forceReload || persistedLastCodeFile === relativePath) {
         void setProjectLastCodeFile(projectId, undefined)
       }
       return false
     } finally {
-      setIsReading(false)
+      if (mountedRef.current && openRequestSeqRef.current === requestSeq) {
+        setIsReading(false)
+      }
     }
   }, [
     activeRelativePath,

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import {
@@ -311,6 +311,48 @@ export function DetailPage() {
     }
   }, [])
 
+  const resolvedProjectPath = project?.path ?? ''
+  const projectRenderKey = `${projectId ?? 'unknown'}:${resolvedProjectPath}`
+  const codePaneRef = useRef<HTMLDivElement | null>(null)
+  const aiCommitPaneRef = useRef<HTMLDivElement | null>(null)
+  const [paneMountState, setPaneMountState] = useState(() => ({
+    projectKey: projectRenderKey,
+    code: activePane === 'code',
+    aicommit: activePane === 'aicommit',
+  }))
+  const hasMountedCodePane = paneMountState.projectKey === projectRenderKey
+    ? paneMountState.code
+    : activePane === 'code'
+  const hasMountedAiCommitPane = paneMountState.projectKey === projectRenderKey
+    ? paneMountState.aicommit
+    : activePane === 'aicommit'
+
+  useEffect(() => {
+    setPaneMountState((prev) => {
+      if (prev.projectKey !== projectRenderKey) {
+        return {
+          projectKey: projectRenderKey,
+          code: activePane === 'code',
+          aicommit: activePane === 'aicommit',
+        }
+      }
+      if (activePane === 'code') {
+        if (prev.code) return prev
+        return { ...prev, code: true }
+      }
+      if (prev.aicommit) return prev
+      return { ...prev, aicommit: true }
+    })
+  }, [activePane, projectRenderKey])
+
+  useEffect(() => {
+    const hiddenPane = activePane === 'code' ? aiCommitPaneRef.current : codePaneRef.current
+    const activeElement = document.activeElement
+    if (!hiddenPane || !(activeElement instanceof HTMLElement)) return
+    if (!hiddenPane.contains(activeElement)) return
+    activeElement.blur()
+  }, [activePane])
+
   if (!project || !projectId) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -325,8 +367,6 @@ export function DetailPage() {
       </div>
     )
   }
-
-  const resolvedProjectPath = project.path
 
   return (
     <div
@@ -545,69 +585,86 @@ export function DetailPage() {
         onClose={() => setRunConfigOpen(false)}
       />
 
-      <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass} ${activePane === 'aicommit' ? 'overflow-x-auto' : 'overflow-x-hidden'}`}>
-        <div className={`mx-auto h-full min-h-0 w-full ${
-          activePane === 'aicommit'
-            ? 'min-w-[1060px] max-w-[1640px]'
-            : 'min-w-0 max-w-[1360px]'
-        }`}>
-          <Suspense fallback={<DetailPaneFallback />}>
-            {activePane === 'code' ? (
-              <CodeWorkspacePanel
-                key={`${project.id}:${resolvedProjectPath}`}
-                projectId={project.id}
-                projectPath={resolvedProjectPath}
-                themeMode={themeMode}
-                projectHeaderCollapsed={projectHeaderCollapsed}
-                projectName={projectDisplayName(project)}
-                projectLinkItems={collapsedProjectLinkItems}
-                hasProjectDocLinks={hasProjectDocLinks}
-                projectLinkTagOptions={docLinkTagOptionsFromHook}
-                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
-                projectDevUrlPending={pendingOpenDevUrl}
-                projectDevUrlReady={isDevReady}
-                activePane={activePane}
-                onPreloadPane={preloadProjectPane}
-                onStartAndOpenDevUrl={startAndOpenDevUrl}
-                onSwitchPane={(nextPane) => {
-                  if (!projectId || nextPane === activePane) return
-                  navigate(`/project/${projectId}/${nextPane}`)
-                }}
-                onOpenTranscript={() => {
-                  if (!projectId) return
-                  navigate(`/project/${projectId}/transcript`)
-                }}
-                onOpenProjectLinksManager={openProjectLinksManager}
-              />
-            ) : (
-              <DetailAiCommitPaneHost
-                projectId={project.id}
-                projectPath={resolvedProjectPath}
-                projectHeaderCollapsed={projectHeaderCollapsed}
-                projectName={projectDisplayName(project)}
-                projectLinkItems={collapsedProjectLinkItems}
-                hasProjectDocLinks={hasProjectDocLinks}
-                projectLinkTagOptions={docLinkTagOptionsFromHook}
-                projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
-                projectDevUrlPending={pendingOpenDevUrl}
-                projectDevUrlReady={isDevReady}
-                aiCommitConfig={aiCommitConfig}
-                activePane={activePane}
-                onPreloadPane={preloadProjectPane}
-                onSwitchPane={(nextPane) => {
-                  if (!projectId || nextPane === activePane) return
-                  navigate(`/project/${projectId}/${nextPane}`)
-                }}
-                onStartAndOpenDevUrl={startAndOpenDevUrl}
-                onOpenTranscript={() => {
-                  if (!projectId) return
-                  navigate(`/project/${projectId}/transcript`)
-                }}
-                onOpenProjectLinksManager={openProjectLinksManager}
-                onCloseProjectContextMenu={() => setMenuPos(null)}
-              />
-            )}
-          </Suspense>
+      <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
+        <div className="relative h-full min-h-0 w-full">
+          <div
+            ref={codePaneRef}
+            className={`absolute inset-0 overflow-hidden ${activePane === 'code' ? '' : 'pointer-events-none invisible opacity-0'}`}
+            aria-hidden={activePane !== 'code'}
+          >
+            <div className="mx-auto h-full min-h-0 w-full min-w-0 max-w-[1360px]">
+              <Suspense fallback={<DetailPaneFallback />}>
+                {hasMountedCodePane && (
+                  <CodeWorkspacePanel
+                    key={projectRenderKey}
+                    projectId={project.id}
+                    projectPath={resolvedProjectPath}
+                    themeMode={themeMode}
+                    projectHeaderCollapsed={projectHeaderCollapsed}
+                    projectName={projectDisplayName(project)}
+                    projectLinkItems={collapsedProjectLinkItems}
+                    hasProjectDocLinks={hasProjectDocLinks}
+                    projectLinkTagOptions={docLinkTagOptionsFromHook}
+                    projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                    projectDevUrlPending={pendingOpenDevUrl}
+                    projectDevUrlReady={isDevReady}
+                    activePane={activePane}
+                    onPreloadPane={preloadProjectPane}
+                    onStartAndOpenDevUrl={startAndOpenDevUrl}
+                    onSwitchPane={(nextPane) => {
+                      if (!projectId || nextPane === activePane) return
+                      navigate(`/project/${projectId}/${nextPane}`)
+                    }}
+                    onOpenTranscript={() => {
+                      if (!projectId) return
+                      navigate(`/project/${projectId}/transcript`)
+                    }}
+                    onOpenProjectLinksManager={openProjectLinksManager}
+                  />
+                )}
+              </Suspense>
+            </div>
+          </div>
+
+          <div
+            ref={aiCommitPaneRef}
+            className={`absolute inset-0 ${activePane === 'aicommit' ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden pointer-events-none invisible opacity-0'}`}
+            aria-hidden={activePane !== 'aicommit'}
+          >
+            <div className="mx-auto h-full min-h-0 w-full min-w-[1060px] max-w-[1640px] overflow-hidden">
+              <Suspense fallback={<DetailPaneFallback />}>
+                {hasMountedAiCommitPane && (
+                  <DetailAiCommitPaneHost
+                    key={projectRenderKey}
+                    projectId={project.id}
+                    projectPath={resolvedProjectPath}
+                    projectHeaderCollapsed={projectHeaderCollapsed}
+                    projectName={projectDisplayName(project)}
+                    projectLinkItems={collapsedProjectLinkItems}
+                    hasProjectDocLinks={hasProjectDocLinks}
+                    projectLinkTagOptions={docLinkTagOptionsFromHook}
+                    projectDevUrlActionVisible={isDevReady || pendingOpenDevUrl || !isActive}
+                    projectDevUrlPending={pendingOpenDevUrl}
+                    projectDevUrlReady={isDevReady}
+                    aiCommitConfig={aiCommitConfig}
+                    activePane={activePane}
+                    onPreloadPane={preloadProjectPane}
+                    onSwitchPane={(nextPane) => {
+                      if (!projectId || nextPane === activePane) return
+                      navigate(`/project/${projectId}/${nextPane}`)
+                    }}
+                    onStartAndOpenDevUrl={startAndOpenDevUrl}
+                    onOpenTranscript={() => {
+                      if (!projectId) return
+                      navigate(`/project/${projectId}/transcript`)
+                    }}
+                    onOpenProjectLinksManager={openProjectLinksManager}
+                    onCloseProjectContextMenu={() => setMenuPos(null)}
+                  />
+                )}
+              </Suspense>
+            </div>
+          </div>
         </div>
       </div>
 

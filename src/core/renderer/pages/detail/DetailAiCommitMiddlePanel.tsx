@@ -92,7 +92,10 @@ export function DetailAiCommitMiddlePanel({
   const MiddlePanelIcon = middlePanelMeta.icon
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
+    <div
+      className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4"
+      style={{ contain: 'layout paint', isolation: 'isolate' }}
+    >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="inline-flex min-w-0 items-center gap-2">
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">

@@ -375,6 +375,22 @@ function DetailAiCommitPanel({
   }, [jumpToAiLogToken])
 
   useEffect(() => {
+    if (activePane === 'aicommit') return
+    setMergeDropdownOpen(false)
+    setBranchManagerMode(null)
+    setGitGuideOpen(false)
+    setOperationConfirm(null)
+    setOperationConfirmInput('')
+    setDiffDrawerOpen(false)
+    setActiveDiffFilePath(null)
+    setDiffContent('')
+    setDiffError(null)
+    setDiffTruncated(false)
+    setConflictData(null)
+    setConflictError(null)
+  }, [activePane])
+
+  useEffect(() => {
     if (!mergeDropdownOpen) return
     const frame = window.requestAnimationFrame(() => {
       mergeSearchInputRef.current?.focus()
@@ -534,6 +550,13 @@ function DetailAiCommitPanel({
     if (activeDiffFile.scope !== 'conflicted') return
     void loadConflict(activeDiffFilePath)
   }, [diffDrawerOpen, activeDiffFilePath, activeDiffFile, gitSnapshot?.checkedAt])
+
+  useEffect(() => {
+    return () => {
+      diffRequestSeqRef.current += 1
+      conflictRequestSeqRef.current += 1
+    }
+  }, [])
 
   const operationStates = useMemo<Record<PanelGitOperationKind, OperationCardState>>(() => {
     if (gitOperationsUnavailable) {
@@ -1049,7 +1072,10 @@ function DetailAiCommitPanel({
 
   return (
     <>
-      <div className="relative flex h-full min-h-0 min-w-0 flex-col">
+      <div
+        className="relative flex h-full min-h-0 min-w-0 flex-col"
+        style={{ contain: 'layout paint', isolation: 'isolate' }}
+      >
         <div className="flex h-full min-h-0 flex-col gap-4">
           <DetailAiCommitHeader
             activePane={activePane}

@@ -42,6 +42,8 @@ import {
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
 const MAX_PRELOADED_TRANSCRIPT_SESSIONS = 4
+const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
+const TRANSCRIPT_SESSION_PRELOAD_DELAY_MS = 320
 const SMART_EMPTY_FILE_CANDIDATES = [
   'README.md',
   'readme.md',
@@ -132,6 +134,7 @@ export function CodeWorkspacePanel({
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
   const transcriptSummaries = useAppStore((s) => s.transcriptSummariesByProjectId[projectId] ?? [], shallow)
   const transcriptSessions = useAppStore((s) => s.transcriptSessions)
+  const transcriptListStatus = useAppStore((s) => s.transcriptListStatusByProjectId[projectId] ?? 'idle')
   const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
   const loadTranscriptSession = useAppStore((s) => s.loadTranscriptSession)
   const openTranscript = useAppStore((s) => s.openTranscript)
@@ -454,20 +457,36 @@ export function CodeWorkspacePanel({
 
   useEffect(() => {
     if (activePane !== 'code') return
-    void loadProjectTranscripts(projectId)
-  }, [activePane, loadProjectTranscripts, projectId])
+    if (transcriptListStatus === 'loading' || transcriptListStatus === 'ready') return
+
+    const timer = window.setTimeout(() => {
+      void loadProjectTranscripts(projectId)
+    }, TRANSCRIPT_SUMMARY_LOAD_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [activePane, loadProjectTranscripts, projectId, transcriptListStatus])
 
   useEffect(() => {
     if (activePane !== 'code') return
-    let loadedCount = 0
-    for (const summary of transcriptSummaries) {
-      if (loadedCount >= MAX_PRELOADED_TRANSCRIPT_SESSIONS) break
-      if (summary.referenceCount <= 0) continue
-      if (transcriptSessions[summary.id]) continue
-      loadedCount += 1
-      void loadTranscriptSession(projectId, summary.id)
+    if (transcriptListStatus !== 'ready') return
+
+    const timer = window.setTimeout(() => {
+      let loadedCount = 0
+      for (const summary of transcriptSummaries) {
+        if (loadedCount >= MAX_PRELOADED_TRANSCRIPT_SESSIONS) break
+        if (summary.referenceCount <= 0) continue
+        if (transcriptSessions[summary.id]) continue
+        loadedCount += 1
+        void loadTranscriptSession(projectId, summary.id)
+      }
+    }, TRANSCRIPT_SESSION_PRELOAD_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timer)
     }
-  }, [activePane, loadTranscriptSession, projectId, transcriptSessions, transcriptSummaries])
+  }, [activePane, loadTranscriptSession, projectId, transcriptListStatus, transcriptSessions, transcriptSummaries])
 
   useEffect(() => {
     const pendingPath = pendingLocateAfterTreeReloadRef.current
@@ -559,6 +578,7 @@ export function CodeWorkspacePanel({
   }, [isExplorerOpen, isNarrowViewport])
 
   useEffect(() => {
+    if (activePane !== 'code') return
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return
       const key = event.key.toLowerCase()
@@ -588,9 +608,10 @@ export function CodeWorkspacePanel({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [focusSearchInputByMode, handleSave, openEditorSearchByMode, openPreviewSearch, shouldHandleFindInPreview])
+  }, [activePane, focusSearchInputByMode, handleSave, openEditorSearchByMode, openPreviewSearch, shouldHandleFindInPreview])
 
   useEffect(() => {
+    if (activePane !== 'code') return
     let timer: number | null = null
     const off = window.electronAPI.onCodeFocusSearch(() => {
       if (timer != null) {
@@ -607,13 +628,14 @@ export function CodeWorkspacePanel({
         window.clearTimeout(timer)
       }
     }
-  }, [focusSearchInputByMode])
+  }, [activePane, focusSearchInputByMode])
 
   useEffect(() => {
+    if (activePane !== 'code') return
     return window.electronAPI.onCodeToggleViewMode(() => {
       toggleCodeViewMode()
     })
-  }, [toggleCodeViewMode])
+  }, [activePane, toggleCodeViewMode])
 
   const showExplorerPanel = !isNarrowViewport || isExplorerOpen
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen

@@ -22,6 +22,8 @@ export type TranscriptActionsSlice = Pick<
 >
 
 const MAX_CACHED_TRANSCRIPT_SESSIONS = 12
+const pendingProjectTranscriptLoads = new Map<string, Promise<void>>()
+const pendingTranscriptSessionLoads = new Map<string, Promise<TranscriptSession | null>>()
 
 function mergeSummaries(
   current: TranscriptSessionSummary[],
@@ -142,37 +144,50 @@ export const createTranscriptActionsSlice: StateCreator<AppState, [], [], Transc
   },
 
   loadProjectTranscripts: async (projectId) => {
-    set((state) => ({
-      transcriptListStatusByProjectId: {
-        ...state.transcriptListStatusByProjectId,
-        [projectId]: 'loading',
-      },
-    }))
-    try {
-      const summaries = await window.electronAPI.listProjectTranscripts(projectId)
-      set((state) => ({
-        transcriptSummariesByProjectId: {
-          ...state.transcriptSummariesByProjectId,
-          [projectId]: summaries,
-        },
-        transcriptListStatusByProjectId: {
-          ...state.transcriptListStatusByProjectId,
-          [projectId]: 'ready',
-        },
-        activeTranscriptIdByProjectId: {
-          ...state.activeTranscriptIdByProjectId,
-          [projectId]: state.activeTranscriptIdByProjectId[projectId] ?? summaries[0]?.id,
-        },
-      }))
-    } catch (error) {
-      console.error('[appStore.loadProjectTranscripts] failed:', error)
+    const existingLoad = pendingProjectTranscriptLoads.get(projectId)
+    if (existingLoad) return existingLoad
+
+    const loadPromise = (async () => {
       set((state) => ({
         transcriptListStatusByProjectId: {
           ...state.transcriptListStatusByProjectId,
-          [projectId]: 'error',
+          [projectId]: 'loading',
         },
       }))
-    }
+      try {
+        const summaries = await window.electronAPI.listProjectTranscripts(projectId)
+        set((state) => ({
+          transcriptSummariesByProjectId: {
+            ...state.transcriptSummariesByProjectId,
+            [projectId]: summaries,
+          },
+          transcriptListStatusByProjectId: {
+            ...state.transcriptListStatusByProjectId,
+            [projectId]: 'ready',
+          },
+          activeTranscriptIdByProjectId: {
+            ...state.activeTranscriptIdByProjectId,
+            [projectId]: state.activeTranscriptIdByProjectId[projectId] ?? summaries[0]?.id,
+          },
+        }))
+      } catch (error) {
+        console.error('[appStore.loadProjectTranscripts] failed:', error)
+        set((state) => ({
+          transcriptListStatusByProjectId: {
+            ...state.transcriptListStatusByProjectId,
+            [projectId]: 'error',
+          },
+        }))
+      }
+    })()
+
+    pendingProjectTranscriptLoads.set(projectId, loadPromise)
+    void loadPromise.finally(() => {
+      if (pendingProjectTranscriptLoads.get(projectId) === loadPromise) {
+        pendingProjectTranscriptLoads.delete(projectId)
+      }
+    })
+    return loadPromise
   },
 
   loadTranscriptSession: async (projectId, transcriptId) => {
@@ -180,15 +195,30 @@ export const createTranscriptActionsSlice: StateCreator<AppState, [], [], Transc
     if (existing && existing.projectId === projectId) {
       return existing
     }
-    try {
-      const session = await window.electronAPI.getTranscript(projectId, transcriptId)
-      if (!session) return null
-      set((state) => buildUpsertTranscriptSessionState(state, session, { activate: false }))
-      return session
-    } catch (error) {
-      console.error('[appStore.loadTranscriptSession] failed:', error)
-      return null
-    }
+
+    const pendingKey = `${projectId}:${transcriptId}`
+    const existingLoad = pendingTranscriptSessionLoads.get(pendingKey)
+    if (existingLoad) return existingLoad
+
+    const loadPromise = (async () => {
+      try {
+        const session = await window.electronAPI.getTranscript(projectId, transcriptId)
+        if (!session) return null
+        set((state) => buildUpsertTranscriptSessionState(state, session, { activate: false }))
+        return session
+      } catch (error) {
+        console.error('[appStore.loadTranscriptSession] failed:', error)
+        return null
+      }
+    })()
+
+    pendingTranscriptSessionLoads.set(pendingKey, loadPromise)
+    void loadPromise.finally(() => {
+      if (pendingTranscriptSessionLoads.get(pendingKey) === loadPromise) {
+        pendingTranscriptSessionLoads.delete(pendingKey)
+      }
+    })
+    return loadPromise
   },
 
   openTranscript: async ({ projectId, transcriptId, initialMode }) => {

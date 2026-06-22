@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { MemoryRouter as Router, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter as Router, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAppStore } from './stores/appStore'
 import { runtimeManager } from './runtime/RuntimeManager'
 import type { AppConfig } from '../shared/types'
@@ -577,6 +577,16 @@ function AppRouteFallback() {
   )
 }
 
+function ProjectDetailRoute() {
+  const { projectId } = useParams<{ projectId: string }>()
+  return <DetailPage key={projectId ?? 'unknown-project'} />
+}
+
+function ProjectTranscriptRoute() {
+  const { projectId } = useParams<{ projectId: string }>()
+  return <TranscriptPage key={projectId ?? 'unknown-project'} />
+}
+
 export function App() {
   return (
     <Router>
@@ -601,8 +611,8 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/project/:projectId" element={<Navigate to="code" replace />} />
-              <Route path="/project/:projectId/transcript" element={<TranscriptPage />} />
-              <Route path="/project/:projectId/:pane" element={<DetailPage />} />
+              <Route path="/project/:projectId/transcript" element={<ProjectTranscriptRoute />} />
+              <Route path="/project/:projectId/:pane" element={<ProjectDetailRoute />} />
               <Route
                 path="/settings"
                 element={<Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />}

@@ -92,7 +92,7 @@ function UrlPopoverCategorySelect({
     const rect = triggerRef.current.getBoundingClientRect()
     const viewportPadding = 12
     const triggerGap = 6
-    const idealMaxHeight = 220
+    const idealMaxHeight = 240
     const width = rect.width
     const preferredTop = rect.bottom + triggerGap
     const availableBelow = window.innerHeight - preferredTop - viewportPadding
@@ -285,7 +285,7 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
 export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
-  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 280 })
+  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -397,9 +397,9 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       const rect = triggerRef.current.getBoundingClientRect()
       const viewportPadding = 12
       const triggerGap = 6
-      const minVisibleHeight = 140
-      const maxPopoverHeight = 420
-      const idealPopoverWidth = 280
+      const minVisibleHeight = 160
+      const maxPopoverHeight = 440
+      const idealPopoverWidth = 300
       const availableWidth = window.innerWidth - viewportPadding * 2
       const width = availableWidth > 220
         ? Math.min(idealPopoverWidth, availableWidth)
