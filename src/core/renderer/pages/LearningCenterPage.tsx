@@ -557,9 +557,9 @@ export function LearningCenterPage() {
     []
   )
   const layoutGridColumns = useMemo(() => {
-    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 320px'
+    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 340px'
     if (!leftSidebarCollapsed && rightSidebarCollapsed) return '280px minmax(0,1fr)'
-    if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 320px'
+    if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 340px'
     return 'minmax(0,1fr)'
   }, [leftSidebarCollapsed, rightSidebarCollapsed])
   const editorPreviewGridColumns = 'minmax(0,1fr) minmax(0,1fr)'
