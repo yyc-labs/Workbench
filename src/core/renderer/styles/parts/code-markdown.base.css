@@ -151,6 +151,7 @@
 .code-markdown-content ul.contains-task-list,
 .code-markdown-content ol.contains-task-list {
   list-style: none;
+  padding-left: 0;
 }
 
 .code-markdown-content .task-list-item {

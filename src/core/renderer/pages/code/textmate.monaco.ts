@@ -4,7 +4,7 @@ import { Registry, INITIAL, type IGrammar, type IRawGrammar, type IRawTheme, typ
 import { buildTextmateRegistry, resolveRootScopeForLanguage, type TextmateLanguageDescriptor } from './textmate.registry'
 
 const registryData = buildTextmateRegistry()
-const onigWasmPath = '/assets/onig.wasm'
+const onigWasmPath = './assets/onig.wasm'
 
 let onigasmBootPromise: Promise<void> | null = null
 let textmateRegistryPromise: Promise<Registry> | null = null
