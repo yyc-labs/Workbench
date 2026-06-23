@@ -3,6 +3,8 @@ import type { AppState } from './appStore.types'
 import type { ClaudeRuntimeProfile, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
 
+const RUNTIME_MODE_SWITCH_COOLDOWN_MS = 1200
+
 export type SettingsActionsSlice = Pick<
   AppState,
   | 'setTheme'
@@ -23,7 +25,7 @@ export type SettingsActionsSlice = Pick<
   | 'markHomeDefaultFilterApplied'
 >
 
-export const createSettingsActionsSlice: StateCreator<AppState, [], [], SettingsActionsSlice> = (set) => ({
+export const createSettingsActionsSlice: StateCreator<AppState, [], [], SettingsActionsSlice> = (set, get) => ({
   setTheme: async (theme) => {
     const updated = await window.electronAPI.setConfig({ theme })
     set((state) => ({
@@ -45,12 +47,18 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
   },
 
   setAiEnvironmentConfig: async (aiEnvironment) => {
+    const previousMode = get().config.aiEnvironment?.mode
     const updated = await window.electronAPI.setConfig({ aiEnvironment })
+    const nextMode = updated.aiEnvironment?.mode
+    const modeChanged = previousMode !== nextMode
     set((state) => ({
       config: {
         ...state.config,
         aiEnvironment: updated.aiEnvironment,
       },
+      runtimeModeSwitchCooldownUntil: modeChanged
+        ? Date.now() + RUNTIME_MODE_SWITCH_COOLDOWN_MS
+        : state.runtimeModeSwitchCooldownUntil,
     }))
   },
 

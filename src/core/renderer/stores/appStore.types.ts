@@ -251,6 +251,7 @@ export interface AppState {
   tmuxSessions: TmuxSessionInfo[]
   sessions: Record<string, SessionRuntime>
   runtimeEntries: Record<string, RuntimeEntry>
+  runtimeModeSwitchCooldownUntil: number
   transcriptSummariesByProjectId: Record<string, TranscriptSessionSummary[]>
   transcriptSessions: Record<string, TranscriptSession>
   activeTranscriptIdByProjectId: Record<string, string | undefined>

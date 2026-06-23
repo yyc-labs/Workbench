@@ -34,6 +34,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   tmuxSessions: [],
   sessions: {},
   runtimeEntries: {},
+  runtimeModeSwitchCooldownUntil: 0,
   transcriptSummariesByProjectId: {},
   transcriptSessions: {},
   activeTranscriptIdByProjectId: {},

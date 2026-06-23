@@ -3,6 +3,13 @@ import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { translateCurrent } from '../i18n'
 
+function waitForDelay(delayMs: number): Promise<void> {
+  if (delayMs <= 0) return Promise.resolve()
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs)
+  })
+}
+
 function sessionsEqual(
   prev: AppState['sessions'],
   next: AppState['sessions'],
@@ -198,8 +205,13 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
   },
 
   startRuntime: async (projectId) => {
-    const project = get().projects.find((p) => p.id === projectId)
+    const state = get()
+    const project = state.projects.find((p) => p.id === projectId)
     if (!project) return
+    const cooldownRemainingMs = Math.max(0, state.runtimeModeSwitchCooldownUntil - Date.now())
+    if (cooldownRemainingMs > 0) {
+      await waitForDelay(cooldownRemainingMs)
+    }
     const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
     if (diagnostics.issues.length > 0) {
       const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
