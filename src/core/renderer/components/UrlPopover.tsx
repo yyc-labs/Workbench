@@ -53,6 +53,7 @@ type UrlPopoverItemActionsMenuProps = {
   copiedActionKey: string | null
   onCopyAction: (entryKey: string, action: UrlPopoverCredentialAction) => void
   floatingMenuRef: MutableRefObject<HTMLDivElement | null>
+  onOpenChange?: (open: boolean) => void
 }
 
 function UrlPopoverItemActionsMenu({
@@ -61,21 +62,14 @@ function UrlPopoverItemActionsMenu({
   copiedActionKey,
   onCopyAction,
   floatingMenuRef,
+  onOpenChange,
 }: UrlPopoverItemActionsMenuProps) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousOpenRef = useRef(open)
   const [menuLayout, setMenuLayout] = useState({ top: 0, left: 0, width: 0, maxHeight: 220 })
-
-  const clearCloseTimer = () => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current)
-      closeTimerRef.current = null
-    }
-  }
 
   const isWithinMenuArea = (target: EventTarget | null) => (
     target instanceof Node
@@ -84,15 +78,6 @@ function UrlPopoverItemActionsMenu({
       || floatingMenuRef.current?.contains(target)
     )
   )
-
-  const scheduleClose = () => {
-    clearCloseTimer()
-    closeTimerRef.current = setTimeout(() => {
-      const activeEl = document.activeElement
-      if (isWithinMenuArea(activeEl)) return
-      setOpen(false)
-    }, 120)
-  }
 
   const updateMenuLayout = () => {
     if (!triggerRef.current) return
@@ -158,18 +143,18 @@ function UrlPopoverItemActionsMenu({
   useEffect(() => {
     if (previousOpenRef.current === open) return
     previousOpenRef.current = open
+    onOpenChange?.(open)
     if (!open) {
       floatingMenuRef.current = null
-      clearCloseTimer()
     }
-  }, [floatingMenuRef, open])
+  }, [floatingMenuRef, onOpenChange, open])
 
   useEffect(() => {
     return () => {
+      onOpenChange?.(false)
       floatingMenuRef.current = null
-      clearCloseTimer()
     }
-  }, [floatingMenuRef])
+  }, [floatingMenuRef, onOpenChange])
 
   if (actions.length === 0) return null
 
@@ -192,25 +177,8 @@ function UrlPopoverItemActionsMenu({
         aria-label={t('common.moreActions')}
         aria-haspopup="menu"
         aria-expanded={open}
-        onMouseEnter={() => {
-          clearCloseTimer()
-        }}
-        onMouseLeave={(event) => {
-          if (!open) return
-          if (isWithinMenuArea(event.relatedTarget)) return
-          scheduleClose()
-        }}
-        onFocus={() => {
-          clearCloseTimer()
-        }}
-        onBlur={(event) => {
-          if (!open) return
-          if (isWithinMenuArea(event.relatedTarget)) return
-          scheduleClose()
-        }}
         onClick={(event) => {
           event.stopPropagation()
-          clearCloseTimer()
           if (!open) updateMenuLayout()
           setOpen((prev) => !prev)
         }}
@@ -231,13 +199,6 @@ function UrlPopoverItemActionsMenu({
           }}
           role="menu"
           aria-label={t('common.moreActions')}
-          onMouseEnter={() => {
-            clearCloseTimer()
-          }}
-          onMouseLeave={(event) => {
-            if (isWithinMenuArea(event.relatedTarget)) return
-            scheduleClose()
-          }}
           onClick={(event) => {
             event.stopPropagation()
           }}
@@ -528,6 +489,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null)
+  const [credentialMenuOpen, setCredentialMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const triggerRef = useRef<HTMLDivElement>(null)
@@ -700,6 +662,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     timerRef.current = setTimeout(() => {
       if (forceClose && (hasSearchText() || hasSelectedCategory())) return
       if (!forceClose && focusWithinRef.current) return
+      if (credentialMenuOpen) return
       const activeEl = document.activeElement
       if (activeEl instanceof HTMLElement && (
         categoryMenuRef.current?.contains(activeEl)
@@ -787,6 +750,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       setQuery('')
       setCopiedKey(null)
       setCopiedCredentialKey(null)
+      setCredentialMenuOpen(false)
       setSelectedCategory('all')
       return
     }
@@ -795,6 +759,20 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     })
     return () => {
       window.cancelAnimationFrame(rafId)
+    }
+  }, [show])
+
+  useEffect(() => {
+    if (!show) return
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      if (isWithinInteractiveArea(event.target)) return
+      closePopover({ blur: true })
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
     }
   }, [show])
 
@@ -914,6 +892,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                       void handleCopyCredentialAction(entryKey, action)
                     }}
                     floatingMenuRef={itemActionsMenuRef}
+                    onOpenChange={setCredentialMenuOpen}
                   />
                 )}
                 <button
