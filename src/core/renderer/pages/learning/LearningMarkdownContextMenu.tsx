@@ -149,6 +149,10 @@ function clampPanelTop(top: number, height: number): number {
   return Math.min(Math.max(padding, top), window.innerHeight - height - padding)
 }
 
+function preventMenuButtonFocus(event: React.MouseEvent<HTMLButtonElement>) {
+  event.preventDefault()
+}
+
 function ContextFlyout({
   left,
   top,
@@ -178,6 +182,9 @@ function ContextFlyout({
         maxHeight: panelMaxHeight,
         WebkitBackdropFilter: 'saturate(170%) blur(18px)',
       }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
     >
       {title ? (
         <div className="px-2.5 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
@@ -197,6 +204,7 @@ function ContextFlyout({
                   ? 'bg-[color:var(--color-primary)]/12'
                   : 'hover:bg-[color:var(--color-accent)]'
               }`}
+              onMouseDown={preventMenuButtonFocus}
               onMouseEnter={() => onHoverItem(item)}
               onFocus={() => onHoverItem(item)}
               onClick={() => onSelectItem(item)}
@@ -336,6 +344,7 @@ export function LearningMarkdownContextMenu({
                       ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
                       : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
                   }`}
+                  onMouseDown={preventMenuButtonFocus}
                   onMouseEnter={() => setActiveCategory(category.key)}
                   onFocus={() => setActiveCategory(category.key)}
                 >
@@ -374,6 +383,7 @@ export function LearningMarkdownContextMenu({
                             ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/18'
                             : 'border-[color:var(--color-border)] bg-[color:var(--color-card)] hover:bg-[color:var(--color-accent)]'
                         }`}
+                        onMouseDown={preventMenuButtonFocus}
                         onMouseEnter={() => {
                           setHoverRows(row)
                           setHoverColumns(column)
@@ -402,6 +412,7 @@ export function LearningMarkdownContextMenu({
                       key={item.id}
                       type="button"
                       className="group flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-left transition-colors hover:bg-[color:var(--color-accent)]"
+                      onMouseDown={preventMenuButtonFocus}
                       onMouseEnter={() => {
                         if (hasChildren) {
                           setActiveLevel2Id(item.id)

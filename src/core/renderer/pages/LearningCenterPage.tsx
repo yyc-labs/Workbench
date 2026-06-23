@@ -33,9 +33,20 @@ import {
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { LearningMarkdownContextMenu } from './learning/LearningMarkdownContextMenu'
 import {
+  createLearningEditorHistoryState,
+  pushLearningEditorSnapshot,
+  updateLearningEditorSnapshotSelection,
+  type LearningEditorSnapshot,
+} from './learning/learningEditorHistory'
+import {
   applyLearningMarkdownInsert,
   type LearningMarkdownInsertRequest,
 } from './learning/learningMarkdownTemplates'
+import {
+  continueMarkdownList,
+  indentMarkdownLines,
+  outdentMarkdownLines,
+} from './learning/learningMarkdownEditor'
 
 type SaveState = 'idle' | 'saved' | 'error'
 type LearningSelectOption = {
@@ -53,6 +64,7 @@ type LearningEditorContextMenuState = {
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
+const LEARNING_EDITOR_HISTORY_LIMIT = 200
 
 function normalizeTagInput(value: string): string[] {
   return [...new Set(
@@ -252,6 +264,8 @@ export function LearningCenterPage() {
     return window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
   })
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const editorHistoryRef = useRef<LearningEditorSnapshot[]>([])
+  const editorHistoryIndexRef = useRef(-1)
 
   const enableMarkdownSyntaxHighlight = useMemo(
     () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
@@ -326,6 +340,9 @@ export function LearningCenterPage() {
       setEditorCategoryId('')
       setEditorStatus('draft')
       setEditorContent('')
+      const nextHistoryState = createLearningEditorHistoryState('')
+      editorHistoryRef.current = nextHistoryState.history
+      editorHistoryIndexRef.current = nextHistoryState.index
       return
     }
 
@@ -341,6 +358,9 @@ export function LearningCenterPage() {
       setEditorContent(note.contentMd)
       setSaveState('idle')
       setSaveError(null)
+      const nextHistoryState = createLearningEditorHistoryState(note.contentMd)
+      editorHistoryRef.current = nextHistoryState.history
+      editorHistoryIndexRef.current = nextHistoryState.index
     }
 
     void loadNote()
@@ -511,6 +531,80 @@ export function LearningCenterPage() {
     setEditorContextMenu(null)
   }
 
+  const pushEditorSnapshot = (snapshot: LearningEditorSnapshot) => {
+    const nextHistoryState = pushLearningEditorSnapshot(
+      {
+        history: editorHistoryRef.current,
+        index: editorHistoryIndexRef.current,
+      },
+      snapshot,
+      LEARNING_EDITOR_HISTORY_LIMIT
+    )
+    editorHistoryRef.current = nextHistoryState.history
+    editorHistoryIndexRef.current = nextHistoryState.index
+  }
+
+  const syncEditorSnapshotSelection = (selectionStart: number, selectionEnd: number) => {
+    const nextHistoryState = updateLearningEditorSnapshotSelection(
+      {
+        history: editorHistoryRef.current,
+        index: editorHistoryIndexRef.current,
+      },
+      selectionStart,
+      selectionEnd
+    )
+    editorHistoryRef.current = nextHistoryState.history
+    editorHistoryIndexRef.current = nextHistoryState.index
+  }
+
+  const restoreEditorSnapshot = (snapshot: LearningEditorSnapshot) => {
+    const textarea = editorTextareaRef.current
+    if (!textarea) return
+    setEditorContent(snapshot.value)
+    window.setTimeout(() => {
+      textarea.focus()
+      textarea.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd)
+    }, 0)
+  }
+
+  const applyEditorEdit = (
+    textarea: HTMLTextAreaElement,
+    previousValue: string,
+    nextValue: string,
+    nextSelectionStart: number,
+    nextSelectionEnd: number
+  ) => {
+    let prefixLength = 0
+    const maxPrefixLength = Math.min(previousValue.length, nextValue.length)
+    while (
+      prefixLength < maxPrefixLength
+      && previousValue[prefixLength] === nextValue[prefixLength]
+    ) {
+      prefixLength += 1
+    }
+
+    let previousSuffixLength = previousValue.length
+    let nextSuffixLength = nextValue.length
+    while (
+      previousSuffixLength > prefixLength
+      && nextSuffixLength > prefixLength
+      && previousValue[previousSuffixLength - 1] === nextValue[nextSuffixLength - 1]
+    ) {
+      previousSuffixLength -= 1
+      nextSuffixLength -= 1
+    }
+
+    const replacement = nextValue.slice(prefixLength, nextSuffixLength)
+    textarea.setRangeText(replacement, prefixLength, previousSuffixLength, 'preserve')
+    textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
+    setEditorContent(textarea.value)
+    pushEditorSnapshot({
+      value: textarea.value,
+      selectionStart: nextSelectionStart,
+      selectionEnd: nextSelectionEnd,
+    })
+  }
+
   const handleEditorContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
     event.preventDefault()
     const target = event.currentTarget
@@ -531,14 +625,78 @@ export function LearningCenterPage() {
 
     const selectionStart = editorContextMenu?.selectionStart ?? textarea.selectionStart ?? 0
     const selectionEnd = editorContextMenu?.selectionEnd ?? textarea.selectionEnd ?? selectionStart
+    syncEditorSnapshotSelection(selectionStart, selectionEnd)
     const result = applyLearningMarkdownInsert(editorContent, selectionStart, selectionEnd, request)
-    setEditorContent(result.value)
+    applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
     closeEditorContextMenu()
+    textarea.focus()
+  }
 
-    window.setTimeout(() => {
+  const handleEditorSelectionSync = (event: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const textarea = event.currentTarget
+    syncEditorSnapshotSelection(
+      textarea.selectionStart ?? 0,
+      textarea.selectionEnd ?? textarea.selectionStart ?? 0
+    )
+  }
+
+  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = event.currentTarget
+    const selectionStart = textarea.selectionStart ?? 0
+    const selectionEnd = textarea.selectionEnd ?? selectionStart
+    const isModKey = event.metaKey || event.ctrlKey
+    syncEditorSnapshotSelection(selectionStart, selectionEnd)
+
+    if (isModKey && !event.shiftKey && event.key.toLowerCase() === 'z') {
+      const nextIndex = editorHistoryIndexRef.current - 1
+      if (nextIndex < 0) return
+      event.preventDefault()
+      editorHistoryIndexRef.current = nextIndex
+      const snapshot = editorHistoryRef.current[nextIndex]
+      if (snapshot) restoreEditorSnapshot(snapshot)
+      return
+    }
+
+    if (
+      (isModKey && event.key.toLowerCase() === 'y')
+      || (isModKey && event.shiftKey && event.key.toLowerCase() === 'z')
+    ) {
+      const nextIndex = editorHistoryIndexRef.current + 1
+      if (nextIndex >= editorHistoryRef.current.length) return
+      event.preventDefault()
+      editorHistoryIndexRef.current = nextIndex
+      const snapshot = editorHistoryRef.current[nextIndex]
+      if (snapshot) restoreEditorSnapshot(snapshot)
+      return
+    }
+
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      const result = event.shiftKey
+        ? outdentMarkdownLines(editorContent, selectionStart, selectionEnd)
+        : indentMarkdownLines(editorContent, selectionStart, selectionEnd)
+      applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
       textarea.focus()
-      textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
-    }, 0)
+      return
+    }
+
+    if (event.key === 'Enter') {
+      const result = continueMarkdownList(editorContent, selectionStart, selectionEnd)
+      if (!result) return
+      event.preventDefault()
+      applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
+      textarea.focus()
+    }
+  }
+
+  const handleEditorChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const textarea = event.currentTarget
+    setEditorContent(textarea.value)
+    pushEditorSnapshot({
+      value: textarea.value,
+      selectionStart: textarea.selectionStart ?? textarea.value.length,
+      selectionEnd: textarea.selectionEnd ?? textarea.value.length,
+    })
   }
 
   const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
@@ -762,7 +920,10 @@ export function LearningCenterPage() {
                     <textarea
                       ref={editorTextareaRef}
                       value={editorContent}
-                      onChange={(event) => setEditorContent(event.target.value)}
+                      onChange={handleEditorChange}
+                      onKeyDown={handleEditorKeyDown}
+                      onKeyUp={handleEditorSelectionSync}
+                      onMouseUp={handleEditorSelectionSync}
                       onContextMenu={handleEditorContextMenu}
                       className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
                       placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"

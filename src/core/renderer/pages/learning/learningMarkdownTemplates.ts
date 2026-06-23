@@ -38,6 +38,11 @@ export interface LearningMarkdownEditResult {
   selectionEnd: number
 }
 
+const LIST_CHILD_INDENT = '  '
+const ORDERED_LIST_MARKER_RE = /^(\s*)(\d+)\.\s+/
+const BULLET_LIST_MARKER_RE = /^(\s*)[-+*]\s+/
+const TASK_LIST_MARKER_RE = /^(\s*)[-+*]\s+\[(?: |x|X)\]\s+/
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
@@ -104,11 +109,6 @@ function replaceRangeWithBlock(
   )
 }
 
-function normalizeInlineSelection(selectedText: string, fallback: string): string {
-  const normalized = selectedText.trim().replace(/\s*\n+\s*/g, ' ')
-  return normalized || fallback
-}
-
 function wrapInline(
   value: string,
   start: number,
@@ -127,28 +127,122 @@ function wrapInline(
   return replaceRange(value, start, end, replacement, prefix.length, prefix.length + innerText.length)
 }
 
-function transformSelectedLines(
-  value: string,
-  start: number,
-  end: number,
-  transformLine: (line: string, index: number) => string
-): LearningMarkdownEditResult {
-  const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1
-  const lineEndIndex = value.indexOf('\n', end)
-  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex
-  const block = value.slice(lineStart, lineEnd)
-  const transformed = block
-    .split('\n')
-    .map((line, index) => transformLine(line, index))
-    .join('\n')
-  return replaceRange(value, lineStart, lineEnd, transformed, 0, transformed.length)
+function deleteSelection(value: string, start: number, end: number): string {
+  if (start === end) return value
+  return `${value.slice(0, start)}${value.slice(end)}`
 }
 
-function withInsertedMarker(line: string, marker: string): string {
-  if (!line.trim()) return line
-  const match = /^(\s*)(.*)$/.exec(line)
-  if (!match) return `${marker}${line}`
-  return `${match[1]}${marker}${match[2]}`
+function collapseSelectionForInsertion(value: string, start: number, end: number) {
+  if (start === end) {
+    return { value, start, end }
+  }
+  return {
+    value: deleteSelection(value, start, end),
+    start,
+    end: start,
+  }
+}
+
+function getLineStart(value: string, index: number): number {
+  return value.lastIndexOf('\n', Math.max(0, index - 1)) + 1
+}
+
+function getLineEnd(value: string, index: number): number {
+  const lineEndIndex = value.indexOf('\n', index)
+  return lineEndIndex === -1 ? value.length : lineEndIndex
+}
+
+function getPreviousLine(value: string, lineStart: number): string | null {
+  if (lineStart <= 0) return null
+  const previousLineEnd = lineStart - 1
+  const previousLineStart = value.lastIndexOf('\n', previousLineEnd - 1) + 1
+  return value.slice(previousLineStart, previousLineEnd)
+}
+
+function getCurrentLineIndent(value: string, lineStart: number): string {
+  const lineEnd = getLineEnd(value, lineStart)
+  const line = value.slice(lineStart, lineEnd)
+  const match = /^(\s*)/.exec(line)
+  return match?.[1] ?? ''
+}
+
+function getOrderedListStartNumber(value: string, lineStart: number): number {
+  const previousLine = getPreviousLine(value, lineStart)
+  if (!previousLine) return 1
+  const match = ORDERED_LIST_MARKER_RE.exec(previousLine)
+  if (!match) return 1
+  const currentIndent = getCurrentLineIndent(value, lineStart)
+  const previousIndent = match[1] ?? ''
+  if (currentIndent !== previousIndent) return 1
+  const previousNumber = Number.parseInt(match[2] ?? '', 10)
+  return Number.isFinite(previousNumber) ? previousNumber + 1 : 1
+}
+
+function getNestedListChildIndent(value: string, position: number): string | null {
+  const lineStart = getLineStart(value, position)
+  const lineEnd = getLineEnd(value, position)
+  if (position !== lineEnd) return null
+
+  const line = value.slice(lineStart, lineEnd)
+  const orderedMatch = ORDERED_LIST_MARKER_RE.exec(line)
+  if (orderedMatch) {
+    const indent = orderedMatch[1] ?? ''
+    const markerWidth = (orderedMatch[0] ?? '').length - indent.length
+    return `${indent}${' '.repeat(markerWidth)}`
+  }
+
+  const taskMatch = TASK_LIST_MARKER_RE.exec(line)
+  if (taskMatch) {
+    return `${taskMatch[1] ?? ''}${LIST_CHILD_INDENT}`
+  }
+
+  const bulletMatch = BULLET_LIST_MARKER_RE.exec(line)
+  if (bulletMatch) {
+    return `${bulletMatch[1] ?? ''}${LIST_CHILD_INDENT}`
+  }
+
+  return null
+}
+
+function getListTemplateLines(
+  template: 'bulletList' | 'orderedList' | 'taskList',
+  count: number,
+  orderedStartNumber: number,
+  indent = ''
+): string[] {
+  if (template === 'bulletList') {
+    return Array.from({ length: count }, (_, index) => `${indent}- ${index === 0 ? '列表项' : ''}`)
+  }
+  if (template === 'orderedList') {
+    return Array.from({ length: count }, (_, index) => `${indent}${orderedStartNumber + index}. ${index === 0 ? '列表项' : ''}`)
+  }
+  return Array.from({ length: count }, (_, index) => `${indent}- [ ] ${index === 0 ? '待办事项' : ''}`)
+}
+
+function getListTemplateSelectionOffsets(
+  template: 'bulletList' | 'orderedList' | 'taskList',
+  orderedStartNumber: number,
+  indent = ''
+): { selectionStartOffset: number; selectionEndOffset: number } {
+  if (template === 'bulletList') {
+    const markerLength = `${indent}- `.length
+    return {
+      selectionStartOffset: markerLength,
+      selectionEndOffset: markerLength + '列表项'.length,
+    }
+  }
+  if (template === 'orderedList') {
+    const markerLength = `${indent}${orderedStartNumber}. `.length
+    return {
+      selectionStartOffset: markerLength,
+      selectionEndOffset: markerLength + '列表项'.length,
+    }
+  }
+  const markerLength = `${indent}- [ ] `.length
+  return {
+    selectionStartOffset: markerLength,
+    selectionEndOffset: markerLength + '待办事项'.length,
+  }
 }
 
 function insertHeading(
@@ -157,29 +251,27 @@ function insertHeading(
   end: number,
   level: 1 | 2 | 3
 ): LearningMarkdownEditResult {
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+
   const prefix = `${'#'.repeat(level)} `
-  const { selectedText } = normalizeRange(value, start, end)
-  const hasSelection = start !== end
-  const headingText = normalizeInlineSelection(
-    selectedText,
-    level === 1 ? '一级标题' : level === 2 ? '二级标题' : '三级标题'
-  )
+  const headingText = level === 1 ? '一级标题' : level === 2 ? '二级标题' : '三级标题'
   const replacement = `${prefix}${headingText}`
-  if (hasSelection) {
-    return replaceRange(value, start, end, replacement, replacement.length, replacement.length)
-  }
   return replaceRange(value, start, end, replacement, prefix.length, replacement.length)
 }
 
 function insertCodeBlock(value: string, start: number, end: number): LearningMarkdownEditResult {
-  const { selectedText } = normalizeRange(value, start, end)
-  const codeText = selectedText || 'code'
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+
+  const codeText = 'code'
   const block = ['```text', codeText, '```'].join('\n')
   const codeStartOffset = '```text\n'.length
   const codeEndOffset = codeStartOffset + codeText.length
-  if (start !== end) {
-    return replaceRangeWithBlock(value, start, end, block, block.length, block.length)
-  }
   return replaceRangeWithBlock(value, start, end, block, codeStartOffset, codeEndOffset)
 }
 
@@ -191,42 +283,47 @@ function insertListTemplate(
   count = 1
 ): LearningMarkdownEditResult {
   const safeCount = clamp(Math.floor(count), 1, 12)
-  if (start === end) {
-    if (template === 'bulletList') {
-      const lines = Array.from({ length: safeCount }, () => '- 列表项')
-      const replacement = lines.join('\n')
-      return replaceRange(value, start, end, replacement, 2, 5)
-    }
-    if (template === 'orderedList') {
-      const lines = Array.from({ length: safeCount }, (_, index) => `${index + 1}. 列表项`)
-      const replacement = lines.join('\n')
-      return replaceRange(value, start, end, replacement, 3, 6)
-    }
-    const lines = Array.from({ length: safeCount }, () => '- [ ] 待办事项')
-    const replacement = lines.join('\n')
-    return replaceRange(value, start, end, replacement, 6, 10)
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+
+  const nestedIndent = getNestedListChildIndent(value, start)
+  if (nestedIndent) {
+    const orderedStartNumber = 1
+    const replacement = `\n${getListTemplateLines(template, safeCount, orderedStartNumber, nestedIndent).join('\n')}`
+    const selectionOffsets = getListTemplateSelectionOffsets(template, orderedStartNumber, nestedIndent)
+    return replaceRange(
+      value,
+      start,
+      start,
+      replacement,
+      1 + selectionOffsets.selectionStartOffset,
+      1 + selectionOffsets.selectionEndOffset
+    )
   }
 
-  let visibleIndex = 0
-  return transformSelectedLines(value, start, end, (line) => {
-    if (!line.trim()) return line
-    if (template === 'bulletList') return withInsertedMarker(line, '- ')
-    if (template === 'taskList') return withInsertedMarker(line, '- [ ] ')
-    visibleIndex += 1
-    return withInsertedMarker(line, `${visibleIndex}. `)
-  })
+  const orderedStartNumber = template === 'orderedList'
+    ? getOrderedListStartNumber(value, getLineStart(value, start))
+    : 0
+  const replacement = getListTemplateLines(template, safeCount, orderedStartNumber || 1).join('\n')
+  const selectionOffsets = getListTemplateSelectionOffsets(template, orderedStartNumber || 1)
+  return replaceRange(
+    value,
+    start,
+    start,
+    replacement,
+    selectionOffsets.selectionStartOffset,
+    selectionOffsets.selectionEndOffset
+  )
 }
 
 function insertBlockquote(value: string, start: number, end: number): LearningMarkdownEditResult {
-  if (start === end) {
-    return replaceRange(value, start, end, '> 引用', 2, 4)
-  }
-  return transformSelectedLines(value, start, end, (line) => {
-    const match = /^(\s*)(.*)$/.exec(line)
-    if (!match) return `> ${line}`
-    if (!match[2]) return `${match[1]}>`
-    return `${match[1]}> ${match[2]}`
-  })
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+  return replaceRange(value, start, end, '> 引用', 2, 4)
 }
 
 function insertLink(value: string, start: number, end: number, asImage: boolean): LearningMarkdownEditResult {
@@ -258,6 +355,11 @@ function insertTable(
   rows: number,
   columns: number
 ): LearningMarkdownEditResult {
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+
   const table = buildMarkdownTable(rows, columns)
   const firstHeader = '列1'
   const headerOffset = table.indexOf(firstHeader)
@@ -271,6 +373,11 @@ function insertPresetBlock(
   lines: string[],
   focusText: string
 ): LearningMarkdownEditResult {
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  value = collapsed.value
+  start = collapsed.start
+  end = collapsed.end
+
   const block = lines.join('\n')
   const selectionOffset = block.indexOf(focusText)
   if (selectionOffset < 0) {
@@ -284,6 +391,11 @@ function insertPresetBlock(
     selectionOffset,
     selectionOffset + focusText.length
   )
+}
+
+function insertHorizontalRule(value: string, start: number, end: number): LearningMarkdownEditResult {
+  const collapsed = collapseSelectionForInsertion(value, start, end)
+  return replaceRangeWithBlock(collapsed.value, collapsed.start, collapsed.end, '---', 3, 3)
 }
 
 export function applyLearningMarkdownInsert(
@@ -325,7 +437,7 @@ export function applyLearningMarkdownInsert(
     case 'image':
       return insertLink(value, normalized.start, normalized.end, true)
     case 'horizontalRule':
-      return replaceRangeWithBlock(value, normalized.start, normalized.end, '---', 3, 3)
+      return insertHorizontalRule(value, normalized.start, normalized.end)
     case 'knowledgePoints':
       return insertPresetBlock(
         value,
