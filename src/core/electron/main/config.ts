@@ -2,7 +2,17 @@ import { app } from 'electron'
 import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
-import type { AppConfig, ClaudeRuntimeProfile, ClaudeBashrcConfig } from '../../shared/types'
+import type {
+  AppConfig,
+  ClaudeRuntimeProfile,
+  ClaudeBashrcConfig,
+  CodexConfig,
+  CodexEnvironmentScope,
+  CodexModelProviderConfig,
+  CodexSettingsSnapshot,
+  CodexSettingsSnapshotMap,
+} from '../../shared/types'
+import { getCodexScopeCacheKey } from '../../shared/codexScope'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/projectDocLinks'
 import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
@@ -68,7 +78,213 @@ const DEFAULT_CONFIG: AppConfig = {
     splitMaxBatches: 4,
     maxBullets: 8,
   },
+  codexProviderApiKeys: {},
+  codexSettingsSnapshots: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+}
+
+function normalizeCodexProviderApiKeys(
+  input: AppConfig['codexProviderApiKeys'] | unknown,
+  legacySnapshotInput?: unknown,
+): Record<string, Record<string, string>> {
+  if (!input || typeof input !== 'object') return {}
+
+  const entries = Object.entries(input as Record<string, unknown>)
+  const looksScoped = entries.some(([, value]) => value && typeof value === 'object')
+
+  if (!looksScoped) {
+    const legacyProviderApiKeys = Object.fromEntries(
+      entries
+        .map(([key, value]) => [key.trim(), typeof value === 'string' ? value.trim() : ''] as const)
+        .filter(([key]) => Boolean(key)),
+    )
+
+    const legacySnapshot = normalizeSingleCodexSettingsSnapshot(legacySnapshotInput)
+    if (legacySnapshot && Object.keys(legacyProviderApiKeys).length > 0) {
+      return {
+        [getCodexScopeCacheKey(legacySnapshot.scope)]: legacyProviderApiKeys,
+      }
+    }
+
+    return Object.keys(legacyProviderApiKeys).length > 0
+      ? { legacy: legacyProviderApiKeys }
+      : {}
+  }
+
+  return Object.fromEntries(
+    entries
+      .map(([scopeKey, value]) => {
+        const normalizedScopeKey = scopeKey.trim()
+        if (!normalizedScopeKey || !value || typeof value !== 'object') return null
+        const scopedProviderApiKeys = Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .map(([providerKey, providerValue]) => [
+              providerKey.trim(),
+              typeof providerValue === 'string' ? providerValue.trim() : '',
+            ] as const)
+            .filter(([providerKey]) => Boolean(providerKey)),
+        )
+        return [normalizedScopeKey, scopedProviderApiKeys] as const
+      })
+      .filter((entry): entry is readonly [string, Record<string, string>] => Boolean(entry)),
+  )
+}
+
+function normalizeCodexEnvironmentScope(
+  input: unknown
+): CodexEnvironmentScope | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const raw = input as Partial<CodexEnvironmentScope>
+  const target = raw.target === 'wsl' ? 'wsl' : raw.target === 'native' ? 'native' : null
+  const hostPlatform = raw.hostPlatform === 'windows'
+    ? 'windows'
+    : raw.hostPlatform === 'linux'
+      ? 'linux'
+      : raw.hostPlatform === 'macos'
+        ? 'macos'
+        : null
+  const runtimeMode = typeof raw.runtimeMode === 'string' ? raw.runtimeMode.trim() : ''
+  const homePath = typeof raw.homePath === 'string' ? raw.homePath.trim() : ''
+  const configPath = typeof raw.configPath === 'string' ? raw.configPath.trim() : ''
+  const envStorage = raw.envStorage === 'bashrc'
+    ? 'bashrc'
+    : raw.envStorage === 'windows-user-env'
+      ? 'windows-user-env'
+      : null
+  const envStoragePath = typeof raw.envStoragePath === 'string' ? raw.envStoragePath.trim() : ''
+
+  if (!target || !hostPlatform || !runtimeMode || !homePath || !configPath || !envStorage || !envStoragePath) {
+    return undefined
+  }
+
+  return {
+    target,
+    hostPlatform,
+    runtimeMode: runtimeMode as CodexEnvironmentScope['runtimeMode'],
+    homePath,
+    configPath,
+    envStorage,
+    envStoragePath,
+  }
+}
+
+function normalizeCodexProviderKey(value: string): string {
+  return value.trim().replace(/\s+/g, '-')
+}
+
+function normalizeCodexModelProviderConfig(
+  providerKey: string,
+  value: unknown
+): CodexModelProviderConfig | null {
+  if (!value || typeof value !== 'object') return null
+
+  const raw = value as Partial<CodexModelProviderConfig>
+  const name = typeof raw.name === 'string' ? raw.name.trim() : providerKey
+  const baseUrl = typeof raw.baseUrl === 'string' ? raw.baseUrl.trim() : ''
+  const wireApi = typeof raw.wireApi === 'string' ? raw.wireApi.trim() : 'responses'
+  const envKey = typeof raw.envKey === 'string' ? raw.envKey.trim() : 'OPENAI_API_KEY'
+  const requiresOpenaiAuth = typeof raw.requiresOpenaiAuth === 'boolean' ? raw.requiresOpenaiAuth : true
+
+  return {
+    name: name || providerKey,
+    baseUrl,
+    wireApi: wireApi || 'responses',
+    requiresOpenaiAuth,
+    envKey: envKey || 'OPENAI_API_KEY',
+  }
+}
+
+function normalizeCodexConfigSnapshot(
+  input: unknown
+): CodexConfig | undefined {
+  if (!input || typeof input !== 'object') return undefined
+
+  const raw = input as Partial<CodexConfig>
+  const rawProviders = raw.modelProviders && typeof raw.modelProviders === 'object'
+    ? raw.modelProviders as Record<string, unknown>
+    : {}
+
+  const modelProviders = Object.fromEntries(
+    Object.entries(rawProviders)
+      .map(([rawKey, rawValue]) => {
+        const key = normalizeCodexProviderKey(rawKey)
+        if (!key) return null
+        const normalized = normalizeCodexModelProviderConfig(key, rawValue)
+        if (!normalized) return null
+        return [key, normalized] as const
+      })
+      .filter((entry): entry is readonly [string, CodexModelProviderConfig] => Boolean(entry)),
+  )
+
+  const providerKeys = Object.keys(modelProviders)
+  if (providerKeys.length === 0) return undefined
+
+  const requestedModelProvider = typeof raw.modelProvider === 'string' ? raw.modelProvider.trim() : ''
+  const modelProvider = modelProviders[requestedModelProvider] ? requestedModelProvider : providerKeys[0]!
+
+  return {
+    modelProvider,
+    model: typeof raw.model === 'string' ? raw.model.trim() : '',
+    modelReasoningEffort: typeof raw.modelReasoningEffort === 'string' ? raw.modelReasoningEffort.trim() : '',
+    preferredAuthMethod: typeof raw.preferredAuthMethod === 'string' ? raw.preferredAuthMethod.trim() : '',
+    approvalsReviewer: typeof raw.approvalsReviewer === 'string' ? raw.approvalsReviewer.trim() : '',
+    modelProviders,
+  }
+}
+
+function normalizeSingleCodexSettingsSnapshot(
+  input: unknown
+): CodexSettingsSnapshot | undefined {
+  if (!input || typeof input !== 'object') return undefined
+
+  const raw = input as Partial<CodexSettingsSnapshot>
+  const scope = normalizeCodexEnvironmentScope(raw.scope)
+  if (!scope) return undefined
+
+  const config = normalizeCodexConfigSnapshot(raw.config)
+  if (!config) return undefined
+  const rawProviderApiKeys = raw.providerApiKeys && typeof raw.providerApiKeys === 'object'
+    ? raw.providerApiKeys as Record<string, unknown>
+    : {}
+  const normalizedProviderApiKeys = Object.fromEntries(
+    Object.keys(config.modelProviders).map((key) => [
+      key,
+      typeof rawProviderApiKeys[key] === 'string' ? String(rawProviderApiKeys[key]).trim() : '',
+    ]),
+  )
+
+  return {
+    scope,
+    providerApiKeys: normalizedProviderApiKeys,
+    configExists: Boolean(raw.configExists),
+    config,
+  }
+}
+
+function normalizeCodexSettingsSnapshots(
+  input: AppConfig['codexSettingsSnapshots'] | unknown,
+  legacySnapshotInput?: unknown,
+): CodexSettingsSnapshotMap {
+  const normalizedMap: CodexSettingsSnapshotMap = {}
+  let hasScopedSnapshots = false
+
+  if (input && typeof input === 'object') {
+    for (const [scopeKey, value] of Object.entries(input as Record<string, unknown>)) {
+      const normalizedScopeKey = scopeKey.trim()
+      if (!normalizedScopeKey) continue
+      const normalizedSnapshot = normalizeSingleCodexSettingsSnapshot(value)
+      if (!normalizedSnapshot) continue
+      normalizedMap[normalizedScopeKey] = normalizedSnapshot
+      hasScopedSnapshots = true
+    }
+  }
+
+  const legacySnapshot = normalizeSingleCodexSettingsSnapshot(legacySnapshotInput)
+  if (legacySnapshot && !hasScopedSnapshots) {
+    normalizedMap[getCodexScopeCacheKey(legacySnapshot.scope)] = legacySnapshot
+  }
+
+  return normalizedMap
 }
 
 function normalizeClaudeRuntimeProfiles(
@@ -299,12 +515,21 @@ export function loadConfig(): AppConfig {
       projects: normalizedProjects,
       removedProjects: normalizedRemovedProjects,
       docLinkTags: normalizeDocLinkTags(parsed.docLinkTags),
+      codexProviderApiKeys: normalizeCodexProviderApiKeys(
+        parsed.codexProviderApiKeys,
+        (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
+      ),
+      codexSettingsSnapshots: normalizeCodexSettingsSnapshots(
+        parsed.codexSettingsSnapshots,
+        (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
+      ),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
         ...parsed,
       }),
     }
+    delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
       const runtimeProfiles = normalizeClaudeRuntimeProfiles(
         parsed.claudeRuntimeProfiles,
@@ -320,6 +545,8 @@ export function loadConfig(): AppConfig {
     cachedConfig = {
       ...DEFAULT_CONFIG,
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
+      codexProviderApiKeys: normalizeCodexProviderApiKeys(DEFAULT_CONFIG.codexProviderApiKeys),
+      codexSettingsSnapshots: normalizeCodexSettingsSnapshots(DEFAULT_CONFIG.codexSettingsSnapshots),
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
@@ -346,10 +573,17 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   const updated: AppConfig = {
     ...current,
     ...partial,
+    codexProviderApiKeys: Object.prototype.hasOwnProperty.call(partial, 'codexProviderApiKeys')
+      ? normalizeCodexProviderApiKeys(partial.codexProviderApiKeys)
+      : current.codexProviderApiKeys,
+    codexSettingsSnapshots: Object.prototype.hasOwnProperty.call(partial, 'codexSettingsSnapshots')
+      ? normalizeCodexSettingsSnapshots(partial.codexSettingsSnapshots)
+      : current.codexSettingsSnapshots,
     agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
   }
+  delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
   const runtimeProfiles = normalizeClaudeRuntimeProfiles(
     Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles')
       ? partial.claudeRuntimeProfiles

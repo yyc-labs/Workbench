@@ -3,6 +3,8 @@ import { IPC } from '../main/ipc'
 import type {
   AgentHookEnvelope,
   AgentHookGatewayStatus,
+  CodexSettingsInput,
+  CodexSettingsSaveResult,
   TranscriptGatewayImportPayload,
   TranscriptImportedEvent,
   TranscriptImportPayload,
@@ -101,6 +103,15 @@ const api = {
 
   setConfig: (partial: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC.CONFIG_SET, partial),
+
+  getCodexEnvironmentScope: () =>
+    ipcRenderer.invoke(IPC.CODEX_SCOPE_GET),
+
+  getCodexSettings: () =>
+    ipcRenderer.invoke(IPC.CODEX_SETTINGS_GET),
+
+  setCodexSettings: (payload: CodexSettingsInput): Promise<CodexSettingsSaveResult> =>
+    ipcRenderer.invoke(IPC.CODEX_SETTINGS_SET, payload),
 
   getClaudeBashrcConfig: () =>
     ipcRenderer.invoke(IPC.CLAUDE_BASHRC_GET),

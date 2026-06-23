@@ -22,6 +22,12 @@ import {
   readClaudeBashrcConfig,
   writeClaudeBashrcConfig,
 } from '../claude-bashrc'
+import {
+  normalizeCodexConfig,
+  resolveCodexEnvironmentScope,
+  readCodexSettings,
+  writeCodexSettings,
+} from '../codex-config'
 import { applyWindowsUserEnvToCurrentProcess, writeWindowsUserEnv } from '../windows-env'
 import {
   deleteDocLinkSecret,
@@ -50,6 +56,7 @@ import type {
   AiCommitUndoResult,
   AppConfig,
   Capability,
+  CodexSettingsSaveResult,
   GitConflictFileRequest,
   GitFileDiffRequest,
   GitOperationRequest,
@@ -287,6 +294,32 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
       return updated
     }
   )
+
+  ipcMain.handle(IPC.CODEX_SCOPE_GET, async () => {
+    return resolveCodexEnvironmentScope(deps.getBootCapability())
+  })
+
+  ipcMain.handle(IPC.CODEX_SETTINGS_GET, async () => {
+    return readCodexSettings(deps.getBootCapability())
+  })
+
+  ipcMain.handle(IPC.CODEX_SETTINGS_SET, async (_event, payload: Record<string, unknown>): Promise<CodexSettingsSaveResult> => {
+    const providerApiKeys = payload.providerApiKeys && typeof payload.providerApiKeys === 'object'
+      ? payload.providerApiKeys as Record<string, string>
+      : {}
+    const config = payload.config && typeof payload.config === 'object'
+      ? normalizeCodexConfig(payload.config as Record<string, unknown>)
+      : normalizeCodexConfig({})
+
+    const snapshot = await writeCodexSettings(deps.getBootCapability(), {
+      providerApiKeys,
+      config,
+    })
+    return {
+      snapshot,
+      appConfig: loadConfig(),
+    }
+  })
 
   ipcMain.handle(IPC.CLAUDE_BASHRC_GET, async () => {
     return readClaudeBashrcConfig()

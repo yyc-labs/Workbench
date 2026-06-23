@@ -72,6 +72,52 @@ export interface ClaudeRuntimeProfile {
   config: ClaudeBashrcConfig
 }
 
+export interface CodexModelProviderConfig {
+  name: string
+  baseUrl: string
+  wireApi: string
+  requiresOpenaiAuth: boolean
+  envKey: string
+}
+
+export interface CodexConfig {
+  modelProvider: string
+  model: string
+  modelReasoningEffort: string
+  preferredAuthMethod: string
+  approvalsReviewer: string
+  modelProviders: Record<string, CodexModelProviderConfig>
+}
+
+export interface CodexEnvironmentScope {
+  target: 'wsl' | 'native'
+  hostPlatform: 'windows' | 'linux' | 'macos'
+  runtimeMode: AiExecutionMode
+  homePath: string
+  configPath: string
+  envStorage: 'bashrc' | 'windows-user-env'
+  envStoragePath: string
+}
+
+export interface CodexSettingsSnapshot {
+  scope: CodexEnvironmentScope
+  providerApiKeys: Record<string, string>
+  configExists: boolean
+  config: CodexConfig
+}
+
+export type CodexSettingsSnapshotMap = Record<string, CodexSettingsSnapshot>
+
+export interface CodexSettingsInput {
+  providerApiKeys: Record<string, string>
+  config: CodexConfig
+}
+
+export interface CodexSettingsSaveResult {
+  snapshot: CodexSettingsSnapshot
+  appConfig: AppConfig
+}
+
 export type AiCommitStatus = 'idle' | 'running' | 'success' | 'error'
 
 export interface AiCommitRunOverride {
@@ -792,6 +838,10 @@ export interface AppConfig {
   runtimeKeepAliveOnQuit?: boolean
   /** AI-assisted git commit configuration */
   aiCommit?: AiCommitConfig
+  /** Cached provider-bound Codex API keys grouped by Codex scope */
+  codexProviderApiKeys?: Record<string, Record<string, string>>
+  /** Cached Codex settings snapshots grouped by Codex scope */
+  codexSettingsSnapshots?: CodexSettingsSnapshotMap
   /** Local lifecycle hook gateway for Claude Code and Codex CLI events */
   agentHooks?: AgentHookGatewayConfig
   /** sessionName → projectId mapping for tmux recovery */

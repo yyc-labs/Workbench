@@ -34,6 +34,23 @@ function psEscape(value: string): string {
   return value.replace(/'/g, "''")
 }
 
+function runPowershellScript<T>(script: string, parse: (stdout: string) => T): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const child = exec('powershell.exe -NonInteractive -NoProfile -', {
+      timeout: 15000,
+      windowsHide: true,
+    }, (error, stdout) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve(parse(stdout))
+    })
+    child.stdin?.write(script)
+    child.stdin?.end()
+  })
+}
+
 function buildSetScript(config: ClaudeBashrcConfig): string {
   const managedNames = new Set(Object.values(FIELD_TO_ENV))
   const lines: string[] = []
@@ -87,15 +104,27 @@ export function writeWindowsUserEnv(config: ClaudeBashrcConfig): Promise<void> {
 
   const script = buildSetScript(config)
 
-  return new Promise((resolve, reject) => {
-    const child = exec('powershell.exe -NonInteractive -NoProfile -', {
-      timeout: 15000,
-      windowsHide: true,
-    }, (error) => {
-      if (error) reject(error)
-      else resolve()
-    })
-    child.stdin?.write(script)
-    child.stdin?.end()
-  })
+  return runPowershellScript(script, () => undefined)
+}
+
+export function readWindowsUserEnvVar(envName: string): Promise<string> {
+  if (process.platform !== 'win32') return Promise.resolve('')
+
+  const escapedName = psEscape(envName)
+  const script = `Write-Output ([System.Environment]::GetEnvironmentVariable('${escapedName}', 'User'))`
+  return runPowershellScript(script, (stdout) => stdout.trim())
+}
+
+export async function writeWindowsUserEnvVar(envName: string, value: string): Promise<void> {
+  if (process.platform !== 'win32') return
+
+  const escapedName = psEscape(envName)
+  const escapedValue = psEscape(value)
+  const script = [
+    `[System.Environment]::SetEnvironmentVariable('${escapedName}', '${escapedValue}', 'User')`,
+    `Start-Process 'rundll32.exe' -ArgumentList 'user32.dll,UpdatePerUserSystemParameters' -Wait -WindowStyle Hidden`,
+  ].join('\n')
+
+  await runPowershellScript(script, () => undefined)
+  process.env[envName] = value
 }
