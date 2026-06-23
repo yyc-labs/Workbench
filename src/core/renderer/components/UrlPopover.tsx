@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Copy, Ellipsis, ExternalLink, KeyRound, Link2, UserRound } from 'lucide-react'
+import { Check, ChevronDown, Copy, Ellipsis, ExternalLink, KeyRound, Link2, RefreshCw, UserRound } from 'lucide-react'
 import { useI18n } from '../i18n'
 import { copyTextToClipboard } from '../pages/code/code.clipboard'
 
@@ -489,6 +489,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null)
+  const [openingEntryKey, setOpeningEntryKey] = useState<string | null>(null)
   const [credentialMenuOpen, setCredentialMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -737,6 +738,21 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     }
   }
 
+  const handleOpenEntry = async (entry: PreparedUrlPopoverEntry) => {
+    if (openingEntryKey === entry.key) return
+
+    const trackOpening = entry.kind === 'ssh'
+    if (trackOpening) setOpeningEntryKey(entry.key)
+
+    try {
+      await openUrlPopoverItem(entry)
+    } finally {
+      if (trackOpening) {
+        setOpeningEntryKey((current) => (current === entry.key ? null : current))
+      }
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -750,6 +766,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       setQuery('')
       setCopiedKey(null)
       setCopiedCredentialKey(null)
+      setOpeningEntryKey(null)
       setCredentialMenuOpen(false)
       setSelectedCategory('all')
       return
@@ -855,17 +872,23 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
         ) : (
           filteredEntries.map((entry) => {
             const isCopied = copiedKey === entry.key
+            const isOpening = openingEntryKey === entry.key
             return (
               <div
                 key={entry.key}
-                className="group/item flex cursor-pointer items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70"
+                className={`group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70 ${
+                  isOpening ? 'cursor-progress' : 'cursor-pointer'
+                }`}
                 role="button"
                 tabIndex={0}
-                onClick={() => { void openUrlPopoverItem(entry) }}
+                aria-busy={isOpening || undefined}
+                aria-disabled={isOpening || undefined}
+                onClick={() => { void handleOpenEntry(entry) }}
                 onKeyDown={(e) => {
+                  if (isOpening) return
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    void openUrlPopoverItem(entry)
+                    void handleOpenEntry(entry)
                   }
                 }}
                 aria-label={entry.label}
@@ -895,21 +918,31 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                     onOpenChange={setCredentialMenuOpen}
                   />
                 )}
-                <button
-                  type="button"
-                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${
-                    isCopied
-                      ? 'scale-105 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] opacity-100'
-                      : 'opacity-0 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100'
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    void handleCopy(entry)
-                  }}
-                >
-                  {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {isCopied ? t('common.copied') : (entry.copyLabel ?? t('common.copy'))}
-                </button>
+                {isOpening ? (
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[11px] text-[color:var(--color-foreground)]"
+                    aria-live="polite"
+                  >
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                    {t('common.opening')}
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${
+                      isCopied
+                        ? 'scale-105 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] opacity-100'
+                        : 'opacity-0 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleCopy(entry)
+                    }}
+                  >
+                    {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {isCopied ? t('common.copied') : (entry.copyLabel ?? t('common.copy'))}
+                  </button>
+                )}
               </div>
             )
           })

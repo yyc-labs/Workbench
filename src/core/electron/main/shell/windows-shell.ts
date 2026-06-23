@@ -238,6 +238,13 @@ export function buildWindowsTerminalShellLaunch(
   args: string[]
 }
 export function buildWindowsTerminalShellLaunch(
+  command: string | undefined,
+  options?: {
+    preferredShell?: string
+    availability?: WindowsShellAvailabilityResolver
+  },
+): WindowsTerminalShellLaunch
+export function buildWindowsTerminalShellLaunch(
   command?: string,
   options?: {
     preferredShell?: string
