@@ -5,7 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
-import { SettingsAiRuntimePanel } from './settings/SettingsAiRuntimePanel'
+import { SettingsAgentsPanel } from './settings/SettingsAgentsPanel'
 import { SettingsTranscriptPanel } from './settings/SettingsTranscriptPanel'
 import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
@@ -15,6 +15,8 @@ import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
 import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
+  isSettingsSectionAlias,
+  type SettingsSectionAlias,
   type ThemeMode,
 } from './settings/settings.types'
 import { useI18n } from '../i18n'
@@ -35,7 +37,8 @@ export function SettingsPage() {
   const setClaudeRuntimeProfiles = useAppStore((s) => s.setClaudeRuntimeProfiles)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
-  const section = isSettingsSection(sectionParam) ? sectionParam : DEFAULT_SETTINGS_SECTION
+  const alias = isSettingsSectionAlias(sectionParam) ? sectionParam as SettingsSectionAlias : null
+  const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
   const { t } = useI18n()
 
   useEffect(() => {
@@ -56,7 +59,7 @@ export function SettingsPage() {
     await setLocaleConfig(nextLocale)
   }
 
-  if (!isSettingsSection(sectionParam)) {
+  if (!isSettingsSection(sectionParam) && !isSettingsSectionAlias(sectionParam)) {
     return <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />
   }
 
@@ -103,13 +106,14 @@ export function SettingsPage() {
                   runtimeEntries={runtimeEntries}
                 />
               )}
-              {section === 'ai-runtime' && (
-                <SettingsAiRuntimePanel
+              {section === 'agents' && (
+                <SettingsAgentsPanel
                   capability={capability}
                   mode={config.aiEnvironment?.mode}
                   profiles={config.claudeRuntimeProfiles ?? []}
                   activeProfileId={config.activeClaudeRuntimeProfileId}
                   onProfilesSave={setClaudeRuntimeProfiles}
+                  initialTab={alias === 'codex' ? 'codex' : 'claude'}
                 />
               )}
               {section === 'transcripts' && (

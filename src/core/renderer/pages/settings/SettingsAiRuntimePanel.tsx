@@ -19,6 +19,7 @@ type SettingsAiRuntimePanelProps = {
   profiles: ClaudeRuntimeProfile[]
   activeProfileId?: string
   onProfilesSave: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
+  embedded?: boolean
 }
 
 type RuntimeEnvField = {
@@ -58,6 +59,7 @@ function SettingsAiRuntimePanel({
   profiles,
   activeProfileId,
   onProfilesSave,
+  embedded = false,
 }: SettingsAiRuntimePanelProps) {
   const { t, tHtml } = useI18n()
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState('https://api.deepseek.com/anthropic')
@@ -448,15 +450,40 @@ function SettingsAiRuntimePanel({
 
   return (
     <div className="space-y-8">
-      <div>
-        <p className="section-label mb-3">{t('settings.aiRuntime.kicker')}</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-          {t('settings.aiRuntime.title')}
-        </h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settings.aiRuntime.description')}
-        </p>
-        <div className="mb-6 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+      {!embedded && (
+        <div>
+          <p className="section-label mb-3">{t('settings.aiRuntime.kicker')}</p>
+          <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
+            {t('settings.aiRuntime.title')}
+          </h2>
+          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
+            {t('settings.aiRuntime.description')}
+          </p>
+          <div className="mb-6 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+            <p>{t('settings.aiRuntime.runtimeModelSummary')}</p>
+            <p className="mt-2">{t('settings.aiRuntime.runtimeModelShell')}</p>
+            <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.runtimeModelClaude')} />
+            {isCustomScriptMode && (
+              <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.customScriptHint')} />
+            )}
+            {capabilityReady && !supportsShellEnvConfig && (
+              <p className="mt-2 text-[color:var(--color-destructive)]">{t('settings.aiRuntime.unsupportedHostHint')}</p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            className="h-10 rounded-full px-4 text-sm"
+            onClick={() => void handleOpenDocs()}
+            loading={profileAction === 'docs'}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {t('settings.aiRuntime.openDocs')}
+          </Button>
+        </div>
+      )}
+
+      {embedded && (
+        <div className="rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
           <p>{t('settings.aiRuntime.runtimeModelSummary')}</p>
           <p className="mt-2">{t('settings.aiRuntime.runtimeModelShell')}</p>
           <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.runtimeModelClaude')} />
@@ -466,17 +493,17 @@ function SettingsAiRuntimePanel({
           {capabilityReady && !supportsShellEnvConfig && (
             <p className="mt-2 text-[color:var(--color-destructive)]">{t('settings.aiRuntime.unsupportedHostHint')}</p>
           )}
+          <Button
+            variant="outline"
+            className="mt-4 h-10 rounded-full px-4 text-sm"
+            onClick={() => void handleOpenDocs()}
+            loading={profileAction === 'docs'}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {t('settings.aiRuntime.openDocs')}
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          className="h-10 rounded-full px-4 text-sm"
-          onClick={() => void handleOpenDocs()}
-          loading={profileAction === 'docs'}
-        >
-          <ExternalLink className="h-4 w-4" />
-          {t('settings.aiRuntime.openDocs')}
-        </Button>
-      </div>
+      )}
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="space-y-4">

@@ -3,6 +3,10 @@ import type {
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
   ClaudeBashrcConfig,
+  CodexEnvironmentScope,
+  CodexSettingsInput,
+  CodexSettingsSaveResult,
+  CodexSettingsSnapshot,
   ClaudeRuntimeProfile,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchOptions,
@@ -72,6 +76,9 @@ declare global {
       sendInput: (id: string, data: string) => Promise<boolean>
       getConfig: () => Promise<AppConfig>
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
+      getCodexEnvironmentScope: () => Promise<CodexEnvironmentScope>
+      getCodexSettings: () => Promise<CodexSettingsSnapshot>
+      setCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSaveResult>
       getClaudeBashrcConfig: () => Promise<ClaudeBashrcConfig>
       setClaudeBashrcConfig: (config: ClaudeBashrcConfig) => Promise<ClaudeBashrcConfig>
       setWindowsUserEnv: (config: ClaudeBashrcConfig) => Promise<ClaudeBashrcConfig>
@@ -258,6 +265,8 @@ export interface AppState {
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
+  loadCodexSettings: () => Promise<CodexSettingsSnapshot>
+  saveCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSnapshot>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
   setClaudeRuntimeProfiles: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
   setDocLinkTags: (tags: ProjectDocTagOption[]) => Promise<void>

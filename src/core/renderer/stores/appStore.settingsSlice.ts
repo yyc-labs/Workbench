@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import type { ClaudeRuntimeProfile, ProjectDocTagOption } from '../../shared/types'
+import type { ClaudeRuntimeProfile, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption } from '../../shared/types'
+import { getCodexScopeCacheKey } from '../../shared/codexScope'
 
 export type SettingsActionsSlice = Pick<
   AppState,
@@ -10,6 +11,8 @@ export type SettingsActionsSlice = Pick<
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
+  | 'loadCodexSettings'
+  | 'saveCodexSettings'
   | 'setAgentHookConfig'
   | 'setClaudeRuntimeProfiles'
   | 'setDocLinkTags'
@@ -79,6 +82,36 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
         aiCommit: updated.aiCommit,
       },
     }))
+  },
+
+  loadCodexSettings: async (): Promise<CodexSettingsSnapshot> => {
+    const snapshot = await window.electronAPI.getCodexSettings()
+    const scopeKey = getCodexScopeCacheKey(snapshot.scope)
+    const currentConfig = window.electronAPI.getConfig
+      ? await window.electronAPI.getConfig()
+      : undefined
+    const updated = await window.electronAPI.setConfig({
+      codexProviderApiKeys: {
+        ...(currentConfig?.codexProviderApiKeys ?? {}),
+        [scopeKey]: snapshot.providerApiKeys,
+      },
+      codexSettingsSnapshots: {
+        ...(currentConfig?.codexSettingsSnapshots ?? {}),
+        [scopeKey]: snapshot,
+      },
+    })
+    set({
+      config: updated,
+    })
+    return snapshot
+  },
+
+  saveCodexSettings: async (payload: CodexSettingsInput): Promise<CodexSettingsSnapshot> => {
+    const { snapshot, appConfig } = await window.electronAPI.setCodexSettings(payload)
+    set({
+      config: appConfig,
+    })
+    return snapshot
   },
 
   setAgentHookConfig: async (agentHooks) => {

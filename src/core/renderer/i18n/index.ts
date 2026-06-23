@@ -7,7 +7,7 @@ import type { Section } from '../pages/settings/settings.types'
 const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = {
   general: 'settings.sections.general',
   runtime: 'settings.sections.runtime',
-  'ai-runtime': 'settings.sections.aiRuntime',
+  agents: 'settings.sections.agents',
   transcripts: 'settings.sections.transcripts',
   hooks: 'settings.sections.hooks',
   logs: 'settings.sections.logs',

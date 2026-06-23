@@ -12,7 +12,7 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
   const icons: Record<Section, React.ComponentType<{ className?: string; strokeWidth?: string | number }>> = {
     general: Palette,
     runtime: Wrench,
-    'ai-runtime': Bot,
+    agents: Bot,
     transcripts: FileText,
     hooks: RadioTower,
     logs: TerminalIcon,

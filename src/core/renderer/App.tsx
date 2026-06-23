@@ -14,6 +14,8 @@ import {
 import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
+  isSettingsSectionAlias,
+  type SettingsSectionAlias,
   type Section,
 } from './pages/settings/settings.types'
 import {
@@ -52,6 +54,10 @@ function resolveWindowTitle(pathname: string, projects: Array<{
   if (segments[0] === 'settings') {
     if (isSettingsSection(segments[1])) {
       return `${settingsLabel} - ${getSettingsSectionLabel(segments[1])} - ${appName}`
+    }
+    if (isSettingsSectionAlias(segments[1])) {
+      const alias = segments[1] as SettingsSectionAlias
+      return `${settingsLabel} - ${alias === 'codex' ? 'Codex' : getSettingsSectionLabel('agents')} - ${appName}`
     }
     return `${settingsLabel} - ${appName}`
   }
