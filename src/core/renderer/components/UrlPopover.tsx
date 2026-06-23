@@ -1,6 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, Copy, ExternalLink, Link2 } from 'lucide-react'
+import { Check, ChevronDown, Copy, Ellipsis, ExternalLink, KeyRound, Link2, UserRound } from 'lucide-react'
 import { useI18n } from '../i18n'
 import { copyTextToClipboard } from '../pages/code/code.clipboard'
 
@@ -22,6 +22,7 @@ export type UrlPopoverItem = {
   copyValue?: string
   copyLabel?: string
   copyValueResolver?: () => Promise<string>
+  credentialActions?: ReadonlyArray<UrlPopoverCredentialAction>
 }
 type UrlPopoverEntry = UrlPopoverItem
 type PreparedUrlPopoverEntry = UrlPopoverEntry & {
@@ -37,6 +38,245 @@ type PreparedUrlPopoverEntry = UrlPopoverEntry & {
 type UrlPopoverCategoryOption = {
   value: string
   label: string
+}
+
+export type UrlPopoverCredentialAction = {
+  key: string
+  label: string
+  onCopy: () => Promise<boolean>
+  icon?: 'account' | 'password'
+}
+
+type UrlPopoverItemActionsMenuProps = {
+  entryKey: string
+  actions: ReadonlyArray<UrlPopoverCredentialAction>
+  copiedActionKey: string | null
+  onCopyAction: (entryKey: string, action: UrlPopoverCredentialAction) => void
+  floatingMenuRef: MutableRefObject<HTMLDivElement | null>
+}
+
+function UrlPopoverItemActionsMenu({
+  entryKey,
+  actions,
+  copiedActionKey,
+  onCopyAction,
+  floatingMenuRef,
+}: UrlPopoverItemActionsMenuProps) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const previousOpenRef = useRef(open)
+  const [menuLayout, setMenuLayout] = useState({ top: 0, left: 0, width: 0, maxHeight: 220 })
+
+  const clearCloseTimer = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+  }
+
+  const isWithinMenuArea = (target: EventTarget | null) => (
+    target instanceof Node
+    && Boolean(
+      containerRef.current?.contains(target)
+      || floatingMenuRef.current?.contains(target)
+    )
+  )
+
+  const scheduleClose = () => {
+    clearCloseTimer()
+    closeTimerRef.current = setTimeout(() => {
+      const activeEl = document.activeElement
+      if (isWithinMenuArea(activeEl)) return
+      setOpen(false)
+    }, 120)
+  }
+
+  const updateMenuLayout = () => {
+    if (!triggerRef.current) return
+
+    const rect = triggerRef.current.getBoundingClientRect()
+    const viewportPadding = 12
+    const triggerGap = 6
+    const menuWidth = 156
+    const idealMaxHeight = 220
+    const preferredTop = rect.bottom + triggerGap
+    const availableBelow = window.innerHeight - preferredTop - viewportPadding
+    const availableAbove = rect.top - triggerGap - viewportPadding
+    const shouldOpenUpward = availableBelow < 120 && availableAbove > availableBelow
+    const maxHeight = Math.max(88, Math.min(
+      idealMaxHeight,
+      shouldOpenUpward ? availableAbove : availableBelow,
+    ))
+    const top = shouldOpenUpward
+      ? Math.max(viewportPadding, rect.top - triggerGap - maxHeight)
+      : rect.bottom + triggerGap
+    const left = Math.max(
+      viewportPadding,
+      Math.min(rect.right - menuWidth, window.innerWidth - viewportPadding - menuWidth),
+    )
+
+    setMenuLayout({ top, left, width: menuWidth, maxHeight })
+  }
+
+  useEffect(() => {
+    if (!open) return
+
+    updateMenuLayout()
+
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target
+      if (!isWithinMenuArea(target)) setOpen(false)
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    const handleResize = () => {
+      updateMenuLayout()
+    }
+
+    const handleScroll = () => {
+      setOpen(false)
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('scroll', handleScroll, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (previousOpenRef.current === open) return
+    previousOpenRef.current = open
+    if (!open) {
+      floatingMenuRef.current = null
+      clearCloseTimer()
+    }
+  }, [floatingMenuRef, open])
+
+  useEffect(() => {
+    return () => {
+      floatingMenuRef.current = null
+      clearCloseTimer()
+    }
+  }, [floatingMenuRef])
+
+  if (actions.length === 0) return null
+
+  const resolveIcon = (icon: UrlPopoverCredentialAction['icon']) => {
+    if (icon === 'password') return <KeyRound className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+    return <UserRound className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+  }
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
+          open
+            ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
+            : 'text-[color:var(--color-muted-foreground)] opacity-0 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100 focus-visible:opacity-100'
+        }`}
+        title={t('common.moreActions')}
+        aria-label={t('common.moreActions')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onMouseEnter={() => {
+          clearCloseTimer()
+        }}
+        onMouseLeave={(event) => {
+          if (!open) return
+          if (isWithinMenuArea(event.relatedTarget)) return
+          scheduleClose()
+        }}
+        onFocus={() => {
+          clearCloseTimer()
+        }}
+        onBlur={(event) => {
+          if (!open) return
+          if (isWithinMenuArea(event.relatedTarget)) return
+          scheduleClose()
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          clearCloseTimer()
+          if (!open) updateMenuLayout()
+          setOpen((prev) => !prev)
+        }}
+      >
+        <Ellipsis className="h-3.5 w-3.5" />
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={(node) => {
+            floatingMenuRef.current = node
+          }}
+          className="surface-card fixed z-[10011] overflow-hidden rounded-[14px]"
+          style={{
+            top: menuLayout.top,
+            left: menuLayout.left,
+            width: menuLayout.width,
+          }}
+          role="menu"
+          aria-label={t('common.moreActions')}
+          onMouseEnter={() => {
+            clearCloseTimer()
+          }}
+          onMouseLeave={(event) => {
+            if (isWithinMenuArea(event.relatedTarget)) return
+            scheduleClose()
+          }}
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault()
+          }}
+        >
+          <div className="overflow-auto p-1" style={{ maxHeight: menuLayout.maxHeight }}>
+            {actions.map((action) => {
+              const actionKey = `${entryKey}:${action.key}`
+              const isCopied = copiedActionKey === actionKey
+              return (
+                <button
+                  key={action.key}
+                  type="button"
+                  className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-xs outline-none transition-colors focus-visible:outline-none ${
+                    isCopied
+                      ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                  }`}
+                  role="menuitem"
+                  onClick={() => {
+                    onCopyAction(entryKey, action)
+                  }}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5 truncate">
+                    {resolveIcon(action.icon)}
+                    <span className="truncate">{isCopied ? t('common.copied') : action.label}</span>
+                  </span>
+                  {isCopied ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                </button>
+              )
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
 }
 
 type UrlPopoverCategorySelectProps = {
@@ -287,14 +527,17 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const categoryMenuRef = useRef<HTMLDivElement | null>(null)
+  const itemActionsMenuRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copiedCredentialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoverStateRef = useRef({ trigger: false, popover: false })
   const focusWithinRef = useRef(false)
   const entries = useMemo<UrlPopoverEntry[]>(
@@ -445,6 +688,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       triggerRef.current?.contains(target)
       || popoverRef.current?.contains(target)
       || categoryMenuRef.current?.contains(target)
+      || itemActionsMenuRef.current?.contains(target)
     )
   )
 
@@ -457,7 +701,10 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       if (forceClose && (hasSearchText() || hasSelectedCategory())) return
       if (!forceClose && focusWithinRef.current) return
       const activeEl = document.activeElement
-      if (activeEl instanceof HTMLElement && categoryMenuRef.current?.contains(activeEl)) return
+      if (activeEl instanceof HTMLElement && (
+        categoryMenuRef.current?.contains(activeEl)
+        || itemActionsMenuRef.current?.contains(activeEl)
+      )) return
       if (hoverStateRef.current.trigger || hoverStateRef.current.popover) return
       closePopover({ blur: Boolean(forceClose) })
     }, 150)
@@ -509,10 +756,29 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     }
   }
 
+  const handleCopyCredentialAction = async (entryKey: string, action: UrlPopoverCredentialAction) => {
+    try {
+      const copied = await action.onCopy()
+      if (!copied) return
+      const key = `${entryKey}:${action.key}`
+      setCopiedCredentialKey(key)
+      if (copiedCredentialTimerRef.current) {
+        clearTimeout(copiedCredentialTimerRef.current)
+        copiedCredentialTimerRef.current = null
+      }
+      copiedCredentialTimerRef.current = setTimeout(() => {
+        setCopiedCredentialKey((current) => (current === key ? null : current))
+      }, 1200)
+    } catch {
+      return
+    }
+  }
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+      if (copiedCredentialTimerRef.current) clearTimeout(copiedCredentialTimerRef.current)
     }
   }, [])
 
@@ -520,6 +786,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     if (!show) {
       setQuery('')
       setCopiedKey(null)
+      setCopiedCredentialKey(null)
       setSelectedCategory('all')
       return
     }
@@ -638,6 +905,17 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                     )}
                   </div>
                 </div>
+                {entry.credentialActions && entry.credentialActions.length > 0 && (
+                  <UrlPopoverItemActionsMenu
+                    entryKey={entry.key}
+                    actions={entry.credentialActions}
+                    copiedActionKey={copiedCredentialKey}
+                    onCopyAction={(entryKey, action) => {
+                      void handleCopyCredentialAction(entryKey, action)
+                    }}
+                    floatingMenuRef={itemActionsMenuRef}
+                  />
+                )}
                 <button
                   type="button"
                   className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${

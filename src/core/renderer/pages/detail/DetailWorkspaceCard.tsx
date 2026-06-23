@@ -31,7 +31,7 @@ function DetailWorkspaceCard({
 }: DetailWorkspaceCardProps) {
   const { t } = useI18n()
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
-  const { handleGetDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
+  const { handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
   const docMenuItems = useMemo(
     () => docLinks.map((link) => {
       const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
@@ -44,14 +44,28 @@ function DetailWorkspaceCard({
         onOpen: () => handleOpenDocLink(link),
         kind: link.kind ?? 'url',
         description: projectDocLinkTarget(link),
-        copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
-        copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
-        copyValueResolver: isSsh && link.hasSecret
-          ? async () => await handleGetDocLinkSecret(link.id) || ''
-          : undefined,
+        copyValue: projectDocLinkCopyValue(link),
+        credentialActions: [
+          ...((link.account?.trim() || link.sshUsername?.trim())
+            ? [{
+              key: 'account',
+              label: t('documentation.copyAccount'),
+              icon: 'account' as const,
+              onCopy: async () => await handleCopyDocLinkAccount(link.id),
+            }]
+            : []),
+          ...(link.hasSecret
+            ? [{
+              key: 'password',
+              label: t('documentation.copyPassword'),
+              icon: 'password' as const,
+              onCopy: async () => await handleCopyDocLinkSecret(link.id),
+            }]
+            : []),
+        ],
       }
     }),
-    [docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, t]
+    [docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, t]
   )
   return (
     <div className="relative overflow-hidden rounded-[24px] p-6 surface-card">

@@ -42,6 +42,12 @@ export type ProjectDocMenuItem = {
   copyValue?: string
   copyLabel?: string
   copyValueResolver?: () => Promise<string>
+  credentialActions?: ReadonlyArray<{
+    key: string
+    label: string
+    onCopy: () => Promise<boolean>
+    icon?: 'account' | 'password'
+  }>
   linkId?: string
 }
 
@@ -618,15 +624,29 @@ export function useProjectDocLinks({
         description: isSsh
           ? `${link.sshUsername || link.account || ''}@${sshTarget}`
           : link.url ?? '',
-        copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
-        copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
-        copyValueResolver: isSsh && link.hasSecret
-          ? async () => await handleGetDocLinkSecret(link.id) || ''
-          : undefined,
+        copyValue: projectDocLinkCopyValue(link),
+        credentialActions: [
+          ...((link.account?.trim() || link.sshUsername?.trim())
+            ? [{
+              key: 'account',
+              label: t('documentation.copyAccount'),
+              icon: 'account' as const,
+              onCopy: async () => await handleCopyDocLinkAccount(link.id),
+            }]
+            : []),
+          ...(link.hasSecret
+            ? [{
+              key: 'password',
+              label: t('documentation.copyPassword'),
+              icon: 'password' as const,
+              onCopy: async () => await handleCopyDocLinkSecret(link.id),
+            }]
+            : []),
+        ],
         linkId: link.id,
       }
     }),
-    [docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, locale, t]
+    [docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, locale, t]
   )
 
   useEffect(() => {

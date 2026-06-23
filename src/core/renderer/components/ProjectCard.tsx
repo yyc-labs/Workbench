@@ -45,7 +45,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
-  const { handleGetDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
+  const { handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
 
   const currentCli: CliTool = project.cli || 'claude'
 
@@ -98,15 +98,29 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onOpen: () => handleOpenDocLink(link),
           kind: link.kind ?? 'url',
           description: projectDocLinkTarget(link),
-          copyValue: isSsh ? undefined : projectDocLinkCopyValue(link),
-          copyLabel: isSsh ? t('documentation.copyPassword') : undefined,
-          copyValueResolver: isSsh && link.hasSecret
-            ? async () => await handleGetDocLinkSecret(link.id) || ''
-            : undefined,
+          copyValue: projectDocLinkCopyValue(link),
+          credentialActions: [
+            ...(link.account?.trim() || link.sshUsername?.trim()
+              ? [{
+                key: 'account',
+                label: t('documentation.copyAccount'),
+                icon: 'account' as const,
+                onCopy: async () => await handleCopyDocLinkAccount(link.id),
+              }]
+              : []),
+            ...(link.hasSecret
+              ? [{
+                key: 'password',
+                label: t('documentation.copyPassword'),
+                icon: 'password' as const,
+                onCopy: async () => await handleCopyDocLinkSecret(link.id),
+              }]
+              : []),
+          ],
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, handleGetDocLinkSecret, handleOpenDocLink, isDevReady, t]
+    [devUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, isDevReady, t]
   )
   const hasProjectDocLinks = docLinks.length > 0
   const hoverDocLabel = defaultDocLink
