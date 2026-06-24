@@ -1,5 +1,6 @@
-import { Check, ChevronDown, GitBranch, GitFork, RefreshCw } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { GitBranch, GitFork, RefreshCw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Combobox, type ComboboxOption } from '../../components/ui/combobox'
 import type { DetailGitRepositorySummary, DetailGitSnapshot } from './detail.types'
 import { useI18n } from '../../i18n'
 
@@ -36,10 +37,7 @@ export function DetailGitRepositorySelector({
   onRefreshRepositories,
 }: DetailGitRepositorySelectorProps) {
   const { t } = useI18n()
-  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
   const selectedRepository = repositories.find((repo) => repo.id === selectedRepositoryId) ?? snapshot?.repository ?? repositories[0]
   const changeCount = snapshot?.changedFileCount ?? 0
   const branchName = snapshot?.branch.current || t('detail.repositorySelectorLoading')
@@ -48,44 +46,14 @@ export function DetailGitRepositorySelector({
     : snapshot?.isGitRepository
       ? `${branchName} · ${t('detail.repositorySelectorChanges', { count: changeCount })}`
       : t('detail.repositorySelectorNoRepository')
-  const filteredRepositories = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return repositories
-    return repositories.filter((repo) => (
-      repo.name.toLowerCase().includes(normalizedQuery)
-      || repo.relativePath.toLowerCase().includes(normalizedQuery)
-      || repo.repoRoot.toLowerCase().includes(normalizedQuery)
-    ))
-  }, [query, repositories])
-
-  useEffect(() => {
-    if (!open) {
-      setQuery('')
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      inputRef.current?.focus()
-    })
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (!containerRef.current?.contains(target)) setOpen(false)
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-    }
-  }, [open])
+  const repositoryOptions = useMemo<ComboboxOption[]>(
+    () => repositories.map((repo) => ({
+      value: repo.id,
+      label: repositoryLabel(repo, t),
+      keywords: [repo.name, repo.relativePath, repo.repoRoot],
+    })),
+    [repositories, t]
+  )
 
   const controlHeightClass = variant === 'inline' ? 'h-7' : 'h-8'
   const buttonMaxWidthClass = variant === 'inline' ? 'max-w-[260px]' : 'max-w-[300px]'
@@ -101,98 +69,70 @@ export function DetailGitRepositorySelector({
             <RefreshCw className={`h-3.5 w-3.5 ${repositoriesLoading ? 'animate-spin' : ''}`} />
           </button>
 
-          <div ref={containerRef} className="relative">
-            {open ? (
-              <div className={`group flex ${controlHeightClass} ${buttonMaxWidthClass} items-center gap-2 rounded-full border border-[color:var(--color-ring)]/55 bg-[color:var(--color-popover)] px-3 text-left text-xs shadow-[0_8px_22px_rgba(29,29,31,0.10)] ring-2 ring-[color:var(--color-ring)]/16`}>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={selectedRepository ? repositoryLabel(selectedRepository, t) : t('detail.repositorySelectorRepository')}
-                  className="min-w-0 flex-1 bg-transparent text-xs text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
-                  spellCheck={false}
-                />
-                <button
-                  type="button"
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                  onClick={() => setOpen(false)}
-                  title={t('detail.repositorySelectorClose')}
-                >
-                  <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className={`group flex ${controlHeightClass} ${buttonMaxWidthClass} items-center gap-2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/72 px-3 text-left text-xs outline-none transition-all hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-popover)]/82 disabled:cursor-not-allowed disabled:opacity-60`}
-                aria-haspopup="listbox"
-                aria-expanded={open}
-                onClick={() => {
-                  if (!open && repositories.length <= 0 && !repositoriesLoading) {
-                    onRefreshRepositories()
-                  }
-                  setOpen(true)
-                }}
-                disabled={repositoriesLoading}
-                title={t('detail.repositorySelectorSwitch')}
-              >
-                <span className="min-w-0 flex-1 truncate text-[color:var(--color-foreground)]">
-                  {selectedRepository ? repositoryLabel(selectedRepository, t) : t('detail.repositorySelectorNoRepository')}
-                </span>
-                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)] transition-transform duration-200" />
-              </button>
+          <Combobox
+            ariaLabel={t('detail.repositorySelectorListAria')}
+            value={selectedRepository?.id ?? ''}
+            searchValue={query}
+            onSearchValueChange={setQuery}
+            options={repositoryOptions}
+            onChange={onChangeRepository}
+            editable="open"
+            clearSearchOnClose
+            disabled={repositoriesLoading}
+            triggerPlaceholder={t('detail.repositorySelectorNoRepository')}
+            inputPlaceholder={selectedRepository ? repositoryLabel(selectedRepository, t) : t('detail.repositorySelectorRepository')}
+            toggleAriaLabel={t('detail.repositorySelectorClose')}
+            emptyText={repositoriesLoading ? t('detail.repositorySelectorLoading') : t('detail.repositorySelectorNoMatch')}
+            minDropdownWidth={360}
+            matchTriggerWidth={false}
+            className={buttonMaxWidthClass}
+            inputClassName={`h-${variant === 'inline' ? '7' : '8'} rounded-full px-3 text-xs`}
+            triggerClassName={`${controlHeightClass} ${buttonMaxWidthClass} bg-[color:var(--color-card)]/72 px-3 text-xs hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-popover)]/82`}
+            contentClassName="w-[min(360px,calc(100vw-32px))]"
+            renderDisplayValue={() => (
+              <span className="min-w-0 flex-1 truncate text-[color:var(--color-foreground)]">
+                {selectedRepository ? repositoryLabel(selectedRepository, t) : t('detail.repositorySelectorNoRepository')}
+              </span>
             )}
-
-            {open && (
-              <div
-                className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(360px,calc(100vw-32px))] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]"
-                style={{ WebkitBackdropFilter: 'saturate(170%) blur(22px)' }}
-                role="listbox"
-                aria-label={t('detail.repositorySelectorListAria')}
-              >
-                <div className="max-h-[260px] overflow-auto">
-                  {repositoriesLoading ? (
-                    <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.repositorySelectorLoading')}</p>
-                  ) : filteredRepositories.length > 0 ? (
-                    filteredRepositories.map((repo) => {
-                      const selected = repo.id === selectedRepository?.id
-                      return (
-                        <button
-                          key={repo.id}
-                          type="button"
-                          className={`flex w-full items-center gap-2 rounded-[13px] px-2.5 py-2 text-left outline-none transition-colors ${
-                            selected
-                              ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                              : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                          }`}
-                          role="option"
-                          aria-selected={selected}
-                          onClick={() => {
-                            onChangeRepository(repo.id)
-                            setOpen(false)
-                          }}
-                        >
-                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-background-sunken)] text-[color:var(--color-muted-foreground)]">
-                            <GitFork className="h-3.5 w-3.5" />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[12px] font-medium">{repo.relativePath === '.' ? repo.name : repo.relativePath}</span>
-                            <span className="block truncate text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                              {repo.relativePath === '.' ? t('detail.repositorySelectorRoot') : repo.isNested ? t('detail.repositorySelectorNested') : t('detail.repositorySelectorRepository')} · {repo.repoRoot}
-                            </span>
-                          </span>
-                          {selected && <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
-                        </button>
-                      )
-                    })
-                  ) : (
-                    <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.repositorySelectorNoMatch')}</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+            renderOption={(option, state) => {
+              const repo = repositories.find((item) => item.id === option.value)
+              if (!repo) return null
+              return (
+                <>
+                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-background-sunken)] text-[color:var(--color-muted-foreground)]">
+                    <GitFork className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] font-medium">{repo.relativePath === '.' ? repo.name : repo.relativePath}</span>
+                    <span className="block truncate text-[10.5px] text-[color:var(--color-muted-foreground)]">
+                      {repo.relativePath === '.' ? t('detail.repositorySelectorRoot') : repo.isNested ? t('detail.repositorySelectorNested') : t('detail.repositorySelectorRepository')} · {repo.repoRoot}
+                    </span>
+                  </span>
+                  {state.selected ? <span className="h-4 w-4 shrink-0 rounded-full bg-[color:var(--color-primary)]" /> : null}
+                </>
+              )
+            }}
+            filterOption={(option, nextQuery) => {
+              const normalizedQuery = nextQuery.trim().toLowerCase()
+              if (!normalizedQuery) return true
+              const repo = repositories.find((item) => item.id === option.value)
+              if (!repo) return false
+              return (
+                repo.name.toLowerCase().includes(normalizedQuery)
+                || repo.relativePath.toLowerCase().includes(normalizedQuery)
+                || repo.repoRoot.toLowerCase().includes(normalizedQuery)
+              )
+            }}
+            onOpenChange={(isOpen) => {
+              if (isOpen) {
+                if (repositories.length <= 0 && !repositoriesLoading) {
+                  onRefreshRepositories()
+                }
+                return
+              }
+              setQuery('')
+            }}
+          />
 
           <span className={`inline-flex ${controlHeightClass} items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-[11px] text-[color:var(--color-muted-foreground)]`}>
             <GitBranch className="h-3.5 w-3.5" />

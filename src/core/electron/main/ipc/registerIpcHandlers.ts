@@ -67,6 +67,7 @@ import type {
   TerminalStopAllResult,
   LearningCreateCategoryPayload,
   LearningCreateNotePayload,
+  LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
@@ -578,6 +579,14 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
 
   ipcMain.handle(IPC.LEARNING_CREATE_CATEGORY, async (_event, payload: LearningCreateCategoryPayload) => {
     return deps.learningService.createCategory(payload)
+  })
+
+  ipcMain.handle(IPC.LEARNING_UPDATE_CATEGORY, async (_event, payload: LearningUpdateCategoryPayload) => {
+    return deps.learningService.updateCategory(payload)
+  })
+
+  ipcMain.handle(IPC.LEARNING_DELETE_CATEGORY, async (_event, categoryId: string) => {
+    return deps.learningService.deleteCategory(categoryId)
   })
 
   ipcMain.handle(IPC.LEARNING_LIST_NOTES, async () => {

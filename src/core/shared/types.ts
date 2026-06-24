@@ -352,6 +352,11 @@ export interface LearningCreateCategoryPayload {
   parentId?: string
 }
 
+export interface LearningUpdateCategoryPayload {
+  categoryId: string
+  name: string
+}
+
 export interface TranscriptImportPayload {
   projectId: string
   sourceType: TranscriptSourceType

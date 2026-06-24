@@ -5,10 +5,8 @@ import remarkGfm from 'remark-gfm'
 import {
   ArrowLeft,
   BookOpenText,
-  Check,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Pencil,
   FolderPlus,
   NotebookPen,
@@ -23,8 +21,10 @@ import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSu
 import { ModalShell } from '../components/ModalShell'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Combobox, type ComboboxOption } from '../components/ui/combobox'
 import { Input } from '../components/ui/input'
 import { ScrollArea } from '../components/ui/scroll-area'
+import { Select, type SelectOption } from '../components/ui/select'
 import { useI18n } from '../i18n'
 import {
   createMarkdownComponents,
@@ -49,22 +49,41 @@ import {
 } from './learning/learningMarkdownEditor'
 
 type SaveState = 'idle' | 'saved' | 'error'
-type LearningSelectOption = {
-  value: string
-  label: string
-}
+type GesturePoint = { x: number; y: number }
 
 type FrontmatterDialogMode = 'create' | 'edit'
+type LearningEditorDisplayMode = 'split' | 'preview'
 type LearningEditorContextMenuState = {
   x: number
   y: number
   selectionStart: number
   selectionEnd: number
 }
+type LearningSidebarGestureOverlayState = {
+  visible: boolean
+  status: 'pending' | 'ready' | 'invalid'
+  action: 'left' | 'right' | null
+  points: GesturePoint[]
+  cursor: GesturePoint | null
+}
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
+const LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY = 'app:learning-editor-display-mode'
 const LEARNING_EDITOR_HISTORY_LIMIT = 200
+const LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE = 8
+const LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE = 6
+const LEARNING_SIDEBAR_GESTURE_MAX_POINTS = 96
+const LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD = 72
+const LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO = 1.25
+const LEARNING_GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
+const EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY: LearningSidebarGestureOverlayState = {
+  visible: false,
+  status: 'pending',
+  action: null,
+  points: [],
+  cursor: null,
+}
 
 function normalizeTagInput(value: string): string[] {
   return [...new Set(
@@ -73,6 +92,12 @@ function normalizeTagInput(value: string): string[] {
       .map((item) => item.trim())
       .filter(Boolean)
   )]
+}
+
+function findCategoryByName(categories: LearningCategory[], name: string): LearningCategory | undefined {
+  const normalizedName = name.trim().toLowerCase()
+  if (!normalizedName) return undefined
+  return categories.find((category) => category.name.trim().toLowerCase() === normalizedName)
 }
 
 function emptySelectionState(): LearningNote | null {
@@ -92,103 +117,35 @@ function defaultNoteContent(title: string): string {
   ].join('\n')
 }
 
-function LearningInlineSelect({
-  ariaLabel,
-  value,
-  options,
-  onChange,
-  disabled = false,
-}: {
-  ariaLabel: string
-  value: string
-  options: LearningSelectOption[]
-  onChange: (value: string) => void
-  disabled?: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
+function resolveLearningSidebarGestureOverlay(dx: number, dy: number): Pick<LearningSidebarGestureOverlayState, 'status' | 'action'> {
+  const absX = Math.abs(dx)
+  const absY = Math.abs(dy)
 
-  useEffect(() => {
-    if (!open) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (containerRef.current?.contains(target)) return
-      setOpen(false)
+  if (absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO) {
+    return {
+      status: 'ready',
+      action: dx < 0 ? 'right' : 'left',
     }
+  }
 
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false)
-      }
+  if (absY > absX * 1.05 && absY >= LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE * 2) {
+    return {
+      status: 'invalid',
+      action: null,
     }
+  }
 
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
+  if (absX < LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD * 0.45) {
+    return {
+      status: 'pending',
+      action: dx < 0 ? 'right' : 'left',
     }
-  }, [ariaLabel, open])
+  }
 
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? options[0]?.label ?? ''
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        type="button"
-        className={`quiet-control flex h-10 w-full items-center justify-between rounded-full border-0 px-4 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
-          open ? 'bg-[color:var(--color-popover)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]' : ''
-        }`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <span>{selectedLabel}</span>
-        <ChevronDown
-          className={`h-4 w-4 text-[color:var(--color-muted-foreground)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {open && (
-        <div
-          className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]"
-          style={{ WebkitBackdropFilter: 'saturate(170%) blur(22px)' }}
-          role="listbox"
-          aria-label={ariaLabel}
-        >
-          <div className="max-h-[220px] overflow-auto">
-            {options.map((option) => {
-              const selected = option.value === value
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-sm outline-none transition-colors ${
-                    selected
-                      ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                  }`}
-                  role="option"
-                  aria-selected={selected}
-                  disabled={disabled}
-                  onClick={() => {
-                    onChange(option.value)
-                    setOpen(false)
-                  }}
-                >
-                  <span>{option.label}</span>
-                  {selected ? <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" /> : null}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  return {
+    status: 'invalid',
+    action: dx < 0 ? 'right' : 'left',
+  }
 }
 
 function LearningSidebarRailButton({
@@ -243,18 +200,26 @@ export function LearningCenterPage() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [categoryInput, setCategoryInput] = useState('')
+  const [categoryCreateError, setCategoryCreateError] = useState<string | null>(null)
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+  const [categoryEditInput, setCategoryEditInput] = useState('')
+  const [categoryEditError, setCategoryEditError] = useState<string | null>(null)
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false)
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [frontmatterDialogOpen, setFrontmatterDialogOpen] = useState(false)
   const [frontmatterDialogMode, setFrontmatterDialogMode] = useState<FrontmatterDialogMode>('create')
   const [frontmatterTitle, setFrontmatterTitle] = useState('')
   const [frontmatterTags, setFrontmatterTags] = useState('')
-  const [frontmatterCategoryId, setFrontmatterCategoryId] = useState<string>('')
+  const [frontmatterCategoryInput, setFrontmatterCategoryInput] = useState('')
   const [frontmatterStatus, setFrontmatterStatus] = useState<LearningNoteStatus>('draft')
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
+  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<LearningSidebarGestureOverlayState>(
+    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+  )
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
@@ -263,9 +228,34 @@ export function LearningCenterPage() {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
   })
+  const [editorDisplayMode, setEditorDisplayMode] = useState<LearningEditorDisplayMode>(() => {
+    if (typeof window === 'undefined') return 'split'
+    return window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY) === 'preview'
+      ? 'preview'
+      : 'split'
+  })
+  const pageRootRef = useRef<HTMLDivElement | null>(null)
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const editorHistoryRef = useRef<LearningEditorSnapshot[]>([])
   const editorHistoryIndexRef = useRef(-1)
+  const sidebarGestureRef = useRef({
+    tracking: false,
+    activated: false,
+    moved: false,
+    startX: 0,
+    startY: 0,
+    lastDx: 0,
+    lastDy: 0,
+    lastSampleX: 0,
+    lastSampleY: 0,
+    points: [] as GesturePoint[],
+  })
+  const suppressSidebarGestureContextMenuRef = useRef(false)
+  const suppressSidebarGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const sidebarGestureFrameRef = useRef<number | null>(null)
+  const nextSidebarGestureOverlayRef = useRef<LearningSidebarGestureOverlayState>(
+    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+  )
 
   const enableMarkdownSyntaxHighlight = useMemo(
     () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
@@ -292,6 +282,11 @@ export function LearningCenterPage() {
       return haystack.includes(q)
     })
   }, [notes, searchQuery, selectedCategoryId])
+
+  const selectedManageCategory = useMemo(
+    () => categories.find((item) => item.id === selectedCategoryId) ?? null,
+    [categories, selectedCategoryId]
+  )
 
   const hasUnsavedChanges = useMemo(() => {
     if (!selectedNote) return false
@@ -333,6 +328,225 @@ export function LearningCenterPage() {
   }, [rightSidebarCollapsed])
 
   useEffect(() => {
+    window.localStorage.setItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY, editorDisplayMode)
+  }, [editorDisplayMode])
+
+  useEffect(() => {
+    const isEventInsidePage = (target: EventTarget | null) => (
+      target instanceof Node
+      && pageRootRef.current?.contains(target)
+    )
+
+    const setGestureActive = (active: boolean) => {
+      document.body.classList.toggle(LEARNING_GESTURE_ACTIVE_CLASS_NAME, active)
+    }
+
+    const hideOverlayImmediately = () => {
+      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+      if (sidebarGestureFrameRef.current !== null) {
+        window.cancelAnimationFrame(sidebarGestureFrameRef.current)
+        sidebarGestureFrameRef.current = null
+      }
+      setSidebarGestureOverlay(EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY)
+    }
+
+    const flushOverlay = () => {
+      sidebarGestureFrameRef.current = null
+      setSidebarGestureOverlay(nextSidebarGestureOverlayRef.current)
+    }
+
+    const scheduleOverlay = (next: LearningSidebarGestureOverlayState) => {
+      nextSidebarGestureOverlayRef.current = next
+      if (sidebarGestureFrameRef.current !== null) return
+      sidebarGestureFrameRef.current = window.requestAnimationFrame(flushOverlay)
+    }
+
+    const clearSuppressTimer = () => {
+      if (suppressSidebarGestureTimerRef.current) {
+        window.clearTimeout(suppressSidebarGestureTimerRef.current)
+        suppressSidebarGestureTimerRef.current = null
+      }
+    }
+
+    const armSuppressContextMenu = () => {
+      suppressSidebarGestureContextMenuRef.current = true
+      clearSuppressTimer()
+      suppressSidebarGestureTimerRef.current = window.setTimeout(() => {
+        suppressSidebarGestureContextMenuRef.current = false
+      }, 450)
+    }
+
+    const resetGesture = () => {
+      sidebarGestureRef.current.tracking = false
+      sidebarGestureRef.current.activated = false
+      sidebarGestureRef.current.moved = false
+      sidebarGestureRef.current.startX = 0
+      sidebarGestureRef.current.startY = 0
+      sidebarGestureRef.current.lastDx = 0
+      sidebarGestureRef.current.lastDy = 0
+      sidebarGestureRef.current.lastSampleX = 0
+      sidebarGestureRef.current.lastSampleY = 0
+      sidebarGestureRef.current.points = []
+    }
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) return
+      if (!(event.ctrlKey || event.metaKey) || !isEventInsidePage(event.target)) return
+
+      setGestureActive(true)
+      sidebarGestureRef.current.tracking = true
+      sidebarGestureRef.current.activated = false
+      sidebarGestureRef.current.moved = false
+      sidebarGestureRef.current.startX = event.clientX
+      sidebarGestureRef.current.startY = event.clientY
+      sidebarGestureRef.current.lastDx = 0
+      sidebarGestureRef.current.lastDy = 0
+      sidebarGestureRef.current.lastSampleX = event.clientX
+      sidebarGestureRef.current.lastSampleY = event.clientY
+      sidebarGestureRef.current.points = []
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const gesture = sidebarGestureRef.current
+      if (!gesture.tracking) return
+
+      if ((event.buttons & 2) === 0) {
+        setGestureActive(false)
+        resetGesture()
+        hideOverlayImmediately()
+        return
+      }
+
+      gesture.lastDx = event.clientX - gesture.startX
+      gesture.lastDy = event.clientY - gesture.startY
+
+      if (!gesture.activated) {
+        const movedDistance = Math.hypot(gesture.lastDx, gesture.lastDy)
+        if (movedDistance < LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE) return
+        gesture.activated = true
+        gesture.moved = true
+        gesture.points = [
+          { x: gesture.startX, y: gesture.startY },
+          { x: event.clientX, y: event.clientY },
+        ]
+        gesture.lastSampleX = event.clientX
+        gesture.lastSampleY = event.clientY
+      } else {
+        const deltaSinceSample = Math.hypot(
+          event.clientX - gesture.lastSampleX,
+          event.clientY - gesture.lastSampleY
+        )
+        if (deltaSinceSample >= LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE) {
+          gesture.points.push({ x: event.clientX, y: event.clientY })
+          if (gesture.points.length > LEARNING_SIDEBAR_GESTURE_MAX_POINTS) {
+            gesture.points.splice(0, gesture.points.length - LEARNING_SIDEBAR_GESTURE_MAX_POINTS)
+          }
+          gesture.lastSampleX = event.clientX
+          gesture.lastSampleY = event.clientY
+        }
+      }
+
+      if (gesture.activated) {
+        const preview = resolveLearningSidebarGestureOverlay(gesture.lastDx, gesture.lastDy)
+        scheduleOverlay({
+          visible: true,
+          status: preview.status,
+          action: preview.action,
+          points: [...gesture.points],
+          cursor: { x: event.clientX, y: event.clientY },
+        })
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    }
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button !== 2) return
+      const gesture = sidebarGestureRef.current
+      if (!gesture.tracking) return
+
+      const dx = gesture.lastDx
+      const dy = gesture.lastDy
+      const absX = Math.abs(dx)
+      const absY = Math.abs(dy)
+      const passedHorizontal = absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD
+        && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO
+
+      setGestureActive(false)
+      if (gesture.moved) {
+        armSuppressContextMenu()
+      }
+
+      resetGesture()
+      hideOverlayImmediately()
+
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+
+      if (!passedHorizontal) return
+
+      closeEditorContextMenu()
+      if (dx < 0) {
+        setRightSidebarCollapsed((current) => !current)
+        return
+      }
+      setLeftSidebarCollapsed((current) => !current)
+    }
+
+    const handleContextMenu = (event: MouseEvent) => {
+      if (
+        !isEventInsidePage(event.target)
+        || (!suppressSidebarGestureContextMenuRef.current && !sidebarGestureRef.current.tracking)
+      ) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      suppressSidebarGestureContextMenuRef.current = false
+      clearSuppressTimer()
+    }
+
+    const handleWindowBlur = () => {
+      setGestureActive(false)
+      resetGesture()
+      hideOverlayImmediately()
+      suppressSidebarGestureContextMenuRef.current = false
+      clearSuppressTimer()
+    }
+
+    document.addEventListener('mousedown', handleMouseDown, true)
+    document.addEventListener('mousemove', handleMouseMove, true)
+    document.addEventListener('mouseup', handleMouseUp, true)
+    document.addEventListener('contextmenu', handleContextMenu, true)
+    window.addEventListener('blur', handleWindowBlur)
+
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown, true)
+      document.removeEventListener('mousemove', handleMouseMove, true)
+      document.removeEventListener('mouseup', handleMouseUp, true)
+      document.removeEventListener('contextmenu', handleContextMenu, true)
+      window.removeEventListener('blur', handleWindowBlur)
+      if (sidebarGestureFrameRef.current !== null) {
+        window.cancelAnimationFrame(sidebarGestureFrameRef.current)
+        sidebarGestureFrameRef.current = null
+      }
+      clearSuppressTimer()
+      suppressSidebarGestureContextMenuRef.current = false
+      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+      setGestureActive(false)
+      resetGesture()
+    }
+  }, [])
+
+  useEffect(() => {
     if (!selectedNoteId) {
       setSelectedNote(null)
       setEditorTitle('')
@@ -370,11 +584,38 @@ export function LearningCenterPage() {
   }, [selectedNoteId])
 
   useEffect(() => {
+    setCategoryEditInput(selectedManageCategory?.name ?? '')
+    setCategoryEditError(null)
+  }, [selectedManageCategory])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement
+      const isTextEntryTarget = activeElement instanceof HTMLInputElement
+        || activeElement instanceof HTMLTextAreaElement
+        || activeElement instanceof HTMLSelectElement
+        || Boolean(activeElement?.closest('[contenteditable="true"]'))
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         if (!selectedNoteId || !hasUnsavedChanges || saving) return
         void handleSave()
+        return
+      }
+
+      if (isTextEntryTarget) return
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowLeft') {
+        event.preventDefault()
+        closeEditorContextMenu()
+        setLeftSidebarCollapsed((current) => !current)
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowRight') {
+        event.preventDefault()
+        closeEditorContextMenu()
+        setRightSidebarCollapsed((current) => !current)
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -411,7 +652,7 @@ export function LearningCenterPage() {
     setFrontmatterDialogMode('create')
     setFrontmatterTitle('')
     setFrontmatterTags('')
-    setFrontmatterCategoryId(selectedCategoryId !== 'all' ? selectedCategoryId : '')
+    setFrontmatterCategoryInput(selectedManageCategory?.name ?? '')
     setFrontmatterStatus('draft')
     setFrontmatterError(null)
     setFrontmatterDialogOpen(true)
@@ -422,10 +663,22 @@ export function LearningCenterPage() {
     setFrontmatterDialogMode('edit')
     setFrontmatterTitle(editorTitle)
     setFrontmatterTags(editorTags)
-    setFrontmatterCategoryId(editorCategoryId)
+    setFrontmatterCategoryInput(categories.find((item) => item.id === editorCategoryId)?.name ?? '')
     setFrontmatterStatus(editorStatus)
     setFrontmatterError(null)
     setFrontmatterDialogOpen(true)
+  }
+
+  const resolveFrontmatterCategoryId = async (): Promise<string | undefined> => {
+    const name = frontmatterCategoryInput.trim()
+    if (!name) return undefined
+
+    const existing = findCategoryByName(categories, name)
+    if (existing) return existing.id
+
+    const nextCategories = await window.electronAPI.createLearningCategory({ name })
+    setCategories(nextCategories)
+    return findCategoryByName(nextCategories, name)?.id
   }
 
   const handleSubmitFrontmatter = async () => {
@@ -438,10 +691,11 @@ export function LearningCenterPage() {
     setFrontmatterSubmitting(true)
     setFrontmatterError(null)
     try {
+      const resolvedCategoryId = await resolveFrontmatterCategoryId()
       if (frontmatterDialogMode === 'create') {
         const created = await window.electronAPI.createLearningNote({
           title: nextTitle,
-          categoryId: frontmatterCategoryId || undefined,
+          categoryId: resolvedCategoryId,
           tags: normalizeTagInput(frontmatterTags),
           status: frontmatterStatus,
           contentMd: defaultNoteContent(nextTitle),
@@ -456,7 +710,7 @@ export function LearningCenterPage() {
       const updated = await window.electronAPI.updateLearningNote({
         noteId: selectedNoteId,
         title: nextTitle,
-        categoryId: frontmatterCategoryId || undefined,
+        categoryId: resolvedCategoryId,
         tags: normalizeTagInput(frontmatterTags),
         status: frontmatterStatus,
         contentMd: editorContent,
@@ -503,12 +757,76 @@ export function LearningCenterPage() {
     const name = categoryInput.trim()
     if (!name) return
     setIsCreatingCategory(true)
+    setCategoryCreateError(null)
     try {
       const next = await window.electronAPI.createLearningCategory({ name })
       setCategories(next)
       setCategoryInput('')
+      if (!selectedManageCategory) {
+        const created = findCategoryByName(next, name)
+        if (created) {
+          setSelectedCategoryId(created.id)
+        }
+      }
+    } catch (error) {
+      setCategoryCreateError(error instanceof Error ? error.message : '新增分类失败')
     } finally {
       setIsCreatingCategory(false)
+    }
+  }
+
+  const handleRenameCategory = async () => {
+    if (!selectedManageCategory) return
+    const name = categoryEditInput.trim()
+    if (!name) {
+      setCategoryEditError('分类名称不能为空')
+      return
+    }
+    setIsUpdatingCategory(true)
+    setCategoryEditError(null)
+    try {
+      const next = await window.electronAPI.updateLearningCategory({
+        categoryId: selectedManageCategory.id,
+        name,
+      })
+      setCategories(next)
+    } catch (error) {
+      setCategoryEditError(error instanceof Error ? error.message : '重命名分类失败')
+    } finally {
+      setIsUpdatingCategory(false)
+    }
+  }
+
+  const handleDeleteCategory = async () => {
+    if (!selectedManageCategory) return
+    const shouldDelete = window.confirm(`确定删除分类“${selectedManageCategory.name}”吗？使用该分类的笔记会变为未分类。`)
+    if (!shouldDelete) return
+
+    setIsDeletingCategory(true)
+    setCategoryEditError(null)
+    try {
+      const deletedCategoryId = selectedManageCategory.id
+      const next = await window.electronAPI.deleteLearningCategory(deletedCategoryId)
+      setCategories(next)
+      setSelectedCategoryId('all')
+      setNotes((current) => current.map((note) => (
+        note.categoryId === deletedCategoryId
+          ? { ...note, categoryId: undefined }
+          : note
+      )))
+      setSelectedNote((current) => (
+        current && current.categoryId === deletedCategoryId
+          ? { ...current, categoryId: undefined }
+          : current
+      ))
+      setEditorCategoryId((current) => (current === deletedCategoryId ? '' : current))
+      setFrontmatterCategoryInput((current) => (
+        current.trim().toLowerCase() === selectedManageCategory.name.trim().toLowerCase() ? '' : current
+      ))
+    } catch (error) {
+      setCategoryEditError(error instanceof Error ? error.message : '删除分类失败')
+    } finally {
+      setIsDeletingCategory(false)
     }
   }
 
@@ -670,6 +988,17 @@ export function LearningCenterPage() {
       return
     }
 
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      if (editorContextMenu) {
+        closeEditorContextMenu()
+        textarea.focus()
+        return
+      }
+      textarea.blur()
+      return
+    }
+
     if (event.key === 'Tab') {
       event.preventDefault()
       const result = event.shiftKey
@@ -700,18 +1029,35 @@ export function LearningCenterPage() {
   }
 
   const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
-  const categoryOptions: LearningSelectOption[] = useMemo(
-    () => [
-      { value: '', label: '未分类' },
-      ...categories.map((category) => ({ value: category.id, label: category.name })),
-    ],
-    [categories]
-  )
-  const statusOptions: LearningSelectOption[] = useMemo(
+  const saveButtonVariant = saveState === 'error'
+    ? 'destructive'
+    : hasUnsavedChanges
+      ? 'default'
+      : 'outline'
+  const saveButtonLabel = saving
+    ? t('common.saving')
+    : saveState === 'error'
+      ? '重试保存'
+      : hasUnsavedChanges
+        ? '保存修改'
+        : '已保存'
+  const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
+  const statusOptions: SelectOption[] = useMemo(
     () => [
       { value: 'draft', label: '草稿' },
       { value: 'organized', label: '已整理' },
     ],
+    []
+  )
+  const categoryOptions: ComboboxOption[] = useMemo(
+    () => categories.map((category) => ({
+      value: category.name,
+      label: category.name,
+    })),
+    [categories]
+  )
+  const uncategorizedOption = useMemo<ComboboxOption[]>(
+    () => [{ value: '', label: '未分类' }],
     []
   )
   const layoutGridColumns = useMemo(() => {
@@ -720,11 +1066,58 @@ export function LearningCenterPage() {
     if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 340px'
     return 'minmax(0,1fr)'
   }, [leftSidebarCollapsed, rightSidebarCollapsed])
-  const editorPreviewGridColumns = 'minmax(0,1fr) minmax(0,1fr)'
+  const editorPreviewGridColumns = editorDisplayMode === 'preview'
+    ? 'minmax(0,1fr)'
+    : 'minmax(0,1fr) minmax(0,1fr)'
   const bothSidebarsCollapsed = leftSidebarCollapsed && rightSidebarCollapsed
+  const sidebarGesturePathPoints = sidebarGestureOverlay.cursor
+    ? [...sidebarGestureOverlay.points, sidebarGestureOverlay.cursor]
+    : sidebarGestureOverlay.points
+  const sidebarGesturePolylinePoints = sidebarGesturePathPoints.map((point) => `${point.x},${point.y}`).join(' ')
+  const sidebarGestureStartPoint = sidebarGesturePathPoints[0]
+  const sidebarGestureEndPoint = sidebarGesturePathPoints[sidebarGesturePathPoints.length - 1]
+  const sidebarGestureStrokeColor = sidebarGestureOverlay.status === 'ready'
+    ? 'var(--color-success)'
+    : sidebarGestureOverlay.status === 'invalid'
+      ? 'var(--color-destructive)'
+      : 'var(--color-muted-foreground)'
 
   return (
-    <div className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
+    <div ref={pageRootRef} className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
+      {sidebarGestureOverlay.visible ? (
+        <div className="pointer-events-none fixed inset-0 z-[10000]">
+          <svg className="h-full w-full">
+            {sidebarGesturePolylinePoints.length > 0 ? (
+              <polyline
+                points={sidebarGesturePolylinePoints}
+                fill="none"
+                stroke={sidebarGestureStrokeColor}
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ opacity: 0.82 }}
+              />
+            ) : null}
+            {sidebarGestureStartPoint ? (
+              <circle
+                cx={sidebarGestureStartPoint.x}
+                cy={sidebarGestureStartPoint.y}
+                r={4}
+                fill={sidebarGestureStrokeColor}
+                style={{ opacity: 0.75 }}
+              />
+            ) : null}
+            {sidebarGestureEndPoint ? (
+              <circle
+                cx={sidebarGestureEndPoint.x}
+                cy={sidebarGestureEndPoint.y}
+                r={5}
+                fill={sidebarGestureStrokeColor}
+              />
+            ) : null}
+          </svg>
+        </div>
+      ) : null}
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
         <header className="quiet-control flex items-center gap-3 rounded-[24px] px-5 py-4">
           <Button
@@ -831,12 +1224,66 @@ export function LearningCenterPage() {
                       </button>
                     ))}
                   </div>
+                  {selectedManageCategory ? (
+                    <div className="mt-3 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/40 p-3">
+                      <div className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">管理当前分类</div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={categoryEditInput}
+                          onChange={(event) => setCategoryEditInput(event.target.value)}
+                          placeholder="分类名称"
+                          className="h-9"
+                          disabled={isUpdatingCategory || isDeletingCategory}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              void handleRenameCategory()
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-9 w-9 rounded-full"
+                          onClick={() => void handleRenameCategory()}
+                          loading={isUpdatingCategory}
+                          disabled={isDeletingCategory}
+                          title="重命名分类"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="destructive"
+                          className="h-9 w-9 rounded-full"
+                          onClick={() => void handleDeleteCategory()}
+                          loading={isDeletingCategory}
+                          disabled={isUpdatingCategory}
+                          title="删除分类"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {categoryEditError ? (
+                        <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex gap-2">
                     <Input
                       value={categoryInput}
                       onChange={(event) => setCategoryInput(event.target.value)}
                       placeholder="新分类"
                       className="h-9"
+                      disabled={isCreatingCategory}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void handleCreateCategory()
+                        }
+                      }}
                     />
                     <Button
                       type="button"
@@ -850,6 +1297,9 @@ export function LearningCenterPage() {
                       <FolderPlus className="h-4 w-4" />
                     </Button>
                   </div>
+                  {categoryCreateError ? (
+                    <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div>
+                  ) : null}
                 </div>
                 <div className="px-4 pb-2 pt-4">
                   <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">笔记</div>
@@ -897,60 +1347,119 @@ export function LearningCenterPage() {
             bothSidebarsCollapsed ? 'mx-auto w-full max-w-[1360px]' : ''
           }`}>
             {selectedNote ? (
-              <div
-                className="grid h-full min-h-0"
-                style={{ gridTemplateColumns: editorPreviewGridColumns }}
-              >
-                <div className="flex min-h-0 flex-col border-r border-[color:var(--color-border)]">
-                  <div className="flex items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
-                    <div className="min-w-0">
-                      <div className="line-clamp-1 text-sm font-semibold text-[color:var(--color-foreground)]">
-                        {editorTitle || '未命名笔记'}
-                      </div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                        先编辑 frontmatter，再专注写正文和预览
-                      </div>
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
+                  <div className="min-w-0">
+                    <div className="line-clamp-1 text-sm font-semibold text-[color:var(--color-foreground)]">
+                      {editorTitle || '未命名笔记'}
                     </div>
-                    <Button size="sm" className="gap-1.5" onClick={() => void handleSave()} loading={saving}>
-                      <Save className="h-4 w-4" />
-                      {saving ? t('common.saving') : t('common.save')}
-                    </Button>
+                    <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                      {editorDisplayMode === 'preview'
+                        ? '纯预览模式，专注查看 Markdown 渲染结果'
+                        : '分栏模式，左侧编辑正文，右侧实时预览'}
+                    </div>
                   </div>
-                  <div className="min-h-0 flex-1 px-5 py-4">
-                    <textarea
-                      ref={editorTextareaRef}
-                      value={editorContent}
-                      onChange={handleEditorChange}
-                      onKeyDown={handleEditorKeyDown}
-                      onKeyUp={handleEditorSelectionSync}
-                      onMouseUp={handleEditorSelectionSync}
-                      onContextMenu={handleEditorContextMenu}
-                      className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
-                      placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/80 bg-[color:var(--color-accent)]/55 p-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={editorDisplayMode === 'split'
+                          ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+                          : 'text-[color:var(--color-muted-foreground)]'}
+                        onClick={() => setEditorDisplayMode('split')}
+                      >
+                        分栏
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={editorDisplayMode === 'preview'
+                          ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+                          : 'text-[color:var(--color-muted-foreground)]'}
+                        onClick={() => setEditorDisplayMode('preview')}
+                      >
+                        纯预览
+                      </Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={saveButtonVariant}
+                      className={`min-w-[104px] justify-center gap-1.5 ${
+                        hasUnsavedChanges && !saving
+                          ? 'shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]'
+                          : ''
+                      }`}
+                      onClick={() => void handleSave()}
+                      loading={saving}
+                      disabled={saveButtonDisabled}
+                    >
+                      <Save className="h-4 w-4" />
+                      {saveButtonLabel}
+                    </Button>
                   </div>
                 </div>
 
-                <div className="flex min-h-0 flex-col">
-                  <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                    <div className="text-sm font-semibold text-[color:var(--color-foreground)]">预览</div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                      Markdown 渲染结果
+                <div
+                  className="grid h-full min-h-0"
+                  style={{ gridTemplateColumns: editorPreviewGridColumns }}
+                >
+                  {editorDisplayMode === 'split' ? (
+                    <div className="flex min-h-0 flex-col border-r border-[color:var(--color-border)]">
+                      <div className="border-b border-[color:var(--color-border)] px-5 py-4">
+                        <div className="text-sm font-semibold text-[color:var(--color-foreground)]">编辑</div>
+                        <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                          Markdown 正文编辑区
+                        </div>
+                      </div>
+                      <div className="min-h-0 flex-1 px-5 py-4">
+                        <textarea
+                          ref={editorTextareaRef}
+                          value={editorContent}
+                          onChange={handleEditorChange}
+                          onKeyDown={handleEditorKeyDown}
+                          onKeyUp={handleEditorSelectionSync}
+                          onMouseUp={handleEditorSelectionSync}
+                          onContextMenu={handleEditorContextMenu}
+                          className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
+                          placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <ScrollArea className="h-full">
-                    <article
-                      className="code-markdown-content code-markdown-content--viewport-scroll px-3 py-4 sm:px-4"
-                      style={{ margin: 0, maxWidth: 'none', minWidth: 0, width: '100%' }}
+                  ) : null}
+
+                  <div className="flex min-h-0 flex-col">
+                    <div className="border-b border-[color:var(--color-border)] px-5 py-4">
+                      <div className="text-sm font-semibold text-[color:var(--color-foreground)]">预览</div>
+                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
+                        {editorDisplayMode === 'preview'
+                          ? '完整宽度显示 Markdown 渲染结果'
+                          : 'Markdown 渲染结果'}
+                      </div>
+                    </div>
+                    <ScrollArea
+                      className="min-h-0 flex-1"
+                      viewportClassName="h-full w-full code-markdown-preview-scroll-root"
+                      horizontalScrollbar
+                      horizontalScrollbarClassName="absolute left-[var(--scrollbar-edge-gap)] right-[var(--scrollbar-edge-gap)] bottom-[var(--scrollbar-edge-gap)] z-10 h-[var(--scrollbar-size)] rounded-full border-t-0 bg-[var(--scrollbar-track)]/92 backdrop-blur-md"
                     >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
-                        components={markdownComponents}
+                      <article
+                        className={`code-markdown-content code-markdown-content--viewport-scroll ${
+                          editorDisplayMode === 'preview' ? 'px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'
+                        }`}
+                        style={{ margin: 0, maxWidth: 'none', minWidth: 0, width: '100%' }}
                       >
-                        {editorContent}
-                      </ReactMarkdown>
-                    </article>
-                  </ScrollArea>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
+                          components={markdownComponents}
+                        >
+                          {editorContent}
+                        </ReactMarkdown>
+                      </article>
+                    </ScrollArea>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1128,17 +1637,38 @@ export function LearningCenterPage() {
             </div>
             <div>
               <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">分类</div>
-              <LearningInlineSelect
+              <Combobox
                 ariaLabel="learning-frontmatter-category"
-                value={frontmatterCategoryId}
+                value={frontmatterCategoryInput}
                 options={categoryOptions}
-                onChange={setFrontmatterCategoryId}
+                pinnedOptions={uncategorizedOption}
+                onChange={setFrontmatterCategoryInput}
+                placeholder="可直接输入新分类"
+                allowCreate
+                toggleAriaLabel={frontmatterCategoryInput.trim() ? '收起分类建议' : '展开分类建议'}
+                emptyText="还没有分类"
+                isOptionSelected={(option, currentValue) => option.value === currentValue.trim()}
+                createIcon={<FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
+                createLabel={(nextValue) => (
+                  <span className="flex min-w-0 items-center gap-2">
+                    <FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />
+                    <span className="truncate">新建分类 “{nextValue}”</span>
+                  </span>
+                )}
+                filterOption={(option, query) => {
+                  const normalizedQuery = query.trim().toLowerCase()
+                  if (!normalizedQuery) return option.value !== ''
+                  return option.label.toLowerCase().includes(normalizedQuery)
+                }}
                 disabled={frontmatterSubmitting}
               />
+              <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
+                可直接输入新分类，会自动创建。
+              </div>
             </div>
             <div>
               <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">状态</div>
-              <LearningInlineSelect
+              <Select
                 ariaLabel="learning-frontmatter-status"
                 value={frontmatterStatus}
                 options={statusOptions}

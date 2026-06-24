@@ -25,6 +25,7 @@ export interface LearningRepository {
   getNote: (noteId: string) => Promise<LearningNote | null>
   saveNote: (note: LearningNote) => Promise<void>
   deleteNote: (noteId: string) => Promise<boolean>
+  clearCategoryReferences: (categoryId: string) => Promise<void>
 }
 
 function ensureDirectory(dirPath: string): void {
@@ -304,6 +305,51 @@ export function createLearningRepository(): LearningRepository {
       const nextNotes = readIndex().notes.filter((item) => item.id !== noteId)
       await writeJsonFile(getIndexPath(), { notes: nextNotes })
       return true
+    },
+
+    clearCategoryReferences: async (categoryId) => {
+      const normalizedCategoryId = assertSafePathSegment(categoryId, 'category id')
+      const currentNotes = readIndex().notes
+      let changed = false
+      const nextNotes = await Promise.all(currentNotes.map(async (summary) => {
+        if (summary.categoryId !== normalizedCategoryId) return summary
+        const note = await (async () => {
+          try {
+            const raw = await fs.readFile(getNotePath(summary.id), 'utf-8')
+            return parseNoteMarkdown(raw)
+          } catch {
+            return null
+          }
+        })()
+        if (!note) {
+          changed = true
+          return {
+            ...summary,
+            categoryId: undefined,
+          }
+        }
+        changed = true
+        const updatedNote: LearningNote = {
+          ...note,
+          categoryId: undefined,
+          updatedAt: Date.now(),
+        }
+        await fs.writeFile(getNotePath(updatedNote.id), serializeNote(updatedNote), 'utf-8')
+        return {
+          id: updatedNote.id,
+          title: updatedNote.title,
+          categoryId: updatedNote.categoryId,
+          tags: updatedNote.tags,
+          status: updatedNote.status,
+          createdAt: updatedNote.createdAt,
+          updatedAt: updatedNote.updatedAt,
+          excerpt: updatedNote.excerpt,
+        }
+      }))
+      if (!changed) return
+      await writeJsonFile(getIndexPath(), {
+        notes: nextNotes.sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt),
+      })
     },
   }
 }

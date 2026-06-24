@@ -71,6 +71,8 @@ export const IPC = {
   TRANSCRIPT_SHARE_LIST: 'transcript:share-list',
   LEARNING_LIST_CATEGORIES: 'learning:list-categories',
   LEARNING_CREATE_CATEGORY: 'learning:create-category',
+  LEARNING_UPDATE_CATEGORY: 'learning:update-category',
+  LEARNING_DELETE_CATEGORY: 'learning:delete-category',
   LEARNING_LIST_NOTES: 'learning:list-notes',
   LEARNING_GET_NOTE: 'learning:get-note',
   LEARNING_CREATE_NOTE: 'learning:create-note',

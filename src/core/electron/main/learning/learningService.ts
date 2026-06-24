@@ -5,6 +5,7 @@ import type {
   LearningNote,
   LearningNoteStatus,
   LearningNoteSummary,
+  LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
 } from '../../../shared/types'
 import type { LearningRepository } from './learningRepository'
@@ -16,6 +17,8 @@ type LearningServiceDependencies = {
 export interface LearningService {
   listCategories: () => Promise<LearningCategory[]>
   createCategory: (payload: LearningCreateCategoryPayload) => Promise<LearningCategory[]>
+  updateCategory: (payload: LearningUpdateCategoryPayload) => Promise<LearningCategory[]>
+  deleteCategory: (categoryId: string) => Promise<LearningCategory[]>
   listNotes: () => Promise<LearningNoteSummary[]>
   getNote: (noteId: string) => Promise<LearningNote | null>
   createNote: (payload?: LearningCreateNotePayload) => Promise<LearningNote>
@@ -38,6 +41,18 @@ function normalizeTags(value: string[] | undefined): string[] {
 
 function normalizeStatus(value: unknown): LearningNoteStatus {
   return value === 'organized' ? 'organized' : 'draft'
+}
+
+function normalizeCategoryName(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function findCategoryByName(categories: LearningCategory[], name: string, excludeId?: string): LearningCategory | undefined {
+  const normalizedName = name.trim().toLowerCase()
+  return categories.find((category) => (
+    category.id !== excludeId
+    && category.name.trim().toLowerCase() === normalizedName
+  ))
 }
 
 function normalizeExcerpt(contentMd: string): string {
@@ -78,12 +93,15 @@ export function createLearningService(deps: LearningServiceDependencies): Learni
     listCategories: async () => deps.repository.listCategories(),
 
     createCategory: async (payload) => {
-      const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+      const name = normalizeCategoryName(payload.name)
       if (!name) {
         throw new Error('Learning category name is required.')
       }
 
       const categories = await deps.repository.listCategories()
+      if (findCategoryByName(categories, name)) {
+        throw new Error('Learning category name already exists.')
+      }
       const createdAt = Date.now()
       const nextCategory: LearningCategory = {
         id: createId('lc'),
@@ -97,6 +115,52 @@ export function createLearningService(deps: LearningServiceDependencies): Learni
       }
       const nextCategories = [...categories, nextCategory]
       await deps.repository.saveCategories(nextCategories)
+      return nextCategories
+    },
+
+    updateCategory: async (payload) => {
+      const categoryId = typeof payload.categoryId === 'string' ? payload.categoryId.trim() : ''
+      const name = normalizeCategoryName(payload.name)
+      if (!categoryId) {
+        throw new Error('Learning category id is required.')
+      }
+      if (!name) {
+        throw new Error('Learning category name is required.')
+      }
+
+      const categories = await deps.repository.listCategories()
+      const current = categories.find((item) => item.id === categoryId)
+      if (!current) {
+        throw new Error('Learning category does not exist.')
+      }
+      if (findCategoryByName(categories, name, categoryId)) {
+        throw new Error('Learning category name already exists.')
+      }
+
+      const nextCategories = categories.map((category) => (
+        category.id === categoryId
+          ? { ...category, name, updatedAt: Date.now() }
+          : category
+      ))
+      await deps.repository.saveCategories(nextCategories)
+      return nextCategories
+    },
+
+    deleteCategory: async (categoryId) => {
+      const normalizedCategoryId = typeof categoryId === 'string' ? categoryId.trim() : ''
+      if (!normalizedCategoryId) {
+        throw new Error('Learning category id is required.')
+      }
+
+      const categories = await deps.repository.listCategories()
+      const target = categories.find((item) => item.id === normalizedCategoryId)
+      if (!target) {
+        throw new Error('Learning category does not exist.')
+      }
+
+      const nextCategories = categories.filter((item) => item.id !== normalizedCategoryId)
+      await deps.repository.saveCategories(nextCategories)
+      await deps.repository.clearCategoryReferences(normalizedCategoryId)
       return nextCategories
     },
 

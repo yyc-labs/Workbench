@@ -44,6 +44,8 @@ function SettingsAgentsPanel({
         </p>
       </div>
 
+      <SettingsAgentInstallCommandsPanel />
+
       <div className="rounded-[28px] border px-5 py-5 surface-card" style={{ borderColor: 'var(--color-border)' }}>
         <div className="quiet-control inline-flex flex-wrap rounded-full p-1 gap-1">
           <button
@@ -85,8 +87,6 @@ function SettingsAgentsPanel({
       ) : (
         <SettingsCodexPanel capability={capability} embedded />
       )}
-
-      <SettingsAgentInstallCommandsPanel />
     </div>
   )
 }

@@ -101,8 +101,6 @@ type PreflightItem = {
   tone: 'success' | 'warning' | 'danger' | 'neutral'
 }
 
-const BRANCH_SEARCH_DEBOUNCE_MS = 140
-
 function DetailAiCommitPanel({
   projectHeaderCollapsed = false,
   projectName,
@@ -163,10 +161,8 @@ function DetailAiCommitPanel({
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
   const [mergeTarget, setMergeTarget] = useState('')
-  const [mergeDropdownOpen, setMergeDropdownOpen] = useState(false)
+  const [mergeSearchValue, setMergeSearchValue] = useState('')
   const [operationConfirmInput, setOperationConfirmInput] = useState('')
-  const [mergeSearchDraft, setMergeSearchDraft] = useState('')
-  const [mergeSearchQuery, setMergeSearchQuery] = useState('')
   const [operationConfirm, setOperationConfirm] = useState<OperationConfirmState>(null)
   const [operationLogs, setOperationLogs] = useState<GitOperationResult[]>([])
   const [branchManagerMode, setBranchManagerMode] = useState<BranchManagerMode | null>(null)
@@ -191,8 +187,6 @@ function DetailAiCommitPanel({
   const [conflictData, setConflictData] = useState<GitConflictFileResult | null>(null)
   const [conflictError, setConflictError] = useState<string | null>(null)
   const [conflictSaving, setConflictSaving] = useState(false)
-  const mergeDropdownRef = useRef<HTMLDivElement | null>(null)
-  const mergeSearchInputRef = useRef<HTMLInputElement | null>(null)
   const currentBranchInputRef = useRef<HTMLInputElement | null>(null)
   const upstreamBranchInputRef = useRef<HTMLInputElement | null>(null)
   const diffRequestSeqRef = useRef(0)
@@ -350,19 +344,7 @@ function DetailAiCommitPanel({
     [remoteBranches, currentBranch]
   )
 
-  const filteredLocalMergeCandidates = useMemo(() => {
-    if (!mergeSearchQuery) return localMergeCandidates
-    return localMergeCandidates.filter((candidate) => candidate.searchText.includes(mergeSearchQuery))
-  }, [localMergeCandidates, mergeSearchQuery])
-
-  const filteredRemoteMergeCandidates = useMemo(() => {
-    if (!mergeSearchQuery) return remoteMergeCandidates
-    return remoteMergeCandidates.filter((candidate) => candidate.searchText.includes(mergeSearchQuery))
-  }, [remoteMergeCandidates, mergeSearchQuery])
-
-  const mergeSearchResultCount = filteredLocalMergeCandidates.length + filteredRemoteMergeCandidates.length
   const branchManagerDangerText = `${(upstreamManagerRemoteName.trim() || 'origin')}/${upstreamManagerBranchName.trim()}`
-  const mergeTargetLabel = mergeTarget || t('detail.mergeTargetPlaceholder')
   const conflictSavingRef = useRef(conflictSaving)
 
   useEffect(() => {
@@ -376,7 +358,7 @@ function DetailAiCommitPanel({
 
   useEffect(() => {
     if (activePane === 'aicommit') return
-    setMergeDropdownOpen(false)
+    setMergeSearchValue('')
     setBranchManagerMode(null)
     setGitGuideOpen(false)
     setOperationConfirm(null)
@@ -389,52 +371,6 @@ function DetailAiCommitPanel({
     setConflictData(null)
     setConflictError(null)
   }, [activePane])
-
-  useEffect(() => {
-    if (!mergeDropdownOpen) return
-    const frame = window.requestAnimationFrame(() => {
-      mergeSearchInputRef.current?.focus()
-    })
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node
-      if (mergeDropdownRef.current?.contains(target)) return
-      setMergeDropdownOpen(false)
-    }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMergeDropdownOpen(false)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [mergeDropdownOpen])
-
-  useEffect(() => {
-    const normalizedDraft = mergeSearchDraft.trim().toLowerCase()
-    if (!normalizedDraft) {
-      if (mergeSearchQuery) setMergeSearchQuery('')
-      return
-    }
-    if (normalizedDraft === mergeSearchQuery) return
-
-    const timer = window.setTimeout(() => {
-      setMergeSearchQuery(normalizedDraft)
-    }, BRANCH_SEARCH_DEBOUNCE_MS)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [mergeSearchDraft, mergeSearchQuery])
-
-  useEffect(() => {
-    if (mergeDropdownOpen) return
-    if (!mergeSearchDraft && !mergeSearchQuery) return
-    setMergeSearchDraft('')
-    setMergeSearchQuery('')
-  }, [mergeDropdownOpen, mergeSearchDraft, mergeSearchQuery])
 
   useEffect(() => {
     if (!operationConfirm) return
@@ -1158,29 +1094,17 @@ function DetailAiCommitPanel({
             branchAhead={branchAhead}
             branchBehind={branchBehind}
             currentBranch={currentBranch}
-            filteredLocalMergeCandidates={filteredLocalMergeCandidates}
-            filteredRemoteMergeCandidates={filteredRemoteMergeCandidates}
             localMergeCandidates={localMergeCandidates}
-            mergeDropdownOpen={mergeDropdownOpen}
-            mergeDropdownRef={mergeDropdownRef}
-            mergeSearchDraft={mergeSearchDraft}
-            mergeSearchInputRef={mergeSearchInputRef}
-            mergeSearchQuery={mergeSearchQuery}
-            mergeSearchResultCount={mergeSearchResultCount}
+            remoteMergeCandidates={remoteMergeCandidates}
             mergeTarget={mergeTarget}
-            mergeTargetLabel={mergeTargetLabel}
-            onChangeMergeSearchDraft={setMergeSearchDraft}
+            mergeSearchValue={mergeSearchValue}
+            onChangeMergeSearchValue={setMergeSearchValue}
             onOpenCurrentBranchManager={() => setBranchManagerMode('current')}
             onOpenGitGuide={() => setGitGuideOpen(true)}
             onOpenUpstreamManager={() => setBranchManagerMode('upstream')}
             onRequestGitOperation={requestGitOperation}
-            onSelectMergeTarget={(branchName) => {
-              setMergeTarget(branchName)
-              setMergeDropdownOpen(false)
-            }}
-            onToggleMergeDropdown={() => setMergeDropdownOpen((prev) => !prev)}
+            onSelectMergeTarget={setMergeTarget}
             operationStates={operationStates}
-            remoteMergeCandidates={remoteMergeCandidates}
             runningOperation={runningOperation}
             showBranchRemoteLoading={showBranchRemoteLoading}
             upstreamBranch={upstreamBranch}

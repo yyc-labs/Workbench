@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, Clock3, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Clock3, FileText, RefreshCw, Search, X } from 'lucide-react'
 import type { ProjectInfo } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
+import { Combobox, type ComboboxOption } from '../../components/ui/combobox'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
 import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
@@ -74,39 +75,20 @@ export function ManualTranscriptImportModal({
   const { t, formatDateTime } = useI18n()
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId ?? '')
   const [projectSearchQuery, setProjectSearchQuery] = useState('')
-  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false)
   const [draftTitle, setDraftTitle] = useState('')
   const [draftText, setDraftText] = useState('')
   const [wrapMode, setWrapMode] = useState<ManualTranscriptImportWrapMode>('none')
   const [error, setError] = useState<string | null>(null)
-  const dropdownRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
     setSelectedProjectId(initialProjectId ?? '')
     setProjectSearchQuery('')
-    setProjectDropdownOpen(false)
     setDraftTitle('')
     setDraftText('')
     setWrapMode('none')
     setError(null)
   }, [initialProjectId, open])
-
-  useEffect(() => {
-    if (!projectDropdownOpen) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (dropdownRef.current?.contains(target)) return
-      setProjectDropdownOpen(false)
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-    }
-  }, [projectDropdownOpen])
 
   const availableProjects = useMemo(
     () => (projects ?? []).slice().sort((a, b) => {
@@ -145,6 +127,14 @@ export function ManualTranscriptImportModal({
   const selectedProjectLabel = selectedProject
     ? projectDisplayName(selectedProject)
     : t('transcript.manualImportProjectPlaceholder')
+  const projectOptions = useMemo<ComboboxOption[]>(
+    () => availableProjects.map((item) => ({
+      value: item.id,
+      label: projectDisplayName(item),
+      keywords: [item.path, item.id],
+    })),
+    [availableProjects]
+  )
 
   const effectiveTitle = title ?? t('transcript.manualImportTitle')
   const effectiveDescription = description ?? t('transcript.manualImportDescription')
@@ -242,110 +232,84 @@ export function ManualTranscriptImportModal({
                 </p>
               </div>
             ) : canChooseProject ? (
-              <div ref={dropdownRef} className="relative">
-                <button
-                  type="button"
-                  className="quiet-control flex h-11 w-full items-center justify-between gap-3 rounded-full px-4 text-left text-sm text-[color:var(--color-foreground)]"
-                  onClick={() => setProjectDropdownOpen((current) => !current)}
-                  disabled={submitting}
-                >
+              <Combobox
+                ariaLabel={t('transcript.manualImportProjectLabel')}
+                value={selectedProject?.id ?? ''}
+                searchValue={projectSearchQuery}
+                onSearchValueChange={setProjectSearchQuery}
+                options={projectOptions}
+                onChange={setSelectedProjectId}
+                editable="open"
+                clearSearchOnClose
+                triggerPlaceholder={selectedProjectLabel}
+                inputPlaceholder={t('transcript.manualImportProjectSearchPlaceholder')}
+                disabled={submitting}
+                emptyText={t('transcript.manualImportProjectSearchEmpty')}
+                minDropdownWidth={360}
+                matchTriggerWidth={true}
+                inputClassName="h-11 rounded-full pr-10"
+                inputLeading={<Search className="h-4 w-4" />}
+                triggerClassName="h-11 gap-3 px-4 text-sm"
+                contentClassName="rounded-[18px] p-1.5"
+                optionClassName="items-start gap-3 rounded-[14px] px-3 py-3"
+                renderDisplayValue={() => (
                   <span className={`min-w-0 truncate ${selectedProject ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
                     {selectedProjectLabel}
                   </span>
-                  <ChevronDown className={`h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)] transition-transform ${projectDropdownOpen ? 'rotate-180' : ''}`} />
-                </button>
-
-                {projectDropdownOpen ? (
-                  <div
-                    className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]"
-                  >
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-                      <Input
-                        value={projectSearchQuery}
-                        onChange={(event) => setProjectSearchQuery(event.target.value)}
-                        placeholder={t('transcript.manualImportProjectSearchPlaceholder')}
-                        className="h-10 rounded-[14px] pr-10 pl-9"
-                        disabled={submitting}
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
-                          projectSearchQuery
-                            ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                            : 'pointer-events-none opacity-0'
-                        }`}
-                        onClick={() => setProjectSearchQuery('')}
-                        title={t('common.clearSearch')}
-                        aria-label={t('common.clearSearch')}
-                        tabIndex={projectSearchQuery ? 0 : -1}
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="mt-1.5 max-h-56 overflow-y-auto">
-                      {filteredProjects.length > 0 ? (
-                        <div className="space-y-1">
-                          {filteredProjects.map((project, index) => {
-                            const active = project.id === resolvedProjectId
-                            const isRecent = index < 5 && typeof project.lastOpened === 'number'
-                            return (
-                              <button
-                                key={project.id}
-                                type="button"
-                                className={`flex w-full items-start justify-between gap-3 rounded-[14px] px-3 py-3 text-left transition-colors ${
-                                  active
-                                    ? 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-foreground)]'
-                                    : 'hover:bg-[color:var(--color-accent)]'
-                                }`}
-                                onClick={() => {
-                                  setSelectedProjectId(project.id)
-                                  setProjectDropdownOpen(false)
-                                  setProjectSearchQuery('')
-                                }}
-                                disabled={submitting}
-                              >
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">
-                                      {projectDisplayName(project)}
-                                    </p>
-                                    {isRecent ? (
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                                        <Clock3 className="h-3 w-3" />
-                                        {t('transcript.manualImportRecentProject')}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <p
-                                    className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]"
-                                    title={project.path}
-                                  >
-                                    {middleTruncatePath(project.path, 30, 24)}
-                                  </p>
-                                </div>
-                                <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                                  active
-                                    ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white'
-                                    : 'border-[color:var(--color-border)] text-transparent'
-                                }`}>
-                                  <Check className="h-3 w-3" />
-                                </span>
-                              </button>
-                            )
-                          })}
+                )}
+                renderOption={(option, state) => {
+                  const project = availableProjects.find((item) => item.id === option.value)
+                  if (!project) return null
+                  const index = filteredProjects.findIndex((item) => item.id === project.id)
+                  const isRecent = index >= 0 && index < 5 && typeof project.lastOpened === 'number'
+                  return (
+                    <>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">
+                            {projectDisplayName(project)}
+                          </p>
+                          {isRecent ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
+                              <Clock3 className="h-3 w-3" />
+                              {t('transcript.manualImportRecentProject')}
+                            </span>
+                          ) : null}
                         </div>
-                      ) : (
-                        <div className="px-3 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">
-                          {t('transcript.manualImportProjectSearchEmpty')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+                        <p
+                          className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]"
+                          title={project.path}
+                        >
+                          {middleTruncatePath(project.path, 30, 24)}
+                        </p>
+                      </div>
+                      <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        state.selected
+                          ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white'
+                          : 'border-[color:var(--color-border)] text-transparent'
+                      }`}>
+                        <span className="h-3 w-3 rounded-full bg-current" />
+                      </span>
+                    </>
+                  )
+                }}
+                filterOption={(option, nextQuery) => {
+                  const normalizedQuery = nextQuery.trim().toLowerCase()
+                  if (!normalizedQuery) return true
+                  const project = availableProjects.find((item) => item.id === option.value)
+                  if (!project) return false
+                  return [
+                    projectDisplayName(project),
+                    project.path,
+                    project.id,
+                  ].some((field) => field.toLowerCase().includes(normalizedQuery))
+                }}
+                onOpenChange={(isOpen) => {
+                  if (!isOpen) {
+                    setProjectSearchQuery('')
+                  }
+                }}
+              />
             ) : (
               <div
                 className="rounded-[18px] border px-4 py-4 text-sm text-[color:var(--color-muted-foreground)]"

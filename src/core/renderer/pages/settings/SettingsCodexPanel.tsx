@@ -1,6 +1,5 @@
-import { Check, ChevronDown, KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type {
   Capability,
   CodexConfig,
@@ -11,6 +10,7 @@ import type {
 import { getCodexScopeCacheKey } from '../../../shared/codexScope'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select, type SelectOption } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 
@@ -169,15 +169,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [preferredAuthMethod, setPreferredAuthMethod] = useState('')
   const [approvalsReviewer, setApprovalsReviewer] = useState('')
   const [providers, setProviders] = useState<ProviderDraft[]>([])
-  const [providerDropdownOpen, setProviderDropdownOpen] = useState(false)
-  const providerDropdownRef = useRef<HTMLDivElement | null>(null)
-  const providerTriggerRef = useRef<HTMLButtonElement | null>(null)
-  const [providerDropdownLayout, setProviderDropdownLayout] = useState({
-    top: 0,
-    left: 0,
-    width: 0,
-    maxHeight: 240,
-  })
   const cachedSnapshot = resolvedScopeKey ? cachedSnapshots[resolvedScopeKey] : undefined
 
   useEffect(() => {
@@ -216,66 +207,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setProviders,
     })
   }, [cachedSnapshot, loaded])
-
-  useEffect(() => {
-    if (!providerDropdownOpen) return
-
-    const updateProviderDropdownLayout = () => {
-      if (!providerTriggerRef.current) return
-      const rect = providerTriggerRef.current.getBoundingClientRect()
-      const viewportPadding = 12
-      const dropdownGap = 8
-      const idealMaxHeight = 240
-      const preferredTop = rect.bottom + dropdownGap
-      const availableBelow = window.innerHeight - preferredTop - viewportPadding
-      const availableAbove = rect.top - dropdownGap - viewportPadding
-      const shouldOpenUpward = availableBelow < 120 && availableAbove > availableBelow
-      const maxHeight = Math.max(96, Math.min(
-        idealMaxHeight,
-        shouldOpenUpward ? availableAbove : availableBelow,
-      ))
-      const top = shouldOpenUpward
-        ? Math.max(viewportPadding, rect.top - dropdownGap - maxHeight)
-        : rect.bottom + dropdownGap
-      const width = rect.width
-      const left = Math.max(
-        viewportPadding,
-        Math.min(rect.left, window.innerWidth - viewportPadding - width),
-      )
-      setProviderDropdownLayout({ top, left, width, maxHeight })
-    }
-
-    updateProviderDropdownLayout()
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (providerDropdownRef.current?.contains(target)) return
-      if (providerTriggerRef.current?.contains(target)) return
-      setProviderDropdownOpen(false)
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setProviderDropdownOpen(false)
-      }
-    }
-
-    const handleReposition = () => {
-      updateProviderDropdownLayout()
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    window.addEventListener('resize', handleReposition)
-    window.addEventListener('scroll', handleReposition, true)
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-      window.removeEventListener('resize', handleReposition)
-      window.removeEventListener('scroll', handleReposition, true)
-    }
-  }, [providerDropdownOpen])
 
   const normalizedProviderKeys = useMemo(
     () => providers.map((provider) => normalizeProviderKey(provider.key)),
@@ -423,6 +354,13 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
   const inputDisabled = !loaded || saving || syncing || !hasCachedSnapshot
   const currentProviderValue = activeProvider?.key.trim() || activeProvider?.name.trim() || ''
+  const providerOptions = useMemo<SelectOption[]>(
+    () => providers.map((provider) => ({
+      value: provider.draftId,
+      label: provider.key.trim() || provider.name.trim() || t('settings.codex.providerPlaceholder'),
+    })),
+    [providers, t]
+  )
 
   return (
     <div className="space-y-8">
@@ -509,28 +447,16 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.providerTitle')}</p>
-            <div
-              ref={providerDropdownRef}
-              className="relative"
-            >
-              <button
-                ref={providerTriggerRef}
-                type="button"
-                className="quiet-control flex h-11 w-full items-center justify-between rounded-full px-4 text-left text-sm transition-colors hover:border-[color:var(--color-border-hover)] disabled:opacity-50"
-                aria-haspopup="listbox"
-                aria-expanded={providerDropdownOpen}
-                onClick={() => {
-                  if (inputDisabled || providers.length === 0) return
-                  setProviderDropdownOpen((current) => !current)
-                }}
-                disabled={inputDisabled || providers.length === 0}
-              >
-                <span className={currentProviderValue ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}>
-                  {currentProviderValue || t('settings.codex.providerPlaceholder')}
-                </span>
-                <ChevronDown className={`h-4 w-4 text-[color:var(--color-muted-foreground)] transition-transform ${providerDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
+            <Select
+              ariaLabel={t('settings.codex.providerTitle')}
+              value={selectedProviderDraftId}
+              options={providerOptions}
+              onChange={setSelectedProviderDraftId}
+              placeholder={t('settings.codex.providerPlaceholder')}
+              disabled={inputDisabled || providers.length === 0}
+              triggerClassName="h-11 hover:border-[color:var(--color-border-hover)]"
+              renderValue={() => currentProviderValue || t('settings.codex.providerPlaceholder')}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -563,50 +489,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
           )}
         </div>
       </div>
-
-      {providerDropdownOpen && createPortal(
-        <div
-          ref={providerDropdownRef}
-          className="surface-card fixed z-[10010] overflow-hidden rounded-[18px]"
-          style={{
-            top: providerDropdownLayout.top,
-            left: providerDropdownLayout.left,
-            width: providerDropdownLayout.width,
-          }}
-          role="listbox"
-          aria-label={t('settings.codex.providerTitle')}
-        >
-          <div className="overflow-auto p-1.5" style={{ maxHeight: providerDropdownLayout.maxHeight }}>
-            {providers.map((provider) => {
-              const key = normalizeProviderKey(provider.key)
-              const active = provider.draftId === activeProvider?.draftId
-              return (
-                <button
-                  key={provider.draftId}
-                  type="button"
-                  className={`flex w-full items-center justify-between rounded-[12px] px-3 py-2 text-left text-sm transition-colors ${
-                    active
-                      ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                      : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                  }`}
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => {
-                    setSelectedProviderDraftId(provider.draftId)
-                    setProviderDropdownOpen(false)
-                  }}
-                >
-                  <span className="truncate font-medium">
-                    {provider.key.trim() || provider.name.trim() || t('settings.codex.providerPlaceholder')}
-                  </span>
-                  {active && <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
-                </button>
-              )
-            })}
-          </div>
-        </div>,
-        document.body,
-      )}
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center justify-between gap-4">

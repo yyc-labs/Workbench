@@ -64,6 +64,7 @@ import type {
   LearningCreateNotePayload,
   LearningNote,
   LearningNoteSummary,
+  LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
 } from '../../shared/types'
 
@@ -154,6 +155,8 @@ declare global {
       listTranscriptShares: () => Promise<TranscriptShareListResult>
       listLearningCategories: () => Promise<LearningCategory[]>
       createLearningCategory: (payload: LearningCreateCategoryPayload) => Promise<LearningCategory[]>
+      updateLearningCategory: (payload: LearningUpdateCategoryPayload) => Promise<LearningCategory[]>
+      deleteLearningCategory: (categoryId: string) => Promise<LearningCategory[]>
       listLearningNotes: () => Promise<LearningNoteSummary[]>
       getLearningNote: (noteId: string) => Promise<LearningNote | null>
       createLearningNote: (payload?: LearningCreateNotePayload) => Promise<LearningNote>

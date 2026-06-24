@@ -1,5 +1,6 @@
-import type { MutableRefObject } from 'react'
-import { Check, ChevronDown, GitBranch } from 'lucide-react'
+import { useMemo } from 'react'
+import { GitBranch } from 'lucide-react'
+import { Combobox, type ComboboxGroup } from '../../components/ui/combobox'
 import {
   getGitOperationItems,
   type OperationCardState,
@@ -12,26 +13,17 @@ type DetailAiCommitBranchPanelProps = {
   branchAhead: number
   branchBehind: number
   currentBranch: string
-  filteredLocalMergeCandidates: IndexedBranchCandidate[]
-  filteredRemoteMergeCandidates: IndexedBranchCandidate[]
   localMergeCandidates: IndexedBranchCandidate[]
-  mergeDropdownOpen: boolean
-  mergeDropdownRef: MutableRefObject<HTMLDivElement | null>
-  mergeSearchDraft: string
-  mergeSearchInputRef: MutableRefObject<HTMLInputElement | null>
-  mergeSearchQuery: string
-  mergeSearchResultCount: number
+  remoteMergeCandidates: IndexedBranchCandidate[]
   mergeTarget: string
-  mergeTargetLabel: string
-  onChangeMergeSearchDraft: (value: string) => void
+  mergeSearchValue: string
+  onChangeMergeSearchValue: (value: string) => void
   onOpenCurrentBranchManager: () => void
   onOpenGitGuide: () => void
   onOpenUpstreamManager: () => void
   onRequestGitOperation: (operation: PanelGitOperationKind) => void
   onSelectMergeTarget: (branchName: string) => void
-  onToggleMergeDropdown: () => void
   operationStates: Record<PanelGitOperationKind, OperationCardState>
-  remoteMergeCandidates: IndexedBranchCandidate[]
   runningOperation: PanelGitOperationKind | null
   showBranchRemoteLoading: boolean
   upstreamBranch: string
@@ -83,32 +75,55 @@ export function DetailAiCommitBranchPanel({
   branchAhead,
   branchBehind,
   currentBranch,
-  filteredLocalMergeCandidates,
-  filteredRemoteMergeCandidates,
   localMergeCandidates,
-  mergeDropdownOpen,
-  mergeDropdownRef,
-  mergeSearchDraft,
-  mergeSearchInputRef,
-  mergeSearchQuery,
-  mergeSearchResultCount,
+  remoteMergeCandidates,
   mergeTarget,
-  mergeTargetLabel,
-  onChangeMergeSearchDraft,
+  mergeSearchValue,
+  onChangeMergeSearchValue,
   onOpenCurrentBranchManager,
   onOpenGitGuide,
   onOpenUpstreamManager,
   onRequestGitOperation,
   onSelectMergeTarget,
-  onToggleMergeDropdown,
   operationStates,
-  remoteMergeCandidates,
   runningOperation,
   showBranchRemoteLoading,
   upstreamBranch,
 }: DetailAiCommitBranchPanelProps) {
   const { t } = useI18n()
   const gitOperationItems = getGitOperationItems()
+  const mergeSearchQuery = mergeSearchValue.trim().toLowerCase()
+  const mergeGroups = useMemo<ComboboxGroup[]>(
+    () => [
+      {
+        key: 'local',
+        label: t('detail.branchPanelLocalBranches'),
+        options: localMergeCandidates.map((candidate) => ({
+          value: candidate.name,
+          label: candidate.name,
+        })),
+      },
+      {
+        key: 'remote',
+        label: t('detail.branchPanelRemoteBranches'),
+        options: remoteMergeCandidates.map((candidate) => ({
+          value: candidate.name,
+          label: candidate.name,
+        })),
+      },
+    ].filter((group) => group.options.length > 0),
+    [localMergeCandidates, remoteMergeCandidates, t]
+  )
+  const filteredLocalCount = useMemo(
+    () => localMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length,
+    [localMergeCandidates, mergeSearchQuery]
+  )
+  const filteredRemoteCount = useMemo(
+    () => remoteMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length,
+    [remoteMergeCandidates, mergeSearchQuery]
+  )
+  const mergeSearchResultCount = filteredLocalCount + filteredRemoteCount
+  const mergeTargetLabel = mergeTarget || t('detail.mergeTargetPlaceholder')
   return (
     <div className="min-h-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
       {showBranchRemoteLoading ? (
@@ -166,115 +181,38 @@ export function DetailAiCommitBranchPanel({
               <p className="mb-1 text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
                 {t('detail.branchPanelMergeTarget')}
               </p>
-              <div
-                ref={(node) => {
-                  mergeDropdownRef.current = node
-                }}
-                className="relative"
-              >
-                {mergeDropdownOpen ? (
-                  <div className="quiet-control flex h-10 w-full items-center gap-2 rounded-[14px] border-[color:var(--color-ring)]/65 px-3 ring-2 ring-[color:var(--color-ring)]/22">
-                    <input
-                      ref={(node) => {
-                        mergeSearchInputRef.current = node
-                      }}
-                      type="text"
-                      value={mergeSearchDraft}
-                      onChange={(event) => onChangeMergeSearchDraft(event.target.value)}
-                      placeholder={mergeTarget || t('detail.branchPanelSearchPlaceholder')}
-                      className="min-w-0 flex-1 bg-transparent font-mono text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:font-sans placeholder:text-[color:var(--color-muted-foreground)]"
-                      spellCheck={false}
-                    />
-                    <button
-                      type="button"
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                      onClick={onToggleMergeDropdown}
-                      title={t('detail.branchPanelCloseList')}
-                    >
-                      <ChevronDown className="h-3.5 w-3.5 rotate-180 transition-transform" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className="quiet-control flex h-10 w-full items-center justify-between rounded-[14px] px-3 text-left text-[12px] transition-colors hover:border-[color:var(--color-border-hover)]"
-                    aria-haspopup="listbox"
-                    aria-expanded={mergeDropdownOpen}
-                    onClick={onToggleMergeDropdown}
-                  >
-                    <span className={mergeTarget ? 'font-mono text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}>
-                      {mergeTargetLabel}
-                    </span>
-                    <ChevronDown className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform" />
-                  </button>
+              <Combobox
+                ariaLabel={t('detail.branchPanelMergeTarget')}
+                value={mergeTarget}
+                searchValue={mergeSearchValue}
+                onSearchValueChange={onChangeMergeSearchValue}
+                options={[]}
+                groups={mergeGroups}
+                onChange={onSelectMergeTarget}
+                editable="open"
+                clearSearchOnClose
+                triggerPlaceholder={mergeTargetLabel}
+                inputPlaceholder={mergeTarget || t('detail.branchPanelSearchPlaceholder')}
+                toggleAriaLabel={t('detail.branchPanelCloseList')}
+                emptyText={mergeSearchQuery ? t('detail.branchPanelNoMatch') : t('detail.branchPanelNoBranches')}
+                inputClassName="h-10 rounded-[14px] px-3 font-mono text-[12px]"
+                triggerClassName="h-10 rounded-[14px] px-3 text-[12px] hover:border-[color:var(--color-border-hover)]"
+                contentClassName="surface-card rounded-[14px] p-1"
+                optionClassName="rounded-[10px] px-2.5 py-1.5 text-[11.5px]"
+                groupLabelClassName="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
+                renderDisplayValue={() => (
+                  <span className={mergeTarget ? 'font-mono text-[12px] text-[color:var(--color-foreground)]' : 'font-sans text-[12px] text-[color:var(--color-muted-foreground)]'}>
+                    {mergeTargetLabel}
+                  </span>
                 )}
-
-                {mergeDropdownOpen && (
-                  <div
-                    className="surface-card absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-[14px]"
-                    role="listbox"
-                    aria-label={t('detail.branchPanelMergeTarget')}
-                  >
-                    <div className="max-h-[240px] overflow-auto p-1">
-                      {filteredLocalMergeCandidates.length > 0 && (
-                        <div className="mb-1">
-                          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                            {t('detail.branchPanelLocalBranches')}
-                          </p>
-                          {filteredLocalMergeCandidates.map((candidate) => {
-                            const active = mergeTarget === candidate.name
-                            return (
-                              <button
-                                key={`local-${candidate.name}`}
-                                type="button"
-                                className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
-                                  active
-                                    ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                                    : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                                }`}
-                                onClick={() => onSelectMergeTarget(candidate.name)}
-                              >
-                                <span className="truncate font-mono">{candidate.name}</span>
-                                {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {filteredRemoteMergeCandidates.length > 0 && (
-                        <div>
-                          <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                            {t('detail.branchPanelRemoteBranches')}
-                          </p>
-                          {filteredRemoteMergeCandidates.map((candidate) => {
-                            const active = mergeTarget === candidate.name
-                            return (
-                              <button
-                                key={`remote-${candidate.name}`}
-                                type="button"
-                                className={`flex w-full items-center justify-between rounded-[10px] px-2.5 py-1.5 text-left text-[11.5px] transition-colors ${
-                                  active
-                                    ? 'bg-[color:var(--color-primary)]/12 text-[color:var(--color-foreground)]'
-                                    : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                                }`}
-                                onClick={() => onSelectMergeTarget(candidate.name)}
-                              >
-                                <span className="truncate font-mono">{candidate.name}</span>
-                                {active && <Check className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )}
-                      {filteredLocalMergeCandidates.length === 0 && filteredRemoteMergeCandidates.length === 0 && (
-                        <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {mergeSearchQuery ? t('detail.branchPanelNoMatch') : t('detail.branchPanelNoBranches')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                renderOption={(option, state) => (
+                  <>
+                    <span className="truncate font-mono">{option.label}</span>
+                    {state.selected ? <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-[color:var(--color-primary)]" /> : null}
+                  </>
                 )}
-              </div>
+                filterOption={(option, query) => option.value.toLowerCase().includes(query.trim().toLowerCase())}
+              />
               <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
                 {t('detail.branchPanelSelectedCount', {
                   localCount: localMergeCandidates.length,

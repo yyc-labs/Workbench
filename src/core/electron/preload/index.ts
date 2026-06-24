@@ -19,6 +19,7 @@ import type {
   LearningCreateNotePayload,
   LearningNote,
   LearningNoteSummary,
+  LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
 } from '../../shared/types'
 
@@ -363,6 +364,12 @@ const api = {
 
   createLearningCategory: (payload: LearningCreateCategoryPayload) =>
     ipcRenderer.invoke(IPC.LEARNING_CREATE_CATEGORY, payload) as Promise<LearningCategory[]>,
+
+  updateLearningCategory: (payload: LearningUpdateCategoryPayload) =>
+    ipcRenderer.invoke(IPC.LEARNING_UPDATE_CATEGORY, payload) as Promise<LearningCategory[]>,
+
+  deleteLearningCategory: (categoryId: string) =>
+    ipcRenderer.invoke(IPC.LEARNING_DELETE_CATEGORY, categoryId) as Promise<LearningCategory[]>,
 
   listLearningNotes: () =>
     ipcRenderer.invoke(IPC.LEARNING_LIST_NOTES) as Promise<LearningNoteSummary[]>,
