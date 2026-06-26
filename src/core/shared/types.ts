@@ -461,11 +461,14 @@ export interface TranscriptShareHost {
   kind: TranscriptShareHostKind
 }
 
+export type TranscriptShareBindingMode = 'lan' | 'loopback'
+
 export interface TranscriptShareStartResult {
   entry: TranscriptShareEntry
-  /** Host:port the share server is listening on (LAN-reachable). */
+  /** Primary host presented to the user for opening the share. */
   host: string
   port: number
+  bindingMode: TranscriptShareBindingMode
   hosts: TranscriptShareHost[]
 }
 
@@ -473,6 +476,7 @@ export interface TranscriptShareListResult {
   running: boolean
   host: string
   port: number
+  bindingMode: TranscriptShareBindingMode
   hosts: TranscriptShareHost[]
   entries: TranscriptShareEntry[]
 }

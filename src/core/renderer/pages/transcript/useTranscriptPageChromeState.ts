@@ -1,38 +1,17 @@
 import { useEffect, useState } from 'react'
+import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
 import {
   PROJECT_HEADER_COLLAPSED_STORAGE_KEY,
   TRANSCRIPT_SPLIT_QUERY,
   readProjectHeaderCollapsed,
 } from './transcriptPage.utils'
 
-type ThemeMode = 'light' | 'dark'
-
 export function useTranscriptPageChromeState() {
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
-  const [effectiveTheme, setEffectiveTheme] = useState<ThemeMode>(
-    () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
-  )
+  const effectiveTheme = useEffectiveTheme()
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => window.matchMedia(TRANSCRIPT_SPLIT_QUERY).matches
   )
-
-  useEffect(() => {
-    const root = document.documentElement
-    const syncTheme = () => {
-      setEffectiveTheme(root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
-    }
-    syncTheme()
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        if (record.type === 'attributes' && record.attributeName === 'data-theme') {
-          syncTheme()
-          break
-        }
-      }
-    })
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     const media = window.matchMedia(TRANSCRIPT_SPLIT_QUERY)

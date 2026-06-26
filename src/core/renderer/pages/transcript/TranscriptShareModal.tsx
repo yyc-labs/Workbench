@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Copy, ExternalLink, Link2, QrCode, RefreshCw, ShieldAlert, Trash2, X } from 'lucide-react'
 import QRCode from 'react-qr-code'
-import type { TranscriptShareEntry, TranscriptShareHost } from '../../../shared/types'
+import type { TranscriptShareBindingMode, TranscriptShareEntry, TranscriptShareHost } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
 import { copyTextToClipboard } from '../code/code.clipboard'
@@ -12,6 +12,7 @@ type TranscriptShareModalProps = {
   entries: TranscriptShareEntry[]
   hosts: TranscriptShareHost[]
   port: number
+  bindingMode: TranscriptShareBindingMode
   generating: boolean
   error: string | null
   onGenerate: () => void
@@ -169,6 +170,7 @@ export function TranscriptShareModal({
   entries,
   hosts,
   port,
+  bindingMode,
   generating,
   error,
   onGenerate,
@@ -252,7 +254,9 @@ export function TranscriptShareModal({
                 {t('transcript.shareReachableHosts')}
               </p>
               <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--color-muted-foreground)]">
-                {t('transcript.shareReachableHostsHint')}
+                {bindingMode === 'loopback'
+                  ? t('transcript.shareLoopbackHint')
+                  : t('transcript.shareReachableHostsHint')}
               </p>
               <div className="mt-3 space-y-2">
                 {hosts.length <= 0 ? (

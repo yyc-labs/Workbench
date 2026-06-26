@@ -304,6 +304,7 @@ export interface AppState {
   syncManagedProcesses: () => Promise<void>
   rehydrateProcessUrlsFromStorage: () => void
   refreshSessions: () => Promise<void>
+  refreshRuntimeState: (mode?: 'sessions' | 'all') => Promise<void>
   importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession | null>
   importCurrentProcessOutputTranscript: (projectId: string, title?: string) => Promise<TranscriptSession | null>
   loadProjectTranscripts: (projectId: string) => Promise<void>

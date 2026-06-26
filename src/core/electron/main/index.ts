@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, nativeTheme } from 'electron'
+import { app, BrowserWindow, nativeTheme } from 'electron'
 import path from 'path'
 import { ProcessManager } from './runner'
 import { loadConfig } from './config'
@@ -16,7 +16,13 @@ import { createLearningService } from './learning/learningService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
 import { createWindow, applyWindowBackground } from './window/createWindow'
+import {
+  registerGlobalShortcuts,
+  unregisterGlobalShortcuts,
+} from './window/globalShortcuts'
+import { ensureWindowVisible } from './window/windowFocus'
 import { projectIdFromPath } from '../../shared/rules'
 import type { Capability, TranscriptImportedEvent } from '../../shared/types'
 
@@ -27,8 +33,6 @@ const aiEnvironmentController = new AiEnvironmentController(
   () => bootCapability,
   () => loadConfig(),
 )
-const GLOBAL_HOME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+H'
-const GLOBAL_THEME_SHORTCUT_ACCELERATOR = 'CommandOrControl+Alt+L'
 const gitService = createGitService({
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
 })
@@ -64,21 +68,6 @@ const learningRepository = createLearningRepository()
 const learningService = createLearningService({
   repository: learningRepository,
 })
-
-function listTranscriptImportProjects() {
-  return loadConfig().projects.map((project) => {
-    const projectId = projectIdFromPath(project.path)
-    const name = path.basename(project.path) || project.path
-    const customName = project.customName?.trim() || undefined
-    return {
-      projectId,
-      projectPath: project.path,
-      name,
-      customName,
-      displayName: customName || name,
-    }
-  })
-}
 
 const agentHookGateway = new AgentHookGateway({
   getConfig: () => loadConfig().agentHooks,
@@ -129,11 +118,7 @@ function emitTranscriptImported(payload: TranscriptImportedEvent): void {
   if (!mainWindow) return
 
   if (payload.openViewer) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore()
-    }
-    mainWindow.show()
-    mainWindow.focus()
+    ensureWindowVisible(mainWindow)
   }
 
   const targetWindow = mainWindow
@@ -152,13 +137,9 @@ function sendGlobalHomeShortcut(): void {
     createMainWindow()
   }
 
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) {
-    mainWindow.restore()
-  }
-  mainWindow.show()
-  mainWindow.focus()
-  mainWindow.webContents.send(IPC.GLOBAL_HOME_SHORTCUT)
+  const window = ensureWindowVisible(mainWindow)
+  if (!window) return
+  window.webContents.send(IPC.GLOBAL_HOME_SHORTCUT)
 }
 
 function sendGlobalThemeShortcut(): void {
@@ -167,18 +148,6 @@ function sendGlobalThemeShortcut(): void {
   }
 
   mainWindow?.webContents.send(IPC.GLOBAL_THEME_SHORTCUT)
-}
-
-function registerGlobalShortcut(accelerator: string, action: () => void): void {
-  const registered = globalShortcut.register(accelerator, action)
-  if (!registered) {
-    console.warn(`[globalShortcut] failed to register ${accelerator}`)
-  }
-}
-
-function registerGlobalShortcuts(): void {
-  registerGlobalShortcut(GLOBAL_HOME_SHORTCUT_ACCELERATOR, sendGlobalHomeShortcut)
-  registerGlobalShortcut(GLOBAL_THEME_SHORTCUT_ACCELERATOR, sendGlobalThemeShortcut)
 }
 
 // ── before-quit ───────────────────────────────────────────
@@ -205,8 +174,7 @@ app.on('before-quit', async (e) => {
 })
 
 app.on('will-quit', () => {
-  globalShortcut.unregister(GLOBAL_HOME_SHORTCUT_ACCELERATOR)
-  globalShortcut.unregister(GLOBAL_THEME_SHORTCUT_ACCELERATOR)
+  unregisterGlobalShortcuts()
 })
 
 // ── startup ──────────────────────────────────────────────
@@ -244,7 +212,7 @@ app.whenReady().then(async () => {
     transcriptShareService,
   })
   createMainWindow()
-  registerGlobalShortcuts()
+  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut)
   agentHookGateway.start()
 
   app.on('activate', () => {

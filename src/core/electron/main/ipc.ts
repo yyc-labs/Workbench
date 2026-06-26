@@ -28,7 +28,6 @@ export const IPC = {
   GIT_GET_CONFLICT_FILE: 'git:getConflictFile',
   GIT_RESOLVE_CONFLICT_FILE: 'git:resolveConflictFile',
   CONFIG_GET: 'config:get',
-  CONFIG_GET_THEME_SYNC: 'config:get-theme-sync',
   CONFIG_SET: 'config:set',
   CODEX_SCOPE_GET: 'codex-scope:get',
   CODEX_SETTINGS_GET: 'codex-settings:get',

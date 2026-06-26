@@ -1,8 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
+import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
 import {
   installMonacoFindWidgetHoverGuard,
-  resolveMonacoTheme,
   type MonacoThemeName,
 } from '../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../lib/monacoPreload'
@@ -113,7 +113,8 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     stickyScroll,
     hiddenLineRanges,
   })
-  const [theme, setTheme] = useState<MonacoThemeName>(() => resolveMonacoTheme())
+  const effectiveTheme = useEffectiveTheme()
+  const [theme, setTheme] = useState<MonacoThemeName>(() => (effectiveTheme === 'dark' ? 'vs-dark' : 'vs'))
 
   latestPropsRef.current = {
     value,
@@ -313,19 +314,8 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
   }, [hiddenLineRanges])
 
   useEffect(() => {
-    const root = document.documentElement
-    const syncTheme = () => setTheme(resolveMonacoTheme())
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        if (record.type === 'attributes' && record.attributeName === 'data-theme') {
-          syncTheme()
-          break
-        }
-      }
-    })
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => observer.disconnect()
-  }, [])
+    setTheme(effectiveTheme === 'dark' ? 'vs-dark' : 'vs')
+  }, [effectiveTheme])
 
   useEffect(() => {
     const container = containerRef.current

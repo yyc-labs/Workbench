@@ -121,136 +121,181 @@ export type RuntimeActionsSlice = Pick<
   AppState,
   | 'loadTmuxSessions'
   | 'refreshSessions'
+  | 'refreshRuntimeState'
   | 'loadRuntimeEntries'
   | 'startRuntime'
   | 'stopRuntime'
   | 'openTerminal'
 >
 
-export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeActionsSlice> = (set, get) => ({
-  loadTmuxSessions: async () => {
+let runtimeRefreshInFlight: Promise<void> | null = null
+let pendingRuntimeRefreshMode: 'sessions' | 'all' | null = null
+
+function mergeRuntimeRefreshMode(
+  current: 'sessions' | 'all',
+  next: 'sessions' | 'all',
+): 'sessions' | 'all' {
+  return current === 'all' || next === 'all' ? 'all' : 'sessions'
+}
+
+export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeActionsSlice> = (set, get) => {
+  const refreshRuntimeStateInternal = async (mode: 'sessions' | 'all' = 'sessions') => {
+    if (runtimeRefreshInFlight) {
+      pendingRuntimeRefreshMode = pendingRuntimeRefreshMode
+        ? mergeRuntimeRefreshMode(pendingRuntimeRefreshMode, mode)
+        : mode
+      await runtimeRefreshInFlight
+      return
+    }
+
+    const run = async (refreshMode: 'sessions' | 'all') => {
+      if (refreshMode === 'all') {
+        await get().loadRuntimeEntries()
+      }
+      await get().refreshSessions()
+    }
+
+    runtimeRefreshInFlight = (async () => {
+      let currentMode: 'sessions' | 'all' = mode
+      for (;;) {
+        await run(currentMode)
+        const nextMode = pendingRuntimeRefreshMode
+        pendingRuntimeRefreshMode = null
+        if (!nextMode) break
+        currentMode = mergeRuntimeRefreshMode(currentMode, nextMode)
+      }
+    })()
+
     try {
-      const sessions = await window.electronAPI.listTmuxSessions()
-      set((state) => {
-        if (state.tmuxSessions.length === sessions.length) {
-          let unchanged = true
-          for (let i = 0; i < sessions.length; i++) {
-            const prev = state.tmuxSessions[i]
-            const next = sessions[i]
-            if (
-              prev?.sessionName !== next.sessionName
-              || prev?.projectId !== next.projectId
-              || prev?.createdAt !== next.createdAt
-              || prev?.status !== next.status
-            ) {
-              unchanged = false
-              break
+      await runtimeRefreshInFlight
+    } finally {
+      runtimeRefreshInFlight = null
+    }
+  }
+
+  return {
+    loadTmuxSessions: async () => {
+      try {
+        const sessions = await window.electronAPI.listTmuxSessions()
+        set((state) => {
+          if (state.tmuxSessions.length === sessions.length) {
+            let unchanged = true
+            for (let i = 0; i < sessions.length; i++) {
+              const prev = state.tmuxSessions[i]
+              const next = sessions[i]
+              if (
+                prev?.sessionName !== next.sessionName
+                || prev?.projectId !== next.projectId
+                || prev?.createdAt !== next.createdAt
+                || prev?.status !== next.status
+              ) {
+                unchanged = false
+                break
+              }
             }
+            if (unchanged) return state
           }
-          if (unchanged) return state
-        }
-        return { tmuxSessions: sessions }
-      })
-    } catch {
-      // tmux not available
-    }
-  },
-
-  refreshSessions: async () => {
-    try {
-      const { projects, runtimeEntries } = get()
-      const rawSessions = await runtimeManager.listRuntimeSessions()
-      const rawSessionNames = rawSessions.map((item) => item.sessionName)
-      const rawSessionNameSet = new Set(rawSessionNames)
-      const createdAtByName = new Map(rawSessions.map((item) => [item.sessionName, item.createdAt] as const))
-      const result: AppState['sessions'] = {}
-
-      for (const project of projects) {
-        const entry = runtimeEntries[project.id]
-        const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName)
-        const sessionName = pickBestSessionName(
-          [entry?.sessionName || '', inferredSessionName || ''],
-          rawSessionNameSet
-        )
-
-        const runtimeSession = rawSessions.find((s) => s.sessionName === sessionName)
-
-        result[project.id] = {
-          projectId: project.id,
-          sessionName,
-          status: runtimeSession
-            ? (runtimeSession.status === 'attached' ? 'attached' : 'detached')
-            : 'stopped',
-          createdAt: runtimeSession?.createdAt ?? 0,
-        }
-      }
-
-      set((state) => (sessionsEqual(state.sessions, result) ? state : { sessions: result }))
-    } catch {
-      // tmux may not be available or WSL bridge timed out — sessions stay as-is
-    }
-  },
-
-  loadRuntimeEntries: async () => {
-    try {
-      const entries = await window.electronAPI.listRuntimeEntries()
-      const map: AppState['runtimeEntries'] = {}
-      for (const e of entries) {
-        map[e.projectId] = e
-      }
-      set((state) => (runtimeEntriesEqual(state.runtimeEntries, map) ? state : { runtimeEntries: map }))
-    } catch {
-      // registry not available
-    }
-  },
-
-  startRuntime: async (projectId) => {
-    const state = get()
-    const project = state.projects.find((p) => p.id === projectId)
-    if (!project) return
-    const cooldownRemainingMs = Math.max(0, state.runtimeModeSwitchCooldownUntil - Date.now())
-    if (cooldownRemainingMs > 0) {
-      await waitForDelay(cooldownRemainingMs)
-    }
-    const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
-    if (diagnostics.issues.length > 0) {
-      const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
-      throw new Error(translateCurrent('settingsRuntime.preflightFailed', { message }))
-    }
-    const ok = await runtimeManager.startRuntime(projectId, project.path, project.cli)
-    if (!ok) {
-      throw new Error(
-        translateCurrent('settingsRuntime.startFailed', {
-          diagnostics: translateCurrent('settingsRuntime.diagnostics'),
-          settings: translateCurrent('common.settings'),
+          return { tmuxSessions: sessions }
         })
-      )
-    }
-    await get().loadRuntimeEntries()
-    await get().refreshSessions()
-    // Launcher script may create/attach tmux slightly after IPC returns.
-    setTimeout(() => {
-      void get().refreshSessions()
-    }, 1200)
-  },
+      } catch {
+        // tmux not available
+      }
+    },
 
-  stopRuntime: async (projectId) => {
-    const session = get().sessions[projectId]
-    if (!session || session.status === 'stopped') return
-    await runtimeManager.stopRuntime(session.sessionName)
-    await get().refreshSessions()
-  },
+    refreshSessions: async () => {
+      try {
+        const { projects, runtimeEntries } = get()
+        const rawSessions = await runtimeManager.listRuntimeSessions()
+        const rawSessionNames = rawSessions.map((item) => item.sessionName)
+        const rawSessionNameSet = new Set(rawSessionNames)
+        const createdAtByName = new Map(rawSessions.map((item) => [item.sessionName, item.createdAt] as const))
+        const result: AppState['sessions'] = {}
 
-  openTerminal: async (projectId, statusHint) => {
-    const session = get().sessions[projectId]
-    console.log('[store.openTerminal]', { projectId, hasSession: !!session, sessionName: session?.sessionName })
-    if (!session) {
-      console.log('[store.openTerminal] BAIL — no session')
-      return false
-    }
-    console.log('[store.openTerminal] calling runtimeManager.openTerminal...')
-    const ok = await runtimeManager.openTerminal(session.sessionName, statusHint)
-    console.log('[store.openTerminal] runtimeManager returned', ok)
-    return ok
-  },
-})
+        for (const project of projects) {
+          const entry = runtimeEntries[project.id]
+          const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName)
+          const sessionName = pickBestSessionName(
+            [entry?.sessionName || '', inferredSessionName || ''],
+            rawSessionNameSet
+          )
+
+          const runtimeSession = rawSessions.find((s) => s.sessionName === sessionName)
+
+          result[project.id] = {
+            projectId: project.id,
+            sessionName,
+            status: runtimeSession
+              ? (runtimeSession.status === 'attached' ? 'attached' : 'detached')
+              : 'stopped',
+            createdAt: runtimeSession?.createdAt ?? 0,
+          }
+        }
+
+        set((state) => (sessionsEqual(state.sessions, result) ? state : { sessions: result }))
+      } catch {
+        // tmux may not be available or WSL bridge timed out — sessions stay as-is
+      }
+    },
+
+    refreshRuntimeState: async (mode = 'sessions') => {
+      await refreshRuntimeStateInternal(mode)
+    },
+
+    loadRuntimeEntries: async () => {
+      try {
+        const entries = await window.electronAPI.listRuntimeEntries()
+        const map: AppState['runtimeEntries'] = {}
+        for (const e of entries) {
+          map[e.projectId] = e
+        }
+        set((state) => (runtimeEntriesEqual(state.runtimeEntries, map) ? state : { runtimeEntries: map }))
+      } catch {
+        // registry not available
+      }
+    },
+
+    startRuntime: async (projectId) => {
+      const state = get()
+      const project = state.projects.find((p) => p.id === projectId)
+      if (!project) return
+      const cooldownRemainingMs = Math.max(0, state.runtimeModeSwitchCooldownUntil - Date.now())
+      if (cooldownRemainingMs > 0) {
+        await waitForDelay(cooldownRemainingMs)
+      }
+      const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
+      if (diagnostics.issues.length > 0) {
+        const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
+        throw new Error(translateCurrent('settingsRuntime.preflightFailed', { message }))
+      }
+      const ok = await runtimeManager.startRuntime(projectId, project.path, project.cli)
+      if (!ok) {
+        throw new Error(
+          translateCurrent('settingsRuntime.startFailed', {
+            diagnostics: translateCurrent('settingsRuntime.diagnostics'),
+            settings: translateCurrent('common.settings'),
+          })
+        )
+      }
+      await refreshRuntimeStateInternal('all')
+      // Launcher script may create/attach tmux slightly after IPC returns.
+      setTimeout(() => {
+        void refreshRuntimeStateInternal('all')
+      }, 1200)
+    },
+
+    stopRuntime: async (projectId) => {
+      const session = get().sessions[projectId]
+      if (!session || session.status === 'stopped') return
+      await runtimeManager.stopRuntime(session.sessionName)
+      await refreshRuntimeStateInternal('all')
+    },
+
+    openTerminal: async (projectId, statusHint) => {
+      const session = get().sessions[projectId]
+      if (!session) {
+        return false
+      }
+      return runtimeManager.openTerminal(session.sessionName, statusHint)
+    },
+  }
+}

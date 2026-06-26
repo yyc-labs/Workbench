@@ -1,9 +1,10 @@
 import { randomUUID } from 'crypto'
 import { promises as fs } from 'fs'
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { networkInterfaces, type NetworkInterfaceInfo } from 'os'
 import { fileURLToPath } from 'url'
 import type {
+  TranscriptShareBindingMode,
   TranscriptShareEntry,
   TranscriptShareHost,
   TranscriptShareHostKind,
@@ -25,9 +26,18 @@ type CandidateHost = TranscriptShareHost & {
   score: number
 }
 
+type ShareHttpServerLike = {
+  once: (event: 'error', listener: (error: Error) => void) => void
+  listen: (port: number, host: string, callback: () => void) => void
+  address: () => { port: number } | string | null
+  close: (callback: () => void) => void
+}
+
 type TranscriptShareServiceOptions = {
   networkInterfaces?: () => NodeJS.Dict<NetworkInterfaceInfo[]>
   port?: number
+  preferredListenHosts?: string[]
+  createServer?: (handler: (req: IncomingMessage, res: ServerResponse) => void) => ShareHttpServerLike
 }
 
 function escapeHtml(value: string): string {
@@ -191,11 +201,13 @@ export interface TranscriptShareService {
 
 export function createTranscriptShareService(options: TranscriptShareServiceOptions = {}): TranscriptShareService {
   const readNetworkInterfaces = options.networkInterfaces || networkInterfaces
+  const createShareServer = options.createServer || ((handler) => createServer(handler))
   const shares = new Map<string, StoredShare>()
-  let server: Server | null = null
+  let server: ShareHttpServerLike | null = null
   let activePort = Number.isInteger(options.port) ? Number(options.port) : SHARE_PORT
   let activeHosts = listLanHosts(readNetworkInterfaces)
   let activeHost = pickPrimaryLanAddress(activeHosts)
+  let activeBindingMode: TranscriptShareBindingMode = activeHost === '127.0.0.1' ? 'loopback' : 'lan'
 
   const renderPage = (share: StoredShare): string => share.html
 
@@ -231,31 +243,77 @@ export function createTranscriptShareService(options: TranscriptShareServiceOpti
     res.end(body)
   }
 
-  const ensureServer = (): Promise<void> => {
-    if (server) return Promise.resolve()
+  const preferredListenHosts = options.preferredListenHosts && options.preferredListenHosts.length > 0
+    ? options.preferredListenHosts
+    : ['0.0.0.0', '127.0.0.1']
+
+  const setBoundHosts = (listenHost: string): void => {
+    const hosts = listLanHosts(readNetworkInterfaces)
+    if (listenHost === '127.0.0.1') {
+      activeBindingMode = 'loopback'
+      activeHosts = [{ host: '127.0.0.1', interfaceName: 'loopback', kind: 'other' }]
+      activeHost = '127.0.0.1'
+      return
+    }
+
+    activeBindingMode = 'lan'
+    activeHosts = hosts
+    activeHost = pickPrimaryLanAddress(hosts)
+  }
+
+  const listenOnHost = (listenHost: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      const created = createServer(handleRequest)
-      created.on('error', (error) => {
-        server = null
+      const created = createShareServer(handleRequest)
+      let settled = false
+
+      const finalizeError = (error: unknown) => {
+        if (settled) return
+        settled = true
         reject(error)
+      }
+
+      created.once('error', (error) => {
+        server = null
+        finalizeError(error)
       })
-      created.listen(activePort, '0.0.0.0', () => {
+
+      created.listen(activePort, listenHost, () => {
+        if (settled) return
+        settled = true
         server = created
         const address = created.address()
         if (address && typeof address === 'object' && Number.isInteger(address.port)) {
           activePort = address.port
         }
-        activeHosts = listLanHosts(readNetworkInterfaces)
-        activeHost = pickPrimaryLanAddress(activeHosts)
+        setBoundHosts(listenHost)
         resolve()
       })
     })
+  }
+
+  const ensureServer = async (): Promise<void> => {
+    if (server) return Promise.resolve()
+
+    let lastError: unknown = null
+    for (const host of preferredListenHosts) {
+      try {
+        await listenOnHost(host)
+        return
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('Transcript share server failed to bind to any listen host.')
   }
 
   const toListResult = (): TranscriptShareListResult => ({
     running: Boolean(server),
     host: activeHost,
     port: activePort,
+    bindingMode: activeBindingMode,
     hosts: activeHosts,
     entries: Array.from(shares.values())
       .map((share) => share.entry)
@@ -286,6 +344,7 @@ export function createTranscriptShareService(options: TranscriptShareServiceOpti
         entry,
         host: activeHost,
         port: activePort,
+        bindingMode: activeBindingMode,
         hosts: activeHosts,
       }
     },

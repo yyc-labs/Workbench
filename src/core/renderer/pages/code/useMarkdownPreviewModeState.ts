@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Components } from 'react-markdown'
+import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
 import {
   createMarkdownComponents,
   dirnameFromRelativePath,
@@ -67,9 +68,7 @@ export function useMarkdownPreviewModeState({
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<MarkdownPreviewMode>(
     () => normalizeMarkdownPreviewMode(persistedLastMarkdownPreviewMode)
   )
-  const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>(
-    () => (document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
-  )
+  const effectiveTheme = useEffectiveTheme()
   const [structuredPreview, setStructuredPreview] = useState<MarkdownStructuredPreviewState | null>(null)
   const [codePreview, setCodePreview] = useState<MarkdownCodePreviewState | null>(null)
 
@@ -80,26 +79,6 @@ export function useMarkdownPreviewModeState({
   useEffect(() => {
     void setProjectLastMarkdownPreviewMode(projectId, markdownPreviewMode)
   }, [markdownPreviewMode, projectId, setProjectLastMarkdownPreviewMode])
-
-  useEffect(() => {
-    const root = document.documentElement
-    const sync = () => {
-      const attr = root.getAttribute('data-theme')
-      setEffectiveTheme(attr === 'dark' ? 'dark' : 'light')
-    }
-
-    sync()
-    const observer = new MutationObserver((records) => {
-      for (const record of records) {
-        if (record.type === 'attributes' && record.attributeName === 'data-theme') {
-          sync()
-          break
-        }
-      }
-    })
-    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => observer.disconnect()
-  }, [])
 
   const isMarkdownFile = useMemo(() => {
     const normalized = (activeRelativePath ?? '').toLowerCase()

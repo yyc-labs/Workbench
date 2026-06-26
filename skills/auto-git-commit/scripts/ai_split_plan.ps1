@@ -38,15 +38,51 @@ function Normalize-String([string]$Value) {
   return $Value.Trim()
 }
 
-function Resolve-AiBaseUrl([string]$Value) {
+function Get-AiApiRoot([string]$Value) {
   $raw = Normalize-String $Value
   if (-not $raw) { $raw = Normalize-String $env:AI_COMMIT_API_BASE_URL }
   if (-not $raw) { $raw = 'https://api.openai.com/v1' }
+
   $trimmed = $raw.TrimEnd('/')
-  if ($trimmed -match '/v1$') {
-    return ($trimmed + '/chat/completions')
+  $lower = $trimmed.ToLowerInvariant()
+  if ($lower.EndsWith('/chat/completions')) {
+    return $trimmed.Substring(0, $trimmed.Length - '/chat/completions'.Length)
   }
-  return ($trimmed + '/v1/chat/completions')
+  if ($lower.EndsWith('/responses')) {
+    return $trimmed.Substring(0, $trimmed.Length - '/responses'.Length)
+  }
+  if ($lower.EndsWith('/v1')) {
+    return $trimmed
+  }
+  return ($trimmed + '/v1')
+}
+
+function Get-AiConfiguredEndpointKind([string]$Value) {
+  $raw = Normalize-String $Value
+  if (-not $raw) { $raw = Normalize-String $env:AI_COMMIT_API_BASE_URL }
+  $trimmed = $raw.TrimEnd('/')
+  if (-not $trimmed) { return '' }
+
+  $lower = $trimmed.ToLowerInvariant()
+  if ($lower.EndsWith('/chat/completions')) { return 'chat' }
+  if ($lower.EndsWith('/responses')) { return 'responses' }
+  return ''
+}
+
+function Resolve-AiEndpoint([string]$Value, [string]$Kind) {
+  $resolvedKind = if ((Normalize-String $Kind).ToLowerInvariant() -eq 'responses') { 'responses' } else { 'chat' }
+  $root = Get-AiApiRoot $Value
+  $suffix = if ($resolvedKind -eq 'responses') { '/responses' } else { '/chat/completions' }
+
+  return [ordered]@{
+    Kind = $resolvedKind
+    Url = ($root.TrimEnd('/') + $suffix)
+    Root = $root
+  }
+}
+
+function Resolve-AiBaseUrl([string]$Value) {
+  return (Resolve-AiEndpoint -Value $Value -Kind 'chat').Url
 }
 
 function Resolve-AiKey([string]$Value) {
@@ -71,6 +107,171 @@ function Resolve-MaxBullets([int]$CliValue) {
     if ($parsed -ge 1 -and $parsed -le 20) { return $parsed }
   }
   return 8
+}
+
+function Test-Gpt5LikeModel([string]$Value) {
+  $clean = (Normalize-String $Value).ToLowerInvariant()
+  if (-not $clean) { return $false }
+  return $clean -match '^gpt-5([.-]|$)'
+}
+
+function Limit-Text([string]$Value, [int]$MaxLength) {
+  $text = Normalize-String $Value
+  if (-not $text) { return '' }
+  if ($text.Length -le $MaxLength) { return $text }
+  return ($text.Substring(0, $MaxLength) + '...')
+}
+
+function Get-ExceptionStatusCode([System.Exception]$Exception) {
+  if (-not $Exception) { return 0 }
+  try {
+    if ($Exception.Response -and $Exception.Response.StatusCode) {
+      return [int]$Exception.Response.StatusCode
+    }
+  } catch { }
+  return 0
+}
+
+function Get-ObjectPropertyString([object]$Value, [string[]]$Names) {
+  if (-not $Value -or -not $Names) { return '' }
+  foreach ($name in $Names) {
+    if (-not $name) { continue }
+    try {
+      $prop = $Value.PSObject.Properties[$name]
+      if (-not $prop) { continue }
+      $text = Normalize-String ([string]$prop.Value)
+      if ($text) { return $text }
+    } catch { }
+  }
+  return ''
+}
+
+function Get-ErrorRecordDetails([object]$ErrorRecord) {
+  if (-not $ErrorRecord) { return '' }
+
+  $candidates = @(
+    (Get-ObjectPropertyString -Value $ErrorRecord -Names @('ErrorDetails')),
+    (Get-ObjectPropertyString -Value $ErrorRecord.ErrorDetails -Names @('Message')),
+    (Get-ObjectPropertyString -Value $ErrorRecord -Names @('Message'))
+  )
+  foreach ($item in $candidates) {
+    $text = Normalize-String $item
+    if ($text) { return $text }
+  }
+  return ''
+}
+
+function Get-ExceptionResponseBody([System.Exception]$Exception) {
+  if (-not $Exception) { return '' }
+
+  $directFields = @(
+    (Get-ObjectPropertyString -Value $Exception -Names @('ResponseBody', 'ResponseContent', 'Content', 'Body'))
+  )
+  foreach ($item in $directFields) {
+    $text = Normalize-String $item
+    if ($text) { return $text }
+  }
+
+  try {
+    if ($Exception.Response -and $Exception.Response.Content) {
+      $text = $Exception.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+      if ($text) { return [string]$text }
+    }
+  } catch { }
+
+  try {
+    if ($Exception.Response) {
+      $stream = $Exception.Response.GetResponseStream()
+      if ($stream) {
+        try {
+          $reader = New-Object System.IO.StreamReader($stream)
+          return [string]$reader.ReadToEnd()
+        } finally {
+          if ($reader) { $reader.Dispose() }
+          $stream.Dispose()
+        }
+      }
+    }
+  } catch { }
+
+  $inner = $Exception.InnerException
+  if ($inner -and ($inner -ne $Exception)) {
+    $innerBody = Get-ExceptionResponseBody $inner
+    if ($innerBody) { return $innerBody }
+  }
+
+  return ''
+}
+
+function Get-ExceptionMessages([System.Exception]$Exception) {
+  $messages = New-Object System.Collections.Generic.List[string]
+  $current = $Exception
+  $depth = 0
+  while ($current -and $depth -lt 8) {
+    $text = Normalize-String ([string]$current.Message)
+    if ($text) { $null = $messages.Add($text) }
+    $current = $current.InnerException
+    $depth += 1
+  }
+  return @($messages.ToArray())
+}
+
+function Get-AiErrorSummary([string]$ResponseBody, [string]$FallbackMessage) {
+  $body = Normalize-String $ResponseBody
+  if ($body) {
+    try {
+      $parsed = $body | ConvertFrom-Json
+      if ($parsed -and $parsed.error) {
+        $parts = @()
+        $message = Normalize-String ([string]$parsed.error.message)
+        $code = Normalize-String ([string]$parsed.error.code)
+        $param = Normalize-String ([string]$parsed.error.param)
+        $type = Normalize-String ([string]$parsed.error.type)
+        if ($message) { $parts += $message }
+        if ($code) { $parts += ('code=' + $code) }
+        if ($param) { $parts += ('param=' + $param) }
+        if ($type) { $parts += ('type=' + $type) }
+        if ($parts.Count -gt 0) { return ($parts -join '; ') }
+      }
+    } catch { }
+    return Limit-Text $body 800
+  }
+  return Limit-Text $FallbackMessage 400
+}
+
+function Format-AiFailure([object]$Failure) {
+  if (-not $Failure) { return 'AI request failed.' }
+
+  $parts = @()
+  $attemptName = Normalize-String ([string]$Failure.AttemptName)
+  if ($attemptName) { $parts += ('attempt=' + $attemptName) }
+
+  $statusCode = 0
+  try { $statusCode = [int]$Failure.StatusCode } catch { }
+  if ($statusCode -gt 0) { $parts += ('status=' + [string]$statusCode) }
+
+  $summary = Normalize-String ([string]$Failure.Summary)
+  if ($summary) {
+    $parts += $summary
+  } else {
+    $exceptionMessage = Normalize-String ([string]$Failure.ExceptionMessage)
+    if ($exceptionMessage) { $parts += $exceptionMessage }
+  }
+
+  if ($parts.Count -eq 0) { return 'AI request failed.' }
+  return ($parts -join '; ')
+}
+
+function Should-TryAiFallback([object]$Failure) {
+  if (-not $Failure) { return $false }
+
+  $statusCode = 0
+  try { $statusCode = [int]$Failure.StatusCode } catch { }
+  if (@(400, 404, 405, 415, 422) -contains $statusCode) { return $true }
+
+  $diagnostic = ((Normalize-String ([string]$Failure.Summary)) + ' ' + (Normalize-String ([string]$Failure.ExceptionMessage))).ToLowerInvariant()
+  if (-not $diagnostic) { return $false }
+  return $diagnostic -match 'unsupported|not\s*found|unknown model|invalid.*model|chat/completions|responses|temperature|developer|system'
 }
 
 function Is-ValidCommitType([string]$Value) {
@@ -147,6 +348,164 @@ function Extract-JsonObject([string]$Text) {
   return $trimmed
 }
 
+function Get-ChatResponseText([object]$Response) {
+  if ($Response -and $Response.choices -and $Response.choices.Count -gt 0) {
+    return Normalize-String ([string]$Response.choices[0].message.content)
+  }
+  return ''
+}
+
+function Get-ResponsesText([object]$Response) {
+  if (-not $Response) { return '' }
+
+  $outputText = Normalize-String ([string]$Response.output_text)
+  if ($outputText) { return $outputText }
+
+  $chunks = @()
+  foreach ($item in @($Response.output)) {
+    if (-not $item) { continue }
+    foreach ($part in @($item.content)) {
+      if (-not $part) { continue }
+      $text = Normalize-String ([string]$part.text)
+      if ($text) {
+        $chunks += $text
+        continue
+      }
+      $alt = Normalize-String ([string]$part.output_text)
+      if ($alt) { $chunks += $alt }
+    }
+  }
+
+  return Normalize-String (($chunks -join "`n"))
+}
+
+function New-AiChatAttempt(
+  [string]$ApiBaseUrl,
+  [string]$Model,
+  [string]$Instruction,
+  [string]$UserPrompt,
+  [bool]$UseDeveloper,
+  [bool]$IncludeTemperature,
+  [string]$Name
+) {
+  $endpoint = Resolve-AiEndpoint -Value $ApiBaseUrl -Kind 'chat'
+  $leadRole = if ($UseDeveloper) { 'developer' } else { 'system' }
+  $bodyObject = @{
+    model = $Model
+    messages = @(
+      @{
+        role = $leadRole
+        content = $Instruction
+      },
+      @{
+        role = 'user'
+        content = $UserPrompt
+      }
+    )
+  }
+  if ($IncludeTemperature) {
+    $bodyObject.temperature = 0.2
+  }
+
+  return [ordered]@{
+    Name = $Name
+    Kind = 'chat'
+    Url = $endpoint.Url
+    Model = $Model
+    BodyObject = $bodyObject
+  }
+}
+
+function New-AiResponsesAttempt(
+  [string]$ApiBaseUrl,
+  [string]$Model,
+  [string]$Instruction,
+  [string]$UserPrompt,
+  [string]$Name
+) {
+  $endpoint = Resolve-AiEndpoint -Value $ApiBaseUrl -Kind 'responses'
+  $bodyObject = @{
+    model = $Model
+    instructions = $Instruction
+    input = $UserPrompt
+  }
+
+  return [ordered]@{
+    Name = $Name
+    Kind = 'responses'
+    Url = $endpoint.Url
+    Model = $Model
+    BodyObject = $bodyObject
+  }
+}
+
+function Invoke-AiAttempt([object]$Attempt, [hashtable]$Headers) {
+  $body = $Attempt.BodyObject | ConvertTo-Json -Depth 12
+  Write-Step ("Calling AI API (" + [string]$Attempt.Model + ')')
+  Write-Ai ('attempt=' + [string]$Attempt.Name)
+  Write-Ai ('endpoint=' + [string]$Attempt.Url)
+
+  try {
+    $resp = Invoke-RestMethod -Method Post -Uri $Attempt.Url -Headers $Headers -Body $body -ContentType 'application/json; charset=utf-8' -TimeoutSec 90
+  } catch {
+    $errorDetails = Get-ErrorRecordDetails $_
+    $statusCode = Get-ExceptionStatusCode $_.Exception
+    $responseBody = Get-ExceptionResponseBody $_.Exception
+    if (-not $responseBody -and $errorDetails) {
+      $responseBody = $errorDetails
+    }
+    $exceptionMessages = @(Get-ExceptionMessages $_.Exception)
+    $fallbackSummary = if ($errorDetails) {
+      $errorDetails
+    } elseif ($exceptionMessages.Count -gt 0) {
+      $exceptionMessages -join ' | '
+    } else {
+      $_.Exception.Message
+    }
+    $summary = Get-AiErrorSummary -ResponseBody $responseBody -FallbackMessage $fallbackSummary
+    Write-Ai ('request failed: ' + $summary)
+    if ($responseBody) {
+      Write-Ai 'error body:'
+      Write-Host $responseBody
+    }
+    Write-Ai 'request body preview:'
+    Write-Host (Limit-Text $body 1200)
+
+    return @{
+      Ok = $false
+      AttemptName = [string]$Attempt.Name
+      StatusCode = $statusCode
+      Summary = $summary
+      ResponseBody = $responseBody
+      ExceptionMessage = Normalize-String ($exceptionMessages -join ' | ')
+    }
+  }
+
+  $content = if ([string]$Attempt.Kind -eq 'responses') {
+    Get-ResponsesText $resp
+  } else {
+    Get-ChatResponseText $resp
+  }
+
+  if (-not $content) {
+    Write-Ai 'request failed: AI response content is empty.'
+    return @{
+      Ok = $false
+      AttemptName = [string]$Attempt.Name
+      StatusCode = 0
+      Summary = 'AI response content is empty.'
+      ResponseBody = ''
+      ExceptionMessage = 'AI response content is empty.'
+    }
+  }
+
+  return @{
+    Ok = $true
+    AttemptName = [string]$Attempt.Name
+    Content = $content
+  }
+}
+
 function New-LocalBatch([string]$Id, [string]$Type, [string]$Subject, [string[]]$Files, [string[]]$Bullets) {
   return [ordered]@{
     id = $Id
@@ -171,7 +530,7 @@ function Normalize-Bullets([object[]]$Items, [int]$Limit) {
 function Compress-Batches([object[]]$Batches, [int]$Limit, [int]$BulletLimit) {
   $list = New-Object System.Collections.Generic.List[object]
   foreach ($b in $Batches) { $null = $list.Add($b) }
-  if ($list.Count -le $Limit) { return @($list.ToArray()) }
+  if ($list.Count -le $Limit) { return ,@($list.ToArray()) }
 
   while ($list.Count -gt $Limit) {
     $tail = $list[$list.Count - 1]
@@ -182,7 +541,7 @@ function Compress-Batches([object[]]$Batches, [int]$Limit, [int]$BulletLimit) {
       $last.bullets = Normalize-Bullets -Items (@($last.bullets) + @('合并批次: ' + [string]$tail.subject)) -Limit $BulletLimit
     }
   }
-  return @($list.ToArray())
+  return ,@($list.ToArray())
 }
 
 function Get-ParentDir([string]$PathValue) {
@@ -201,7 +560,7 @@ function Join-RepoPath([string]$Dir, [string]$FileName) {
 }
 
 function Enforce-PackageLockPairing([object[]]$Batches) {
-  if (-not $Batches -or $Batches.Count -eq 0) { return @() }
+  if (-not $Batches -or $Batches.Count -eq 0) { return ,@() }
 
   $location = @{}
   for ($i = 0; $i -lt $Batches.Count; $i++) {
@@ -246,7 +605,7 @@ function Enforce-PackageLockPairing([object[]]$Batches) {
     $batch.files = $files
     $result += $batch
   }
-  return @($result)
+  return ,@($result)
 }
 
 function New-LocalPlan([string[]]$Files, [int]$BatchLimit) {
@@ -424,41 +783,59 @@ if ($UseAi) {
     throw 'AI split enabled but no API key provided.'
   } else {
     try {
-      $apiUrl = Resolve-AiBaseUrl $ApiBaseUrl
       $model = Resolve-AiModel $Model
       Write-Ai ("model=" + $model)
-      Write-Ai ("endpoint=" + $apiUrl)
 
       $userPrompt = New-AiSplitPrompt -Files $filesText -Stat $statText -BatchLimit $MaxBatches -BulletLimit $resolvedMaxBullets
-      $messages = @(
-        @{
-          role = 'system'
-          content = 'You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese.'
-        },
-        @{
-          role = 'user'
-          content = $userPrompt
-        }
-      )
+      $instruction = 'You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese.'
+      $configuredEndpointKind = Get-AiConfiguredEndpointKind $ApiBaseUrl
+      $isGpt5Like = Test-Gpt5LikeModel $model
+      $attempts = New-Object System.Collections.Generic.List[object]
 
-      $bodyObject = @{
-        model = $model
-        temperature = 0.2
-        messages = $messages
+      if ($configuredEndpointKind -eq 'responses') {
+        $null = $attempts.Add((New-AiResponsesAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -Name 'responses-primary'))
+        if ($isGpt5Like) {
+          $null = $attempts.Add((New-AiChatAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -UseDeveloper $true -IncludeTemperature $false -Name 'chat-developer-fallback'))
+          $null = $attempts.Add((New-AiChatAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -UseDeveloper $false -IncludeTemperature $true -Name 'chat-system-fallback'))
+        }
+      } else {
+        $null = $attempts.Add((New-AiChatAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -UseDeveloper $false -IncludeTemperature $true -Name 'chat-system-primary'))
+        if ($isGpt5Like) {
+          $null = $attempts.Add((New-AiChatAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -UseDeveloper $true -IncludeTemperature $false -Name 'chat-developer-fallback'))
+          $null = $attempts.Add((New-AiResponsesAttempt -ApiBaseUrl $ApiBaseUrl -Model $model -Instruction $instruction -UserPrompt $userPrompt -Name 'responses-fallback'))
+        }
+      }
+
+      if ($attempts.Count -eq 0) {
+        throw 'AI request configuration is empty.'
       }
 
       $headers = @{
         Authorization = ("Bearer " + $apiKey)
-        'Content-Type' = 'application/json'
       }
 
-      $body = $bodyObject | ConvertTo-Json -Depth 10
-      Write-Step ("Calling AI API (" + $model + ')')
-      $resp = Invoke-RestMethod -Method Post -Uri $apiUrl -Headers $headers -Body $body -TimeoutSec 90
-
       $contentRaw = ''
-      if ($resp -and $resp.choices -and $resp.choices.Count -gt 0) {
-        $contentRaw = Normalize-String ([string]$resp.choices[0].message.content)
+      $lastFailure = $null
+      for ($index = 0; $index -lt $attempts.Count; $index++) {
+        $attempt = $attempts[$index]
+        $result = Invoke-AiAttempt -Attempt $attempt -Headers $headers
+        if ($result.Ok) {
+          $contentRaw = Normalize-String ([string]$result.Content)
+          Write-Ai ('response accepted via ' + [string]$result.AttemptName)
+          break
+        }
+
+        $lastFailure = $result
+        if ($index -ge ($attempts.Count - 1)) { break }
+        if (-not (Should-TryAiFallback $result)) { break }
+        Write-Ai ('fallback next=' + [string]$attempts[$index + 1].Name)
+      }
+
+      if (-not $contentRaw) {
+        if ($lastFailure) {
+          throw (Format-AiFailure $lastFailure)
+        }
+        throw 'AI response content is empty.'
       }
 
       $jsonText = Extract-JsonObject $contentRaw

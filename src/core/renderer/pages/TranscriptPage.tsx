@@ -24,6 +24,7 @@ import type {
   AiCommitStatus,
   AiCommitTaskSnapshot,
   TranscriptReference,
+  TranscriptShareBindingMode,
   TranscriptShareEntry,
   TranscriptShareHost,
   TranscriptViewerMode,
@@ -67,6 +68,11 @@ import {
   shouldSkipProjectPageContextMenu,
   sliceMarkdownLines,
 } from './transcript/transcriptPage.utils'
+import {
+  TranscriptListSidebar,
+  TranscriptMainContent,
+  TranscriptPageHeader,
+} from './transcript/TranscriptPageSections'
 import { useTranscriptPageChromeState } from './transcript/useTranscriptPageChromeState'
 import type { CodeWorkspaceNavigationState } from './code/code.navigation'
 
@@ -88,37 +94,6 @@ function waitForRenderSettle(): Promise<void> {
       })
     })
   })
-}
-
-function TranscriptModeButton({
-  active,
-  disabled = false,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean
-  disabled?: boolean
-  icon: JSX.Element
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-        active
-          ? 'bg-primary text-white'
-          : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-      }`}
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-    >
-      {icon}
-      {label}
-    </button>
-  )
 }
 
 export function TranscriptPage() {
@@ -258,6 +233,7 @@ export function TranscriptPage() {
   const [shareEntries, setShareEntries] = useState<TranscriptShareEntry[]>([])
   const [shareHosts, setShareHosts] = useState<TranscriptShareHost[]>([])
   const [sharePort, setSharePort] = useState<number>(17374)
+  const [shareBindingMode, setShareBindingMode] = useState<TranscriptShareBindingMode>('lan')
   const [isGeneratingShare, setIsGeneratingShare] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
   // When true, the preview forces every code block to its inline-styled
@@ -615,6 +591,7 @@ export function TranscriptPage() {
     if (!session) return
     try {
       const result = await window.electronAPI.listTranscriptShares()
+      setShareBindingMode(result.bindingMode)
       setShareHosts(filterPreferredShareHosts(result.hosts))
       setSharePort(result.port)
       setShareEntries(result.entries.filter((entry) => entry.transcriptId === session.id))
@@ -658,6 +635,7 @@ export function TranscriptPage() {
         html: snapshot.html,
         images: snapshot.images,
       })
+      setShareBindingMode(result.bindingMode)
       setShareHosts(filterPreferredShareHosts(result.hosts))
       setSharePort(result.port)
       setShareEntries((current) => [result.entry, ...current.filter((entry) => entry.token !== result.entry.token)])
@@ -673,6 +651,7 @@ export function TranscriptPage() {
   const handleRevokeShare = useCallback(async (token: string) => {
     try {
       const result = await window.electronAPI.stopTranscriptShare(token)
+      setShareBindingMode(result.bindingMode)
       setShareHosts(filterPreferredShareHosts(result.hosts))
       setSharePort(result.port)
       const activeId = session?.id
@@ -811,496 +790,82 @@ export function TranscriptPage() {
         setMenuPos({ x: event.clientX, y: event.clientY })
       }}
     >
-      {!projectHeaderCollapsed && (
-        <header className="app-chrome pointer-events-auto absolute inset-x-0 top-0 z-[85] flex min-h-[84px] items-center justify-between gap-4 px-8 py-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <button
-              className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => navigate(`/project/${projectId}/code`)}
-            >
-              <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
-            </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">
-                {projectDisplayName(project)}
-              </h1>
-              <p
-                className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]"
-                title={project.path}
-              >
-                {middleTruncatePath(project.path)}
-              </p>
-              <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
-                {t('transcript.pageTitle')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3">
-            <ProjectPaneTabs
-              activePane="transcript"
-              onPreloadPane={preloadProjectPane}
-              onSelectPane={(pane) => {
-                if (pane === 'transcript') return
-                navigate(`/project/${projectId}/${pane}`)
-              }}
-            />
-            {renderProjectLinksButton()}
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => setManualImportOpen(true)}
-            >
-              <FileText className="h-4 w-4" />
-              {t('transcript.importPastedContent')}
-            </button>
-            <button
-              type="button"
-              className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                hasTerminalOutput
-                  ? 'bg-primary text-white shadow-sm hover:bg-primary-hover'
-                  : 'cursor-not-allowed border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'
-              }`}
-              onClick={() => {
-                void handleImportCurrentOutput()
-              }}
-              disabled={!hasTerminalOutput || isImporting}
-              title={hasTerminalOutput ? t('transcript.importCurrentOutputHint') : t('transcript.processOutputEmpty')}
-            >
-              {isImporting ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ArrowDownToLine className="h-3.5 w-3.5" />
-              )}
-              {t('transcript.importCurrentOutput')}
-            </button>
-            <div className="ml-1 flex items-center gap-2">
-              <span className={`hidden text-xs min-[1480px]:inline ${saveStatusToneClass}`}>
-                {saveStatusText}
-              </span>
-              <Button
-                type="button"
-                className="h-9 rounded-full px-4"
-                onClick={() => void handleSaveTranscript()}
-                disabled={saveButtonDisabled}
-              >
-                {isSavingTranscript ? <RefreshCw className="animate-spin" /> : <Check className="h-4 w-4" />}
-                {isSavingTranscript ? t('common.saving') : t('common.save')}
-              </Button>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            aria-label={t('transcript.collapseProjectHeader')}
-            title={t('transcript.collapseProjectHeader')}
-            className="absolute bottom-0 left-1/2 z-[87] inline-flex h-6 w-6 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => setProjectHeaderCollapsed(true)}
-          >
-            <ChevronUp className="h-3.5 w-3.5" strokeWidth={1.8} />
-          </button>
-        </header>
-      )}
-
-      {projectHeaderCollapsed && (
-        <button
-          type="button"
-          aria-label={t('transcript.expandProjectHeader')}
-          className="app-chrome fixed left-1/2 top-[calc(var(--window-titlebar-height)+6px)] z-[86] inline-flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] shadow-[0_6px_18px_rgba(0,0,0,0.08)] backdrop-blur-md transition-all hover:scale-105 hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-          onClick={() => setProjectHeaderCollapsed(false)}
-          title={t('transcript.expandProjectHeader')}
-        >
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.8} />
-        </button>
-      )}
-
       <div className={`min-h-0 flex-1 overflow-x-hidden px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
         <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1360px] flex-col gap-3">
-          <section className="shrink-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/62 px-4 py-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                {projectHeaderCollapsed ? (
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <p className="max-w-[140px] truncate text-sm font-medium text-[color:var(--color-foreground)]" title={projectDisplayName(project)}>
-                      {projectDisplayName(project)}
-                    </p>
-                    <ProjectPaneTabs
-                      activePane="transcript"
-                      onPreloadPane={preloadProjectPane}
-                      onSelectPane={(pane) => {
-                        if (pane === 'transcript') return
-                        navigate(`/project/${projectId}/${pane}`)
-                      }}
-                    />
-                    {firstProjectLinkItem && renderProjectLinksButton()}
-                    {(isDevReady || pendingOpenDevUrl || !isActive) && (
-                      <button
-                        type="button"
-                        className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
-                          isDevReady
-                            ? 'text-primary hover:text-primary'
-                            : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                        }`}
-                        onClick={() => { void startAndOpenDevUrl() }}
-                        disabled={pendingOpenDevUrl}
-                        title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
-                        aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
-                      >
-                        {pendingOpenDevUrl ? (
-                          <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                        ) : (
-                          <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
-                        )}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('transcript.listTitle')}</p>
-                    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                        {transcriptCountLabel}
-                      </span>
-                      <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                        {projectDocsCountLabel}
-                      </span>
-                      {session && (
-                        <span
-                          className="inline-flex max-w-[280px] items-center truncate rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]"
-                          title={session.title}
-                        >
-                          {session.title}
-                        </span>
-                      )}
-                      {session && (
-                        <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {formatTranscriptSourceType(locale, session.sourceType)}
-                        </span>
-                      )}
-                      {session && (
-                        <span className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {t('transcript.refs', { count: session.references.length })}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex min-w-0 shrink-0 items-center justify-end gap-3">
-                {projectHeaderCollapsed ? (
-                  <>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                      onClick={() => setManualImportOpen(true)}
-                      title={t('transcript.importPastedContent')}
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      {t('transcript.importPastedContent')}
-                    </button>
-                    <button
-                      type="button"
-                      className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                        hasTerminalOutput
-                          ? 'bg-primary text-white shadow-sm hover:bg-primary-hover'
-                          : 'cursor-not-allowed border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)]'
-                      }`}
-                      onClick={() => {
-                        void handleImportCurrentOutput()
-                      }}
-                      disabled={!hasTerminalOutput || isImporting}
-                      title={hasTerminalOutput ? t('transcript.importCurrentOutputHint') : t('transcript.processOutputEmpty')}
-                    >
-                      {isImporting ? (
-                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <ArrowDownToLine className="h-3.5 w-3.5" />
-                      )}
-                      {t('transcript.importCurrentOutput')}
-                    </button>
-                    <div className="ml-1 flex items-center gap-2">
-                      <span className={`hidden text-xs min-[1480px]:inline ${saveStatusToneClass}`}>
-                        {saveStatusText}
-                      </span>
-                      <Button
-                        type="button"
-                        className="h-9 rounded-full px-4"
-                        onClick={() => void handleSaveTranscript()}
-                        disabled={saveButtonDisabled}
-                      >
-                        {isSavingTranscript ? <RefreshCw className="animate-spin" /> : <Check className="h-4 w-4" />}
-                        {isSavingTranscript ? t('common.saving') : t('common.save')}
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {session && (
-                      <span className={`hidden text-xs min-[1240px]:inline ${saveStatusToneClass}`}>
-                        {saveStatusText}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                      onClick={() => {
-                        void loadProjectTranscripts(projectId)
-                      }}
-                      title={t('settingsTranscript.refresh')}
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </section>
+          <TranscriptPageHeader
+            project={project}
+            projectId={projectId}
+            projectHeaderCollapsed={projectHeaderCollapsed}
+            setProjectHeaderCollapsed={setProjectHeaderCollapsed}
+            transcriptCountLabel={transcriptCountLabel}
+            projectDocsCountLabel={projectDocsCountLabel}
+            firstProjectLinkItem={firstProjectLinkItem}
+            projectLinkItems={projectLinkItems}
+            docLinkTagOptions={docLinkTagOptionsFromHook}
+            session={session}
+            locale={locale}
+            formatTranscriptSourceType={formatTranscriptSourceType}
+            navigateToPane={(pane) => navigate(`/project/${projectId}/${pane}`)}
+            onOpenManualImport={() => setManualImportOpen(true)}
+            onOpenImportCurrentOutput={() => {
+              void handleImportCurrentOutput()
+            }}
+            hasTerminalOutput={hasTerminalOutput}
+            isImporting={isImporting}
+            renderProjectLinksButton={renderProjectLinksButton}
+            saveStatusText={saveStatusText}
+            saveStatusToneClass={saveStatusToneClass}
+            saveButtonDisabled={saveButtonDisabled}
+            isSavingTranscript={isSavingTranscript}
+            onSaveTranscript={() => {
+              void handleSaveTranscript()
+            }}
+            t={t}
+            isDevReady={isDevReady}
+            pendingOpenDevUrl={pendingOpenDevUrl}
+            isActive={isActive}
+            startAndOpenDevUrl={startAndOpenDevUrl}
+            onRefreshList={() => {
+              void loadProjectTranscripts(projectId)
+            }}
+          />
 
           <div className="grid min-h-0 flex-1 gap-4 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
-              <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('transcript.listTitle')}</p>
-                    <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                      {transcriptCountLabel}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-                    onClick={() => {
-                      void loadProjectTranscripts(projectId)
-                    }}
-                    title={t('settingsTranscript.refresh')}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+            <TranscriptListSidebar
+              listStatus={listStatus}
+              summaries={summaries}
+              resolvedActiveTranscriptId={resolvedActiveTranscriptId}
+              deletingTranscriptId={deletingTranscriptId}
+              transcriptCountLabel={transcriptCountLabel}
+              locale={locale}
+              formatDateTime={formatDateTime}
+              formatTranscriptSourceType={formatTranscriptSourceType}
+              onRefreshList={() => {
+                void loadProjectTranscripts(projectId)
+              }}
+              onSelectTranscript={handleSelectTranscript}
+              onDeleteTranscript={(payload) => {
+                setDeleteConfirmTarget(payload)
+              }}
+              t={t}
+            />
 
-              <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-                {listStatus === 'loading' && summaries.length <= 0 ? (
-                  <div className="flex h-full items-center justify-center text-xs text-[color:var(--color-muted-foreground)]">
-                    {t('transcript.loadingTranscripts')}
-                  </div>
-                ) : listStatus === 'error' && summaries.length <= 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
-                    <p className="text-sm text-[color:var(--color-destructive)]">{t('transcript.failedToLoad')}</p>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-                      onClick={() => {
-                        void loadProjectTranscripts(projectId)
-                      }}
-                    >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      {t('transcript.retry')}
-                    </button>
-                  </div>
-                ) : summaries.length <= 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
-                    <FileText className="h-10 w-10 text-[color:var(--color-muted-foreground)]/70" />
-                    <div>
-                      <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('transcript.noTranscriptYet')}</p>
-                      <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                        {t('transcript.firstTranscriptHint')}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 px-4"
-                      onClick={() => setManualImportOpen(true)}
-                    >
-                      <FileText className="h-4 w-4" />
-                      {t('transcript.importPastedContent')}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {summaries.map((summary) => {
-                      const isActive = summary.id === resolvedActiveTranscriptId
-                      const isDeleting = deletingTranscriptId === summary.id
-                      return (
-                        <div
-                          key={summary.id}
-                          className={`flex items-start gap-2 rounded-[18px] border px-3 py-3 transition-colors ${
-                            isActive
-                              ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-primary)]/8'
-                              : 'border-transparent bg-[color:var(--color-background)] hover:border-[color:var(--color-border)] hover:bg-[color:var(--color-accent)]/45'
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                            onClick={() => handleSelectTranscript(summary.id)}
-                            onContextMenu={(event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              setMenuPos({ x: event.clientX, y: event.clientY })
-                            }}
-                            disabled={isDeleting}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">
-                                  {summary.title}
-                                </p>
-                                <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                                  {formatTranscriptSourceType(locale, summary.sourceType)}
-                                </p>
-                              </div>
-                              <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                                {t('transcript.refs', { count: summary.referenceCount })}
-                              </span>
-                            </div>
-                            <p className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                              {t('transcript.updatedAt', {
-                                value: formatDateTime(summary.updatedAt, {
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  hour12: false,
-                                }),
-                              })}
-                            </p>
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => {
-                              setDeleteConfirmTarget({ id: summary.id, title: summary.title })
-                            }}
-                            disabled={isDeleting || deletingTranscriptId !== null}
-                            title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
-                          >
-                            {isDeleting ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </aside>
-
-            <main className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
-              {!resolvedActiveTranscriptId ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-                  <FileText className="h-10 w-10 text-[color:var(--color-muted-foreground)]/70" />
-                  <div>
-                    <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('transcript.selectOrImport')}</p>
-                    <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-                      {t('transcript.selectOrImportHint')}
-                    </p>
-                  </div>
-                </div>
-              ) : !session ? (
-                <div className="flex h-full items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">
-                  {t('transcript.loadingTranscript')}
-                </div>
-              ) : (
-                <>
-                  <div className="border-b border-[color:var(--color-border)] px-6 py-5">
-                    <div className="flex flex-col gap-4 min-[960px]:flex-row min-[960px]:items-start min-[960px]:justify-between">
-                      <div className="min-w-0 min-[960px]:max-w-[min(100%,560px)]">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <h2 className="min-w-0 max-w-full flex-1 truncate whitespace-nowrap text-lg font-semibold text-[color:var(--color-foreground)] min-[960px]:max-w-[300px]">
-                            {session.title}
-                          </h2>
-                          <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            {formatTranscriptSourceType(locale, session.sourceType)}
-                          </span>
-                          <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            {t('transcript.refs', { count: session.references.length })}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3.5 text-xs font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                          onClick={handleOpenShareModal}
-                          disabled={effectiveMode === 'editor'}
-                          title={effectiveMode === 'editor' ? t('transcript.preview') : t('transcript.shareTitle')}
-                        >
-                          <Share2 className="h-3.5 w-3.5" />
-                          {t('transcript.share')}
-                        </button>
-                        <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] p-1">
-                          <TranscriptModeButton
-                            active={effectiveMode === 'preview'}
-                            icon={<Eye className="h-3.5 w-3.5" />}
-                            label={t('transcript.preview')}
-                            onClick={() => setTranscriptMode(session.id, 'preview')}
-                          />
-                          <TranscriptModeButton
-                            active={effectiveMode === 'editor'}
-                            icon={<Code2 className="h-3.5 w-3.5" />}
-                            label={t('transcript.editor')}
-                            onClick={() => setTranscriptMode(session.id, 'editor')}
-                          />
-                          <TranscriptModeButton
-                            active={effectiveMode === 'split'}
-                            disabled={isNarrowViewport}
-                            icon={<Columns2 className="h-3.5 w-3.5" />}
-                            label={t('transcript.split')}
-                            onClick={() => setTranscriptMode(session.id, 'split')}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-hidden p-4">
-                    <div
-                      className={`grid h-full min-h-0 overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)] ${
-                        effectiveMode === 'split' ? 'min-[960px]:grid-cols-2' : 'grid-cols-1'
-                      }`}
-                    >
-                      {(effectiveMode === 'preview' || effectiveMode === 'split') && (
-                        <div
-                          ref={previewScrollRef}
-                          className="code-markdown-preview-scroll-root transcript-markdown-preview-scroll-root min-h-0 overflow-y-auto bg-[color:var(--color-card)]"
-                        >
-                          <article className="code-markdown-content code-markdown-content--viewport-scroll transcript-markdown-content px-6 py-6">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
-                              components={markdownComponents}
-                              urlTransform={transformMarkdownUrl}
-                            >
-                              {displayMarkdownText}
-                            </ReactMarkdown>
-                          </article>
-                        </div>
-                      )}
-
-                      {(effectiveMode === 'editor' || effectiveMode === 'split') && (
-                        <div className={`min-h-0 bg-[color:var(--color-card)] ${effectiveMode === 'split' ? 'border-t border-[color:var(--color-border)] min-[960px]:border-l min-[960px]:border-t-0' : ''}`}>
-                          <MonacoTextViewer
-                            value={editorValue}
-                            filePath={`transcript/${session.id}.md`}
-                            language={inferLanguageFromRelativePath('transcript.md')}
-                            readOnly={false}
-                            onChange={setEditorValue}
-                            modelNamespace="transcript-viewer"
-                            stickyScroll
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </main>
+            <TranscriptMainContent
+              resolvedActiveTranscriptId={resolvedActiveTranscriptId}
+              session={session}
+              effectiveMode={effectiveMode}
+              isNarrowViewport={isNarrowViewport}
+              locale={locale}
+              markdownComponents={markdownComponents}
+              displayMarkdownText={displayMarkdownText}
+              previewScrollRef={previewScrollRef}
+              editorValue={editorValue}
+              setEditorValue={setEditorValue}
+              onOpenShareModal={handleOpenShareModal}
+              setTranscriptMode={setTranscriptMode}
+              t={t}
+              formatTranscriptSourceType={formatTranscriptSourceType}
+            />
           </div>
         </div>
       </div>
@@ -1396,6 +961,7 @@ export function TranscriptPage() {
         entries={shareEntries}
         hosts={shareHosts}
         port={sharePort}
+        bindingMode={shareBindingMode}
         generating={isGeneratingShare}
         error={shareError}
         onGenerate={() => void handleGenerateShare()}
