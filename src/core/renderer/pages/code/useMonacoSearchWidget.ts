@@ -9,6 +9,15 @@ type UseMonacoSearchWidgetOptions = {
   editorRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>
 }
 
+function isMonacoCanceledError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+
+  const name = 'name' in error ? error.name : undefined
+  const message = 'message' in error ? error.message : undefined
+
+  return name === 'Canceled' || message === 'Canceled'
+}
+
 export function useMonacoSearchWidget({
   editorRef,
 }: UseMonacoSearchWidgetOptions) {
@@ -139,6 +148,16 @@ export function useMonacoSearchWidget({
     return selectedText.replace(/\r?\n/g, ' ')
   }, [])
 
+  const closeMonacoFindWidget = useCallback((editor: MonacoEditor.IStandaloneCodeEditor | null) => {
+    const closeAction = editor?.getAction('closeFindWidget')
+    if (!closeAction) return
+
+    void closeAction.run().catch((error: unknown) => {
+      if (isMonacoCanceledError(error)) return
+      console.error('Failed to close Monaco find widget.', error)
+    })
+  }, [])
+
   const openSearchPanel = useCallback((
     mode: EditorSearchMode,
     options?: { prefillFromSelection?: boolean }
@@ -152,20 +171,20 @@ export function useMonacoSearchWidget({
     }
     setSearchMode(mode)
     setSearchVisible(true)
-    editor.getAction('closeFindWidget')?.run()
+    closeMonacoFindWidget(editor)
     window.setTimeout(() => {
       searchInputRef.current?.focus()
       searchInputRef.current?.select()
       refreshSearchResult(editor)
     }, 0)
-  }, [editorRef, getSelectedTextForSearch, refreshSearchResult])
+  }, [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult])
 
   const closeSearchPanel = useCallback(() => {
     setSearchVisible(false)
     const editor = editorRef.current
     editor?.focus()
-    editor?.getAction('closeFindWidget')?.run()
-  }, [editorRef])
+    closeMonacoFindWidget(editor)
+  }, [closeMonacoFindWidget, editorRef])
 
   const goToNextMatch = useCallback(() => {
     const editor = editorRef.current
@@ -234,8 +253,8 @@ export function useMonacoSearchWidget({
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
-    editor.getAction('closeFindWidget')?.run()
-  }, [editorRef, searchVisible])
+    closeMonacoFindWidget(editor)
+  }, [closeMonacoFindWidget, editorRef, searchVisible])
 
   useEffect(() => {
     if (!searchVisible) return

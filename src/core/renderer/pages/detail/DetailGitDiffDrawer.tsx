@@ -1,7 +1,12 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import type { Ref } from 'react'
 import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, RefreshCw, Save, X } from 'lucide-react'
-import { MonacoTextViewer } from '../../components/MonacoTextViewer'
+import {
+  MonacoTextViewer,
+  type MonacoTextViewerHiddenLineRange,
+  type MonacoTextViewerHandle,
+} from '../../components/MonacoTextViewer'
 import { useI18n } from '../../i18n'
 import { ensureGitDiffMonacoLanguage, GIT_DIFF_MONACO_LANGUAGE_ID } from '../../lib/monacoDiffLanguage'
 import { inferLanguageFromRelativePath } from '../code/code.helpers'
@@ -10,6 +15,8 @@ import { formatBytes, parseConflictMarkers, replaceConflictBlock, type ConflictB
 import type { DetailGitSnapshot, GitConflictFileResult, GitDiffViewMode } from './detail.types'
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
+type ConflictResolutionMode = 'ours' | 'theirs' | 'both-ours-first' | 'both-theirs-first' | 'ignore'
+type ConflictLayoutMode = 'horizontal' | 'vertical'
 
 type DetailGitDiffDrawerProps = {
   open: boolean
@@ -34,8 +41,94 @@ type DetailGitDiffDrawerProps = {
   onSaveConflict: (payload: { filePath: string; content: string; markResolved: boolean }) => void
 }
 
+type SourceCardProps = {
+  title: string
+  subtitle: string
+  content: string
+  filePath: string
+  language: string
+  missingText: string
+  canRenderViewer: boolean
+  badgeLabel?: string | null
+  badgeClassName?: string
+  outputLimit?: { keptBytes: number; totalBytes: number } | null
+  actionLabel?: string
+  actionDisabled?: boolean
+  actionTitle?: string
+  onAction?: () => void
+  viewerRef?: Ref<MonacoTextViewerHandle>
+}
+
 const DRAWER_TRANSITION_MS = 240
 const DRAWER_CONTENT_REVEAL_MS = 90
+
+function SourceCard({
+  title,
+  subtitle,
+  content,
+  filePath,
+  language,
+  missingText,
+  canRenderViewer,
+  badgeLabel,
+  badgeClassName,
+  outputLimit,
+  actionLabel,
+  actionDisabled,
+  actionTitle,
+  onAction,
+  viewerRef,
+}: SourceCardProps) {
+  return (
+    <div className="flex h-full min-h-[clamp(180px,28vh,220px)] min-w-0 flex-col overflow-hidden rounded-[10px] border border-[color:var(--color-border)]/90 bg-[color:var(--color-background)]">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-background-sunken)]/46 px-3 py-2">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[10.5px] font-semibold tracking-[0.02em] text-[color:var(--color-foreground)]">{title}</p>
+            {badgeLabel ? (
+              <span className={`shrink-0 rounded-[6px] border px-1.5 py-0.5 text-[9px] font-medium ${badgeClassName ?? 'border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-muted-foreground)]'}`}>
+                {badgeLabel}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-[10px] text-[color:var(--color-muted-foreground)]">{subtitle}</p>
+        </div>
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            className="inline-flex h-6 items-center rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+            disabled={actionDisabled}
+            onClick={onAction}
+            title={actionTitle}
+          >
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+      {outputLimit ? (
+        <div className="shrink-0 px-3 pb-2 pt-1 text-[10px] text-[color:var(--color-warning)]">
+          Diff truncated {formatBytes(outputLimit.keptBytes)} / {formatBytes(outputLimit.totalBytes)}
+        </div>
+      ) : null}
+      <div className="min-h-[clamp(140px,22vh,160px)] flex-1 overflow-hidden">
+        {canRenderViewer ? (
+          <MonacoTextViewer
+            ref={viewerRef}
+            value={content}
+            filePath={filePath}
+            language={language}
+            readOnly
+            modelNamespace="git-conflict-source-preview"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center px-4 text-[11px] text-[color:var(--color-muted-foreground)]">
+            {missingText}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   open,
@@ -65,7 +158,14 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   const [contentVisible, setContentVisible] = useState(open)
   const [activeConflictBlockIndex, setActiveConflictBlockIndex] = useState(0)
   const [conflictDraft, setConflictDraft] = useState('')
+  const [showBaseView, setShowBaseView] = useState(false)
+  const [conflictLayoutMode, setConflictLayoutMode] = useState<ConflictLayoutMode>('horizontal')
   const conflictDraftDirtyRef = useRef(false)
+  const incomingViewerRef = useRef<MonacoTextViewerHandle | null>(null)
+  const baseViewerRef = useRef<MonacoTextViewerHandle | null>(null)
+  const currentViewerRef = useRef<MonacoTextViewerHandle | null>(null)
+  const resultViewerRef = useRef<MonacoTextViewerHandle | null>(null)
+
   const languageHint = useMemo(
     () => inferLanguageFromRelativePath(activeFile?.path ?? ''),
     [activeFile?.path]
@@ -75,6 +175,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   const conflictDataForActiveFile = isConflictFile && conflictData?.filePath === activeFile?.path
     ? conflictData
     : null
+  const baseStage = conflictDataForActiveFile?.stageContents.find((item) => item.stage === 1) ?? null
   const oursStage = conflictDataForActiveFile?.stageContents.find((item) => item.stage === 2) ?? null
   const theirsStage = conflictDataForActiveFile?.stageContents.find((item) => item.stage === 3) ?? null
   const parsedConflicts = useMemo(() => parseConflictMarkers(conflictDraft), [conflictDraft])
@@ -84,8 +185,28 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
   const hasUnresolvedConflictMarkers = hasConflictBlocks
   const isOursStageTruncated = Boolean(oursStage?.outputLimit)
   const isTheirsStageTruncated = Boolean(theirsStage?.outputLimit)
-  const currentConflictPreviewContent = activeConflictBlock ? activeConflictBlock.oursContent : (oursStage?.output ?? '')
-  const incomingConflictPreviewContent = activeConflictBlock ? activeConflictBlock.theirsContent : (theirsStage?.output ?? '')
+  const canToggleBaseView = Boolean(baseStage?.exists)
+  const currentConflictPreviewContent = oursStage?.output ?? ''
+  const incomingConflictPreviewContent = theirsStage?.output ?? ''
+  const baseConflictPreviewContent = baseStage?.output ?? ''
+  const activeIncomingLabel = activeConflictBlock?.theirsLabel || 'THEIRS'
+  const activeCurrentLabel = activeConflictBlock?.oursLabel || 'OURS'
+  const activeBaseLabel = activeConflictBlock?.ancestorLabel || 'BASE'
+  const resultHiddenLineRanges = useMemo<MonacoTextViewerHiddenLineRange[]>(
+    () => conflictBlocks.flatMap((block) => block.hiddenLineRanges),
+    [conflictBlocks]
+  )
+  const sourcePanelGridClassName = showBaseView
+    ? conflictLayoutMode === 'horizontal'
+      ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))]'
+      : 'grid-cols-1'
+    : conflictLayoutMode === 'horizontal'
+      ? 'grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))]'
+      : 'grid-cols-1'
+  const conflictSectionsGridClassName = 'grid min-h-0 flex-1 gap-2.5 grid-rows-[minmax(200px,0.92fr)_minmax(240px,1.08fr)]'
+  const resultViewerPadding = hasConflictBlocks
+    ? { top: 74, bottom: 16 }
+    : { top: 10, bottom: 16 }
 
   useEffect(() => {
     if (!isConflictFile) {
@@ -102,6 +223,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
     activeFile?.path,
     conflictDataForActiveFile?.checkedAt,
     conflictDataForActiveFile?.workingTreeContent,
+    conflictDraft,
   ])
 
   useEffect(() => {
@@ -140,17 +262,50 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
     }
   }, [conflictBlocks, activeConflictBlockIndex])
 
-  const applyConflictBlockResolution = (
-    mode: 'ours' | 'theirs' | 'both-ours-first' | 'both-theirs-first'
-  ) => {
+  useEffect(() => {
+    if (!canToggleBaseView && showBaseView) setShowBaseView(false)
+  }, [canToggleBaseView, showBaseView])
+
+  useEffect(() => {
+    if (!activeConflictBlock) return
+    const timer = window.setTimeout(() => {
+      incomingViewerRef.current?.revealPosition(activeConflictBlock.theirsRange.startLine, 1)
+      incomingViewerRef.current?.highlightRange(
+        activeConflictBlock.theirsRange.startLine,
+        activeConflictBlock.theirsRange.endLine
+      )
+      currentViewerRef.current?.revealPosition(activeConflictBlock.oursRange.startLine, 1)
+      currentViewerRef.current?.highlightRange(
+        activeConflictBlock.oursRange.startLine,
+        activeConflictBlock.oursRange.endLine
+      )
+      if (activeConflictBlock.ancestorRange) {
+        baseViewerRef.current?.revealPosition(activeConflictBlock.ancestorRange.startLine, 1)
+        baseViewerRef.current?.highlightRange(
+          activeConflictBlock.ancestorRange.startLine,
+          activeConflictBlock.ancestorRange.endLine
+        )
+      }
+      resultViewerRef.current?.revealPosition(activeConflictBlock.resultVisibleRange.startLine, 1)
+      resultViewerRef.current?.highlightRange(
+        activeConflictBlock.resultVisibleRange.startLine,
+        activeConflictBlock.resultVisibleRange.endLine
+      )
+    }, 48)
+    return () => window.clearTimeout(timer)
+  }, [activeConflictBlock?.id])
+
+  const applyConflictBlockResolution = (mode: ConflictResolutionMode) => {
     if (!activeConflictBlock) return
     const replacement = mode === 'ours'
       ? activeConflictBlock.oursContent
       : mode === 'theirs'
         ? activeConflictBlock.theirsContent
-        : mode === 'both-ours-first'
-          ? `${activeConflictBlock.oursContent}${activeConflictBlock.theirsContent}`
-          : `${activeConflictBlock.theirsContent}${activeConflictBlock.oursContent}`
+        : mode === 'ignore'
+          ? ''
+          : mode === 'both-ours-first'
+            ? `${activeConflictBlock.oursContent}${activeConflictBlock.theirsContent}`
+            : `${activeConflictBlock.theirsContent}${activeConflictBlock.oursContent}`
     const nextDraft = replaceConflictBlock(conflictDraft, activeConflictBlock, replacement)
     conflictDraftDirtyRef.current = true
     setConflictDraft(nextDraft)
@@ -214,11 +369,11 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-mono text-[11.5px] text-[color:var(--color-foreground)]">{file.path}</p>
-                          {file.originalPath && (
+                          {file.originalPath ? (
                             <p className="mt-0.5 truncate font-mono text-[10px] text-[color:var(--color-muted-foreground)]">
                               {t('detail.workingTreeFrom', { path: file.originalPath })}
                             </p>
-                          )}
+                          ) : null}
                           <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]">
                             {getScopeLabel(file)} · {file.indexStatus}{file.worktreeStatus}
                           </p>
@@ -242,11 +397,11 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                           : `${diffViewMode === 'staged' ? t('detail.gitDiffStagedMode') : t('detail.gitDiffUnstagedMode')} · ${languageHint}`
                         }
                       </p>
-                      {!isConflictFile && diffTruncated && (
+                      {!isConflictFile && diffTruncated ? (
                         <p className="mt-1 text-[10.5px] text-[color:var(--color-warning)]">
                           {t('detail.gitDiffTruncated')}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                     {!isConflictFile ? (
                       <div className="quiet-control flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
@@ -276,7 +431,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
                           className="inline-flex h-8 items-center gap-1 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 text-[10.5px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-60"
@@ -288,6 +443,34 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                         >
                           <RefreshCw className={`h-3.5 w-3.5 ${conflictLoading ? 'animate-spin' : ''}`} />
                           {t('detail.gitDiffReload')}
+                        </button>
+                        <button
+                          type="button"
+                          className={`inline-flex h-8 items-center rounded-full border px-3 text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                            showBaseView
+                              ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-primary)]/12 text-[color:var(--color-primary)]'
+                              : 'border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                          }`}
+                          onClick={() => setShowBaseView((prev) => !prev)}
+                          disabled={!canToggleBaseView || conflictLoading || conflictSaving}
+                          aria-pressed={showBaseView}
+                          title={showBaseView ? t('detail.gitDiffHideBase') : t('detail.gitDiffShowBase')}
+                        >
+                          {showBaseView ? t('detail.gitDiffHideBase') : t('detail.gitDiffShowBase')}
+                        </button>
+                        <button
+                          type="button"
+                          className={`inline-flex h-8 items-center rounded-full border px-3 text-[10.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                            conflictLayoutMode === 'vertical'
+                              ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-primary)]/12 text-[color:var(--color-primary)]'
+                              : 'border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+                          }`}
+                          onClick={() => setConflictLayoutMode((prev) => prev === 'horizontal' ? 'vertical' : 'horizontal')}
+                          disabled={conflictLoading || conflictSaving}
+                          aria-pressed={conflictLayoutMode === 'vertical'}
+                          title={conflictLayoutMode === 'vertical' ? t('detail.gitDiffLayoutHorizontal') : t('detail.gitDiffLayoutVertical')}
+                        >
+                          {conflictLayoutMode === 'vertical' ? t('detail.gitDiffLayoutHorizontal') : t('detail.gitDiffLayoutVertical')}
                         </button>
                         <button
                           type="button"
@@ -342,33 +525,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                         <div className="h-full w-full" aria-hidden="true" />
                       )
                     ) : (
-                      <div className="flex h-full min-h-0 flex-col gap-3 p-3">
-                        <div className={`rounded-[12px] border px-3 py-2 text-[11px] ${
-                          hasConflictBlocks
-                            ? 'border-[color:var(--color-destructive)]/35 bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)]'
-                            : 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] text-[color:var(--color-muted-foreground)]'
-                        }`}>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-1.5">
-                              <AlertTriangle className="h-3.5 w-3.5" />
-                              <span>
-                                {hasConflictBlocks
-                                  ? t('detail.gitDiffConflictDetected', { count: conflictBlocks.length })
-                                  : t('detail.gitDiffConflictDetailsMissing')
-                                }
-                              </span>
-                            </div>
-                            {hasConflictBlocks && (
-                              <span className="shrink-0 rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10px]">
-                                {t('detail.gitDiffConflictCount', {
-                                  current: Math.min(activeConflictBlockIndex + 1, conflictBlocks.length),
-                                  total: conflictBlocks.length,
-                                })}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
+                      <div className="flex h-full min-h-0 flex-col gap-2.5 overflow-hidden p-2.5">
                         {conflictLoading ? (
                           <div className="flex min-h-0 flex-1 items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
                             {t('detail.gitDiffLoadingConflict')}
@@ -382,17 +539,75 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                             {t('detail.gitDiffConflictDetailsMissing')}
                           </div>
                         ) : (
-                          <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)_minmax(0,1fr)] gap-3">
-                            {hasConflictBlocks && (
-                              <div className="rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75 px-3 py-2.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">
-                                    {t('detail.gitDiffConflictNav')}
-                                  </p>
-                                  <div className="flex items-center gap-1">
+                          <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+                            <div className={`rounded-[10px] border px-3 py-2 ${
+                              hasConflictBlocks
+                                ? 'border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)]/48'
+                                : 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70'
+                            }`}>
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-1.5 text-[10.5px]">
+                                    <span className={`inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 font-medium ${
+                                      hasConflictBlocks
+                                        ? 'bg-[color:var(--color-background)] text-[color:var(--color-warning)]'
+                                        : 'bg-[color:var(--color-background)] text-[color:var(--color-muted-foreground)]'
+                                    }`}>
+                                      <AlertTriangle className="h-3.5 w-3.5" />
+                                      {hasConflictBlocks
+                                        ? t('detail.gitDiffConflictCount', {
+                                          current: Math.min(activeConflictBlockIndex + 1, conflictBlocks.length),
+                                          total: conflictBlocks.length,
+                                        })
+                                        : t('detail.gitDiffConflictDetailsMissing')
+                                      }
+                                    </span>
+                                    {activeConflictBlock ? (
+                                      <span className="rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2 py-1 text-[color:var(--color-foreground)]">
+                                        {t('detail.gitDiffLineRange', { start: activeConflictBlock.startLine, end: activeConflictBlock.endLine })}
+                                      </span>
+                                    ) : null}
+                                    {activeConflictBlock ? (
+                                      <span className="rounded-[7px] border border-[color:var(--color-warning)]/35 bg-[color:var(--color-background)] px-2 py-1 text-[color:var(--color-warning)]">
+                                        {t('detail.gitDiffIncoming')}: {activeIncomingLabel}
+                                      </span>
+                                    ) : null}
+                                    {activeConflictBlock?.ancestorLabel ? (
+                                      <span className="rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2 py-1 text-[color:var(--color-muted-foreground)]">
+                                        {t('detail.gitDiffBase')}: {activeBaseLabel}
+                                      </span>
+                                    ) : null}
+                                    {activeConflictBlock ? (
+                                      <span className="rounded-[7px] border border-[color:var(--color-primary)]/25 bg-[color:var(--color-background)] px-2 py-1 text-[color:var(--color-primary)]">
+                                        {t('detail.gitDiffCurrent')}: {activeCurrentLabel}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {hasConflictBlocks ? (
+                                    <div className="mt-2 flex gap-1.5 overflow-x-auto overflow-y-hidden pr-1">
+                                      {conflictBlocks.map((block, index) => (
+                                        <button
+                                          key={block.id}
+                                          type="button"
+                                          className={`rounded-[7px] border px-2 py-1 text-[10px] transition-colors ${
+                                            index === activeConflictBlockIndex
+                                              ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-primary)]/12 text-[color:var(--color-primary)]'
+                                              : 'border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                                          }`}
+                                          onClick={() => setActiveConflictBlockIndex(index)}
+                                          title={t('detail.gitDiffOpenBlock')}
+                                        >
+                                          #{index + 1} · {block.startLine}-{block.endLine}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                {hasConflictBlocks ? (
+                                  <div className="flex shrink-0 items-center gap-1">
                                     <button
                                       type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                       onClick={() => setActiveConflictBlockIndex((prev) => Math.max(0, prev - 1))}
                                       disabled={activeConflictBlockIndex <= 0}
                                       title={t('detail.gitDiffPrevConflict')}
@@ -401,7 +616,7 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                     </button>
                                     <button
                                       type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                       onClick={() => setActiveConflictBlockIndex((prev) => Math.min(conflictBlocks.length - 1, prev + 1))}
                                       disabled={activeConflictBlockIndex >= conflictBlocks.length - 1}
                                       title={t('detail.gitDiffNextConflict')}
@@ -409,129 +624,91 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
                                   </div>
-                                </div>
-                                {activeConflictBlock && (
-                                  <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10.5px]">
-                                    <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]">
-                                      {t('detail.gitDiffLineRange', { start: activeConflictBlock.startLine, end: activeConflictBlock.endLine })}
-                                    </span>
-                                    <span className="rounded-full border border-[color:var(--color-primary)]/25 bg-[color:var(--color-primary)]/10 px-2 py-0.5 text-[color:var(--color-primary)]">
-                                      {t('detail.gitDiffCurrent')}: {activeConflictBlock.oursLabel || 'OURS'}
-                                    </span>
-                                    <span className="rounded-full border border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">
-                                      {t('detail.gitDiffIncoming')}: {activeConflictBlock.theirsLabel || 'THEIRS'}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="grid min-h-0 grid-cols-2 gap-3 max-[1280px]:grid-cols-1">
-                              <div className="grid min-h-0 grid-rows-[56px_minmax(160px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
-                                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffCurrent')} (OURS)</p>
-                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitDiffCurrentReadonly')}</p>
-                                  </div>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                                      disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!oursStage?.exists || isOursStageTruncated))}
-                                      onClick={() => {
-                                        if (hasConflictBlocks) {
-                                          applyConflictBlockResolution('ours')
-                                          return
-                                        }
-                                      if (!oursStage?.exists) return
-                                      conflictDraftDirtyRef.current = true
-                                      setConflictDraft(oursStage.output)
-                                    }}
-                                      title={hasConflictBlocks ? t('detail.gitDiffAcceptCurrent') : isOursStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptCurrentWhole')}
-                                    >
-                                      {t('detail.gitDiffAcceptCurrent')}
-                                    </button>
-                                </div>
-                                {oursStage?.outputLimit && (
-                                  <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
-                                    {t('detail.gitDiffTruncated')} {formatBytes(oursStage.outputLimit.keptBytes)} / {formatBytes(oursStage.outputLimit.totalBytes)}
-                                  </div>
-                                )}
-                                <div className="min-h-0">
-                                  {currentConflictPreviewContent ? (
-                                    <MonacoTextViewer
-                                      value={currentConflictPreviewContent}
-                                      filePath={`${activeFile.path}:current-preview`}
-                                      language={languageHint}
-                                      readOnly
-                                      modelNamespace="git-conflict-current-preview"
-                                    />
-                                  ) : (
-                                    <div className="flex h-full items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      {t('detail.gitDiffCurrentMissing')}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="grid min-h-0 grid-rows-[56px_minmax(160px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
-                                <div className="flex items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffIncoming')} (THEIRS)</p>
-                                    <p className="text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitDiffIncomingReadonly')}</p>
-                                  </div>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-7 items-center rounded-full border border-[color:var(--color-border)] px-2.5 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
-                                      disabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!theirsStage?.exists || isTheirsStageTruncated))}
-                                      onClick={() => {
-                                        if (hasConflictBlocks) {
-                                          applyConflictBlockResolution('theirs')
-                                          return
-                                        }
-                                      if (!theirsStage?.exists) return
-                                      conflictDraftDirtyRef.current = true
-                                      setConflictDraft(theirsStage.output)
-                                    }}
-                                      title={hasConflictBlocks ? t('detail.gitDiffAcceptIncoming') : isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptIncomingWhole')}
-                                    >
-                                      {t('detail.gitDiffAcceptIncoming')}
-                                    </button>
-                                </div>
-                                {theirsStage?.outputLimit && (
-                                  <div className="px-3 pb-2 text-[10px] text-[color:var(--color-warning)]">
-                                    {t('detail.gitDiffTruncated')} {formatBytes(theirsStage.outputLimit.keptBytes)} / {formatBytes(theirsStage.outputLimit.totalBytes)}
-                                  </div>
-                                )}
-                                <div className="min-h-0">
-                                  {incomingConflictPreviewContent ? (
-                                    <MonacoTextViewer
-                                      value={incomingConflictPreviewContent}
-                                      filePath={`${activeFile.path}:incoming-preview`}
-                                      language={languageHint}
-                                      readOnly
-                                      modelNamespace="git-conflict-incoming-preview"
-                                    />
-                                  ) : (
-                                    <div className="flex h-full items-center justify-center text-[11px] text-[color:var(--color-muted-foreground)]">
-                                      {t('detail.gitDiffIncomingMissing')}
-                                    </div>
-                                  )}
-                                </div>
+                                ) : null}
                               </div>
                             </div>
 
-                            <div className="grid min-h-0 grid-rows-[58px_minmax(260px,1fr)] rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/75">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 px-3 py-2">
+                            <div className={conflictSectionsGridClassName}>
+                              <div className={`grid h-full min-h-0 auto-rows-[minmax(180px,1fr)] items-stretch gap-2.5 overflow-y-auto overflow-x-hidden ${sourcePanelGridClassName}`}>
+                                <SourceCard
+                                  title={t('detail.gitDiffIncoming')}
+                                  subtitle={t('detail.gitDiffIncomingReadonly')}
+                                  content={incomingConflictPreviewContent}
+                                  filePath={`${activeFile.path}:incoming-preview`}
+                                  language={languageHint}
+                                  missingText={t('detail.gitDiffIncomingMissing')}
+                                  canRenderViewer={Boolean(theirsStage?.exists)}
+                                  badgeLabel={activeIncomingLabel}
+                                  badgeClassName="border-[color:var(--color-warning)]/35 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]"
+                                  outputLimit={theirsStage?.outputLimit ?? null}
+                                  viewerRef={incomingViewerRef}
+                                  actionLabel={t('detail.gitDiffAcceptIncoming')}
+                                  actionDisabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!theirsStage?.exists || isTheirsStageTruncated))}
+                                  actionTitle={hasConflictBlocks ? t('detail.gitDiffAcceptIncoming') : t('detail.gitDiffAcceptIncomingWhole')}
+                                  onAction={() => {
+                                    if (hasConflictBlocks) {
+                                      applyConflictBlockResolution('theirs')
+                                      return
+                                    }
+                                    if (!theirsStage?.exists) return
+                                    conflictDraftDirtyRef.current = true
+                                    setConflictDraft(theirsStage.output)
+                                  }}
+                                />
+                                {showBaseView ? (
+                                  <SourceCard
+                                    title={t('detail.gitDiffBase')}
+                                    subtitle={t('detail.gitDiffBaseReadonly')}
+                                    content={baseConflictPreviewContent}
+                                    filePath={`${activeFile.path}:base-preview`}
+                                    language={languageHint}
+                                    missingText={t('detail.gitDiffBaseMissing')}
+                                    canRenderViewer={Boolean(baseStage?.exists)}
+                                    badgeLabel={activeBaseLabel}
+                                    outputLimit={baseStage?.outputLimit ?? null}
+                                    viewerRef={baseViewerRef}
+                                  />
+                                ) : null}
+                                <SourceCard
+                                  title={t('detail.gitDiffCurrent')}
+                                  subtitle={t('detail.gitDiffCurrentReadonly')}
+                                  content={currentConflictPreviewContent}
+                                  filePath={`${activeFile.path}:current-preview`}
+                                  language={languageHint}
+                                  missingText={t('detail.gitDiffCurrentMissing')}
+                                  canRenderViewer={Boolean(oursStage?.exists)}
+                                  badgeLabel={activeCurrentLabel}
+                                  badgeClassName="border-[color:var(--color-primary)]/25 bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]"
+                                  outputLimit={oursStage?.outputLimit ?? null}
+                                  viewerRef={currentViewerRef}
+                                  actionLabel={t('detail.gitDiffAcceptCurrent')}
+                                  actionDisabled={conflictLoading || conflictSaving || (!hasConflictBlocks && (!oursStage?.exists || isOursStageTruncated))}
+                                  actionTitle={hasConflictBlocks ? t('detail.gitDiffAcceptCurrent') : t('detail.gitDiffAcceptCurrentWhole')}
+                                  onAction={() => {
+                                    if (hasConflictBlocks) {
+                                      applyConflictBlockResolution('ours')
+                                      return
+                                    }
+                                    if (!oursStage?.exists) return
+                                    conflictDraftDirtyRef.current = true
+                                    setConflictDraft(oursStage.output)
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid min-h-0 grid-rows-[52px_minmax(260px,1fr)] rounded-[10px] border border-[color:var(--color-border)]/90 bg-[color:var(--color-background)]">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--color-border)]/85 bg-[color:var(--color-background-sunken)]/46 px-3 py-2">
                                 <div className="min-w-0">
-                                  <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitDiffResultTitle')}</p>
-                                  <p className="text-[10px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('detail.gitDiffResultDescription')} />
+                                  <p className="text-[10.5px] font-semibold tracking-[0.02em] text-[color:var(--color-foreground)]">{t('detail.gitDiffResultTitle')}</p>
+                                  <p className="truncate text-[10px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('detail.gitDiffResultDescription')} />
                                 </div>
-                                <div className="quiet-control flex flex-wrap items-center gap-1 rounded-full border border-[color:var(--color-border)]/75 p-1">
+                                <div className="quiet-control flex flex-wrap items-center gap-1 rounded-[8px] border border-[color:var(--color-border)]/75 bg-[color:var(--color-background)] p-1">
                                   {hasConflictBlocks ? (
                                     <>
                                       <button
                                         type="button"
-                                        className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        className="rounded-[6px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !activeConflictBlock}
                                         onClick={() => applyConflictBlockResolution('both-ours-first')}
                                         title={t('detail.gitDiffAcceptCombinedCurrentFirst')}
@@ -540,37 +717,46 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                       </button>
                                       <button
                                         type="button"
-                                        className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        className="rounded-[6px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !activeConflictBlock}
                                         onClick={() => applyConflictBlockResolution('both-theirs-first')}
                                         title={t('detail.gitDiffAcceptCombinedIncomingFirst')}
                                       >
                                         {t('detail.gitDiffAcceptCombinedIncomingFirst')}
                                       </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-[6px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('ignore')}
+                                        title={t('detail.gitDiffIgnoreCurrent')}
+                                      >
+                                        {t('detail.gitDiffIgnoreCurrent')}
+                                      </button>
                                     </>
                                   ) : (
                                     <>
                                       <button
                                         type="button"
-                                        className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        className="rounded-[6px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists || isOursStageTruncated || isTheirsStageTruncated}
                                         onClick={() => {
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${oursStage?.output ?? ''}${theirsStage?.output ?? ''}`)
                                         }}
-                                        title={isOursStageTruncated || isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptWholeCurrentFirst')}
+                                        title={t('detail.gitDiffAcceptWholeCurrentFirst')}
                                       >
                                         {t('detail.gitDiffAcceptWholeCurrentFirst')}
                                       </button>
                                       <button
                                         type="button"
-                                        className="rounded-full px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        className="rounded-[6px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
                                         disabled={conflictLoading || conflictSaving || !oursStage?.exists || !theirsStage?.exists || isOursStageTruncated || isTheirsStageTruncated}
                                         onClick={() => {
                                           conflictDraftDirtyRef.current = true
                                           setConflictDraft(`${theirsStage?.output ?? ''}${oursStage?.output ?? ''}`)
                                         }}
-                                        title={isOursStageTruncated || isTheirsStageTruncated ? t('detail.gitDiffTruncated') : t('detail.gitDiffAcceptWholeIncomingFirst')}
+                                        title={t('detail.gitDiffAcceptWholeIncomingFirst')}
                                       >
                                         {t('detail.gitDiffAcceptWholeIncomingFirst')}
                                       </button>
@@ -578,13 +764,67 @@ const DetailGitDiffDrawer = memo(function DetailGitDiffDrawer({
                                   )}
                                 </div>
                               </div>
-                              <div className="min-h-0">
+                              <div className="relative min-h-0">
+                                {hasConflictBlocks ? (
+                                  <div className="pointer-events-none absolute inset-x-3 top-3 z-10">
+                                    <div className="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-1 rounded-[10px] border border-[color:var(--color-border)]/80 bg-[color:var(--color-popover)]/96 p-1 shadow-[0_10px_28px_rgba(15,15,20,0.12)] backdrop-blur-[8px]">
+                                      <button
+                                        type="button"
+                                        className="rounded-[7px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('theirs')}
+                                        title={t('detail.gitDiffAcceptIncoming')}
+                                      >
+                                        {t('detail.gitDiffAcceptIncoming')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-[7px] bg-[color:var(--color-primary)]/12 px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18 disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('ours')}
+                                        title={t('detail.gitDiffAcceptCurrent')}
+                                      >
+                                        {t('detail.gitDiffAcceptCurrent')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-[7px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('both-ours-first')}
+                                        title={t('detail.gitDiffAcceptCombinedCurrentFirst')}
+                                      >
+                                        {t('detail.gitDiffAcceptCombinedCurrentFirst')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-[7px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('both-theirs-first')}
+                                        title={t('detail.gitDiffAcceptCombinedIncomingFirst')}
+                                      >
+                                        {t('detail.gitDiffAcceptCombinedIncomingFirst')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="rounded-[7px] px-2.5 py-1 text-[10px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)] disabled:cursor-not-allowed disabled:opacity-45"
+                                        disabled={conflictLoading || conflictSaving || !activeConflictBlock}
+                                        onClick={() => applyConflictBlockResolution('ignore')}
+                                        title={t('detail.gitDiffIgnoreCurrent')}
+                                      >
+                                        {t('detail.gitDiffIgnoreCurrent')}
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
                                 <MonacoTextViewer
+                                  ref={resultViewerRef}
                                   value={conflictDraft}
                                   filePath={`${activeFile.path}:resolved`}
                                   language={languageHint}
                                   readOnly={conflictSaving}
                                   modelNamespace="git-conflict-resolved"
+                                  padding={resultViewerPadding}
+                                  hiddenLineRanges={resultHiddenLineRanges}
                                   onChange={(nextValue) => {
                                     conflictDraftDirtyRef.current = true
                                     setConflictDraft(nextValue)

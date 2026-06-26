@@ -176,6 +176,47 @@
   font-weight: 700;
 }
 
+.monaco-inline-action-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--color-border) 92%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-background) 96%, transparent);
+  box-shadow: 0 6px 16px rgba(15, 15, 20, 0.1);
+}
+
+.monaco-inline-action-widget__button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 6px 9px;
+  transition: background-color 120ms var(--spring), color 120ms var(--spring);
+}
+
+.monaco-inline-action-widget__button:hover {
+  background: color-mix(in srgb, var(--color-accent) 84%, transparent);
+  color: var(--color-foreground);
+}
+
+.monaco-inline-action-widget__button.is-primary {
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  color: var(--color-primary);
+}
+
+.monaco-inline-action-widget__button.is-danger {
+  color: var(--color-destructive);
+}
+
+.monaco-inline-action-widget__button.is-danger:hover {
+  background: var(--color-destructive-background);
+}
+
 .recent-project-drawer {
   --recent-project-drawer-top: clamp(96px, 14vh, 150px);
   position: fixed;

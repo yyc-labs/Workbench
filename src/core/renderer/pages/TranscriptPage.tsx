@@ -68,6 +68,7 @@ import {
   sliceMarkdownLines,
 } from './transcript/transcriptPage.utils'
 import { useTranscriptPageChromeState } from './transcript/useTranscriptPageChromeState'
+import type { CodeWorkspaceNavigationState } from './code/code.navigation'
 
 function filterPreferredShareHosts(hosts: TranscriptShareHost[]): TranscriptShareHost[] {
   const preferred = hosts.filter((item) => item.host.startsWith('192.'))
@@ -735,7 +736,15 @@ export function TranscriptPage() {
         },
       },
     })
-    navigate(`/project/${projectId}/code`)
+    navigate(`/project/${projectId}/code`, {
+      state: {
+        revealTarget: {
+          relativePath,
+          lineNumber: Math.max(1, Math.floor(lineNumber)),
+          column: Math.max(1, Math.floor(column)),
+        },
+      } satisfies CodeWorkspaceNavigationState,
+    })
   }, [navigate, project, projectId, setProjectCodeSession, setProjectLastCodeFile])
 
   useEffect(() => {

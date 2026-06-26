@@ -8,6 +8,11 @@ export type ConflictBlock = {
   oursContent: string
   theirsContent: string
   ancestorContent: string
+  hiddenLineRanges: Array<{ startLineNumber: number; endLineNumber: number }>
+  resultVisibleRange: { startLine: number; endLine: number; lineCount: number }
+  oursRange: { startLine: number; endLine: number; lineCount: number }
+  theirsRange: { startLine: number; endLine: number; lineCount: number }
+  ancestorRange?: { startLine: number; endLine: number; lineCount: number }
 }
 
 type ParsedConflictDocument = {
@@ -25,6 +30,10 @@ function joinLines(lines: string[]): string {
   return lines.join('')
 }
 
+function countLines(text: string): number {
+  return splitLinesKeepingEol(text).length
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
@@ -35,6 +44,10 @@ export function parseConflictMarkers(text: string): ParsedConflictDocument {
   const lines = splitLinesKeepingEol(text)
   const blocks: ConflictBlock[] = []
   let lineIndex = 0
+  let lastResolvedLineIndex = 0
+  let oursLineCursor = 1
+  let theirsLineCursor = 1
+  let ancestorLineCursor = 1
 
   while (lineIndex < lines.length) {
     const line = lines[lineIndex]
@@ -87,6 +100,57 @@ export function parseConflictMarkers(text: string): ParsedConflictDocument {
     const oursContent = joinLines(lines.slice(oursStart, oursEndExclusive))
     const ancestorContent = joinLines(lines.slice(ancestorStart, ancestorEndExclusive))
     const theirsContent = joinLines(lines.slice(theirsStart, theirsEndExclusive))
+    const unchangedPrefixLineCount = lineIndex - lastResolvedLineIndex
+    oursLineCursor += unchangedPrefixLineCount
+    theirsLineCursor += unchangedPrefixLineCount
+    ancestorLineCursor += unchangedPrefixLineCount
+
+    const oursLineCount = countLines(oursContent)
+    const theirsLineCount = countLines(theirsContent)
+    const ancestorLineCount = countLines(ancestorContent)
+    const hiddenLineRanges = ancestorSplit >= 0
+      ? [
+        { startLineNumber: startLine, endLineNumber: startLine },
+        { startLineNumber: ancestorSplit + 1, endLineNumber: midSplit + 1 },
+        { startLineNumber: endSplit + 1, endLineNumber: endSplit + 1 },
+      ]
+      : [
+        { startLineNumber: startLine, endLineNumber: startLine },
+        { startLineNumber: midSplit + 1, endLineNumber: midSplit + 1 },
+        { startLineNumber: endSplit + 1, endLineNumber: endSplit + 1 },
+      ]
+    const resultVisibleStartLine = oursLineCount > 0
+      ? startLine + 1
+      : theirsLineCount > 0
+        ? midSplit + 2
+        : startLine + 1
+    const resultVisibleEndLine = theirsLineCount > 0
+      ? endSplit
+      : oursLineCount > 0
+        ? oursEndExclusive
+        : resultVisibleStartLine
+    const resultVisibleRange = {
+      startLine: resultVisibleStartLine,
+      endLine: Math.max(resultVisibleStartLine, resultVisibleEndLine),
+      lineCount: Math.max(oursLineCount + theirsLineCount, 1),
+    }
+    const oursRange = {
+      startLine: oursLineCursor,
+      endLine: oursLineCount > 0 ? oursLineCursor + oursLineCount - 1 : oursLineCursor,
+      lineCount: oursLineCount,
+    }
+    const theirsRange = {
+      startLine: theirsLineCursor,
+      endLine: theirsLineCount > 0 ? theirsLineCursor + theirsLineCount - 1 : theirsLineCursor,
+      lineCount: theirsLineCount,
+    }
+    const ancestorRange = ancestorSplit >= 0
+      ? {
+        startLine: ancestorLineCursor,
+        endLine: ancestorLineCount > 0 ? ancestorLineCursor + ancestorLineCount - 1 : ancestorLineCursor,
+        lineCount: ancestorLineCount,
+      }
+      : undefined
 
     blocks.push({
       id: `conflict-${blocks.length + 1}-${startLine}`,
@@ -98,8 +162,19 @@ export function parseConflictMarkers(text: string): ParsedConflictDocument {
       oursContent,
       theirsContent,
       ancestorContent,
+      hiddenLineRanges,
+      resultVisibleRange,
+      oursRange,
+      theirsRange,
+      ancestorRange,
     })
 
+    oursLineCursor += oursLineCount
+    theirsLineCursor += theirsLineCount
+    if (ancestorRange) {
+      ancestorLineCursor += ancestorLineCount
+    }
+    lastResolvedLineIndex = endSplit + 1
     lineIndex = endSplit + 1
   }
 

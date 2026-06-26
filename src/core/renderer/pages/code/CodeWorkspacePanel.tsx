@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
@@ -38,6 +39,7 @@ import {
   MAX_PROJECT_CODE_SESSION_TABS,
   normalizeProjectCodeSession,
 } from './useProjectCodeSession'
+import type { CodeWorkspaceNavigationState } from './code.navigation'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
@@ -109,6 +111,8 @@ export function CodeWorkspacePanel({
   onOpenTranscript,
   onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
   const projectCodeMeta = useAppStore((s) => {
     const found = s.projects.find((p) => p.id === projectId)
     return found
@@ -698,6 +702,25 @@ export function CodeWorkspacePanel({
       setIsExplorerOpen(false)
     }
   }, [isNarrowViewport, openContentSearchMatch])
+
+  useEffect(() => {
+    const revealTarget = (location.state as CodeWorkspaceNavigationState | null)?.revealTarget
+    if (!revealTarget) return
+    if (!revealTarget.relativePath.trim()) return
+
+    void openContentSearchMatch(
+      revealTarget.relativePath,
+      revealTarget.lineNumber,
+      revealTarget.column,
+    )
+    setActiveContentSearchLocation({
+      relativePath: revealTarget.relativePath,
+      lineNumber: revealTarget.lineNumber,
+      column: revealTarget.column,
+    })
+
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.pathname, location.state, navigate, openContentSearchMatch])
 
   const handleOpenSmartEmptyFile = useCallback((relativePath: string) => {
     void openFileWithTreeLocate(relativePath)
