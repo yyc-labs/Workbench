@@ -13,6 +13,7 @@ import { CardContextMenu } from './CardContextMenu'
 import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { RunCommandConfigPopover } from './RunCommandConfigPopover'
+import { Select, type SelectOption } from './ui/select'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../lib/projectDocLinks'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
@@ -21,6 +22,13 @@ import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
+import {
+  defaultAiRuntimeProfiles,
+  getAiRuntimeProfileCli,
+  getAiRuntimeProfileLabel,
+  resolveAiRuntimeProfile,
+  resolveProjectAiRuntimeProfileId,
+} from '../../shared/aiRuntimeProfiles'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -29,6 +37,8 @@ interface ProjectCardProps {
   onSelect: (id: string) => void
   index?: number
 }
+
+const DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE = '__default_ai_runtime_profile__'
 
 function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 0 }: ProjectCardProps) {
   const { t } = useI18n()
@@ -40,14 +50,41 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
   const setProjectCustomType = useAppStore((s) => s.setProjectCustomType)
   const docLinkTagOptions = useAppStore((s) => s.config.docLinkTags)
+  const aiRuntimeProfilesConfig = useAppStore((s) => s.config.aiRuntimeProfiles ?? [])
+  const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
   const { handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink } = useProjectDocLinks({ project })
 
-  const currentCli: CliTool = project.cli || 'claude'
+  const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
+  const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
+  const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
+  const defaultRuntimeProfileCli: CliTool = getAiRuntimeProfileCli(defaultRuntimeProfile)
+  const hasProjectAiRuntimeOverride = Boolean(project.aiRuntimeProfileId?.trim() || project.cli)
+  const currentRuntimeProfileId = resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
+  const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project.cli)
+  const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project.cli)
+  const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project.cli)
+  const selectedAiRuntimeProfileValue = hasProjectAiRuntimeOverride
+    ? currentRuntimeProfile.id
+    : DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE
+  const aiRuntimeProfileOptions = useMemo<SelectOption[]>(
+    () => [
+      {
+        value: DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE,
+        label: `${t('common.default')} · ${defaultRuntimeProfileLabel}`,
+      },
+      ...aiRuntimeProfiles.map((profile) => ({
+        value: profile.id,
+        label: profile.name,
+      })),
+    ],
+    [aiRuntimeProfiles, defaultRuntimeProfileLabel, t]
+  )
 
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
@@ -73,9 +110,22 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       ? 'bg-[color:var(--color-warning)]'
       : 'bg-[color:var(--color-muted-foreground)]/45'
 
+  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
+    void setProjectAiRuntimeProfile(
+      project.id,
+      profileId === DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE ? '' : profileId
+    )
+  }, [project.id, setProjectAiRuntimeProfile])
+
   const handleSwitchCli = useCallback(() => {
-    setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
-  }, [project.id, currentCli, setProjectCli])
+    const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
+    const nextProfile = aiRuntimeProfiles[(currentIndex + 1 + aiRuntimeProfiles.length) % aiRuntimeProfiles.length]
+    if (nextProfile) {
+      void setProjectAiRuntimeProfile(project.id, nextProfile.id)
+      return
+    }
+    void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
+  }, [aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, project.id, setProjectAiRuntimeProfile, setProjectCli])
 
   const togglePin = useAppStore((s) => s.togglePin)
   const removeProject = useAppStore((s) => s.removeProject)
@@ -394,11 +444,18 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
+          defaultRuntimeProfileLabel={defaultRuntimeProfileLabel}
+          defaultRuntimeProfileCli={defaultRuntimeProfileCli}
+          isUsingDefaultAiRuntimeProfile={!hasProjectAiRuntimeOverride}
+          currentRuntimeProfileLabel={currentRuntimeProfileLabel}
+          currentRuntimeProfileId={currentRuntimeProfile.id}
+          aiRuntimeProfiles={aiRuntimeProfiles}
           isPinned={project.pinned}
           onStartRuntime={handleStartRuntime}
           onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
+          onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={handleAiAutoCommit}
@@ -441,18 +498,26 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       />
 
       <div className="relative z-10 flex items-center gap-1.5 shrink-0">
-        <button
-          className="quiet-control hidden h-8 items-center gap-1 rounded-full border-0 px-2.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] md:inline-flex"
-          onClick={(e) => { e.stopPropagation(); handleSwitchCli() }}
-          title={`AI CLI: ${currentCli}`}
+        <div
+          className="hidden min-w-0 shrink-0 md:block"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
         >
-          {currentCli === 'codex' ? (
-            <Terminal className="h-3 w-3" />
-          ) : (
-            <Sparkles className="h-3 w-3" />
-          )}
-          {currentCli}
-        </button>
+          <Select
+            ariaLabel={t('settingsRuntime.activeRuntimeProfile')}
+            value={selectedAiRuntimeProfileValue}
+            options={aiRuntimeProfileOptions}
+            onChange={handleSelectAiRuntimeProfile}
+            minDropdownWidth={168}
+            triggerClassName="h-8 w-auto min-w-[76px] max-w-[220px] px-2 text-[11px]"
+            renderValue={(option) => (
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+                {currentCli === 'codex' ? <Terminal className="h-3 w-3 shrink-0" /> : <Sparkles className="h-3 w-3 shrink-0" />}
+                <span className="truncate">{option?.label ?? currentRuntimeProfileLabel}</span>
+              </span>
+            )}
+          />
+        </div>
         {hasProjectDocLinks && (
           <ProjectLinksTrigger
             items={linkMenuItems}

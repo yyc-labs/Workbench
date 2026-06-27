@@ -1,3 +1,5 @@
+import type { AiRuntimeProfile } from '../../shared/types'
+
 class RuntimeManager {
   private pollTimer: ReturnType<typeof setInterval> | null = null
 
@@ -7,9 +9,10 @@ class RuntimeManager {
   async startRuntime(
     projectId: string,
     projectPath: string,
+    profile?: AiRuntimeProfile | null,
     cli?: 'claude' | 'codex',
   ): Promise<boolean> {
-    return window.electronAPI.startRuntime(projectId, projectPath, cli)
+    return window.electronAPI.startRuntime(projectId, projectPath, profile, cli)
   }
 
   /** Open the singleton Windows Terminal and switch to the target tmux session.

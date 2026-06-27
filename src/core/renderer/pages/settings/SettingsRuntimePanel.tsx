@@ -1,9 +1,10 @@
-import { Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type {
   AiEnvironmentConfig,
   AiExecutionMode,
+  AiRuntimeProfile,
   BackendMode,
   Capability,
   ManagedProcessSnapshot,
@@ -12,9 +13,13 @@ import type {
 } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
 import { isTmuxRuntimeMode } from '../../lib/runtimePresentation'
 import { backendLabel, formatSince } from './settings.helpers'
+import { SettingsAiRuntimeProfilesPanel } from './SettingsAiRuntimeProfilesPanel'
+
+type WindowsAiRunningShell = 'pwsh' | 'cmd'
 
 type RuntimePanelProps = {
   capability: Capability | null
@@ -23,8 +28,15 @@ type RuntimePanelProps = {
   runtimeLauncherScript: string
   runtimeKeepAliveOnQuit: boolean
   onRuntimeKeepAliveToggle: (enabled: boolean) => Promise<void>
+  aiRuntimeProfiles: AiRuntimeProfile[]
+  activeAiRuntimeProfileId?: string
+  onAiRuntimeProfilesSave: (profiles: AiRuntimeProfile[], activeProfileId: string) => Promise<void>
   projects: { id: string; name: string; path: string }[]
   runtimeEntries: Record<string, RuntimeEntry>
+}
+
+function normalizeWindowsAiRunningShell(shell?: AiEnvironmentConfig['shell']): WindowsAiRunningShell {
+  return shell === 'cmd' ? 'cmd' : 'pwsh'
 }
 
 function SettingsRuntimePanel({
@@ -34,6 +46,9 @@ function SettingsRuntimePanel({
   runtimeLauncherScript,
   runtimeKeepAliveOnQuit,
   onRuntimeKeepAliveToggle,
+  aiRuntimeProfiles,
+  activeAiRuntimeProfileId,
+  onAiRuntimeProfilesSave,
   projects,
   runtimeEntries,
 }: RuntimePanelProps) {
@@ -67,6 +82,9 @@ function SettingsRuntimePanel({
   }
 
   const [executionMode, setExecutionMode] = useState<AiExecutionMode>(resolveMode(aiEnvironment?.mode))
+  const [windowsAiRunningShell, setWindowsAiRunningShell] = useState<WindowsAiRunningShell>(
+    normalizeWindowsAiRunningShell(aiEnvironment?.shell)
+  )
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
   const [scriptHistoryOpen, setScriptHistoryOpen] = useState(false)
   const [runtimeEntrypointHistory, setRuntimeEntrypointHistory] = useState<string[]>(aiEnvironment?.runtimeEntrypointHistory ?? [])
@@ -74,6 +92,7 @@ function SettingsRuntimePanel({
   const [historyMutationPending, setHistoryMutationPending] = useState(false)
   const [historyPendingTarget, setHistoryPendingTarget] = useState<string | 'clear-all' | null>(null)
   const [historyMutationError, setHistoryMutationError] = useState<string | null>(null)
+  const [historyDeleteConfirmTarget, setHistoryDeleteConfirmTarget] = useState<string | 'clear-all' | null>(null)
   const [diag, setDiag] = useState<{
     mode: AiExecutionMode
     providerLabel: string
@@ -110,6 +129,10 @@ function SettingsRuntimePanel({
   useEffect(() => {
     setExecutionMode(resolveMode(aiEnvironment?.mode))
   }, [aiEnvironment?.mode, capability?.hostPlatform, capability?.hasWsl])
+
+  useEffect(() => {
+    setWindowsAiRunningShell(normalizeWindowsAiRunningShell(aiEnvironment?.shell))
+  }, [aiEnvironment?.shell])
 
   useEffect(() => {
     setRuntimePassProjectPath(aiEnvironment?.runtimePassProjectPath ?? true)
@@ -291,7 +314,7 @@ function SettingsRuntimePanel({
   ): AiEnvironmentConfig => ({
     mode: executionMode,
     wslDistro: aiEnvironment?.wslDistro,
-    shell: aiEnvironment?.shell,
+    shell: capability?.hostPlatform === 'windows' ? windowsAiRunningShell : aiEnvironment?.shell,
     runtimeEntrypoint: executionMode === 'custom-script' ? nextRuntimeEntrypoint : aiEnvironment?.runtimeEntrypoint,
     runtimeEntrypointHistory: executionMode === 'custom-script' ? nextRuntimeEntrypointHistory : aiEnvironment?.runtimeEntrypointHistory,
     runtimePassProjectPath,
@@ -351,6 +374,7 @@ function SettingsRuntimePanel({
         setRuntimeEntrypointHistory(nextHistory)
         setScriptPath(nextDraftPath)
         setScriptHistoryOpen(false)
+        setHistoryDeleteConfirmTarget(null)
       })
       .catch((error) => {
         skipNextScriptPathSyncRef.current = false
@@ -376,6 +400,7 @@ function SettingsRuntimePanel({
         setRuntimeEntrypointHistory([])
         setScriptPath(nextDraftPath)
         setScriptHistoryOpen(false)
+        setHistoryDeleteConfirmTarget(null)
       })
       .catch((error) => {
         skipNextScriptPathSyncRef.current = false
@@ -386,6 +411,27 @@ function SettingsRuntimePanel({
         setHistoryMutationPending(false)
         setHistoryPendingTarget(null)
       })
+  }
+
+  const openRuntimeEntrypointDeleteConfirm = (value: string) => {
+    if (historyMutationPending) return
+    setHistoryMutationError(null)
+    setHistoryDeleteConfirmTarget(value)
+  }
+
+  const openRuntimeEntrypointClearConfirm = () => {
+    if (historyMutationPending || runtimeEntrypointHistory.length === 0) return
+    setHistoryMutationError(null)
+    setHistoryDeleteConfirmTarget('clear-all')
+  }
+
+  const handleConfirmRuntimeEntrypointHistoryDelete = () => {
+    if (!historyDeleteConfirmTarget || historyMutationPending) return
+    if (historyDeleteConfirmTarget === 'clear-all') {
+      handleClearRuntimeEntrypointHistory()
+      return
+    }
+    handleDeleteRuntimeEntrypoint(historyDeleteConfirmTarget)
   }
 
   const handleKeepAliveToggle = async (enabled: boolean) => {
@@ -410,6 +456,27 @@ function SettingsRuntimePanel({
   ]
   const modeOptions = allModeOptions.filter((option) => availableModes.includes(option.value))
   const usesTmuxRuntime = isTmuxRuntimeMode(executionMode)
+  const showWindowsShellOptions = capability?.hostPlatform === 'windows'
+  const windowsShellOptions: Array<{
+    value: WindowsAiRunningShell
+    label: string
+    description: string
+  }> = [
+    {
+      value: 'pwsh',
+      label: t('settingsRuntime.windowsShellPwsh'),
+      description: t('settingsRuntime.windowsShellPwshDescription'),
+    },
+    {
+      value: 'cmd',
+      label: t('settingsRuntime.windowsShellCmd'),
+      description: t('settingsRuntime.windowsShellCmdDescription'),
+    },
+  ]
+  const historyDeleteConfirmIsClearAll = historyDeleteConfirmTarget === 'clear-all'
+  const historyDeleteConfirmValue = historyDeleteConfirmIsClearAll
+    ? t('settingsRuntime.clearAll')
+    : historyDeleteConfirmTarget ?? ''
 
   return (
     <div className="space-y-8">
@@ -457,6 +524,41 @@ function SettingsRuntimePanel({
               {t('settingsRuntime.detectingCapabilities')}
             </p>
           )}
+          {showWindowsShellOptions && (
+            <div className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/35 px-4 py-4">
+              <div className="mb-3">
+                <p className="text-sm font-medium text-[color:var(--color-foreground)]">
+                  {t('settingsRuntime.windowsShellTitle')}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                  {t('settingsRuntime.windowsShellHint')}
+                </p>
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {windowsShellOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-start gap-2 rounded-[16px] border px-4 py-3 text-sm text-[color:var(--color-foreground)]"
+                    style={{ borderColor: windowsAiRunningShell === option.value ? 'var(--color-primary)' : 'var(--color-border)' }}
+                  >
+                    <input
+                      type="radio"
+                      name="windows-ai-running-shell"
+                      value={option.value}
+                      checked={windowsAiRunningShell === option.value}
+                      onChange={() => setWindowsAiRunningShell(option.value)}
+                    />
+                    <span>
+                      <span className="block font-medium">{option.label}</span>
+                      <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                        {option.description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           {executionMode === 'custom-script' && (
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -490,7 +592,7 @@ function SettingsRuntimePanel({
                           type="button"
                           className="button-interactive inline-flex h-7 items-center justify-center rounded-full px-2 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
                           disabled={runtimeEntrypointHistory.length === 0 || historyMutationPending}
-                          onClick={handleClearRuntimeEntrypointHistory}
+                          onClick={openRuntimeEntrypointClearConfirm}
                           aria-busy={historyPendingTarget === 'clear-all' || undefined}
                         >
                           {historyPendingTarget === 'clear-all' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
@@ -520,7 +622,7 @@ function SettingsRuntimePanel({
                                 <button
                                   type="button"
                                   className="button-interactive inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-50"
-                                  onClick={() => handleDeleteRuntimeEntrypoint(item)}
+                                  onClick={() => openRuntimeEntrypointDeleteConfirm(item)}
                                   title={t('settingsRuntime.deleteSavedPath')}
                                   disabled={historyMutationPending}
                                   aria-busy={historyPendingTarget === item || undefined}
@@ -568,6 +670,90 @@ function SettingsRuntimePanel({
           </Button>
         </div>
       </div>
+
+      <ModalShell
+        open={Boolean(historyDeleteConfirmTarget)}
+        onClose={() => {
+          if (historyMutationPending) return
+          setHistoryDeleteConfirmTarget(null)
+        }}
+        widthClassName="max-w-[560px]"
+        ariaLabel={t(
+          historyDeleteConfirmIsClearAll
+            ? 'settingsRuntime.clearSavedPathsConfirmLabel'
+            : 'settingsRuntime.deleteSavedPathConfirmLabel'
+        )}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div
+              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{
+                background: 'var(--color-destructive-background)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
+                {t(
+                  historyDeleteConfirmIsClearAll
+                    ? 'settingsRuntime.clearSavedPathsConfirmTitle'
+                    : 'settingsRuntime.deleteSavedPathConfirmTitle'
+                )}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {historyDeleteConfirmIsClearAll
+                  ? t('settingsRuntime.clearSavedPathsConfirmHint', { count: runtimeEntrypointHistory.length })
+                  : t('settingsRuntime.deleteSavedPathConfirmHint', { value: historyDeleteConfirmValue })}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="rounded-[18px] border px-4 py-3"
+            style={{ borderColor: 'var(--color-border)' }}
+          >
+            <p className="break-all text-sm text-[color:var(--color-foreground)]">
+              {historyDeleteConfirmValue}
+            </p>
+          </div>
+
+          {historyMutationError && (
+            <p className="text-xs text-[color:var(--color-destructive)]">{historyMutationError}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4"
+              onClick={() => setHistoryDeleteConfirmTarget(null)}
+              disabled={historyMutationPending}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-10 px-4"
+              onClick={handleConfirmRuntimeEntrypointHistoryDelete}
+              loading={historyMutationPending}
+              disabled={historyMutationPending || !historyDeleteConfirmTarget}
+            >
+              {t('common.delete')}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
+
+      <SettingsAiRuntimeProfilesPanel
+        capability={capability}
+        profiles={aiRuntimeProfiles}
+        activeProfileId={activeAiRuntimeProfileId}
+        onProfilesSave={onAiRuntimeProfilesSave}
+      />
 
       <div>
         <p className="section-label mb-3">{t('settingsRuntime.lifecycle')}</p>

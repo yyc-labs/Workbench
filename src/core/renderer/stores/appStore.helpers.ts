@@ -88,6 +88,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   pinned?: boolean
   lastOpened?: number
   cli?: 'claude' | 'codex'
+  aiRuntimeProfileId?: string
   docLinks: ProjectInfo['docLinks']
   folderId?: string
   tagIds: string[]
@@ -106,6 +107,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     pinned: p.pinned,
     lastOpened: p.lastOpened,
     cli: p.cli,
+    aiRuntimeProfileId: p.aiRuntimeProfileId,
     docLinks: p.docLinks ?? [],
     folderId: p.folderId,
     tagIds: p.tagIds ?? [],
@@ -127,6 +129,7 @@ export function toRemovedProjectSnapshot(project: ProjectInfo): RemovedProjectSn
     pinned: project.pinned,
     lastOpened: project.lastOpened,
     cli: project.cli,
+    aiRuntimeProfileId: project.aiRuntimeProfileId,
     docLinks: project.docLinks ?? [],
     folderId: project.folderId,
     tagIds: project.tagIds ?? [],
@@ -149,6 +152,7 @@ export function applySavedProjectSnapshot(
     pinned?: boolean
     lastOpened?: number
     cli?: 'claude' | 'codex'
+    aiRuntimeProfileId?: string
     docLinks?: ProjectInfo['docLinks']
     folderId?: string
     tagIds?: string[]
@@ -170,6 +174,7 @@ export function applySavedProjectSnapshot(
   if (hasSavedField('pinned')) project.pinned = saved.pinned
   if (hasSavedField('lastOpened')) project.lastOpened = saved.lastOpened
   if (hasSavedField('cli')) project.cli = saved.cli
+  if (hasSavedField('aiRuntimeProfileId')) project.aiRuntimeProfileId = saved.aiRuntimeProfileId
   if (hasSavedField('docLinks')) project.docLinks = saved.docLinks ?? []
   if (hasSavedField('folderId')) project.folderId = saved.folderId
   if (hasSavedField('tagIds')) project.tagIds = saved.tagIds ?? []

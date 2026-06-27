@@ -8,6 +8,13 @@ import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
+import {
+  defaultAiRuntimeProfiles,
+  getAiRuntimeProfileCli,
+  getAiRuntimeProfileLabel,
+  resolveAiRuntimeProfile,
+  resolveProjectAiRuntimeProfileId,
+} from '../../shared/aiRuntimeProfiles'
 
 type RecentProjectDrawerCardProps = {
   project: RecentProjectListItem
@@ -109,16 +116,27 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const togglePin = useAppStore((s) => s.togglePin)
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
+  const aiRuntimeProfilesConfig = useAppStore((s) => s.config.aiRuntimeProfiles ?? [])
+  const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
 
-  const currentCli: CliTool = project.cli || 'claude'
+  const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
+  const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
+  const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
+  const defaultRuntimeProfileCli: CliTool = getAiRuntimeProfileCli(defaultRuntimeProfile)
+  const hasProjectAiRuntimeOverride = Boolean(project.aiRuntimeProfileId?.trim() || project.cli)
+  const currentRuntimeProfileId = resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
+  const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project.cli)
+  const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project.cli)
+  const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project.cli)
   const isDevRunning = devStatus === 'running'
   const isDevStopping = devStatus === 'stopping'
   const isRuntimeAttached = session?.status === 'attached'
@@ -127,9 +145,19 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const aiCommitStatus: AiCommitStatus = 'idle'
 
+  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
+    void setProjectAiRuntimeProfile(project.id, profileId)
+  }, [project.id, setProjectAiRuntimeProfile])
+
   const handleSwitchCli = useCallback(() => {
+    const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
+    const nextProfile = aiRuntimeProfiles[(currentIndex + 1 + aiRuntimeProfiles.length) % aiRuntimeProfiles.length]
+    if (nextProfile) {
+      void setProjectAiRuntimeProfile(project.id, nextProfile.id)
+      return
+    }
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
-  }, [currentCli, project.id, setProjectCli])
+  }, [aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, project.id, setProjectAiRuntimeProfile, setProjectCli])
 
   const handleOpenTerminal = useCallback(async () => {
     if (isOpeningTerminal) return
@@ -174,11 +202,18 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
       isStartingRuntime={isStartingRuntime}
       isStoppingRuntime={isStoppingRuntime}
       currentCli={currentCli}
+      defaultRuntimeProfileLabel={defaultRuntimeProfileLabel}
+      defaultRuntimeProfileCli={defaultRuntimeProfileCli}
+      isUsingDefaultAiRuntimeProfile={!hasProjectAiRuntimeOverride}
+      currentRuntimeProfileLabel={currentRuntimeProfileLabel}
+      currentRuntimeProfileId={currentRuntimeProfile.id}
+      aiRuntimeProfiles={aiRuntimeProfiles}
       isPinned={project.pinned}
       onStartRuntime={handleStartRuntime}
       onStopRuntime={handleStopRuntime}
       onOpenTerminal={handleOpenTerminal}
       onSwitchCli={handleSwitchCli}
+      onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
       onStartProject={() => startProject(project.id)}
       onStopProject={() => stopProject(project.id)}
       aiCommitStatus={aiCommitStatus}

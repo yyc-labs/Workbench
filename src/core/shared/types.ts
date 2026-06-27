@@ -19,6 +19,7 @@ export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 export type RunStartupMode = 'silent' | 'terminal'
 
 export type CliTool = 'claude' | 'codex'
+export type AiRuntimeProfileKind = 'native' | 'custom'
 export type AiExecutionMode =
   | 'windows-wsl'
   | 'windows-native'
@@ -26,6 +27,7 @@ export type AiExecutionMode =
   | 'macos-native'
   | 'custom-script'
   | 'disabled'
+export type AiRuntimeProfileMode = AiExecutionMode | 'inherit'
 export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
 export type AiCommitProfileSource = 'manual' | 'claude' | 'codex'
 export type StartupDefaultFilter =
@@ -68,6 +70,25 @@ export interface AiEnvironmentConfig {
   runtimeEntrypointHistory?: string[]
   runtimePassProjectPath?: boolean
   aiCommitEntrypoint?: string
+}
+
+export interface AiRuntimeProfile {
+  id: string
+  name: string
+  /** native runs inside the selected Runtime mode; custom can also receive project path/env metadata. */
+  kind: AiRuntimeProfileKind
+  /** inherit keeps using the global Runtime execution mode; any concrete value overrides it for this profile. */
+  mode?: AiRuntimeProfileMode
+  /** Compatibility/default hint for built-in Claude/Codex profiles. */
+  cli?: CliTool
+  /** Command or script to execute after entering the project directory. */
+  command?: string
+  /** Extra arguments appended to command. */
+  args?: string[]
+  /** Extra environment variables available to the launched AI process. */
+  env?: Record<string, string>
+  /** For custom profiles, append the resolved project path as the final positional argument. */
+  passProjectPath?: boolean
 }
 
 export interface ClaudeBashrcConfig {
@@ -786,6 +807,8 @@ export interface ProjectInfo {
   lastOpened?: number
   /** AI coding CLI tool preference — defaults to 'claude' */
   cli?: CliTool
+  /** AI Runtime profile used when launching AI Running. Falls back to active app profile or legacy cli. */
+  aiRuntimeProfileId?: string
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
   /** User-defined folder classification */
@@ -851,6 +874,10 @@ export interface AppConfig {
   startupDefaultFilter?: StartupDefaultFilter
   /** AI Runtime / AI Commit execution environment selection */
   aiEnvironment?: AiEnvironmentConfig
+  /** User-defined AI Running launch profiles. */
+  aiRuntimeProfiles?: AiRuntimeProfile[]
+  /** Default AI Running profile used by projects that do not override it. */
+  activeAiRuntimeProfileId?: string
   /** Saved Claude runtime shell profiles for quick switching */
   claudeRuntimeProfiles?: ClaudeRuntimeProfile[]
   /** Active Claude runtime profile id */
@@ -886,6 +913,8 @@ export interface SavedProject {
   lastOpened?: number
   /** AI coding CLI tool preference — defaults to 'claude' when absent */
   cli?: CliTool
+  /** AI Runtime profile used when launching AI Running. Falls back to active app profile or legacy cli. */
+  aiRuntimeProfileId?: string
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
   /** User-defined folder classification */
@@ -966,6 +995,8 @@ export interface RuntimeEntry {
   createdAt: number
   lastOpened: number
   mode?: AiExecutionMode
+  profileId?: string
+  profileName?: string
   /** Dedicated host process pid for providers like Windows Native. */
   pid?: number | null
   /** Host process start timestamp used to guard against pid reuse. */

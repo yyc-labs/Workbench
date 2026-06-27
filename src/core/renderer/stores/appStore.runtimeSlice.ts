@@ -2,6 +2,12 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { translateCurrent } from '../i18n'
+import {
+  getAiRuntimeProfileCli,
+  resolveAiRuntimeProfile,
+  resolveProjectAiRuntimeProfileId,
+  slugAiRuntimeProfileName,
+} from '../../shared/aiRuntimeProfiles'
 
 function waitForDelay(delayMs: number): Promise<void> {
   if (delayMs <= 0) return Promise.resolve()
@@ -55,6 +61,8 @@ function runtimeEntriesEqual(
       || (prevEntry.pid ?? null) !== (nextEntry.pid ?? null)
       || (prevEntry.pidStartedAt ?? null) !== (nextEntry.pidStartedAt ?? null)
       || (prevEntry.mode ?? null) !== (nextEntry.mode ?? null)
+      || (prevEntry.profileId ?? null) !== (nextEntry.profileId ?? null)
+      || (prevEntry.profileName ?? null) !== (nextEntry.profileName ?? null)
     ) {
       return false
     }
@@ -86,6 +94,7 @@ function inferRuntimeSessionName(
   project: AppState['projects'][number],
   sessionNames: string[],
   createdAtByName: Map<string, number>,
+  profileSlug?: string,
 ): string | null {
   const baseName = project.name?.trim()
   if (!baseName) return null
@@ -97,6 +106,15 @@ function inferRuntimeSessionName(
     ? new RegExp(`^${escaped}-claude-${md5Suffix}$`)
     : new RegExp(`^${escaped}-(?:codex-)?${md5Suffix}$`)
   const genericPattern = new RegExp(`^${escaped}-(?:claude-|codex-)?${md5Suffix}$`)
+  const profilePattern = profileSlug
+    ? new RegExp(`^${escaped}-${escapeRegExp(profileSlug)}-${md5Suffix}$`)
+    : null
+
+  if (profilePattern) {
+    const profileMatches = sessionNames.filter((name) => profilePattern.test(name))
+    const profileLatest = pickLatestSessionName(profileMatches, createdAtByName)
+    if (profileLatest) return profileLatest
+  }
 
   const cliMatches = sessionNames.filter((name) => cliPattern.test(name))
   const cliLatest = pickLatestSessionName(cliMatches, createdAtByName)
@@ -213,7 +231,17 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
 
         for (const project of projects) {
           const entry = runtimeEntries[project.id]
-          const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName)
+          const profile = resolveAiRuntimeProfile(
+            get().config.aiRuntimeProfiles,
+            resolveProjectAiRuntimeProfileId(project, get().config.activeAiRuntimeProfileId),
+            project.cli,
+          )
+          const inferredSessionName = inferRuntimeSessionName(
+            project,
+            rawSessionNames,
+            createdAtByName,
+            slugAiRuntimeProfileName(profile.name || profile.id),
+          )
           const sessionName = pickBestSessionName(
             [entry?.sessionName || '', inferredSessionName || ''],
             rawSessionNameSet
@@ -262,12 +290,19 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
       if (cooldownRemainingMs > 0) {
         await waitForDelay(cooldownRemainingMs)
       }
-      const diagnostics = await window.electronAPI.getRuntimeDiagnostics()
+      const profileId = resolveProjectAiRuntimeProfileId(project, state.config.activeAiRuntimeProfileId)
+      const profile = resolveAiRuntimeProfile(state.config.aiRuntimeProfiles, profileId, project.cli)
+      const diagnostics = await window.electronAPI.getRuntimeDiagnostics(profile)
       if (diagnostics.issues.length > 0) {
         const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
         throw new Error(translateCurrent('settingsRuntime.preflightFailed', { message }))
       }
-      const ok = await runtimeManager.startRuntime(projectId, project.path, project.cli)
+      const ok = await runtimeManager.startRuntime(
+        projectId,
+        project.path,
+        profile,
+        getAiRuntimeProfileCli(profile, project.cli),
+      )
       if (!ok) {
         throw new Error(
           translateCurrent('settingsRuntime.startFailed', {

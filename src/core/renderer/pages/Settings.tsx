@@ -35,6 +35,7 @@ export function SettingsPage() {
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
+  const setAiRuntimeProfiles = useAppStore((s) => s.setAiRuntimeProfiles)
   const setClaudeRuntimeProfiles = useAppStore((s) => s.setClaudeRuntimeProfiles)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
@@ -106,6 +107,9 @@ export function SettingsPage() {
                   runtimeLauncherScript={config.aiEnvironment?.runtimeEntrypoint || ''}
                   runtimeKeepAliveOnQuit={config.runtimeKeepAliveOnQuit ?? false}
                   onRuntimeKeepAliveToggle={setRuntimeKeepAliveOnQuit}
+                  aiRuntimeProfiles={config.aiRuntimeProfiles ?? []}
+                  activeAiRuntimeProfileId={config.activeAiRuntimeProfileId}
+                  onAiRuntimeProfilesSave={setAiRuntimeProfiles}
                   projects={projects}
                   runtimeEntries={runtimeEntries}
                 />

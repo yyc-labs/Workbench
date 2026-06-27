@@ -1,5 +1,5 @@
-import { KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   Capability,
   CodexConfig,
@@ -11,6 +11,7 @@ import { getCodexScopeCacheKey } from '../../../shared/codexScope'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
+import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 
@@ -169,6 +170,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [preferredAuthMethod, setPreferredAuthMethod] = useState('')
   const [approvalsReviewer, setApprovalsReviewer] = useState('')
   const [providers, setProviders] = useState<ProviderDraft[]>([])
+  const [deleteConfirmProviderDraftId, setDeleteConfirmProviderDraftId] = useState<string | null>(null)
   const cachedSnapshot = resolvedScopeKey ? cachedSnapshots[resolvedScopeKey] : undefined
 
   useEffect(() => {
@@ -206,6 +208,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setApprovalsReviewer,
       setProviders,
     })
+    setDeleteConfirmProviderDraftId(null)
   }, [cachedSnapshot, loaded])
 
   const normalizedProviderKeys = useMemo(
@@ -213,20 +216,25 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
     [providers],
   )
 
-  const validationError = useMemo(() => {
+  const getProviderValidationError = (sourceProviders: ProviderDraft[]) => {
     const seen = new Set<string>()
-    for (const key of normalizedProviderKeys) {
+    for (const key of sourceProviders.map((provider) => normalizeProviderKey(provider.key))) {
       if (!key) return t('settings.codex.emptyProviderKey')
       if (seen.has(key)) return t('settings.codex.duplicateProviderKey')
       seen.add(key)
     }
     return null
+  }
+
+  const validationError = useMemo(() => {
+    return getProviderValidationError(providers)
   }, [normalizedProviderKeys, t])
 
   const activeProvider = providers.find((provider) => provider.draftId === selectedProviderDraftId) ?? providers[0] ?? null
   const activeProviderIndex = activeProvider ? providers.findIndex((provider) => provider.draftId === activeProvider.draftId) : -1
   const activeProviderKey = normalizeProviderKey(activeProvider?.key ?? '')
   const activeProviderApiKey = activeProvider?.apiKey ?? ''
+  const deleteConfirmProvider = providers.find((provider) => provider.draftId === deleteConfirmProviderDraftId) ?? null
   const hasCachedSnapshot = Boolean(cachedSnapshot)
 
   const handleProviderChange = (
@@ -263,14 +271,68 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
     }
     setProviders((current) => [...current, nextProvider])
     setSelectedProviderDraftId(nextProvider.draftId)
+    setDeleteConfirmProviderDraftId(null)
   }
 
-  const handleDeleteProvider = (index: number) => {
+  const saveProviderDrafts = async (sourceProviders: ProviderDraft[], currentProvider: string) => {
+    const normalizedProviderApiKeys = Object.fromEntries(
+      sourceProviders
+        .map((provider) => [normalizeProviderKey(provider.key), provider.apiKey.trim()] as const)
+        .filter(([key]) => Boolean(key)),
+    )
+    const saved = await saveCodexSettings({
+      providerApiKeys: normalizedProviderApiKeys,
+      config: buildConfig(
+        sourceProviders,
+        currentProvider,
+        model,
+        modelReasoningEffort,
+        preferredAuthMethod,
+        approvalsReviewer,
+      ),
+    })
+
+    applySnapshotToState(saved, {
+      setScope,
+      setConfigExists,
+      setSelectedProviderDraftId,
+      setModel,
+      setModelReasoningEffort,
+      setPreferredAuthMethod,
+      setApprovalsReviewer,
+      setProviders,
+    })
+  }
+
+  const handleDeleteProvider = async (draftId: string) => {
+    const index = providers.findIndex((provider) => provider.draftId === draftId)
+    if (index < 0) return
     const deletingDraftId = providers[index]?.draftId ?? ''
     const nextProviders = providers.filter((_, providerIndex) => providerIndex !== index)
-    setProviders(nextProviders)
-    if (deletingDraftId && selectedProviderDraftId === deletingDraftId) {
-      setSelectedProviderDraftId(nextProviders[0]?.draftId ?? '')
+    const nextSelectedProviderDraftId = deletingDraftId && selectedProviderDraftId === deletingDraftId
+      ? nextProviders[0]?.draftId ?? ''
+      : selectedProviderDraftId
+    const nextActiveProvider = nextProviders.find((provider) => provider.draftId === nextSelectedProviderDraftId)
+      ?? nextProviders[0]
+      ?? null
+    const nextValidationError = getProviderValidationError(nextProviders)
+    if (nextValidationError) {
+      setError(nextValidationError)
+      return
+    }
+
+    setSaving(true)
+    setSavedHint(null)
+    setError(null)
+    try {
+      await saveProviderDrafts(nextProviders, normalizeProviderKey(nextActiveProvider?.key ?? ''))
+      setDeleteConfirmProviderDraftId(null)
+      setSavedHint(t('settings.codex.savedHint'))
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setError(message || t('settings.codex.saveError'))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -316,33 +378,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
     setError(null)
 
     try {
-      const normalizedProviderApiKeys = Object.fromEntries(
-        providers
-          .map((provider) => [normalizeProviderKey(provider.key), provider.apiKey.trim()] as const)
-          .filter(([key]) => Boolean(key)),
-      )
-      const saved = await saveCodexSettings({
-        providerApiKeys: normalizedProviderApiKeys,
-        config: buildConfig(
-          providers,
-          activeProviderKey,
-          model,
-          modelReasoningEffort,
-          preferredAuthMethod,
-          approvalsReviewer,
-        ),
-      })
-
-      applySnapshotToState(saved, {
-        setScope,
-        setConfigExists,
-        setSelectedProviderDraftId,
-        setModel,
-        setModelReasoningEffort,
-        setPreferredAuthMethod,
-        setApprovalsReviewer,
-        setProviders,
-      })
+      await saveProviderDrafts(providers, activeProviderKey)
       setSavedHint(t('settings.codex.savedHint'))
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
@@ -577,7 +613,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
               <Button
                 variant="outline"
                 className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
-                onClick={() => handleDeleteProvider(activeProviderIndex)}
+                onClick={() => setDeleteConfirmProviderDraftId(activeProvider.draftId)}
                 disabled={inputDisabled || providers.length <= 1}
               >
                 <Trash2 className="h-4 w-4" />
@@ -587,6 +623,78 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
           </div>
         )}
       </div>
+
+      <ModalShell
+        open={Boolean(deleteConfirmProvider)}
+        onClose={() => {
+          if (saving) return
+          setDeleteConfirmProviderDraftId(null)
+        }}
+        widthClassName="max-w-[560px]"
+        ariaLabel={t('settings.codex.deleteProviderConfirmLabel')}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div
+              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{
+                background: 'var(--color-destructive-background)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
+                {t('settings.codex.deleteProviderConfirmTitle')}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {t('settings.codex.deleteProviderConfirmHint', {
+                  value: deleteConfirmProvider?.key || deleteConfirmProvider?.name || t('settings.codex.providerPlaceholder'),
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="rounded-[18px] border px-4 py-3"
+            style={{ borderColor: 'var(--color-border)' }}
+          >
+            <p className="text-sm text-[color:var(--color-foreground)]">
+              {deleteConfirmProvider?.key || deleteConfirmProvider?.name}
+            </p>
+          </div>
+
+          {error && (
+            <p className="text-xs text-[color:var(--color-destructive)]">{error}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4"
+              onClick={() => setDeleteConfirmProviderDraftId(null)}
+              disabled={saving}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-10 px-4"
+              onClick={() => {
+                if (!deleteConfirmProvider) return
+                void handleDeleteProvider(deleteConfirmProvider.draftId)
+              }}
+              loading={saving}
+              disabled={inputDisabled || saving || !deleteConfirmProvider}
+            >
+              {t('common.delete')}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
         <div>

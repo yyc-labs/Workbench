@@ -8,6 +8,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'addProject'
   | 'removeProject'
   | 'setProjectCli'
+  | 'setProjectAiRuntimeProfile'
   | 'setProjectCustomName'
   | 'setProjectCustomType'
   | 'setProjectCustomCommand'
@@ -95,6 +96,29 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectCli: async (projectId, cli) => {
     set((state) => ({
       projects: state.projects.map((p) => (p.id === projectId ? { ...p, cli } : p)),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
+  },
+
+  setProjectAiRuntimeProfile: async (projectId, profileId) => {
+    const normalizedProfileId = profileId.trim()
+    const profile = get().config.aiRuntimeProfiles?.find((item) => item.id === normalizedProfileId)
+    set((state) => ({
+      projects: state.projects.map((project) => (
+        project.id === projectId
+          ? normalizedProfileId
+            ? {
+              ...project,
+              aiRuntimeProfileId: normalizedProfileId,
+              cli: profile?.cli ?? project.cli,
+            }
+            : {
+              ...project,
+              aiRuntimeProfileId: undefined,
+              cli: undefined,
+            }
+          : project
+      )),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },

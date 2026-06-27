@@ -2,12 +2,14 @@ import type {
   AiCommitConfig,
   AiEnvironmentConfig,
   AiExecutionMode,
+  AiRuntimeProfile,
   AppConfig,
   Capability,
   RuntimeDiagnostics,
   RuntimeSessionInfo,
 } from '../../../shared/types'
 import { availableModesForCapability, migrateLegacyEnvironment } from './platform-detector'
+import { getAiRuntimeProfileCli } from '../../../shared/aiRuntimeProfiles'
 import type {
   AiCommitLaunchPlan,
   AiExecutionProvider,
@@ -61,12 +63,17 @@ export class AiEnvironmentController {
     return availableModesForCapability(this.requireCapability())
   }
 
-  async diagnoseRuntime(): Promise<RuntimeDiagnostics> {
-    const provider = await this.getProvider()
-    const diagnostics = await provider.diagnose(this.buildContext())
+  async diagnoseRuntime(profile?: AiRuntimeProfile | null): Promise<RuntimeDiagnostics> {
+    const provider = await this.getProvider(this.getProfileModeOverride(profile))
+    const diagnostics = await provider.diagnose(this.buildContext(this.getProfileModeOverride(profile), profile))
+    const profileIssue = this.getRuntimeProfileIssue(profile)
     return {
       ...diagnostics,
+      supported: profileIssue ? false : diagnostics.supported,
       availableModes: this.getAvailableModes(),
+      issues: profileIssue && !diagnostics.issues.includes(profileIssue)
+        ? [...diagnostics.issues, profileIssue]
+        : diagnostics.issues,
     }
   }
 
@@ -74,9 +81,16 @@ export class AiEnvironmentController {
     projectId: string
     projectPath: string
     cli: 'claude' | 'codex'
+    profile?: AiRuntimeProfile
   }): Promise<RuntimeLaunchPlan> {
-    const provider = await this.getProvider()
-    return provider.resolveRuntimeLaunch(this.buildContext(), input)
+    const profileIssue = this.getRuntimeProfileIssue(input.profile)
+    if (profileIssue) throw new Error(profileIssue)
+    const modeOverride = this.getProfileModeOverride(input.profile)
+    const provider = await this.getProvider(modeOverride)
+    return provider.resolveRuntimeLaunch(this.buildContext(modeOverride, input.profile), {
+      ...input,
+      cli: getAiRuntimeProfileCli(input.profile, input.cli),
+    })
   }
 
   async resolveAiCommitLaunch(input: {
@@ -141,8 +155,8 @@ export class AiEnvironmentController {
     return this.getProvider()
   }
 
-  private async getProvider(): Promise<AiExecutionProvider> {
-    const context = this.buildContext()
+  private async getProvider(modeOverride?: AiExecutionMode): Promise<AiExecutionProvider> {
+    const context = this.buildContext(modeOverride)
     const preferredMode = context.config.mode
     const provider = PROVIDERS.find((item) => item.mode === preferredMode)
     if (provider && await provider.isSupported(context)) {
@@ -156,13 +170,28 @@ export class AiEnvironmentController {
     return disabledProvider
   }
 
-  private buildContext(): ProviderContext {
+  private buildContext(modeOverride?: AiExecutionMode, runtimeProfile?: AiRuntimeProfile | null): ProviderContext {
     const capability = this.requireCapability()
+    const config = this.getEnvironmentConfig()
     return {
       capability,
-      config: this.getEnvironmentConfig(),
+      config: modeOverride ? { ...config, mode: modeOverride } : config,
       aiCommitConfig: normalizeAiCommitConfig(this.getConfig().aiCommit),
+      runtimeProfile: runtimeProfile ?? undefined,
     }
+  }
+
+  private getProfileModeOverride(profile?: AiRuntimeProfile | null): AiExecutionMode | undefined {
+    const mode = profile?.mode
+    if (!mode || mode === 'inherit') return undefined
+    return mode
+  }
+
+  private getRuntimeProfileIssue(profile?: AiRuntimeProfile | null): string | null {
+    if (profile?.kind === 'custom' && !profile.command?.trim()) {
+      return `Runtime profile command is not configured: ${profile.name}`
+    }
+    return null
   }
 
   private requireCapability(): Capability {

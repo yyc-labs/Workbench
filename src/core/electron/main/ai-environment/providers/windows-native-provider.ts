@@ -8,6 +8,12 @@ import {
   resolveWindowsPowerShell,
 } from '../../shell/windows-shell'
 import type { AiExecutionProvider } from '../provider-types'
+import {
+  buildProfileAwareSessionName,
+  buildProfileCommandLine,
+  buildRuntimeProfileEnv,
+  quoteWindowsShellArg,
+} from '../runtime-profile-launch'
 
 function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
   return cli === 'codex' ? 'codex' : 'claude'
@@ -43,9 +49,25 @@ export const windowsNativeProvider: AiExecutionProvider = {
 
   async resolveRuntimeLaunch(context, input) {
     const hostProjectPath = normalizeWindowsHostPath(input.projectPath, context.capability.wslDistro)
-    const sessionName = buildRuntimeSessionName(input.projectPath, input.cli)
-    const runtimeCommand = input.cli === 'codex' ? 'codex' : 'claude'
-    const title = input.cli === 'codex' ? 'Codex Runtime' : 'Claude Runtime'
+    const sessionName = buildProfileAwareSessionName(
+      input.projectPath,
+      input.profile,
+      input.cli,
+      buildRuntimeSessionName,
+      hostProjectPath,
+    )
+    const runtimeCommand = buildProfileCommandLine(input.profile, input.cli, hostProjectPath, quoteWindowsShellArg)
+    const title = input.profile?.name?.trim()
+      ? `${input.profile.name.trim()} Runtime`
+      : input.cli === 'codex' ? 'Codex Runtime' : 'Claude Runtime'
+    const launchEnv = buildRuntimeProfileEnv({
+      profile: input.profile,
+      fallbackCli: input.cli,
+      projectPath: input.projectPath,
+      resolvedProjectPath: hostProjectPath,
+      sessionName,
+      commandLine: runtimeCommand,
+    })
     const terminalLaunch = buildWindowsTerminalShellLaunch(runtimeCommand, {
       preferredShell: context.config.shell,
     })
@@ -69,6 +91,7 @@ export const windowsNativeProvider: AiExecutionProvider = {
       detached: false,
       windowsHide: true,
       shell: false,
+      env: launchEnv,
       openStrategy: 'not-supported',
       stopStrategy: 'not-supported',
     }

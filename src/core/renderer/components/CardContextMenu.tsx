@@ -1,6 +1,8 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  Check,
+  ChevronRight,
   Play,
   Square,
   Terminal,
@@ -12,7 +14,8 @@ import {
   Pin,
   Trash2,
 } from 'lucide-react'
-import type { CliTool } from '../../shared/types'
+import type { AiRuntimeProfile, CliTool } from '../../shared/types'
+import { getAiRuntimeProfileCli, getAiRuntimeProfileLabel } from '../../shared/aiRuntimeProfiles'
 import { useI18n } from '../i18n'
 
 interface CardContextMenuProps {
@@ -27,11 +30,18 @@ interface CardContextMenuProps {
   isStartingRuntime: boolean
   isStoppingRuntime: boolean
   currentCli: CliTool
+  defaultRuntimeProfileLabel?: string
+  defaultRuntimeProfileCli?: CliTool
+  isUsingDefaultAiRuntimeProfile?: boolean
+  currentRuntimeProfileLabel?: string
+  currentRuntimeProfileId?: string
+  aiRuntimeProfiles?: AiRuntimeProfile[]
   isPinned?: boolean
   onStartRuntime: () => void | Promise<unknown>
   onStopRuntime: () => void | Promise<unknown>
   onOpenTerminal: () => void | Promise<unknown>
   onSwitchCli: () => void | Promise<unknown>
+  onSelectAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
   onStartProject: () => void | Promise<unknown>
   onStopProject: () => void | Promise<unknown>
   onAiAutoCommit?: () => void | Promise<unknown>
@@ -47,6 +57,7 @@ interface CardContextMenuProps {
 type MenuTone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
 
 interface MenuAction {
+  key: string
   label: string
   caption?: string
   icon: React.ReactNode
@@ -54,6 +65,24 @@ interface MenuAction {
   action: () => void | Promise<unknown>
   disabled?: boolean
   tone?: MenuTone
+}
+
+interface AiProfileSubmenuLayout {
+  top: number
+  left: number
+  width: number
+  maxHeight: number
+}
+
+const AI_PROFILE_SUBMENU_WIDTH = 232
+const AI_PROFILE_SUBMENU_MAX_HEIGHT = 280
+const AI_PROFILE_SUBMENU_MIN_HEIGHT = 96
+const AI_PROFILE_SUBMENU_GAP = 8
+
+function clamp(value: number, min: number, max: number): number {
+  if (value < min) return min
+  if (value > max) return max
+  return value
 }
 
 function getIconToneClass(tone: MenuTone = 'default') {
@@ -126,6 +155,70 @@ function getClampedMenuPosition({
   return { menuLeft, menuTop, opensUpward }
 }
 
+function getClampedAiProfileSubmenuPosition({
+  triggerRect,
+  viewportPadding,
+  gap,
+}: {
+  triggerRect: DOMRect
+  viewportPadding: number
+  gap: number
+}): AiProfileSubmenuLayout {
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const width = Math.min(
+    AI_PROFILE_SUBMENU_WIDTH,
+    Math.max(180, viewportWidth - viewportPadding * 2)
+  )
+  const usableHeight = Math.max(64, viewportHeight - viewportPadding * 2)
+  const minHeight = Math.min(AI_PROFILE_SUBMENU_MIN_HEIGHT, usableHeight)
+  const sideMaxHeight = Math.min(AI_PROFILE_SUBMENU_MAX_HEIGHT, usableHeight)
+  const rightLeft = triggerRect.right + gap
+  const leftLeft = triggerRect.left - width - gap
+  const canOpenRight = rightLeft + width <= viewportWidth - viewportPadding
+  const canOpenLeft = leftLeft >= viewportPadding
+
+  if (canOpenRight || canOpenLeft) {
+    return {
+      left: canOpenRight ? rightLeft : leftLeft,
+      top: clamp(
+        triggerRect.top,
+        viewportPadding,
+        Math.max(viewportPadding, viewportHeight - viewportPadding - sideMaxHeight)
+      ),
+      width,
+      maxHeight: sideMaxHeight,
+    }
+  }
+
+  const availableBelow = viewportHeight - triggerRect.bottom - gap - viewportPadding
+  const availableAbove = triggerRect.top - gap - viewportPadding
+  const opensBelow = availableBelow >= minHeight || availableBelow >= availableAbove
+  const availableHeight = opensBelow ? availableBelow : availableAbove
+  const maxHeight = Math.min(
+    AI_PROFILE_SUBMENU_MAX_HEIGHT,
+    Math.max(minHeight, availableHeight)
+  )
+  const preferredTop = opensBelow
+    ? triggerRect.bottom + gap
+    : triggerRect.top - gap - maxHeight
+
+  return {
+    left: clamp(
+      triggerRect.left,
+      viewportPadding,
+      Math.max(viewportPadding, viewportWidth - viewportPadding - width)
+    ),
+    top: clamp(
+      preferredTop,
+      viewportPadding,
+      Math.max(viewportPadding, viewportHeight - viewportPadding - maxHeight)
+    ),
+    width,
+    maxHeight,
+  }
+}
+
 export function CardContextMenu({
   x,
   y,
@@ -138,11 +231,18 @@ export function CardContextMenu({
   isStartingRuntime,
   isStoppingRuntime,
   currentCli,
+  defaultRuntimeProfileLabel,
+  defaultRuntimeProfileCli,
+  isUsingDefaultAiRuntimeProfile = false,
+  currentRuntimeProfileLabel,
+  currentRuntimeProfileId,
+  aiRuntimeProfiles = [],
   isPinned,
   onStartRuntime,
   onStopRuntime,
   onOpenTerminal,
   onSwitchCli,
+  onSelectAiRuntimeProfile,
   onStartProject,
   onStopProject,
   onAiAutoCommit,
@@ -156,6 +256,11 @@ export function CardContextMenu({
 }: CardContextMenuProps) {
   const { t } = useI18n()
   const [actionError, setActionError] = useState<string | null>(null)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [profileSubmenuLayout, setProfileSubmenuLayout] = useState<AiProfileSubmenuLayout | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const profileMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const profileSubmenuRef = useRef<HTMLDivElement | null>(null)
 
   const handleClick = useCallback(
     async (action: () => void | Promise<unknown>) => {
@@ -180,7 +285,19 @@ export function CardContextMenu({
   }, [onClose])
 
   useEffect(() => {
-    const onPointerDown = () => onClose()
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (
+        target instanceof Node
+        && (
+          menuRef.current?.contains(target)
+          || profileSubmenuRef.current?.contains(target)
+        )
+      ) {
+        return
+      }
+      onClose()
+    }
     const timer = window.setTimeout(() => {
       document.addEventListener('pointerdown', onPointerDown)
     }, 0)
@@ -190,16 +307,72 @@ export function CardContextMenu({
     }
   }, [onClose])
 
-  const cliLabel = currentCli === 'codex' ? 'Codex' : 'Claude'
+  const cliLabel = currentRuntimeProfileLabel || (currentCli === 'codex' ? 'Codex' : 'Claude')
   const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} ${t('common.runtime')} · ${t('common.active')}` : `${t('common.runtime')} · ${t('common.offline')}`
   const devStatusLabel = isDevStopping ? `${t('common.dev')} ${t('common.stopping')}` : isDevRunning ? `${t('common.dev')} ${t('common.running')}` : `${t('common.dev')} ${t('common.offline')}`
   const runtimeActionLabel = usesTmuxRuntime ? t('common.runtimeTerminal') : t('common.runtimeLaunch')
   const runtimeActionCaption = isRuntimeActive
     ? (isOpeningTerminal ? t('common.opening') : (usesTmuxRuntime ? t('common.openSession') : t('common.openTerminalLaunch')))
     : t('common.connectAiRuntime')
+  const canChooseAiRuntimeProfile = Boolean(onSelectAiRuntimeProfile && aiRuntimeProfiles.length > 0)
+  const updateProfileSubmenuLayout = useCallback(() => {
+    const trigger = profileMenuTriggerRef.current
+    if (!trigger) {
+      setProfileSubmenuLayout(null)
+      return
+    }
+
+    setProfileSubmenuLayout(getClampedAiProfileSubmenuPosition({
+      triggerRect: trigger.getBoundingClientRect(),
+      viewportPadding: 10,
+      gap: AI_PROFILE_SUBMENU_GAP,
+    }))
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!profileMenuOpen || !canChooseAiRuntimeProfile) {
+      setProfileSubmenuLayout(null)
+      return
+    }
+
+    updateProfileSubmenuLayout()
+    const frame = window.requestAnimationFrame(() => {
+      updateProfileSubmenuLayout()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [canChooseAiRuntimeProfile, profileMenuOpen, updateProfileSubmenuLayout])
+
+  useEffect(() => {
+    if (!profileMenuOpen || !canChooseAiRuntimeProfile) return
+
+    const handleLayout = () => {
+      updateProfileSubmenuLayout()
+    }
+    let observer: ResizeObserver | null = null
+
+    if (typeof ResizeObserver !== 'undefined' && profileMenuTriggerRef.current) {
+      observer = new ResizeObserver(handleLayout)
+      observer.observe(profileMenuTriggerRef.current)
+    }
+
+    window.addEventListener('resize', handleLayout)
+    window.addEventListener('scroll', handleLayout, true)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', handleLayout)
+      window.removeEventListener('scroll', handleLayout, true)
+    }
+  }, [canChooseAiRuntimeProfile, profileMenuOpen, updateProfileSubmenuLayout])
+
+  const profileSubmenuMaxHeight = profileSubmenuLayout?.maxHeight ?? AI_PROFILE_SUBMENU_MAX_HEIGHT
+  const profileSubmenuListMaxHeight = Math.max(48, profileSubmenuMaxHeight - 38)
 
   const primaryActionItems: MenuAction[] = [
     {
+      key: 'runtime',
       label: isStartingRuntime
         ? `${t('common.run')} ${cliLabel}`
         : isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
@@ -218,6 +391,7 @@ export function CardContextMenu({
       tone: 'primary',
     },
     {
+      key: 'dev',
       label: isDevStopping ? t('common.stopping') : isDevRunning ? t('common.stopProject') : t('common.startProject'),
       caption: isDevStopping ? t('common.waitForExit') : isDevRunning ? t('common.terminateDevProcess') : t('common.runDevService'),
       icon: isDevStopping
@@ -230,6 +404,7 @@ export function CardContextMenu({
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
     },
     {
+      key: 'ai-commit',
       label: aiCommitStatus === 'running' ? `AI ${t('common.stopping')}` : t('common.aiAutoCommit'),
       caption: t('common.defaultParams'),
       icon: aiCommitStatus === 'running'
@@ -245,6 +420,7 @@ export function CardContextMenu({
 
   const openActions: MenuAction[] = [
     {
+      key: 'folder',
       label: t('common.folder'),
       caption: t('common.browse'),
       icon: <FolderOpen className="h-4 w-4" />,
@@ -252,6 +428,7 @@ export function CardContextMenu({
       tone: 'default',
     },
     {
+      key: 'terminal',
       label: t('common.terminal'),
       caption: t('common.currentPath'),
       icon: <Terminal className="h-4 w-4" />,
@@ -259,6 +436,7 @@ export function CardContextMenu({
       tone: 'primary',
     },
     {
+      key: 'vscode',
       label: 'VS Code',
       caption: t('common.edit'),
       icon: <Code2 className="h-4 w-4" />,
@@ -269,12 +447,14 @@ export function CardContextMenu({
 
   const utilityActionItems: MenuAction[] = [
     {
-      label: currentCli === 'codex' ? t('common.switchToClaude') : t('common.switchToCodex'),
+      key: 'ai-profile',
+      label: t('common.switchAiProfile'),
       icon: <Bot className="h-3.5 w-3.5" />,
       action: onSwitchCli,
       tone: 'primary',
     },
     {
+      key: 'pin',
       label: isPinned ? t('common.unpinProject') : t('common.pinProject'),
       icon: <Pin className="h-3.5 w-3.5" />,
       show: Boolean(onTogglePin),
@@ -282,6 +462,7 @@ export function CardContextMenu({
       tone: isPinned ? 'warning' : 'default',
     },
     {
+      key: 'metadata',
       label: t('common.classificationTags'),
       icon: <FolderOpen className="h-3.5 w-3.5" />,
       show: Boolean(onEditMetadata),
@@ -293,6 +474,7 @@ export function CardContextMenu({
 
   const dangerActionItems: MenuAction[] = [
     {
+      key: 'stop-runtime',
       label: isStoppingRuntime ? t('common.stopping') : t('common.stopRuntime'),
       icon: isStoppingRuntime
         ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -303,6 +485,7 @@ export function CardContextMenu({
       tone: 'danger',
     },
     {
+      key: 'remove-project',
       label: t('common.removeProject'),
       icon: <Trash2 className="h-3.5 w-3.5" />,
       show: Boolean(onRemoveProject),
@@ -346,24 +529,117 @@ export function CardContextMenu({
     </div>
   )
 
-  return createPortal(
+  const profileSubmenu = profileMenuOpen && canChooseAiRuntimeProfile ? (
     <div
-      className="fixed z-[9998] rounded-[24px] p-2"
+      ref={profileSubmenuRef}
+      role="menu"
+      className="fixed z-[10020] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
       style={{
-        top: menuTop,
-        left: menuLeft,
-        width: menuWidth,
-        background:
-          'linear-gradient(180deg, color-mix(in srgb, var(--color-popover) 96%, var(--color-primary) 4%) 0%, var(--color-popover) 100%)',
-        border: '1px solid var(--color-border)',
-        backdropFilter: 'saturate(132%) blur(10px)',
-        WebkitBackdropFilter: 'saturate(132%) blur(10px)',
-        boxShadow: 'var(--shadow-popover)',
+        top: profileSubmenuLayout?.top ?? 0,
+        left: profileSubmenuLayout?.left ?? 0,
+        width: profileSubmenuLayout?.width ?? AI_PROFILE_SUBMENU_WIDTH,
+        maxHeight: profileSubmenuMaxHeight,
+        visibility: profileSubmenuLayout ? 'visible' : 'hidden',
+        WebkitBackdropFilter: 'saturate(160%) blur(18px)',
       }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
     >
+      <div className="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+        {t('common.switchAiProfile')}
+      </div>
+      <div className="overflow-auto" style={{ maxHeight: profileSubmenuListMaxHeight }}>
+        <button
+          type="button"
+          role="menuitemradio"
+          aria-checked={isUsingDefaultAiRuntimeProfile}
+          className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${
+            isUsingDefaultAiRuntimeProfile
+              ? 'bg-primary/10 text-primary'
+              : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+          }`}
+          onClick={() => {
+            void handleClick(async () => {
+              await onSelectAiRuntimeProfile?.('')
+            })
+          }}
+        >
+          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">
+            {(defaultRuntimeProfileCli ?? currentCli) === 'codex'
+              ? <Terminal className="h-3.5 w-3.5" />
+              : <Bot className="h-3.5 w-3.5" />}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">
+              {t('common.default')} · {defaultRuntimeProfileLabel ?? currentRuntimeProfileLabel ?? currentCli}
+            </span>
+            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
+              {t('settingsRuntime.activeRuntimeProfile')}
+            </span>
+          </span>
+          {isUsingDefaultAiRuntimeProfile ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+        </button>
+        {aiRuntimeProfiles.map((profile) => {
+          const selected = !isUsingDefaultAiRuntimeProfile && profile.id === currentRuntimeProfileId
+          const profileCli = getAiRuntimeProfileCli(profile, currentCli)
+
+          return (
+            <button
+              key={profile.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={selected}
+              className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${
+                selected
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+              }`}
+              onClick={() => {
+                void handleClick(async () => {
+                  await onSelectAiRuntimeProfile?.(profile.id)
+                })
+              }}
+            >
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">
+                {profileCli === 'codex' ? <Terminal className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">
+                  {getAiRuntimeProfileLabel(profile, currentCli)}
+                </span>
+                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
+                  {profile.kind === 'custom' ? profile.command || profileCli : profileCli}
+                </span>
+              </span>
+              {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  ) : null
+
+  return createPortal(
+    <>
+      <div
+        ref={menuRef}
+        className="fixed z-[9998] rounded-[24px] p-2"
+        style={{
+          top: menuTop,
+          left: menuLeft,
+          width: menuWidth,
+          background:
+            'linear-gradient(180deg, color-mix(in srgb, var(--color-popover) 96%, var(--color-primary) 4%) 0%, var(--color-popover) 100%)',
+          border: '1px solid var(--color-border)',
+          backdropFilter: 'saturate(132%) blur(10px)',
+          WebkitBackdropFilter: 'saturate(132%) blur(10px)',
+          boxShadow: 'var(--shadow-popover)',
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => e.preventDefault()}
+      >
       {actionError && (
         <div
           className="mb-2 rounded-[16px] border px-3 py-2 text-xs whitespace-pre-line"
@@ -480,21 +756,40 @@ export function CardContextMenu({
           className="mt-2 grid gap-1.5"
           style={{ gridTemplateColumns: `repeat(${utilityActions.length}, minmax(0, 1fr))` }}
         >
-          {utilityActions.map((item) => (
-            <button
-              key={item.label}
-              className="group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]/70 hover:text-[color:var(--color-foreground)]"
-              onClick={() => { void handleClick(item.action) }}
-            >
-              <span className={`shrink-0 ${getIconToneClass(item.tone)}`}>{item.icon}</span>
-              <span className="truncate">{item.label}</span>
-            </button>
-          ))}
+          {utilityActions.map((item) => {
+            const isAiProfileAction = item.key === 'ai-profile'
+
+            return (
+              <div key={item.key} className="relative min-w-0">
+                <button
+                  ref={isAiProfileAction ? profileMenuTriggerRef : undefined}
+                  className="group flex w-full min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]/70 hover:text-[color:var(--color-foreground)]"
+                  aria-haspopup={isAiProfileAction && canChooseAiRuntimeProfile ? 'menu' : undefined}
+                  aria-expanded={isAiProfileAction && canChooseAiRuntimeProfile ? profileMenuOpen : undefined}
+                  onClick={() => {
+                    if (isAiProfileAction && canChooseAiRuntimeProfile) {
+                      setProfileMenuOpen((current) => !current)
+                      return
+                    }
+                    void handleClick(item.action)
+                  }}
+                >
+                  <span className={`shrink-0 ${getIconToneClass(item.tone)}`}>{item.icon}</span>
+                  <span className="truncate">{item.label}</span>
+                  {isAiProfileAction && canChooseAiRuntimeProfile ? (
+                    <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${profileMenuOpen ? 'rotate-90' : ''}`} />
+                  ) : null}
+                </button>
+              </div>
+            )
+          })}
         </div>
       )}
 
       {!opensUpward && dangerActionsBlock && <div className="mt-2">{dangerActionsBlock}</div>}
-    </div>,
+      </div>
+      {profileSubmenu}
+    </>,
     document.body
   )
 }

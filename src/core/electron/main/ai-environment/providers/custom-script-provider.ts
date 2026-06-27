@@ -2,11 +2,19 @@ import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { homedir } from 'os'
 import { basename } from 'path'
-import type { AiExecutionMode, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
+import type { AiExecutionMode, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
 import { normalizeWindowsHostPath } from '../../host-path'
 import type { AiExecutionProvider } from '../provider-types'
 import { wslBridge } from '../../wsl-bridge'
 import { tmuxManager } from '../../tmux-manager'
+import { buildWindowsTerminalShellLaunch } from '../../shell/windows-shell'
+import {
+  buildEnvPrefix,
+  buildProfileAwareSessionName,
+  buildProfileCommandLine,
+  buildRuntimeProfileEnv,
+  quoteWindowsShellArg,
+} from '../runtime-profile-launch'
 
 function quoteBashSingle(input: string): string {
   return input.replace(/'/g, "'\\''")
@@ -152,6 +160,10 @@ function buildRuntimeScriptArgs(
   ]
 }
 
+function getCustomProfileCommand(profile?: AiRuntimeProfile | null): string {
+  return profile?.kind === 'custom' ? profile.command?.trim() || '' : ''
+}
+
 function buildBashWrappedExec(entrypoint: string, args: string[], env?: Record<string, string>): string {
   const envPrefix = env
     ? Object.entries(env)
@@ -241,6 +253,45 @@ function buildWslPwshCommand(
   ].join('\n')
 }
 
+function buildProfileTerminalCommand(
+  resolvedProjectPath: string,
+  launchEnv: Record<string, string>,
+  commandLine: string,
+): string {
+  return [
+    `cd '${quoteBashSingle(resolvedProjectPath)}'`,
+    `${buildEnvPrefix(launchEnv)} ${commandLine}; exec bash -i`,
+  ].join(' && ')
+}
+
+function quoteAppleScriptString(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function buildPosixTerminalProfileLaunch(
+  hostPlatform: 'linux' | 'macos',
+  command: string,
+): { startCommand: string; startArgs: string[] } {
+  if (hostPlatform === 'macos') {
+    const bashCommand = `bash -ilc '${quoteBashSingle(command)}'`
+    const appleScript = [
+      'tell application "Terminal"',
+      'activate',
+      `do script "${quoteAppleScriptString(bashCommand)}"`,
+      'end tell',
+    ]
+    return {
+      startCommand: 'osascript',
+      startArgs: appleScript.flatMap((line) => ['-e', line]),
+    }
+  }
+
+  return {
+    startCommand: 'x-terminal-emulator',
+    startArgs: ['-e', 'bash', '-ilc', command],
+  }
+}
+
 export const customScriptProvider: AiExecutionProvider = {
   mode: 'custom-script',
   label: 'Custom Script',
@@ -251,6 +302,38 @@ export const customScriptProvider: AiExecutionProvider = {
 
   async diagnose(context): Promise<RuntimeDiagnostics> {
     const issues: string[] = []
+    const profileCommand = getCustomProfileCommand(context.runtimeProfile)
+    if (context.runtimeProfile?.kind === 'custom' && !profileCommand) {
+      issues.push(`Runtime profile command is not configured: ${context.runtimeProfile.name}`)
+      return {
+        checkedAt: Date.now(),
+        mode: 'custom-script',
+        providerLabel: this.label,
+        runtimeEntrypoint: undefined,
+        supported: false,
+        hasWsl: context.capability.hasWsl,
+        hasTmux: context.capability.hasTmux,
+        shell: context.config.shell,
+        issues,
+      }
+    }
+    if (profileCommand) {
+      if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(profileCommand) && !context.capability.hasWsl) {
+        issues.push('WSL is required to run a POSIX custom runtime command on Windows')
+      }
+      return {
+        checkedAt: Date.now(),
+        mode: 'custom-script',
+        providerLabel: this.label,
+        runtimeEntrypoint: profileCommand,
+        supported: issues.length === 0,
+        hasWsl: context.capability.hasWsl,
+        hasTmux: context.capability.hasTmux,
+        shell: context.config.shell,
+        issues,
+      }
+    }
+
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
     const expandedEntrypoint = rawEntrypoint
       ? await resolveCustomEntrypoint(
@@ -315,15 +398,19 @@ export const customScriptProvider: AiExecutionProvider = {
   },
 
   async resolveRuntimeLaunch(context, input) {
+    const profileCommand = getCustomProfileCommand(input.profile)
+    if (input.profile?.kind === 'custom' && !profileCommand) {
+      throw new Error(`Runtime profile command is not configured: ${input.profile.name}`)
+    }
     const rawEntrypoint = context.config.runtimeEntrypoint?.trim()
-    const entrypoint = rawEntrypoint
+    const entrypoint = profileCommand || (rawEntrypoint
       ? await resolveCustomEntrypoint(
         rawEntrypoint,
         context.capability.hostPlatform,
         context.capability.hasWsl,
         context.capability.wslEnv?.HOME,
       )
-      : ''
+      : '')
     const targetEnvironment: 'host' | 'wsl' =
       context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)
         ? 'wsl'
@@ -334,16 +421,76 @@ export const customScriptProvider: AiExecutionProvider = {
       targetEnvironment,
       context.config.wslDistro || context.capability.wslDistro,
     )
-    const startArgs = buildRuntimeScriptArgs(
-      input,
+    const startArgs = profileCommand
+      ? []
+      : buildRuntimeScriptArgs(
+        input,
+        resolvedProjectPath,
+        Boolean(context.config.runtimePassProjectPath),
+      )
+    const commandLine = profileCommand
+      ? buildProfileCommandLine(
+        input.profile,
+        input.cli,
+        resolvedProjectPath,
+        context.capability.hostPlatform === 'windows' && targetEnvironment === 'host'
+          ? quoteWindowsShellArg
+          : undefined,
+      )
+      : buildBashWrappedExec(entrypoint, startArgs)
+    const sessionHint = buildProfileAwareSessionName(
+      input.projectPath,
+      input.profile,
+      input.cli,
+      buildSessionHint,
       resolvedProjectPath,
-      Boolean(context.config.runtimePassProjectPath),
     )
-    const launchEnv = buildRuntimeLaunchEnv(input, resolvedProjectPath)
-    const sessionHint = launchEnv.AI_RUNTIME_SESSION_NAME
+    const launchEnv = profileCommand
+      ? buildRuntimeProfileEnv({
+        profile: input.profile,
+        fallbackCli: input.cli,
+        projectPath: input.projectPath,
+        resolvedProjectPath,
+        sessionName: sessionHint,
+        commandLine,
+      })
+      : buildRuntimeLaunchEnv(input, resolvedProjectPath)
 
     if (!entrypoint) {
       throw new Error('Custom runtime entrypoint is not configured')
+    }
+
+    if (profileCommand && context.capability.hostPlatform === 'windows' && targetEnvironment === 'wsl') {
+      if (!context.capability.hasWsl) {
+        throw new Error('WSL is required to run a POSIX custom runtime command on Windows')
+      }
+      const title = `${input.profile?.name?.trim() || 'AI Runtime'} Runtime`
+      return {
+        mode: 'custom-script',
+        sessionName: sessionHint,
+        providerLabel: this.label,
+        supportsManagedSessions: false,
+        startCommand: 'cmd.exe',
+        startArgs: [
+          '/d',
+          '/c',
+          'start',
+          title,
+          'wsl.exe',
+          '-d',
+          context.config.wslDistro || context.capability.wslDistro || 'Ubuntu',
+          '--',
+          'bash',
+          '-ilc',
+          buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine),
+        ],
+        env: launchEnv,
+        shell: false,
+        windowsHide: true,
+        detached: false,
+        openStrategy: 'not-supported',
+        stopStrategy: 'not-supported',
+      }
     }
 
     if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)) {
@@ -373,6 +520,27 @@ export const customScriptProvider: AiExecutionProvider = {
       }
     }
 
+    if (profileCommand && (context.capability.hostPlatform === 'linux' || context.capability.hostPlatform === 'macos')) {
+      const terminalLaunch = buildPosixTerminalProfileLaunch(
+        context.capability.hostPlatform,
+        buildProfileTerminalCommand(resolvedProjectPath, launchEnv, commandLine),
+      )
+      return {
+        mode: 'custom-script',
+        sessionName: sessionHint,
+        providerLabel: this.label,
+        supportsManagedSessions: false,
+        startCommand: terminalLaunch.startCommand,
+        startArgs: terminalLaunch.startArgs,
+        cwd: resolvedProjectPath,
+        env: launchEnv,
+        shell: false,
+        detached: true,
+        openStrategy: 'not-supported',
+        stopStrategy: 'not-supported',
+      }
+    }
+
     if (context.capability.hostPlatform === 'linux' || context.capability.hostPlatform === 'macos') {
       return {
         mode: 'custom-script',
@@ -384,6 +552,35 @@ export const customScriptProvider: AiExecutionProvider = {
         env: launchEnv,
         shell: false,
         detached: true,
+        openStrategy: 'not-supported',
+        stopStrategy: 'not-supported',
+      }
+    }
+
+    if (profileCommand) {
+      const terminalLaunch = buildWindowsTerminalShellLaunch(commandLine, {
+        preferredShell: context.config.shell,
+      })
+      const title = `${input.profile?.name?.trim() || 'AI Runtime'} Runtime`
+      return {
+        mode: 'custom-script',
+        sessionName: sessionHint,
+        providerLabel: this.label,
+        supportsManagedSessions: false,
+        startCommand: 'cmd.exe',
+        startArgs: [
+          '/d',
+          '/c',
+          'start',
+          title,
+          terminalLaunch.shell.command,
+          ...terminalLaunch.args,
+        ],
+        cwd: resolvedProjectPath,
+        env: launchEnv,
+        shell: false,
+        windowsHide: true,
+        detached: false,
         openStrategy: 'not-supported',
         stopStrategy: 'not-supported',
       }

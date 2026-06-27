@@ -30,6 +30,13 @@ import {
 } from '../lib/projectPagePreload'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
+import {
+  defaultAiRuntimeProfiles,
+  getAiRuntimeProfileCli,
+  getAiRuntimeProfileLabel,
+  resolveAiRuntimeProfile,
+  resolveProjectAiRuntimeProfileId,
+} from '../../shared/aiRuntimeProfiles'
 
 const CodeWorkspacePanel = lazy(() =>
   loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel }))
@@ -95,6 +102,7 @@ export function DetailPage() {
       packageManager: found.packageManager,
       pinned: found.pinned,
       cli: found.cli,
+      aiRuntimeProfileId: found.aiRuntimeProfileId,
       docLinks: found.docLinks,
       folderId: found.folderId,
       tagIds: found.tagIds,
@@ -109,12 +117,15 @@ export function DetailPage() {
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
   const themeMode = useAppStore((s) => s.config.theme)
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
+  const aiRuntimeProfilesConfig = useAppStore((s) => s.config.aiRuntimeProfiles ?? [])
+  const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
@@ -140,7 +151,17 @@ export function DetailPage() {
   const isStopping = processStatus === 'stopping'
   const isActive = isRunning || isStopping
   const isDevReady = isRunning && processUrls.length > 0
-  const currentCli: CliTool = project?.cli || 'claude'
+  const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
+  const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
+  const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
+  const defaultRuntimeProfileCli: CliTool = getAiRuntimeProfileCli(defaultRuntimeProfile)
+  const hasProjectAiRuntimeOverride = Boolean(project?.aiRuntimeProfileId?.trim() || project?.cli)
+  const currentRuntimeProfileId = project
+    ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
+    : activeAiRuntimeProfileId
+  const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project?.cli)
+  const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project?.cli)
+  const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project?.cli)
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
@@ -204,10 +225,21 @@ export function DetailPage() {
   )
   const hasProjectDocLinks = docMenuItems.length > 0
 
+  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
+    if (!project) return
+    void setProjectAiRuntimeProfile(project.id, profileId)
+  }, [project, setProjectAiRuntimeProfile])
+
   const handleSwitchCli = useCallback(() => {
     if (!project) return
+    const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
+    const nextProfile = aiRuntimeProfiles[(currentIndex + 1 + aiRuntimeProfiles.length) % aiRuntimeProfiles.length]
+    if (nextProfile) {
+      void setProjectAiRuntimeProfile(project.id, nextProfile.id)
+      return
+    }
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
-  }, [project, currentCli, setProjectCli])
+  }, [project, aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, setProjectAiRuntimeProfile, setProjectCli])
 
   const handleOpenTerminal = useCallback(async () => {
     if (!projectId || isOpeningTerminal) return
@@ -544,11 +576,18 @@ export function DetailPage() {
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
+          defaultRuntimeProfileLabel={defaultRuntimeProfileLabel}
+          defaultRuntimeProfileCli={defaultRuntimeProfileCli}
+          isUsingDefaultAiRuntimeProfile={!hasProjectAiRuntimeOverride}
+          currentRuntimeProfileLabel={currentRuntimeProfileLabel}
+          currentRuntimeProfileId={currentRuntimeProfile.id}
+          aiRuntimeProfiles={aiRuntimeProfiles}
           isPinned={project.pinned}
           onStartRuntime={handleStartRuntime}
           onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
+          onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={() => {

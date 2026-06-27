@@ -1,5 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
+import type { AiRuntimeProfile } from '../../shared/types'
 
 export function createRuntimeInvokeApi() {
   return {
@@ -13,10 +14,15 @@ export function createRuntimeInvokeApi() {
 
     stopAllTerminalProcesses: () => ipcRenderer.invoke(IPC.TERMINAL_STOP_ALL),
 
-    startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') =>
-      ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, cli),
+    startRuntime: (
+      projectId: string,
+      projectPath: string,
+      profile?: AiRuntimeProfile | null,
+      cli?: 'claude' | 'codex',
+    ) => ipcRenderer.invoke(IPC.RUNTIME_START, projectId, projectPath, profile, cli),
 
-    getRuntimeDiagnostics: () => ipcRenderer.invoke(IPC.RUNTIME_DIAGNOSTICS),
+    getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) =>
+      ipcRenderer.invoke(IPC.RUNTIME_DIAGNOSTICS, profile),
 
     listRuntimeSessions: () => ipcRenderer.invoke(IPC.RUNTIME_LIST_SESSIONS),
 

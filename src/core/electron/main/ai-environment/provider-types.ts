@@ -2,6 +2,7 @@ import type {
   AiCommitConfig,
   AiEnvironmentConfig,
   AiExecutionMode,
+  AiRuntimeProfile,
   AiShell,
   Capability,
   CliTool,
@@ -40,6 +41,7 @@ export type ProviderContext = {
   capability: Capability
   config: AiEnvironmentConfig
   aiCommitConfig: AiCommitConfig
+  runtimeProfile?: AiRuntimeProfile
 }
 
 export interface AiExecutionProvider {
@@ -51,6 +53,7 @@ export interface AiExecutionProvider {
     projectId: string
     projectPath: string
     cli: CliTool
+    profile?: AiRuntimeProfile
   }): Promise<RuntimeLaunchPlan>
   resolveAiCommitLaunch(context: ProviderContext, input: {
     repoRoot: string

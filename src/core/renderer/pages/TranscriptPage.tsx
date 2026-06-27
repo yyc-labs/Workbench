@@ -54,6 +54,13 @@ import { transformMarkdownUrl } from './code/code.markdownUrls'
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
+import {
+  defaultAiRuntimeProfiles,
+  getAiRuntimeProfileCli,
+  getAiRuntimeProfileLabel,
+  resolveAiRuntimeProfile,
+  resolveProjectAiRuntimeProfileId,
+} from '../../shared/aiRuntimeProfiles'
 import { ManualTranscriptImportModal } from './transcript/ManualTranscriptImportModal'
 import { TranscriptShareModal } from './transcript/TranscriptShareModal'
 import { buildTranscriptShareSnapshot } from './transcript/transcriptShareSnapshot'
@@ -117,6 +124,7 @@ export function TranscriptPage() {
       packageManager: found.packageManager,
       pinned: found.pinned,
       cli: found.cli,
+      aiRuntimeProfileId: found.aiRuntimeProfileId,
       docLinks: found.docLinks,
       folderId: found.folderId,
       tagIds: found.tagIds,
@@ -130,6 +138,8 @@ export function TranscriptPage() {
   const runtimeSession = useAppStore((s) => (projectId ? s.sessions[projectId] : undefined))
   const runtimeEntry = useAppStore((s) => (projectId ? s.runtimeEntries[projectId] : undefined))
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
+  const aiRuntimeProfilesConfig = useAppStore((s) => s.config.aiRuntimeProfiles ?? [])
+  const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
   const {
     summaries,
     activeTranscriptId,
@@ -166,6 +176,7 @@ export function TranscriptPage() {
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
   const setProjectCli = useAppStore((s) => s.setProjectCli)
+  const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const assignProjectFolder = useAppStore((s) => s.assignProjectFolder)
   const setProjectTags = useAppStore((s) => s.setProjectTags)
   const setProjectCustomName = useAppStore((s) => s.setProjectCustomName)
@@ -310,7 +321,17 @@ export function TranscriptPage() {
   const isDevRunning = processStatus === 'running'
   const isDevStopping = processStatus === 'stopping'
   const isActive = isDevRunning || isDevStopping
-  const currentCli = project?.cli || 'claude'
+  const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
+  const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
+  const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
+  const defaultRuntimeProfileCli = getAiRuntimeProfileCli(defaultRuntimeProfile)
+  const hasProjectAiRuntimeOverride = Boolean(project?.aiRuntimeProfileId?.trim() || project?.cli)
+  const currentRuntimeProfileId = project
+    ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
+    : activeAiRuntimeProfileId
+  const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project?.cli)
+  const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project?.cli)
+  const currentCli = getAiRuntimeProfileCli(currentRuntimeProfile, project?.cli)
   const {
     isDevReady,
     pendingOpenDevUrl,
@@ -417,10 +438,21 @@ export function TranscriptPage() {
     }
   }, [isStoppingRuntime, project, stopRuntime])
 
+  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
+    if (!project) return
+    void setProjectAiRuntimeProfile(project.id, profileId)
+  }, [project, setProjectAiRuntimeProfile])
+
   const handleSwitchCli = useCallback(() => {
     if (!project) return
+    const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
+    const nextProfile = aiRuntimeProfiles[(currentIndex + 1 + aiRuntimeProfiles.length) % aiRuntimeProfiles.length]
+    if (nextProfile) {
+      void setProjectAiRuntimeProfile(project.id, nextProfile.id)
+      return
+    }
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
-  }, [currentCli, project, setProjectCli])
+  }, [aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, project, setProjectAiRuntimeProfile, setProjectCli])
 
   const handleAiAutoCommit = useCallback(async () => {
     if (!project || aiCommitStatus === 'running') return
@@ -883,11 +915,18 @@ export function TranscriptPage() {
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
           currentCli={currentCli}
+          defaultRuntimeProfileLabel={defaultRuntimeProfileLabel}
+          defaultRuntimeProfileCli={defaultRuntimeProfileCli}
+          isUsingDefaultAiRuntimeProfile={!hasProjectAiRuntimeOverride}
+          currentRuntimeProfileLabel={currentRuntimeProfileLabel}
+          currentRuntimeProfileId={currentRuntimeProfile.id}
+          aiRuntimeProfiles={aiRuntimeProfiles}
           isPinned={project.pinned}
           onStartRuntime={handleStartRuntime}
           onStopRuntime={handleStopRuntime}
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
+          onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={() => {

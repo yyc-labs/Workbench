@@ -8,6 +8,7 @@ import type {
   CodexSettingsSaveResult,
   CodexSettingsSnapshot,
   ClaudeRuntimeProfile,
+  AiRuntimeProfile,
   ProjectFileContentSearchResponse,
   ProjectFileContentSearchOptions,
   ProjectFileNode,
@@ -107,8 +108,13 @@ declare global {
       killTmuxSession: (sessionName: string) => Promise<boolean>
       listTerminalProcesses: () => Promise<TerminalProcessInventory>
       stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
-      startRuntime: (projectId: string, projectPath: string, cli?: 'claude' | 'codex') => Promise<boolean>
-      getRuntimeDiagnostics: () => Promise<RuntimeDiagnostics>
+      startRuntime: (
+        projectId: string,
+        projectPath: string,
+        profile?: AiRuntimeProfile | null,
+        cli?: 'claude' | 'codex'
+      ) => Promise<boolean>
+      getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
       listRuntimeSessions: () => Promise<RuntimeSessionInfo[]>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
       listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
@@ -269,6 +275,7 @@ export interface AppState {
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>
   setAiCommitConfig: (aiCommit: NonNullable<AppConfig['aiCommit']>) => Promise<void>
+  setAiRuntimeProfiles: (profiles: AiRuntimeProfile[], activeProfileId: string) => Promise<void>
   loadCodexSettings: () => Promise<CodexSettingsSnapshot>
   saveCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSnapshot>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
@@ -319,6 +326,7 @@ export interface AppState {
   setTranscriptMode: (sessionId: string, mode: TranscriptViewerMode) => void
   removeTranscriptSession: (projectId: string, transcriptId: string) => Promise<void>
   setProjectCli: (projectId: string, cli: 'claude' | 'codex') => Promise<void>
+  setProjectAiRuntimeProfile: (projectId: string, profileId: string) => Promise<void>
   setProjectCustomName: (projectId: string, customName?: string) => Promise<void>
   setProjectCustomType: (projectId: string, customType?: string) => Promise<void>
   setProjectCustomCommand: (projectId: string, customCommand?: string) => Promise<void>

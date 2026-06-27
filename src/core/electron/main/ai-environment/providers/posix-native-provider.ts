@@ -8,6 +8,13 @@ import type {
   RuntimeSessionInfo,
 } from '../../../../shared/types'
 import type { AiExecutionProvider, ProviderContext } from '../provider-types'
+import {
+  buildEnvPrefix,
+  buildProfileAwareSessionName,
+  buildProfileCommandLine,
+  buildRuntimeProfileEnv,
+  quoteBashSingle,
+} from '../runtime-profile-launch'
 
 function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
   return cli === 'codex' ? 'codex' : 'claude'
@@ -82,11 +89,25 @@ export const posixNativeProvider: AiExecutionProvider = {
 
   async resolveRuntimeLaunch(context, input) {
     const shell = shellExecutable(context)
-    const sessionName = buildRuntimeSessionName(input.projectPath, input.cli)
-    const runtimeCommand = input.cli === 'codex' ? 'codex' : 'claude'
+    const sessionName = buildProfileAwareSessionName(
+      input.projectPath,
+      input.profile,
+      input.cli,
+      buildRuntimeSessionName,
+    )
+    const commandLine = buildProfileCommandLine(input.profile, input.cli, input.projectPath)
+    const launchEnv = buildRuntimeProfileEnv({
+      profile: input.profile,
+      fallbackCli: input.cli,
+      projectPath: input.projectPath,
+      resolvedProjectPath: input.projectPath,
+      sessionName,
+      commandLine,
+    })
+    const envPrefix = buildEnvPrefix(launchEnv)
     const tmuxCommand = [
-      `cd '${input.projectPath.replace(/'/g, "'\\''")}'`,
-      `exec tmux new-session -A -s '${sessionName}' '${runtimeCommand}'`,
+      `cd '${quoteBashSingle(input.projectPath)}'`,
+      `exec tmux new-session -A -s '${sessionName}' '${quoteBashSingle(`${envPrefix} exec ${commandLine}`)}'`,
     ].join(' && ')
     return {
       mode: resolveMode(context),
@@ -98,6 +119,7 @@ export const posixNativeProvider: AiExecutionProvider = {
       cwd: input.projectPath,
       shell: false,
       detached: true,
+      env: launchEnv,
       openStrategy: 'posix-terminal-tmux',
       stopStrategy: 'tmux',
     }

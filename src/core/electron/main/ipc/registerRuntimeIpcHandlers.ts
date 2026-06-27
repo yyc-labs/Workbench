@@ -3,6 +3,7 @@ import { IPC } from '../ipc'
 import { tmuxManager } from '../tmux-manager'
 import { openSshTerminal, openTerminalAtPath } from '../shell/openers'
 import type {
+  AiRuntimeProfile,
   TerminalProcessInventory,
   TerminalStopAllResult,
 } from '../../../shared/types'
@@ -16,8 +17,14 @@ export function registerRuntimeIpcHandlers(
 ): void {
   ipcMain.handle(
     IPC.RUNTIME_START,
-    async (_event, projectId: string, projectPath: string, cli?: 'claude' | 'codex') => {
-      return deps.runtimeService.startRuntime(projectId, projectPath, cli)
+    async (
+      _event,
+      projectId: string,
+      projectPath: string,
+      profile?: AiRuntimeProfile | null,
+      cli?: 'claude' | 'codex',
+    ) => {
+      return deps.runtimeService.startRuntime(projectId, projectPath, profile, cli)
     }
   )
 
@@ -53,8 +60,8 @@ export function registerRuntimeIpcHandlers(
     return deps.runtimeService.listRuntimeSessions()
   })
 
-  ipcMain.handle(IPC.RUNTIME_DIAGNOSTICS, async () => {
-    return deps.runtimeService.diagnoseRuntime()
+  ipcMain.handle(IPC.RUNTIME_DIAGNOSTICS, async (_event, profile?: AiRuntimeProfile | null) => {
+    return deps.runtimeService.diagnoseRuntime(profile)
   })
 
   ipcMain.handle(IPC.WSL_GET_CAPABILITY, () => {

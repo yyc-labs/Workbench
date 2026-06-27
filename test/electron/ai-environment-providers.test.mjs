@@ -95,6 +95,238 @@ test('custom-script runtime launch passes project path and cli arg', async () =>
   assert.match(plan.startArgs[1], /exec '\/tmp\/start-runtime\.sh' '\/repo\/demo' '--cli' 'codex'/)
 })
 
+test('custom profile command opens a visible Linux terminal', async () => {
+  const profile = {
+    id: 'custom-local',
+    name: 'Local AI',
+    kind: 'custom',
+    mode: 'custom-script',
+    command: 'my-ai',
+    args: ['--profile', 'fast'],
+    env: {
+      AI_VENDOR: 'local',
+    },
+    passProjectPath: true,
+  }
+  const plan = await customScriptProvider.resolveRuntimeLaunch({
+    capability: {
+      hostPlatform: 'linux',
+      backend: 'direct-pty',
+      hasPty: true,
+      hasWsl: false,
+      hasTmux: true,
+      wslDistro: undefined,
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'custom-script',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  }, {
+    projectId: 'project-1',
+    projectPath: '/repo/demo',
+    cli: 'claude',
+    profile,
+  })
+
+  assert.equal(plan.startCommand, 'x-terminal-emulator')
+  assert.deepEqual(plan.startArgs.slice(0, 3), ['-e', 'bash', '-ilc'])
+  assert.match(plan.startArgs[3], /cd '\/repo\/demo'/)
+  assert.match(plan.startArgs[3], /AI_VENDOR='local'/)
+  assert.match(plan.startArgs[3], /my-ai '--profile' 'fast' '\/repo\/demo'; exec bash -i/)
+  assert.equal(plan.env?.AI_RUNTIME_PROFILE_ID, 'custom-local')
+  assert.equal(plan.env?.AI_RUNTIME_COMMAND, "my-ai '--profile' 'fast' '/repo/demo'")
+})
+
+test('custom profile command opens a visible Windows host terminal', async () => {
+  const profile = {
+    id: 'custom-windows',
+    name: 'Windows AI',
+    kind: 'custom',
+    mode: 'custom-script',
+    command: 'my-ai.exe',
+    args: ['--fast'],
+    env: {},
+    passProjectPath: false,
+  }
+  const plan = await customScriptProvider.resolveRuntimeLaunch({
+    capability: {
+      hostPlatform: 'windows',
+      backend: 'direct-pty',
+      hasPty: true,
+      hasWsl: false,
+      hasTmux: false,
+      wslDistro: undefined,
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'custom-script',
+      shell: 'cmd',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  }, {
+    projectId: 'project-1',
+    projectPath: '/mnt/d/work/demo',
+    cli: 'claude',
+    profile,
+  })
+
+  assert.equal(plan.startCommand, 'cmd.exe')
+  assert.deepEqual(plan.startArgs.slice(0, 4), ['/d', '/c', 'start', 'Windows AI Runtime'])
+  assert.equal(plan.startArgs[4], 'cmd.exe')
+  assert.deepEqual(plan.startArgs.slice(5), ['/d', '/k', 'my-ai.exe --fast'])
+  assert.equal(plan.cwd, 'D:\\work\\demo')
+})
+
+test('custom profile POSIX command opens a visible WSL terminal on Windows', async () => {
+  const profile = {
+    id: 'custom-wsl',
+    name: 'WSL AI',
+    kind: 'custom',
+    mode: 'custom-script',
+    command: '/home/ubuntu/bin/my-ai',
+    args: ['--fast'],
+    env: {},
+    passProjectPath: true,
+  }
+  const plan = await customScriptProvider.resolveRuntimeLaunch({
+    capability: {
+      hostPlatform: 'windows',
+      backend: 'wsl-pty',
+      hasPty: true,
+      hasWsl: true,
+      hasTmux: true,
+      wslDistro: 'Ubuntu',
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'custom-script',
+      wslDistro: 'Ubuntu',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  }, {
+    projectId: 'project-1',
+    projectPath: '/mnt/d/work/demo',
+    cli: 'claude',
+    profile,
+  })
+
+  assert.equal(plan.startCommand, 'cmd.exe')
+  assert.deepEqual(plan.startArgs.slice(0, 5), ['/d', '/c', 'start', 'WSL AI Runtime', 'wsl.exe'])
+  assert.deepEqual(plan.startArgs.slice(5, 11), ['-d', 'Ubuntu', '--', 'bash', '-ilc', plan.startArgs[10]])
+  assert.match(plan.startArgs[10], /cd '\/mnt\/d\/work\/demo'/)
+  assert.match(plan.startArgs[10], /\/home\/ubuntu\/bin\/my-ai '--fast' '\/mnt\/d\/work\/demo'; exec bash -i/)
+})
+
+test('custom profile command diagnostics do not require a script file check', async () => {
+  const diagnostics = await customScriptProvider.diagnose({
+    capability: {
+      hostPlatform: 'linux',
+      backend: 'direct-pty',
+      hasPty: true,
+      hasWsl: false,
+      hasTmux: false,
+      wslDistro: undefined,
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'custom-script',
+    },
+    runtimeProfile: {
+      id: 'custom-local',
+      name: 'Local AI',
+      kind: 'custom',
+      mode: 'custom-script',
+      command: 'my-ai',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  })
+
+  assert.equal(diagnostics.supported, true)
+  assert.equal(diagnostics.runtimeEntrypoint, 'my-ai')
+  assert.equal(diagnostics.launcherScript, undefined)
+  assert.equal(diagnostics.launcherScriptExists, undefined)
+  assert.equal(diagnostics.launcherScriptExecutable, undefined)
+})
+
+test('custom profile POSIX command diagnostics require WSL on Windows', async () => {
+  const diagnostics = await customScriptProvider.diagnose({
+    capability: {
+      hostPlatform: 'windows',
+      backend: 'direct-pty',
+      hasPty: true,
+      hasWsl: false,
+      hasTmux: false,
+      wslDistro: undefined,
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'custom-script',
+    },
+    runtimeProfile: {
+      id: 'custom-wsl',
+      name: 'WSL AI',
+      kind: 'custom',
+      mode: 'custom-script',
+      command: '/home/ubuntu/bin/my-ai',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  })
+
+  assert.equal(diagnostics.supported, false)
+  assert.deepEqual(diagnostics.issues, ['WSL is required to run a POSIX custom runtime command on Windows'])
+})
+
 test('custom-script diagnostics expand HOME through WSL when boot capability skipped env capture', async () => {
   const originalExec = wslBridge.exec
   wslBridge.exec = async (cmd) => {
@@ -236,6 +468,37 @@ test('windows-native runtime launch normalizes /mnt path to Windows host cwd', a
   } else {
     assert.deepEqual(plan.startArgs.slice(5), ['-NoLogo', '-NoExit', '-Command', 'codex'])
   }
+})
+
+test('windows-native diagnostics report configured AI Running shell preference', async () => {
+  const diagnostics = await windowsNativeProvider.diagnose({
+    capability: {
+      hostPlatform: 'windows',
+      backend: 'direct-pty',
+      hasPty: true,
+      hasWsl: false,
+      hasTmux: false,
+      wslDistro: undefined,
+      wslShell: 'bash',
+      wslEnv: undefined,
+    },
+    config: {
+      mode: 'windows-native',
+      shell: 'cmd',
+    },
+    aiCommitConfig: {
+      enabled: true,
+      apiBaseUrl: 'https://api.openai.com/v1',
+      apiKey: '',
+      model: 'gpt-4o-mini',
+      wslPwshPath: '/snap/bin/pwsh',
+      split: false,
+      splitMaxBatches: 4,
+      maxBullets: 8,
+    },
+  })
+
+  assert.equal(diagnostics.shell, 'cmd')
 })
 
 test('windows-native ai commit launch normalizes /mnt path to Windows host cwd', async () => {

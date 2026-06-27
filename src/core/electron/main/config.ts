@@ -5,6 +5,7 @@ import { join, dirname } from 'path'
 import type {
   AiCommitConfig,
   AiCommitProfile,
+  AiRuntimeProfile,
   AppConfig,
   ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
@@ -15,6 +16,11 @@ import type {
   CodexSettingsSnapshotMap,
 } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
+import {
+  defaultAiRuntimeProfileIdForCli,
+  defaultAiRuntimeProfiles,
+  isCliTool,
+} from '../../shared/aiRuntimeProfiles'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/projectDocLinks'
 import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
@@ -91,6 +97,8 @@ const DEFAULT_CONFIG: AppConfig = {
   docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
   startupDefaultFilter: undefined,
   aiEnvironment: undefined,
+  aiRuntimeProfiles: defaultAiRuntimeProfiles(),
+  activeAiRuntimeProfileId: defaultAiRuntimeProfileIdForCli('claude'),
   claudeRuntimeProfiles: [{
     id: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
     name: DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME,
@@ -103,6 +111,106 @@ const DEFAULT_CONFIG: AppConfig = {
   codexProviderApiKeys: {},
   codexSettingsSnapshots: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+}
+
+function normalizeAiRuntimeProfileKind(value: unknown): AiRuntimeProfile['kind'] {
+  return value === 'custom' ? 'custom' : 'native'
+}
+
+function normalizeAiRuntimeProfileMode(value: unknown): AiRuntimeProfile['mode'] {
+  if (
+    value === 'windows-wsl'
+    || value === 'windows-native'
+    || value === 'linux-native'
+    || value === 'macos-native'
+    || value === 'custom-script'
+    || value === 'disabled'
+    || value === 'inherit'
+  ) {
+    return value
+  }
+  return 'inherit'
+}
+
+function normalizeAiRuntimeProfileEnv(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([rawKey, rawValue]) => {
+        const key = rawKey.trim()
+        if (!key) return null
+        return [key, typeof rawValue === 'string' ? rawValue : String(rawValue ?? '')] as const
+      })
+      .filter((entry): entry is readonly [string, string] => Boolean(entry)),
+  )
+}
+
+function normalizeAiRuntimeProfileArgs(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim() : String(item ?? '').trim()))
+    .filter(Boolean)
+}
+
+function normalizeAiRuntimeProfiles(
+  profiles: AppConfig['aiRuntimeProfiles'] | unknown,
+  activeProfileId: unknown,
+): { profiles: AiRuntimeProfile[]; activeProfileId: string } {
+  const defaults = defaultAiRuntimeProfiles()
+  const normalizedInput = Array.isArray(profiles)
+    ? profiles
+      .map((item, index): AiRuntimeProfile | null => {
+        if (!item || typeof item !== 'object') return null
+        const raw = item as Partial<AiRuntimeProfile>
+        const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+        if (!id) return null
+        const kind = normalizeAiRuntimeProfileKind(raw.kind)
+        const cli = isCliTool(raw.cli) ? raw.cli : undefined
+        const fallback = defaults[index] ?? defaults[0]!
+        const command = typeof raw.command === 'string' ? raw.command.trim() : ''
+        const mode = normalizeAiRuntimeProfileMode(raw.mode)
+        return {
+          id,
+          name: typeof raw.name === 'string' && raw.name.trim()
+            ? raw.name.trim()
+            : fallback.name,
+          kind,
+          mode: kind === 'native' && mode === 'custom-script' ? 'inherit' : mode,
+          cli,
+          command: command || cli || (kind === 'native' ? fallback.command : ''),
+          args: kind === 'custom' ? normalizeAiRuntimeProfileArgs(raw.args) : [],
+          env: kind === 'custom' ? normalizeAiRuntimeProfileEnv(raw.env) : {},
+          passProjectPath: kind === 'custom'
+            ? typeof raw.passProjectPath === 'boolean'
+              ? raw.passProjectPath
+              : true
+            : false,
+        }
+      })
+      .filter((item): item is AiRuntimeProfile => Boolean(item))
+    : []
+
+  const merged: AiRuntimeProfile[] = []
+  const usedIds = new Set<string>()
+  for (const profile of [...defaults, ...normalizedInput]) {
+    if (usedIds.has(profile.id)) {
+      const existingIndex = merged.findIndex((item) => item.id === profile.id)
+      if (existingIndex >= 0) merged[existingIndex] = profile
+      continue
+    }
+    usedIds.add(profile.id)
+    merged.push(profile)
+  }
+
+  const requestedActiveProfileId = typeof activeProfileId === 'string' ? activeProfileId.trim() : ''
+  const active = merged.some((profile) => profile.id === requestedActiveProfileId)
+    ? requestedActiveProfileId
+    : defaultAiRuntimeProfileIdForCli('claude')
+
+  return {
+    profiles: merged,
+    activeProfileId: merged.some((profile) => profile.id === active) ? active : merged[0]!.id,
+  }
 }
 
 function normalizeAiCommitProfileSource(value: unknown): AiCommitProfile['source'] {
@@ -585,6 +693,10 @@ export function loadConfig(): AppConfig {
         const codeSession = normalizeCodeSession(project.codeSession)
         return {
           ...project,
+          cli: isCliTool(project.cli) ? project.cli : undefined,
+          aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim()
+            ? project.aiRuntimeProfileId.trim()
+            : undefined,
           codeFileDrawerState: hasDrawerState
             ? {
               favorites: Array.from(new Set(favorites)),
@@ -607,6 +719,10 @@ export function loadConfig(): AppConfig {
         const codeSession = normalizeCodeSession(project.codeSession)
         return {
           ...project,
+          cli: isCliTool(project.cli) ? project.cli : undefined,
+          aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim()
+            ? project.aiRuntimeProfileId.trim()
+            : undefined,
           removedAt: Number.isFinite(project.removedAt) ? Math.trunc(project.removedAt) : Date.now(),
           codeFileDrawerState: hasDrawerState
             ? {
@@ -641,6 +757,14 @@ export function loadConfig(): AppConfig {
     }
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
+      const runtimeProfiles = normalizeAiRuntimeProfiles(
+        parsed.aiRuntimeProfiles,
+        parsed.activeAiRuntimeProfileId
+      )
+      cachedConfig.aiRuntimeProfiles = runtimeProfiles.profiles
+      cachedConfig.activeAiRuntimeProfileId = runtimeProfiles.activeProfileId
+    }
+    {
       const runtimeProfiles = normalizeClaudeRuntimeProfiles(
         parsed.claudeRuntimeProfiles,
         parsed.activeClaudeRuntimeProfileId
@@ -652,12 +776,18 @@ export function loadConfig(): AppConfig {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
     }
   } catch {
+    const runtimeProfiles = normalizeAiRuntimeProfiles(
+      DEFAULT_CONFIG.aiRuntimeProfiles,
+      DEFAULT_CONFIG.activeAiRuntimeProfileId
+    )
     cachedConfig = {
       ...DEFAULT_CONFIG,
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
       codexProviderApiKeys: normalizeCodexProviderApiKeys(DEFAULT_CONFIG.codexProviderApiKeys),
       codexSettingsSnapshots: normalizeCodexSettingsSnapshots(DEFAULT_CONFIG.codexSettingsSnapshots),
       aiCommit: normalizeAiCommitConfig(DEFAULT_CONFIG.aiCommit),
+      aiRuntimeProfiles: runtimeProfiles.profiles,
+      activeAiRuntimeProfileId: runtimeProfiles.activeProfileId,
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
@@ -708,6 +838,16 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   )
   updated.claudeRuntimeProfiles = runtimeProfiles.profiles
   updated.activeClaudeRuntimeProfileId = runtimeProfiles.activeProfileId
+  const aiRuntimeProfiles = normalizeAiRuntimeProfiles(
+    Object.prototype.hasOwnProperty.call(partial, 'aiRuntimeProfiles')
+      ? partial.aiRuntimeProfiles
+      : current.aiRuntimeProfiles,
+    Object.prototype.hasOwnProperty.call(partial, 'activeAiRuntimeProfileId')
+      ? partial.activeAiRuntimeProfileId
+      : current.activeAiRuntimeProfileId
+  )
+  updated.aiRuntimeProfiles = aiRuntimeProfiles.profiles
+  updated.activeAiRuntimeProfileId = aiRuntimeProfiles.activeProfileId
   updated.aiEnvironment = normalizeAiEnvironmentConfig(updated)
   await saveConfig(updated)
   return updated

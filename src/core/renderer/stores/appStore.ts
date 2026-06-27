@@ -8,6 +8,7 @@ import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../lib/projectDocLinks'
+import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../../shared/aiRuntimeProfiles'
 
 export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   isAppReady: false,
@@ -25,6 +26,8 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     codexProviderApiKeys: {},
     codexSettingsSnapshots: {},
     docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
+    aiRuntimeProfiles: defaultAiRuntimeProfiles(),
+    activeAiRuntimeProfileId: defaultAiRuntimeProfileIdForCli('claude'),
   },
   searchQuery: '',
   homeEnvFilter: 'all',

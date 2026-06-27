@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import type { ClaudeRuntimeProfile, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption } from '../../shared/types'
+import type { AiRuntimeProfile, ClaudeRuntimeProfile, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
 
 const RUNTIME_MODE_SWITCH_COOLDOWN_MS = 1200
@@ -13,6 +13,7 @@ export type SettingsActionsSlice = Pick<
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
   | 'setAiCommitConfig'
+  | 'setAiRuntimeProfiles'
   | 'loadCodexSettings'
   | 'saveCodexSettings'
   | 'setAgentHookConfig'
@@ -88,6 +89,20 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         aiCommit: updated.aiCommit,
+      },
+    }))
+  },
+
+  setAiRuntimeProfiles: async (profiles: AiRuntimeProfile[], activeProfileId: string) => {
+    const updated = await window.electronAPI.setConfig({
+      aiRuntimeProfiles: profiles,
+      activeAiRuntimeProfileId: activeProfileId,
+    })
+    set((state) => ({
+      config: {
+        ...state.config,
+        aiRuntimeProfiles: updated.aiRuntimeProfiles,
+        activeAiRuntimeProfileId: updated.activeAiRuntimeProfileId,
       },
     }))
   },

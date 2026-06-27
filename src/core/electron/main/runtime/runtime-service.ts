@@ -13,6 +13,7 @@ import { tmuxManager } from '../tmux-manager'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
 import type {
   Capability,
+  AiRuntimeProfile,
   RuntimeDiagnostics,
   RuntimeSessionInfo,
   TerminalProcessInventory,
@@ -139,16 +140,17 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
   const getCapability = () => deps.getCapability()
   const getProcessManager = () => deps.getProcessManager()
 
-  async function diagnoseRuntime(): Promise<RuntimeDiagnostics> {
-    return deps.aiEnvironmentController.diagnoseRuntime()
+  async function diagnoseRuntime(profile?: AiRuntimeProfile | null): Promise<RuntimeDiagnostics> {
+    return deps.aiEnvironmentController.diagnoseRuntime(profile)
   }
 
   async function startRuntime(
     projectId: string,
     projectPath: string,
+    profile?: AiRuntimeProfile | null,
     cli?: 'claude' | 'codex'
   ): Promise<boolean> {
-    const diagnostics = await diagnoseRuntime()
+    const diagnostics = await diagnoseRuntime(profile)
     if (diagnostics.issues.length > 0 && diagnostics.mode !== 'windows-native') {
       console.error('[runtime:start] diagnostics failed:', diagnostics.issues.join(' | '))
       return false
@@ -158,6 +160,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
       projectId,
       projectPath,
       cli: cli === 'codex' ? 'codex' : 'claude',
+      profile: profile ?? undefined,
     })
 
     return new Promise<boolean>((resolve) => {
@@ -184,6 +187,8 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
             createdAt: startedAt,
             lastOpened: startedAt,
             mode: plan.mode,
+            profileId: profile?.id,
+            profileName: profile?.name,
             pid: child.pid ?? null,
             pidStartedAt: child.pid != null ? startedAt : null,
           })
