@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Clock3 } from 'lucide-react'
+import { Clock3, Map } from 'lucide-react'
 import { RecentProjectsDrawer } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { useI18n } from '../i18n'
@@ -297,15 +297,26 @@ function GlobalRecentProjectsDrawerHost() {
 
   return (
     <>
-      <button
-        type="button"
-        className="fixed bottom-5 right-5 z-[91] quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-        onClick={() => setOpen(true)}
-        title={`${t('common.recentProjects')} (${t('common.recentProjectsHint')})`}
-      >
-        <Clock3 className="h-3.5 w-3.5" />
-        {t('common.recentProjects')}
-      </button>
+      <div className="fixed bottom-5 right-5 z-[91] flex items-center gap-2">
+        <button
+          type="button"
+          className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+          onClick={() => window.dispatchEvent(new CustomEvent('app:open-route-catalog'))}
+          title={`${t('common.routeCatalog.title')} (${t('common.routeCatalog.shortcutHint')})`}
+        >
+          <Map className="h-3.5 w-3.5" />
+          {t('common.routeCatalog.title')}
+        </button>
+        <button
+          type="button"
+          className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+          onClick={() => setOpen(true)}
+          title={`${t('common.recentProjects')} (${t('common.recentProjectsHint')})`}
+        >
+          <Clock3 className="h-3.5 w-3.5" />
+          {t('common.recentProjects')}
+        </button>
+      </div>
 
       <RecentProjectsDrawer
         open={open}

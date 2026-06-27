@@ -475,6 +475,14 @@ export function RouteCatalogDialogHost() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    const onOpenRouteCatalog = () => setOpen(true)
+    window.addEventListener('app:open-route-catalog', onOpenRouteCatalog as EventListener)
+    return () => {
+      window.removeEventListener('app:open-route-catalog', onOpenRouteCatalog as EventListener)
+    }
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const isRouteCatalogShortcut =
         (event.metaKey || event.ctrlKey) &&

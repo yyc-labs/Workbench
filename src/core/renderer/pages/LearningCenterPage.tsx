@@ -1,37 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent as ReactChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type SyntheticEvent as ReactSyntheticEvent,
+} from 'react'
 import { useNavigate } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import {
-  ArrowLeft,
-  BookOpenText,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
-  FolderPlus,
-  NotebookPen,
-  Plus,
-  Save,
-  Search,
-  Tags,
-  Trash2,
-  X,
-} from 'lucide-react'
 import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
-import { ModalShell } from '../components/ModalShell'
-import { Button } from '../components/ui/button'
-import { Card } from '../components/ui/card'
-import { Combobox, type ComboboxOption } from '../components/ui/combobox'
-import { Input } from '../components/ui/input'
-import { ScrollArea } from '../components/ui/scroll-area'
-import { Select, type SelectOption } from '../components/ui/select'
-import { useI18n } from '../i18n'
-import {
-  createMarkdownComponents,
-  shouldDisableMarkdownSyntaxHighlight,
-} from './code/code.markdown'
-import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
+import { LearningCenterHeader } from './learning/LearningCenterHeader'
+import { LearningDeleteNoteDialog } from './learning/LearningDeleteNoteDialog'
+import { LearningEditorPanel } from './learning/LearningEditorPanel'
+import { LearningFrontmatterDialog } from './learning/LearningFrontmatterDialog'
 import { LearningMarkdownContextMenu } from './learning/LearningMarkdownContextMenu'
+import { LearningNoteInfoSidebar } from './learning/LearningNoteInfoSidebar'
+import { LearningNotesSidebar } from './learning/LearningNotesSidebar'
+import { LearningSidebarGestureOverlay } from './learning/LearningSidebarGestureOverlay'
+import { LearningSidebarRailButton } from './learning/LearningSidebarRailButton'
 import {
   createLearningEditorHistoryState,
   pushLearningEditorSnapshot,
@@ -47,143 +34,29 @@ import {
   indentMarkdownLines,
   outdentMarkdownLines,
 } from './learning/learningMarkdownEditor'
-
-type SaveState = 'idle' | 'saved' | 'error'
-type GesturePoint = { x: number; y: number }
-
-type FrontmatterDialogMode = 'create' | 'edit'
-type LearningEditorDisplayMode = 'split' | 'preview'
-type LearningEditorContextMenuState = {
-  x: number
-  y: number
-  selectionStart: number
-  selectionEnd: number
-}
-type LearningSidebarGestureOverlayState = {
-  visible: boolean
-  status: 'pending' | 'ready' | 'invalid'
-  action: 'left' | 'right' | null
-  points: GesturePoint[]
-  cursor: GesturePoint | null
-}
+import {
+  type FrontmatterDialogMode,
+  type LearningEditorContextMenuState,
+  type LearningEditorDisplayMode,
+  type SaveState,
+} from './learning/learningCenterTypes'
+import {
+  defaultNoteContent,
+  emptySelectionState,
+  findCategoryByName,
+  normalizeTagInput,
+} from './learning/learningCenterUtils'
+import { useLearningSidebarGesture } from './learning/useLearningSidebarGesture'
+import { useI18n } from '../i18n'
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
 const LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY = 'app:learning-editor-display-mode'
 const LEARNING_EDITOR_HISTORY_LIMIT = 200
-const LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE = 8
-const LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE = 6
-const LEARNING_SIDEBAR_GESTURE_MAX_POINTS = 96
-const LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD = 72
-const LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO = 1.25
-const LEARNING_GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
-const EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY: LearningSidebarGestureOverlayState = {
-  visible: false,
-  status: 'pending',
-  action: null,
-  points: [],
-  cursor: null,
-}
-
-function normalizeTagInput(value: string): string[] {
-  return [...new Set(
-    value
-      .split(/[,\n]/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-  )]
-}
-
-function findCategoryByName(categories: LearningCategory[], name: string): LearningCategory | undefined {
-  const normalizedName = name.trim().toLowerCase()
-  if (!normalizedName) return undefined
-  return categories.find((category) => category.name.trim().toLowerCase() === normalizedName)
-}
-
-function emptySelectionState(): LearningNote | null {
-  return null
-}
-
-function defaultNoteContent(title: string): string {
-  const normalizedTitle = title.trim() || '新学习记录'
-  return [
-    `# ${normalizedTitle}`,
-    '',
-    '今天学习到：',
-    '',
-    '1. ',
-    '2. ',
-    '3. ',
-  ].join('\n')
-}
-
-function resolveLearningSidebarGestureOverlay(dx: number, dy: number): Pick<LearningSidebarGestureOverlayState, 'status' | 'action'> {
-  const absX = Math.abs(dx)
-  const absY = Math.abs(dy)
-
-  if (absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO) {
-    return {
-      status: 'ready',
-      action: dx < 0 ? 'right' : 'left',
-    }
-  }
-
-  if (absY > absX * 1.05 && absY >= LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE * 2) {
-    return {
-      status: 'invalid',
-      action: null,
-    }
-  }
-
-  if (absX < LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD * 0.45) {
-    return {
-      status: 'pending',
-      action: dx < 0 ? 'right' : 'left',
-    }
-  }
-
-  return {
-    status: 'invalid',
-    action: dx < 0 ? 'right' : 'left',
-  }
-}
-
-function LearningSidebarRailButton({
-  side,
-  collapsed,
-  onClick,
-  className,
-}: {
-  side: 'left' | 'right'
-  collapsed: boolean
-  onClick: () => void
-  className: string
-}) {
-  const label = side === 'left'
-    ? (collapsed ? '展开左侧学习目录' : '收起左侧学习目录')
-    : (collapsed ? '展开右侧笔记信息' : '收起右侧笔记信息')
-  const Icon = side === 'left'
-    ? (collapsed ? ChevronRight : ChevronLeft)
-    : (collapsed ? ChevronLeft : ChevronRight)
-
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      className={`h-8 w-8 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/96 shadow-[0_8px_20px_rgba(15,23,42,0.10)] backdrop-blur-md ${className}`}
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </Button>
-  )
-}
 
 export function LearningCenterPage() {
   const navigate = useNavigate()
-  const { t, formatDateTime } = useI18n()
+  const { t } = useI18n()
   const [notes, setNotes] = useState<LearningNoteSummary[]>([])
   const [categories, setCategories] = useState<LearningCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
@@ -217,9 +90,6 @@ export function LearningCenterPage() {
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
-  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<LearningSidebarGestureOverlayState>(
-    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
-  )
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
@@ -238,36 +108,17 @@ export function LearningCenterPage() {
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const editorHistoryRef = useRef<LearningEditorSnapshot[]>([])
   const editorHistoryIndexRef = useRef(-1)
-  const sidebarGestureRef = useRef({
-    tracking: false,
-    activated: false,
-    moved: false,
-    startX: 0,
-    startY: 0,
-    lastDx: 0,
-    lastDy: 0,
-    lastSampleX: 0,
-    lastSampleY: 0,
-    points: [] as GesturePoint[],
+
+  const closeEditorContextMenu = () => {
+    setEditorContextMenu(null)
+  }
+
+  const sidebarGestureOverlay = useLearningSidebarGesture({
+    pageRootRef,
+    onCloseEditorContextMenu: closeEditorContextMenu,
+    onToggleLeftSidebar: () => setLeftSidebarCollapsed((current) => !current),
+    onToggleRightSidebar: () => setRightSidebarCollapsed((current) => !current),
   })
-  const suppressSidebarGestureContextMenuRef = useRef(false)
-  const suppressSidebarGestureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const sidebarGestureFrameRef = useRef<number | null>(null)
-  const nextSidebarGestureOverlayRef = useRef<LearningSidebarGestureOverlayState>(
-    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
-  )
-
-  const enableMarkdownSyntaxHighlight = useMemo(
-    () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
-    [editorContent]
-  )
-
-  const markdownComponents = useMemo(() => createMarkdownComponents({
-    activeRelativePath: null,
-    enableMarkdownSyntaxHighlight,
-    projectPath: '',
-    themeMode: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
-  }), [enableMarkdownSyntaxHighlight])
 
   const filteredNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -332,221 +183,6 @@ export function LearningCenterPage() {
   }, [editorDisplayMode])
 
   useEffect(() => {
-    const isEventInsidePage = (target: EventTarget | null) => (
-      target instanceof Node
-      && pageRootRef.current?.contains(target)
-    )
-
-    const setGestureActive = (active: boolean) => {
-      document.body.classList.toggle(LEARNING_GESTURE_ACTIVE_CLASS_NAME, active)
-    }
-
-    const hideOverlayImmediately = () => {
-      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
-      if (sidebarGestureFrameRef.current !== null) {
-        window.cancelAnimationFrame(sidebarGestureFrameRef.current)
-        sidebarGestureFrameRef.current = null
-      }
-      setSidebarGestureOverlay(EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY)
-    }
-
-    const flushOverlay = () => {
-      sidebarGestureFrameRef.current = null
-      setSidebarGestureOverlay(nextSidebarGestureOverlayRef.current)
-    }
-
-    const scheduleOverlay = (next: LearningSidebarGestureOverlayState) => {
-      nextSidebarGestureOverlayRef.current = next
-      if (sidebarGestureFrameRef.current !== null) return
-      sidebarGestureFrameRef.current = window.requestAnimationFrame(flushOverlay)
-    }
-
-    const clearSuppressTimer = () => {
-      if (suppressSidebarGestureTimerRef.current) {
-        window.clearTimeout(suppressSidebarGestureTimerRef.current)
-        suppressSidebarGestureTimerRef.current = null
-      }
-    }
-
-    const armSuppressContextMenu = () => {
-      suppressSidebarGestureContextMenuRef.current = true
-      clearSuppressTimer()
-      suppressSidebarGestureTimerRef.current = window.setTimeout(() => {
-        suppressSidebarGestureContextMenuRef.current = false
-      }, 450)
-    }
-
-    const resetGesture = () => {
-      sidebarGestureRef.current.tracking = false
-      sidebarGestureRef.current.activated = false
-      sidebarGestureRef.current.moved = false
-      sidebarGestureRef.current.startX = 0
-      sidebarGestureRef.current.startY = 0
-      sidebarGestureRef.current.lastDx = 0
-      sidebarGestureRef.current.lastDy = 0
-      sidebarGestureRef.current.lastSampleX = 0
-      sidebarGestureRef.current.lastSampleY = 0
-      sidebarGestureRef.current.points = []
-    }
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 2) return
-      if (!(event.ctrlKey || event.metaKey) || !isEventInsidePage(event.target)) return
-
-      setGestureActive(true)
-      sidebarGestureRef.current.tracking = true
-      sidebarGestureRef.current.activated = false
-      sidebarGestureRef.current.moved = false
-      sidebarGestureRef.current.startX = event.clientX
-      sidebarGestureRef.current.startY = event.clientY
-      sidebarGestureRef.current.lastDx = 0
-      sidebarGestureRef.current.lastDy = 0
-      sidebarGestureRef.current.lastSampleX = event.clientX
-      sidebarGestureRef.current.lastSampleY = event.clientY
-      sidebarGestureRef.current.points = []
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-    }
-
-    const handleMouseMove = (event: MouseEvent) => {
-      const gesture = sidebarGestureRef.current
-      if (!gesture.tracking) return
-
-      if ((event.buttons & 2) === 0) {
-        setGestureActive(false)
-        resetGesture()
-        hideOverlayImmediately()
-        return
-      }
-
-      gesture.lastDx = event.clientX - gesture.startX
-      gesture.lastDy = event.clientY - gesture.startY
-
-      if (!gesture.activated) {
-        const movedDistance = Math.hypot(gesture.lastDx, gesture.lastDy)
-        if (movedDistance < LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE) return
-        gesture.activated = true
-        gesture.moved = true
-        gesture.points = [
-          { x: gesture.startX, y: gesture.startY },
-          { x: event.clientX, y: event.clientY },
-        ]
-        gesture.lastSampleX = event.clientX
-        gesture.lastSampleY = event.clientY
-      } else {
-        const deltaSinceSample = Math.hypot(
-          event.clientX - gesture.lastSampleX,
-          event.clientY - gesture.lastSampleY
-        )
-        if (deltaSinceSample >= LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE) {
-          gesture.points.push({ x: event.clientX, y: event.clientY })
-          if (gesture.points.length > LEARNING_SIDEBAR_GESTURE_MAX_POINTS) {
-            gesture.points.splice(0, gesture.points.length - LEARNING_SIDEBAR_GESTURE_MAX_POINTS)
-          }
-          gesture.lastSampleX = event.clientX
-          gesture.lastSampleY = event.clientY
-        }
-      }
-
-      if (gesture.activated) {
-        const preview = resolveLearningSidebarGestureOverlay(gesture.lastDx, gesture.lastDy)
-        scheduleOverlay({
-          visible: true,
-          status: preview.status,
-          action: preview.action,
-          points: [...gesture.points],
-          cursor: { x: event.clientX, y: event.clientY },
-        })
-      }
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-    }
-
-    const handleMouseUp = (event: MouseEvent) => {
-      if (event.button !== 2) return
-      const gesture = sidebarGestureRef.current
-      if (!gesture.tracking) return
-
-      const dx = gesture.lastDx
-      const dy = gesture.lastDy
-      const absX = Math.abs(dx)
-      const absY = Math.abs(dy)
-      const passedHorizontal = absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD
-        && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO
-
-      setGestureActive(false)
-      if (gesture.moved) {
-        armSuppressContextMenu()
-      }
-
-      resetGesture()
-      hideOverlayImmediately()
-
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-
-      if (!passedHorizontal) return
-
-      closeEditorContextMenu()
-      if (dx < 0) {
-        setRightSidebarCollapsed((current) => !current)
-        return
-      }
-      setLeftSidebarCollapsed((current) => !current)
-    }
-
-    const handleContextMenu = (event: MouseEvent) => {
-      if (
-        !isEventInsidePage(event.target)
-        || (!suppressSidebarGestureContextMenuRef.current && !sidebarGestureRef.current.tracking)
-      ) {
-        return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-      suppressSidebarGestureContextMenuRef.current = false
-      clearSuppressTimer()
-    }
-
-    const handleWindowBlur = () => {
-      setGestureActive(false)
-      resetGesture()
-      hideOverlayImmediately()
-      suppressSidebarGestureContextMenuRef.current = false
-      clearSuppressTimer()
-    }
-
-    document.addEventListener('mousedown', handleMouseDown, true)
-    document.addEventListener('mousemove', handleMouseMove, true)
-    document.addEventListener('mouseup', handleMouseUp, true)
-    document.addEventListener('contextmenu', handleContextMenu, true)
-    window.addEventListener('blur', handleWindowBlur)
-
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown, true)
-      document.removeEventListener('mousemove', handleMouseMove, true)
-      document.removeEventListener('mouseup', handleMouseUp, true)
-      document.removeEventListener('contextmenu', handleContextMenu, true)
-      window.removeEventListener('blur', handleWindowBlur)
-      if (sidebarGestureFrameRef.current !== null) {
-        window.cancelAnimationFrame(sidebarGestureFrameRef.current)
-        sidebarGestureFrameRef.current = null
-      }
-      clearSuppressTimer()
-      suppressSidebarGestureContextMenuRef.current = false
-      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
-      setGestureActive(false)
-      resetGesture()
-    }
-  }, [])
-
-  useEffect(() => {
     if (!selectedNoteId) {
       setSelectedNote(null)
       setEditorTitle('')
@@ -587,40 +223,6 @@ export function LearningCenterPage() {
     setCategoryEditInput(selectedManageCategory?.name ?? '')
     setCategoryEditError(null)
   }, [selectedManageCategory])
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const activeElement = document.activeElement
-      const isTextEntryTarget = activeElement instanceof HTMLInputElement
-        || activeElement instanceof HTMLTextAreaElement
-        || activeElement instanceof HTMLSelectElement
-        || Boolean(activeElement?.closest('[contenteditable="true"]'))
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault()
-        if (!selectedNoteId || !hasUnsavedChanges || saving) return
-        void handleSave()
-        return
-      }
-
-      if (isTextEntryTarget) return
-
-      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowLeft') {
-        event.preventDefault()
-        closeEditorContextMenu()
-        setLeftSidebarCollapsed((current) => !current)
-        return
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowRight') {
-        event.preventDefault()
-        closeEditorContextMenu()
-        setRightSidebarCollapsed((current) => !current)
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [hasUnsavedChanges, saving, selectedNoteId, editorTitle, editorContent, editorCategoryId, editorStatus, editorTags])
 
   useEffect(() => {
     if (!selectedNote || !hasUnsavedChanges) return
@@ -753,6 +355,40 @@ export function LearningCenterPage() {
     }
   }
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement
+      const isTextEntryTarget = activeElement instanceof HTMLInputElement
+        || activeElement instanceof HTMLTextAreaElement
+        || activeElement instanceof HTMLSelectElement
+        || Boolean(activeElement?.closest('[contenteditable="true"]'))
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        if (!selectedNoteId || !hasUnsavedChanges || saving) return
+        void handleSave()
+        return
+      }
+
+      if (isTextEntryTarget) return
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowLeft') {
+        event.preventDefault()
+        closeEditorContextMenu()
+        setLeftSidebarCollapsed((current) => !current)
+        return
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === 'ArrowRight') {
+        event.preventDefault()
+        closeEditorContextMenu()
+        setRightSidebarCollapsed((current) => !current)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [hasUnsavedChanges, saving, selectedNoteId, editorTitle, editorContent, editorCategoryId, editorStatus, editorTags])
+
   const handleCreateCategory = async () => {
     const name = categoryInput.trim()
     if (!name) return
@@ -845,10 +481,6 @@ export function LearningCenterPage() {
     }
   }
 
-  const closeEditorContextMenu = () => {
-    setEditorContextMenu(null)
-  }
-
   const pushEditorSnapshot = (snapshot: LearningEditorSnapshot) => {
     const nextHistoryState = pushLearningEditorSnapshot(
       {
@@ -923,7 +555,7 @@ export function LearningCenterPage() {
     })
   }
 
-  const handleEditorContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
+  const handleEditorContextMenu = (event: ReactMouseEvent<HTMLTextAreaElement>) => {
     event.preventDefault()
     const target = event.currentTarget
     setEditorContextMenu({
@@ -950,7 +582,7 @@ export function LearningCenterPage() {
     textarea.focus()
   }
 
-  const handleEditorSelectionSync = (event: React.SyntheticEvent<HTMLTextAreaElement>) => {
+  const handleEditorSelectionSync = (event: ReactSyntheticEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
     syncEditorSnapshotSelection(
       textarea.selectionStart ?? 0,
@@ -958,7 +590,7 @@ export function LearningCenterPage() {
     )
   }
 
-  const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
     const selectionStart = textarea.selectionStart ?? 0
     const selectionEnd = textarea.selectionEnd ?? selectionStart
@@ -1018,7 +650,7 @@ export function LearningCenterPage() {
     }
   }
 
-  const handleEditorChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleEditorChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
     setEditorContent(textarea.value)
     pushEditorSnapshot({
@@ -1028,7 +660,6 @@ export function LearningCenterPage() {
     })
   }
 
-  const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
   const saveButtonVariant = saveState === 'error'
     ? 'destructive'
     : hasUnsavedChanges
@@ -1042,107 +673,22 @@ export function LearningCenterPage() {
         ? '保存修改'
         : '已保存'
   const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
-  const statusOptions: SelectOption[] = useMemo(
-    () => [
-      { value: 'draft', label: '草稿' },
-      { value: 'organized', label: '已整理' },
-    ],
-    []
-  )
-  const categoryOptions: ComboboxOption[] = useMemo(
-    () => categories.map((category) => ({
-      value: category.name,
-      label: category.name,
-    })),
-    [categories]
-  )
-  const uncategorizedOption = useMemo<ComboboxOption[]>(
-    () => [{ value: '', label: '未分类' }],
-    []
-  )
   const layoutGridColumns = useMemo(() => {
     if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 340px'
     if (!leftSidebarCollapsed && rightSidebarCollapsed) return '280px minmax(0,1fr)'
     if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 340px'
     return 'minmax(0,1fr)'
   }, [leftSidebarCollapsed, rightSidebarCollapsed])
-  const editorPreviewGridColumns = editorDisplayMode === 'preview'
-    ? 'minmax(0,1fr)'
-    : 'minmax(0,1fr) minmax(0,1fr)'
   const bothSidebarsCollapsed = leftSidebarCollapsed && rightSidebarCollapsed
-  const sidebarGesturePathPoints = sidebarGestureOverlay.cursor
-    ? [...sidebarGestureOverlay.points, sidebarGestureOverlay.cursor]
-    : sidebarGestureOverlay.points
-  const sidebarGesturePolylinePoints = sidebarGesturePathPoints.map((point) => `${point.x},${point.y}`).join(' ')
-  const sidebarGestureStartPoint = sidebarGesturePathPoints[0]
-  const sidebarGestureEndPoint = sidebarGesturePathPoints[sidebarGesturePathPoints.length - 1]
-  const sidebarGestureStrokeColor = sidebarGestureOverlay.status === 'ready'
-    ? 'var(--color-success)'
-    : sidebarGestureOverlay.status === 'invalid'
-      ? 'var(--color-destructive)'
-      : 'var(--color-muted-foreground)'
 
   return (
     <div ref={pageRootRef} className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
-      {sidebarGestureOverlay.visible ? (
-        <div className="pointer-events-none fixed inset-0 z-[10000]">
-          <svg className="h-full w-full">
-            {sidebarGesturePolylinePoints.length > 0 ? (
-              <polyline
-                points={sidebarGesturePolylinePoints}
-                fill="none"
-                stroke={sidebarGestureStrokeColor}
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ opacity: 0.82 }}
-              />
-            ) : null}
-            {sidebarGestureStartPoint ? (
-              <circle
-                cx={sidebarGestureStartPoint.x}
-                cy={sidebarGestureStartPoint.y}
-                r={4}
-                fill={sidebarGestureStrokeColor}
-                style={{ opacity: 0.75 }}
-              />
-            ) : null}
-            {sidebarGestureEndPoint ? (
-              <circle
-                cx={sidebarGestureEndPoint.x}
-                cy={sidebarGestureEndPoint.y}
-                r={5}
-                fill={sidebarGestureStrokeColor}
-              />
-            ) : null}
-          </svg>
-        </div>
-      ) : null}
+      <LearningSidebarGestureOverlay overlay={sidebarGestureOverlay} />
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
-        <header className="quiet-control flex items-center gap-3 rounded-[24px] px-5 py-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full"
-            onClick={() => navigate('/')}
-            title={t('common.projects')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--color-primary)]/12 text-[color:var(--color-primary)]">
-            <BookOpenText className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-semibold text-[color:var(--color-foreground)]">{t('common.learningCenter')}</div>
-            <div className="text-xs text-[color:var(--color-muted-foreground)]">
-              用 Markdown 长期保存和整理你的学习记录
-            </div>
-          </div>
-          <Button size="sm" className="gap-1.5" onClick={openCreateDialog}>
-            <Plus className="h-4 w-4" />
-            新建笔记
-          </Button>
-        </header>
+        <LearningCenterHeader
+          onBack={() => navigate('/')}
+          onCreateNote={openCreateDialog}
+        />
 
         <div
           className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200"
@@ -1166,422 +712,74 @@ export function LearningCenterPage() {
           ) : null}
 
           {!leftSidebarCollapsed ? (
-            <div className="relative flex h-full min-h-0">
-              <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
-                <div className="border-b border-[color:var(--color-border)] px-4 py-4">
-                  <div className="relative">
-                    <Search
-                      className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]"
-                    />
-                    <Input
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="搜索学习记录..."
-                      className="h-10 rounded-full pl-11 pr-10"
-                    />
-                    <button
-                      type="button"
-                      className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
-                        searchQuery
-                          ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                          : 'pointer-events-none opacity-0'
-                      }`}
-                      onClick={() => setSearchQuery('')}
-                      aria-label={t('common.clearSearch')}
-                      title={t('common.clearSearch')}
-                      tabIndex={searchQuery ? 0 : -1}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="border-b border-[color:var(--color-border)] px-4 py-4">
-                  <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">分类</div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-                        selectedCategoryId === 'all'
-                          ? 'bg-[color:var(--color-primary)] text-white'
-                          : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-                      }`}
-                      onClick={() => setSelectedCategoryId('all')}
-                    >
-                      全部
-                    </button>
-                    {categories.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-                          selectedCategoryId === category.id
-                            ? 'bg-[color:var(--color-primary)] text-white'
-                            : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-                        }`}
-                        onClick={() => setSelectedCategoryId(category.id)}
-                      >
-                        {category.name}
-                      </button>
-                    ))}
-                  </div>
-                  {selectedManageCategory ? (
-                    <div className="mt-3 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/40 p-3">
-                      <div className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">管理当前分类</div>
-                      <div className="flex gap-2">
-                        <Input
-                          value={categoryEditInput}
-                          onChange={(event) => setCategoryEditInput(event.target.value)}
-                          placeholder="分类名称"
-                          className="h-9"
-                          disabled={isUpdatingCategory || isDeletingCategory}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault()
-                              void handleRenameCategory()
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="outline"
-                          className="h-9 w-9 rounded-full"
-                          onClick={() => void handleRenameCategory()}
-                          loading={isUpdatingCategory}
-                          disabled={isDeletingCategory}
-                          title="重命名分类"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="destructive"
-                          className="h-9 w-9 rounded-full"
-                          onClick={() => void handleDeleteCategory()}
-                          loading={isDeletingCategory}
-                          disabled={isUpdatingCategory}
-                          title="删除分类"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {categoryEditError ? (
-                        <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                  <div className="mt-3 flex gap-2">
-                    <Input
-                      value={categoryInput}
-                      onChange={(event) => setCategoryInput(event.target.value)}
-                      placeholder="新分类"
-                      className="h-9"
-                      disabled={isCreatingCategory}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault()
-                          void handleCreateCategory()
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="h-9 w-9 rounded-full"
-                      onClick={() => void handleCreateCategory()}
-                      loading={isCreatingCategory}
-                      title="新增分类"
-                    >
-                      <FolderPlus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  {categoryCreateError ? (
-                    <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div>
-                  ) : null}
-                </div>
-                <div className="px-4 pb-2 pt-4">
-                  <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">笔记</div>
-                </div>
-                <ScrollArea className="min-h-0 flex-1">
-                  <div className="space-y-2 p-3">
-                    {loading ? (
-                      <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">{t('common.loading')}</div>
-                    ) : filteredNotes.length > 0 ? (
-                      filteredNotes.map((note) => (
-                        <button
-                          key={note.id}
-                          type="button"
-                          className={`flex w-full flex-col gap-1 rounded-[18px] border px-3 py-3 text-left transition-colors ${
-                            selectedNoteId === note.id
-                              ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8'
-                              : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
-                          }`}
-                          onClick={() => setSelectedNoteId(note.id)}
-                        >
-                          <div className="line-clamp-1 text-sm font-medium text-[color:var(--color-foreground)]">{note.title}</div>
-                          <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{note.excerpt || '暂无摘要'}</div>
-                          <div className="flex items-center justify-between gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            <span>{formatDateTime(note.updatedAt)}</span>
-                            <span>{note.status === 'organized' ? '已整理' : '草稿'}</span>
-                          </div>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">还没有学习记录</div>
-                    )}
-                  </div>
-                </ScrollArea>
-              </Card>
-              <LearningSidebarRailButton
-                side="left"
-                collapsed={false}
-                onClick={() => setLeftSidebarCollapsed(true)}
-                className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
-              />
-            </div>
+            <LearningNotesSidebar
+              categories={categories}
+              categoryCreateError={categoryCreateError}
+              categoryEditError={categoryEditError}
+              categoryEditInput={categoryEditInput}
+              categoryInput={categoryInput}
+              filteredNotes={filteredNotes}
+              isCreatingCategory={isCreatingCategory}
+              isDeletingCategory={isDeletingCategory}
+              isUpdatingCategory={isUpdatingCategory}
+              loading={loading}
+              searchQuery={searchQuery}
+              selectedCategoryId={selectedCategoryId}
+              selectedManageCategory={selectedManageCategory}
+              selectedNoteId={selectedNoteId}
+              onCategoryEditInputChange={setCategoryEditInput}
+              onCategoryInputChange={setCategoryInput}
+              onClearSearch={() => setSearchQuery('')}
+              onCollapse={() => setLeftSidebarCollapsed(true)}
+              onCreateCategory={handleCreateCategory}
+              onDeleteCategory={handleDeleteCategory}
+              onRenameCategory={handleRenameCategory}
+              onSearchQueryChange={setSearchQuery}
+              onSelectCategory={setSelectedCategoryId}
+              onSelectNote={setSelectedNoteId}
+            />
           ) : null}
 
-          <Card className={`min-h-0 overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/94 ${
-            bothSidebarsCollapsed ? 'mx-auto w-full max-w-[1360px]' : ''
-          }`}>
-            {selectedNote ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
-                  <div className="min-w-0">
-                    <div className="line-clamp-1 text-sm font-semibold text-[color:var(--color-foreground)]">
-                      {editorTitle || '未命名笔记'}
-                    </div>
-                    <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                      {editorDisplayMode === 'preview'
-                        ? '纯预览模式，专注查看 Markdown 渲染结果'
-                        : '分栏模式，左侧编辑正文，右侧实时预览'}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/80 bg-[color:var(--color-accent)]/55 p-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={editorDisplayMode === 'split'
-                          ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
-                          : 'text-[color:var(--color-muted-foreground)]'}
-                        onClick={() => setEditorDisplayMode('split')}
-                      >
-                        分栏
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={editorDisplayMode === 'preview'
-                          ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
-                          : 'text-[color:var(--color-muted-foreground)]'}
-                        onClick={() => setEditorDisplayMode('preview')}
-                      >
-                        纯预览
-                      </Button>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={saveButtonVariant}
-                      className={`min-w-[104px] justify-center gap-1.5 ${
-                        hasUnsavedChanges && !saving
-                          ? 'shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]'
-                          : ''
-                      }`}
-                      onClick={() => void handleSave()}
-                      loading={saving}
-                      disabled={saveButtonDisabled}
-                    >
-                      <Save className="h-4 w-4" />
-                      {saveButtonLabel}
-                    </Button>
-                  </div>
-                </div>
-
-                <div
-                  className="grid h-full min-h-0"
-                  style={{ gridTemplateColumns: editorPreviewGridColumns }}
-                >
-                  {editorDisplayMode === 'split' ? (
-                    <div className="flex min-h-0 flex-col border-r border-[color:var(--color-border)]">
-                      <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                        <div className="text-sm font-semibold text-[color:var(--color-foreground)]">编辑</div>
-                        <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                          Markdown 正文编辑区
-                        </div>
-                      </div>
-                      <div className="min-h-0 flex-1 px-5 py-4">
-                        <textarea
-                          ref={editorTextareaRef}
-                          value={editorContent}
-                          onChange={handleEditorChange}
-                          onKeyDown={handleEditorKeyDown}
-                          onKeyUp={handleEditorSelectionSync}
-                          onMouseUp={handleEditorSelectionSync}
-                          onContextMenu={handleEditorContextMenu}
-                          className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
-                          placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"
-                        />
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="flex min-h-0 flex-col">
-                    <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                      <div className="text-sm font-semibold text-[color:var(--color-foreground)]">预览</div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                        {editorDisplayMode === 'preview'
-                          ? '完整宽度显示 Markdown 渲染结果'
-                          : 'Markdown 渲染结果'}
-                      </div>
-                    </div>
-                    <ScrollArea
-                      className="min-h-0 flex-1"
-                      viewportClassName="h-full w-full code-markdown-preview-scroll-root"
-                      horizontalScrollbar
-                      horizontalScrollbarClassName="absolute left-[var(--scrollbar-edge-gap)] right-[var(--scrollbar-edge-gap)] bottom-[var(--scrollbar-edge-gap)] z-10 h-[var(--scrollbar-size)] rounded-full border-t-0 bg-[var(--scrollbar-track)]/92 backdrop-blur-md"
-                    >
-                      <article
-                        className={`code-markdown-content code-markdown-content--viewport-scroll ${
-                          editorDisplayMode === 'preview' ? 'px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'
-                        }`}
-                        style={{ margin: 0, maxWidth: 'none', minWidth: 0, width: '100%' }}
-                      >
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
-                          components={markdownComponents}
-                        >
-                          {editorContent}
-                        </ReactMarkdown>
-                      </article>
-                    </ScrollArea>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">
-                先新建一篇学习记录
-              </div>
-            )}
-          </Card>
+          <LearningEditorPanel
+            bothSidebarsCollapsed={bothSidebarsCollapsed}
+            editorContent={editorContent}
+            editorDisplayMode={editorDisplayMode}
+            editorTextareaRef={editorTextareaRef}
+            editorTitle={editorTitle}
+            hasUnsavedChanges={hasUnsavedChanges}
+            saveButtonDisabled={saveButtonDisabled}
+            saveButtonLabel={saveButtonLabel}
+            saveButtonVariant={saveButtonVariant}
+            saving={saving}
+            selectedNote={selectedNote}
+            onEditorChange={handleEditorChange}
+            onEditorContextMenu={handleEditorContextMenu}
+            onEditorDisplayModeChange={setEditorDisplayMode}
+            onEditorKeyDown={handleEditorKeyDown}
+            onEditorSelectionSync={handleEditorSelectionSync}
+            onSave={handleSave}
+          />
 
           {!rightSidebarCollapsed ? (
-            <div className="relative flex h-full min-h-0">
-              <Card className="h-full min-h-0 w-full overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
-                <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[color:var(--color-foreground)]">笔记信息</div>
-                      <div className="text-xs text-[color:var(--color-muted-foreground)]">frontmatter、状态和保存状态</div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={openEditDialog}
-                      disabled={!selectedNote}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      编辑信息
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-5 p-5">
-                  <section className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-                      <NotebookPen className="h-3.5 w-3.5" />
-                      标题
-                    </div>
-                    <div className="text-sm font-medium text-[color:var(--color-foreground)]">
-                      {editorTitle || selectedNote?.title || '未命名笔记'}
-                    </div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-                      <FolderPlus className="h-3.5 w-3.5" />
-                      分类
-                    </div>
-                    <div className="text-sm text-[color:var(--color-foreground)]">{selectedCategoryName}</div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-                      <Tags className="h-3.5 w-3.5" />
-                      标签
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {normalizeTagInput(editorTags).length > 0 ? normalizeTagInput(editorTags).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-xs text-[color:var(--color-foreground)]"
-                        >
-                          {tag}
-                        </span>
-                      )) : (
-                        <span className="text-sm text-[color:var(--color-muted-foreground)]">暂无标签</span>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">状态</div>
-                    <div className="text-sm text-[color:var(--color-foreground)]">{editorStatus === 'organized' ? '已整理' : '草稿'}</div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">时间</div>
-                    <div className="space-y-1 text-sm text-[color:var(--color-foreground)]">
-                      <div>创建：{selectedNote ? formatDateTime(selectedNote.createdAt) : '--'}</div>
-                      <div>更新：{selectedNote ? formatDateTime(selectedNote.updatedAt) : '--'}</div>
-                    </div>
-                  </section>
-
-                  <section className="space-y-2">
-                    <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">保存状态</div>
-                    <div className={`text-sm ${
-                      saveState === 'error'
-                        ? 'text-[color:var(--color-destructive)]'
-                        : saveState === 'saved'
-                          ? 'text-[color:var(--color-success)]'
-                          : 'text-[color:var(--color-muted-foreground)]'
-                    }`}>
-                      {saveState === 'error'
-                        ? (saveError || '保存失败')
-                        : saveState === 'saved'
-                          ? '已保存'
-                          : hasUnsavedChanges
-                            ? '有未保存修改'
-                            : '未修改'}
-                    </div>
-                  </section>
-
-                  <Button
-                    variant="destructive"
-                    className="mt-4 w-full gap-1.5"
-                    onClick={() => setDeleteConfirmOpen(true)}
-                    loading={false}
-                    disabled={!selectedNoteId}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    删除笔记
-                  </Button>
-                </div>
-              </Card>
-              <LearningSidebarRailButton
-                side="right"
-                collapsed={false}
-                onClick={() => setRightSidebarCollapsed(true)}
-                className="absolute -left-4 top-1/2 z-20 -translate-y-1/2"
-              />
-            </div>
+            <LearningNoteInfoSidebar
+              categories={categories}
+              editorCategoryId={editorCategoryId}
+              editorStatus={editorStatus}
+              editorTags={editorTags}
+              editorTitle={editorTitle}
+              hasUnsavedChanges={hasUnsavedChanges}
+              saveError={saveError}
+              saveState={saveState}
+              selectedNote={selectedNote}
+              selectedNoteId={selectedNoteId}
+              onCollapse={() => setRightSidebarCollapsed(true)}
+              onOpenDeleteConfirm={() => setDeleteConfirmOpen(true)}
+              onOpenEditDialog={openEditDialog}
+            />
           ) : null}
         </div>
       </div>
+
       {editorContextMenu ? (
         <LearningMarkdownContextMenu
           x={editorContextMenu.x}
@@ -1590,167 +788,32 @@ export function LearningCenterPage() {
           onClose={closeEditorContextMenu}
         />
       ) : null}
-      <ModalShell
+
+      <LearningFrontmatterDialog
+        categories={categories}
+        categoryInput={frontmatterCategoryInput}
+        error={frontmatterError}
+        mode={frontmatterDialogMode}
         open={frontmatterDialogOpen}
-        onClose={() => {
-          if (frontmatterSubmitting) return
-          resetFrontmatterDialog()
-        }}
-        widthClassName="max-w-[640px]"
-        ariaLabel={frontmatterDialogMode === 'create' ? '新建学习记录' : '编辑笔记信息'}
-        panelClassName="p-0 overflow-hidden"
-      >
-        <div className="flex flex-col">
-          <div className="border-b border-[color:var(--color-border)] px-5 py-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-base font-semibold text-[color:var(--color-foreground)]">
-                  {frontmatterDialogMode === 'create' ? '先填写 frontmatter' : '编辑 frontmatter'}
-                </div>
-                <div className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-                  {frontmatterDialogMode === 'create'
-                    ? '先确定标题、分类、标签和状态，再进入正文编辑与预览分栏。'
-                    : '元信息单独维护，主区域继续专注 Markdown 正文。'}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={() => resetFrontmatterDialog()}
-                title={t('common.close')}
-                disabled={frontmatterSubmitting}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
+        status={frontmatterStatus}
+        submitting={frontmatterSubmitting}
+        tags={frontmatterTags}
+        title={frontmatterTitle}
+        onCategoryInputChange={setFrontmatterCategoryInput}
+        onClose={resetFrontmatterDialog}
+        onStatusChange={setFrontmatterStatus}
+        onSubmit={handleSubmitFrontmatter}
+        onTagsChange={setFrontmatterTags}
+        onTitleChange={setFrontmatterTitle}
+      />
 
-          <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标题</div>
-              <Input
-                value={frontmatterTitle}
-                onChange={(event) => setFrontmatterTitle(event.target.value)}
-                placeholder="例如：DNS 与 Nginx 基础整理"
-                disabled={frontmatterSubmitting}
-              />
-            </div>
-            <div>
-              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">分类</div>
-              <Combobox
-                ariaLabel="learning-frontmatter-category"
-                value={frontmatterCategoryInput}
-                options={categoryOptions}
-                pinnedOptions={uncategorizedOption}
-                onChange={setFrontmatterCategoryInput}
-                placeholder="可直接输入新分类"
-                allowCreate
-                toggleAriaLabel={frontmatterCategoryInput.trim() ? '收起分类建议' : '展开分类建议'}
-                emptyText="还没有分类"
-                isOptionSelected={(option, currentValue) => option.value === currentValue.trim()}
-                createIcon={<FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
-                createLabel={(nextValue) => (
-                  <span className="flex min-w-0 items-center gap-2">
-                    <FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />
-                    <span className="truncate">新建分类 “{nextValue}”</span>
-                  </span>
-                )}
-                filterOption={(option, query) => {
-                  const normalizedQuery = query.trim().toLowerCase()
-                  if (!normalizedQuery) return option.value !== ''
-                  return option.label.toLowerCase().includes(normalizedQuery)
-                }}
-                disabled={frontmatterSubmitting}
-              />
-              <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
-                可直接输入新分类，会自动创建。
-              </div>
-            </div>
-            <div>
-              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">状态</div>
-              <Select
-                ariaLabel="learning-frontmatter-status"
-                value={frontmatterStatus}
-                options={statusOptions}
-                onChange={(value) => setFrontmatterStatus(value as LearningNoteStatus)}
-                disabled={frontmatterSubmitting}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标签</div>
-              <Input
-                value={frontmatterTags}
-                onChange={(event) => setFrontmatterTags(event.target.value)}
-                placeholder="例如：dns, nginx, web"
-                disabled={frontmatterSubmitting}
-              />
-              <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
-                使用逗号分隔，会写入 Markdown frontmatter。
-              </div>
-            </div>
-            {frontmatterError ? (
-              <div className="sm:col-span-2 text-sm text-[color:var(--color-destructive)]">{frontmatterError}</div>
-            ) : null}
-          </div>
-
-          <div className="flex justify-end gap-3 border-t border-[color:var(--color-border)] px-5 py-4">
-            <Button
-              variant="outline"
-              className="rounded-full"
-              onClick={() => resetFrontmatterDialog()}
-              disabled={frontmatterSubmitting}
-            >
-              取消
-            </Button>
-            <Button
-              className="rounded-full"
-              onClick={() => void handleSubmitFrontmatter()}
-              loading={frontmatterSubmitting}
-            >
-              {frontmatterDialogMode === 'create' ? '创建并开始编辑' : '保存 frontmatter'}
-            </Button>
-          </div>
-        </div>
-      </ModalShell>
-      <ModalShell
+      <LearningDeleteNoteDialog
+        isDeleting={isDeleting}
         open={deleteConfirmOpen}
-        onClose={() => {
-          if (isDeleting) return
-          setDeleteConfirmOpen(false)
-        }}
-        widthClassName="max-w-[420px]"
-        ariaLabel="删除学习记录"
-      >
-        <div className="space-y-5">
-          <div>
-            <div className="text-base font-semibold text-[color:var(--color-foreground)]">删除这篇学习记录？</div>
-            <div className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              删除后不可恢复。当前笔记：
-              <span className="ml-1 font-medium text-[color:var(--color-foreground)]">
-                {selectedNote?.title || '未命名笔记'}
-              </span>
-            </div>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setDeleteConfirmOpen(false)}
-              disabled={isDeleting}
-            >
-              取消
-            </Button>
-            <Button
-              variant="destructive"
-              className="rounded-full"
-              onClick={() => void handleDelete()}
-              loading={isDeleting}
-            >
-              删除
-            </Button>
-          </div>
-        </div>
-      </ModalShell>
+        selectedNote={selectedNote}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onDelete={handleDelete}
+      />
     </div>
   )
 }
