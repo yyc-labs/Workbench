@@ -5,7 +5,7 @@ import { useAppStore } from '../stores/appStore'
 import { useI18n } from '../i18n'
 import { resolveWindowTitle } from './windowTitle'
 
-const WINDOW_ICON_SRC = new URL('../../../icon/Y.png', import.meta.url).href
+const WINDOW_ICON_SRC = new URL('../../../../icon/Y.png', import.meta.url).href
 
 function useWindowTitleText(): string {
   const location = useLocation()

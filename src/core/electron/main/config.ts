@@ -3,6 +3,8 @@ import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import type {
+  AiCommitConfig,
+  AiCommitProfile,
   AppConfig,
   ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
@@ -45,9 +47,38 @@ const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
 
 const DEFAULT_CLAUDE_RUNTIME_PROFILE_ID = 'default'
 const DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME = 'DeepSeek Default'
+const DEFAULT_AI_COMMIT_PROFILE_ID = 'default'
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
+}
+
+function defaultAiCommitProfile(): AiCommitProfile {
+  return {
+    id: DEFAULT_AI_COMMIT_PROFILE_ID,
+    name: 'Default OpenAI',
+    source: 'manual',
+    apiBaseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    model: 'gpt-4o-mini',
+  }
+}
+
+function defaultAiCommitConfig(): AiCommitConfig {
+  const profile = defaultAiCommitProfile()
+  return {
+    enabled: true,
+    activeProfileId: profile.id,
+    profiles: [profile],
+    loadedAgentProfileKeys: [],
+    apiBaseUrl: profile.apiBaseUrl,
+    apiKey: profile.apiKey,
+    model: profile.model,
+    wslPwshPath: '/snap/bin/pwsh',
+    split: false,
+    splitMaxBatches: 4,
+    maxBullets: 8,
+  }
 }
 
 const DEFAULT_CONFIG: AppConfig = {
@@ -68,19 +99,97 @@ const DEFAULT_CONFIG: AppConfig = {
   activeClaudeRuntimeProfileId: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
   runtimeLauncherScript: undefined,
   runtimeKeepAliveOnQuit: false,
-  aiCommit: {
-    enabled: true,
-    apiBaseUrl: 'https://api.openai.com/v1',
-    apiKey: '',
-    model: 'gpt-4o-mini',
-    wslPwshPath: '/snap/bin/pwsh',
-    split: false,
-    splitMaxBatches: 4,
-    maxBullets: 8,
-  },
+  aiCommit: defaultAiCommitConfig(),
   codexProviderApiKeys: {},
   codexSettingsSnapshots: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+}
+
+function normalizeAiCommitProfileSource(value: unknown): AiCommitProfile['source'] {
+  return value === 'claude' || value === 'codex' || value === 'manual' ? value : 'manual'
+}
+
+function normalizeAiCommitProfiles(
+  profiles: unknown,
+  legacyConfig: Partial<AiCommitConfig>
+): AiCommitProfile[] {
+  const normalizedProfiles = Array.isArray(profiles)
+    ? profiles
+      .map((item, index): AiCommitProfile | null => {
+        if (!item || typeof item !== 'object') return null
+        const raw = item as Partial<AiCommitProfile>
+        const id = typeof raw.id === 'string' ? raw.id.trim() : `profile-${index + 1}`
+        const name = typeof raw.name === 'string' ? raw.name.trim() : `Profile ${index + 1}`
+        if (!id) return null
+        return {
+          id,
+          name: name || `Profile ${index + 1}`,
+          source: normalizeAiCommitProfileSource(raw.source),
+          sourceKey: typeof raw.sourceKey === 'string' ? raw.sourceKey.trim() : undefined,
+          apiBaseUrl: typeof raw.apiBaseUrl === 'string' ? raw.apiBaseUrl.trim() : '',
+          apiKey: typeof raw.apiKey === 'string' ? raw.apiKey.trim() : '',
+          model: typeof raw.model === 'string' ? raw.model.trim() : '',
+        }
+      })
+      .filter((item): item is AiCommitProfile => Boolean(item))
+    : []
+
+  const dedupedProfiles: AiCommitProfile[] = []
+  const usedIds = new Set<string>()
+  for (const profile of normalizedProfiles) {
+    if (usedIds.has(profile.id)) continue
+    usedIds.add(profile.id)
+    dedupedProfiles.push(profile)
+  }
+
+  if (dedupedProfiles.length > 0) return dedupedProfiles
+
+  return [{
+    ...defaultAiCommitProfile(),
+    apiBaseUrl: typeof legacyConfig.apiBaseUrl === 'string'
+      ? legacyConfig.apiBaseUrl.trim()
+      : defaultAiCommitProfile().apiBaseUrl,
+    apiKey: typeof legacyConfig.apiKey === 'string' ? legacyConfig.apiKey.trim() : '',
+    model: typeof legacyConfig.model === 'string'
+      ? legacyConfig.model.trim()
+      : defaultAiCommitProfile().model,
+  }]
+}
+
+function normalizeAiCommitConfig(input: AppConfig['aiCommit'] | unknown): AiCommitConfig {
+  const defaults = defaultAiCommitConfig()
+  const raw = input && typeof input === 'object' ? input as Partial<AiCommitConfig> : {}
+  const profiles = normalizeAiCommitProfiles(raw.profiles, raw)
+  const requestedActiveProfileId = typeof raw.activeProfileId === 'string' ? raw.activeProfileId.trim() : ''
+  const activeProfile = profiles.find((profile) => profile.id === requestedActiveProfileId) ?? profiles[0]!
+  const loadedAgentProfileKeys = Array.isArray(raw.loadedAgentProfileKeys)
+    ? Array.from(new Set(
+      raw.loadedAgentProfileKeys
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    ))
+    : defaults.loadedAgentProfileKeys
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : defaults.enabled,
+    activeProfileId: activeProfile.id,
+    profiles,
+    loadedAgentProfileKeys,
+    apiBaseUrl: activeProfile.apiBaseUrl || defaults.apiBaseUrl,
+    apiKey: activeProfile.apiKey || '',
+    model: activeProfile.model || defaults.model,
+    wslPwshPath: typeof raw.wslPwshPath === 'string' && raw.wslPwshPath.trim()
+      ? raw.wslPwshPath.trim()
+      : defaults.wslPwshPath,
+    split: typeof raw.split === 'boolean' ? raw.split : defaults.split,
+    splitMaxBatches: Number.isFinite(raw.splitMaxBatches)
+      ? Math.max(1, Math.min(12, Math.trunc(raw.splitMaxBatches as number)))
+      : defaults.splitMaxBatches,
+    maxBullets: Number.isFinite(raw.maxBullets)
+      ? Math.max(1, Math.min(20, Math.trunc(raw.maxBullets as number)))
+      : defaults.maxBullets,
+  }
 }
 
 function normalizeCodexProviderApiKeys(
@@ -523,6 +632,7 @@ export function loadConfig(): AppConfig {
         parsed.codexSettingsSnapshots,
         (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
       ),
+      aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
@@ -547,6 +657,7 @@ export function loadConfig(): AppConfig {
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
       codexProviderApiKeys: normalizeCodexProviderApiKeys(DEFAULT_CONFIG.codexProviderApiKeys),
       codexSettingsSnapshots: normalizeCodexSettingsSnapshots(DEFAULT_CONFIG.codexSettingsSnapshots),
+      aiCommit: normalizeAiCommitConfig(DEFAULT_CONFIG.aiCommit),
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
@@ -579,6 +690,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     codexSettingsSnapshots: Object.prototype.hasOwnProperty.call(partial, 'codexSettingsSnapshots')
       ? normalizeCodexSettingsSnapshots(partial.codexSettingsSnapshots)
       : current.codexSettingsSnapshots,
+    aiCommit: Object.prototype.hasOwnProperty.call(partial, 'aiCommit')
+      ? normalizeAiCommitConfig(partial.aiCommit)
+      : normalizeAiCommitConfig(current.aiCommit),
     agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,

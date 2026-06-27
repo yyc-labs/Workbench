@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useAppStore } from '../stores/appStore'
+import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
@@ -39,6 +40,9 @@ export function SettingsPage() {
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const alias = isSettingsSectionAlias(sectionParam) ? sectionParam as SettingsSectionAlias : null
   const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
+  const preferredCodexScopeKey = getCodexScopeCacheKey(
+    resolveCodexScopeDescriptor(capability, config.aiEnvironment)
+  )
   const { t } = useI18n()
 
   useEffect(() => {
@@ -132,6 +136,9 @@ export function SettingsPage() {
                 <SettingsAiCommitPanel
                   aiCommit={config.aiCommit || {}}
                   onSave={setAiCommitConfig}
+                  claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []}
+                  codexSettingsSnapshots={config.codexSettingsSnapshots ?? {}}
+                  preferredCodexScopeKey={preferredCodexScopeKey}
                 />
               )}
               {section === 'rules' && <SettingsRulesPanel />}

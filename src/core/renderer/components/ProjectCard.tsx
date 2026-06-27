@@ -177,7 +177,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
     }
 
-    if (typeof api.onAiCommitStatus !== 'function') return
+    if (!menuPos || typeof api.onAiCommitStatus !== 'function') return
 
     const cleanup = api.onAiCommitStatus(({ projectId, status }) => {
       if (projectId !== project.id) return
@@ -195,7 +195,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     })()
 
     return cleanup
-  }, [project.id])
+  }, [menuPos, project.id])
 
   const handleAiAutoCommit = useCallback(async () => {
     if (aiCommitStatus === 'running') return

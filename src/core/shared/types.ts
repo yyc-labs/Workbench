@@ -27,6 +27,7 @@ export type AiExecutionMode =
   | 'custom-script'
   | 'disabled'
 export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
+export type AiCommitProfileSource = 'manual' | 'claude' | 'codex'
 export type StartupDefaultFilter =
   | { type: 'all' }
   | { type: 'pinned' }
@@ -37,6 +38,9 @@ export type StartupDefaultFilter =
 
 export interface AiCommitConfig {
   enabled?: boolean
+  activeProfileId?: string
+  profiles?: AiCommitProfile[]
+  loadedAgentProfileKeys?: string[]
   apiBaseUrl?: string
   apiKey?: string
   model?: string
@@ -44,6 +48,16 @@ export interface AiCommitConfig {
   split?: boolean
   splitMaxBatches?: number
   maxBullets?: number
+}
+
+export interface AiCommitProfile {
+  id: string
+  name: string
+  source?: AiCommitProfileSource
+  sourceKey?: string
+  apiBaseUrl?: string
+  apiKey?: string
+  model?: string
 }
 
 export interface AiEnvironmentConfig {

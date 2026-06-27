@@ -11,6 +11,7 @@ import {
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { useAppStore } from '../stores/appStore'
+import { RouteCatalogDialogHost } from './RouteCatalogDialog'
 import { resolveTheme } from './windowTitle'
 
 function ThemeSync() {
@@ -386,6 +387,7 @@ export function AppGlobalEffects() {
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
       <GlobalRecentProjectsDrawerHost />
+      <RouteCatalogDialogHost />
       <GlobalTitleTooltipBridge />
     </>
   )

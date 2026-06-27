@@ -21,6 +21,7 @@ import { resolveWindowsPowerShell } from '../shell/windows-shell'
 import { wslBridge } from '../wsl-bridge'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
 import type {
+  AiCommitConfig,
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
@@ -37,6 +38,19 @@ type AiCommitServiceDependencies = {
 const AI_COMMIT_UNDO_WINDOW_MS = 30_000
 const AI_COMMIT_UNDO_AUTH_GRACE_MS = 10_000
 const GIT_HASH_RE = /^[0-9a-f]{40}$/i
+
+function resolveAiCommitRuntimeConfig(input: AiCommitConfig | undefined): AiCommitConfig {
+  const raw = input ?? {}
+  const profiles = Array.isArray(raw.profiles) ? raw.profiles : []
+  const activeProfile = profiles.find((profile) => profile.id === raw.activeProfileId) ?? profiles[0]
+
+  return {
+    ...raw,
+    apiBaseUrl: activeProfile?.apiBaseUrl?.trim() || raw.apiBaseUrl,
+    apiKey: activeProfile?.apiKey?.trim() || raw.apiKey,
+    model: activeProfile?.model?.trim() || raw.model,
+  }
+}
 
 export function createAiCommitService(deps: AiCommitServiceDependencies) {
   const activeAiCommitProjects = new Set<string>()
@@ -256,8 +270,8 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     })
     activeAiCommitProjects.add(projectId)
 
-      const config = loadConfig()
-    const aiCfgRaw = config.aiCommit || {}
+    const config = loadConfig()
+    const aiCfgRaw = resolveAiCommitRuntimeConfig(config.aiCommit)
     const aiCfg = {
       ...aiCfgRaw,
       split: typeof override?.split === 'boolean' ? override.split : aiCfgRaw.split,

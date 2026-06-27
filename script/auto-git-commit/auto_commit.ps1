@@ -300,9 +300,12 @@ function Contains-Cjk([string]$Text) {
   return [regex]::IsMatch($Text, '[\u4E00-\u9FFF]')
 }
 
+function New-StringFromCodePoints([int[]]$CodePoints) {
+  return -join ($CodePoints | ForEach-Object { [char]$_ })
+}
+
 function Get-DefaultChineseSubject([int]$FileCount) {
-  $codePoints = @(0x66F4, 0x65B0, 0x4EE3, 0x7801, 0x6539, 0x52A8)
-  $prefix = -join ($codePoints | ForEach-Object { [char]$_ })
+  $prefix = New-StringFromCodePoints -CodePoints @(0x66F4, 0x65B0, 0x4EE3, 0x7801, 0x6539, 0x52A8)
   return ($prefix + ' (' + [string]$FileCount + ' files)')
 }
 
@@ -329,14 +332,19 @@ function Test-GenericSubject([string]$Text) {
   $clean = Normalize-String $Text
   if (-not $clean) { return $true }
 
-  $patterns = @(
-    '^更新代码改动(\s*[\(（]\d+\s*files[\)）])?$',
-    '^自动提交当前改动(\s*[\(（]\d+\s*files[\)）])?$',
-    '^提交当前改动(\s*[\(（]\d+\s*files[\)）])?$',
-    '^更新文件变更(\s*[\(（]\d+\s*files[\)）])?$',
-    '^更新项目文件(\s*[\(（]\d+\s*files[\)）])?$'
+  $subjects = @(
+    (New-StringFromCodePoints -CodePoints @(0x66F4, 0x65B0, 0x4EE3, 0x7801, 0x6539, 0x52A8)),
+    (New-StringFromCodePoints -CodePoints @(0x81EA, 0x52A8, 0x63D0, 0x4EA4, 0x5F53, 0x524D, 0x6539, 0x52A8)),
+    (New-StringFromCodePoints -CodePoints @(0x63D0, 0x4EA4, 0x5F53, 0x524D, 0x6539, 0x52A8)),
+    (New-StringFromCodePoints -CodePoints @(0x66F4, 0x65B0, 0x6587, 0x4EF6, 0x53D8, 0x66F4)),
+    (New-StringFromCodePoints -CodePoints @(0x66F4, 0x65B0, 0x9879, 0x76EE, 0x6587, 0x4EF6))
   )
-  foreach ($pattern in $patterns) {
+
+  $wideOpen = [regex]::Escape([string][char]0xFF08)
+  $wideClose = [regex]::Escape([string][char]0xFF09)
+  $countSuffix = '(?:\s*\(\d+\s*files\)|\s*' + $wideOpen + '\d+\s*files' + $wideClose + ')?'
+  foreach ($subject in $subjects) {
+    $pattern = '^' + [regex]::Escape($subject) + $countSuffix + '$'
     if ($clean -match $pattern) { return $true }
   }
   return $false
