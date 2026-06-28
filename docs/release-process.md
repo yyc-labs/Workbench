@@ -15,8 +15,9 @@
 ## 发布前检查
 
 1. 确认版本号
-   - 更新 `package.json` 的 `version`
-   - 同步更新 `package-lock.json`
+   - Windows 安装包版本由 `build/win-version.json` 管理
+   - 手工只改 `manualVersion.major` 和 `manualVersion.minor`
+   - `dist:win` 会自动处理最后一位：未改前两位时自增；改了前两位后自动归零
 
 2. 确认元数据
    - `description` 不为空
@@ -39,6 +40,14 @@
 ```bash
 npm run dist:win
 ```
+
+该命令会先读取 `build/win-version.json`，算出本次 Windows 安装包版本，再执行构建。
+
+规则如下：
+
+- 当前两位未变化时，版本从 `x.y.N` 自动变成 `x.y.(N+1)`
+- 当 `minor` 改动时，版本重置为 `x.newMinor.0`
+- 当 `major` 改动时，`minor` 和最后一位都会自动清零，版本重置为 `newMajor.0.0`
 
 构建完成后检查 `release/` 目录。安装包文件名由 `electron-builder.yml` 中的 `artifactName` 控制：
 

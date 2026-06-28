@@ -285,7 +285,7 @@ export function useCodeWorkspaceExplorerState({
 
   useEffect(() => {
     if (activePane !== 'code') return
-    if (tree.status !== 'idle' && tree.status !== 'error') return
+    if (tree.status !== 'idle') return
     void loadTree()
   }, [activePane, loadTree, tree.status])
 

@@ -13,7 +13,7 @@
     "build": "electron-vite build",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "dist:win": "npm run build && electron-builder --win nsis",
+    "dist:win": "node script/release/dist-win.mjs",
     "preview": "electron-vite preview",
     "ai:commit": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi",
     "ai:commit:dry": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi -DryRun",

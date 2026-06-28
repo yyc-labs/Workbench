@@ -166,28 +166,6 @@ async function scanDirectoryFallback(
   return [...directories, ...files]
 }
 
-async function directoryHasVisibleChildren(absoluteDirectoryPath: string): Promise<boolean> {
-  let entries: Dirent[]
-  try {
-    entries = await fs.readdir(absoluteDirectoryPath, { withFileTypes: true })
-  } catch {
-    return false
-  }
-
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (isExcludedDirectory(entry.name)) continue
-      return true
-    }
-    if (entry.isFile()) {
-      if (isExcludedFile(entry.name)) continue
-      return true
-    }
-  }
-
-  return false
-}
-
 async function listProjectDirectoryChildren(
   rootRealPath: string,
   directoryRelativePath: string | null
@@ -246,12 +224,14 @@ async function listProjectDirectoryChildren(
         continue
       }
 
-      const hasChildren = await directoryHasVisibleChildren(entryAbsolutePath)
       nodes.push({
         name: entry.name,
         relativePath,
         kind: 'directory',
-        hasChildren,
+        // Keep directory discovery lazy. Probing every listed folder adds an extra
+        // readdir round-trip per entry and makes the initial tree load noticeably
+        // slower on WSL / mounted Windows disks.
+        hasChildren: true,
         isLoaded: false,
       })
       includedEntries += 1
