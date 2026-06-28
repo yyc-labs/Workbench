@@ -23,12 +23,27 @@ import {
   unregisterGlobalShortcuts,
 } from './window/globalShortcuts'
 import { ensureWindowVisible } from './window/windowFocus'
+import {
+  isSilentAutostartLaunch,
+  isWindowsAutostartLaunch,
+  syncWindowsLaunchOnLogin,
+} from './launchOnLogin'
+import { createAppTray, type AppTrayController } from './tray'
 import { projectIdFromPath } from '../../shared/rules'
 import type { Capability, TranscriptImportedEvent } from '../../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
+let trayController: AppTrayController | null = null
+const shouldStartHiddenToTray = isSilentAutostartLaunch(process.argv)
+const shouldUseTrayLifecycle = process.platform === 'win32'
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
 const aiEnvironmentController = new AiEnvironmentController(
   () => bootCapability,
   () => loadConfig(),
@@ -89,6 +104,7 @@ function createMainWindow(): void {
   mainWindow = createWindow({
     theme: config.theme,
     shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+    showOnReady: !(shouldUseTrayLifecycle && shouldStartHiddenToTray),
     onToggleViewMode: () => {
       mainWindow?.webContents.send(IPC.CODE_TOGGLE_VIEW_MODE)
     },
@@ -105,6 +121,23 @@ function createMainWindow(): void {
   })
 
   processManager?.setOutputWindow(mainWindow)
+
+  if (shouldUseTrayLifecycle) {
+    mainWindow.on('close', (event) => {
+      if (isQuitting) return
+      if (!trayController?.ensure()) return
+      event.preventDefault()
+      mainWindow?.hide()
+    })
+
+    mainWindow.on('show', () => {
+      trayController?.ensure()
+    })
+
+    mainWindow.on('hide', () => {
+      trayController?.ensure()
+    })
+  }
 }
 
 function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; sessionName?: string }): void {
@@ -150,6 +183,30 @@ function sendGlobalThemeShortcut(): void {
   mainWindow?.webContents.send(IPC.GLOBAL_THEME_SHORTCUT)
 }
 
+function hideMainWindowToTray(): void {
+  if (!mainWindow) return
+  mainWindow.hide()
+}
+
+function showMainWindowFromTray(): void {
+  if (!mainWindow) {
+    createMainWindow()
+  }
+  ensureWindowVisible(mainWindow)
+}
+
+function shouldUseChineseTrayLabels(): boolean {
+  const configuredLocale = loadConfig().locale ?? 'system'
+  if (configuredLocale === 'zh-CN') return true
+  if (configuredLocale === 'en-US') return false
+  return app.getLocale().toLowerCase().startsWith('zh')
+}
+
+app.on('second-instance', (_event, argv) => {
+  if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
+  showMainWindowFromTray()
+})
+
 // ── before-quit ───────────────────────────────────────────
 
 let isQuitting = false
@@ -174,6 +231,7 @@ app.on('before-quit', async (e) => {
 })
 
 app.on('will-quit', () => {
+  trayController?.destroy()
   unregisterGlobalShortcuts()
 })
 
@@ -184,6 +242,8 @@ if (process.platform === 'win32' && app.isPackaged) {
 }
 
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) return
+
   nativeTheme.on('updated', () => {
     const { theme } = loadConfig()
     if (theme === 'system') {
@@ -197,6 +257,21 @@ app.whenReady().then(async () => {
 
   // Create ProcessManager with capability injected
   processManager = new ProcessManager(bootCapability)
+  if (shouldUseTrayLifecycle) {
+    trayController = createAppTray({
+      getShowLabel: () => shouldUseChineseTrayLabels() ? '显示 IDE Electron' : 'Show IDE Electron',
+      getHideLabel: () => shouldUseChineseTrayLabels() ? '隐藏 IDE Electron' : 'Hide IDE Electron',
+      getQuitLabel: () => shouldUseChineseTrayLabels() ? '退出 IDE Electron' : 'Quit IDE Electron',
+      getTooltip: () => 'IDE Electron',
+      onShow: showMainWindowFromTray,
+      onHide: hideMainWindowToTray,
+      onQuit: () => app.quit(),
+      isWindowVisible: () => {
+        if (!mainWindow) return false
+        return mainWindow.isVisible() && !mainWindow.isMinimized()
+      },
+    })
+  }
 
   registerIpcHandlers({
     getMainWindow: () => mainWindow,
@@ -211,7 +286,15 @@ app.whenReady().then(async () => {
     transcriptService,
     transcriptShareService,
   })
+  syncWindowsLaunchOnLogin(loadConfig())
   createMainWindow()
+  if (shouldUseTrayLifecycle && trayController) {
+    if (shouldStartHiddenToTray && !trayController.ensure()) {
+      showMainWindowFromTray()
+    } else {
+      trayController.ensure()
+    }
+  }
   registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut)
   agentHookGateway.start()
 

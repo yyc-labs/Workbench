@@ -35,6 +35,7 @@ export function applyWindowBackground(
 interface CreateWindowOptions {
   theme: ThemeMode
   shouldUseDarkColors: boolean
+  showOnReady?: boolean
   onToggleViewMode: () => void
   onFocusSearch: () => void
   onWindowStateChange: (isMaximized: boolean) => void
@@ -45,6 +46,7 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
   const {
     theme,
     shouldUseDarkColors,
+    showOnReady = true,
     onToggleViewMode,
     onFocusSearch,
     onWindowStateChange,
@@ -108,6 +110,7 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
     onWindowStateChange(false)
   })
   mainWindow.on('ready-to-show', () => {
+    if (!showOnReady) return
     mainWindow.show()
   })
   mainWindow.on('closed', onClosed)

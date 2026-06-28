@@ -29,6 +29,7 @@ import {
 } from '../doc-link-secret-store'
 import { applyWindowBackground } from '../window/createWindow'
 import { openFolder, openVsCode } from '../shell/openers'
+import { syncWindowsLaunchOnLogin } from '../launchOnLogin'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
@@ -128,6 +129,9 @@ export function registerCoreIpcHandlers(
           updated.theme,
           nativeTheme.shouldUseDarkColors
         )
+      }
+      if (Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')) {
+        syncWindowsLaunchOnLogin(updated)
       }
       return updated
     }

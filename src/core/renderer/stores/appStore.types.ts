@@ -271,6 +271,7 @@ export interface AppState {
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
+  setLaunchOnLogin: (enabled: boolean) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>

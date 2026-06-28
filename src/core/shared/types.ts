@@ -862,6 +862,8 @@ export interface AppConfig {
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
   locale?: AppLocale
+  /** Launch app automatically after Windows sign-in. */
+  launchOnLogin?: boolean
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
   removedProjects?: RemovedProjectSnapshot[]
   /** User-defined project folders */

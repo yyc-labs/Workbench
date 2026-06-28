@@ -32,6 +32,7 @@ export function SettingsPage() {
   const runtimeEntries = useAppStore((s) => s.runtimeEntries)
   const setThemeConfig = useAppStore((s) => s.setTheme)
   const setLocaleConfig = useAppStore((s) => s.setLocale)
+  const setLaunchOnLoginConfig = useAppStore((s) => s.setLaunchOnLogin)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
@@ -39,6 +40,7 @@ export function SettingsPage() {
   const setClaudeRuntimeProfiles = useAppStore((s) => s.setClaudeRuntimeProfiles)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
+  const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
   const alias = isSettingsSectionAlias(sectionParam) ? sectionParam as SettingsSectionAlias : null
   const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
   const preferredCodexScopeKey = getCodexScopeCacheKey(
@@ -54,6 +56,10 @@ export function SettingsPage() {
     setLocale(config.locale ?? 'system')
   }, [config.locale])
 
+  useEffect(() => {
+    setLaunchOnLogin(config.launchOnLogin ?? false)
+  }, [config.launchOnLogin])
+
   const handleThemeChange = async (newTheme: ThemeMode) => {
     setTheme(newTheme)
     await setThemeConfig(newTheme)
@@ -62,6 +68,11 @@ export function SettingsPage() {
   const handleLocaleChange = async (nextLocale: NonNullable<AppLocale>) => {
     setLocale(nextLocale)
     await setLocaleConfig(nextLocale)
+  }
+
+  const handleLaunchOnLoginChange = async (enabled: boolean) => {
+    setLaunchOnLogin(enabled)
+    await setLaunchOnLoginConfig(enabled)
   }
 
   if (!isSettingsSection(sectionParam) && !isSettingsSectionAlias(sectionParam)) {
@@ -95,8 +106,11 @@ export function SettingsPage() {
                 <SettingsGeneralPanel
                   theme={theme}
                   locale={locale}
+                  launchOnLogin={launchOnLogin}
+                  supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   onThemeChange={handleThemeChange}
                   onLocaleChange={handleLocaleChange}
+                  onLaunchOnLoginChange={handleLaunchOnLoginChange}
                 />
               )}
               {section === 'runtime' && (

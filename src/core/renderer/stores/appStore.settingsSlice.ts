@@ -9,6 +9,7 @@ export type SettingsActionsSlice = Pick<
   AppState,
   | 'setTheme'
   | 'setLocale'
+  | 'setLaunchOnLogin'
   | 'setAiEnvironmentConfig'
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
@@ -43,6 +44,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         locale: updated.locale,
+      },
+    }))
+  },
+
+  setLaunchOnLogin: async (enabled) => {
+    const updated = await window.electronAPI.setConfig({ launchOnLogin: enabled })
+    set((state) => ({
+      config: {
+        ...state.config,
+        launchOnLogin: updated.launchOnLogin ?? false,
       },
     }))
   },

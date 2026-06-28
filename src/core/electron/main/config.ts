@@ -91,6 +91,7 @@ const DEFAULT_CONFIG: AppConfig = {
   projects: [],
   theme: 'system',
   locale: 'system',
+  launchOnLogin: false,
   removedProjects: [],
   folders: [],
   tags: [],
@@ -215,6 +216,11 @@ function normalizeAiRuntimeProfiles(
 
 function normalizeAiCommitProfileSource(value: unknown): AiCommitProfile['source'] {
   return value === 'claude' || value === 'codex' || value === 'manual' ? value : 'manual'
+}
+
+function normalizeBooleanFlag(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value
+  return fallback
 }
 
 function normalizeAiCommitProfiles(
@@ -755,6 +761,10 @@ export function loadConfig(): AppConfig {
         ...parsed,
       }),
     }
+    cachedConfig.launchOnLogin = normalizeBooleanFlag(
+      parsed.launchOnLogin,
+      DEFAULT_CONFIG.launchOnLogin ?? false
+    )
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
       const runtimeProfiles = normalizeAiRuntimeProfiles(
@@ -827,6 +837,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
   }
+  updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
+    ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false)
+    : current.launchOnLogin ?? false
   delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
   const runtimeProfiles = normalizeClaudeRuntimeProfiles(
     Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles')

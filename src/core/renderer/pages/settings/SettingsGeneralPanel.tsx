@@ -6,11 +6,22 @@ import type { ThemeMode } from './settings.types'
 type GeneralPanelProps = {
   theme: ThemeMode
   locale: AppLocale
+  launchOnLogin: boolean
+  supportsLaunchOnLogin: boolean
   onThemeChange: (next: ThemeMode) => void
   onLocaleChange: (next: NonNullable<AppLocale>) => void
+  onLaunchOnLoginChange: (enabled: boolean) => void | Promise<void>
 }
 
-function SettingsGeneralPanel({ theme, locale, onThemeChange, onLocaleChange }: GeneralPanelProps) {
+function SettingsGeneralPanel({
+  theme,
+  locale,
+  launchOnLogin,
+  supportsLaunchOnLogin,
+  onThemeChange,
+  onLocaleChange,
+  onLaunchOnLoginChange,
+}: GeneralPanelProps) {
   const { t } = useI18n()
 
   return (
@@ -50,6 +61,29 @@ function SettingsGeneralPanel({ theme, locale, onThemeChange, onLocaleChange }: 
           ))}
         </div>
       </div>
+
+      {supportsLaunchOnLogin && (
+        <div>
+          <p className="section-label mb-3">{t('settings.general.startup')}</p>
+          <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.launchOnLogin')}</h2>
+          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
+            {t('settings.general.launchOnLoginDescription')}
+          </p>
+          <label className="inline-flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              checked={launchOnLogin}
+              onChange={(e) => void onLaunchOnLoginChange(e.target.checked)}
+            />
+            <span>
+              <span className="block">{t('settings.general.launchOnLoginLabel')}</span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                {t('settings.general.launchOnLoginHint')}
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
     </div>
   )
 }
