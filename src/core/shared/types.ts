@@ -14,6 +14,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 export type AppLocale = 'system' | 'en-US' | 'zh-CN'
+export type CloseWindowBehavior = 'tray' | 'quit'
 
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 export type RunStartupMode = 'silent' | 'terminal'
@@ -864,6 +865,8 @@ export interface AppConfig {
   locale?: AppLocale
   /** Launch app automatically after Windows sign-in. */
   launchOnLogin?: boolean
+  /** Control whether closing the main window quits the app or hides it to tray. */
+  closeWindowBehavior?: CloseWindowBehavior
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
   removedProjects?: RemovedProjectSnapshot[]
   /** User-defined project folders */

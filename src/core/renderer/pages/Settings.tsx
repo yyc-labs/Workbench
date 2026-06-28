@@ -21,7 +21,7 @@ import {
   type ThemeMode,
 } from './settings/settings.types'
 import { useI18n } from '../i18n'
-import type { AppLocale } from '../../shared/types'
+import type { AppLocale, CloseWindowBehavior } from '../../shared/types'
 
 export function SettingsPage() {
   const { section: sectionParam } = useParams<{ section?: string }>()
@@ -33,6 +33,7 @@ export function SettingsPage() {
   const setThemeConfig = useAppStore((s) => s.setTheme)
   const setLocaleConfig = useAppStore((s) => s.setLocale)
   const setLaunchOnLoginConfig = useAppStore((s) => s.setLaunchOnLogin)
+  const setCloseWindowBehaviorConfig = useAppStore((s) => s.setCloseWindowBehavior)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
@@ -41,6 +42,9 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
+  const [closeWindowBehavior, setCloseWindowBehavior] = useState<CloseWindowBehavior>(
+    config.closeWindowBehavior ?? 'quit'
+  )
   const alias = isSettingsSectionAlias(sectionParam) ? sectionParam as SettingsSectionAlias : null
   const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
   const preferredCodexScopeKey = getCodexScopeCacheKey(
@@ -60,6 +64,10 @@ export function SettingsPage() {
     setLaunchOnLogin(config.launchOnLogin ?? false)
   }, [config.launchOnLogin])
 
+  useEffect(() => {
+    setCloseWindowBehavior(config.closeWindowBehavior ?? 'quit')
+  }, [config.closeWindowBehavior])
+
   const handleThemeChange = async (newTheme: ThemeMode) => {
     setTheme(newTheme)
     await setThemeConfig(newTheme)
@@ -73,6 +81,11 @@ export function SettingsPage() {
   const handleLaunchOnLoginChange = async (enabled: boolean) => {
     setLaunchOnLogin(enabled)
     await setLaunchOnLoginConfig(enabled)
+  }
+
+  const handleCloseWindowBehaviorChange = async (behavior: CloseWindowBehavior) => {
+    setCloseWindowBehavior(behavior)
+    await setCloseWindowBehaviorConfig(behavior)
   }
 
   if (!isSettingsSection(sectionParam) && !isSettingsSectionAlias(sectionParam)) {
@@ -107,10 +120,13 @@ export function SettingsPage() {
                   theme={theme}
                   locale={locale}
                   launchOnLogin={launchOnLogin}
+                  closeWindowBehavior={closeWindowBehavior}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
+                  supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
                   onThemeChange={handleThemeChange}
                   onLocaleChange={handleLocaleChange}
                   onLaunchOnLoginChange={handleLaunchOnLoginChange}
+                  onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                 />
               )}
               {section === 'runtime' && (

@@ -117,6 +117,9 @@ function createMainWindow(): void {
     onClosed: () => {
       processManager?.setOutputWindow(null)
       mainWindow = null
+      if (shouldUseTrayLifecycle && !isQuitting && loadConfig().closeWindowBehavior === 'quit') {
+        app.quit()
+      }
     },
   })
 
@@ -125,6 +128,7 @@ function createMainWindow(): void {
   if (shouldUseTrayLifecycle) {
     mainWindow.on('close', (event) => {
       if (isQuitting) return
+      if (loadConfig().closeWindowBehavior !== 'tray') return
       if (!trayController?.ensure()) return
       event.preventDefault()
       mainWindow?.hide()
@@ -195,11 +199,70 @@ function showMainWindowFromTray(): void {
   ensureWindowVisible(mainWindow)
 }
 
-function shouldUseChineseTrayLabels(): boolean {
-  const configuredLocale = loadConfig().locale ?? 'system'
-  if (configuredLocale === 'zh-CN') return true
-  if (configuredLocale === 'en-US') return false
-  return app.getLocale().toLowerCase().startsWith('zh')
+function navigateMainWindow(pathname: string): void {
+  showMainWindowFromTray()
+  if (!mainWindow) return
+
+  const send = () => {
+    mainWindow?.webContents.send(IPC.APP_NAVIGATE, { path: pathname })
+  }
+
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', send)
+    return
+  }
+
+  send()
+}
+
+function openMainWindowFromTray(): void {
+  if (!mainWindow) {
+    createMainWindow()
+    ensureWindowVisible(mainWindow)
+    return
+  }
+
+  showMainWindowFromTray()
+}
+
+function buildTrayMenuTemplate() {
+  const isVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible())
+  return [
+    {
+      label: isVisible ? '隐藏主窗口' : '显示主窗口',
+      click: () => {
+        if (isVisible) {
+          hideMainWindowToTray()
+        } else {
+          showMainWindowFromTray()
+        }
+      },
+    },
+    {
+      type: 'separator' as const,
+    },
+    {
+      label: '打开首页',
+      click: () => {
+        navigateMainWindow('/')
+      },
+    },
+    {
+      label: '打开设置',
+      click: () => {
+        navigateMainWindow('/settings/general')
+      },
+    },
+    {
+      type: 'separator' as const,
+    },
+    {
+      label: '退出 IDE Electron',
+      click: () => {
+        app.quit()
+      },
+    },
+  ]
 }
 
 app.on('second-instance', (_event, argv) => {
@@ -215,6 +278,7 @@ app.on('before-quit', async (e) => {
   if (isQuitting) return
   e.preventDefault()
   isQuitting = true
+  trayController?.destroy()
 
   const { runtimeKeepAliveOnQuit = false } = loadConfig()
   if (!runtimeKeepAliveOnQuit) {
@@ -259,17 +323,9 @@ app.whenReady().then(async () => {
   processManager = new ProcessManager(bootCapability)
   if (shouldUseTrayLifecycle) {
     trayController = createAppTray({
-      getShowLabel: () => shouldUseChineseTrayLabels() ? '显示 IDE Electron' : 'Show IDE Electron',
-      getHideLabel: () => shouldUseChineseTrayLabels() ? '隐藏 IDE Electron' : 'Hide IDE Electron',
-      getQuitLabel: () => shouldUseChineseTrayLabels() ? '退出 IDE Electron' : 'Quit IDE Electron',
       getTooltip: () => 'IDE Electron',
-      onShow: showMainWindowFromTray,
-      onHide: hideMainWindowToTray,
-      onQuit: () => app.quit(),
-      isWindowVisible: () => {
-        if (!mainWindow) return false
-        return mainWindow.isVisible() && !mainWindow.isMinimized()
-      },
+      buildMenu: buildTrayMenuTemplate,
+      onOpenMainWindow: openMainWindowFromTray,
     })
   }
 

@@ -9,6 +9,7 @@ import type {
   AppConfig,
   ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
+  CloseWindowBehavior,
   CodexConfig,
   CodexEnvironmentScope,
   CodexModelProviderConfig,
@@ -92,6 +93,7 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'system',
   locale: 'system',
   launchOnLogin: false,
+  closeWindowBehavior: 'quit',
   removedProjects: [],
   folders: [],
   tags: [],
@@ -221,6 +223,10 @@ function normalizeAiCommitProfileSource(value: unknown): AiCommitProfile['source
 function normalizeBooleanFlag(value: unknown, fallback: boolean): boolean {
   if (typeof value === 'boolean') return value
   return fallback
+}
+
+function normalizeCloseWindowBehavior(value: unknown): CloseWindowBehavior {
+  return value === 'tray' ? 'tray' : 'quit'
 }
 
 function normalizeAiCommitProfiles(
@@ -765,6 +771,7 @@ export function loadConfig(): AppConfig {
       parsed.launchOnLogin,
       DEFAULT_CONFIG.launchOnLogin ?? false
     )
+    cachedConfig.closeWindowBehavior = normalizeCloseWindowBehavior(parsed.closeWindowBehavior)
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
       const runtimeProfiles = normalizeAiRuntimeProfiles(
@@ -840,6 +847,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
     ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false)
     : current.launchOnLogin ?? false
+  updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior')
+    ? normalizeCloseWindowBehavior(partial.closeWindowBehavior)
+    : normalizeCloseWindowBehavior(current.closeWindowBehavior)
   delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
   const runtimeProfiles = normalizeClaudeRuntimeProfiles(
     Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles')

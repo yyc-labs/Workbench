@@ -198,6 +198,11 @@ declare global {
       toggleMaximizeWindow: () => Promise<boolean>
       closeWindow: () => Promise<boolean>
       isWindowMaximized: () => Promise<boolean>
+      trayPanelShowMainWindow: () => Promise<boolean>
+      trayPanelHideMainWindow: () => Promise<boolean>
+      trayPanelQuitApp: () => Promise<boolean>
+      trayPanelDismiss: () => Promise<boolean>
+      trayPanelResizeToContent: (size: { width: number; height: number }) => Promise<boolean>
       runAiCommit: (
         projectId: string,
         repoRoot: string,
@@ -235,6 +240,7 @@ declare global {
       onAgentHookEvent: (cb: (d: AgentHookEnvelope) => void) => () => void
       onTranscriptImported: (cb: (d: TranscriptImportedEvent) => void) => () => void
       onWindowState: (cb: (d: { isMaximized: boolean }) => void) => () => void
+      onAppNavigate: (cb: (d: { path: string }) => void) => () => void
       onCodeFocusSearch: (cb: () => void) => () => void
       onCodeToggleViewMode: (cb: () => void) => () => void
       onGlobalHomeShortcut: (cb: () => void) => () => void
@@ -272,6 +278,7 @@ export interface AppState {
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
   setLaunchOnLogin: (enabled: boolean) => Promise<void>
+  setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>

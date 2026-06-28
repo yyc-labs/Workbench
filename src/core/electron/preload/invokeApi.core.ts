@@ -101,6 +101,17 @@ export function createCoreInvokeApi() {
 
     isWindowMaximized: () => ipcRenderer.invoke(IPC.WINDOW_IS_MAXIMIZED),
 
+    trayPanelShowMainWindow: () => ipcRenderer.invoke(IPC.TRAY_PANEL_SHOW_MAIN),
+
+    trayPanelHideMainWindow: () => ipcRenderer.invoke(IPC.TRAY_PANEL_HIDE_MAIN),
+
+    trayPanelQuitApp: () => ipcRenderer.invoke(IPC.TRAY_PANEL_QUIT),
+
+    trayPanelDismiss: () => ipcRenderer.invoke(IPC.TRAY_PANEL_DISMISS),
+
+    trayPanelResizeToContent: (size: { width: number; height: number }) =>
+      ipcRenderer.invoke(IPC.TRAY_PANEL_RESIZE_TO_CONTENT, size),
+
     runAiCommit: (
       projectId: string,
       repoRoot: string,

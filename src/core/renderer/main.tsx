@@ -4,15 +4,24 @@ import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
 import { App } from './App'
+import { TrayPanelApp } from './TrayPanelApp'
 import './styles/global.css'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element not found')
 
+if (window.location.hash === '#tray-panel') {
+  document.documentElement.style.background = 'transparent'
+  document.documentElement.style.backgroundColor = 'transparent'
+  document.body.style.background = 'transparent'
+  document.body.style.backgroundColor = 'transparent'
+  rootElement.style.background = 'transparent'
+}
+
 try {
   createRoot(rootElement).render(
     <StrictMode>
-      <App />
+      {window.location.hash === '#tray-panel' ? <TrayPanelApp /> : <App />}
     </StrictMode>
   )
 } catch (error) {

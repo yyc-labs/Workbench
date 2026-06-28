@@ -347,6 +347,19 @@ function GlobalHomeShortcutListener() {
   return null
 }
 
+function AppNavigateListener() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    return window.electronAPI.onAppNavigate(({ path }) => {
+      if (typeof path !== 'string' || !path.trim()) return
+      navigate(path)
+    })
+  }, [navigate])
+
+  return null
+}
+
 function ProjectRoutePreloader() {
   const location = useLocation()
 
@@ -395,6 +408,7 @@ export function AppGlobalEffects() {
       <SessionPoller />
       <MouseGestureNavigatorOverlay />
       <GlobalHomeShortcutListener />
+      <AppNavigateListener />
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
       <GlobalRecentProjectsDrawerHost />

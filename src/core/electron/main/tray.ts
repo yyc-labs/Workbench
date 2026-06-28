@@ -1,20 +1,21 @@
-import { Menu, Tray } from 'electron'
+import {
+  Menu,
+  Tray,
+  type MenuItemConstructorOptions,
+  type Rectangle,
+} from 'electron'
 import { resolveAppResourcePath } from './app-resource-path'
 
 export interface AppTrayController {
   ensure(): boolean
   destroy(): void
+  getBounds(): Rectangle | null
 }
 
 interface CreateAppTrayOptions {
-  getShowLabel: () => string
-  getHideLabel: () => string
-  getQuitLabel: () => string
   getTooltip: () => string
-  onShow: () => void
-  onHide: () => void
-  onQuit: () => void
-  isWindowVisible: () => boolean
+  buildMenu: () => MenuItemConstructorOptions[]
+  onOpenMainWindow: () => void
 }
 
 function resolveTrayIconPath(): string {
@@ -26,52 +27,43 @@ function resolveTrayIconPath(): string {
 export function createAppTray(options: CreateAppTrayOptions): AppTrayController {
   let tray: Tray | null = null
 
-  const rebuildMenu = () => {
+  const showNativeMenu = () => {
     if (!tray) return
     tray.setToolTip(options.getTooltip())
-    tray.setContextMenu(Menu.buildFromTemplate([
-      {
-        label: options.isWindowVisible() ? options.getHideLabel() : options.getShowLabel(),
-        click: () => {
-          if (options.isWindowVisible()) {
-            options.onHide()
-            return
-          }
-          options.onShow()
-        },
-      },
-      { type: 'separator' },
-      {
-        label: options.getQuitLabel(),
-        click: () => options.onQuit(),
-      },
-    ]))
+    tray.popUpContextMenu(Menu.buildFromTemplate(options.buildMenu()))
   }
 
   return {
     ensure(): boolean {
       if (tray) {
-        rebuildMenu()
+        tray.setToolTip(options.getTooltip())
         return true
       }
 
       try {
         tray = new Tray(resolveTrayIconPath())
+        tray.setToolTip(options.getTooltip())
         tray.on('click', () => {
-          if (options.isWindowVisible()) {
-            options.onHide()
-            return
-          }
-          options.onShow()
+          options.onOpenMainWindow()
+        })
+        tray.on('right-click', () => {
+          showNativeMenu()
         })
         tray.on('double-click', () => {
-          options.onShow()
+          options.onOpenMainWindow()
         })
-        rebuildMenu()
         return true
       } catch {
         tray = null
         return false
+      }
+    },
+    getBounds(): Rectangle | null {
+      if (!tray) return null
+      try {
+        return tray.getBounds()
+      } catch {
+        return null
       }
     },
     destroy(): void {

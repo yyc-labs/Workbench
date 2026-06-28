@@ -1,4 +1,6 @@
 import {
+  app,
+  BrowserWindow,
   clipboard,
   dialog,
   ipcMain,
@@ -281,6 +283,28 @@ export function registerCoreIpcHandlers(
     deps.getMainWindow()?.close()
     return true
   })
+
+  ipcMain.handle(IPC.TRAY_PANEL_SHOW_MAIN, () => {
+    deps.getMainWindow()?.show()
+    deps.getMainWindow()?.focus()
+    return true
+  })
+
+  ipcMain.handle(IPC.TRAY_PANEL_HIDE_MAIN, () => {
+    deps.getMainWindow()?.hide()
+    return true
+  })
+
+  ipcMain.handle(IPC.TRAY_PANEL_QUIT, () => {
+    app.quit()
+    return true
+  })
+
+  ipcMain.handle(IPC.TRAY_PANEL_DISMISS, () => {
+    return true
+  })
+
+  ipcMain.handle(IPC.TRAY_PANEL_RESIZE_TO_CONTENT, () => true)
 
   ipcMain.handle(IPC.WINDOW_IS_MAXIMIZED, () => {
     return deps.getMainWindow()?.isMaximized() ?? false

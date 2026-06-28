@@ -70,6 +70,9 @@ export function createSubscriptionApi() {
     onWindowState: (cb: (data: { isMaximized: boolean }) => void) =>
       subscribeIpcEvent(IPC.WINDOW_STATE, cb),
 
+    onAppNavigate: (cb: (data: { path: string }) => void) =>
+      subscribeIpcEvent(IPC.APP_NAVIGATE, cb),
+
     onCodeFocusSearch: (cb: () => void) => subscribeIpcSignal(IPC.CODE_FOCUS_SEARCH, cb),
 
     onCodeToggleViewMode: (cb: () => void) => subscribeIpcSignal(IPC.CODE_TOGGLE_VIEW_MODE, cb),

@@ -24,6 +24,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     theme: initialThemeMode,
     locale: 'system',
     launchOnLogin: false,
+    closeWindowBehavior: 'quit',
     codexProviderApiKeys: {},
     codexSettingsSnapshots: {},
     docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
