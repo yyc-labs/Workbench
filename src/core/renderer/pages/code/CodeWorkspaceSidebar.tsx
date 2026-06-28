@@ -1,6 +1,6 @@
 import type { Dispatch, Ref, SetStateAction } from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
-import { ChevronDown, ChevronUp, FileSearch, LocateFixed, RefreshCw, Search } from 'lucide-react'
+import { ChevronDown, ChevronUp, FileSearch, FolderSearch, LocateFixed, RefreshCw, Search } from 'lucide-react'
 import { useI18n } from '../../i18n'
 import { DebouncedSearchInput } from './DebouncedSearchInput'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
@@ -120,10 +120,11 @@ export function CodeWorkspaceSidebar({
             <DebouncedSearchInput
               inputRef={fileSearchInputRef}
               leadingIcon={<Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-              placeholder={t('codeWorkspace.searchFilesPlaceholder')}
+              placeholder={tree.autoLoadBlocked ? t('codeWorkspace.fileSearchDisabledUntilTreeLoad') : t('codeWorkspace.searchFilesPlaceholder')}
               inputClassName="code-search-input"
               debounceMs={FILE_SEARCH_DEBOUNCE_MS}
               onQueryChange={onChangeFileSearchQuery}
+              disabled={tree.autoLoadBlocked}
             />
           </div>
           <button
@@ -148,7 +149,31 @@ export function CodeWorkspaceSidebar({
           </button>
         </div>
 
-        {tree.status === 'loading' ? (
+        {tree.autoLoadBlocked ? (
+          <div className="code-panel-empty">
+            <div className="code-large-project-empty-state">
+              <div className="code-large-project-empty-icon">
+                <FolderSearch className="h-5 w-5" />
+              </div>
+              <div className="code-large-project-empty-title">{t('codeWorkspace.largeProjectManualLoadTitle')}</div>
+              <div className="code-large-project-empty-copy">{t('codeWorkspace.largeProjectManualLoadHint')}</div>
+              <div className="code-large-project-empty-meta">
+                {t('codeWorkspace.largeProjectManualLoadCount', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}
+              </div>
+              <div className="code-large-project-empty-copy code-large-project-empty-copy--secondary">
+                {t('codeWorkspace.largeProjectManualLoadDetail', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}
+              </div>
+              <button
+                type="button"
+                className="code-large-project-empty-action"
+                onClick={onReloadTree}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>{t('codeWorkspace.largeProjectManualLoadAction')}</span>
+              </button>
+            </div>
+          </div>
+        ) : tree.status === 'loading' ? (
           <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.loadingFiles')}</div>
         ) : tree.status === 'error' ? (
           <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? t('codeWorkspace.failedToLoadFileTree')}</div>

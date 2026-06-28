@@ -4,6 +4,9 @@ import type { ProjectFileContentSearchOptions } from '../../shared/types'
 
 export function createProjectFileInvokeApi() {
   return {
+    getProjectFileAutoLoadDecision: (projectPath: string) =>
+      ipcRenderer.invoke(IPC.PROJECT_FILE_AUTOLOAD_DECISION, projectPath),
+
     listProjectFiles: (projectPath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath),
 
     listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) =>

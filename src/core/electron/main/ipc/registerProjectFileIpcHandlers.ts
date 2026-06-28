@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
 import {
+  getProjectFileAutoLoadDecision,
   listProjectDirectoryFiles,
   listProjectFiles,
   readProjectFile,
@@ -14,6 +15,10 @@ import type { ProjectFileContentSearchOptions } from '../../../shared/types'
 import { withProjectFileErrors } from './registerIpcHandlers.shared'
 
 export function registerProjectFileIpcHandlers(): void {
+  ipcMain.handle(IPC.PROJECT_FILE_AUTOLOAD_DECISION, async (_event, projectPath: string) => {
+    return withProjectFileErrors(() => getProjectFileAutoLoadDecision(projectPath))
+  })
+
   ipcMain.handle(IPC.PROJECT_FILE_TREE, async (_event, projectPath: string) => {
     return withProjectFileErrors(() => listProjectFiles(projectPath))
   })

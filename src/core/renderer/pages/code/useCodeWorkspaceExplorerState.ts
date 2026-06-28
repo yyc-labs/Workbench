@@ -99,6 +99,7 @@ type UseCodeWorkspaceExplorerStateOptions = {
   activeRelativePath: string | null
   contentSearchScopeInput: string
   projectPath: string
+  treeAutoLoadPaused?: boolean
 }
 
 export function useCodeWorkspaceExplorerState({
@@ -106,6 +107,7 @@ export function useCodeWorkspaceExplorerState({
   activeRelativePath,
   contentSearchScopeInput,
   projectPath,
+  treeAutoLoadPaused = false,
 }: UseCodeWorkspaceExplorerStateOptions) {
   const [tree, setTree] = useState<FileTreeState>({
     status: 'idle',
@@ -115,6 +117,9 @@ export function useCodeWorkspaceExplorerState({
     loadingDirectories: new Set(),
     skippedDirectories: 0,
     skippedFiles: 0,
+    autoLoadBlocked: false,
+    autoLoadFileCountSample: 0,
+    autoLoadLimit: 0,
   })
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const [fileSearchQuery, setFileSearchQuery] = useState('')
@@ -185,6 +190,9 @@ export function useCodeWorkspaceExplorerState({
             loadingDirectories: nextLoadingDirectories,
             skippedDirectories: prev.skippedDirectories + result.skipped.directories,
             skippedFiles: prev.skippedFiles + result.skipped.files,
+            autoLoadBlocked: false,
+            autoLoadFileCountSample: prev.autoLoadFileCountSample,
+            autoLoadLimit: prev.autoLoadLimit,
           }
         })
         return true
@@ -227,6 +235,9 @@ export function useCodeWorkspaceExplorerState({
       loadingDirectories: new Set(),
       skippedDirectories: 0,
       skippedFiles: 0,
+      autoLoadBlocked: false,
+      autoLoadFileCountSample: 0,
+      autoLoadLimit: 0,
     })
     setExpandedDirectories(new Set())
     setFileSearchError(null)
@@ -245,6 +256,9 @@ export function useCodeWorkspaceExplorerState({
           loadingDirectories: new Set(),
           skippedDirectories: result.skipped.directories,
           skippedFiles: result.skipped.files,
+          autoLoadBlocked: false,
+          autoLoadFileCountSample: 0,
+          autoLoadLimit: 0,
         }
       })
     } catch (error) {
@@ -257,10 +271,33 @@ export function useCodeWorkspaceExplorerState({
         loadingDirectories: new Set(),
         skippedDirectories: 0,
         skippedFiles: 0,
+        autoLoadBlocked: false,
+        autoLoadFileCountSample: 0,
+        autoLoadLimit: 0,
       })
       setSearchResultNodes([])
     }
   }, [projectPath])
+
+  const blockTreeAutoLoad = useCallback((fileCountSample: number, limit: number) => {
+    directoryLoadGenerationRef.current += 1
+    directoryLoadPromisesRef.current.clear()
+    setTree({
+      status: 'idle',
+      nodes: [],
+      error: null,
+      knownFilePaths: new Set(),
+      loadingDirectories: new Set(),
+      skippedDirectories: 0,
+      skippedFiles: 0,
+      autoLoadBlocked: true,
+      autoLoadFileCountSample: fileCountSample,
+      autoLoadLimit: limit,
+    })
+    setExpandedDirectories(new Set())
+    setFileSearchError(null)
+    setSearchResultNodes([])
+  }, [])
 
   const ensureTreePathLoaded = useCallback(async (relativePath: string) => {
     await expandTreePath(relativePath, collectParentDirectories(relativePath), {
@@ -284,14 +321,34 @@ export function useCodeWorkspaceExplorerState({
   }, [])
 
   useEffect(() => {
+    if (treeAutoLoadPaused) return
     if (activePane !== 'code') return
     if (tree.status !== 'idle') return
-    void loadTree()
-  }, [activePane, loadTree, tree.status])
+    if (tree.autoLoadBlocked) return
+
+    void window.electronAPI.getProjectFileAutoLoadDecision(projectPath)
+      .then((decision) => {
+        if (!decision.shouldAutoLoad) {
+          blockTreeAutoLoad(decision.fileCountSample, decision.limit)
+          return
+        }
+        void loadTree()
+      })
+      .catch(() => {
+        void loadTree()
+      })
+  }, [activePane, blockTreeAutoLoad, loadTree, projectPath, tree.autoLoadBlocked, tree.status, treeAutoLoadPaused])
 
   useEffect(() => {
     const normalizedQuery = fileSearchQuery.trim()
     if (!normalizedQuery) {
+      setIsSearchingFiles(false)
+      setFileSearchError(null)
+      setSearchResultNodes([])
+      return
+    }
+
+    if (tree.autoLoadBlocked) {
       setIsSearchingFiles(false)
       setFileSearchError(null)
       setSearchResultNodes([])
@@ -321,8 +378,10 @@ export function useCodeWorkspaceExplorerState({
 
   useEffect(() => {
     if (!activeRelativePath) return
+    if (treeAutoLoadPaused) return
+    if (tree.autoLoadBlocked) return
     void ensureTreePathLoaded(activeRelativePath)
-  }, [activeRelativePath, ensureTreePathLoaded])
+  }, [activeRelativePath, ensureTreePathLoaded, tree.autoLoadBlocked, treeAutoLoadPaused])
 
   const contentSearchScopeGlobs = useMemo(
     () => parseContentSearchScopeGlobs(contentSearchScopeInput),

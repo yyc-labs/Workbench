@@ -4,8 +4,10 @@ import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
+import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
+import { CodeSidebarRailButton } from './CodeSidebarRailButton'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
@@ -46,6 +48,7 @@ const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
 const MAX_PRELOADED_TRANSCRIPT_SESSIONS = 4
 const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
 const TRANSCRIPT_SESSION_PRELOAD_DELAY_MS = 320
+const CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:code-left-sidebar-collapsed'
 const SMART_EMPTY_FILE_CANDIDATES = [
   'README.md',
   'readme.md',
@@ -111,6 +114,7 @@ export function CodeWorkspacePanel({
   onOpenTranscript,
   onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
+  const { t } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const projectCodeMeta = useAppStore((s) => {
@@ -145,6 +149,10 @@ export function CodeWorkspacePanel({
   const openTranscriptReference = useAppStore((s) => s.openTranscriptReference)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
   const [isExplorerOpen, setIsExplorerOpen] = useState(() => !window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
+  })
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
@@ -250,6 +258,7 @@ export function CodeWorkspacePanel({
     activeRelativePath,
     contentSearchScopeInput,
     projectPath,
+    treeAutoLoadPaused: !isNarrowViewport && isLeftSidebarCollapsed,
   })
   const {
     closeCodePreview,
@@ -365,11 +374,12 @@ export function CodeWorkspacePanel({
     activeRelativePath ? transcriptReferencesByPath.get(activeRelativePath) ?? [] : []
   ), [activeRelativePath, transcriptReferencesByPath])
   const locateFileInTree = useCallback(async (relativePath: string) => {
+    if (tree.autoLoadBlocked) return
     const normalizedPath = relativePath.trim()
     if (!normalizedPath) return
     await ensureTreePathLoaded(normalizedPath)
     setLocateRequestToken((prev) => prev + 1)
-  }, [ensureTreePathLoaded])
+  }, [ensureTreePathLoaded, tree.autoLoadBlocked])
   const openFileWithTreeLocate = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
     const normalizedPath = relativePath.trim()
     if (!normalizedPath) return false
@@ -417,7 +427,9 @@ export function CodeWorkspacePanel({
       if (!preview) return false
       return revealMarkdownPreviewSourceLine(preview, lineNumber)
     },
-    treeStatus: tree.status,
+    treeStatus: tree.status === 'ready' || tree.autoLoadBlocked || (!isNarrowViewport && isLeftSidebarCollapsed)
+      ? 'ready'
+      : tree.status,
   })
   const hasRestorableCodeSession = useMemo(() => {
     const persistedTabs = persistedProjectCodeSession?.tabs ?? []
@@ -427,9 +439,12 @@ export function CodeWorkspacePanel({
       || persistedTabs.some((path) => path.trim().length > 0)
     )
   }, [persistedLastCodeFile, persistedProjectCodeSession])
+  const isTreeReadyForRestore = tree.status === 'ready'
+    || tree.autoLoadBlocked
+    || (!isNarrowViewport && isLeftSidebarCollapsed)
   const isInitialRestoring = !activeRelativePath && (
     isReading
-    || (tree.status !== 'error' && (tree.status !== 'ready' || (isRestoringCodeSession && hasRestorableCodeSession)))
+    || (tree.status !== 'error' && (!isTreeReadyForRestore || (isRestoringCodeSession && hasRestorableCodeSession)))
   )
   captureCurrentModeScrollRef.current = captureCurrentModeScroll
   markOpenedFileInExplorerRef.current = markFilePathKnown
@@ -531,12 +546,25 @@ export function CodeWorkspacePanel({
       setIsContentSearchAdvancedOpen(false)
     }
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, isLeftSidebarCollapsed ? '1' : '0')
+  }, [isLeftSidebarCollapsed])
+
   const focusSearchInputByMode = useCallback(() => {
     const focusTarget = () => {
       const target = viewMode === 'search' ? contentSearchInputRef.current : fileSearchInputRef.current
       if (!target) return
       target.focus()
       target.select()
+    }
+
+    if (!isNarrowViewport && isLeftSidebarCollapsed) {
+      setIsLeftSidebarCollapsed(false)
+      window.setTimeout(() => {
+        focusTarget()
+      }, 0)
+      return
     }
 
     if (isNarrowViewport && !isExplorerOpen) {
@@ -548,7 +576,7 @@ export function CodeWorkspacePanel({
     }
 
     focusTarget()
-  }, [isExplorerOpen, isNarrowViewport, viewMode])
+  }, [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, viewMode])
 
   const openEditorSearchByMode = useCallback((mode: EditorSearchMode = 'find') => {
     if (!activeRelativePath || !isShowingEditor) {
@@ -641,10 +669,17 @@ export function CodeWorkspacePanel({
     })
   }, [activePane, toggleCodeViewMode])
 
-  const showExplorerPanel = !isNarrowViewport || isExplorerOpen
+  const showExplorerPanel = isNarrowViewport ? isExplorerOpen : !isLeftSidebarCollapsed
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
-  const showExplorerPanelForMode = viewMode === 'files' ? showExplorerPanel : true
+  const showExplorerPanelForMode = viewMode === 'files'
+    ? showExplorerPanel
+    : (isNarrowViewport ? true : !isLeftSidebarCollapsed)
   const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
+  const layoutGridStyle = isNarrowViewport
+    ? { gridTemplateColumns: 'minmax(0, 1fr)' }
+    : isLeftSidebarCollapsed
+      ? { gridTemplateColumns: '44px minmax(0, 1fr)' }
+      : undefined
   const handleToggleTreeDirectory = useCallback((relativePath: string) => {
     if (hasSearchQuery) return
     const isExpanded = expandedDirectories.has(relativePath)
@@ -871,55 +906,77 @@ export function CodeWorkspacePanel({
       />
 
       <div className="min-h-0 flex-1">
-        <div className="code-layout-grid h-full" style={isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}>
+        <div className="code-layout-grid h-full" style={layoutGridStyle}>
+          {!isNarrowViewport && isLeftSidebarCollapsed ? (
+            <div className="relative flex h-full min-h-0 items-center justify-center">
+              <CodeSidebarRailButton
+                side="left"
+                collapsed
+                onClick={() => setIsLeftSidebarCollapsed(false)}
+                className="z-20"
+                ariaLabel={t('codeWorkspace.expandSidebar')}
+              />
+            </div>
+          ) : null}
           {showExplorerPanelForMode && (
-            <CodeWorkspaceSidebar
-              activeContentSearchLocation={activeContentSearchLocation}
-              activeContentSearchScopeKey={activeContentSearchScopeKey}
-              activeContentSearchScopeLabel={activeContentSearchScopeLabel}
-              activeRelativePath={activeRelativePath}
-              autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
-              canToggleContentSearchTree={canToggleContentSearchTree}
-              contentSearchCaseSensitive={contentSearchCaseSensitive}
-              contentSearchError={contentSearchError}
-              contentSearchInputRef={contentSearchInputRef}
-              contentSearchQuery={contentSearchQuery}
-              contentSearchResult={contentSearchResult}
-              contentSearchScopeGlobs={contentSearchScopeGlobs}
-              contentSearchScopeInput={contentSearchScopeInput}
-              contentSearchScopePresets={contentSearchScopePresets}
-              contentSearchScopeSummary={contentSearchScopeSummary}
-              contentSearchToggleLabel={contentSearchToggleLabel}
-              contentSearchTreeRef={contentSearchTreeRef}
-              expandedDirectories={expandedDirectories}
-              fileSearchError={fileSearchError}
-              fileSearchInputRef={fileSearchInputRef}
-              hasContentSearchScope={hasContentSearchScope}
-              hasSearchQuery={hasSearchQuery}
-              isContentSearchAdvancedOpen={isContentSearchAdvancedOpen}
-              isSearchingContent={isSearchingContent}
-              isSearchingFiles={isSearchingFiles}
-              locateRequestToken={locateRequestToken}
-              onApplyContentSearchScopePreset={applyContentSearchScopePreset}
-              onChangeContentSearchQuery={handleContentSearchQueryChange}
-              onChangeFileSearchQuery={handleFileSearchQueryChange}
-              onCopyTreeNodeName={handleCopyTreeNodeName}
-              onCopyTreeNodeRelativePath={handleCopyTreeNodeRelativePath}
-              onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
-              onOpenContentSearchResult={handleOpenContentSearchResult}
-              onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
-              onReloadTree={handleReloadTree}
-              onSelectTreeFile={handleSelectTreeFile}
-              onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
-              onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
-              onSetContentSearchScopeInput={setContentSearchScopeInput}
-              onToggleContentSearchTree={handleToggleContentSearchTree}
-              onToggleTreeDirectory={handleToggleTreeDirectory}
-              onLocateFileInTree={locateFileInTree}
-              tree={tree}
-              treeNodesForView={treeNodesForView}
-              viewMode={viewMode}
-            />
+            <div className="relative flex h-full min-h-0">
+              <CodeWorkspaceSidebar
+                activeContentSearchLocation={activeContentSearchLocation}
+                activeContentSearchScopeKey={activeContentSearchScopeKey}
+                activeContentSearchScopeLabel={activeContentSearchScopeLabel}
+                activeRelativePath={activeRelativePath}
+                autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
+                canToggleContentSearchTree={canToggleContentSearchTree}
+                contentSearchCaseSensitive={contentSearchCaseSensitive}
+                contentSearchError={contentSearchError}
+                contentSearchInputRef={contentSearchInputRef}
+                contentSearchQuery={contentSearchQuery}
+                contentSearchResult={contentSearchResult}
+                contentSearchScopeGlobs={contentSearchScopeGlobs}
+                contentSearchScopeInput={contentSearchScopeInput}
+                contentSearchScopePresets={contentSearchScopePresets}
+                contentSearchScopeSummary={contentSearchScopeSummary}
+                contentSearchToggleLabel={contentSearchToggleLabel}
+                contentSearchTreeRef={contentSearchTreeRef}
+                expandedDirectories={expandedDirectories}
+                fileSearchError={fileSearchError}
+                fileSearchInputRef={fileSearchInputRef}
+                hasContentSearchScope={hasContentSearchScope}
+                hasSearchQuery={hasSearchQuery}
+                isContentSearchAdvancedOpen={isContentSearchAdvancedOpen}
+                isSearchingContent={isSearchingContent}
+                isSearchingFiles={isSearchingFiles}
+                locateRequestToken={locateRequestToken}
+                onApplyContentSearchScopePreset={applyContentSearchScopePreset}
+                onChangeContentSearchQuery={handleContentSearchQueryChange}
+                onChangeFileSearchQuery={handleFileSearchQueryChange}
+                onCopyTreeNodeName={handleCopyTreeNodeName}
+                onCopyTreeNodeRelativePath={handleCopyTreeNodeRelativePath}
+                onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
+                onOpenContentSearchResult={handleOpenContentSearchResult}
+                onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
+                onReloadTree={handleReloadTree}
+                onSelectTreeFile={handleSelectTreeFile}
+                onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
+                onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
+                onSetContentSearchScopeInput={setContentSearchScopeInput}
+                onToggleContentSearchTree={handleToggleContentSearchTree}
+                onToggleTreeDirectory={handleToggleTreeDirectory}
+                onLocateFileInTree={locateFileInTree}
+                tree={tree}
+                treeNodesForView={treeNodesForView}
+                viewMode={viewMode}
+              />
+              {!isNarrowViewport && (
+                <CodeSidebarRailButton
+                  side="left"
+                  collapsed={false}
+                  onClick={() => setIsLeftSidebarCollapsed(true)}
+                  className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
+                  ariaLabel={t('codeWorkspace.collapseSidebar')}
+                />
+              )}
+            </div>
           )}
 
           {showEditorPanelForMode && (

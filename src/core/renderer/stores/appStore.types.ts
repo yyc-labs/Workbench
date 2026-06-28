@@ -67,6 +67,7 @@ import type {
   LearningNoteSummary,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
+  ProjectFileAutoLoadDecision,
 } from '../../shared/types'
 
 declare global {
@@ -104,6 +105,7 @@ declare global {
       openExternal: (url: string) => Promise<void>
       resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
       getCapability: () => Promise<Capability>
+      getProjectFileAutoLoadDecision: (projectPath: string) => Promise<ProjectFileAutoLoadDecision>
       listTmuxSessions: () => Promise<TmuxSessionInfo[]>
       killTmuxSession: (sessionName: string) => Promise<boolean>
       listTerminalProcesses: () => Promise<TerminalProcessInventory>

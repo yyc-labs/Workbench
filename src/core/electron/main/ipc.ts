@@ -50,6 +50,7 @@ export const IPC = {
   RUNTIME_LIST_SESSIONS: 'runtime:list-sessions',
   RUNTIME_LIST_ENTRIES: 'runtime:list-entries',
   PROJECT_FILE_TREE: 'project-file:tree',
+  PROJECT_FILE_AUTOLOAD_DECISION: 'project-file:auto-load-decision',
   PROJECT_FILE_TREE_DIRECTORY: 'project-file:tree-directory',
   PROJECT_FILE_SEARCH: 'project-file:search',
   PROJECT_FILE_CONTENT_SEARCH: 'project-file:content-search',

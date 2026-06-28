@@ -15,6 +15,9 @@ export interface FileTreeState {
   loadingDirectories: Set<string>
   skippedDirectories: number
   skippedFiles: number
+  autoLoadBlocked: boolean
+  autoLoadFileCountSample: number
+  autoLoadLimit: number
 }
 
 export interface CodeFileDrawerState {

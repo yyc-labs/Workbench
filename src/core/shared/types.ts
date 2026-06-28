@@ -1058,6 +1058,13 @@ export interface ProjectFileTreeResult {
   }
 }
 
+export interface ProjectFileAutoLoadDecision {
+  shouldAutoLoad: boolean
+  reason: 'ok' | 'large-project'
+  fileCountSample: number
+  limit: number
+}
+
 export interface ProjectFileReadResult {
   relativePath: string
   content: string

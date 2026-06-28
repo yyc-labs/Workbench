@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
-import type { Stats } from 'node:fs'
+import type { Dirent, Stats } from 'node:fs'
 import path from 'node:path'
 import type { ProjectFileContentSearchResult, ProjectFileNode } from '../../../shared/types'
 
@@ -8,6 +8,7 @@ export const MAX_TEXT_FILE_SIZE = 1024 * 1024
 export const MAX_TREE_FILES = 5000
 export const MAX_TREE_DEPTH = 8
 export const MAX_DIRECTORY_ENTRIES = 10_000
+export const LARGE_PROJECT_AUTOLOAD_FILE_LIMIT = 4000
 export const MAX_BINARY_PROBE_BYTES = 8 * 1024
 export const RG_FILE_LIST_TIMEOUT_MS = 20_000
 export const RG_FILE_LIST_MAX_BUFFER = 16 * 1024 * 1024
@@ -122,6 +123,10 @@ export interface FilterListedPathsResult {
 export interface DirectoryListCounters {
   skippedFiles: number
   skippedDirectories: number
+}
+
+export interface AutoLoadProbeCounters {
+  filesSeen: number
 }
 
 export interface RgOutputData {
@@ -438,6 +443,42 @@ export function filterListedFilePaths(listedPaths: string[]): FilterListedPathsR
   }
 
   return { acceptedPaths, skippedFiles }
+}
+
+export async function scanDirectoryForAutoLoadThreshold(
+  rootRealPath: string,
+  absoluteDirPath: string,
+  depth: number,
+  limit: number,
+  counters: AutoLoadProbeCounters
+): Promise<void> {
+  if (counters.filesSeen > limit) return
+  if (depth > MAX_TREE_DEPTH) return
+
+  let entries: Dirent[]
+  try {
+    entries = await fs.readdir(absoluteDirPath, { withFileTypes: true })
+  } catch {
+    return
+  }
+
+  for (const entry of entries) {
+    if (counters.filesSeen > limit) return
+
+    const entryAbsolutePath = path.join(absoluteDirPath, entry.name)
+    const relativePath = toPosixRelativePath(path.relative(rootRealPath, entryAbsolutePath))
+    if (!relativePath || relativePath.startsWith('..')) continue
+
+    if (entry.isDirectory()) {
+      if (isExcludedDirectory(entry.name)) continue
+      await scanDirectoryForAutoLoadThreshold(rootRealPath, entryAbsolutePath, depth + 1, limit, counters)
+      continue
+    }
+
+    if (!entry.isFile()) continue
+    if (isExcludedFile(entry.name)) continue
+    counters.filesSeen += 1
+  }
 }
 
 export async function execFileUtf8(cwd: string, args: string[]): Promise<string> {

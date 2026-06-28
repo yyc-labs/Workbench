@@ -1,13 +1,19 @@
 import { Dirent } from 'node:fs'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { ProjectFileNode, ProjectFileTreeResult } from '../../../shared/types'
+import type {
+  ProjectFileAutoLoadDecision,
+  ProjectFileNode,
+  ProjectFileTreeResult,
+} from '../../../shared/types'
 import {
+  LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
   MAX_DIRECTORY_ENTRIES,
   MAX_SEARCH_RESULTS,
   MAX_TREE_DEPTH,
   MAX_TREE_FILES,
   PROJECT_FILE_LIST_CACHE_TTL_MS,
+  type AutoLoadProbeCounters,
   type DirectoryListCounters,
   type ScanCounters,
   compareTreeNodesByName,
@@ -23,6 +29,7 @@ import {
   normalizeRelativeInput,
   resolveRoot,
   RG_EXCLUDE_GLOBS,
+  scanDirectoryForAutoLoadThreshold,
   shouldSkipListedFilePath,
   toPosixRelativePath,
 } from './shared'
@@ -276,6 +283,44 @@ export async function listProjectDirectoryFiles(
 
 export async function listProjectFiles(projectPath: string): Promise<ProjectFileTreeResult> {
   return listProjectDirectoryFiles(projectPath, null)
+}
+
+export async function getProjectFileAutoLoadDecision(projectPath: string): Promise<ProjectFileAutoLoadDecision> {
+  const rootRealPath = await resolveRoot(projectPath)
+  const cached = getProjectFileListFromCache(rootRealPath)
+  if (cached) {
+    return {
+      shouldAutoLoad: cached.length <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+      reason: cached.length <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+      fileCountSample: cached.length,
+      limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+    }
+  }
+
+  const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
+  if (listedPaths) {
+    const filtered = filterListedFilePaths(listedPaths)
+    setProjectFileListCache(rootRealPath, filtered.acceptedPaths)
+    const fileCountSample = filtered.acceptedPaths.length
+    return {
+      shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+      reason: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+      fileCountSample,
+      limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+    }
+  }
+
+  const counters: AutoLoadProbeCounters = {
+    filesSeen: 0,
+  }
+  await scanDirectoryForAutoLoadThreshold(rootRealPath, rootRealPath, 0, LARGE_PROJECT_AUTOLOAD_FILE_LIMIT, counters)
+  const fileCountSample = counters.filesSeen
+  return {
+    shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+    reason: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+    fileCountSample,
+    limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+  }
 }
 
 export async function searchProjectFiles(projectPath: string, query: string): Promise<ProjectFileNode[]> {
