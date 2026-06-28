@@ -533,6 +533,10 @@ export function CodeWorkspacePanel({
     pendingLocateAfterTreeReloadRef.current = normalizedPath || null
     void loadTree()
   }, [activeRelativePath, loadTree])
+  const handleExpandSidebar = useCallback(() => {
+    setIsLeftSidebarCollapsed(false)
+    handleReloadTree()
+  }, [handleReloadTree])
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
@@ -912,7 +916,7 @@ export function CodeWorkspacePanel({
               <CodeSidebarRailButton
                 side="left"
                 collapsed
-                onClick={() => setIsLeftSidebarCollapsed(false)}
+                onClick={handleExpandSidebar}
                 className="z-20"
                 ariaLabel={t('codeWorkspace.expandSidebar')}
               />
