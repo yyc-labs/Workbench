@@ -24,7 +24,7 @@ export type RuntimeStateChangedPayload = {
 export type RegisterIpcHandlersDependencies = {
   getMainWindow: () => BrowserWindow | null
   getProcessManager: () => ProcessManager | null
-  getBootCapability: () => Capability | null
+  getCapability: () => Capability | null
   emitRuntimeStateChanged: (payload: RuntimeStateChangedPayload) => void
   aiCommitService: AiCommitService
   agentHookGateway: AgentHookGateway
@@ -49,7 +49,7 @@ export type TranscriptGatewayImportResult = {
 }
 
 export function getBootDistro(deps: RegisterIpcHandlersDependencies): string {
-  return deps.getBootCapability()?.wslDistro || 'Ubuntu'
+  return deps.getCapability()?.wslDistro || 'Ubuntu'
 }
 
 export async function withProjectFileErrors<T>(action: () => Promise<T>): Promise<T> {

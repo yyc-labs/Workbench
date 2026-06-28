@@ -103,6 +103,10 @@ class ProcessManager {
     this.capability = capability
   }
 
+  updateCapability(capability: Capability): void {
+    this.capability = capability
+  }
+
   get backend(): BackendMode {
     return this.capability.backend
   }
@@ -146,7 +150,6 @@ class ProcessManager {
 
     switch (this.capability.backend) {
       case 'tmux':
-      case 'wsl-pty':
       case 'direct-pty':
         return this.startWithPty(projectId, command, cwd)
       default:

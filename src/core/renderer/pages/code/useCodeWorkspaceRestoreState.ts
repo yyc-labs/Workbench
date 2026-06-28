@@ -147,7 +147,7 @@ export function useCodeWorkspaceRestoreState({
     const restoreCandidates = Array.from(new Set([
       persistedLastCodeFile?.trim() || '',
       sanitizedSession?.activePath?.trim() || '',
-      sanitizedSession?.tabs[0]?.trim() || '',
+      sanitizedSession?.tabs[sanitizedSession.tabs.length - 1]?.trim() || '',
     ].filter(Boolean)))
 
     if (restoreCandidates.length <= 0) {

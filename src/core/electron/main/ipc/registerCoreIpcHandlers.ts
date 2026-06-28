@@ -140,11 +140,11 @@ export function registerCoreIpcHandlers(
   )
 
   ipcMain.handle(IPC.CODEX_SCOPE_GET, async () => {
-    return resolveCodexEnvironmentScope(deps.getBootCapability())
+    return resolveCodexEnvironmentScope(deps.getCapability())
   })
 
   ipcMain.handle(IPC.CODEX_SETTINGS_GET, async () => {
-    return readCodexSettings(deps.getBootCapability())
+    return readCodexSettings(deps.getCapability())
   })
 
   ipcMain.handle(
@@ -159,7 +159,7 @@ export function registerCoreIpcHandlers(
           ? normalizeCodexConfig(payload.config as Record<string, unknown>)
           : normalizeCodexConfig({})
 
-      const snapshot = await writeCodexSettings(deps.getBootCapability(), {
+      const snapshot = await writeCodexSettings(deps.getCapability(), {
         providerApiKeys,
         config,
       })

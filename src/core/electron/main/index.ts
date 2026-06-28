@@ -46,6 +46,10 @@ if (!gotSingleInstanceLock) {
 
 const aiEnvironmentController = new AiEnvironmentController(
   () => bootCapability,
+  (capability) => {
+    bootCapability = capability
+    processManager?.updateCapability(capability)
+  },
   () => loadConfig(),
 )
 const gitService = createGitService({
@@ -332,7 +336,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers({
     getMainWindow: () => mainWindow,
     getProcessManager: () => processManager,
-    getBootCapability: () => bootCapability,
+    getCapability: () => bootCapability,
     emitRuntimeStateChanged,
     aiCommitService,
     agentHookGateway,

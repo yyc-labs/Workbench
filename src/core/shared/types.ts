@@ -31,6 +31,20 @@ export type AiExecutionMode =
 export type AiRuntimeProfileMode = AiExecutionMode | 'inherit'
 export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
 export type AiCommitProfileSource = 'manual' | 'claude' | 'codex'
+export type RuntimeEntrypointTarget = 'native' | 'wsl'
+export type RuntimeEntrypointWslPrefix = '~/' | '$HOME/' | '${HOME}/' | '/'
+
+export interface RuntimeEntrypointConfig {
+  /** Explicit execution target for custom-script runtime entrypoint. */
+  target: RuntimeEntrypointTarget
+  /** Effective path passed to the launcher, kept for simple provider consumption. */
+  path: string
+  /** WSL path prefix selected in the UI when target is "wsl". */
+  wslPrefix?: RuntimeEntrypointWslPrefix
+  /** User-entered WSL path suffix after wslPrefix. */
+  wslRelativePath?: string
+}
+
 export type StartupDefaultFilter =
   | { type: 'all' }
   | { type: 'pinned' }
@@ -67,7 +81,9 @@ export interface AiEnvironmentConfig {
   mode: AiExecutionMode
   wslDistro?: string
   shell?: AiShell
+  runtimeEntrypointConfig?: RuntimeEntrypointConfig
   runtimeEntrypoint?: string
+  runtimeEntrypointHistoryEntries?: RuntimeEntrypointConfig[]
   runtimeEntrypointHistory?: string[]
   runtimePassProjectPath?: boolean
   aiCommitEntrypoint?: string
@@ -776,7 +792,7 @@ export interface ProjectCodeCursorPosition {
 }
 
 export interface ProjectCodeSession {
-  /** Recently opened file tabs in Code page, newest first */
+  /** Open file tabs in Code page, kept in display order */
   tabs: string[]
   /** Active tab path when session snapshot was saved */
   activePath?: string
@@ -960,6 +976,8 @@ export interface Capability {
   hostPlatform: 'windows' | 'linux' | 'macos'
   backend: BackendMode
   hasPty: boolean
+  /** Host-only WSL installation signal; does not mean a distro has been started or probed. */
+  hasWslInstalled?: boolean
   hasWsl: boolean
   hasTmux: boolean
   wslDistro?: string

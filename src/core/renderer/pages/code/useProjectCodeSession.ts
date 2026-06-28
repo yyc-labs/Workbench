@@ -8,6 +8,10 @@ export const CODE_FILE_DRAWER_SECTION_LIMIT = 40
 
 export type EditorCursorPosition = { lineNumber: number; column: number }
 
+function fallbackActiveTabPath(tabs: string[]): string | undefined {
+  return tabs.length > 0 ? tabs[tabs.length - 1] : undefined
+}
+
 function normalizeContentSearchScope(value: unknown): string {
   if (typeof value !== 'string') return ''
   return value.trim()
@@ -30,7 +34,7 @@ export function normalizeProjectCodeSession(value: ProjectCodeSession | undefine
     : []
 
   const activePath = typeof value.activePath === 'string' ? value.activePath.trim() : ''
-  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
+  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : fallbackActiveTabPath(tabs)
   const cursorEntries: Array<[string, EditorCursorPosition]> = []
 
   if (value.cursorPositions && typeof value.cursorPositions === 'object') {
@@ -141,7 +145,7 @@ export function sanitizeProjectCodeSessionByPaths(
   const tabSet = new Set(tabs)
   const cursorPositions = sanitizeCursorPositionsForTabs(normalized.cursorPositions, tabSet)
   const activePathRaw = normalized.activePath?.trim() || ''
-  const activePath = activePathRaw && tabSet.has(activePathRaw) ? activePathRaw : tabs[0]
+  const activePath = activePathRaw && tabSet.has(activePathRaw) ? activePathRaw : fallbackActiveTabPath(tabs)
 
   return normalizeProjectCodeSession({
     tabs,

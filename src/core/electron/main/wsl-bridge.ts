@@ -9,6 +9,7 @@ class WslBridge {
   private _available: boolean | null = null
   private _distro: string | null = null
   private _shell: string | null = null
+  private _shellDetected = false
 
   private execWithArgs(args: string[], cmdLabel: string, timeoutMs: number): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -73,7 +74,7 @@ class WslBridge {
       : utf8
   }
 
-  /** One-shot check: is WSL installed? Uses execSync because it's only called at boot. */
+  /** Host-only check: is WSL installed and what distro name should be used? */
   isAvailable(): boolean {
     if (this._available !== null) return this._available
     try {
@@ -87,14 +88,6 @@ class WslBridge {
       // Prefer Ubuntu, fall back to first listed
       this._distro = distros.find((d) => d.toLowerCase().includes('ubuntu')) || distros[0] || 'Ubuntu'
 
-      // Detect available shell inside the target distro
-      try {
-        execSync(`wsl.exe -d "${this._distro}" -e bash -c "echo ok"`, { stdio: 'pipe', timeout: 5000 })
-        this._shell = 'bash'
-      } catch {
-        this._shell = 'sh'
-      }
-
       return true
     } catch {
       this._available = false
@@ -107,10 +100,25 @@ class WslBridge {
     return this._distro ?? 'Ubuntu'
   }
 
+  private detectShell(): string {
+    if (this._shellDetected) return this._shell ?? 'sh'
+    this._shellDetected = true
+    if (!this.isAvailable()) {
+      this._shell = 'sh'
+      return this._shell
+    }
+    try {
+      execSync(`wsl.exe -d "${this.getDistro()}" -e bash -c "echo ok"`, { stdio: 'pipe', timeout: 5000 })
+      this._shell = 'bash'
+    } catch {
+      this._shell = 'sh'
+    }
+    return this._shell
+  }
+
   /** Returns the detected shell: 'bash' or 'sh'. Call after isAvailable() returns true. */
   getShell(): string {
-    this.isAvailable()
-    return this._shell ?? 'sh'
+    return this.detectShell()
   }
 
   /** Convert Windows path to WSL path. C:\Users\me\proj → /mnt/c/Users/me/proj */

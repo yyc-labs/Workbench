@@ -79,7 +79,7 @@ export const windowsWslProvider: AiExecutionProvider = {
   async diagnose(context): Promise<RuntimeDiagnostics> {
     const issues: string[] = []
     const hasWsl = context.capability.hasWsl
-    const hasTmux = context.capability.hasTmux
+    const hasTmux = hasWsl ? await wslBridge.hasTmux() : false
     const distro = context.config.wslDistro || context.capability.wslDistro
 
     if (!hasWsl) issues.push('WSL is not available')
@@ -93,7 +93,7 @@ export const windowsWslProvider: AiExecutionProvider = {
       hasWsl,
       hasTmux,
       distro,
-      shell: normalizeWslShell(context.capability.wslShell),
+      shell: normalizeWslShell(hasWsl ? wslBridge.getShell() : context.capability.wslShell),
       issues,
     }
   },
@@ -176,6 +176,7 @@ export const windowsWslProvider: AiExecutionProvider = {
   },
 
   async listRuntimeSessions(): Promise<RuntimeSessionInfo[]> {
+    if (!await wslBridge.hasTmux()) return []
     const sessions = await tmuxManager.listLauncherSessions()
     return sessions.map((item) => ({
       sessionName: item.sessionName,
@@ -187,6 +188,7 @@ export const windowsWslProvider: AiExecutionProvider = {
   },
 
   async stopRuntimeSession(_context, sessionName: string): Promise<boolean> {
+    if (!await wslBridge.hasTmux()) return false
     return tmuxManager.killSession(sessionName)
   },
 }

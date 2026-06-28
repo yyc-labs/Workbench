@@ -65,7 +65,7 @@ export function registerRuntimeIpcHandlers(
   })
 
   ipcMain.handle(IPC.WSL_GET_CAPABILITY, () => {
-    return deps.getBootCapability()
+    return deps.getCapability()
   })
 
   ipcMain.handle(IPC.TMUX_LIST_SESSIONS, () => {

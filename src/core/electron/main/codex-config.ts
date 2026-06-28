@@ -266,7 +266,7 @@ export async function resolveCodexEnvironmentScope(capability: Capability | null
   const runtimeMode = getRuntimeMode()
   const descriptor = resolveCodexScopeDescriptor(capability, loadConfig().aiEnvironment)
 
-  if (descriptor.target === 'wsl' && capability?.hostPlatform === 'windows' && capability.wslDistro) {
+  if (descriptor.target === 'wsl' && capability?.hostPlatform === 'windows') {
     const homePath = await resolveWslHomePath()
     return {
       target: 'wsl',

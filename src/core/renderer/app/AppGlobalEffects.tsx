@@ -151,6 +151,7 @@ function SessionPoller() {
   const hasLiveProcesses =
     processStatusesKey.includes(':running') || processStatusesKey.includes(':stopping')
   const shouldPollSessions = hasRuntimeEntries || hasLiveProcesses
+  const shouldRefreshOnFocus = hasRuntimeEntries || hasLiveProcesses
 
   useEffect(() => {
     if (projects.length === 0 || !shouldPollSessions) {
@@ -164,7 +165,7 @@ function SessionPoller() {
   }, [projectIds, projects.length, shouldPollSessions, refreshRuntimeState])
 
   useEffect(() => {
-    if (projects.length === 0) return
+    if (projects.length === 0 || !shouldRefreshOnFocus) return
 
     const refreshNow = () => {
       void refreshRuntimeState('all')
@@ -183,7 +184,7 @@ function SessionPoller() {
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [projectIds, projects.length, refreshRuntimeState])
+  }, [projectIds, projects.length, refreshRuntimeState, shouldRefreshOnFocus])
 
   return null
 }

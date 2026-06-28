@@ -1,22 +1,11 @@
 import type { AiEnvironmentConfig, Capability, CodexEnvironmentScope } from './types'
+import {
+  isClearlyWindowsEntrypointPath,
+  isLikelyWslEntrypointPath,
+  shouldUseWslForRuntimeEntrypoint,
+} from './runtimeEntrypoint'
 
 type CodexScopeDescriptor = Pick<CodexEnvironmentScope, 'hostPlatform' | 'runtimeMode' | 'target'>
-
-function isLikelyWslPath(pathValue: string): boolean {
-  const normalized = pathValue.trim()
-  return normalized.startsWith('/')
-    || normalized.startsWith('~/')
-    || normalized === '~'
-    || normalized === '$HOME'
-    || normalized.startsWith('$HOME/')
-    || normalized === '${HOME}'
-    || normalized.startsWith('${HOME}/')
-}
-
-function isClearlyWindowsPath(pathValue: string): boolean {
-  const normalized = pathValue.trim()
-  return /^[A-Za-z]:[\\/]/.test(normalized) || /^\\\\/.test(normalized)
-}
 
 function inferHostPlatform(
   capability: Capability | null,
@@ -35,24 +24,31 @@ export function resolveCodexScopeDescriptor(
   const runtimeMode = aiEnvironment?.mode ?? 'disabled'
   const hostPlatform = inferHostPlatform(capability, runtimeMode)
 
-  if (hostPlatform === 'windows' && capability?.hasWsl) {
+  if (hostPlatform === 'windows') {
     if (runtimeMode === 'windows-wsl') {
       return { hostPlatform, runtimeMode, target: 'wsl' }
     }
 
     if (runtimeMode === 'custom-script') {
       const entrypoint = aiEnvironment?.runtimeEntrypoint?.trim() || ''
+      if (aiEnvironment?.runtimeEntrypointConfig) {
+        return {
+          hostPlatform,
+          runtimeMode,
+          target: shouldUseWslForRuntimeEntrypoint(aiEnvironment) ? 'wsl' : 'native',
+        }
+      }
       if (!entrypoint) {
+        return { hostPlatform, runtimeMode, target: 'native' }
+      }
+      if (isLikelyWslEntrypointPath(entrypoint)) {
         return { hostPlatform, runtimeMode, target: 'wsl' }
       }
-      if (isLikelyWslPath(entrypoint)) {
-        return { hostPlatform, runtimeMode, target: 'wsl' }
-      }
-      if (isClearlyWindowsPath(entrypoint)) {
+      if (isClearlyWindowsEntrypointPath(entrypoint)) {
         return { hostPlatform, runtimeMode, target: 'native' }
       }
 
-      return { hostPlatform, runtimeMode, target: 'wsl' }
+      return { hostPlatform, runtimeMode, target: 'native' }
     }
   }
 
@@ -68,4 +64,3 @@ export function getCodexScopeCacheKey(
 ): string {
   return `${scope.hostPlatform}:${scope.runtimeMode}:${scope.target}`
 }
-

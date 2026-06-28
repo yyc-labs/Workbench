@@ -72,6 +72,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
   setAiEnvironmentConfig: async (aiEnvironment) => {
     const previousMode = get().config.aiEnvironment?.mode
     const updated = await window.electronAPI.setConfig({ aiEnvironment })
+    const capability = await window.electronAPI.getCapability()
     const nextMode = updated.aiEnvironment?.mode
     const modeChanged = previousMode !== nextMode
     set((state) => ({
@@ -79,6 +80,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
         ...state.config,
         aiEnvironment: updated.aiEnvironment,
       },
+      capability,
       runtimeModeSwitchCooldownUntil: modeChanged
         ? Date.now() + RUNTIME_MODE_SWITCH_COOLDOWN_MS
         : state.runtimeModeSwitchCooldownUntil,

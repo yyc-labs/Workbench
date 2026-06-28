@@ -148,6 +148,7 @@ export function SettingsPage() {
                 <SettingsAgentsPanel
                   capability={capability}
                   mode={config.aiEnvironment?.mode}
+                  aiEnvironment={config.aiEnvironment}
                   profiles={config.claudeRuntimeProfiles ?? []}
                   activeProfileId={config.activeClaudeRuntimeProfileId}
                   onProfilesSave={setClaudeRuntimeProfiles}

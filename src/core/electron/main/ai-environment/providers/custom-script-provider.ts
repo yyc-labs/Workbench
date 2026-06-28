@@ -2,7 +2,11 @@ import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { homedir } from 'os'
 import { basename } from 'path'
-import type { AiExecutionMode, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
+import type { AiEnvironmentConfig, AiExecutionMode, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo } from '../../../../shared/types'
+import {
+  isLikelyWslEntrypointPath,
+  shouldUseWslForRuntimeEntrypoint,
+} from '../../../../shared/runtimeEntrypoint'
 import { normalizeWindowsHostPath } from '../../host-path'
 import type { AiExecutionProvider } from '../provider-types'
 import { wslBridge } from '../../wsl-bridge'
@@ -32,16 +36,6 @@ function expandHomeRelativePath(pathValue: string, homeDir?: string): string {
   if (normalized === '${HOME}') return homeDir
   if (normalized.startsWith('${HOME}/')) return `${homeDir}/${normalized.slice(8)}`
   return normalized
-}
-
-function isLikelyWslPath(pathValue: string): boolean {
-  return pathValue.startsWith('/')
-    || pathValue.startsWith('~/')
-    || pathValue === '~'
-    || pathValue === '$HOME'
-    || pathValue.startsWith('$HOME/')
-    || pathValue === '${HOME}'
-    || pathValue.startsWith('${HOME}/')
 }
 
 async function resolveWslHome(hasWsl: boolean, wslHome?: string): Promise<string | undefined> {
@@ -93,6 +87,11 @@ function isPowerShellScript(pathValue: string): boolean {
 
 function isCmdScript(pathValue: string): boolean {
   return /\.(cmd|bat)$/i.test(pathValue)
+}
+
+function shouldUseWslForConfigEntrypoint(config: Pick<AiEnvironmentConfig, 'runtimeEntrypointConfig' | 'runtimeEntrypoint'>): boolean {
+  if (config.runtimeEntrypointConfig) return shouldUseWslForRuntimeEntrypoint(config)
+  return isLikelyWslEntrypointPath(config.runtimeEntrypoint)
 }
 
 function checkPosixEntrypoint(pathValue: string): { exists: boolean; executable: boolean } {
@@ -318,7 +317,7 @@ export const customScriptProvider: AiExecutionProvider = {
       }
     }
     if (profileCommand) {
-      if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(profileCommand) && !context.capability.hasWsl) {
+      if (context.capability.hostPlatform === 'windows' && isLikelyWslEntrypointPath(profileCommand) && !context.capability.hasWsl) {
         issues.push('WSL is required to run a POSIX custom runtime command on Windows')
       }
       return {
@@ -343,12 +342,13 @@ export const customScriptProvider: AiExecutionProvider = {
         context.capability.wslEnv?.HOME,
       )
       : undefined
+    const useWslEntrypoint = shouldUseWslForConfigEntrypoint(context.config)
     let launcherScriptExists: boolean | undefined
     let launcherScriptExecutable: boolean | undefined
 
     if (!expandedEntrypoint) {
       issues.push('Runtime entrypoint is not configured')
-    } else if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(expandedEntrypoint)) {
+    } else if (context.capability.hostPlatform === 'windows' && useWslEntrypoint) {
       if (!context.capability.hasWsl) {
         issues.push('WSL is required to run a POSIX custom runtime entrypoint on Windows')
       } else {
@@ -408,11 +408,16 @@ export const customScriptProvider: AiExecutionProvider = {
         rawEntrypoint,
         context.capability.hostPlatform,
         context.capability.hasWsl,
-        context.capability.wslEnv?.HOME,
+      context.capability.wslEnv?.HOME,
       )
       : '')
     const targetEnvironment: 'host' | 'wsl' =
-      context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)
+      context.capability.hostPlatform === 'windows'
+        && (
+          profileCommand
+            ? isLikelyWslEntrypointPath(entrypoint)
+            : shouldUseWslForConfigEntrypoint(context.config)
+        )
         ? 'wsl'
         : 'host'
     const resolvedProjectPath = resolveProjectPathArg(
@@ -493,7 +498,7 @@ export const customScriptProvider: AiExecutionProvider = {
       }
     }
 
-    if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)) {
+    if (context.capability.hostPlatform === 'windows' && targetEnvironment === 'wsl') {
       if (!context.capability.hasWsl) {
         throw new Error('WSL is required to run a POSIX custom runtime entrypoint on Windows')
       }
@@ -616,7 +621,7 @@ export const customScriptProvider: AiExecutionProvider = {
       ? normalizeWindowsHostPath(input.repoRoot, context.capability.wslDistro)
       : input.repoRoot
 
-    if (context.capability.hostPlatform === 'windows' && isLikelyWslPath(entrypoint)) {
+    if (context.capability.hostPlatform === 'windows' && isLikelyWslEntrypointPath(entrypoint)) {
       if (!context.capability.hasWsl) {
         throw new Error('WSL is required to run a POSIX custom AI Commit entrypoint on Windows')
       }
@@ -706,9 +711,8 @@ export const customScriptProvider: AiExecutionProvider = {
   },
 
   async listRuntimeSessions(context): Promise<RuntimeSessionInfo[]> {
-    if (!context.capability.hasTmux) return []
-
     if (context.capability.hostPlatform === 'windows' && context.capability.hasWsl) {
+      if (!await wslBridge.hasTmux()) return []
       const sessions = await tmuxManager.listLauncherSessions()
       return sessions.map((item) => ({
         sessionName: item.sessionName,
@@ -727,9 +731,8 @@ export const customScriptProvider: AiExecutionProvider = {
   },
 
   async stopRuntimeSession(context, sessionName: string): Promise<boolean> {
-    if (!context.capability.hasTmux) return false
-
     if (context.capability.hostPlatform === 'windows' && context.capability.hasWsl) {
+      if (!await wslBridge.hasTmux()) return false
       return tmuxManager.killSession(sessionName)
     }
 

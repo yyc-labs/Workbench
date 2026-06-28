@@ -60,10 +60,9 @@ function normalizeProfiles(profiles: AiRuntimeProfile[]): AiRuntimeProfile[] {
 function getAvailableModes(capability: Capability | null): AiExecutionMode[] {
   if (!capability) return []
   if (capability.hostPlatform === 'windows') {
-    const modes: AiExecutionMode[] = []
-    if (capability.hasWsl) modes.push('windows-wsl')
-    modes.push('windows-native', 'custom-script', 'disabled')
-    return modes
+    return capability.hasWsl || capability.hasWslInstalled
+      ? ['windows-native', 'windows-wsl', 'custom-script', 'disabled']
+      : ['windows-native', 'custom-script', 'disabled']
   }
   return [capability.hostPlatform === 'macos' ? 'macos-native' : 'linux-native', 'custom-script', 'disabled']
 }

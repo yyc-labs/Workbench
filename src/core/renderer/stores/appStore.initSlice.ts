@@ -62,7 +62,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
           set({ tmuxSessions })
 
           await get().loadRuntimeEntries()
-          if (config.aiEnvironment?.mode === 'windows-wsl') {
+          if (config.aiEnvironment?.mode === 'windows-wsl' && Object.keys(get().runtimeEntries).length > 0) {
             await get().refreshSessions()
           }
           await get().syncManagedProcesses()

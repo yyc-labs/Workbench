@@ -1,11 +1,13 @@
 import { AlertTriangle, ExternalLink, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AiEnvironmentConfig,
   AiExecutionMode,
   Capability,
   ClaudeBashrcConfig,
   ClaudeRuntimeProfile,
 } from '../../../shared/types'
+import { shouldUseWslForRuntimeEntrypoint } from '../../../shared/runtimeEntrypoint'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -16,6 +18,7 @@ const DEEPSEEK_CLAUDE_CODE_DOC_URL = 'https://api-docs.deepseek.com/zh-cn/quick_
 type SettingsAiRuntimePanelProps = {
   capability: Capability | null
   mode?: AiExecutionMode
+  aiEnvironment?: AiEnvironmentConfig
   profiles: ClaudeRuntimeProfile[]
   activeProfileId?: string
   onProfilesSave: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
@@ -56,6 +59,7 @@ function sanitizeProfileName(value: string, fallback: string): string {
 function SettingsAiRuntimePanel({
   capability,
   mode,
+  aiEnvironment,
   profiles,
   activeProfileId,
   onProfilesSave,
@@ -82,12 +86,15 @@ function SettingsAiRuntimePanel({
 
   const capabilityReady = capability !== null
   const isWindowsNativeMode = mode === 'windows-native'
+  const usesWslShellScope = capability?.hostPlatform === 'windows' && (
+    mode === 'windows-wsl'
+    || (mode === 'custom-script' && shouldUseWslForRuntimeEntrypoint(aiEnvironment))
+  )
   const supportsShellEnvConfig = Boolean(
     capability && (
       capability.hostPlatform === 'linux'
       || capability.hostPlatform === 'macos'
-      || (capability.hostPlatform === 'windows' && capability.hasWsl)
-      || mode === 'custom-script'
+      || usesWslShellScope
     )
   )
   const supportsWindowsEnvConfig = isWindowsNativeMode && capability?.hostPlatform === 'windows'

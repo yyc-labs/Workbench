@@ -5,9 +5,8 @@ import { join } from 'path'
 import { wslBridge } from './wsl-bridge'
 import type { ClaudeBashrcConfig } from '../../shared/types'
 
-const BASHRC_PATH = process.platform === 'win32'
-  ? '/home/ubuntu/.bashrc'
-  : join(homedir(), '.bashrc')
+const POSIX_BASHRC_PATH = join(homedir(), '.bashrc')
+let cachedWslBashrcPath: string | null = null
 
 const DEFAULT_CLAUDE_BASHRC_CONFIG: ClaudeBashrcConfig = {
   anthropicBaseUrl: 'https://api.deepseek.com/anthropic',
@@ -35,6 +34,18 @@ function ensureShellRuntimeAvailable(): void {
   if (process.platform === 'win32' && !wslBridge.isAvailable()) {
     throw new Error('WSL is not available on this host')
   }
+}
+
+async function resolveBashrcPath(): Promise<string> {
+  if (process.platform !== 'win32') return POSIX_BASHRC_PATH
+  if (cachedWslBashrcPath) return cachedWslBashrcPath
+  try {
+    const homePath = await wslBridge.exec('printf %s "$HOME"', 15000)
+    cachedWslBashrcPath = `${(homePath.trim() || '/home/ubuntu').replace(/\/+$/, '')}/.bashrc`
+  } catch {
+    cachedWslBashrcPath = '/home/ubuntu/.bashrc'
+  }
+  return cachedWslBashrcPath
 }
 
 function shellSingleQuote(input: string): string {
@@ -83,21 +94,23 @@ function replaceOrAppendExport(content: string, envName: string, value: string):
 async function writeRawBashrc(content: string): Promise<void> {
   ensureShellRuntimeAvailable()
   if (process.platform === 'win32') {
-    const escaped = shellSingleQuote(BASHRC_PATH)
+    const bashrcPath = await resolveBashrcPath()
+    const escaped = shellSingleQuote(bashrcPath)
     const payloadBase64 = Buffer.from(content, 'utf-8').toString('base64')
     await wslBridge.exec(`printf '%s' '${payloadBase64}' | base64 -d > '${escaped}'`, 15000)
     return
   }
-  await writeFile(BASHRC_PATH, content, 'utf-8')
+  await writeFile(POSIX_BASHRC_PATH, content, 'utf-8')
 }
 
 async function readRawBashrc(): Promise<string> {
   ensureShellRuntimeAvailable()
   if (process.platform === 'win32') {
-    const escaped = shellSingleQuote(BASHRC_PATH)
+    const bashrcPath = await resolveBashrcPath()
+    const escaped = shellSingleQuote(bashrcPath)
     return wslBridge.exec(`cat '${escaped}'`, 15000)
   }
-  return readFile(BASHRC_PATH, 'utf-8')
+  return readFile(POSIX_BASHRC_PATH, 'utf-8')
 }
 
 async function execBashInteractiveLogin(command: string): Promise<void> {
@@ -127,8 +140,9 @@ async function execBashInteractiveLogin(command: string): Promise<void> {
 
 async function validateBashrcLoad(expected: ClaudeBashrcConfig): Promise<void> {
   ensureShellRuntimeAvailable()
+  const bashrcPath = await resolveBashrcPath()
   const checkCommand = [
-    `source '${shellSingleQuote(BASHRC_PATH)}'`,
+    `source '${shellSingleQuote(bashrcPath)}'`,
     '[ -n "$ANTHROPIC_BASE_URL" ]',
     '[ -n "$ANTHROPIC_MODEL" ]',
     '[ -n "$CLAUDE_CODE_SUBAGENT_MODEL" ]',

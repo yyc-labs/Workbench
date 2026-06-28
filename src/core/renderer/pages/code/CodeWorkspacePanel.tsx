@@ -811,7 +811,7 @@ export function CodeWorkspacePanel({
     })
 
     if (activeRelativePath !== normalizedPath) return
-    const nextActivePath = nextTabs[0]
+    const nextActivePath = nextTabs[nextTabs.length - 1]
     if (nextActivePath) {
       void openFileWithTreeLocate(nextActivePath)
     }

@@ -1,6 +1,6 @@
 import { Bot, KeyRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { AiExecutionMode, Capability, ClaudeRuntimeProfile } from '../../../shared/types'
+import type { AiEnvironmentConfig, AiExecutionMode, Capability, ClaudeRuntimeProfile } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import { SettingsAgentInstallCommandsPanel } from './SettingsAgentInstallCommandsPanel'
 import { SettingsAiRuntimePanel } from './SettingsAiRuntimePanel'
@@ -11,6 +11,7 @@ type AgentsTab = 'claude' | 'codex'
 type SettingsAgentsPanelProps = {
   capability: Capability | null
   mode?: AiExecutionMode
+  aiEnvironment?: AiEnvironmentConfig
   profiles: ClaudeRuntimeProfile[]
   activeProfileId?: string
   onProfilesSave: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
@@ -20,6 +21,7 @@ type SettingsAgentsPanelProps = {
 function SettingsAgentsPanel({
   capability,
   mode,
+  aiEnvironment,
   profiles,
   activeProfileId,
   onProfilesSave,
@@ -79,6 +81,7 @@ function SettingsAgentsPanel({
         <SettingsAiRuntimePanel
           capability={capability}
           mode={mode}
+          aiEnvironment={aiEnvironment}
           profiles={profiles}
           activeProfileId={activeProfileId}
           onProfilesSave={onProfilesSave}

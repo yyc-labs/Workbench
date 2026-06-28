@@ -115,6 +115,8 @@ export function useProjectCodeSessionState({
 
   useEffect(() => {
     if (!projectId) return
+    // Avoid overwriting the persisted active tab before the initial restore picks a file.
+    if (!activeRelativePath && isRestoringCodeSessionRef.current) return
     const activePath = activeRelativePath?.trim() || undefined
     const tabs = openTabPaths.slice(0, MAX_PROJECT_CODE_SESSION_TABS)
     if (activePath && !tabs.includes(activePath)) {

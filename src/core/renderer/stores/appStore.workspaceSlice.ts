@@ -234,7 +234,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const normalizedActivePathRaw = normalizePath(session?.activePath)
     const normalizedActivePath = normalizedActivePathRaw && normalizedTabs.includes(normalizedActivePathRaw)
       ? normalizedActivePathRaw
-      : normalizedTabs[0]
+      : normalizedTabs[normalizedTabs.length - 1]
 
     const cursorEntries: Array<[string, { lineNumber: number; column: number }]> = []
     const rawCursorPositions = session?.cursorPositions

@@ -8,14 +8,30 @@ import type {
   BackendMode,
   Capability,
   ManagedProcessSnapshot,
+  RuntimeEntrypointConfig,
+  RuntimeEntrypointTarget,
+  RuntimeEntrypointWslPrefix,
   RuntimeEntry,
   TerminalProcessInventory,
 } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select, type SelectOption } from '../../components/ui/select'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
 import { isTmuxRuntimeMode } from '../../lib/runtimePresentation'
+import {
+  composeRuntimeEntrypointConfig,
+  composeWslEntrypointPath,
+  createRuntimeEntrypointConfigFromPath,
+  createWslRuntimeEntrypointConfig,
+  dedupeRuntimeEntrypointConfigs,
+  isLikelyWslEntrypointPath,
+  normalizeRuntimeEntrypointConfig,
+  normalizeRuntimeEntrypointHistoryEntries,
+  runtimeEntrypointConfigsToHistory,
+  splitWslEntrypointPath,
+} from '../../../shared/runtimeEntrypoint'
 import { backendLabel, formatSince } from './settings.helpers'
 import { SettingsAiRuntimeProfilesPanel } from './SettingsAiRuntimeProfilesPanel'
 
@@ -39,6 +55,14 @@ function normalizeWindowsAiRunningShell(shell?: AiEnvironmentConfig['shell']): W
   return shell === 'cmd' ? 'cmd' : 'pwsh'
 }
 
+function supportsWindowsWslOption(capability: Capability | null): boolean {
+  return capability?.hostPlatform === 'windows' && Boolean(capability.hasWsl || capability.hasWslInstalled)
+}
+
+function getRuntimeEntrypointHistoryKey(entry: RuntimeEntrypointConfig): string {
+  return `${entry.target}:${entry.path}`
+}
+
 function SettingsRuntimePanel({
   capability,
   aiEnvironment,
@@ -57,7 +81,7 @@ function SettingsRuntimePanel({
   const skipNextScriptPathSyncRef = useRef(false)
   const getDefaultMode = (): AiExecutionMode => {
     if (capability?.hostPlatform === 'windows') {
-      return capability.hasWsl ? 'windows-wsl' : 'windows-native'
+      return 'windows-native'
     }
     if (capability?.hostPlatform === 'macos') return 'macos-native'
     return 'linux-native'
@@ -66,10 +90,9 @@ function SettingsRuntimePanel({
   const getAvailableModes = (): AiExecutionMode[] => {
     if (!capability) return []
     if (capability.hostPlatform === 'windows') {
-      const modes: AiExecutionMode[] = []
-      if (capability.hasWsl) modes.push('windows-wsl')
-      modes.push('windows-native', 'custom-script', 'disabled')
-      return modes
+      return supportsWindowsWslOption(capability)
+        ? ['windows-native', 'windows-wsl', 'custom-script', 'disabled']
+        : ['windows-native', 'custom-script', 'disabled']
     }
     return [capability.hostPlatform === 'macos' ? 'macos-native' : 'linux-native', 'custom-script', 'disabled']
   }
@@ -85,9 +108,25 @@ function SettingsRuntimePanel({
   const [windowsAiRunningShell, setWindowsAiRunningShell] = useState<WindowsAiRunningShell>(
     normalizeWindowsAiRunningShell(aiEnvironment?.shell)
   )
+  const initialEntrypointConfig = normalizeRuntimeEntrypointConfig(
+    aiEnvironment?.runtimeEntrypointConfig,
+    runtimeLauncherScript,
+  )
+  const initialWslParts = splitWslEntrypointPath(initialEntrypointConfig?.path)
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
+  const [scriptTarget, setScriptTarget] = useState<RuntimeEntrypointTarget>(initialEntrypointConfig?.target ?? 'native')
+  const [wslPathPrefix, setWslPathPrefix] = useState<RuntimeEntrypointWslPrefix>(
+    initialEntrypointConfig?.wslPrefix ?? initialWslParts.prefix
+  )
+  const [wslPathSuffix, setWslPathSuffix] = useState(
+    initialEntrypointConfig?.wslRelativePath ?? initialWslParts.relativePath
+  )
   const [scriptHistoryOpen, setScriptHistoryOpen] = useState(false)
-  const [runtimeEntrypointHistory, setRuntimeEntrypointHistory] = useState<string[]>(aiEnvironment?.runtimeEntrypointHistory ?? [])
+  const [runtimeEntrypointHistoryEntries, setRuntimeEntrypointHistoryEntries] = useState<RuntimeEntrypointConfig[]>(
+    aiEnvironment?.runtimeEntrypointHistoryEntries
+      ?? normalizeRuntimeEntrypointHistoryEntries(undefined, aiEnvironment?.runtimeEntrypointHistory, initialEntrypointConfig)
+      ?? []
+  )
   const [runtimePassProjectPath, setRuntimePassProjectPath] = useState(aiEnvironment?.runtimePassProjectPath ?? true)
   const [historyMutationPending, setHistoryMutationPending] = useState(false)
   const [historyPendingTarget, setHistoryPendingTarget] = useState<string | 'clear-all' | null>(null)
@@ -119,16 +158,34 @@ function SettingsRuntimePanel({
       skipNextScriptPathSyncRef.current = false
       return
     }
+    const nextConfig = normalizeRuntimeEntrypointConfig(aiEnvironment?.runtimeEntrypointConfig, runtimeLauncherScript)
+    const parts = splitWslEntrypointPath(nextConfig?.path)
     setScriptPath(runtimeLauncherScript)
-  }, [runtimeLauncherScript])
+    setScriptTarget(nextConfig?.target ?? 'native')
+    setWslPathPrefix(nextConfig?.wslPrefix ?? parts.prefix)
+    setWslPathSuffix(nextConfig?.wslRelativePath ?? parts.relativePath)
+  }, [
+    runtimeLauncherScript,
+    aiEnvironment?.runtimeEntrypointConfig?.target,
+    aiEnvironment?.runtimeEntrypointConfig?.wslPrefix,
+    aiEnvironment?.runtimeEntrypointConfig?.wslRelativePath,
+  ])
 
   useEffect(() => {
-    setRuntimeEntrypointHistory(aiEnvironment?.runtimeEntrypointHistory ?? [])
-  }, [aiEnvironment?.runtimeEntrypointHistory])
+    setRuntimeEntrypointHistoryEntries(
+      aiEnvironment?.runtimeEntrypointHistoryEntries
+        ?? normalizeRuntimeEntrypointHistoryEntries(
+          undefined,
+          aiEnvironment?.runtimeEntrypointHistory,
+          aiEnvironment?.runtimeEntrypointConfig ?? aiEnvironment?.runtimeEntrypoint,
+        )
+        ?? []
+    )
+  }, [aiEnvironment?.runtimeEntrypointHistory, aiEnvironment?.runtimeEntrypointHistoryEntries, aiEnvironment?.runtimeEntrypoint, aiEnvironment?.runtimeEntrypointConfig])
 
   useEffect(() => {
     setExecutionMode(resolveMode(aiEnvironment?.mode))
-  }, [aiEnvironment?.mode, capability?.hostPlatform, capability?.hasWsl])
+  }, [aiEnvironment?.mode, capability?.hostPlatform])
 
   useEffect(() => {
     setWindowsAiRunningShell(normalizeWindowsAiRunningShell(aiEnvironment?.shell))
@@ -300,23 +357,50 @@ function SettingsRuntimePanel({
     return value ? t('settingsRuntime.yes') : t('settingsRuntime.no')
   }
 
-  const normalizedScriptPath = scriptPath.trim()
-  const mergedRuntimeEntrypointHistory = useMemo(() => {
-    const merged = normalizedScriptPath
-      ? [normalizedScriptPath, ...runtimeEntrypointHistory]
-      : [...runtimeEntrypointHistory]
-    return Array.from(new Set(merged.map((item) => item.trim()).filter(Boolean)))
-  }, [normalizedScriptPath, runtimeEntrypointHistory])
-
+  const canShowWslPathOptions = capability?.hostPlatform === 'windows'
+    && (supportsWindowsWslOption(capability) || scriptTarget === 'wsl')
+  const targetOptions: SelectOption[] = [
+    { value: 'native', label: t('settingsRuntime.customScriptTargetNative') },
+    ...(canShowWslPathOptions ? [{ value: 'wsl', label: t('settingsRuntime.customScriptTargetWsl') }] : []),
+  ]
+  const wslPrefixOptions: SelectOption[] = [
+    { value: '~/', label: '~/' },
+    { value: '$HOME/', label: '$HOME/' },
+    { value: '${HOME}/', label: '${HOME}/' },
+    { value: '/', label: '/' },
+  ]
+  const normalizedNativeScriptPath = scriptPath.trim()
+  const normalizedWslScriptPath = composeWslEntrypointPath(wslPathPrefix, wslPathSuffix)
+  const normalizedScriptPath = scriptTarget === 'wsl' ? normalizedWslScriptPath : normalizedNativeScriptPath
+  const currentRuntimeEntrypointConfig = useMemo(() => {
+    if (scriptTarget === 'wsl') {
+      return createWslRuntimeEntrypointConfig(wslPathPrefix, wslPathSuffix)
+    }
+    return createRuntimeEntrypointConfigFromPath(normalizedNativeScriptPath, 'native')
+  }, [normalizedNativeScriptPath, scriptTarget, wslPathPrefix, wslPathSuffix])
+  const mergedRuntimeEntrypointHistoryEntries = useMemo(() => {
+    return dedupeRuntimeEntrypointConfigs([
+      currentRuntimeEntrypointConfig,
+      ...runtimeEntrypointHistoryEntries,
+    ])
+  }, [currentRuntimeEntrypointConfig, runtimeEntrypointHistoryEntries])
   const buildAiEnvironmentPayload = (
-    nextRuntimeEntrypoint: string,
-    nextRuntimeEntrypointHistory: string[],
+    nextRuntimeEntrypointConfig: RuntimeEntrypointConfig | undefined,
+    nextRuntimeEntrypointHistoryEntries: RuntimeEntrypointConfig[],
   ): AiEnvironmentConfig => ({
     mode: executionMode,
     wslDistro: aiEnvironment?.wslDistro,
     shell: capability?.hostPlatform === 'windows' ? windowsAiRunningShell : aiEnvironment?.shell,
-    runtimeEntrypoint: executionMode === 'custom-script' ? nextRuntimeEntrypoint : aiEnvironment?.runtimeEntrypoint,
-    runtimeEntrypointHistory: executionMode === 'custom-script' ? nextRuntimeEntrypointHistory : aiEnvironment?.runtimeEntrypointHistory,
+    runtimeEntrypointConfig: executionMode === 'custom-script' ? nextRuntimeEntrypointConfig : aiEnvironment?.runtimeEntrypointConfig,
+    runtimeEntrypoint: executionMode === 'custom-script'
+      ? composeRuntimeEntrypointConfig(nextRuntimeEntrypointConfig) || ''
+      : aiEnvironment?.runtimeEntrypoint,
+    runtimeEntrypointHistoryEntries: executionMode === 'custom-script'
+      ? nextRuntimeEntrypointHistoryEntries
+      : aiEnvironment?.runtimeEntrypointHistoryEntries,
+    runtimeEntrypointHistory: executionMode === 'custom-script'
+      ? runtimeEntrypointConfigsToHistory(nextRuntimeEntrypointHistoryEntries)
+      : aiEnvironment?.runtimeEntrypointHistory,
     runtimePassProjectPath,
     aiCommitEntrypoint: aiEnvironment?.aiCommitEntrypoint,
   })
@@ -342,37 +426,62 @@ function SettingsRuntimePanel({
   }
 
   const handleSaveMode = async () => {
-    const nextRuntimeEntrypoint = executionMode === 'custom-script' ? normalizedScriptPath : aiEnvironment?.runtimeEntrypoint
     setSaveModeLoading(true)
     try {
       await onAiEnvironmentSave(buildAiEnvironmentPayload(
-        nextRuntimeEntrypoint || '',
-        executionMode === 'custom-script' ? mergedRuntimeEntrypointHistory : (aiEnvironment?.runtimeEntrypointHistory ?? []),
+        executionMode === 'custom-script' ? currentRuntimeEntrypointConfig : aiEnvironment?.runtimeEntrypointConfig,
+        executionMode === 'custom-script' ? mergedRuntimeEntrypointHistoryEntries : (aiEnvironment?.runtimeEntrypointHistoryEntries ?? []),
       ))
     } finally {
       setSaveModeLoading(false)
     }
   }
 
-  const handleSelectRuntimeEntrypoint = (value: string) => {
-    setScriptPath(value)
+  const handleSelectRuntimeEntrypoint = (entry: RuntimeEntrypointConfig) => {
+    if (entry.target === 'wsl') {
+      const parts = splitWslEntrypointPath(entry.path)
+      setScriptTarget('wsl')
+      setWslPathPrefix(entry.wslPrefix ?? parts.prefix)
+      setWslPathSuffix(entry.wslRelativePath ?? parts.relativePath)
+      setScriptPath(entry.path)
+    } else {
+      setScriptTarget('native')
+      setScriptPath(entry.path)
+    }
     setScriptHistoryOpen(false)
   }
 
-  const handleDeleteRuntimeEntrypoint = (value: string) => {
+  const handleDeleteRuntimeEntrypoint = (historyKey: string) => {
     if (historyMutationPending) return
-    const persistedRuntimeEntrypoint = aiEnvironment?.runtimeEntrypoint?.trim() || ''
-    const nextHistory = runtimeEntrypointHistory.filter((item) => item !== value)
-    const nextPersistedEntrypoint = persistedRuntimeEntrypoint === value ? (nextHistory[0] || '') : persistedRuntimeEntrypoint
-    const nextDraftPath = scriptPath.trim() === value ? (nextHistory[0] || '') : scriptPath
+    const persistedRuntimeEntrypointConfig = normalizeRuntimeEntrypointConfig(
+      aiEnvironment?.runtimeEntrypointConfig,
+      aiEnvironment?.runtimeEntrypoint,
+    )
+    const nextHistoryEntries = runtimeEntrypointHistoryEntries.filter((item) => getRuntimeEntrypointHistoryKey(item) !== historyKey)
+    const currentHistoryKey = currentRuntimeEntrypointConfig ? getRuntimeEntrypointHistoryKey(currentRuntimeEntrypointConfig) : null
+    const nextPersistedEntrypointConfig = currentHistoryKey === historyKey
+      ? nextHistoryEntries[0]
+      : persistedRuntimeEntrypointConfig
+    const nextDraftConfig = currentHistoryKey === historyKey
+      ? nextHistoryEntries[0]
+      : currentRuntimeEntrypointConfig
     setHistoryMutationPending(true)
-    setHistoryPendingTarget(value)
+    setHistoryPendingTarget(historyKey)
     setHistoryMutationError(null)
     skipNextScriptPathSyncRef.current = true
-    void onAiEnvironmentSave(buildAiEnvironmentPayload(nextPersistedEntrypoint, nextHistory))
+    void onAiEnvironmentSave(buildAiEnvironmentPayload(nextPersistedEntrypointConfig, nextHistoryEntries))
       .then(() => {
-        setRuntimeEntrypointHistory(nextHistory)
-        setScriptPath(nextDraftPath)
+        setRuntimeEntrypointHistoryEntries(nextHistoryEntries)
+        if (nextDraftConfig?.target === 'wsl') {
+          const parts = splitWslEntrypointPath(nextDraftConfig.path)
+          setScriptTarget('wsl')
+          setWslPathPrefix(nextDraftConfig.wslPrefix ?? parts.prefix)
+          setWslPathSuffix(nextDraftConfig.wslRelativePath ?? parts.relativePath)
+          setScriptPath(nextDraftConfig.path)
+        } else {
+          setScriptTarget(nextDraftConfig?.target ?? 'native')
+          setScriptPath(nextDraftConfig?.path ?? '')
+        }
         setScriptHistoryOpen(false)
         setHistoryDeleteConfirmTarget(null)
       })
@@ -388,17 +497,18 @@ function SettingsRuntimePanel({
   }
 
   const handleClearRuntimeEntrypointHistory = () => {
-    if (historyMutationPending || runtimeEntrypointHistory.length === 0) return
-    const persistedRuntimeEntrypoint = aiEnvironment?.runtimeEntrypoint?.trim() || ''
-    const nextDraftPath = scriptPath
+    if (historyMutationPending || runtimeEntrypointHistoryEntries.length === 0) return
+    const persistedRuntimeEntrypointConfig = normalizeRuntimeEntrypointConfig(
+      aiEnvironment?.runtimeEntrypointConfig,
+      aiEnvironment?.runtimeEntrypoint,
+    )
     setHistoryMutationPending(true)
     setHistoryPendingTarget('clear-all')
     setHistoryMutationError(null)
     skipNextScriptPathSyncRef.current = true
-    void onAiEnvironmentSave(buildAiEnvironmentPayload(persistedRuntimeEntrypoint, []))
+    void onAiEnvironmentSave(buildAiEnvironmentPayload(persistedRuntimeEntrypointConfig, []))
       .then(() => {
-        setRuntimeEntrypointHistory([])
-        setScriptPath(nextDraftPath)
+        setRuntimeEntrypointHistoryEntries([])
         setScriptHistoryOpen(false)
         setHistoryDeleteConfirmTarget(null)
       })
@@ -420,7 +530,7 @@ function SettingsRuntimePanel({
   }
 
   const openRuntimeEntrypointClearConfirm = () => {
-    if (historyMutationPending || runtimeEntrypointHistory.length === 0) return
+    if (historyMutationPending || runtimeEntrypointHistoryEntries.length === 0) return
     setHistoryMutationError(null)
     setHistoryDeleteConfirmTarget('clear-all')
   }
@@ -476,7 +586,9 @@ function SettingsRuntimePanel({
   const historyDeleteConfirmIsClearAll = historyDeleteConfirmTarget === 'clear-all'
   const historyDeleteConfirmValue = historyDeleteConfirmIsClearAll
     ? t('settingsRuntime.clearAll')
-    : historyDeleteConfirmTarget ?? ''
+    : runtimeEntrypointHistoryEntries.find((item) => getRuntimeEntrypointHistoryKey(item) === historyDeleteConfirmTarget)?.path
+      ?? historyDeleteConfirmTarget
+      ?? ''
 
   return (
     <div className="space-y-8">
@@ -561,15 +673,70 @@ function SettingsRuntimePanel({
           )}
           {executionMode === 'custom-script' && (
             <div className="space-y-3">
+              {capability?.hostPlatform === 'windows' && (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.customScriptTarget')}</p>
+                    <Select
+                      ariaLabel={t('settingsRuntime.customScriptTarget')}
+                      value={scriptTarget}
+                      options={targetOptions}
+                      onChange={(value) => {
+                        const nextTarget = value === 'wsl' ? 'wsl' : 'native'
+                        setScriptTarget(nextTarget)
+                        if (nextTarget === 'wsl' && normalizedNativeScriptPath && !normalizedWslScriptPath) {
+                          const inferredParts = splitWslEntrypointPath(
+                            isLikelyWslEntrypointPath(normalizedNativeScriptPath)
+                              ? normalizedNativeScriptPath
+                              : `~/${normalizedNativeScriptPath.replace(/^\/+/, '')}`
+                          )
+                          setWslPathPrefix(inferredParts.prefix)
+                          setWslPathSuffix(inferredParts.relativePath)
+                        }
+                      }}
+                    />
+                    <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">
+                      {t(
+                        scriptTarget === 'wsl'
+                          ? 'settingsRuntime.customScriptTargetWslHint'
+                          : 'settingsRuntime.customScriptTargetNativeHint'
+                      )}
+                    </p>
+                  </div>
+                  {scriptTarget === 'wsl' && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.customScriptWslPrefix')}</p>
+                      <Select
+                        ariaLabel={t('settingsRuntime.customScriptWslPrefix')}
+                        value={wslPathPrefix}
+                        options={wslPrefixOptions}
+                        onChange={(value) => setWslPathPrefix(value as RuntimeEntrypointWslPrefix)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex gap-2">
                 <div ref={historyContainerRef} className="relative flex-1">
                   <div className="flex gap-2">
-                    <Input
-                      value={scriptPath}
-                      onChange={(e) => setScriptPath(e.target.value)}
-                      className="quiet-control flex-1 h-11 rounded-full border-0 px-4 pr-12 text-[color:var(--color-foreground)]"
-                      placeholder={t('settingsRuntime.customScriptPlaceholder')}
-                    />
+                    {scriptTarget === 'wsl' ? (
+                      <div className="quiet-control flex h-11 w-full items-center rounded-full border-0 px-4 pr-12 text-sm text-[color:var(--color-foreground)]">
+                        <span className="mr-2 shrink-0 text-[color:var(--color-muted-foreground)]">{wslPathPrefix}</span>
+                        <input
+                          value={wslPathSuffix}
+                          onChange={(e) => setWslPathSuffix(e.target.value)}
+                          className="min-w-0 flex-1 bg-transparent text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
+                          placeholder={t('settingsRuntime.customScriptWslPlaceholder')}
+                        />
+                      </div>
+                    ) : (
+                      <Input
+                        value={scriptPath}
+                        onChange={(e) => setScriptPath(e.target.value)}
+                        className="quiet-control flex-1 h-11 rounded-full border-0 px-4 pr-12 text-[color:var(--color-foreground)]"
+                        placeholder={t('settingsRuntime.customScriptPlaceholder')}
+                      />
+                    )}
                     <button
                       type="button"
                       className="button-interactive absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
@@ -591,7 +758,7 @@ function SettingsRuntimePanel({
                         <button
                           type="button"
                           className="button-interactive inline-flex h-7 items-center justify-center rounded-full px-2 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={runtimeEntrypointHistory.length === 0 || historyMutationPending}
+                          disabled={runtimeEntrypointHistoryEntries.length === 0 || historyMutationPending}
                           onClick={openRuntimeEntrypointClearConfirm}
                           aria-busy={historyPendingTarget === 'clear-all' || undefined}
                         >
@@ -600,12 +767,15 @@ function SettingsRuntimePanel({
                         </button>
                       </div>
                       <div className="max-h-[260px] overflow-auto">
-                        {mergedRuntimeEntrypointHistory.length > 0 ? (
-                          mergedRuntimeEntrypointHistory.map((item) => {
-                            const selected = item === normalizedScriptPath
+                        {mergedRuntimeEntrypointHistoryEntries.length > 0 ? (
+                          mergedRuntimeEntrypointHistoryEntries.map((item) => {
+                            const selected = getRuntimeEntrypointHistoryKey(item) === (
+                              currentRuntimeEntrypointConfig ? getRuntimeEntrypointHistoryKey(currentRuntimeEntrypointConfig) : ''
+                            )
+                            const itemKey = getRuntimeEntrypointHistoryKey(item)
                             return (
                               <div
-                                key={item}
+                                key={itemKey}
                                 className={`flex items-center gap-2 rounded-[13px] px-2 py-1.5 ${
                                   selected ? 'bg-[color:var(--color-primary)]/12' : ''
                                 }`}
@@ -616,18 +786,18 @@ function SettingsRuntimePanel({
                                   onClick={() => handleSelectRuntimeEntrypoint(item)}
                                   disabled={historyMutationPending}
                                 >
-                                  <span className="min-w-0 flex-1 truncate text-[12px]">{item}</span>
+                                  <span className="min-w-0 flex-1 truncate text-[12px]">{item.path}</span>
                                   {selected && <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
                                 </button>
                                 <button
                                   type="button"
                                   className="button-interactive inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-50"
-                                  onClick={() => openRuntimeEntrypointDeleteConfirm(item)}
+                                  onClick={() => openRuntimeEntrypointDeleteConfirm(itemKey)}
                                   title={t('settingsRuntime.deleteSavedPath')}
                                   disabled={historyMutationPending}
-                                  aria-busy={historyPendingTarget === item || undefined}
+                                  aria-busy={historyPendingTarget === itemKey || undefined}
                                 >
-                                  {historyPendingTarget === item ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                  {historyPendingTarget === itemKey ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                 </button>
                               </div>
                             )
@@ -705,7 +875,7 @@ function SettingsRuntimePanel({
               </h3>
               <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
                 {historyDeleteConfirmIsClearAll
-                  ? t('settingsRuntime.clearSavedPathsConfirmHint', { count: runtimeEntrypointHistory.length })
+                  ? t('settingsRuntime.clearSavedPathsConfirmHint', { count: runtimeEntrypointHistoryEntries.length })
                   : t('settingsRuntime.deleteSavedPathConfirmHint', { value: historyDeleteConfirmValue })}
               </p>
             </div>

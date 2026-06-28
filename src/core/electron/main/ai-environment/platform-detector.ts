@@ -1,24 +1,17 @@
 import type { AiEnvironmentConfig, AiExecutionMode, Capability } from '../../../shared/types'
+import {
+  composeRuntimeEntrypointConfig,
+  normalizeRuntimeEntrypointConfig,
+  normalizeRuntimeEntrypointHistoryEntries,
+  runtimeEntrypointConfigsToHistory,
+} from '../../../shared/runtimeEntrypoint'
 
-function normalizeRuntimeEntrypointHistory(
-  history: AiEnvironmentConfig['runtimeEntrypointHistory'] | unknown,
-  runtimeEntrypoint?: string
-): string[] | undefined {
-  const items = Array.isArray(history)
-    ? history
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean)
-    : []
-  const primary = runtimeEntrypoint?.trim()
-  const merged = primary ? [primary, ...items] : items
-  const deduped = Array.from(new Set(merged))
-  return deduped.length > 0 ? deduped : undefined
+function hasHostWslOption(capability: Capability): boolean {
+  return Boolean(capability.hasWsl || capability.hasWslInstalled)
 }
 
 export function defaultModeForCapability(capability: Capability): AiExecutionMode {
   if (capability.hostPlatform === 'windows') {
-    if (capability.hasWsl) return 'windows-wsl'
     return 'windows-native'
   }
   if (capability.hostPlatform === 'macos') return 'macos-native'
@@ -27,10 +20,9 @@ export function defaultModeForCapability(capability: Capability): AiExecutionMod
 
 export function availableModesForCapability(capability: Capability): AiExecutionMode[] {
   if (capability.hostPlatform === 'windows') {
-    const modes: AiExecutionMode[] = []
-    if (capability.hasWsl) modes.push('windows-wsl')
-    modes.push('windows-native', 'custom-script', 'disabled')
-    return modes
+    return hasHostWslOption(capability)
+      ? ['windows-native', 'windows-wsl', 'custom-script', 'disabled']
+      : ['windows-native', 'custom-script', 'disabled']
   }
   return [
     capability.hostPlatform === 'macos' ? 'macos-native' : 'linux-native',
@@ -48,29 +40,48 @@ export function migrateLegacyEnvironment(
   }
 ): AiEnvironmentConfig {
   if (config?.mode) {
-    const runtimeEntrypointHistory = normalizeRuntimeEntrypointHistory(
-      config.runtimeEntrypointHistory,
-      config.runtimeEntrypoint
+    const runtimeEntrypointConfig = normalizeRuntimeEntrypointConfig(
+      config.runtimeEntrypointConfig,
+      config.runtimeEntrypoint,
     )
-    const runtimeEntrypoint = config.runtimeEntrypoint?.trim()
+    const runtimeEntrypointHistoryEntries = normalizeRuntimeEntrypointHistoryEntries(
+      config.runtimeEntrypointHistoryEntries,
+      config.runtimeEntrypointHistory,
+      runtimeEntrypointConfig ?? config.runtimeEntrypoint,
+    )
+    const runtimeEntrypointHistory = runtimeEntrypointConfigsToHistory(runtimeEntrypointHistoryEntries)
+    const runtimeEntrypoint = composeRuntimeEntrypointConfig(runtimeEntrypointConfig)
       || runtimeEntrypointHistory?.[0]
       || undefined
     return {
       mode: config.mode,
-      wslDistro: config.wslDistro || (capability.hasWsl ? capability.wslDistro : undefined),
+      wslDistro: config.wslDistro || ((capability.hasWsl || capability.hasWslInstalled) ? capability.wslDistro : undefined),
       shell: config.shell,
+      runtimeEntrypointConfig: runtimeEntrypointConfig ?? (
+        runtimeEntrypoint ? normalizeRuntimeEntrypointConfig(undefined, runtimeEntrypoint) : undefined
+      ),
       runtimeEntrypoint,
+      runtimeEntrypointHistoryEntries,
       runtimeEntrypointHistory,
       runtimePassProjectPath: config.runtimePassProjectPath ?? true,
       aiCommitEntrypoint: config.aiCommitEntrypoint || legacy.aiCommitEntrypoint,
     }
   }
 
+  const runtimeEntrypointConfig = normalizeRuntimeEntrypointConfig(undefined, legacy.runtimeLauncherScript)
+  const runtimeEntrypointHistoryEntries = normalizeRuntimeEntrypointHistoryEntries(
+    undefined,
+    undefined,
+    runtimeEntrypointConfig,
+  )
+
   return {
     mode: defaultModeForCapability(capability),
-    wslDistro: capability.hasWsl ? capability.wslDistro : undefined,
-    runtimeEntrypoint: legacy.runtimeLauncherScript?.trim() || undefined,
-    runtimeEntrypointHistory: normalizeRuntimeEntrypointHistory(undefined, legacy.runtimeLauncherScript),
+    wslDistro: (capability.hasWsl || capability.hasWslInstalled) ? capability.wslDistro : undefined,
+    runtimeEntrypointConfig,
+    runtimeEntrypoint: composeRuntimeEntrypointConfig(runtimeEntrypointConfig) || undefined,
+    runtimeEntrypointHistoryEntries,
+    runtimeEntrypointHistory: runtimeEntrypointConfigsToHistory(runtimeEntrypointHistoryEntries),
     runtimePassProjectPath: true,
     aiCommitEntrypoint: legacy.aiCommitEntrypoint,
   }

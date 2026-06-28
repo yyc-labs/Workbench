@@ -7,7 +7,7 @@ import type {
   CodexModelProviderConfig,
   CodexSettingsSnapshot,
 } from '../../../shared/types'
-import { getCodexScopeCacheKey } from '../../../shared/codexScope'
+import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../../shared/codexScope'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
@@ -176,6 +176,15 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   useEffect(() => {
     let mounted = true
     setLoaded(false)
+
+    const descriptor = resolveCodexScopeDescriptor(capability, aiEnvironment)
+    if (descriptor.target === 'wsl' && !capability?.hasWsl) {
+      setResolvedScopeKey(getCodexScopeCacheKey(descriptor))
+      setLoaded(true)
+      return () => {
+        mounted = false
+      }
+    }
 
     void window.electronAPI.getCodexEnvironmentScope()
       .then((resolvedScope) => {

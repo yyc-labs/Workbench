@@ -10,6 +10,10 @@ import type {
 } from '../../../shared/types'
 import { availableModesForCapability, migrateLegacyEnvironment } from './platform-detector'
 import { getAiRuntimeProfileCli } from '../../../shared/aiRuntimeProfiles'
+import {
+  isLikelyWslEntrypointPath,
+  shouldUseWslForRuntimeEntrypoint,
+} from '../../../shared/runtimeEntrypoint'
 import type {
   AiCommitLaunchPlan,
   AiExecutionProvider,
@@ -22,6 +26,7 @@ import { posixNativeProvider } from './providers/posix-native-provider'
 import { customScriptProvider } from './providers/custom-script-provider'
 import { disabledProvider } from './providers/disabled-provider'
 import { resolveWslVsCodeTarget } from '../shell/openers'
+import { wslBridge } from '../wsl-bridge'
 
 const PROVIDERS: AiExecutionProvider[] = [
   windowsWslProvider,
@@ -47,6 +52,7 @@ function normalizeAiCommitConfig(input: AppConfig['aiCommit'] | undefined): AiCo
 export class AiEnvironmentController {
   constructor(
     private readonly getCapability: () => Capability | null,
+    private readonly setCapability: (capability: Capability) => void,
     private readonly getConfig: () => AppConfig,
   ) {}
 
@@ -64,6 +70,7 @@ export class AiEnvironmentController {
   }
 
   async diagnoseRuntime(profile?: AiRuntimeProfile | null): Promise<RuntimeDiagnostics> {
+    await this.ensureCapabilityForMode(this.getProfileModeOverride(profile))
     const provider = await this.getProvider(this.getProfileModeOverride(profile))
     const diagnostics = await provider.diagnose(this.buildContext(this.getProfileModeOverride(profile), profile))
     const profileIssue = this.getRuntimeProfileIssue(profile)
@@ -86,6 +93,7 @@ export class AiEnvironmentController {
     const profileIssue = this.getRuntimeProfileIssue(input.profile)
     if (profileIssue) throw new Error(profileIssue)
     const modeOverride = this.getProfileModeOverride(input.profile)
+    await this.ensureCapabilityForMode(modeOverride)
     const provider = await this.getProvider(modeOverride)
     return provider.resolveRuntimeLaunch(this.buildContext(modeOverride, input.profile), {
       ...input,
@@ -117,22 +125,29 @@ export class AiEnvironmentController {
   }
 
   async listRuntimeSessions(): Promise<RuntimeSessionInfo[]> {
+    await this.ensureCapabilityForMode()
     const provider = await this.getProvider()
     if (!provider.listRuntimeSessions) return []
     return provider.listRuntimeSessions(this.buildContext())
   }
 
   async stopRuntimeSession(sessionName: string): Promise<boolean> {
+    await this.ensureCapabilityForMode()
     const provider = await this.getProvider()
     if (!provider.stopRuntimeSession) return false
     return provider.stopRuntimeSession(this.buildContext(), sessionName)
   }
 
   private async getAiCommitProvider(repoRoot: string): Promise<AiExecutionProvider> {
-    const context = this.buildContext()
+    await this.ensureCapabilityForMode()
+    let context = this.buildContext()
     const explicitAiCommitEntrypoint = context.config.aiCommitEntrypoint?.trim()
 
     if (explicitAiCommitEntrypoint) {
+      if (this.shouldUseWslForCustomScript(explicitAiCommitEntrypoint)) {
+        await this.ensureWslCapability()
+        context = this.buildContext()
+      }
       return customScriptProvider
     }
 
@@ -140,6 +155,8 @@ export class AiEnvironmentController {
       const defaultDistro = context.config.wslDistro || context.capability.wslDistro || 'Ubuntu'
       const wslTarget = resolveWslVsCodeTarget(repoRoot, defaultDistro)
       if (wslTarget) {
+        await this.ensureWslCapability()
+        context = this.buildContext()
         if (await windowsWslProvider.isSupported(context)) {
           return windowsWslProvider
         }
@@ -156,6 +173,7 @@ export class AiEnvironmentController {
   }
 
   private async getProvider(modeOverride?: AiExecutionMode): Promise<AiExecutionProvider> {
+    await this.ensureCapabilityForMode(modeOverride)
     const context = this.buildContext(modeOverride)
     const preferredMode = context.config.mode
     const provider = PROVIDERS.find((item) => item.mode === preferredMode)
@@ -179,6 +197,57 @@ export class AiEnvironmentController {
       aiCommitConfig: normalizeAiCommitConfig(this.getConfig().aiCommit),
       runtimeProfile: runtimeProfile ?? undefined,
     }
+  }
+
+  private async ensureCapabilityForMode(modeOverride?: AiExecutionMode): Promise<void> {
+    const capability = this.requireCapability()
+    if (capability.hostPlatform !== 'windows') return
+
+    const config = this.getConfig()
+    const preferredMode = modeOverride ?? config.aiEnvironment?.mode
+
+    if (preferredMode === 'windows-wsl') {
+      await this.ensureWslCapability()
+      return
+    }
+
+    if (preferredMode === 'custom-script') {
+      const entrypoint = config.aiEnvironment?.runtimeEntrypoint?.trim() || ''
+      if (this.shouldUseWslForCustomScript(entrypoint, config.aiEnvironment)) {
+        await this.ensureWslCapability()
+      }
+    }
+  }
+
+  private shouldUseWslForCustomScript(
+    entrypoint: string,
+    aiEnvironment?: AiEnvironmentConfig,
+  ): boolean {
+    if (aiEnvironment?.runtimeEntrypointConfig) {
+      return shouldUseWslForRuntimeEntrypoint(aiEnvironment)
+    }
+    const normalized = entrypoint.trim()
+    if (!normalized) return false
+    return isLikelyWslEntrypointPath(normalized)
+  }
+
+  private async ensureWslCapability(): Promise<Capability> {
+    const capability = this.requireCapability()
+    if (capability.hostPlatform !== 'windows') return capability
+    if (capability.hasWsl && capability.wslDistro) return capability
+    if (!wslBridge.isAvailable()) {
+      return capability
+    }
+
+    const nextCapability: Capability = {
+      ...capability,
+      hasWsl: true,
+      hasTmux: false,
+      wslDistro: wslBridge.getDistro(),
+      wslShell: wslBridge.getShell(),
+    }
+    this.setCapability(nextCapability)
+    return nextCapability
   }
 
   private getProfileModeOverride(profile?: AiRuntimeProfile | null): AiExecutionMode | undefined {
