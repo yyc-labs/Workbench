@@ -32,6 +32,11 @@ import {
 import { applyWindowBackground } from '../window/createWindow'
 import { openFolder, openVsCode } from '../shell/openers'
 import { syncWindowsLaunchOnLogin } from '../launchOnLogin'
+import { describeAppCacheLocation, rememberAppCacheLocation } from '../cache-location'
+import {
+  cleanupLegacyBrowserCaches,
+  getBrowserDataMaintenanceInfo,
+} from '../browser-data-maintenance'
 import type {
   AiCommitRunOverride,
   AiCommitTaskSnapshot,
@@ -135,9 +140,32 @@ export function registerCoreIpcHandlers(
       if (Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')) {
         syncWindowsLaunchOnLogin(updated)
       }
+      if (Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')) {
+        rememberAppCacheLocation(updated.cacheLocation)
+      }
       return updated
     }
   )
+
+  ipcMain.handle(IPC.APP_RESTART, () => {
+    setTimeout(() => {
+      app.relaunch()
+      app.quit()
+    }, 50)
+    return true
+  })
+
+  ipcMain.handle(IPC.CACHE_LOCATION_GET, () => {
+    return describeAppCacheLocation(loadConfig().cacheLocation)
+  })
+
+  ipcMain.handle(IPC.BROWSER_DATA_MAINTENANCE_GET, () => {
+    return getBrowserDataMaintenanceInfo()
+  })
+
+  ipcMain.handle(IPC.BROWSER_DATA_MAINTENANCE_CLEANUP, async (_event, rootPath?: string) => {
+    return cleanupLegacyBrowserCaches(rootPath)
+  })
 
   ipcMain.handle(IPC.CODEX_SCOPE_GET, async () => {
     return resolveCodexEnvironmentScope(deps.getCapability())

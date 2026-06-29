@@ -8,6 +8,7 @@ import {
   removeRuntimeEntry,
   setRuntimeEntry,
 } from '../runtime-registry'
+import type { RuntimeLaunchCommand } from '../ai-environment/provider-types'
 import type { ProcessManager } from '../runner'
 import { tmuxManager } from '../tmux-manager'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
@@ -43,6 +44,46 @@ function isWindowsWslTmuxMode(mode?: RuntimeSessionInfo['mode'] | RuntimeDiagnos
 
 function isPosixTmuxMode(mode?: RuntimeSessionInfo['mode'] | RuntimeDiagnostics['mode']): boolean {
   return mode === 'linux-native' || mode === 'macos-native'
+}
+
+type RuntimeSpawnResult =
+  | { ok: true, pid: number | null }
+  | { ok: false, error: string }
+
+function spawnRuntimeAttempt(
+  attempt: RuntimeLaunchCommand,
+  fallbackEnv?: Record<string, string>,
+): Promise<RuntimeSpawnResult> {
+  return new Promise<RuntimeSpawnResult>((resolve) => {
+    let settled = false
+    const finish = (result: RuntimeSpawnResult) => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+
+    const child = spawn(attempt.startCommand, attempt.startArgs, {
+      cwd: attempt.cwd,
+      detached: attempt.detached,
+      windowsHide: attempt.windowsHide,
+      shell: attempt.shell ?? false,
+      stdio: 'ignore',
+      env: attempt.env
+        ? { ...process.env, ...attempt.env }
+        : fallbackEnv ? { ...process.env, ...fallbackEnv } : process.env,
+    })
+
+    child.on('error', (err) => {
+      finish({ ok: false, error: err.message })
+    })
+
+    child.on('spawn', () => {
+      if (attempt.detached) {
+        child.unref()
+      }
+      finish({ ok: true, pid: child.pid ?? null })
+    })
+  })
 }
 
 function openPosixTmuxTerminal(sessionName: string): Promise<boolean> {
@@ -163,22 +204,10 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
       profile: profile ?? undefined,
     })
 
-    return new Promise<boolean>((resolve) => {
-      const child = spawn(plan.startCommand, plan.startArgs, {
-        cwd: plan.cwd,
-        detached: plan.detached,
-        windowsHide: plan.windowsHide,
-        shell: plan.shell ?? false,
-        stdio: 'ignore',
-        env: plan.env ? { ...process.env, ...plan.env } : process.env,
-      })
-
-      child.on('error', (err) => {
-        console.error('[runtime:start] spawn failed:', err.message)
-        resolve(false)
-      })
-
-      child.on('spawn', () => {
+    const launchAttempts: RuntimeLaunchCommand[] = [plan, ...(plan.fallbackLaunches ?? [])]
+    for (const [index, attempt] of launchAttempts.entries()) {
+      const result = await spawnRuntimeAttempt(attempt, plan.env)
+      if (result.ok) {
         const startedAt = Date.now()
         if (plan.supportsManagedSessions) {
           setRuntimeEntry({
@@ -189,19 +218,22 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
             mode: plan.mode,
             profileId: profile?.id,
             profileName: profile?.name,
-            pid: child.pid ?? null,
-            pidStartedAt: child.pid != null ? startedAt : null,
+            pid: result.pid,
+            pidStartedAt: result.pid != null ? startedAt : null,
           })
         } else {
           removeRuntimeEntry(projectId)
         }
         deps.emitRuntimeStateChanged({ reason: 'runtime-started', projectId, sessionName: plan.sessionName })
-        if (plan.detached) {
-          child.unref()
-        }
-        resolve(true)
-      })
-    })
+        return true
+      }
+
+      console.error(
+        `[runtime:start] launch attempt ${index + 1}/${launchAttempts.length} failed: ${attempt.startCommand} (${result.error})`
+      )
+    }
+
+    return false
   }
 
   async function openRuntimeTerminal(sessionName: string, statusHint?: string): Promise<boolean> {
