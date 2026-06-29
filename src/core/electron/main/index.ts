@@ -18,6 +18,7 @@ import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
 import { createWindow, applyWindowBackground } from './window/createWindow'
+import { applyAppCacheLocation } from './cache-location'
 import {
   registerGlobalShortcuts,
   unregisterGlobalShortcuts,
@@ -312,6 +313,13 @@ if (process.platform === 'win32' && app.isPackaged) {
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return
 
+  const bootConfig = loadConfig()
+  try {
+    applyAppCacheLocation(bootConfig.cacheLocation)
+  } catch (error) {
+    console.warn('[cache-location] Failed to apply cache location.', error)
+  }
+
   nativeTheme.on('updated', () => {
     const { theme } = loadConfig()
     if (theme === 'system') {
@@ -346,7 +354,7 @@ app.whenReady().then(async () => {
     transcriptService,
     transcriptShareService,
   })
-  syncWindowsLaunchOnLogin(loadConfig())
+  syncWindowsLaunchOnLogin(bootConfig)
   createMainWindow()
   if (shouldUseTrayLifecycle && trayController) {
     if (shouldStartHiddenToTray && !trayController.ensure()) {

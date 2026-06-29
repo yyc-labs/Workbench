@@ -1,8 +1,9 @@
 import { app } from 'electron'
 import { readFileSync, existsSync, mkdirSync } from 'fs'
 import { writeFile } from 'fs/promises'
-import { join, dirname } from 'path'
+import { join, dirname, resolve } from 'path'
 import type {
+  AppCacheLocationConfig,
   AiCommitConfig,
   AiCommitProfile,
   AiRuntimeProfile,
@@ -55,6 +56,9 @@ const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
 const DEFAULT_CLAUDE_RUNTIME_PROFILE_ID = 'default'
 const DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME = 'DeepSeek Default'
 const DEFAULT_AI_COMMIT_PROFILE_ID = 'default'
+const DEFAULT_CACHE_LOCATION_CONFIG: AppCacheLocationConfig = {
+  mode: 'default',
+}
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
@@ -94,6 +98,7 @@ const DEFAULT_CONFIG: AppConfig = {
   locale: 'system',
   launchOnLogin: false,
   closeWindowBehavior: 'quit',
+  cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
   folders: [],
   tags: [],
@@ -673,6 +678,29 @@ function normalizeAgentHookConfig(
   }
 }
 
+function normalizeCacheLocationConfig(
+  value: AppConfig['cacheLocation'] | unknown
+): AppCacheLocationConfig {
+  const raw = value && typeof value === 'object'
+    ? value as Partial<AppCacheLocationConfig>
+    : {}
+  const mode = raw.mode === 'install' || raw.mode === 'custom'
+    ? raw.mode
+    : 'default'
+  const customPath = typeof raw.customPath === 'string' && raw.customPath.trim()
+    ? resolve(raw.customPath.trim())
+    : undefined
+
+  if (mode === 'custom') {
+    return {
+      mode,
+      customPath,
+    }
+  }
+
+  return { mode }
+}
+
 function normalizeAiEnvironmentConfig(config: AppConfig): AppConfig['aiEnvironment'] {
   try {
     const capability = capabilityManager.get()
@@ -762,6 +790,7 @@ export function loadConfig(): AppConfig {
       ),
       aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
+      cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
         ...parsed,
@@ -806,6 +835,7 @@ export function loadConfig(): AppConfig {
       aiRuntimeProfiles: runtimeProfiles.profiles,
       activeAiRuntimeProfileId: runtimeProfiles.activeProfileId,
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
+      cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
   }
@@ -843,6 +873,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
+    cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')
+      ? normalizeCacheLocationConfig(partial.cacheLocation)
+      : normalizeCacheLocationConfig(current.cacheLocation),
   }
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
     ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false)

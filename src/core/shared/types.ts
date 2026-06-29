@@ -15,6 +15,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 export type AppLocale = 'system' | 'en-US' | 'zh-CN'
 export type CloseWindowBehavior = 'tray' | 'quit'
+export type AppCacheLocationMode = 'default' | 'install' | 'custom'
 
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
 export type RunStartupMode = 'silent' | 'terminal'
@@ -65,6 +66,68 @@ export interface AiCommitConfig {
   split?: boolean
   splitMaxBatches?: number
   maxBullets?: number
+}
+
+export interface AppCacheLocationConfig {
+  mode: AppCacheLocationMode
+  customPath?: string
+}
+
+export interface AppCacheLocationInfo {
+  mode: AppCacheLocationMode
+  defaultPath: string
+  installPath: string
+  customPath?: string
+  configuredPath: string
+  activePath: string
+  nextActivePath: string
+  restartRequired: boolean
+  usedFallback: boolean
+  fallbackReason?: string
+}
+
+export interface BrowserDataCacheRootInfo {
+  rootPath: string
+  browserDataPath: string
+  rootExists: boolean
+  browserDataExists: boolean
+  browserDataDetected: boolean
+  sourceEqualsTarget: boolean
+}
+
+export type BrowserDataOperationStatus =
+  | 'deleted'
+  | 'not-found'
+  | 'failed'
+  | 'skipped-same-path'
+
+export interface BrowserDataOperationItemResult {
+  name: string
+  rootPath?: string
+  sourcePath?: string
+  targetPath?: string
+  status: BrowserDataOperationStatus
+  error?: string
+}
+
+export interface BrowserDataMaintenanceInfo {
+  currentBrowserDataPath: string
+  oldCacheRootPath: string
+  oldBrowserDataPath: string
+  oldCacheRootPaths: string[]
+  oldBrowserDataPaths: string[]
+  oldCacheRoots: BrowserDataCacheRootInfo[]
+  oldCacheRootExists: boolean
+  oldBrowserDataExists: boolean
+  oldBrowserDataDetected: boolean
+  sourceEqualsTarget: boolean
+  dataLossItems: string[]
+  cleanupItems: string[]
+}
+
+export interface BrowserDataCleanupResult {
+  info: BrowserDataMaintenanceInfo
+  items: BrowserDataOperationItemResult[]
 }
 
 export interface AiCommitProfile {
@@ -883,6 +946,8 @@ export interface AppConfig {
   launchOnLogin?: boolean
   /** Control whether closing the main window quits the app or hides it to tray. */
   closeWindowBehavior?: CloseWindowBehavior
+  /** Chromium session/cache storage location. Changes apply after restart. */
+  cacheLocation?: AppCacheLocationConfig
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
   removedProjects?: RemovedProjectSnapshot[]
   /** User-defined project folders */

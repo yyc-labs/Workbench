@@ -7,6 +7,8 @@ import type {
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
+  BrowserDataCleanupResult,
+  BrowserDataMaintenanceInfo,
   CodexSettingsInput,
   CodexSettingsSaveResult,
 } from '../../shared/types'
@@ -29,6 +31,16 @@ export function createCoreInvokeApi() {
     getConfig: () => ipcRenderer.invoke(IPC.CONFIG_GET),
 
     setConfig: (partial: Record<string, unknown>) => ipcRenderer.invoke(IPC.CONFIG_SET, partial),
+
+    restartApp: () => ipcRenderer.invoke(IPC.APP_RESTART) as Promise<boolean>,
+
+    getCacheLocationInfo: () => ipcRenderer.invoke(IPC.CACHE_LOCATION_GET),
+
+    getBrowserDataMaintenanceInfo: () =>
+      ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_GET) as Promise<BrowserDataMaintenanceInfo>,
+
+    cleanupLegacyBrowserCaches: (rootPath?: string) =>
+      ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_CLEANUP, rootPath) as Promise<BrowserDataCleanupResult>,
 
     getCodexEnvironmentScope: () => ipcRenderer.invoke(IPC.CODEX_SCOPE_GET),
 

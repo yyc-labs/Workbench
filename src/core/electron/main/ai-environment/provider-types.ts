@@ -10,11 +10,7 @@ import type {
   RuntimeSessionInfo,
 } from '../../../shared/types'
 
-export type RuntimeLaunchPlan = {
-  mode: AiExecutionMode
-  sessionName: string
-  providerLabel: string
-  supportsManagedSessions: boolean
+export type RuntimeLaunchCommand = {
   startCommand: string
   startArgs: string[]
   cwd?: string
@@ -22,6 +18,14 @@ export type RuntimeLaunchPlan = {
   windowsHide?: boolean
   detached?: boolean
   env?: Record<string, string>
+}
+
+export type RuntimeLaunchPlan = RuntimeLaunchCommand & {
+  mode: AiExecutionMode
+  sessionName: string
+  providerLabel: string
+  supportsManagedSessions: boolean
+  fallbackLaunches?: RuntimeLaunchCommand[]
   openStrategy: 'wt-wsl-tmux' | 'wt-native-title' | 'posix-terminal-tmux' | 'not-supported'
   stopStrategy: 'tmux' | 'process' | 'not-supported'
 }

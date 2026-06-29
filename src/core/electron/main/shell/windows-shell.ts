@@ -269,7 +269,7 @@ export function buildWindowsTerminalShellLaunch(
 
   return {
     shell,
-    args: ['-NoLogo', '-NoExit', '-Command', trimmed],
+    args: ['-NoLogo', '-NoProfile', '-NoExit', '-Command', trimmed],
   }
 }
 

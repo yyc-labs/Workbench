@@ -68,7 +68,7 @@ test('buildWindowsTerminalShellLaunch uses interactive args for pwsh-family shel
   })
 
   assert.equal(launch.shell.kind, 'pwsh')
-  assert.deepEqual(launch.args, ['-NoLogo', '-NoExit', '-Command', 'npm run dev'])
+  assert.deepEqual(launch.args, ['-NoLogo', '-NoProfile', '-NoExit', '-Command', 'npm run dev'])
 })
 
 test('buildWindowsTerminalShellLaunch omits shell args when no command is provided', () => {

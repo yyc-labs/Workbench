@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'path'
 import { IPC } from '../ipc'
 import { resolveAppResourcePath } from '../app-resource-path'
@@ -52,12 +52,6 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
     onWindowStateChange,
     onClosed,
   } = options
-
-  try {
-    app.setPath('sessionData', join(app.getPath('userData'), 'session'))
-  } catch {
-    // Best effort only.
-  }
 
   const windowIcon =
     process.platform === 'win32'

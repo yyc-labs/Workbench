@@ -458,16 +458,33 @@ test('windows-native runtime launch normalizes /mnt path to Windows host cwd', a
   })
 
   assert.equal(plan.cwd, 'D:\\work\\demo')
-  assert.equal(plan.startCommand, 'cmd.exe')
-  assert.equal(plan.startArgs[0], '/d')
-  assert.equal(plan.startArgs[1], '/c')
-  assert.equal(plan.startArgs[2], 'start')
-  assert.ok(['pwsh.exe', 'powershell.exe', 'cmd.exe'].includes(plan.startArgs[4]))
-  if (plan.startArgs[4] === 'cmd.exe') {
-    assert.deepEqual(plan.startArgs.slice(5), ['/d', '/k', 'codex'])
-  } else {
-    assert.deepEqual(plan.startArgs.slice(5), ['-NoLogo', '-NoExit', '-Command', 'codex'])
-  }
+  assert.equal(plan.startCommand, 'wt.exe')
+  assert.deepEqual(plan.startArgs, [
+    '-d',
+    'D:\\work\\demo',
+    'pwsh.exe',
+    '-NoLogo',
+    '-NoProfile',
+    '-NoExit',
+    '-Command',
+    'codex',
+  ])
+  assert.equal(plan.detached, true)
+  assert.equal(plan.windowsHide, false)
+  assert.equal(plan.fallbackLaunches.length, 1)
+  assert.equal(plan.fallbackLaunches[0].startCommand, 'cmd.exe')
+  assert.deepEqual(plan.fallbackLaunches[0].startArgs, [
+    '/d',
+    '/c',
+    'start',
+    'Codex Runtime',
+    'pwsh.exe',
+    '-NoLogo',
+    '-NoProfile',
+    '-NoExit',
+    '-Command',
+    'codex',
+  ])
 })
 
 test('windows-native diagnostics report configured AI Running shell preference', async () => {

@@ -3,7 +3,6 @@ import { basename } from 'path'
 import type { RuntimeDiagnostics } from '../../../../shared/types'
 import { normalizeWindowsHostPath } from '../../host-path'
 import {
-  buildWindowsTerminalShellLaunch,
   preferredWindowsShellForDiagnostics,
   resolveWindowsPowerShell,
 } from '../../shell/windows-shell'
@@ -17,6 +16,10 @@ import {
 
 function normalizeRuntimeCli(cli?: 'claude' | 'codex'): 'claude' | 'codex' {
   return cli === 'codex' ? 'codex' : 'claude'
+}
+
+function preferredRuntimePowerShellCommand(shell?: string): string {
+  return shell === 'powershell' ? 'powershell.exe' : 'pwsh.exe'
 }
 
 function buildRuntimeSessionName(projectPath: string, cli?: 'claude' | 'codex'): string {
@@ -68,9 +71,8 @@ export const windowsNativeProvider: AiExecutionProvider = {
       sessionName,
       commandLine: runtimeCommand,
     })
-    const terminalLaunch = buildWindowsTerminalShellLaunch(runtimeCommand, {
-      preferredShell: context.config.shell,
-    })
+    const runtimeShellCommand = preferredRuntimePowerShellCommand(context.config.shell)
+    const runtimeShellArgs = ['-NoLogo', '-NoProfile', '-NoExit', '-Command', runtimeCommand]
     return {
       mode: 'windows-native',
       sessionName,
@@ -78,20 +80,22 @@ export const windowsNativeProvider: AiExecutionProvider = {
       // Windows Native is intentionally fire-and-forget for now:
       // open a local terminal directly instead of pretending we can reattach/close it reliably.
       supportsManagedSessions: false,
-      startCommand: 'cmd.exe',
-      startArgs: [
-        '/d',
-        '/c',
-        'start',
-        title,
-        terminalLaunch.shell.command,
-        ...terminalLaunch.args,
-      ],
+      startCommand: 'wt.exe',
+      startArgs: ['-d', hostProjectPath, runtimeShellCommand, ...runtimeShellArgs],
       cwd: hostProjectPath,
-      detached: false,
-      windowsHide: true,
+      detached: true,
+      windowsHide: false,
       shell: false,
       env: launchEnv,
+      fallbackLaunches: [{
+        startCommand: 'cmd.exe',
+        startArgs: ['/d', '/c', 'start', title, runtimeShellCommand, ...runtimeShellArgs],
+        cwd: hostProjectPath,
+        detached: false,
+        windowsHide: true,
+        shell: false,
+        env: launchEnv,
+      }],
       openStrategy: 'not-supported',
       stopStrategy: 'not-supported',
     }
