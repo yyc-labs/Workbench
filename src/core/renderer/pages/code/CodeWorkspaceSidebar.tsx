@@ -111,6 +111,7 @@ export function CodeWorkspaceSidebar({
   autoCollapseMatchThreshold = 10,
 }: CodeWorkspaceSidebarProps) {
   const { t } = useI18n()
+  const isFileTreeRefreshing = tree.status === 'loading' || tree.isRefreshingRoot
 
   if (viewMode === 'files') {
     return (
@@ -144,8 +145,9 @@ export function CodeWorkspaceSidebar({
             className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
             onClick={onReloadTree}
             title={t('codeWorkspace.reloadFileTree')}
+            disabled={isFileTreeRefreshing}
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${tree.status === 'loading' ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isFileTreeRefreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
 

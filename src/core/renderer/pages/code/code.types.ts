@@ -13,6 +13,9 @@ export interface FileTreeState {
   error: string | null
   knownFilePaths: Set<string>
   loadingDirectories: Set<string>
+  isRefreshingRoot: boolean
+  lastRootLoadedAtMs: number | null
+  lastRootRefreshStartedAtMs: number | null
   skippedDirectories: number
   skippedFiles: number
   autoLoadBlocked: boolean

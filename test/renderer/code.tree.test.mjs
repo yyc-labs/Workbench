@@ -58,3 +58,30 @@ test('replaceDirectoryNodes inserts missing parent branch for out-of-order neste
   assert.equal(renderer?.isLoaded, true)
   assert.deepEqual(renderer?.children?.map((node) => node.relativePath), ['src/core/renderer/App.tsx'])
 })
+
+test('replaceDirectoryNodes refreshes target directory while preserving deeper loaded children', () => {
+  const loadedComponents = replaceDirectoryNodes([], 'src/components', [
+    directory('src/components/Button', [
+      file('src/components/Button/index.ts'),
+    ]),
+    file('src/components/old.ts'),
+  ])
+
+  const refreshedComponents = replaceDirectoryNodes(loadedComponents, 'src/components', [
+    directory('src/components/Button'),
+    file('src/components/new.ts'),
+  ])
+
+  const components = findDirectoryNode(refreshedComponents, 'src/components')
+  const button = findDirectoryNode(refreshedComponents, 'src/components/Button')
+
+  assert.equal(components?.isLoaded, true)
+  assert.deepEqual(components?.children?.map((node) => node.relativePath), [
+    'src/components/Button',
+    'src/components/new.ts',
+  ])
+  assert.equal(button?.isLoaded, true)
+  assert.deepEqual(button?.children?.map((node) => node.relativePath), [
+    'src/components/Button/index.ts',
+  ])
+})

@@ -248,6 +248,7 @@ export function CodeWorkspacePanel({
     loadDirectory,
     loadTree,
     markFilePathKnown,
+    refreshRootIfStale,
     setContentSearchCaseSensitive,
     setContentSearchQuery,
     setExpandedDirectories,
@@ -519,10 +520,10 @@ export function CodeWorkspacePanel({
       return
     }
 
-    if (tree.status !== 'ready') return
+    if (tree.status !== 'ready' || tree.isRefreshingRoot) return
     pendingLocateAfterTreeReloadRef.current = null
     void locateFileInTree(pendingPath)
-  }, [locateFileInTree, tree.status])
+  }, [locateFileInTree, tree.isRefreshingRoot, tree.lastRootLoadedAtMs, tree.status])
 
   const toggleFavoriteForPath = useCallback((relativePath: string) => {
     setCodeFileDrawerState((prev) => toggleFavoriteCodeFilePath(prev, relativePath))
@@ -534,12 +535,12 @@ export function CodeWorkspacePanel({
   const handleReloadTree = useCallback(() => {
     const normalizedPath = activeRelativePath?.trim() ?? ''
     pendingLocateAfterTreeReloadRef.current = normalizedPath || null
-    void loadTree()
+    void loadTree({ reason: 'manual-refresh' })
   }, [activeRelativePath, loadTree])
   const handleExpandSidebar = useCallback(() => {
     setIsLeftSidebarCollapsed(false)
-    handleReloadTree()
-  }, [handleReloadTree])
+    refreshRootIfStale()
+  }, [refreshRootIfStale])
   const sidebarGestureOverlay = useSidebarGesture({
     pageRootRef,
     onToggleLeftSidebar: () => {
@@ -582,6 +583,7 @@ export function CodeWorkspacePanel({
 
     if (!isNarrowViewport && isLeftSidebarCollapsed) {
       setIsLeftSidebarCollapsed(false)
+      refreshRootIfStale()
       window.setTimeout(() => {
         focusTarget()
       }, 0)
@@ -597,7 +599,7 @@ export function CodeWorkspacePanel({
     }
 
     focusTarget()
-  }, [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, viewMode])
+  }, [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, refreshRootIfStale, viewMode])
 
   const openEditorSearchByMode = useCallback((mode: EditorSearchMode = 'find') => {
     if (!activeRelativePath || !isShowingEditor) {
