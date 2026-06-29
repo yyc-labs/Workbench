@@ -16,3 +16,4 @@ release/
 .codex/
 AGENTS.md
 CLAUDE.md
+cache/
