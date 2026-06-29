@@ -1,10 +1,10 @@
-import type { LearningSidebarGestureOverlayState } from './learningCenterTypes'
+import type { SidebarGestureOverlayState } from '../hooks/useSidebarGesture'
 
-type LearningSidebarGestureOverlayProps = {
-  overlay: LearningSidebarGestureOverlayState
+type SidebarGestureOverlayProps = {
+  overlay: SidebarGestureOverlayState
 }
 
-export function LearningSidebarGestureOverlay({ overlay }: LearningSidebarGestureOverlayProps) {
+export function SidebarGestureOverlay({ overlay }: SidebarGestureOverlayProps) {
   if (!overlay.visible) return null
 
   const pathPoints = overlay.cursor

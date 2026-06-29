@@ -10,6 +10,9 @@ import {
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
+import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
+import { useSidebarGesture } from '../hooks/useSidebarGesture'
+import { useI18n } from '../i18n'
 import { LearningCenterHeader } from './learning/LearningCenterHeader'
 import { LearningDeleteNoteDialog } from './learning/LearningDeleteNoteDialog'
 import { LearningEditorPanel } from './learning/LearningEditorPanel'
@@ -17,7 +20,6 @@ import { LearningFrontmatterDialog } from './learning/LearningFrontmatterDialog'
 import { LearningMarkdownContextMenu } from './learning/LearningMarkdownContextMenu'
 import { LearningNoteInfoSidebar } from './learning/LearningNoteInfoSidebar'
 import { LearningNotesSidebar } from './learning/LearningNotesSidebar'
-import { LearningSidebarGestureOverlay } from './learning/LearningSidebarGestureOverlay'
 import { LearningSidebarRailButton } from './learning/LearningSidebarRailButton'
 import {
   createLearningEditorHistoryState,
@@ -46,8 +48,6 @@ import {
   findCategoryByName,
   normalizeTagInput,
 } from './learning/learningCenterUtils'
-import { useLearningSidebarGesture } from './learning/useLearningSidebarGesture'
-import { useI18n } from '../i18n'
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
@@ -113,9 +113,9 @@ export function LearningCenterPage() {
     setEditorContextMenu(null)
   }
 
-  const sidebarGestureOverlay = useLearningSidebarGesture({
+  const sidebarGestureOverlay = useSidebarGesture({
     pageRootRef,
-    onCloseEditorContextMenu: closeEditorContextMenu,
+    onBeforeToggle: closeEditorContextMenu,
     onToggleLeftSidebar: () => setLeftSidebarCollapsed((current) => !current),
     onToggleRightSidebar: () => setRightSidebarCollapsed((current) => !current),
   })
@@ -683,7 +683,7 @@ export function LearningCenterPage() {
 
   return (
     <div ref={pageRootRef} className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
-      <LearningSidebarGestureOverlay overlay={sidebarGestureOverlay} />
+      <SidebarGestureOverlay overlay={sidebarGestureOverlay} />
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
         <LearningCenterHeader
           onBack={() => navigate('/')}

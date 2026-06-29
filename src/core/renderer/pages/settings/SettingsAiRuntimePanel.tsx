@@ -101,6 +101,7 @@ function SettingsAiRuntimePanel({
   const isCustomScriptMode = mode === 'custom-script'
   const inputDisabled = !capabilityReady || !loaded || saving || (!supportsShellEnvConfig && !supportsWindowsEnvConfig)
   const shellConfigReadOnly = capabilityReady && !supportsShellEnvConfig && !supportsWindowsEnvConfig
+  const showUnsupportedHostHint = shellConfigReadOnly && !isWindowsNativeMode
   const shellScopeLabel = supportsWindowsEnvConfig
     ? tHtml('settings.aiRuntime.shellScopeWindowsNative')
     : capability?.hostPlatform === 'windows'
@@ -473,7 +474,7 @@ function SettingsAiRuntimePanel({
             {isCustomScriptMode && (
               <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.customScriptHint')} />
             )}
-            {capabilityReady && !supportsShellEnvConfig && (
+            {showUnsupportedHostHint && (
               <p className="mt-2 text-[color:var(--color-destructive)]">{t('settings.aiRuntime.unsupportedHostHint')}</p>
             )}
           </div>
@@ -497,7 +498,7 @@ function SettingsAiRuntimePanel({
           {isCustomScriptMode && (
             <p className="mt-2" dangerouslySetInnerHTML={tHtml('settings.aiRuntime.customScriptHint')} />
           )}
-          {capabilityReady && !supportsShellEnvConfig && (
+          {showUnsupportedHostHint && (
             <p className="mt-2 text-[color:var(--color-destructive)]">{t('settings.aiRuntime.unsupportedHostHint')}</p>
           )}
           <Button

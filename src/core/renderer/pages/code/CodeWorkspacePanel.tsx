@@ -3,7 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
+import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
+import { useSidebarGesture } from '../../hooks/useSidebarGesture'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
@@ -167,6 +169,7 @@ export function CodeWorkspacePanel({
   const editorRef = useRef<MonacoCodeEditorHandle | null>(null)
   const contentSearchTreeRef = useRef<CodeContentSearchTreeHandle | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const pageRootRef = useRef<HTMLDivElement | null>(null)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
   const captureCurrentModeScrollRef = useRef<() => void>(() => {})
@@ -537,6 +540,20 @@ export function CodeWorkspacePanel({
     setIsLeftSidebarCollapsed(false)
     handleReloadTree()
   }, [handleReloadTree])
+  const sidebarGestureOverlay = useSidebarGesture({
+    pageRootRef,
+    onToggleLeftSidebar: () => {
+      if (isNarrowViewport) {
+        setIsExplorerOpen((current) => !current)
+        return
+      }
+      if (isLeftSidebarCollapsed) {
+        handleExpandSidebar()
+        return
+      }
+      setIsLeftSidebarCollapsed(true)
+    },
+  })
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
@@ -834,7 +851,8 @@ export function CodeWorkspacePanel({
   }, [activeRelativePath])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
+    <div ref={pageRootRef} className="relative flex h-full min-h-0 flex-col">
+      <SidebarGestureOverlay overlay={sidebarGestureOverlay} />
       <CodeWorkspaceChrome
         activeLanguage={activeLanguage}
         activeRelativePath={activeRelativePath}

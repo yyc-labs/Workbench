@@ -1,16 +1,32 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import {
-  EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY,
-  type GesturePoint,
-  type LearningSidebarGestureOverlayState,
-} from './learningCenterTypes'
 
-const LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE = 8
-const LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE = 6
-const LEARNING_SIDEBAR_GESTURE_MAX_POINTS = 96
-const LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD = 72
-const LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO = 1.25
-const LEARNING_GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
+const SIDEBAR_GESTURE_ACTIVATE_DISTANCE = 8
+const SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE = 6
+const SIDEBAR_GESTURE_MAX_POINTS = 96
+const SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD = 72
+const SIDEBAR_GESTURE_ANGLE_RATIO = 1.25
+const GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
+
+export type SidebarGesturePoint = {
+  x: number
+  y: number
+}
+
+export type SidebarGestureOverlayState = {
+  visible: boolean
+  status: 'pending' | 'ready' | 'invalid'
+  action: 'left' | 'right' | null
+  points: SidebarGesturePoint[]
+  cursor: SidebarGesturePoint | null
+}
+
+export const EMPTY_SIDEBAR_GESTURE_OVERLAY: SidebarGestureOverlayState = {
+  visible: false,
+  status: 'pending',
+  action: null,
+  points: [],
+  cursor: null,
+}
 
 type SidebarGestureTracker = {
   tracking: boolean
@@ -22,14 +38,14 @@ type SidebarGestureTracker = {
   lastDy: number
   lastSampleX: number
   lastSampleY: number
-  points: GesturePoint[]
+  points: SidebarGesturePoint[]
 }
 
-type UseLearningSidebarGestureOptions = {
-  pageRootRef: RefObject<HTMLElement>
-  onCloseEditorContextMenu: () => void
-  onToggleLeftSidebar: () => void
-  onToggleRightSidebar: () => void
+type UseSidebarGestureOptions = {
+  pageRootRef: RefObject<HTMLElement | null>
+  onBeforeToggle?: () => void
+  onToggleLeftSidebar?: () => void
+  onToggleRightSidebar?: () => void
 }
 
 function createEmptyGestureTracker(): SidebarGestureTracker {
@@ -47,69 +63,71 @@ function createEmptyGestureTracker(): SidebarGestureTracker {
   }
 }
 
-function resolveLearningSidebarGestureOverlay(
+function resolveSidebarGestureOverlay(
   dx: number,
-  dy: number
-): Pick<LearningSidebarGestureOverlayState, 'status' | 'action'> {
+  dy: number,
+  canToggleLeftSidebar: boolean,
+  canToggleRightSidebar: boolean
+): Pick<SidebarGestureOverlayState, 'status' | 'action'> {
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
+  const action = dx < 0 ? 'right' : 'left'
+  const canToggleSidebar = action === 'left' ? canToggleLeftSidebar : canToggleRightSidebar
 
-  if (absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO) {
+  if (absX >= SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD && absX >= absY * SIDEBAR_GESTURE_ANGLE_RATIO) {
     return {
-      status: 'ready',
-      action: dx < 0 ? 'right' : 'left',
+      status: canToggleSidebar ? 'ready' : 'invalid',
+      action,
     }
   }
 
-  if (absY > absX * 1.05 && absY >= LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE * 2) {
+  if (absY > absX * 1.05 && absY >= SIDEBAR_GESTURE_ACTIVATE_DISTANCE * 2) {
     return {
       status: 'invalid',
       action: null,
     }
   }
 
-  if (absX < LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD * 0.45) {
+  if (absX < SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD * 0.45) {
     return {
       status: 'pending',
-      action: dx < 0 ? 'right' : 'left',
+      action,
     }
   }
 
   return {
     status: 'invalid',
-    action: dx < 0 ? 'right' : 'left',
+    action,
   }
 }
 
-export function useLearningSidebarGesture({
+export function useSidebarGesture({
   pageRootRef,
-  onCloseEditorContextMenu,
+  onBeforeToggle,
   onToggleLeftSidebar,
   onToggleRightSidebar,
-}: UseLearningSidebarGestureOptions): LearningSidebarGestureOverlayState {
-  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<LearningSidebarGestureOverlayState>(
-    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+}: UseSidebarGestureOptions): SidebarGestureOverlayState {
+  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<SidebarGestureOverlayState>(
+    EMPTY_SIDEBAR_GESTURE_OVERLAY
   )
   const sidebarGestureRef = useRef<SidebarGestureTracker>(createEmptyGestureTracker())
   const suppressSidebarGestureContextMenuRef = useRef(false)
   const suppressSidebarGestureTimerRef = useRef<number | null>(null)
   const sidebarGestureFrameRef = useRef<number | null>(null)
-  const nextSidebarGestureOverlayRef = useRef<LearningSidebarGestureOverlayState>(
-    EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
-  )
+  const nextSidebarGestureOverlayRef = useRef<SidebarGestureOverlayState>(EMPTY_SIDEBAR_GESTURE_OVERLAY)
   const callbacksRef = useRef({
-    onCloseEditorContextMenu,
+    onBeforeToggle,
     onToggleLeftSidebar,
     onToggleRightSidebar,
   })
 
   useEffect(() => {
     callbacksRef.current = {
-      onCloseEditorContextMenu,
+      onBeforeToggle,
       onToggleLeftSidebar,
       onToggleRightSidebar,
     }
-  }, [onCloseEditorContextMenu, onToggleLeftSidebar, onToggleRightSidebar])
+  }, [onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar])
 
   useEffect(() => {
     const isEventInsidePage = (target: EventTarget | null) => (
@@ -118,16 +136,16 @@ export function useLearningSidebarGesture({
     )
 
     const setGestureActive = (active: boolean) => {
-      document.body.classList.toggle(LEARNING_GESTURE_ACTIVE_CLASS_NAME, active)
+      document.body.classList.toggle(GESTURE_ACTIVE_CLASS_NAME, active)
     }
 
     const hideOverlayImmediately = () => {
-      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+      nextSidebarGestureOverlayRef.current = EMPTY_SIDEBAR_GESTURE_OVERLAY
       if (sidebarGestureFrameRef.current !== null) {
         window.cancelAnimationFrame(sidebarGestureFrameRef.current)
         sidebarGestureFrameRef.current = null
       }
-      setSidebarGestureOverlay(EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY)
+      setSidebarGestureOverlay(EMPTY_SIDEBAR_GESTURE_OVERLAY)
     }
 
     const flushOverlay = () => {
@@ -135,7 +153,7 @@ export function useLearningSidebarGesture({
       setSidebarGestureOverlay(nextSidebarGestureOverlayRef.current)
     }
 
-    const scheduleOverlay = (next: LearningSidebarGestureOverlayState) => {
+    const scheduleOverlay = (next: SidebarGestureOverlayState) => {
       nextSidebarGestureOverlayRef.current = next
       if (sidebarGestureFrameRef.current !== null) return
       sidebarGestureFrameRef.current = window.requestAnimationFrame(flushOverlay)
@@ -199,7 +217,7 @@ export function useLearningSidebarGesture({
 
       if (!gesture.activated) {
         const movedDistance = Math.hypot(gesture.lastDx, gesture.lastDy)
-        if (movedDistance < LEARNING_SIDEBAR_GESTURE_ACTIVATE_DISTANCE) return
+        if (movedDistance < SIDEBAR_GESTURE_ACTIVATE_DISTANCE) return
         gesture.activated = true
         gesture.moved = true
         gesture.points = [
@@ -213,10 +231,10 @@ export function useLearningSidebarGesture({
           event.clientX - gesture.lastSampleX,
           event.clientY - gesture.lastSampleY
         )
-        if (deltaSinceSample >= LEARNING_SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE) {
+        if (deltaSinceSample >= SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE) {
           gesture.points.push({ x: event.clientX, y: event.clientY })
-          if (gesture.points.length > LEARNING_SIDEBAR_GESTURE_MAX_POINTS) {
-            gesture.points.splice(0, gesture.points.length - LEARNING_SIDEBAR_GESTURE_MAX_POINTS)
+          if (gesture.points.length > SIDEBAR_GESTURE_MAX_POINTS) {
+            gesture.points.splice(0, gesture.points.length - SIDEBAR_GESTURE_MAX_POINTS)
           }
           gesture.lastSampleX = event.clientX
           gesture.lastSampleY = event.clientY
@@ -224,7 +242,12 @@ export function useLearningSidebarGesture({
       }
 
       if (gesture.activated) {
-        const preview = resolveLearningSidebarGestureOverlay(gesture.lastDx, gesture.lastDy)
+        const preview = resolveSidebarGestureOverlay(
+          gesture.lastDx,
+          gesture.lastDy,
+          Boolean(callbacksRef.current.onToggleLeftSidebar),
+          Boolean(callbacksRef.current.onToggleRightSidebar),
+        )
         scheduleOverlay({
           visible: true,
           status: preview.status,
@@ -248,8 +271,12 @@ export function useLearningSidebarGesture({
       const dy = gesture.lastDy
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
-      const passedHorizontal = absX >= LEARNING_SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD
-        && absX >= absY * LEARNING_SIDEBAR_GESTURE_ANGLE_RATIO
+      const passedHorizontal = absX >= SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD
+        && absX >= absY * SIDEBAR_GESTURE_ANGLE_RATIO
+      const targetAction = dx < 0 ? 'right' : 'left'
+      const toggleSidebar = targetAction === 'left'
+        ? callbacksRef.current.onToggleLeftSidebar
+        : callbacksRef.current.onToggleRightSidebar
 
       setGestureActive(false)
       if (gesture.moved) {
@@ -263,14 +290,10 @@ export function useLearningSidebarGesture({
       event.stopPropagation()
       event.stopImmediatePropagation()
 
-      if (!passedHorizontal) return
+      if (!passedHorizontal || !toggleSidebar) return
 
-      callbacksRef.current.onCloseEditorContextMenu()
-      if (dx < 0) {
-        callbacksRef.current.onToggleRightSidebar()
-        return
-      }
-      callbacksRef.current.onToggleLeftSidebar()
+      callbacksRef.current.onBeforeToggle?.()
+      toggleSidebar()
     }
 
     const handleContextMenu = (event: MouseEvent) => {
@@ -313,7 +336,7 @@ export function useLearningSidebarGesture({
       }
       clearSuppressTimer()
       suppressSidebarGestureContextMenuRef.current = false
-      nextSidebarGestureOverlayRef.current = EMPTY_LEARNING_SIDEBAR_GESTURE_OVERLAY
+      nextSidebarGestureOverlayRef.current = EMPTY_SIDEBAR_GESTURE_OVERLAY
       setGestureActive(false)
       resetGesture()
     }
