@@ -87,17 +87,24 @@ function UrlPopoverItemActionsMenu({
     const triggerGap = 6
     const menuWidth = 156
     const idealMaxHeight = 220
+    const estimatedItemHeight = 28
+    const menuVerticalPadding = 8
+    const desiredMenuHeight = Math.min(idealMaxHeight, (actions.length * estimatedItemHeight) + menuVerticalPadding)
     const preferredTop = rect.bottom + triggerGap
     const availableBelow = window.innerHeight - preferredTop - viewportPadding
     const availableAbove = rect.top - triggerGap - viewportPadding
-    const shouldOpenUpward = availableBelow < 120 && availableAbove > availableBelow
-    const maxHeight = Math.max(88, Math.min(
+    const shouldOpenUpward = availableBelow < desiredMenuHeight && availableAbove > availableBelow
+    const maxHeight = Math.max(56, Math.min(
       idealMaxHeight,
       shouldOpenUpward ? availableAbove : availableBelow,
     ))
+    const renderedHeight = Math.min(desiredMenuHeight, maxHeight)
     const top = shouldOpenUpward
-      ? Math.max(viewportPadding, rect.top - triggerGap - maxHeight)
-      : rect.bottom + triggerGap
+      ? Math.max(viewportPadding, rect.top - triggerGap - renderedHeight)
+      : Math.max(
+        viewportPadding,
+        Math.min(rect.bottom + triggerGap, window.innerHeight - viewportPadding - renderedHeight),
+      )
     const left = Math.max(
       viewportPadding,
       Math.min(rect.right - menuWidth, window.innerWidth - viewportPadding - menuWidth),
@@ -191,11 +198,16 @@ function UrlPopoverItemActionsMenu({
           ref={(node) => {
             floatingMenuRef.current = node
           }}
-          className="surface-card fixed z-[10011] overflow-hidden rounded-[14px]"
+          className="fixed z-[10011] overflow-hidden rounded-[14px]"
           style={{
             top: menuLayout.top,
             left: menuLayout.left,
             width: menuLayout.width,
+            background: 'var(--color-popover)',
+            border: '1px solid var(--color-border)',
+            boxShadow: 'var(--shadow-popover)',
+            backdropFilter: 'saturate(145%) blur(14px)',
+            WebkitBackdropFilter: 'saturate(145%) blur(14px)',
           }}
           role="menu"
           aria-label={t('common.moreActions')}
