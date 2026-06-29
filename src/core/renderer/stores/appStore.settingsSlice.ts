@@ -11,6 +11,7 @@ export type SettingsActionsSlice = Pick<
   | 'setLocale'
   | 'setLaunchOnLogin'
   | 'setCloseWindowBehavior'
+  | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
   | 'setRuntimeLauncherScript'
   | 'setRuntimeKeepAliveOnQuit'
@@ -65,6 +66,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         closeWindowBehavior: updated.closeWindowBehavior ?? 'quit',
+      },
+    }))
+  },
+
+  setCacheLocation: async (cacheLocation) => {
+    const updated = await window.electronAPI.setConfig({ cacheLocation })
+    set((state) => ({
+      config: {
+        ...state.config,
+        cacheLocation: updated.cacheLocation,
       },
     }))
   },

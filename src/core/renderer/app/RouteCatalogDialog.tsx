@@ -70,6 +70,7 @@ const routeIconMap: Record<RouteCatalogIconName, LucideIcon> = {
 
 const settingsDescriptionKeyBySection: Record<Section, string> = {
   general: 'common.routeCatalog.settingsDescriptions.general',
+  data: 'common.routeCatalog.settingsDescriptions.data',
   runtime: 'common.routeCatalog.settingsDescriptions.runtime',
   agents: 'common.routeCatalog.settingsDescriptions.agents',
   transcripts: 'common.routeCatalog.settingsDescriptions.transcripts',

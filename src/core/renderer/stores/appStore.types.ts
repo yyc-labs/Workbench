@@ -20,6 +20,10 @@ import type {
   ProjectInfo,
   ProcessInfo,
   AppConfig,
+  AppCacheLocationConfig,
+  AppCacheLocationInfo,
+  BrowserDataCleanupResult,
+  BrowserDataMaintenanceInfo,
   Capability,
   RuntimeSessionInfo,
   TmuxSessionInfo,
@@ -79,6 +83,10 @@ declare global {
       sendInput: (id: string, data: string) => Promise<boolean>
       getConfig: () => Promise<AppConfig>
       setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
+      restartApp: () => Promise<boolean>
+      getCacheLocationInfo: () => Promise<AppCacheLocationInfo>
+      getBrowserDataMaintenanceInfo: () => Promise<BrowserDataMaintenanceInfo>
+      cleanupLegacyBrowserCaches: (rootPath?: string) => Promise<BrowserDataCleanupResult>
       getCodexEnvironmentScope: () => Promise<CodexEnvironmentScope>
       getCodexSettings: () => Promise<CodexSettingsSnapshot>
       setCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSaveResult>
@@ -281,6 +289,7 @@ export interface AppState {
   setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
   setLaunchOnLogin: (enabled: boolean) => Promise<void>
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
+  setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>
   setRuntimeKeepAliveOnQuit: (enabled: boolean) => Promise<void>

@@ -1,5 +1,8 @@
 import { ThemeSegmentedControl } from './ThemeSegmentedControl'
-import type { AppLocale, CloseWindowBehavior } from '../../../shared/types'
+import type {
+  AppLocale,
+  CloseWindowBehavior,
+} from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import type { ThemeMode } from './settings.types'
 

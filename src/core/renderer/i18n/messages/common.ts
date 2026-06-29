@@ -153,6 +153,7 @@ export const commonMessages = {
         },
         settingsDescriptions: {
           general: 'Theme, language, and general interface preferences.',
+          data: 'Chromium cache location, switching risk, and old browser data cleanup.',
           runtime: 'Runtime launch mode, session management, and terminal behavior.',
           agents: 'Claude and Codex agent configuration in one place.',
           transcripts: 'Transcript import, retention, and related project records.',
@@ -328,6 +329,7 @@ export const commonMessages = {
         },
         settingsDescriptions: {
           general: '主题、语言和通用界面偏好。',
+          data: 'Chromium 缓存位置、切换风险和旧浏览器数据清理。',
           runtime: '运行时启动模式、会话管理和终端行为。',
           agents: '集中管理 Claude 与 Codex 代理配置。',
           transcripts: '转录导入、保留策略和相关项目记录。',

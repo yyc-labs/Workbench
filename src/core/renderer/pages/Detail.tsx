@@ -138,6 +138,7 @@ export function DetailPage() {
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
+  const [runtimeStartError, setRuntimeStartError] = useState<string | null>(null)
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
 
@@ -254,8 +255,13 @@ export function DetailPage() {
   const handleStartRuntime = useCallback(async () => {
     if (!project || isStartingRuntime) return
     setIsStartingRuntime(true)
+    setRuntimeStartError(null)
     try {
       await startRuntime(project.id)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setRuntimeStartError(message)
+      console.error('[Detail] runtime start failed:', err)
     } finally {
       setIsStartingRuntime(false)
     }
@@ -427,6 +433,14 @@ export function DetailPage() {
               <p className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]/85">
                 {t('detail.environment')}: {environmentLabel}
               </p>
+              {runtimeStartError && (
+                <p
+                  className="mt-1 max-w-[460px] truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2 py-1 text-[11px] text-[color:var(--color-destructive)]"
+                  title={runtimeStartError}
+                >
+                  {runtimeStartError}
+                </p>
+              )}
             </div>
 
             {isActive ? (
