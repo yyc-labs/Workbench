@@ -9,6 +9,30 @@ import { tmuxManager, getSessionName } from './tmux-manager'
 import { ResizeController } from './resize-controller'
 import { buildWindowsAutomationShellLaunch } from './shell/windows-shell'
 
+function resolveWindowsSystemExecutable(command: string): string {
+  const trimmed = command.trim()
+  const normalized = trimmed.toLowerCase()
+  if (!trimmed || trimmed.includes('\\') || trimmed.includes('/')) {
+    return command
+  }
+
+  const systemRoot = (process.env.SystemRoot || process.env.WINDIR || process.env.windir || 'C:\\Windows')
+    .replace(/[\\/]+$/, '')
+  const system32 = `${systemRoot}\\System32`
+
+  if (normalized === 'cmd.exe' || normalized === 'cmd') {
+    return process.env.ComSpec || process.env.comspec || `${system32}\\cmd.exe`
+  }
+  if (normalized === 'powershell.exe' || normalized === 'powershell') {
+    return `${system32}\\WindowsPowerShell\\v1.0\\powershell.exe`
+  }
+  if (normalized === 'wsl.exe' || normalized === 'wsl') {
+    return `${system32}\\wsl.exe`
+  }
+
+  return command
+}
+
 export const IPC_CHANNELS = {
   PROCESS_OUTPUT: 'process:output',
   PROCESS_STATUS: 'process:status',
@@ -129,6 +153,19 @@ class ProcessManager {
   start(projectId: string, command: string, cwd: string, useWsl?: boolean): boolean {
     if (this.processes.has(projectId)) return false
 
+    try {
+      return this.startResolved(projectId, command, cwd, useWsl)
+    } catch (err) {
+      this.send(IPC_CHANNELS.PROCESS_OUTPUT, {
+        projectId,
+        data: `Error: ${err instanceof Error ? err.message : String(err)}\n`,
+      })
+      this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'error' })
+      return false
+    }
+  }
+
+  private startResolved(projectId: string, command: string, cwd: string, useWsl?: boolean): boolean {
     // UNC WSL paths cannot be used as cwd for cmd.exe.
     // Force WSL backend even when UI requested host-native mode.
     const forceWslForPath =
@@ -151,6 +188,9 @@ class ProcessManager {
     switch (this.capability.backend) {
       case 'tmux':
       case 'direct-pty':
+        if (process.platform === 'win32') {
+          return this.startHostNative(projectId, command, cwd)
+        }
         return this.startWithPty(projectId, command, cwd)
       default:
         return this.startWithSpawn(projectId, command, cwd)
@@ -290,14 +330,18 @@ class ProcessManager {
     }
     const ptySpawn = this.getPtySpawn()
     const launch = buildWindowsAutomationShellLaunch(command)
-    const pty = ptySpawn(launch.shell.command, launch.args, {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 24,
-      cwd: hostCwd,
-      env: process.env as Record<string, string>,
-    })
-    return this.finalizePtyStart(projectId, pty, 'direct-pty')
+    try {
+      const pty = ptySpawn(resolveWindowsSystemExecutable(launch.shell.command), launch.args, {
+        name: 'xterm-color',
+        cols: 80,
+        rows: 24,
+        cwd: hostCwd,
+        env: process.env as Record<string, string>,
+      })
+      return this.finalizePtyStart(projectId, pty, 'direct-pty')
+    } catch {
+      return this.startWithSpawn(projectId, command, hostCwd)
+    }
   }
 
   // ── backend: tmux ───────────────────────────────────────
@@ -345,7 +389,7 @@ class ProcessManager {
       const wslPath = wslBridge.toWslPath(cwd)
       const escapedCmd = command.replace(/'/g, "'\\''")
       const shellCmd = `${this.wslEnvPrefix()}cd '${wslPath}' && exec bash -lc '${escapedCmd}'`
-      pty = ptySpawn('wsl.exe', this.wslShellArgs(shellCmd), {
+      pty = ptySpawn(resolveWindowsSystemExecutable('wsl.exe'), this.wslShellArgs(shellCmd), {
         name: 'xterm-color',
         cols: 80,
         rows: 24,
