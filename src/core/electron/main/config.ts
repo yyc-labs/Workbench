@@ -10,12 +10,14 @@ import type {
   AppConfig,
   ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
+  ClaudeRuntimeProfileGatewayBinding,
   CloseWindowBehavior,
   CodexConfig,
   CodexEnvironmentScope,
   CodexModelProviderConfig,
   CodexSettingsSnapshot,
   CodexSettingsSnapshotMap,
+  ShortcutPreferencesConfig,
 } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
 import {
@@ -27,6 +29,7 @@ import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/project
 import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
+import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/gateway-config'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -58,6 +61,9 @@ const DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME = 'DeepSeek Default'
 const DEFAULT_AI_COMMIT_PROFILE_ID = 'default'
 const DEFAULT_CACHE_LOCATION_CONFIG: AppCacheLocationConfig = {
   mode: 'default',
+}
+const DEFAULT_SHORTCUT_PREFERENCES: ShortcutPreferencesConfig = {
+  quickTranscriptCaptureOpenViewer: false,
 }
 
 function getConfigPath(): string {
@@ -119,6 +125,8 @@ const DEFAULT_CONFIG: AppConfig = {
   codexProviderApiKeys: {},
   codexSettingsSnapshots: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+  aiGateway: defaultAiGatewayConfig(),
+  shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
 }
 
 function normalizeAiRuntimeProfileKind(value: unknown): AiRuntimeProfile['kind'] {
@@ -521,13 +529,52 @@ function normalizeCodexSettingsSnapshots(
   return normalizedMap
 }
 
+function normalizeClaudeRuntimeProfileGateway(
+  input: unknown
+): ClaudeRuntimeProfileGatewayBinding | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const raw = input as Partial<ClaudeRuntimeProfileGatewayBinding>
+  const providerId = typeof raw.providerId === 'string' ? raw.providerId.trim() : ''
+  const modelAlias = typeof raw.modelAlias === 'string' ? raw.modelAlias.trim() : ''
+  const upstreamModel = typeof raw.upstreamModel === 'string' ? raw.upstreamModel.trim() : ''
+  const directConfig = raw.directConfig && typeof raw.directConfig === 'object'
+    ? normalizeClaudeBashrcConfig(raw.directConfig as unknown as Record<string, unknown>)
+    : undefined
+
+  if (!providerId && !modelAlias && !directConfig) return undefined
+
+  const binding: ClaudeRuntimeProfileGatewayBinding = {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : false,
+    providerId,
+    directConfig,
+  }
+  if (modelAlias) binding.modelAlias = modelAlias
+  if (upstreamModel) binding.upstreamModel = upstreamModel
+  return binding
+}
+
+function stripLegacyClaudeGatewayDirectConfig(
+  gateway: ClaudeRuntimeProfileGatewayBinding | undefined
+): ClaudeRuntimeProfileGatewayBinding | undefined {
+  if (!gateway) return undefined
+  if (!gateway.enabled && !gateway.providerId && !gateway.modelAlias && !gateway.upstreamModel) return undefined
+
+  const binding: ClaudeRuntimeProfileGatewayBinding = {
+    enabled: gateway.enabled,
+    providerId: gateway.providerId,
+  }
+  if (gateway.modelAlias) binding.modelAlias = gateway.modelAlias
+  if (gateway.upstreamModel) binding.upstreamModel = gateway.upstreamModel
+  return binding
+}
+
 function normalizeClaudeRuntimeProfiles(
   profiles: AppConfig['claudeRuntimeProfiles'] | unknown,
   activeProfileId: unknown
 ): { profiles: ClaudeRuntimeProfile[]; activeProfileId: string } {
   const normalizedProfiles = Array.isArray(profiles)
     ? profiles
-      .map((item, index) => {
+      .map((item, index): (ClaudeRuntimeProfile & { sortOrder: number }) | null => {
         if (!item || typeof item !== 'object') return null
         const raw = item as Partial<ClaudeRuntimeProfile>
         const id = typeof raw.id === 'string' ? raw.id.trim() : ''
@@ -535,13 +582,17 @@ function normalizeClaudeRuntimeProfiles(
         const config = raw.config && typeof raw.config === 'object'
           ? normalizeClaudeBashrcConfig(raw.config as unknown as Record<string, unknown>)
           : defaultClaudeBashrcConfig()
+        const gateway = normalizeClaudeRuntimeProfileGateway(raw.gateway)
         if (!id || !name) return null
-        return {
+        const profile: ClaudeRuntimeProfile & { sortOrder: number } = {
           id,
           name,
-          config,
+          config: gateway?.directConfig ?? config,
           sortOrder: index,
         }
+        const nextGateway = stripLegacyClaudeGatewayDirectConfig(gateway)
+        if (nextGateway) profile.gateway = nextGateway
+        return profile
       })
       .filter((item): item is ClaudeRuntimeProfile & { sortOrder: number } => Boolean(item))
     : []
@@ -555,6 +606,7 @@ function normalizeClaudeRuntimeProfiles(
       id: profile.id,
       name: profile.name,
       config: profile.config,
+      gateway: profile.gateway,
     })
   }
 
@@ -701,6 +753,20 @@ function normalizeCacheLocationConfig(
   return { mode }
 }
 
+function normalizeShortcutPreferences(
+  value: AppConfig['shortcutPreferences'] | unknown
+): ShortcutPreferencesConfig {
+  const raw = value && typeof value === 'object'
+    ? value as Partial<ShortcutPreferencesConfig>
+    : {}
+
+  return {
+    quickTranscriptCaptureOpenViewer: typeof raw.quickTranscriptCaptureOpenViewer === 'boolean'
+      ? raw.quickTranscriptCaptureOpenViewer
+      : DEFAULT_SHORTCUT_PREFERENCES.quickTranscriptCaptureOpenViewer,
+  }
+}
+
 function normalizeAiEnvironmentConfig(config: AppConfig): AppConfig['aiEnvironment'] {
   try {
     const capability = capabilityManager.get()
@@ -790,6 +856,8 @@ export function loadConfig(): AppConfig {
       ),
       aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
+      aiGateway: normalizeAiGatewayConfig(parsed.aiGateway),
+      shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
@@ -835,6 +903,8 @@ export function loadConfig(): AppConfig {
       aiRuntimeProfiles: runtimeProfiles.profiles,
       activeAiRuntimeProfileId: runtimeProfiles.activeProfileId,
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
+      aiGateway: normalizeAiGatewayConfig(DEFAULT_CONFIG.aiGateway),
+      shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
     }
@@ -873,6 +943,12 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
+    aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway')
+      ? normalizeAiGatewayConfig(partial.aiGateway)
+      : normalizeAiGatewayConfig(current.aiGateway),
+    shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences')
+      ? normalizeShortcutPreferences(partial.shortcutPreferences)
+      : normalizeShortcutPreferences(current.shortcutPreferences),
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')
       ? normalizeCacheLocationConfig(partial.cacheLocation)
       : normalizeCacheLocationConfig(current.cacheLocation),

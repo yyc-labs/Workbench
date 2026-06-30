@@ -28,6 +28,11 @@ Codex runs command hooks only, so `.codex/hooks/agent-hook-forwarder.mjs` reads
 the hook JSON from stdin and forwards it to the gateway. The forwarder exits
 successfully even when the gateway is not running.
 
+Prefer exec-form hooks (`"command": "node"` plus `"args": [...]`) instead of a
+single shell string. On Windows, shell-wrapped forms can let `cmd` consume the
+hook stdin after `node` exits, which makes the JSON payload show up as a second
+shell command instead of reaching the forwarder.
+
 After changing hooks, open `/hooks` in Codex and trust the project hooks.
 
 ## Claude Code

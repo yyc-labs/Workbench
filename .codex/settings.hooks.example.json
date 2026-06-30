@@ -6,7 +6,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli SessionStart",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "SessionStart"
+            ],
             "timeout": 3
           }
         ]
@@ -17,7 +22,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli UserPromptSubmit",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "UserPromptSubmit"
+            ],
             "timeout": 3
           }
         ]
@@ -29,7 +39,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli PreToolUse",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "PreToolUse"
+            ],
             "timeout": 3
           }
         ]
@@ -41,7 +56,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli PermissionRequest",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "PermissionRequest"
+            ],
             "timeout": 3
           }
         ]
@@ -53,7 +73,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli PostToolUse",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "PostToolUse"
+            ],
             "timeout": 3
           }
         ]
@@ -65,7 +90,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli PreCompact",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "PreCompact"
+            ],
             "timeout": 3
           }
         ]
@@ -77,7 +107,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli PostCompact",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "PostCompact"
+            ],
             "timeout": 3
           }
         ]
@@ -89,7 +124,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli SubagentStart",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "SubagentStart"
+            ],
             "timeout": 3
           }
         ]
@@ -101,7 +141,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli SubagentStop",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "SubagentStop"
+            ],
             "timeout": 3
           }
         ]
@@ -112,7 +157,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node ~/.codex/hooks/agent-hook-forwarder.mjs codex-cli Stop",
+            "command": "node",
+            "args": [
+              "~/.codex/hooks/agent-hook-forwarder.mjs",
+              "codex-cli",
+              "Stop"
+            ],
             "timeout": 3
           }
         ]

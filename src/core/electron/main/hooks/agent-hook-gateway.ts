@@ -4,12 +4,20 @@ import type {
   AgentHookCanonicalEvent,
   AgentHookEnvelope,
   AgentHookGatewayConfig,
+  AgentHookLogDetail,
   AgentHookGatewayStatus,
   AgentHookProvider,
+  StructuredHttpRequestSnapshot,
   TranscriptExternalImportPayload,
   TranscriptImportedEvent,
   TranscriptImportProjectTarget,
 } from '../../../shared/types'
+import {
+  buildJsonSnapshot,
+  buildRequestSnapshot,
+  hasStructuredTruncation,
+  maskUnknown,
+} from '../agent-logs/log-snapshots'
 
 type AgentHookGatewayOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
@@ -51,6 +59,13 @@ const EVENT_ALIASES: Record<string, AgentHookCanonicalEvent> = {
   WorktreeCreate: 'worktree-create',
   WorktreeRemove: 'worktree-remove',
   TeammateIdle: 'teammate-idle',
+}
+
+type HookRequestTrace = {
+  id: string
+  startedAt: number
+  provider: AgentHookProvider
+  ingressRequest: StructuredHttpRequestSnapshot
 }
 
 function jsonResponse(res: ServerResponse, statusCode: number, payload: unknown): void {
@@ -224,6 +239,7 @@ export class AgentHookGateway {
   private readonly onTranscriptImport?: AgentHookGatewayOptions['onTranscriptImport']
   private server: Server | null = null
   private recentEvents: AgentHookEnvelope[] = []
+  private recentLogDetails: AgentHookLogDetail[] = []
   private running = false
   private error: string | undefined
   private activeHost = DEFAULT_HOST
@@ -278,6 +294,10 @@ export class AgentHookGateway {
     return this.recentEvents.slice()
   }
 
+  getRecentLogDetails(): AgentHookLogDetail[] {
+    return this.recentLogDetails.slice()
+  }
+
   getStatus(): AgentHookGatewayStatus {
     const config = this.resolveConfig()
     const host = this.server ? this.activeHost : config.host
@@ -297,6 +317,116 @@ export class AgentHookGateway {
       transcriptImportTokenConfigured: Boolean(config.transcriptImportToken),
       error: this.error,
     }
+  }
+
+  private appendRecentLogDetail(detail: AgentHookLogDetail): void {
+    this.recentLogDetails.unshift(detail)
+    const { recentEventLimit } = this.resolveConfig()
+    if (this.recentLogDetails.length > recentEventLimit) {
+      this.recentLogDetails = this.recentLogDetails.slice(0, recentEventLimit)
+    }
+  }
+
+  private beginHookTrace(
+    req: IncomingMessage,
+    provider: AgentHookProvider,
+    url: URL
+  ): HookRequestTrace {
+    return {
+      id: randomUUID(),
+      startedAt: Date.now(),
+      provider,
+      ingressRequest: buildRequestSnapshot({
+        method: req.method || 'POST',
+        path: url.pathname,
+        url: req.url || url.pathname,
+        query: url.searchParams,
+        headers: req.headers,
+        contentType: typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : undefined,
+      }),
+    }
+  }
+
+  private finalizeHookTrace(
+    trace: HookRequestTrace,
+    envelope: AgentHookEnvelope | null,
+    payload: unknown,
+    options: {
+      level: 'info' | 'warn' | 'error'
+      statusCode: number
+      errorCode?: string
+      errorMessage?: string
+      bodyText?: string
+      maxBodyBytes: number
+      parseError?: string
+      bodyTruncated?: boolean
+    }
+  ): void {
+    const durationMs = Math.max(0, Date.now() - trace.startedAt)
+    const providerEvent = envelope?.providerEvent || 'unknown'
+    const canonicalEvent = envelope?.canonicalEvent || 'unknown'
+    const detail: AgentHookLogDetail = {
+      source: 'agent-hooks',
+      summary: {
+        id: trace.id,
+        source: 'agent-hooks',
+        title: providerEvent,
+        timestamp: trace.startedAt,
+        level: options.level,
+        providerEvent,
+        canonicalEvent,
+        provider: trace.provider,
+        statusCode: options.statusCode,
+        durationMs,
+        truncated: hasStructuredTruncation({
+          ingressRequest: trace.ingressRequest,
+          payload,
+        }),
+        cwd: envelope?.cwd,
+        toolName: envelope?.toolName,
+      },
+      meta: {
+        requestId: trace.id,
+        provider: trace.provider,
+        providerEvent,
+        canonicalEvent,
+        durationMs,
+      },
+      ingressRequest: buildRequestSnapshot({
+        method: trace.ingressRequest.method,
+        path: trace.ingressRequest.path,
+        url: trace.ingressRequest.url,
+        query: trace.ingressRequest.query,
+        headers: trace.ingressRequest.headers,
+        bodyText: options.bodyText,
+        bodyValue: payload,
+        contentType: trace.ingressRequest.body?.contentType
+          ?? (typeof trace.ingressRequest.headers['content-type'] === 'string'
+            ? trace.ingressRequest.headers['content-type']
+            : undefined),
+        maxBodyBytes: options.maxBodyBytes,
+        bodyParseError: options.parseError,
+        bodyTruncated: options.bodyTruncated,
+      }),
+      normalizedEnvelope: envelope ? maskUnknown(envelope) : undefined,
+      payload: buildJsonSnapshot({
+        contentType: typeof trace.ingressRequest.headers['content-type'] === 'string'
+          ? trace.ingressRequest.headers['content-type']
+          : 'application/json; charset=utf-8',
+        rawText: options.bodyText,
+        parsedValue: payload,
+        maxBytes: options.maxBodyBytes,
+        parseError: options.parseError,
+        truncated: options.bodyTruncated,
+      }),
+      error: options.errorMessage
+        ? {
+          code: options.errorCode,
+          message: options.errorMessage,
+        }
+        : undefined,
+    }
+    this.appendRecentLogDetail(detail)
   }
 
   private resolveConfig(): {
@@ -433,14 +563,6 @@ export class AgentHookGateway {
       return
     }
 
-    if (!this.isAuthorized(req, config.token, [
-      'x-agent-hook-token',
-      'x-ide-electron-token',
-    ])) {
-      emptyResponse(res, 401)
-      return
-    }
-
     const provider = PROVIDER_PATHS[url.pathname]
       || (url.pathname.startsWith('/hooks/') ? 'unknown' : undefined)
     if (!provider) {
@@ -448,19 +570,73 @@ export class AgentHookGateway {
       return
     }
 
+    const trace = this.beginHookTrace(req, provider, url)
+
+    if (!this.isAuthorized(req, config.token, [
+      'x-agent-hook-token',
+      'x-ide-electron-token',
+    ])) {
+      this.finalizeHookTrace(trace, null, undefined, {
+        level: 'warn',
+        statusCode: 401,
+        errorCode: 'unauthorized',
+        errorMessage: 'Unauthorized hook request.',
+        maxBodyBytes: config.maxBodyBytes,
+      })
+      emptyResponse(res, 401)
+      return
+    }
+
     try {
       const rawBody = await readRequestBody(req, config.maxBodyBytes)
-      const payload = rawBody.trim() ? JSON.parse(rawBody) : {}
+      let payload: unknown = {}
+      try {
+        payload = rawBody.trim() ? JSON.parse(rawBody) : {}
+      } catch (error) {
+        this.finalizeHookTrace(trace, null, undefined, {
+          level: 'warn',
+          statusCode: 400,
+          errorCode: 'invalid_hook_payload',
+          errorMessage: 'invalid hook payload',
+          bodyText: rawBody,
+          maxBodyBytes: config.maxBodyBytes,
+          parseError: error instanceof Error ? error.message : String(error),
+        })
+        jsonResponse(res, 400, { error: 'invalid hook payload', requestId: trace.id })
+        return
+      }
       const fallbackEvent = url.searchParams.get('event') || 'unknown'
       const envelope = normalizeEnvelope(provider, rawBody, payload, fallbackEvent)
       this.pushEvent(envelope)
+      this.finalizeHookTrace(trace, envelope, payload, {
+        level: 'info',
+        statusCode: 204,
+        bodyText: rawBody,
+        maxBodyBytes: config.maxBodyBytes,
+      })
       emptyResponse(res, 204)
     } catch (error) {
       if (error instanceof Error && error.message === 'REQUEST_BODY_TOO_LARGE') {
+        this.finalizeHookTrace(trace, null, undefined, {
+          level: 'warn',
+          statusCode: 413,
+          errorCode: 'request_body_too_large',
+          errorMessage: 'request body too large',
+          maxBodyBytes: config.maxBodyBytes,
+          bodyTruncated: true,
+          parseError: 'Request body exceeded the configured limit.',
+        })
         jsonResponse(res, 413, { error: 'request body too large' })
         return
       }
-      jsonResponse(res, 400, { error: 'invalid hook payload', requestId: randomUUID() })
+      this.finalizeHookTrace(trace, null, undefined, {
+        level: 'warn',
+        statusCode: 400,
+        errorCode: 'invalid_hook_payload',
+        errorMessage: error instanceof Error ? error.message : 'invalid hook payload',
+        maxBodyBytes: config.maxBodyBytes,
+      })
+      jsonResponse(res, 400, { error: 'invalid hook payload', requestId: trace.id })
     }
   }
 

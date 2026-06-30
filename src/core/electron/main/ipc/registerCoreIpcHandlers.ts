@@ -4,6 +4,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  type IpcMainInvokeEvent,
   nativeImage,
   nativeTheme,
   shell,
@@ -50,6 +51,10 @@ import { getBootDistro, type RegisterIpcHandlersDependencies } from './registerI
 export function registerCoreIpcHandlers(
   deps: RegisterIpcHandlersDependencies
 ): void {
+  const resolveSenderWindow = (event: IpcMainInvokeEvent): BrowserWindow | null => (
+    BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow()
+  )
+
   ipcMain.handle(IPC.DETECT_DIRECTORY, (_event, dirPath: string) => {
     return detectProject(dirPath)
   })
@@ -118,6 +123,10 @@ export function registerCoreIpcHandlers(
 
   ipcMain.handle(IPC.LOCAL_IMAGE_READ_DATA_URL, async (_event, source: string) => {
     return readLocalImageAsDataUrl(source)
+  })
+
+  ipcMain.handle(IPC.TRANSCRIPT_CAPTURE_INITIAL_TEXT_CONSUME, () => {
+    return deps.consumeTranscriptCaptureInitialText()
   })
 
   ipcMain.handle(IPC.CONFIG_GET, () => {
@@ -295,13 +304,13 @@ export function registerCoreIpcHandlers(
     openVsCode(folderPath, getBootDistro(deps))
   })
 
-  ipcMain.handle(IPC.WINDOW_MINIMIZE, () => {
-    deps.getMainWindow()?.minimize()
+  ipcMain.handle(IPC.WINDOW_MINIMIZE, (event) => {
+    resolveSenderWindow(event)?.minimize()
     return true
   })
 
-  ipcMain.handle(IPC.WINDOW_TOGGLE_MAXIMIZE, () => {
-    const currentWindow = deps.getMainWindow()
+  ipcMain.handle(IPC.WINDOW_TOGGLE_MAXIMIZE, (event) => {
+    const currentWindow = resolveSenderWindow(event)
     if (!currentWindow) return false
     if (currentWindow.isMaximized()) {
       currentWindow.unmaximize()
@@ -311,8 +320,8 @@ export function registerCoreIpcHandlers(
     return currentWindow.isMaximized()
   })
 
-  ipcMain.handle(IPC.WINDOW_CLOSE, () => {
-    deps.getMainWindow()?.close()
+  ipcMain.handle(IPC.WINDOW_CLOSE, (event) => {
+    resolveSenderWindow(event)?.close()
     return true
   })
 
@@ -338,8 +347,8 @@ export function registerCoreIpcHandlers(
 
   ipcMain.handle(IPC.TRAY_PANEL_RESIZE_TO_CONTENT, () => true)
 
-  ipcMain.handle(IPC.WINDOW_IS_MAXIMIZED, () => {
-    return deps.getMainWindow()?.isMaximized() ?? false
+  ipcMain.handle(IPC.WINDOW_IS_MAXIMIZED, (event) => {
+    return resolveSenderWindow(event)?.isMaximized() ?? false
   })
 
   ipcMain.handle(IPC.DIALOG_SELECT_DIRECTORY, async (_event, defaultPath?: string) => {

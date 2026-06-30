@@ -2,7 +2,9 @@ import type { BrowserWindow } from 'electron'
 import http from 'http'
 import { loadConfig } from '../config'
 import { toProjectFileServiceErrorMessage } from '../project-file-service'
+import type { AgentLogService } from '../agent-logs/agent-log-service'
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
+import type { AiGatewayService } from '../ai-gateway/gateway-service'
 import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
 import type { LearningService } from '../learning/learningService'
@@ -12,6 +14,8 @@ import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
 import type {
   Capability,
+  TranscriptCaptureInitialText,
+  TranscriptImportedEvent,
   TranscriptGatewayImportPayload,
 } from '../../../shared/types'
 
@@ -26,7 +30,11 @@ export type RegisterIpcHandlersDependencies = {
   getProcessManager: () => ProcessManager | null
   getCapability: () => Capability | null
   emitRuntimeStateChanged: (payload: RuntimeStateChangedPayload) => void
+  emitTranscriptImported: (payload: TranscriptImportedEvent) => void
+  consumeTranscriptCaptureInitialText: () => Promise<TranscriptCaptureInitialText>
+  agentLogService: AgentLogService
   aiCommitService: AiCommitService
+  aiGatewayService: AiGatewayService
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService

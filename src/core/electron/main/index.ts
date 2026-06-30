@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme } from 'electron'
+import { app, BrowserWindow, nativeTheme, screen } from 'electron'
 import path from 'path'
 import { ProcessManager } from './runner'
 import { loadConfig } from './config'
@@ -7,6 +7,8 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { createAgentLogService } from './agent-logs/agent-log-service'
+import { createAiGatewayService } from './ai-gateway/gateway-service'
 import { flushAiCommitRegistry } from './ai-commit-registry'
 import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createTranscriptRepository } from './transcript/transcriptRepository'
@@ -19,6 +21,16 @@ import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
 import { createWindow, applyWindowBackground } from './window/createWindow'
+import {
+  createTranscriptCaptureWindow,
+  TRANSCRIPT_CAPTURE_WINDOW_HEIGHT,
+  TRANSCRIPT_CAPTURE_WINDOW_WIDTH,
+} from './window/createTranscriptCaptureWindow'
+import {
+  captureTranscriptCaptureInitialText,
+  emptyTranscriptCaptureInitialText,
+  readTranscriptCaptureClipboardText,
+} from './window/transcriptCaptureSelection'
 import { applyAppCacheLocation } from './cache-location'
 import {
   registerGlobalShortcuts,
@@ -32,9 +44,19 @@ import {
 } from './launchOnLogin'
 import { createAppTray, type AppTrayController } from './tray'
 import { projectIdFromPath } from '../../shared/rules'
-import type { Capability, TranscriptImportedEvent } from '../../shared/types'
+import type {
+  Capability,
+  TranscriptCaptureInitialText,
+  TranscriptImportedEvent,
+} from '../../shared/types'
 
 let mainWindow: BrowserWindow | null = null
+let transcriptCaptureWindow: BrowserWindow | null = null
+let transcriptCaptureInitialText: TranscriptCaptureInitialText = emptyTranscriptCaptureInitialText
+let transcriptCaptureInitialTextPromise: Promise<TranscriptCaptureInitialText> | null = null
+let transcriptCaptureRequestId = 0
+let isTranscriptCaptureShortcutPending = false
+let shouldFocusTranscriptCaptureWindowOnReady = false
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 let trayController: AppTrayController | null = null
@@ -89,6 +111,9 @@ const learningRepository = createLearningRepository()
 const learningService = createLearningService({
   repository: learningRepository,
 })
+const aiGatewayService = createAiGatewayService({
+  getCapability: () => bootCapability,
+})
 
 const agentHookGateway = new AgentHookGateway({
   getConfig: () => loadConfig().agentHooks,
@@ -102,6 +127,11 @@ const agentHookGateway = new AgentHookGateway({
     emitTranscriptImported(imported)
     return imported
   },
+})
+
+const agentLogService = createAgentLogService({
+  getAiGatewayLogs: () => aiGatewayService.getRecentLogDetails(),
+  getAgentHookLogs: () => agentHookGateway.getRecentLogDetails(),
 })
 
 function createMainWindow(): void {
@@ -150,6 +180,80 @@ function createMainWindow(): void {
   }
 }
 
+function positionTranscriptCaptureWindow(window: BrowserWindow): void {
+  const cursorPoint = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursorPoint)
+  const x = Math.round(display.workArea.x + (display.workArea.width - TRANSCRIPT_CAPTURE_WINDOW_WIDTH) / 2)
+  const y = Math.round(
+    display.workArea.y + Math.max(48, (display.workArea.height - TRANSCRIPT_CAPTURE_WINDOW_HEIGHT) / 4)
+  )
+  window.webContents.setZoomFactor(1)
+  window.setBounds({
+    x,
+    y,
+    width: TRANSCRIPT_CAPTURE_WINDOW_WIDTH,
+    height: TRANSCRIPT_CAPTURE_WINDOW_HEIGHT,
+  })
+}
+
+function revealTranscriptCaptureWindow(window: BrowserWindow, focus: boolean): void {
+  positionTranscriptCaptureWindow(window)
+  if (focus) {
+    window.show()
+    window.focus()
+    shouldFocusTranscriptCaptureWindowOnReady = false
+    return
+  }
+  window.showInactive()
+}
+
+function requestTranscriptCaptureWindowFocus(): void {
+  if (!transcriptCaptureWindow || transcriptCaptureWindow.isDestroyed()) return
+  shouldFocusTranscriptCaptureWindowOnReady = true
+  if (!transcriptCaptureWindow.isVisible()) return
+  revealTranscriptCaptureWindow(transcriptCaptureWindow, true)
+}
+
+function resetTranscriptCaptureRequest(): void {
+  transcriptCaptureRequestId += 1
+  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
+  transcriptCaptureInitialTextPromise = null
+  isTranscriptCaptureShortcutPending = false
+  shouldFocusTranscriptCaptureWindowOnReady = false
+}
+
+function showTranscriptCaptureWindow(options: { focus?: boolean } = {}): void {
+  const shouldFocus = options.focus !== false
+  if (shouldFocus) {
+    shouldFocusTranscriptCaptureWindowOnReady = true
+  }
+
+  if (transcriptCaptureWindow && !transcriptCaptureWindow.isDestroyed()) {
+    revealTranscriptCaptureWindow(transcriptCaptureWindow, shouldFocus)
+    return
+  }
+
+  const config = loadConfig()
+  transcriptCaptureWindow = createTranscriptCaptureWindow({
+    theme: config.theme,
+    shouldUseDarkColors: nativeTheme.shouldUseDarkColors,
+  })
+  transcriptCaptureWindow.once('ready-to-show', () => {
+    if (!transcriptCaptureWindow || transcriptCaptureWindow.isDestroyed()) return
+    revealTranscriptCaptureWindow(
+      transcriptCaptureWindow,
+      shouldFocus || shouldFocusTranscriptCaptureWindowOnReady
+    )
+  })
+  transcriptCaptureWindow.on('blur', () => {
+    transcriptCaptureWindow?.close()
+  })
+  transcriptCaptureWindow.on('closed', () => {
+    transcriptCaptureWindow = null
+    resetTranscriptCaptureRequest()
+  })
+}
+
 function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; sessionName?: string }): void {
   mainWindow?.webContents.send(IPC.RUNTIME_STATE_CHANGED, payload)
 }
@@ -191,6 +295,84 @@ function sendGlobalThemeShortcut(): void {
   }
 
   mainWindow?.webContents.send(IPC.GLOBAL_THEME_SHORTCUT)
+}
+
+function beginTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
+  const requestId = ++transcriptCaptureRequestId
+  isTranscriptCaptureShortcutPending = true
+  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
+
+  const capturePromise = (async () => {
+    try {
+      return await captureTranscriptCaptureInitialText()
+    } catch (error) {
+      console.warn('[transcript-capture] Failed to capture selected text.', error)
+      return readTranscriptCaptureClipboardText()
+    }
+  })()
+
+  transcriptCaptureInitialTextPromise = capturePromise
+  void capturePromise
+    .then((initialText) => {
+      if (
+        transcriptCaptureRequestId !== requestId ||
+        transcriptCaptureInitialTextPromise !== capturePromise
+      ) {
+        return
+      }
+      transcriptCaptureInitialText = initialText
+    })
+    .finally(() => {
+      if (
+        transcriptCaptureRequestId !== requestId ||
+        transcriptCaptureInitialTextPromise !== capturePromise
+      ) {
+        return
+      }
+      transcriptCaptureInitialTextPromise = null
+      isTranscriptCaptureShortcutPending = false
+    })
+
+  return capturePromise
+}
+
+async function consumeTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
+  const pendingCapture = transcriptCaptureInitialTextPromise
+  const requestId = transcriptCaptureRequestId
+  if (pendingCapture) {
+    const snapshot = await pendingCapture
+    if (
+      transcriptCaptureRequestId === requestId &&
+      transcriptCaptureInitialTextPromise === pendingCapture
+    ) {
+      transcriptCaptureInitialTextPromise = null
+      isTranscriptCaptureShortcutPending = false
+    }
+    if (transcriptCaptureRequestId === requestId) {
+      transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
+    }
+    return snapshot
+  }
+
+  const snapshot = transcriptCaptureInitialText
+  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
+  return snapshot
+}
+
+function sendGlobalTranscriptCaptureShortcut(): void {
+  if (isTranscriptCaptureShortcutPending) {
+    showTranscriptCaptureWindow({ focus: false })
+    return
+  }
+
+  if (transcriptCaptureWindow && !transcriptCaptureWindow.isDestroyed()) {
+    showTranscriptCaptureWindow()
+    return
+  }
+
+  const capturePromise = beginTranscriptCaptureInitialText()
+  showTranscriptCaptureWindow({ focus: false })
+  void capturePromise.finally(requestTranscriptCaptureWindowFocus)
 }
 
 function hideMainWindowToTray(): void {
@@ -294,6 +476,7 @@ app.on('before-quit', async (e) => {
   aiCommitService.cleanupOnBeforeQuit()
   processManager?.stopAll()
   await agentHookGateway.stop()
+  await aiGatewayService.shutdown()
   await transcriptShareService.shutdown()
 
   setTimeout(() => {
@@ -350,7 +533,11 @@ app.whenReady().then(async () => {
     getProcessManager: () => processManager,
     getCapability: () => bootCapability,
     emitRuntimeStateChanged,
+    emitTranscriptImported,
+    consumeTranscriptCaptureInitialText,
+    agentLogService,
     aiCommitService,
+    aiGatewayService,
     agentHookGateway,
     gitService,
     runtimeService,
@@ -367,8 +554,15 @@ app.whenReady().then(async () => {
       trayController.ensure()
     }
   }
-  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut)
+  registerGlobalShortcuts(
+    sendGlobalHomeShortcut,
+    sendGlobalThemeShortcut,
+    sendGlobalTranscriptCaptureShortcut
+  )
   agentHookGateway.start()
+  void aiGatewayService.start(false).catch((error) => {
+    console.warn('[ai-gateway] Failed to start from saved config.', error)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
