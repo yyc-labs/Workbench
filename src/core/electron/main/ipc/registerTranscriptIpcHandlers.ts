@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
 import type {
+  TranscriptExternalImportPayload,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
   TranscriptShareStartPayload,
@@ -17,6 +18,15 @@ export function registerTranscriptIpcHandlers(
   ipcMain.handle(IPC.TRANSCRIPT_IMPORT, async (_event, payload: TranscriptImportPayload) => {
     return deps.transcriptService.importTranscript(payload)
   })
+
+  ipcMain.handle(
+    IPC.TRANSCRIPT_IMPORT_EXTERNAL,
+    async (_event, payload: TranscriptExternalImportPayload) => {
+      const imported = await deps.transcriptService.importExternalTranscript(payload)
+      deps.emitTranscriptImported(imported)
+      return imported
+    }
+  )
 
   ipcMain.handle(
     IPC.TRANSCRIPT_IMPORT_VIA_GATEWAY,

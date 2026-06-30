@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock3, FileText, RefreshCw, Search, X } from 'lucide-react'
 import type { ProjectInfo } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
@@ -48,6 +48,9 @@ type ManualTranscriptImportModalProps = {
   projects?: ManualTranscriptImportProject[]
   project?: ManualTranscriptImportProject
   initialProjectId?: string
+  initialTitle?: string
+  initialText?: string
+  resetKey?: string | number
   requireProjectSelection?: boolean
   submitting?: boolean
   ariaLabel?: string
@@ -55,6 +58,7 @@ type ManualTranscriptImportModalProps = {
   description?: string
   submitLabel?: string
   onImported?: (projectId: string) => void | Promise<void>
+  autoFocusContent?: boolean
 }
 
 export function ManualTranscriptImportModal({
@@ -64,6 +68,9 @@ export function ManualTranscriptImportModal({
   projects,
   project,
   initialProjectId,
+  initialTitle,
+  initialText,
+  resetKey,
   requireProjectSelection = false,
   submitting = false,
   ariaLabel,
@@ -71,24 +78,34 @@ export function ManualTranscriptImportModal({
   description,
   submitLabel,
   onImported,
+  autoFocusContent = false,
 }: ManualTranscriptImportModalProps) {
   const { t, formatDateTime } = useI18n()
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId ?? '')
   const [projectSearchQuery, setProjectSearchQuery] = useState('')
-  const [draftTitle, setDraftTitle] = useState('')
-  const [draftText, setDraftText] = useState('')
+  const [draftTitle, setDraftTitle] = useState(initialTitle ?? '')
+  const [draftText, setDraftText] = useState(initialText ?? '')
   const [wrapMode, setWrapMode] = useState<ManualTranscriptImportWrapMode>('none')
   const [error, setError] = useState<string | null>(null)
+  const contentTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     if (!open) return
     setSelectedProjectId(initialProjectId ?? '')
     setProjectSearchQuery('')
-    setDraftTitle('')
-    setDraftText('')
+    setDraftTitle(initialTitle ?? '')
+    setDraftText(initialText ?? '')
     setWrapMode('none')
     setError(null)
-  }, [initialProjectId, open])
+  }, [initialProjectId, initialText, initialTitle, open, resetKey])
+
+  useEffect(() => {
+    if (!open || !autoFocusContent) return
+    const frameId = window.requestAnimationFrame(() => {
+      contentTextareaRef.current?.focus()
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [autoFocusContent, open, resetKey])
 
   const availableProjects = useMemo(
     () => (projects ?? []).slice().sort((a, b) => {
@@ -393,6 +410,7 @@ export function ManualTranscriptImportModal({
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('transcript.manualImportContentLabel')}</p>
           <textarea
+            ref={contentTextareaRef}
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}
             className="quiet-control min-h-[240px] w-full resize-y rounded-[18px] border-0 px-4 py-3 text-sm text-[color:var(--color-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"

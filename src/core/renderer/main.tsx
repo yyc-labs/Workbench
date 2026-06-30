@@ -1,10 +1,8 @@
-import { StrictMode } from 'react'
+import { StrictMode, type ComponentType } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/600.css'
-import { App } from './App'
-import { TrayPanelApp } from './TrayPanelApp'
 import './styles/global.css'
 
 const rootElement = document.getElementById('root')
@@ -18,14 +16,28 @@ if (window.location.hash === '#tray-panel') {
   rootElement.style.background = 'transparent'
 }
 
-try {
-  createRoot(rootElement).render(
-    <StrictMode>
-      {window.location.hash === '#tray-panel' ? <TrayPanelApp /> : <App />}
-    </StrictMode>
-  )
-} catch (error) {
-  rootElement.textContent = `App mount failed: ${error instanceof Error ? error.message : String(error)}`
-  // Keep error visible in window for fast diagnosis when DevTools is unavailable.
-  console.error('[renderer.mount] failed', error)
+async function loadRootComponent(): Promise<ComponentType> {
+  switch (window.location.hash) {
+    case '#tray-panel':
+      return (await import('./TrayPanelApp')).TrayPanelApp
+    case '#transcript-capture':
+      return (await import('./TranscriptCaptureApp')).TranscriptCaptureApp
+    default:
+      return (await import('./App')).App
+  }
 }
+
+void (async () => {
+  try {
+    const RootComponent = await loadRootComponent()
+    createRoot(rootElement).render(
+      <StrictMode>
+        <RootComponent />
+      </StrictMode>
+    )
+  } catch (error) {
+    rootElement.textContent = `App mount failed: ${error instanceof Error ? error.message : String(error)}`
+    // Keep error visible in window for fast diagnosis when DevTools is unavailable.
+    console.error('[renderer.mount] failed', error)
+  }
+})()

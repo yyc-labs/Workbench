@@ -181,10 +181,21 @@ export interface ClaudeBashrcConfig {
   claudeCodeSubagentModel: string
 }
 
+export interface ClaudeRuntimeProfileGatewayBinding {
+  enabled: boolean
+  providerId: string
+  /** Legacy optional fields kept for reading older saved gateway profile bindings. */
+  modelAlias?: string
+  upstreamModel?: string
+  /** Legacy backup shape. New configs keep direct Claude settings in ClaudeRuntimeProfile.config. */
+  directConfig?: ClaudeBashrcConfig
+}
+
 export interface ClaudeRuntimeProfile {
   id: string
   name: string
   config: ClaudeBashrcConfig
+  gateway?: ClaudeRuntimeProfileGatewayBinding
 }
 
 export interface CodexModelProviderConfig {
@@ -230,6 +241,114 @@ export interface CodexSettingsInput {
 
 export interface CodexSettingsSaveResult {
   snapshot: CodexSettingsSnapshot
+  appConfig: AppConfig
+}
+
+export type AiGatewayUpstreamProtocol =
+  | 'openai_chat'
+  | 'openai_responses'
+  | 'anthropic_messages'
+
+export type AiGatewayClientCli = 'claude' | 'codex'
+export type AiGatewayLogLevel = 'info' | 'warn' | 'error'
+export type AiGatewayLogRoute = 'anthropic' | 'responses' | 'chat' | 'health' | 'unknown'
+
+export interface AiGatewayProviderConfig {
+  id: string
+  name: string
+  baseUrl: string
+  apiKeyEnv?: string
+  apiKey?: string
+  protocol: AiGatewayUpstreamProtocol
+  modelMap?: Record<string, string>
+  enabled: boolean
+  timeoutMs?: number
+}
+
+export interface AiGatewayModelRoute {
+  id: string
+  model: string
+  providerId: string
+  upstreamModel?: string
+  enabled: boolean
+  source?: 'manual' | 'claude-profile'
+  profileId?: string
+}
+
+export interface AiGatewayClientBindingBackup {
+  createdAt: string
+  claudeConfig?: ClaudeBashrcConfig
+  codexSnapshot?: CodexSettingsSnapshot
+}
+
+export interface AiGatewayClientBinding {
+  cli: AiGatewayClientCli
+  enabled: boolean
+  baseUrl: string
+  providerId: string
+  backupPath?: string
+  backup?: AiGatewayClientBindingBackup
+}
+
+export interface AiGatewayConfig {
+  enabled: boolean
+  host: string
+  port: number
+  activeProviderId: string
+  providers: AiGatewayProviderConfig[]
+  clientBindings: Record<AiGatewayClientCli, AiGatewayClientBinding>
+  modelRoutes?: AiGatewayModelRoute[]
+  maxBodyBytes?: number
+}
+
+export interface AiGatewayStatus {
+  enabled: boolean
+  running: boolean
+  host: string
+  port: number
+  url: string
+  anthropicBaseUrl: string
+  openAiBaseUrl: string
+  activeProviderId: string
+  activeProvider?: AiGatewayProviderConfig
+  providerCount: number
+  clientBindings: Record<AiGatewayClientCli, AiGatewayClientBinding>
+  modelRoutes?: AiGatewayModelRoute[]
+  error?: string
+}
+
+export interface AiGatewayLogEntry {
+  id: string
+  timestamp: number
+  level: AiGatewayLogLevel
+  route: AiGatewayLogRoute
+  requestMethod: string
+  requestPath: string
+  message: string
+  providerId?: string
+  providerName?: string
+  upstreamUrl?: string
+  profileId?: string
+  model?: string
+  stream?: boolean
+  statusCode?: number
+  contentType?: string
+  authSource?: string
+  authToken?: string
+  errorCode?: string
+  eventCount?: number
+  bodyPreview?: string
+}
+
+export interface AiGatewaySaveConfigResult {
+  config: AiGatewayConfig
+  status: AiGatewayStatus
+  appConfig: AppConfig
+}
+
+export interface AiGatewayBindingResult {
+  config: AiGatewayConfig
+  status: AiGatewayStatus
   appConfig: AppConfig
 }
 
@@ -364,6 +483,11 @@ export interface AgentHookGatewayConfig {
   }
 }
 
+export interface ShortcutPreferencesConfig {
+  /** Open the main transcript viewer after Ctrl/Cmd+Shift+K quick capture imports content. */
+  quickTranscriptCaptureOpenViewer?: boolean
+}
+
 export interface AgentHookGatewayStatus {
   enabled: boolean
   running: boolean
@@ -379,12 +503,121 @@ export interface AgentHookGatewayStatus {
   error?: string
 }
 
+export type AgentLogSource = 'ai-gateway' | 'agent-hooks'
+export type AgentLogLevel = 'info' | 'warn' | 'error'
+
+export interface AgentLogSummary {
+  id: string
+  source: AgentLogSource
+  title: string
+  timestamp: number
+  level: AgentLogLevel
+  route?: AiGatewayLogRoute
+  requestMethod?: string
+  requestPath?: string
+  providerEvent?: string
+  canonicalEvent?: AgentHookCanonicalEvent
+  provider?: AgentHookProvider
+  providerId?: string
+  providerName?: string
+  model?: string
+  profileId?: string
+  statusCode?: number
+  durationMs?: number
+  stream?: boolean
+  eventCount?: number
+  truncated?: boolean
+  cwd?: string
+  toolName?: string
+}
+
+export interface StructuredJsonSnapshot {
+  contentType?: string
+  sizeBytes?: number
+  truncated?: boolean
+  parseError?: string
+  rawText?: string
+  parsed?: unknown
+}
+
+export interface StructuredHttpRequestSnapshot {
+  method: string
+  path: string
+  url?: string
+  query?: Record<string, string | string[]>
+  headers: Record<string, string | string[]>
+  body?: StructuredJsonSnapshot
+}
+
+export interface StructuredHttpResponseSnapshot {
+  statusCode: number
+  headers?: Record<string, string | string[]>
+  body?: StructuredJsonSnapshot
+}
+
+export interface AiGatewayLogDetail {
+  source: 'ai-gateway'
+  summary: AgentLogSummary
+  meta: {
+    requestId: string
+    route: AiGatewayLogRoute
+    providerId?: string
+    providerName?: string
+    profileId?: string
+    model?: string
+    durationMs?: number
+    authSource?: string
+  }
+  ingressRequest?: StructuredHttpRequestSnapshot
+  normalizedRequest?: StructuredJsonSnapshot
+  upstreamRequest?: StructuredHttpRequestSnapshot
+  upstreamResponse?: StructuredHttpResponseSnapshot
+  clientResponse?: StructuredHttpResponseSnapshot
+  stream?: {
+    enabled: boolean
+    upstreamEventCount?: number
+    previewEvents?: unknown[]
+  }
+  error?: {
+    code?: string
+    message: string
+  }
+}
+
+export interface AgentHookLogDetail {
+  source: 'agent-hooks'
+  summary: AgentLogSummary
+  meta: {
+    requestId: string
+    provider: AgentHookProvider
+    providerEvent: string
+    canonicalEvent: AgentHookCanonicalEvent
+    durationMs?: number
+  }
+  ingressRequest?: StructuredHttpRequestSnapshot
+  normalizedEnvelope?: unknown
+  payload?: StructuredJsonSnapshot
+  error?: {
+    code?: string
+    message: string
+  }
+}
+
+export type AgentLogDetail = AiGatewayLogDetail | AgentHookLogDetail
+
 export type TranscriptSourceType =
   | 'process-output'
   | 'tmux-capture'
   | 'agent-hook'
   | 'manual-markdown'
   | 'imported-file'
+
+export type TranscriptCaptureInitialTextSource = 'selection' | 'clipboard' | 'empty'
+
+export interface TranscriptCaptureInitialText {
+  text: string
+  source: TranscriptCaptureInitialTextSource
+}
 
 export type TranscriptViewerMode = 'preview' | 'editor' | 'split'
 
@@ -980,6 +1213,10 @@ export interface AppConfig {
   codexSettingsSnapshots?: CodexSettingsSnapshotMap
   /** Local lifecycle hook gateway for Claude Code and Codex CLI events */
   agentHooks?: AgentHookGatewayConfig
+  /** Local model protocol gateway for Claude/Codex compatible CLIs */
+  aiGateway?: AiGatewayConfig
+  /** User-configurable global shortcut behavior */
+  shortcutPreferences?: ShortcutPreferencesConfig
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
 }

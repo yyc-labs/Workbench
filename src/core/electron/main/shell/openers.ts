@@ -8,7 +8,23 @@ import { buildWindowsTerminalTabArgs } from './windows-shell'
 
 const SSH_TERMINAL_DEBUG_LOG = join(tmpdir(), 'ide-electron-open-ssh.log')
 const SSH_TERMINAL_DEBUG_TEXT_LIMIT = 240
+const WSL_SSH_DEFAULT_SETUP_TIMEOUT_MS = 5000
+const WSL_SSH_COLD_START_SETUP_TIMEOUT_MS = 30000
 const WSL_GB18030_DECODER = new TextDecoder('gb18030', { fatal: false })
+
+type WslSshSetupStep =
+  | 'verify-wsl-distro'
+  | 'verify-bash'
+  | 'verify-expect'
+  | 'create-temp-script-path'
+  | 'write-temp-script'
+  | 'inspect-temp-script-bytes'
+
+export function getWslSshSetupTimeoutMs(step: WslSshSetupStep): number {
+  return step === 'verify-wsl-distro'
+    ? WSL_SSH_COLD_START_SETUP_TIMEOUT_MS
+    : WSL_SSH_DEFAULT_SETUP_TIMEOUT_MS
+}
 
 function appendSshTerminalDebugLog(event: string, details?: Record<string, unknown>): void {
   try {
@@ -335,10 +351,10 @@ export function buildWslTempScriptWriteCommand(scriptPath: string, scriptContent
 }
 
 async function writeWslTempScript(distro: string, scriptContent: string): Promise<string> {
-  const scriptPath = await execWslBash(distro, buildWslTempScriptPathCommand(), 5000, {
+  const scriptPath = await execWslBash(distro, buildWslTempScriptPathCommand(), getWslSshSetupTimeoutMs('create-temp-script-path'), {
     debugLabel: 'create-temp-script-path',
   })
-  await execWslBash(distro, buildWslTempScriptWriteCommand(scriptPath, scriptContent), 5000, {
+  await execWslBash(distro, buildWslTempScriptWriteCommand(scriptPath, scriptContent), getWslSshSetupTimeoutMs('write-temp-script'), {
     debugLabel: 'write-temp-script',
   })
   return scriptPath
@@ -455,7 +471,7 @@ async function verifyWslExpectReady(distro: string): Promise<void> {
   }
 
   try {
-    await execWslBash(distro, 'true', 5000, {
+    await execWslBash(distro, 'true', getWslSshSetupTimeoutMs('verify-wsl-distro'), {
       debugLabel: 'verify-wsl-distro',
     })
     appendSshTerminalDebugLog('openSshTerminal:wsl-verify-step-ok', {
@@ -485,7 +501,7 @@ async function verifyWslExpectReady(distro: string): Promise<void> {
   }
 
   try {
-    await execWslBash(distro, 'command -v bash >/dev/null', 5000, {
+    await execWslBash(distro, 'command -v bash >/dev/null', getWslSshSetupTimeoutMs('verify-bash'), {
       debugLabel: 'verify-bash',
     })
     appendSshTerminalDebugLog('openSshTerminal:wsl-verify-step-ok', {
@@ -501,7 +517,7 @@ async function verifyWslExpectReady(distro: string): Promise<void> {
   }
 
   try {
-    await execWslBash(distro, 'command -v expect >/dev/null', 5000, {
+    await execWslBash(distro, 'command -v expect >/dev/null', getWslSshSetupTimeoutMs('verify-expect'), {
       debugLabel: 'verify-expect',
     })
     appendSshTerminalDebugLog('openSshTerminal:wsl-verify-step-ok', {
@@ -813,7 +829,7 @@ export async function openSshTerminal(
       const scriptBytes = await execWslBash(
         defaultDistro,
         `wc -c < '${quoteBashSingle(scriptPath)}'`,
-        5000,
+        getWslSshSetupTimeoutMs('inspect-temp-script-bytes'),
         {
           debugLabel: 'inspect-temp-script-bytes',
         }

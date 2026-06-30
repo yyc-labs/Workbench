@@ -1,6 +1,8 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
 import type {
+  TranscriptImportedEvent,
+  TranscriptExternalImportPayload,
   TranscriptGatewayImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
@@ -15,6 +17,9 @@ export function createTranscriptInvokeApi() {
   return {
     importTranscript: (payload: TranscriptImportPayload) =>
       ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT, payload) as Promise<TranscriptSession>,
+
+    importExternalTranscript: (payload: TranscriptExternalImportPayload) =>
+      ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT_EXTERNAL, payload) as Promise<TranscriptImportedEvent>,
 
     importTranscriptViaGateway: (payload: TranscriptGatewayImportPayload) =>
       ipcRenderer.invoke(IPC.TRANSCRIPT_IMPORT_VIA_GATEWAY, payload) as Promise<{
