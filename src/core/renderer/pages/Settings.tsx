@@ -36,6 +36,7 @@ const DEFAULT_CACHE_LOCATION: AppCacheLocationConfig = { mode: 'default' }
 
 type SettingsConfirmDialogState =
   | { type: 'restart' }
+  | { type: 'install-cache-warning'; nextLocation: AppCacheLocationConfig }
   | { type: 'cleanup'; rootPath: string | null }
 
 function toErrorMessage(error: unknown): string {
@@ -168,11 +169,20 @@ export function SettingsPage() {
     await setCloseWindowBehaviorConfig(behavior)
   }
 
-  const handleCacheLocationChange = async (nextLocation: AppCacheLocationConfig) => {
+  const applyCacheLocationChange = async (nextLocation: AppCacheLocationConfig) => {
     setCacheLocation(nextLocation)
     await setCacheLocationConfig(nextLocation)
     const info = await window.electronAPI.getCacheLocationInfo()
     setCacheLocationInfo(info)
+  }
+
+  const handleCacheLocationChange = async (nextLocation: AppCacheLocationConfig) => {
+    if (nextLocation.mode === 'install' && cacheLocation.mode !== 'install') {
+      setConfirmDialog({ type: 'install-cache-warning', nextLocation })
+      return
+    }
+
+    await applyCacheLocationChange(nextLocation)
   }
 
   const handleRestartApp = () => {
@@ -256,6 +266,12 @@ export function SettingsPage() {
     if (confirmDialog.type === 'restart') {
       setConfirmDialog(null)
       await executeRestartApp()
+      return
+    }
+
+    if (confirmDialog.type === 'install-cache-warning') {
+      setConfirmDialog(null)
+      await applyCacheLocationChange(confirmDialog.nextLocation)
       return
     }
 
@@ -381,26 +397,50 @@ export function SettingsPage() {
         ariaLabel={
           confirmDialog?.type === 'cleanup'
             ? t('settings.dataCache.browserDataCleanupConfirmTitle')
-            : t('settings.dataCache.restartConfirmTitle')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
+              : t('settings.dataCache.restartConfirmTitle')
         }
         title={
           confirmDialog?.type === 'cleanup'
             ? t('settings.dataCache.browserDataCleanupConfirmTitle')
-            : t('settings.dataCache.restartConfirmTitle')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
+              : t('settings.dataCache.restartConfirmTitle')
         }
         description={
           confirmDialog?.type === 'cleanup'
             ? t('settings.dataCache.browserDataCleanupConfirm')
-            : t('settings.dataCache.restartConfirm')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirm')
+              : t('settings.dataCache.restartConfirm')
         }
         confirmLabel={
           confirmDialog?.type === 'cleanup'
             ? t('settings.dataCache.cleanupLegacyBrowserCaches')
-            : t('settings.dataCache.restartApp')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmButton')
+              : t('settings.dataCache.restartApp')
         }
         confirmVariant={confirmDialog?.type === 'cleanup' ? 'destructive' : 'default'}
         busy={browserDataMaintenanceAction === 'cleanup'}
       >
+        {confirmDialog?.type === 'install-cache-warning' && (
+          <div
+            className="rounded-[18px] border px-4 py-3"
+            style={{ borderColor: 'var(--color-border)' }}
+          >
+            <p className="text-xs font-medium text-[color:var(--color-foreground)]">
+              {t('settings.dataCache.cacheLocationInstallConfirmAdviceTitle')}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+              {t('settings.dataCache.cacheLocationInstallConfirmAdvice')}
+            </p>
+            <code className="mt-3 block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">
+              {t('settings.dataCache.cacheLocationInstallConfirmExample')}
+            </code>
+          </div>
+        )}
         {confirmDialog?.type === 'cleanup' && (
           <div
             className="max-h-40 overflow-y-auto rounded-[18px] border px-4 py-3"
