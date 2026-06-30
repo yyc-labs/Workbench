@@ -81,6 +81,7 @@ type DetailAiCommitPanelProps = {
   aiCommitUndoRemainingSeconds: number
   aiCommitUndoGraceActive: boolean
   aiCommitUndoGraceRemainingSeconds: number
+  aiCommitCanceling: boolean
   aiCommitUndoRunning: boolean
   aiCommitUndoError: string | null
   aiCommitStatus: AiCommitStatus
@@ -89,6 +90,7 @@ type DetailAiCommitPanelProps = {
   onAiAutoCommit: () => void
   onBeginUndoAiCommitAuth: () => Promise<boolean>
   onCancelUndoAiCommitAuth: () => Promise<void>
+  onCancelAiCommit: () => void
   onUndoAiCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
 }
@@ -141,6 +143,7 @@ function DetailAiCommitPanel({
   aiCommitUndoRemainingSeconds,
   aiCommitUndoGraceActive,
   aiCommitUndoGraceRemainingSeconds,
+  aiCommitCanceling,
   aiCommitUndoRunning,
   aiCommitUndoError,
   aiCommitStatus,
@@ -149,6 +152,7 @@ function DetailAiCommitPanel({
   onAiAutoCommit,
   onBeginUndoAiCommitAuth,
   onCancelUndoAiCommitAuth,
+  onCancelAiCommit,
   onUndoAiCommit,
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
@@ -1025,6 +1029,7 @@ function DetailAiCommitPanel({
             aiCommitUndoGraceActive={aiCommitUndoGraceActive}
             aiCommitUndoGraceRemainingSeconds={aiCommitUndoGraceRemainingSeconds}
             aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
+            aiCommitCanceling={aiCommitCanceling}
             aiCommitUndoRunning={aiCommitUndoRunning}
             firstProjectLinkItem={firstProjectLinkItem}
             hasProjectDocLinks={hasProjectDocLinks}
@@ -1033,6 +1038,7 @@ function DetailAiCommitPanel({
             isAiEnabled={isAiEnabled}
             onAiAutoCommit={onAiAutoCommit}
             onAiAutoCommitContextMenu={onAiAutoCommitContextMenu}
+            onCancelAiCommit={onCancelAiCommit}
             onOpenTranscript={onOpenTranscript}
             onPreloadPane={onPreloadPane}
             onStartAndOpenDevUrl={onStartAndOpenDevUrl}

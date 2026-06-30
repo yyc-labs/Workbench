@@ -218,6 +218,7 @@ declare global {
         repoRoot: string,
         override?: { split?: boolean; splitMaxBatches?: number; maxBullets?: number }
       ) => Promise<boolean>
+      cancelAiCommit: (projectId: string) => Promise<boolean>
       getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
       beginAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
       cancelAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>

@@ -87,6 +87,7 @@ export function DetailAiCommitPaneHost({
     aiCommitUndoRemainingSeconds,
     aiCommitUndoGraceActive,
     aiCommitUndoGraceRemainingSeconds,
+    aiCommitCanceling,
     aiCommitUndoRunning,
     aiCommitUndoError,
     quickConfigOpen,
@@ -108,6 +109,7 @@ export function DetailAiCommitPaneHost({
     quickSplitMaxBatchesNumber,
     quickMaxBulletsNumber,
     handleAiCommit,
+    handleCancelAiCommit,
     handleBeginUndoAiCommitAuth,
     handleCancelUndoAiCommitAuth,
     handleUndoAiCommit,
@@ -284,6 +286,7 @@ export function DetailAiCommitPaneHost({
         aiCommitUndoRemainingSeconds={aiCommitUndoRemainingSeconds}
         aiCommitUndoGraceActive={aiCommitUndoGraceActive}
         aiCommitUndoGraceRemainingSeconds={aiCommitUndoGraceRemainingSeconds}
+        aiCommitCanceling={aiCommitCanceling}
         aiCommitUndoRunning={aiCommitUndoRunning}
         aiCommitUndoError={aiCommitUndoError}
         aiCommitStatus={aiCommitStatus}
@@ -294,6 +297,9 @@ export function DetailAiCommitPaneHost({
         }}
         onBeginUndoAiCommitAuth={() => handleBeginUndoAiCommitAuth()}
         onCancelUndoAiCommitAuth={() => handleCancelUndoAiCommitAuth()}
+        onCancelAiCommit={() => {
+          void handleCancelAiCommit()
+        }}
         onUndoAiCommit={() => {
           void handleUndoAiCommit()
         }}

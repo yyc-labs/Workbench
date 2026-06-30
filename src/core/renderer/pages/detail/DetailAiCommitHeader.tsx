@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
-import { ArrowUpRight, Bot, Loader2, RefreshCw, RotateCcw } from 'lucide-react'
+import { ArrowUpRight, Bot, Loader2, RefreshCw, RotateCcw, X } from 'lucide-react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
@@ -34,6 +34,7 @@ type DetailAiCommitHeaderProps = {
   aiCommitUndoGraceActive: boolean
   aiCommitUndoGraceRemainingSeconds: number
   aiCommitUndoRemainingSeconds: number
+  aiCommitCanceling: boolean
   aiCommitUndoRunning: boolean
   firstProjectLinkItem?: ProjectLinkItem
   flowNodes: AiFlowNode[]
@@ -42,6 +43,7 @@ type DetailAiCommitHeaderProps = {
   isAiEnabled: boolean
   onAiAutoCommit: () => void
   onAiAutoCommitContextMenu: (event: ReactMouseEvent<HTMLButtonElement>) => void
+  onCancelAiCommit: () => void
   onOpenTranscript?: () => void
   onPreloadPane?: ProjectPanePreload
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
@@ -77,6 +79,7 @@ export function DetailAiCommitHeader({
   aiCommitUndoGraceActive,
   aiCommitUndoGraceRemainingSeconds,
   aiCommitUndoRemainingSeconds,
+  aiCommitCanceling,
   aiCommitUndoRunning,
   firstProjectLinkItem,
   flowNodes,
@@ -85,6 +88,7 @@ export function DetailAiCommitHeader({
   isAiEnabled,
   onAiAutoCommit,
   onAiAutoCommitContextMenu,
+  onCancelAiCommit,
   onOpenTranscript,
   onPreloadPane,
   onStartAndOpenDevUrl,
@@ -114,18 +118,23 @@ export function DetailAiCommitHeader({
     : aiCommitBlockedReason
       ? t('detail.aiCommitBlockedTitle')
     : aiCommitStatus === 'running'
-      ? t('detail.aiCommitRunning')
+      ? aiCommitCanceling ? t('detail.aiCommitCancelling') : t('detail.aiCommitCancel')
       : t('common.aiAutoCommit')
   const primaryButtonTitle = aiCommitUndoAvailable
     ? aiCommitUndoAuthActive
       ? t('detail.aiCommitUndoAuthActive')
       : t('detail.aiCommitUndoCurrent')
+    : aiCommitStatus === 'running'
+      ? aiCommitCanceling ? t('detail.aiCommitCancelling') : t('detail.aiCommitButtonHintRunning')
     : aiCommitBlockedReason
       ? t('detail.aiCommitButtonHintBlocked')
     : isAiEnabled
       ? t('detail.aiCommitButtonHintEnabled')
       : t('detail.aiCommitButtonHintDisabled')
-  const primaryButtonDisabled = aiCommitStatus === 'running' || aiCommitUndoRunning || Boolean(aiCommitBlockedReason)
+  const primaryButtonDisabled =
+    aiCommitUndoRunning
+    || Boolean(aiCommitBlockedReason)
+    || (aiCommitStatus === 'running' && aiCommitCanceling)
   const preflightClassByTone: Record<NonNullable<DetailAiCommitHeaderProps['preflightItems']>[number]['tone'], string> = {
     success: 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]',
     warning: 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]',
@@ -215,9 +224,15 @@ export function DetailAiCommitHeader({
                     ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 34%, transparent)' }
                     : undefined
               }
-              onClick={aiCommitUndoAvailable ? onUndoAiCommit : onAiAutoCommit}
+              onClick={
+                aiCommitUndoAvailable
+                  ? onUndoAiCommit
+                  : aiCommitStatus === 'running'
+                    ? onCancelAiCommit
+                    : onAiAutoCommit
+              }
               onContextMenu={(event) => {
-                if (aiCommitUndoAvailable || aiCommitBlockedReason) {
+                if (aiCommitUndoAvailable || aiCommitBlockedReason || aiCommitStatus === 'running') {
                   event.preventDefault()
                   event.stopPropagation()
                   return
@@ -231,6 +246,8 @@ export function DetailAiCommitHeader({
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : aiCommitUndoAvailable ? (
                 <RotateCcw className="h-3.5 w-3.5" />
+              ) : aiCommitStatus === 'running' ? (
+                aiCommitCanceling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />
               ) : aiCommitBlockedReason ? (
                 <RefreshCw className="h-3.5 w-3.5" />
               ) : (
