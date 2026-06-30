@@ -10,6 +10,7 @@ const {
   buildWslSshRunnerScript,
   buildWtWslExecArgs,
   decodeWslProcessOutput,
+  getWslSshSetupTimeoutMs,
   mapWslSshFailure,
   openSshTerminal,
   resolveSshOpenRoute,
@@ -77,6 +78,13 @@ test('buildWtWslExecArgs uses the same wt wsl launch shape as other WSL terminal
     buildWtWslExecArgs('Ubuntu', ['bash', '/tmp/ide-electron-ssh.abc123.sh']),
     ['wsl', '-d', 'Ubuntu', '--', 'bash', '/tmp/ide-electron-ssh.abc123.sh']
   )
+})
+
+test('WSL SSH setup allows a cold-start window only for the first distro entry', () => {
+  assert.equal(getWslSshSetupTimeoutMs('verify-wsl-distro'), 30000)
+  assert.equal(getWslSshSetupTimeoutMs('verify-bash'), 5000)
+  assert.equal(getWslSshSetupTimeoutMs('verify-expect'), 5000)
+  assert.equal(getWslSshSetupTimeoutMs('create-temp-script-path'), 5000)
 })
 
 test('resolveSshOpenRoute only keeps the WSL route on Windows hosts', () => {
