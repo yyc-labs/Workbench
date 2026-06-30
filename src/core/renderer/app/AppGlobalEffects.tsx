@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Clock3, Map } from 'lucide-react'
-import { RecentProjectsDrawer } from '../components/RecentProjectsDrawer'
+import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { useI18n } from '../i18n'
 import {
@@ -250,6 +250,7 @@ function GlobalRecentProjectsDrawerHost() {
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const clearProjectLastOpened = useAppStore((s) => s.clearProjectLastOpened)
   const [open, setOpen] = useState(false)
+  const [metaDialogProjectId, setMetaDialogProjectId] = useState<string | null>(null)
   const { t } = useI18n()
 
   const currentProjectId = useMemo(() => {
@@ -331,7 +332,15 @@ function GlobalRecentProjectsDrawerHost() {
         onRemoveProject={(projectId) => {
           void clearProjectLastOpened(projectId)
         }}
+        onEditProjectMetadata={setMetaDialogProjectId}
       />
+
+      {metaDialogProjectId && (
+        <RecentProjectsMetaDialogHost
+          projectId={metaDialogProjectId}
+          onClose={() => setMetaDialogProjectId(null)}
+        />
+      )}
     </>
   )
 }

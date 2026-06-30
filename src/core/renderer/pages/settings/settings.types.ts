@@ -1,10 +1,13 @@
 export const SETTINGS_SECTIONS = [
   'general',
+  'shortcuts',
   'data',
   'runtime',
   'agents',
+  'gateway',
   'transcripts',
   'hooks',
+  'agent-logs',
   'logs',
   'ai',
   'rules',

@@ -20,6 +20,7 @@ export type SettingsActionsSlice = Pick<
   | 'loadCodexSettings'
   | 'saveCodexSettings'
   | 'setAgentHookConfig'
+  | 'setShortcutPreferences'
   | 'setClaudeRuntimeProfiles'
   | 'setDocLinkTags'
   | 'setStartupDefaultFilter'
@@ -178,6 +179,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         agentHooks: updated.agentHooks,
+      },
+    }))
+  },
+
+  setShortcutPreferences: async (shortcutPreferences) => {
+    const updated = await window.electronAPI.setConfig({ shortcutPreferences })
+    set((state) => ({
+      config: {
+        ...state.config,
+        shortcutPreferences: updated.shortcutPreferences,
       },
     }))
   },

@@ -1,7 +1,16 @@
 import type {
+  AgentLogDetail,
+  AgentLogSource,
+  AgentLogSummary,
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
+  AiGatewayBindingResult,
+  AiGatewayClientCli,
+  AiGatewayConfig,
+  AiGatewayLogEntry,
+  AiGatewaySaveConfigResult,
+  AiGatewayStatus,
   ClaudeBashrcConfig,
   CodexEnvironmentScope,
   CodexSettingsInput,
@@ -54,7 +63,9 @@ import type {
   AgentHookEnvelope,
   AgentHookGatewayStatus,
   TranscriptGatewayImportPayload,
+  TranscriptCaptureInitialText,
   TranscriptImportedEvent,
+  TranscriptExternalImportPayload,
   TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
@@ -99,6 +110,8 @@ declare global {
       selectDirectory: (defaultPath?: string) => Promise<string | null>
       getPathForFile: (file: File) => string
       readClipboardImagePngBase64: () => string | null
+      readClipboardText: () => string
+      consumeTranscriptCaptureInitialText: () => Promise<TranscriptCaptureInitialText>
       captureWindowRectToPngBase64: (
         rect: { x: number; y: number; width: number; height: number }
       ) => Promise<string>
@@ -153,6 +166,7 @@ declare global {
         dataBase64: string
       ) => Promise<ProjectFileWriteImageResult>
       importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
+      importExternalTranscript: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
       importTranscriptViaGateway: (payload: TranscriptGatewayImportPayload) => Promise<{
         ok: boolean
         projectId: string
@@ -229,6 +243,17 @@ declare global {
       ) => Promise<AiCommitTaskSnapshot | null>
       getAgentHookStatus: () => Promise<AgentHookGatewayStatus>
       getAgentHookRecentEvents: () => Promise<AgentHookEnvelope[]>
+      getAgentLogSummaries: () => Promise<AgentLogSummary[]>
+      getAgentLogDetail: (source: AgentLogSource, id: string) => Promise<AgentLogDetail | null>
+      getAgentLogMarkdown: (source: AgentLogSource, id: string) => Promise<string>
+      getAiGatewayStatus: () => Promise<AiGatewayStatus>
+      getAiGatewayConfig: () => Promise<AiGatewayConfig>
+      getAiGatewayRecentLogs: () => Promise<AiGatewayLogEntry[]>
+      saveAiGatewayConfig: (config: AiGatewayConfig) => Promise<AiGatewaySaveConfigResult>
+      startAiGateway: () => Promise<AiGatewayStatus>
+      stopAiGateway: () => Promise<AiGatewayStatus>
+      applyAiGatewayClientBinding: (cli: AiGatewayClientCli) => Promise<AiGatewayBindingResult>
+      restoreAiGatewayClientBinding: (cli: AiGatewayClientCli) => Promise<AiGatewayBindingResult>
       getLatestCommit: (repoRoot: string) => Promise<{
         hash: string
         shortHash: string
@@ -299,6 +324,7 @@ export interface AppState {
   loadCodexSettings: () => Promise<CodexSettingsSnapshot>
   saveCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSnapshot>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
+  setShortcutPreferences: (shortcutPreferences: NonNullable<AppConfig['shortcutPreferences']>) => Promise<void>
   setClaudeRuntimeProfiles: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>
   setDocLinkTags: (tags: ProjectDocTagOption[]) => Promise<void>
   initApp: () => Promise<void>

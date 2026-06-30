@@ -28,6 +28,9 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     cacheLocation: { mode: 'default' },
     codexProviderApiKeys: {},
     codexSettingsSnapshots: {},
+    shortcutPreferences: {
+      quickTranscriptCaptureOpenViewer: false,
+    },
     docLinkTags: PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS.map((item) => ({ ...item })),
     aiRuntimeProfiles: defaultAiRuntimeProfiles(),
     activeAiRuntimeProfileId: defaultAiRuntimeProfileIdForCli('claude'),

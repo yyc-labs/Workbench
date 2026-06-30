@@ -87,9 +87,9 @@ function SettingsAgentsPanel({
           onProfilesSave={onProfilesSave}
           embedded
         />
-      ) : (
+      ) : activeTab === 'codex' ? (
         <SettingsCodexPanel capability={capability} embedded />
-      )}
+      ) : null}
     </div>
   )
 }

@@ -30,6 +30,7 @@ type RecentProjectsDrawerProps = {
   onClose: () => void
   onSelectProject: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
+  onEditProjectMetadata: (projectId: string) => void
 }
 
 type RecentProjectListItem = Pick<ProjectInfo, 'id' | 'path' | 'name' | 'customName' | 'lastOpened'>
@@ -44,10 +45,11 @@ type RecentProjectsContextMenuProps = {
   contextMenu: ContextMenuState
   project: ProjectInfo
   onClose: () => void
+  onRequestCloseDrawer: () => void
   onEditMetadata: (projectId: string) => void
 }
 
-type RecentProjectsMetaDialogHostProps = {
+export type RecentProjectsMetaDialogHostProps = {
   projectId: string
   onClose: () => void
 }
@@ -108,6 +110,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   contextMenu,
   project,
   onClose,
+  onRequestCloseDrawer,
   onEditMetadata,
 }: RecentProjectsContextMenuProps) {
   const startProject = useAppStore((s) => s.startProject)
@@ -189,6 +192,11 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
     }
   }, [isStoppingRuntime, project.id, stopRuntime])
 
+  const handleActionAndCloseDrawer = useCallback(async (action: () => void | Promise<unknown>) => {
+    await action()
+    onRequestCloseDrawer()
+  }, [onRequestCloseDrawer])
+
   return (
     <CardContextMenu
       x={contextMenu.x}
@@ -209,26 +217,27 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
       currentRuntimeProfileId={currentRuntimeProfile.id}
       aiRuntimeProfiles={aiRuntimeProfiles}
       isPinned={project.pinned}
-      onStartRuntime={handleStartRuntime}
-      onStopRuntime={handleStopRuntime}
-      onOpenTerminal={handleOpenTerminal}
-      onSwitchCli={handleSwitchCli}
-      onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
-      onStartProject={() => startProject(project.id)}
-      onStopProject={() => stopProject(project.id)}
+      onStartRuntime={() => handleActionAndCloseDrawer(handleStartRuntime)}
+      onStopRuntime={() => handleActionAndCloseDrawer(handleStopRuntime)}
+      onOpenTerminal={() => handleActionAndCloseDrawer(handleOpenTerminal)}
+      onSwitchCli={() => handleActionAndCloseDrawer(handleSwitchCli)}
+      onSelectAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleSelectAiRuntimeProfile(profileId))}
+      onStartProject={() => handleActionAndCloseDrawer(() => startProject(project.id))}
+      onStopProject={() => handleActionAndCloseDrawer(() => stopProject(project.id))}
       aiCommitStatus={aiCommitStatus}
-      onOpenFolder={() => window.electronAPI.openFolder(project.path)}
-      onOpenPathTerminal={async () => {
-        await window.electronAPI.openPathTerminal(project.path)
+      onOpenFolder={() => handleActionAndCloseDrawer(() => window.electronAPI.openFolder(project.path))}
+      onOpenPathTerminal={() => handleActionAndCloseDrawer(() => window.electronAPI.openPathTerminal(project.path))}
+      onOpenVsCode={() => handleActionAndCloseDrawer(() => window.electronAPI.openInVsCode(project.path))}
+      onTogglePin={() => handleActionAndCloseDrawer(() => togglePin(project.id))}
+      onEditMetadata={() => {
+        onEditMetadata(project.id)
+        onRequestCloseDrawer()
       }}
-      onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
-      onTogglePin={() => togglePin(project.id)}
-      onEditMetadata={() => onEditMetadata(project.id)}
     />
   )
 })
 
-const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDialogHost({
+export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDialogHost({
   projectId,
   onClose,
 }: RecentProjectsMetaDialogHostProps) {
@@ -263,13 +272,13 @@ export function RecentProjectsDrawer({
   onClose,
   onSelectProject,
   onRemoveProject,
+  onEditProjectMetadata,
 }: RecentProjectsDrawerProps) {
   const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [metaDialogProjectId, setMetaDialogProjectId] = useState<string | null>(null)
   const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
   const recentProjects = useAppStore((s) => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
@@ -280,7 +289,6 @@ export function RecentProjectsDrawer({
   }, shallow)
   const contextMenuProjectId = contextMenu?.projectId
   const contextMenuProject = useAppStore((s) => getProjectById(s.projects, contextMenuProjectId))
-  const metaDialogProject = useAppStore((s) => getProjectById(s.projects, metaDialogProjectId))
 
   const handleOpenContextMenu = useCallback((projectId: string, x: number, y: number) => {
     setContextMenu({ projectId, x, y })
@@ -325,18 +333,12 @@ export function RecentProjectsDrawer({
   useEffect(() => {
     if (open) return
     setContextMenu(null)
-    setMetaDialogProjectId(null)
   }, [open])
 
   useEffect(() => {
     if (!contextMenuProjectId || contextMenuProject) return
     setContextMenu(null)
   }, [contextMenuProject, contextMenuProjectId])
-
-  useEffect(() => {
-    if (!metaDialogProjectId || metaDialogProject) return
-    setMetaDialogProjectId(null)
-  }, [metaDialogProject, metaDialogProjectId])
 
   if (!shouldRender) return null
 
@@ -409,14 +411,8 @@ export function RecentProjectsDrawer({
           contextMenu={contextMenu}
           project={contextMenuProject}
           onClose={handleCloseContextMenu}
-          onEditMetadata={setMetaDialogProjectId}
-        />
-      )}
-
-      {metaDialogProjectId && (
-        <RecentProjectsMetaDialogHost
-          projectId={metaDialogProjectId}
-          onClose={() => setMetaDialogProjectId(null)}
+          onRequestCloseDrawer={onClose}
+          onEditMetadata={onEditProjectMetadata}
         />
       )}
     </>

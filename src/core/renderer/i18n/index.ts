@@ -6,11 +6,14 @@ import type { Section } from '../pages/settings/settings.types'
 
 const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = {
   general: 'settings.sections.general',
+  shortcuts: 'settings.sections.shortcuts',
   data: 'settings.sections.data',
   runtime: 'settings.sections.runtime',
   agents: 'settings.sections.agents',
+  gateway: 'settings.sections.gateway',
   transcripts: 'settings.sections.transcripts',
   hooks: 'settings.sections.hooks',
+  'agent-logs': 'settings.sections.agentLogs',
   logs: 'settings.sections.logs',
   ai: 'settings.sections.ai',
   rules: 'settings.sections.rules',

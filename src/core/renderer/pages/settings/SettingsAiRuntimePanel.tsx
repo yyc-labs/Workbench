@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   AiEnvironmentConfig,
   AiExecutionMode,
+  AiGatewayConfig,
   Capability,
   ClaudeBashrcConfig,
   ClaudeRuntimeProfile,
@@ -11,7 +12,14 @@ import { shouldUseWslForRuntimeEntrypoint } from '../../../shared/runtimeEntrypo
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select, type SelectOption } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
+import {
+  applyClaudeProfileGatewayBinding,
+  getClaudeProfileDirectConfig,
+  getClaudeProfileRuntimeConfig,
+  withClaudeProfileModelRoutes,
+} from '../../lib/claudeGatewayProfiles'
 
 const DEEPSEEK_CLAUDE_CODE_DOC_URL = 'https://api-docs.deepseek.com/zh-cn/quick_start/agent_integrations/claude_code'
 
@@ -44,6 +52,23 @@ function cloneConfig(config: ClaudeBashrcConfig): ClaudeBashrcConfig {
     anthropicDefaultSonnetModel: config.anthropicDefaultSonnetModel,
     anthropicDefaultHaikuModel: config.anthropicDefaultHaikuModel,
     claudeCodeSubagentModel: config.claudeCodeSubagentModel,
+  }
+}
+
+function cloneProfile(profile: ClaudeRuntimeProfile): ClaudeRuntimeProfile {
+  const gateway = profile.gateway
+    ? {
+      enabled: profile.gateway.enabled,
+      providerId: profile.gateway.providerId,
+      modelAlias: profile.gateway.modelAlias,
+      upstreamModel: profile.gateway.upstreamModel,
+    }
+    : undefined
+
+  return {
+    ...profile,
+    config: getClaudeProfileDirectConfig(profile),
+    gateway,
   }
 }
 
@@ -83,6 +108,8 @@ function SettingsAiRuntimePanel({
   const [profileAction, setProfileAction] = useState<'select' | 'create' | 'rename' | 'delete' | 'docs' | null>(null)
   const [pendingProfileId, setPendingProfileId] = useState<string | null>(null)
   const [deleteConfirmProfileId, setDeleteConfirmProfileId] = useState<string | null>(null)
+  const [aiGatewayConfig, setAiGatewayConfig] = useState<AiGatewayConfig | null>(null)
+  const [gatewayLoading, setGatewayLoading] = useState(false)
 
   const capabilityReady = capability !== null
   const isWindowsNativeMode = mode === 'windows-native'
@@ -112,6 +139,20 @@ function SettingsAiRuntimePanel({
     () => profileDrafts.find((profile) => profile.id === selectedProfileId) ?? profileDrafts[0] ?? null,
     [profileDrafts, selectedProfileId]
   )
+  const profileGatewayEnabled = Boolean(activeProfile?.gateway?.enabled)
+  const gatewayProviderOptions = useMemo<SelectOption[]>(() => (
+    aiGatewayConfig?.providers
+      .filter((provider) => provider.enabled)
+      .map((provider) => ({ value: provider.id, label: provider.name || provider.id })) ?? []
+  ), [aiGatewayConfig])
+  const activeGatewayProviderId = activeProfile?.gateway?.providerId
+    || aiGatewayConfig?.activeProviderId
+    || gatewayProviderOptions[0]?.value
+    || ''
+  const activeGatewayProvider = aiGatewayConfig?.providers.find((provider) => provider.id === activeGatewayProviderId) ?? null
+  const activeGatewayBaseUrl = aiGatewayConfig && activeProfile
+    ? `http://${aiGatewayConfig.host}:${aiGatewayConfig.port}/profiles/${encodeURIComponent(activeProfile.id)}`
+    : ''
   const deleteConfirmProfile = useMemo(
     () => profileDrafts.find((profile) => profile.id === deleteConfirmProfileId) ?? null,
     [deleteConfirmProfileId, profileDrafts]
@@ -135,6 +176,18 @@ function SettingsAiRuntimePanel({
     claudeCodeSubagentModel,
   ])
 
+  const activeProfileWithCurrentConfig = useMemo<ClaudeRuntimeProfile | null>(() => (
+    activeProfile
+      ? { ...activeProfile, config: cloneConfig(currentConfig) }
+      : null
+  ), [activeProfile, currentConfig])
+
+  const runtimeConfig = useMemo<ClaudeBashrcConfig>(() => (
+    activeProfileWithCurrentConfig?.gateway?.enabled && aiGatewayConfig
+      ? getClaudeProfileRuntimeConfig(activeProfileWithCurrentConfig, aiGatewayConfig)
+      : cloneConfig(currentConfig)
+  ), [activeProfileWithCurrentConfig, aiGatewayConfig, currentConfig])
+
   const applyConfig = (result: ClaudeBashrcConfig) => {
     setAnthropicBaseUrl(result.anthropicBaseUrl)
     setAnthropicAuthToken(result.anthropicAuthToken)
@@ -147,7 +200,7 @@ function SettingsAiRuntimePanel({
 
   useEffect(() => {
     const normalizedProfiles = profiles.length > 0
-      ? profiles.map((profile) => ({ ...profile, config: cloneConfig(profile.config) }))
+      ? profiles.map(cloneProfile)
       : [{
         id: 'default',
         name: 'DeepSeek Default',
@@ -170,10 +223,32 @@ function SettingsAiRuntimePanel({
   }, [activeProfileId, profiles])
 
   useEffect(() => {
-    if (!activeProfile || !supportsWindowsEnvConfig) return
-    applyConfig(activeProfile.config)
+    if (!activeProfile) return
+    if (!supportsWindowsEnvConfig && !activeProfile.gateway?.enabled) return
+    applyConfig(getClaudeProfileDirectConfig(activeProfile))
     setLoaded(true)
   }, [activeProfile, supportsWindowsEnvConfig])
+
+  useEffect(() => {
+    let mounted = true
+    setGatewayLoading(true)
+    void window.electronAPI.getAiGatewayConfig()
+      .then((result) => {
+        if (!mounted) return
+        setAiGatewayConfig(result)
+      })
+      .catch(() => {
+        if (!mounted) return
+        setAiGatewayConfig(null)
+      })
+      .finally(() => {
+        if (mounted) setGatewayLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -289,22 +364,14 @@ function SettingsAiRuntimePanel({
   ])
 
   const shellCommand = useMemo(() => ([
-    `export ANTHROPIC_BASE_URL=${anthropicBaseUrl || 'https://api.deepseek.com/anthropic'}`,
-    `export ANTHROPIC_AUTH_TOKEN=${anthropicAuthToken || '<YOUR_DEEPSEEK_API_KEY>'}`,
-    `export ANTHROPIC_MODEL=${anthropicModel || 'deepseek-v4-pro[1m]'}`,
-    `export ANTHROPIC_DEFAULT_OPUS_MODEL=${anthropicDefaultOpusModel || 'deepseek-v4-pro[1m]'}`,
-    `export ANTHROPIC_DEFAULT_SONNET_MODEL=${anthropicDefaultSonnetModel || 'deepseek-v4-pro[1m]'}`,
-    `export ANTHROPIC_DEFAULT_HAIKU_MODEL=${anthropicDefaultHaikuModel || 'deepseek-v4-flash'}`,
-    `export CLAUDE_CODE_SUBAGENT_MODEL=${claudeCodeSubagentModel || 'deepseek-v4-flash'}`,
-  ].join('\n')), [
-    anthropicBaseUrl,
-    anthropicAuthToken,
-    anthropicModel,
-    anthropicDefaultOpusModel,
-    anthropicDefaultSonnetModel,
-    anthropicDefaultHaikuModel,
-    claudeCodeSubagentModel,
-  ])
+    `export ANTHROPIC_BASE_URL=${runtimeConfig.anthropicBaseUrl || 'https://api.deepseek.com/anthropic'}`,
+    `export ANTHROPIC_AUTH_TOKEN=${runtimeConfig.anthropicAuthToken || '<YOUR_DEEPSEEK_API_KEY>'}`,
+    `export ANTHROPIC_MODEL=${runtimeConfig.anthropicModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_OPUS_MODEL=${runtimeConfig.anthropicDefaultOpusModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_SONNET_MODEL=${runtimeConfig.anthropicDefaultSonnetModel || 'deepseek-v4-pro[1m]'}`,
+    `export ANTHROPIC_DEFAULT_HAIKU_MODEL=${runtimeConfig.anthropicDefaultHaikuModel || 'deepseek-v4-flash'}`,
+    `export CLAUDE_CODE_SUBAGENT_MODEL=${runtimeConfig.claudeCodeSubagentModel || 'deepseek-v4-flash'}`,
+  ].join('\n')), [runtimeConfig])
 
   const launchCommand = useMemo(() => ([
     'cd /path/to/my-project',
@@ -316,6 +383,73 @@ function SettingsAiRuntimePanel({
     setProfileDrafts((current) => current.map((profile) => (
       profile.id === activeProfile.id ? updater(profile) : profile
     )))
+  }
+
+  const buildDirectConfigFromCurrent = (): ClaudeBashrcConfig => {
+    return cloneConfig(currentConfig)
+  }
+
+  const buildRuntimeConfigForProfile = (profile: ClaudeRuntimeProfile): ClaudeBashrcConfig => {
+    if (!profile.gateway?.enabled) return cloneConfig(profile.config)
+    if (!aiGatewayConfig) throw new Error(t('settings.aiRuntime.gatewayConfigMissing'))
+    return getClaudeProfileRuntimeConfig(profile, aiGatewayConfig)
+  }
+
+  const mergeSavedRuntimeConfigForProfile = (
+    profile: ClaudeRuntimeProfile,
+    savedRuntimeConfig: ClaudeBashrcConfig
+  ): ClaudeBashrcConfig => (
+    profile.gateway?.enabled
+      ? {
+        ...cloneConfig(savedRuntimeConfig),
+        anthropicBaseUrl: profile.config.anthropicBaseUrl,
+      }
+      : cloneConfig(savedRuntimeConfig)
+  )
+
+  const persistGatewayRoutes = async (nextProfiles: ClaudeRuntimeProfile[], gatewayConfig = aiGatewayConfig) => {
+    if (!gatewayConfig) return
+    const result = await window.electronAPI.saveAiGatewayConfig(withClaudeProfileModelRoutes(gatewayConfig, nextProfiles))
+    setAiGatewayConfig(result.config)
+  }
+
+  const updateActiveGatewayBinding = async (partial: { enabled?: boolean; providerId?: string }) => {
+    if (!activeProfile || !aiGatewayConfig) return
+    setSaving(true)
+    setSavedHint(null)
+    setError(null)
+    try {
+      const updatedProfile = applyClaudeProfileGatewayBinding(activeProfile, aiGatewayConfig, {
+        enabled: profileGatewayEnabled,
+        providerId: activeGatewayProviderId,
+        directConfig: buildDirectConfigFromCurrent(),
+        ...partial,
+      })
+      const saveApi = supportsWindowsEnvConfig
+        ? window.electronAPI.setWindowsUserEnv
+        : window.electronAPI.setClaudeBashrcConfig
+      const savedRuntimeConfig = await saveApi(buildRuntimeConfigForProfile(updatedProfile))
+      const savedProfileConfig = mergeSavedRuntimeConfigForProfile(updatedProfile, savedRuntimeConfig)
+      const savedProfile = {
+        ...updatedProfile,
+        config: savedProfileConfig,
+      }
+      applyConfig(savedProfileConfig)
+      const nextProfiles = profileDrafts.map((profile) => (
+        profile.id === savedProfile.id ? savedProfile : profile
+      ))
+      setProfileDrafts(nextProfiles)
+      await onProfilesSave(nextProfiles, savedProfile.id)
+      await persistGatewayRoutes(nextProfiles)
+      setSavedHint(partial.enabled === false
+        ? t('settings.aiRuntime.gatewayDisabledHint')
+        : t('settings.aiRuntime.gatewayEnabledHint'))
+    } catch (gatewayError) {
+      const message = gatewayError instanceof Error ? gatewayError.message : String(gatewayError)
+      setError(message || t('settings.aiRuntime.gatewayUpdateError'))
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleSelectProfile = async (profileId: string) => {
@@ -334,11 +468,12 @@ function SettingsAiRuntimePanel({
       const saveApi = supportsWindowsEnvConfig
         ? window.electronAPI.setWindowsUserEnv
         : window.electronAPI.setClaudeBashrcConfig
-      const saved = await saveApi(nextProfile.config)
-      applyConfig(saved)
+      const savedRuntimeConfig = await saveApi(buildRuntimeConfigForProfile(nextProfile))
+      const savedProfileConfig = mergeSavedRuntimeConfigForProfile(nextProfile, savedRuntimeConfig)
+      applyConfig(savedProfileConfig)
       const nextProfiles = profileDrafts.map((profile) => (
         profile.id === nextProfile.id
-          ? { ...profile, config: cloneConfig(saved) }
+          ? { ...profile, config: savedProfileConfig }
           : profile
       ))
       setProfileDrafts(nextProfiles)
@@ -387,6 +522,7 @@ function SettingsAiRuntimePanel({
     setError(null)
     try {
       await onProfilesSave(nextProfiles, nextActiveProfileId)
+      await persistGatewayRoutes(nextProfiles)
       setDeleteConfirmProfileId(null)
     } finally {
       setProfileAction(null)
@@ -417,7 +553,7 @@ function SettingsAiRuntimePanel({
     setSavedHint(null)
     setError(null)
     try {
-      const payload = {
+      const directPayload = {
         anthropicBaseUrl: anthropicBaseUrl.trim(),
         anthropicAuthToken: anthropicAuthToken.trim(),
         anthropicModel: anthropicModel.trim(),
@@ -426,18 +562,41 @@ function SettingsAiRuntimePanel({
         anthropicDefaultHaikuModel: anthropicDefaultHaikuModel.trim(),
         claudeCodeSubagentModel: claudeCodeSubagentModel.trim(),
       }
+      const directConfig = directPayload
+      if (profileGatewayEnabled && !aiGatewayConfig) {
+        throw new Error(t('settings.aiRuntime.gatewayConfigMissing'))
+      }
+      const nextProfile = profileGatewayEnabled && aiGatewayConfig
+        ? applyClaudeProfileGatewayBinding(activeProfile, aiGatewayConfig, {
+          enabled: true,
+          providerId: activeGatewayProviderId,
+          directConfig,
+        })
+        : {
+          ...activeProfile,
+          config: cloneConfig(directConfig),
+          gateway: activeProfile.gateway?.enabled
+            ? { ...activeProfile.gateway, enabled: false }
+            : activeProfile.gateway,
+        }
       const saveApi = supportsWindowsEnvConfig
         ? window.electronAPI.setWindowsUserEnv
         : window.electronAPI.setClaudeBashrcConfig
-      const saved = await saveApi(payload)
-      applyConfig(saved)
+      const savedRuntimeConfig = await saveApi(buildRuntimeConfigForProfile(nextProfile))
+      const savedProfileConfig = mergeSavedRuntimeConfigForProfile(nextProfile, savedRuntimeConfig)
+      applyConfig(savedProfileConfig)
       const nextProfiles = profileDrafts.map((profile) => (
         profile.id === activeProfile.id
-          ? { ...profile, name: sanitizeProfileName(profileNameDraft, profile.name), config: cloneConfig(saved) }
+          ? {
+            ...nextProfile,
+            name: sanitizeProfileName(profileNameDraft, profile.name),
+            config: savedProfileConfig,
+          }
           : profile
       ))
       setProfileDrafts(nextProfiles)
       await onProfilesSave(nextProfiles, activeProfile.id)
+      await persistGatewayRoutes(nextProfiles)
       setSavedHint(t(supportsWindowsEnvConfig ? 'settings.aiRuntime.savedHintWindows' : 'settings.aiRuntime.savedHint'))
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
@@ -600,6 +759,60 @@ function SettingsAiRuntimePanel({
           <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
             {t('settings.aiRuntime.restartHint')}
           </p>
+        </div>
+
+        <div className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiRuntime.gatewayTitle')}</h4>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiRuntime.gatewayDescription')}</p>
+            </div>
+            <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
+              <input
+                type="checkbox"
+                checked={profileGatewayEnabled}
+                onChange={(event) => void updateActiveGatewayBinding({ enabled: event.target.checked })}
+                disabled={inputDisabled || gatewayLoading || !aiGatewayConfig || !activeProfile}
+              />
+              {t('settings.aiRuntime.gatewayUseProfile')}
+            </label>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiRuntime.gatewayProvider')}</p>
+              <Select
+                ariaLabel={t('settings.aiRuntime.gatewayProvider')}
+                value={activeGatewayProviderId}
+                options={gatewayProviderOptions}
+                onChange={(value) => void updateActiveGatewayBinding({ enabled: profileGatewayEnabled, providerId: value })}
+                disabled={inputDisabled || gatewayLoading || !aiGatewayConfig || gatewayProviderOptions.length === 0 || !activeProfile}
+                triggerClassName="h-11"
+              />
+              {activeGatewayProvider?.baseUrl && (
+                <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">
+                  {t('settings.aiGateway.providerBaseUrl')}: {activeGatewayProvider.baseUrl}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiRuntime.gatewayBaseUrl')}</p>
+              <div className="quiet-control min-h-11 rounded-[18px] px-4 py-3 font-mono text-xs leading-5 text-[color:var(--color-muted-foreground)] break-all">
+                {activeGatewayBaseUrl || t(profileGatewayEnabled
+                  ? 'settings.aiRuntime.notAvailable'
+                  : 'settings.aiRuntime.gatewayUnavailable')}
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+            {profileGatewayEnabled
+              ? t('settings.aiRuntime.gatewayEnabledDetail')
+              : t('settings.aiRuntime.gatewayDisabledDetail')}
+          </p>
+          {!aiGatewayConfig && (
+            <p className="mt-2 text-xs text-[color:var(--color-destructive)]">{t('settings.aiRuntime.gatewayConfigMissing')}</p>
+          )}
         </div>
 
         {envFields.map((field) => (

@@ -6,11 +6,14 @@ import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
+import { SettingsShortcutsPanel } from './settings/SettingsShortcutsPanel'
 import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
 import { SettingsAgentsPanel } from './settings/SettingsAgentsPanel'
+import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
 import { SettingsTranscriptPanel } from './settings/SettingsTranscriptPanel'
 import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
+import { SettingsAgentLogsPanel } from './settings/SettingsAgentLogsPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
@@ -60,6 +63,7 @@ export function SettingsPage() {
   const setAiCommitConfig = useAppStore((s) => s.setAiCommitConfig)
   const setAiRuntimeProfiles = useAppStore((s) => s.setAiRuntimeProfiles)
   const setClaudeRuntimeProfiles = useAppStore((s) => s.setClaudeRuntimeProfiles)
+  const setShortcutPreferences = useAppStore((s) => s.setShortcutPreferences)
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
@@ -320,6 +324,12 @@ export function SettingsPage() {
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                 />
               )}
+              {section === 'shortcuts' && (
+                <SettingsShortcutsPanel
+                  shortcutPreferences={config.shortcutPreferences}
+                  onSave={setShortcutPreferences}
+                />
+              )}
               {section === 'data' && (
                 <SettingsDataCachePanel
                   cacheLocation={cacheLocation}
@@ -362,6 +372,13 @@ export function SettingsPage() {
                   initialTab={alias === 'codex' ? 'codex' : 'claude'}
                 />
               )}
+              {section === 'gateway' && (
+                <SettingsAiGatewayPanel
+                  profiles={config.claudeRuntimeProfiles ?? []}
+                  activeProfileId={config.activeClaudeRuntimeProfileId}
+                  onProfilesSave={setClaudeRuntimeProfiles}
+                />
+              )}
               {section === 'transcripts' && (
                 <SettingsTranscriptPanel
                   projects={projects}
@@ -369,6 +386,7 @@ export function SettingsPage() {
                 />
               )}
               {section === 'hooks' && <SettingsAgentHooksPanel />}
+              {section === 'agent-logs' && <SettingsAgentLogsPanel />}
               {section === 'logs' && (
                 <SettingsStartupLogsPanel
                   projects={projects}

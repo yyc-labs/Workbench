@@ -70,11 +70,14 @@ const routeIconMap: Record<RouteCatalogIconName, LucideIcon> = {
 
 const settingsDescriptionKeyBySection: Record<Section, string> = {
   general: 'common.routeCatalog.settingsDescriptions.general',
+  shortcuts: 'common.routeCatalog.settingsDescriptions.shortcuts',
   data: 'common.routeCatalog.settingsDescriptions.data',
   runtime: 'common.routeCatalog.settingsDescriptions.runtime',
   agents: 'common.routeCatalog.settingsDescriptions.agents',
+  gateway: 'common.routeCatalog.settingsDescriptions.gateway',
   transcripts: 'common.routeCatalog.settingsDescriptions.transcripts',
   hooks: 'common.routeCatalog.settingsDescriptions.hooks',
+  'agent-logs': 'common.routeCatalog.settingsDescriptions.agentLogs',
   logs: 'common.routeCatalog.settingsDescriptions.logs',
   ai: 'common.routeCatalog.settingsDescriptions.ai',
   rules: 'common.routeCatalog.settingsDescriptions.rules',

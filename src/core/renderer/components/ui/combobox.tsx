@@ -420,7 +420,7 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
         <button
           type="button"
           className={cn(
-            "quiet-control flex h-10 w-full items-center justify-between rounded-full border-0 px-4 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+            "quiet-control flex h-10 w-full items-center rounded-full border-0 px-4 pr-11 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
             triggerClassName
           )}
           aria-label={ariaLabel}
@@ -447,7 +447,6 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
           )}>
             {displayContent}
           </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
         </button>
       ) : (
         <div className="relative">

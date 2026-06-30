@@ -29,3 +29,11 @@
 .i18n-rich strong {
   color: var(--color-foreground);
 }
+
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
