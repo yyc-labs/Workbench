@@ -11,6 +11,7 @@ import type {
   BrowserDataMaintenanceInfo,
   CodexSettingsInput,
   CodexSettingsSaveResult,
+  TranscriptCaptureInitialText,
 } from '../../shared/types'
 
 export function createCoreInvokeApi() {
@@ -88,6 +89,17 @@ export function createCoreInvokeApi() {
         return null
       }
     },
+
+    readClipboardText: () => {
+      try {
+        return clipboard.readText()
+      } catch {
+        return ''
+      }
+    },
+
+    consumeTranscriptCaptureInitialText: () =>
+      ipcRenderer.invoke(IPC.TRANSCRIPT_CAPTURE_INITIAL_TEXT_CONSUME) as Promise<TranscriptCaptureInitialText>,
 
     captureWindowRectToPngBase64: (rect: { x: number; y: number; width: number; height: number }) =>
       ipcRenderer.invoke(IPC.WINDOW_CAPTURE_RECT, rect) as Promise<string>,

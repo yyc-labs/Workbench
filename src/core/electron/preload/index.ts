@@ -1,4 +1,6 @@
 import { contextBridge } from 'electron'
+import { createAgentLogsInvokeApi } from './invokeApi.agentLogs'
+import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
 import { createCoreInvokeApi } from './invokeApi.core'
 import { createGitInvokeApi } from './invokeApi.git'
 import { createLearningInvokeApi } from './invokeApi.learning'
@@ -9,6 +11,8 @@ import { createSubscriptionApi } from './subscriptions'
 
 const api = {
   ...createCoreInvokeApi(),
+  ...createAgentLogsInvokeApi(),
+  ...createAiGatewayInvokeApi(),
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
   ...createTranscriptInvokeApi(),
