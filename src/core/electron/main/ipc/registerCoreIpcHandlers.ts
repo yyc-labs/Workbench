@@ -242,6 +242,10 @@ export function registerCoreIpcHandlers(
     }
   )
 
+  ipcMain.handle(IPC.AI_COMMIT_CANCEL, (_event, projectId: string): boolean => {
+    return deps.aiCommitService.cancelAiCommit(projectId)
+  })
+
   ipcMain.handle(IPC.AI_COMMIT_GET_STATE, (_event, projectId: string): AiCommitTaskSnapshot | null => {
     return deps.aiCommitService.getAiCommitState(projectId)
   })

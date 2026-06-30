@@ -130,6 +130,9 @@ export function createCoreInvokeApi() {
       override?: AiCommitRunOverride
     ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, repoRoot, override),
 
+    cancelAiCommit: (projectId: string) =>
+      ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL, projectId) as Promise<boolean>,
+
     getAiCommitState: (projectId: string) =>
       ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId) as Promise<AiCommitTaskSnapshot | null>,
 

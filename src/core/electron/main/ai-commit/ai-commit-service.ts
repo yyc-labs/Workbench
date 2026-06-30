@@ -37,7 +37,23 @@ type AiCommitServiceDependencies = {
 
 const AI_COMMIT_UNDO_WINDOW_MS = 30_000
 const AI_COMMIT_UNDO_AUTH_GRACE_MS = 10_000
+const AI_COMMIT_RUN_TIMEOUT_MS = 5 * 60_000
 const GIT_HASH_RE = /^[0-9a-f]{40}$/i
+type AiCommitStopReason = 'cancelled' | 'timeout' | 'quit'
+
+type ActiveAiCommitTask = {
+  runId: string
+  requestStop: (reason: AiCommitStopReason) => boolean
+}
+
+function formatAiCommitDuration(ms: number): string {
+  if (ms % 60_000 === 0) {
+    const minutes = Math.max(1, Math.round(ms / 60_000))
+    return `${minutes} minute${minutes > 1 ? 's' : ''}`
+  }
+  const seconds = Math.max(1, Math.round(ms / 1000))
+  return `${seconds} second${seconds > 1 ? 's' : ''}`
+}
 
 function resolveAiCommitRuntimeConfig(input: AiCommitConfig | undefined): AiCommitConfig {
   const raw = input ?? {}
@@ -54,9 +70,47 @@ function resolveAiCommitRuntimeConfig(input: AiCommitConfig | undefined): AiComm
 
 export function createAiCommitService(deps: AiCommitServiceDependencies) {
   const activeAiCommitProjects = new Set<string>()
+  const activeAiCommitTasks = new Map<string, ActiveAiCommitTask>()
   const gitCommandRunner = createGitCommandRunner({
     getDefaultWslDistro: () => deps.getDefaultWslDistro(),
   })
+
+  function clearActiveAiCommitTask(projectId: string, runId?: string): void {
+    const current = activeAiCommitTasks.get(projectId)
+    if (!current) return
+    if (runId && current.runId !== runId) return
+    activeAiCommitTasks.delete(projectId)
+  }
+
+  function stopChildProcessTree(proc: ReturnType<typeof spawn>): void {
+    const pid = proc.pid
+
+    try {
+      if (process.platform === 'win32' && pid != null) {
+        const killer = spawn('taskkill', ['/pid', String(pid), '/t', '/f'], {
+          stdio: 'ignore',
+          shell: false,
+          windowsHide: true,
+        })
+        killer.on('error', () => {
+          try { proc.kill('SIGTERM') } catch { /* already dead */ }
+        })
+        return
+      }
+
+      if (pid != null) {
+        try { process.kill(-pid, 'SIGTERM') } catch { /* already dead */ }
+        setTimeout(() => {
+          try { process.kill(-pid, 'SIGKILL') } catch { /* already dead */ }
+        }, 2_000)
+        return
+      }
+    } catch {
+      // Fall through to the direct child kill below.
+    }
+
+    try { proc.kill('SIGTERM') } catch { /* already dead */ }
+  }
 
   function sendAiCommitOutput(projectId: string, data: string): void {
     appendAiCommitTaskOutput(projectId, data)
@@ -336,14 +390,25 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
       let started = false
       let settled = false
+      let stopReason: AiCommitStopReason | null = null
       const allowWindowsFallback = process.platform === 'win32'
       let switchedToWindowsPowerShell = false
+      let timeoutHandle: NodeJS.Timeout | null = null
 
       const stdoutDecoder = new StringDecoder('utf8')
       const stderrDecoder = new StringDecoder('utf8')
 
+      const clearTimeoutHandle = () => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle)
+          timeoutHandle = null
+        }
+      }
+
       const cleanup = () => {
+        clearTimeoutHandle()
         activeAiCommitProjects.delete(projectId)
+        clearActiveAiCommitTask(projectId, runId)
       }
 
       const flushTails = () => {
@@ -357,11 +422,31 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         }
       }
 
+      const finishStoppedTask = () => {
+        if (stopReason === 'cancelled') {
+          sendAiCommitOutput(projectId, '[AI Commit] cancelled by user.\r\n')
+        } else if (stopReason === 'timeout') {
+          sendAiCommitOutput(
+            projectId,
+            `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)} and was stopped.\r\n`
+          )
+        } else if (stopReason === 'quit') {
+          sendAiCommitOutput(projectId, '[AI Commit] stopped because the app is quitting.\r\n')
+        }
+        sendAiCommitStatus(projectId, 'error')
+        cleanup()
+        resolve(false)
+      }
+
       const finalize = (code: number | null) => {
         if (settled) return
         settled = true
         void (async () => {
           flushTails()
+          if (stopReason) {
+            finishStoppedTask()
+            return
+          }
           const ok = code === 0
           sendAiCommitOutput(projectId, `[AI Commit] finished with code ${code}\r\n`)
 
@@ -395,11 +480,46 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       const fail = (message: string) => {
         if (settled) return
         settled = true
+        clearTimeoutHandle()
         sendAiCommitOutput(projectId, `[AI Commit] process error: ${message}\r\n`)
         sendAiCommitStatus(projectId, 'error')
         cleanup()
         resolve(false)
       }
+
+      const requestStop = (reason: AiCommitStopReason): boolean => {
+        if (settled) return false
+        if (stopReason) return true
+
+        stopReason = reason
+        if (reason === 'cancelled') {
+          sendAiCommitOutput(projectId, '[AI Commit] cancel requested. Stopping current task...\r\n')
+        } else if (reason === 'timeout') {
+          sendAiCommitOutput(
+            projectId,
+            `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)}. Stopping current task...\r\n`
+          )
+        } else if (reason === 'quit') {
+          sendAiCommitOutput(projectId, '[AI Commit] app is quitting. Stopping current task...\r\n')
+        }
+
+        if (!child) {
+          settled = true
+          finishStoppedTask()
+          return true
+        }
+
+        stopChildProcessTree(child)
+        return true
+      }
+
+      activeAiCommitTasks.set(projectId, {
+        runId,
+        requestStop,
+      })
+      timeoutHandle = setTimeout(() => {
+        requestStop('timeout')
+      }, AI_COMMIT_RUN_TIMEOUT_MS)
 
       const attachStreams = (proc: ReturnType<typeof spawn>) => {
         proc.stdout?.on('data', (buf: Buffer) => {
@@ -418,6 +538,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       }
 
       void launchPlanPromise.then((plan) => {
+        if (settled) return
         child = spawn(plan.command, plan.args, {
           cwd: plan.cwd,
           shell: plan.shell ?? false,
@@ -432,6 +553,10 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         })
 
         child.on('error', (err) => {
+          if (stopReason) {
+            finalize(null)
+            return
+          }
           if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
             switchedToWindowsPowerShell = true
             const fallbackShell = resolveWindowsPowerShell('powershell')
@@ -459,8 +584,17 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
               sendAiCommitOutput(projectId, `[AI Commit] shell: ${fallbackShell.kind}\r\n`)
               attachStreams(child!)
             })
-            child.on('error', (fallbackErr) => fail(fallbackErr.message))
+            child.on('error', (fallbackErr) => {
+              if (stopReason) {
+                finalize(null)
+                return
+              }
+              fail(fallbackErr.message)
+            })
             child.on('close', (code) => finalize(code))
+            if (stopReason) {
+              requestStop(stopReason)
+            }
             return
           }
 
@@ -470,7 +604,12 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         child.on('close', (code) => {
           finalize(code)
         })
+
+        if (stopReason) {
+          requestStop(stopReason)
+        }
       }).catch((error) => {
+        if (settled) return
         fail(error instanceof Error ? error.message : String(error))
       })
     })
@@ -478,6 +617,18 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
   function getAiCommitState(projectId: string): AiCommitTaskSnapshot | null {
     return expireAiCommitUndoIfNeeded(markAiCommitInterruptedIfOrphan(projectId)) ?? null
+  }
+
+  function cancelAiCommit(projectId: string): boolean {
+    const task = activeAiCommitTasks.get(projectId)
+    if (!task) return false
+    return task.requestStop('cancelled')
+  }
+
+  function cleanupOnBeforeQuit(): void {
+    for (const task of activeAiCommitTasks.values()) {
+      task.requestStop('quit')
+    }
   }
 
   async function undoAiCommit(projectId: string): Promise<AiCommitUndoResult> {
@@ -569,10 +720,12 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
   return {
     runAiCommit,
     getAiCommitState,
+    cancelAiCommit,
     beginAiCommitUndoAuth,
     cancelAiCommitUndoAuth,
     undoAiCommit,
     closeAiCommitUndo,
+    cleanupOnBeforeQuit,
   }
 }
 

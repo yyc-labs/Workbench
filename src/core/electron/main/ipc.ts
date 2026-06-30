@@ -10,6 +10,7 @@ export const IPC = {
   RUNTIME_STATE_CHANGED: 'runtime:state-changed',
   AI_COMMIT_RUN: 'ai-commit:run',
   AI_COMMIT_GET_STATE: 'ai-commit:get-state',
+  AI_COMMIT_CANCEL: 'ai-commit:cancel',
   AI_COMMIT_BEGIN_UNDO_AUTH: 'ai-commit:begin-undo-auth',
   AI_COMMIT_CANCEL_UNDO_AUTH: 'ai-commit:cancel-undo-auth',
   AI_COMMIT_UNDO: 'ai-commit:undo',

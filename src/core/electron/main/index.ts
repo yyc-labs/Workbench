@@ -7,6 +7,7 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { flushAiCommitRegistry } from './ai-commit-registry'
 import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createTranscriptRepository } from './transcript/transcriptRepository'
 import { createTranscriptService } from './transcript/transcriptService'
@@ -290,16 +291,19 @@ app.on('before-quit', async (e) => {
     await runtimeService.cleanupOnBeforeQuit()
   }
 
+  aiCommitService.cleanupOnBeforeQuit()
   processManager?.stopAll()
   await agentHookGateway.stop()
   await transcriptShareService.shutdown()
 
   setTimeout(() => {
+    flushAiCommitRegistry()
     app.quit()
   }, 1500)
 })
 
 app.on('will-quit', () => {
+  flushAiCommitRegistry()
   trayController?.destroy()
   unregisterGlobalShortcuts()
 })

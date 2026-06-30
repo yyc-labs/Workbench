@@ -9,6 +9,11 @@ interface AiCommitRegistry {
 
 const REGISTRY_FILE = 'ai-commit-registry.json'
 const MAX_OUTPUT_CHARS = 300_000
+const REGISTRY_FLUSH_DEBOUNCE_MS = 250
+
+let registryCache: AiCommitRegistry | null = null
+let registryDirty = false
+let flushTimer: NodeJS.Timeout | null = null
 
 function getRegistryPath(): string {
   return join(app.getPath('userData'), REGISTRY_FILE)
@@ -63,7 +68,7 @@ function trimOutput(output: string): string {
   return output.slice(output.length - MAX_OUTPUT_CHARS)
 }
 
-function loadRegistry(): AiCommitRegistry {
+function loadRegistryFromDisk(): AiCommitRegistry {
   const filePath = getRegistryPath()
   try {
     const raw = readFileSync(filePath, 'utf-8')
@@ -83,7 +88,7 @@ function loadRegistry(): AiCommitRegistry {
   }
 }
 
-function saveRegistry(registry: AiCommitRegistry): void {
+function saveRegistryToDisk(registry: AiCommitRegistry): void {
   const filePath = getRegistryPath()
   const dir = dirname(filePath)
   if (!existsSync(dir)) {
@@ -92,20 +97,54 @@ function saveRegistry(registry: AiCommitRegistry): void {
   writeFileSync(filePath, JSON.stringify(registry, null, 2), 'utf-8')
 }
 
+function ensureRegistryLoaded(): AiCommitRegistry {
+  if (!registryCache) {
+    registryCache = loadRegistryFromDisk()
+  }
+  return registryCache
+}
+
+function clearFlushTimer(): void {
+  if (!flushTimer) return
+  clearTimeout(flushTimer)
+  flushTimer = null
+}
+
+function scheduleRegistryFlush(): void {
+  if (flushTimer) return
+  flushTimer = setTimeout(() => {
+    flushTimer = null
+    flushAiCommitRegistry()
+  }, REGISTRY_FLUSH_DEBOUNCE_MS)
+  flushTimer.unref?.()
+}
+
+function persistRegistry(registry: AiCommitRegistry, immediate: boolean): void {
+  registryCache = registry
+  registryDirty = true
+
+  if (immediate) {
+    flushAiCommitRegistry()
+    return
+  }
+
+  scheduleRegistryFlush()
+}
+
 export function getAiCommitTask(projectId: string): AiCommitTaskSnapshot | undefined {
-  return loadRegistry().entries[projectId]
+  return ensureRegistryLoaded().entries[projectId]
 }
 
 export function upsertAiCommitTask(task: AiCommitTaskSnapshot): AiCommitTaskSnapshot {
-  const registry = loadRegistry()
+  const registry = ensureRegistryLoaded()
   const normalized = normalizeEntry(task)
   registry.entries[task.projectId] = normalized
-  saveRegistry(registry)
+  persistRegistry(registry, true)
   return normalized
 }
 
 export function appendAiCommitTaskOutput(projectId: string, chunk: string): AiCommitTaskSnapshot | undefined {
-  const registry = loadRegistry()
+  const registry = ensureRegistryLoaded()
   const task = registry.entries[projectId]
   if (!task) return undefined
 
@@ -116,6 +155,13 @@ export function appendAiCommitTaskOutput(projectId: string, chunk: string): AiCo
   }
 
   registry.entries[projectId] = next
-  saveRegistry(registry)
+  persistRegistry(registry, false)
   return next
+}
+
+export function flushAiCommitRegistry(): void {
+  clearFlushTimer()
+  if (!registryDirty || !registryCache) return
+  saveRegistryToDisk(registryCache)
+  registryDirty = false
 }
