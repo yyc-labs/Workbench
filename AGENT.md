@@ -1,7 +1,7 @@
 # IDE Electron Agent 协作规则
 
 本文件用于约束 AI Agent 在本仓库中的改动方式。目标是：尊重当前架构边界、避免跨层乱改、保持 Windows/WSL 行为一致，并延续现有 Apple-like 视觉体系。
-
+默认在完成需求修改后不要执行 build；该项目 build 性能开销较大，仅在用户明确要求时再执行。
 ## 0. 优先级与适用范围
 
 - 本规则适用于仓库内所有代码、文档、脚本和配置改动。
@@ -98,7 +98,6 @@
 
 ## 5. 命令与环境红线
 
-- 不要 build 项目，除非用户当次明确要求。
 - `node.exe`、`node`、`npm`、`npx`、`electron-rebuild`、`node-gyp` 相关命令需要提权使用。
 - 不得在 WSL 的 `/mnt/d/...` 路径下执行依赖安装或重建，包括 `npm install`、`pnpm install`、`yarn install`、`electron-rebuild`、`node-gyp`。
 - 未经确认，不新增第三方依赖、不升级大版本基础库。

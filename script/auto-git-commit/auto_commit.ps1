@@ -395,6 +395,58 @@ function Write-Utf8NoBomFile([string]$Path, [string]$Content) {
   [System.IO.File]::WriteAllText($Path, $Content, $enc)
 }
 
+function Get-LimitedGitDiffPreview([int]$MaxChars, [int]$MaxLines = 400) {
+  $safeMaxChars = [Math]::Max(1, $MaxChars)
+  $safeMaxLines = [Math]::Max(1, $MaxLines)
+  $builder = New-Object System.Text.StringBuilder
+  $lineCount = 0
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = 'git'
+  $psi.Arguments = 'diff --cached --unified=0 --no-color'
+  $psi.WorkingDirectory = (Get-Location).Path
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+
+  $proc = New-Object System.Diagnostics.Process
+  $proc.StartInfo = $psi
+
+  try {
+    [void]$proc.Start()
+
+    while (-not $proc.StandardOutput.EndOfStream) {
+      $lineCount += 1
+      $lineText = [string]$proc.StandardOutput.ReadLine()
+
+      if ($lineCount -gt 1) {
+        if ($builder.Length -ge $safeMaxChars) { break }
+        [void]$builder.Append("`n")
+      }
+
+      $remaining = $safeMaxChars - $builder.Length
+      if ($remaining -le 0) { break }
+      if ($lineText.Length -gt $remaining) {
+        [void]$builder.Append($lineText.Substring(0, $remaining))
+        break
+      }
+
+      [void]$builder.Append($lineText)
+      if ($lineCount -ge $safeMaxLines) { break }
+    }
+  } finally {
+    if ($proc -and -not $proc.HasExited) {
+      try { $proc.Kill() } catch {}
+    }
+    if ($proc) {
+      try { $proc.WaitForExit() } catch {}
+      $proc.Dispose()
+    }
+  }
+
+  return $builder.ToString()
+}
+
 function Extract-JsonObject([string]$Text) {
   $trimmed = Normalize-String $Text
   if (-not $trimmed) { return '' }
@@ -608,10 +660,7 @@ function Try-ApplyAiMessage([string]$CurrentType, [string]$CurrentSubject, [stri
 
   $files = (git diff --cached --name-only | Out-String).Trim()
   $stat = (git diff --cached --stat | Out-String).Trim()
-  $patch = (git diff --cached --unified=0 | Out-String)
-  if ($patch.Length -gt 12000) {
-    $patch = $patch.Substring(0, 12000)
-  }
+  $patch = Get-LimitedGitDiffPreview -MaxChars 12000 -MaxLines 400
 
   $userPrompt = New-AiPrompt -Files $files -Stat $stat -Patch $patch -BulletLimit $resolvedMaxBullets
   $instruction = 'You are a senior engineer. Output JSON only. Every textual field must be Simplified Chinese.'
