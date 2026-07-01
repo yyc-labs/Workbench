@@ -19,6 +19,7 @@ export function SettingsAgentLogsPanel() {
   const [summaries, setSummaries] = useState<AgentLogSummary[]>([])
   const [filters, setFilters] = useState<AgentLogFilters>(DEFAULT_FILTERS)
   const [selection, setSelection] = useState<AgentLogSelection | null>(null)
+  const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [detail, setDetail] = useState<AgentLogDetail | null>(null)
   const [markdown, setMarkdown] = useState('')
   const [loadingSummaries, setLoadingSummaries] = useState(false)
@@ -33,6 +34,11 @@ export function SettingsAgentLogsPanel() {
   )
 
   const selectedKey = selection ? agentLogKey(selection) : null
+
+  const handleSelectLog = (item: AgentLogSummary) => {
+    setSelection({ source: item.source, id: item.id })
+    setMobileView('detail')
+  }
 
   const loadSummaries = async () => {
     setLoadingSummaries(true)
@@ -65,6 +71,7 @@ export function SettingsAgentLogsPanel() {
     if (!selection) {
       setDetail(null)
       setMarkdown('')
+      setMobileView('list')
       return
     }
 
@@ -163,22 +170,57 @@ export function SettingsAgentLogsPanel() {
         onRefresh={() => void loadSummaries()}
       />
 
+      <div className="quiet-control flex rounded-full p-1 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileView('list')}
+          className={`button-interactive flex-1 rounded-full px-3 py-2 text-sm transition-colors ${
+            mobileView === 'list'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+              : 'text-[color:var(--color-muted-foreground)]'
+          }`}
+        >
+          {t('settings.agentLogs.listPane')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileView('detail')}
+          disabled={!selection}
+          className={`button-interactive flex-1 rounded-full px-3 py-2 text-sm transition-colors disabled:opacity-50 ${
+            mobileView === 'detail'
+              ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+              : 'text-[color:var(--color-muted-foreground)]'
+          }`}
+        >
+          {t('settings.agentLogs.detailPane')}
+        </button>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(280px,0.62fr)_minmax(0,1.38fr)] 2xl:grid-cols-[minmax(340px,0.68fr)_minmax(0,1.32fr)]">
-        <div className="lg:sticky lg:top-0 lg:self-start">
+        <div className={`${mobileView === 'list' ? 'block' : 'hidden'} lg:sticky lg:top-0 lg:block lg:self-start`}>
           <AgentLogSummaryList
             items={filteredSummaries}
             selectedKey={selectedKey}
             emptyReason={summaries.length > 0 ? 'filtered' : 'none'}
-            onSelect={(item) => setSelection({ source: item.source, id: item.id })}
+            onSelect={handleSelectLog}
           />
         </div>
-        <AgentLogDetailPane
-          detail={detail}
-          loading={loadingDetail}
-          markdown={markdown}
-          markdownLoading={loadingMarkdown}
-          error={error}
-        />
+        <div className={`${mobileView === 'detail' ? 'block' : 'hidden'} lg:block`}>
+          <button
+            type="button"
+            onClick={() => setMobileView('list')}
+            className="button-interactive mb-3 inline-flex rounded-full px-3 py-2 text-sm text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-card)] hover:text-[color:var(--color-foreground)] lg:hidden"
+          >
+            {t('settings.agentLogs.backToList')}
+          </button>
+          <AgentLogDetailPane
+            detail={detail}
+            loading={loadingDetail}
+            markdown={markdown}
+            markdownLoading={loadingMarkdown}
+            error={error}
+          />
+        </div>
       </div>
     </div>
   )

@@ -1,9 +1,10 @@
-import { Bot, Braces, FileText, MessageSquareText, RadioTower } from 'lucide-react'
+import { Braces, FileText, MessageSquareText } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { AgentLogDetail } from '../../../../shared/types'
 import { useI18n } from '../../../i18n'
 import { detailToJson } from './agentLogs.helpers'
 import type { AgentLogDetailTab } from './agentLogs.types'
+import { AgentLogDetailHeader } from './AgentLogDetailHeader'
 import { AgentLogJsonView } from './AgentLogJsonView'
 import { AgentLogMarkdownView } from './AgentLogMarkdownView'
 import { AgentLogRequestView } from './AgentLogRequestView'
@@ -184,25 +185,7 @@ export function AgentLogDetailPane({
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-[color:var(--color-muted-foreground)]">
-                {detail.source === 'ai-gateway'
-                  ? <Bot className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  : <RadioTower className="h-3.5 w-3.5" strokeWidth={1.8} />}
-                {detail.source === 'ai-gateway'
-                  ? t('settings.agentLogs.sourceGateway')
-                  : t('settings.agentLogs.sourceHooks')}
-              </div>
-              <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">
-                {detail.summary.title}
-              </h3>
-              <p className="mt-1 break-all font-mono text-xs text-[color:var(--color-muted-foreground)]">
-                {detail.summary.id}
-              </p>
-            </div>
-            {tabs}
-          </div>
+          <AgentLogDetailHeader detail={detail} tabs={tabs} />
 
           {error ? (
             <div className="rounded-[16px] bg-[color:var(--color-destructive-background)] px-4 py-3 text-sm text-[color:var(--color-destructive)]">

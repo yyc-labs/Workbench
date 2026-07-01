@@ -191,6 +191,49 @@ export const settingsMessages = {
         requestedStream: 'Requested Stream',
         actualStream: 'Actual Stream',
         eventCount: 'Events',
+        listPane: 'List',
+        detailPane: 'Detail',
+        backToList: 'Back to list',
+        requestId: 'Request ID',
+        copyRequestId: 'Copy ID',
+        flowMap: 'Flow Map',
+        flowMapHint: 'Click a step to inspect only that part of the request path.',
+        focusedStep: 'Focused step',
+        stepStatusOk: 'OK',
+        stepStatusWarn: 'Warn',
+        stepStatusError: 'Error',
+        stepStatusMissing: 'Missing',
+        sideEffects: 'Import / Notify',
+        sideEffectsDescription: 'Transcript import and Feishu notification side effects.',
+        notCapturedYet: 'Not captured yet',
+        parseError: 'Parse error',
+        overview: 'Overview',
+        bodySummary: 'Body Summary',
+        rawJson: 'Raw JSON',
+        rawText: 'Raw Text',
+        contentType: 'Content-Type',
+        bodySize: 'Body Size',
+        method: 'Method',
+        path: 'Path',
+        url: 'URL',
+        query: 'Query',
+        expand: 'Expand',
+        collapse: 'Collapse',
+        copyFull: 'Copy full',
+        charactersLabel: '{count} chars',
+        linesLabel: '{count} lines',
+        previewOnly: 'Preview only',
+        noContent: 'No content',
+        showAllMessages: 'Show all messages',
+        showLessMessages: 'Show fewer messages',
+        messagesHidden: '{count} more message hidden | {count} more messages hidden',
+        toolCount: '{count} tool | {count} tools',
+        schemaAvailable: 'schema',
+        schemaMissing: 'no schema',
+        toolSchemas: 'Tool schemas',
+        expandImportant: 'Expand important',
+        expandAll: 'Expand all',
+        collapseAll: 'Collapse all',
       },
       general: {
         appearance: 'Appearance',
@@ -215,8 +258,8 @@ export const settingsMessages = {
       },
       shortcuts: {
         kicker: 'Shortcut Management',
-        title: 'Global Shortcuts',
-        description: 'Configure behavior that belongs to keyboard shortcuts only. External transcript import API behavior is configured under Agent Hooks.',
+        title: 'Shortcuts & Right-Drag Gestures',
+        description: 'Review the app-defined shortcuts and right-drag gestures here. Only the quick transcript capture viewer behavior is configurable on this page; the rest are fixed interactions.',
         quickCaptureTitle: 'Quick Transcript Capture Shortcut',
         quickCaptureDescription: 'This setting only applies to transcript imports started from Ctrl/Cmd+Shift+K. It does not change external Hook/API imports.',
         quickCaptureShortcut: 'Shortcut',
@@ -224,6 +267,175 @@ export const settingsMessages = {
         openViewerHint: 'Enabled: the quick capture window saves the transcript, reveals the main window, and opens the selected project transcript page.',
         disabledHint: 'Disabled: Ctrl/Cmd+Shift+K quick capture only saves the transcript and closes the capture window.',
         saveError: 'Failed to save shortcut preferences.',
+        keyboardGuideTitle: 'Keyboard Shortcuts',
+        keyboardGuideDescription: 'This list focuses on app-defined or high-frequency shortcuts. Default browser or text-field shortcuts are not repeated here.',
+        gestureGuideTitle: 'Right-Drag Gestures',
+        gestureGuideDescription: 'Hold the right mouse button and drag. A normal right click still uses the page context menu unless a gesture takes over.',
+        gestureTriggers: {
+          backForward: 'Right-drag left / right',
+          recent: 'Right-drag down',
+          home: 'Right-draw a circle',
+          projectHeader: 'Right-drag up',
+          codeSidebar: 'Ctrl/Cmd + Right-drag right',
+          learningLeftSidebar: 'Ctrl/Cmd + Right-drag right',
+          learningRightSidebar: 'Ctrl/Cmd + Right-drag left',
+        },
+        groups: {
+          global: {
+            title: 'Global',
+            description: 'System-level shortcuts registered by the app.',
+          },
+          code: {
+            title: 'Code Workspace',
+            description: 'Available on the project code page and the Monaco editor.',
+          },
+          learning: {
+            title: 'Learning Center',
+            description: 'Note editing, sidebars, and Markdown editing shortcuts.',
+          },
+          terminal: {
+            title: 'Terminal & Quick Capture',
+            description: 'Shortcuts inside the built-in terminal and the quick transcript capture window.',
+          },
+          gestureGlobal: {
+            title: 'Global Navigation Gestures',
+            description: 'Right-drag navigation available across the main application pages.',
+          },
+          gestureSidebar: {
+            title: 'Sidebar Gestures',
+            description: 'On Code and Learning pages, holding Ctrl/Cmd while right-dragging takes priority over the normal context menu.',
+          },
+        },
+        items: {
+          globalHome: {
+            title: 'Return to Home',
+            description: 'Reveal the main window and navigate back to the Home page.',
+          },
+          globalTheme: {
+            title: 'Toggle Light/Dark Theme',
+            description: 'Switch between the current light and dark theme quickly.',
+          },
+          globalCapture: {
+            title: 'Quick Transcript Capture',
+            description: 'Open the quick transcript capture window from anywhere.',
+          },
+          globalRecent: {
+            title: 'Toggle Recent Projects',
+            description: 'Open or close the recent projects drawer.',
+          },
+          globalRoutes: {
+            title: 'Toggle Route Catalog',
+            description: 'Open the route catalog dialog for fast page jumping.',
+          },
+          homeSearch: {
+            title: 'Focus Home Search',
+            description: 'Move focus to the project search box on the Home page.',
+          },
+          codeViewMode: {
+            title: 'Switch File/Search Mode',
+            description: 'On the code page, switch the left workspace panel between file tree and content search.',
+          },
+          codeGlobalSearch: {
+            title: 'Focus Workspace Search',
+            description: 'Open or focus project-wide search on the code page.',
+          },
+          codeFind: {
+            title: 'Find in Current File',
+            description: 'Open find for the current editor or Markdown preview.',
+          },
+          codeReplace: {
+            title: 'Replace in Current File',
+            description: 'Open replace in the current editor.',
+          },
+          codeSave: {
+            title: 'Save Current File',
+            description: 'Save the currently open file in the code workspace.',
+          },
+          codeCopyLineDown: {
+            title: 'Copy Current Line Down',
+            description: 'Duplicate the current line downward in the Monaco editor.',
+          },
+          codeDeleteLine: {
+            title: 'Delete Current Line',
+            description: 'Delete the current line in the Monaco editor.',
+          },
+          learningSave: {
+            title: 'Save Current Note',
+            description: 'Save the current Learning Center note when there are unsaved changes.',
+          },
+          learningLeftSidebar: {
+            title: 'Toggle Left Sidebar',
+            description: 'Collapse or expand the note and category sidebar in Learning Center.',
+          },
+          learningRightSidebar: {
+            title: 'Toggle Right Sidebar',
+            description: 'Collapse or expand the note info sidebar in Learning Center.',
+          },
+          learningUndoRedo: {
+            title: 'Undo / Redo',
+            description: 'Use Ctrl/Cmd+Z to undo, and Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y to redo in the Markdown editor.',
+          },
+          learningIndent: {
+            title: 'Indent / Outdent Markdown',
+            description: 'Use Tab and Shift+Tab to indent or outdent selected Markdown lines.',
+          },
+          learningContinueList: {
+            title: 'Continue Markdown List',
+            description: 'Press Enter in a list item to continue the Markdown list automatically.',
+          },
+          terminalCopy: {
+            title: 'Copy Selection',
+            description: 'Copy the current terminal selection to the clipboard.',
+          },
+          terminalPaste: {
+            title: 'Paste into Terminal',
+            description: 'Paste clipboard text into the built-in terminal.',
+          },
+          terminalSelectAll: {
+            title: 'Select All and Copy',
+            description: 'Select the whole terminal buffer and copy the selection.',
+          },
+          captureSubmit: {
+            title: 'Submit Quick Capture',
+            description: 'In the quick transcript capture window, import the current content.',
+          },
+          captureLineBreak: {
+            title: 'Insert New Line',
+            description: 'In the quick transcript capture editor, keep a line break instead of importing.',
+          },
+          captureClose: {
+            title: 'Close Quick Capture',
+            description: 'Close the quick transcript capture window without importing.',
+          },
+          gestureBackForward: {
+            title: 'Back / Forward Navigation',
+            description: 'Right-drag horizontally to go back or forward. On project detail pages, this also switches among Code, AI Commit, and Transcript in order.',
+          },
+          gestureRecent: {
+            title: 'Toggle Recent Projects',
+            description: 'Right-drag downward to open or close the recent projects drawer.',
+          },
+          gestureHome: {
+            title: 'Go Home',
+            description: 'Right-draw a circle to return to the Home page.',
+          },
+          gestureProjectHeader: {
+            title: 'Toggle Project Header',
+            description: 'On project detail pages, right-drag upward to collapse or expand the project header.',
+          },
+          gestureCodeSidebar: {
+            title: 'Code Page Left Sidebar',
+            description: 'On the code page, hold Ctrl/Cmd and right-drag to the right to collapse or expand the left file sidebar.',
+          },
+          gestureLearningLeftSidebar: {
+            title: 'Learning Left Sidebar',
+            description: 'In Learning Center, hold Ctrl/Cmd and right-drag to the right to collapse or expand the left note sidebar.',
+          },
+          gestureLearningRightSidebar: {
+            title: 'Learning Right Sidebar',
+            description: 'In Learning Center, hold Ctrl/Cmd and right-drag to the left to collapse or expand the right info sidebar.',
+          },
+        },
       },
       dataCache: {
         cacheStorage: 'Cache Storage',
@@ -651,6 +863,49 @@ export const settingsMessages = {
         requestedStream: '请求流式',
         actualStream: '实际流式',
         eventCount: '事件数',
+        listPane: '列表',
+        detailPane: '详情',
+        backToList: '返回列表',
+        requestId: '请求 ID',
+        copyRequestId: '复制 ID',
+        flowMap: '流程地图',
+        flowMapHint: '点击节点后，只查看这一步的请求链路细节。',
+        focusedStep: '当前节点',
+        stepStatusOk: '正常',
+        stepStatusWarn: '警告',
+        stepStatusError: '异常',
+        stepStatusMissing: '缺失',
+        sideEffects: '导入 / 通知',
+        sideEffectsDescription: '转录导入与飞书通知等副作用。',
+        notCapturedYet: '尚未捕获',
+        parseError: '解析失败',
+        overview: '概览',
+        bodySummary: '正文摘要',
+        rawJson: '原始 JSON',
+        rawText: '原始文本',
+        contentType: 'Content-Type',
+        bodySize: '正文大小',
+        method: '方法',
+        path: '路径',
+        url: 'URL',
+        query: 'Query',
+        expand: '展开',
+        collapse: '收起',
+        copyFull: '复制完整内容',
+        charactersLabel: '{count} 字符',
+        linesLabel: '{count} 行',
+        previewOnly: '仅预览',
+        noContent: '无内容',
+        showAllMessages: '显示全部消息',
+        showLessMessages: '收起消息',
+        messagesHidden: '还有 {count} 条消息未显示',
+        toolCount: '{count} 个工具',
+        schemaAvailable: '有 schema',
+        schemaMissing: '无 schema',
+        toolSchemas: '工具 schema',
+        expandImportant: '展开关键字段',
+        expandAll: '全部展开',
+        collapseAll: '全部收起',
       },
       general: {
         appearance: '外观',
@@ -675,8 +930,8 @@ export const settingsMessages = {
       },
       shortcuts: {
         kicker: '快捷键管理',
-        title: '全局快捷键',
-        description: '这里只配置键盘快捷键触发后的行为。外部转录导入 API 的行为在“代理钩子”里配置。',
+        title: '快捷键与右键手势',
+        description: '这里集中说明项目里已经实现的快捷键和右键拖拽手势。这个页面里只有快速转录导入后的查看器行为可配置，其余说明都是固定交互。',
         quickCaptureTitle: '快速转录导入快捷键',
         quickCaptureDescription: '此设置仅影响通过 Ctrl/Cmd+Shift+K 发起的转录导入，不会影响外部 Hook/API 导入。',
         quickCaptureShortcut: '快捷键',
@@ -684,6 +939,175 @@ export const settingsMessages = {
         openViewerHint: '开启后，快速导入会先保存转录，然后显示主窗口并打开所选项目的转录页面。',
         disabledHint: '关闭后，Ctrl/Cmd+Shift+K 快速导入只保存转录并关闭导入窗口。',
         saveError: '保存快捷键偏好失败。',
+        keyboardGuideTitle: '键盘快捷键',
+        keyboardGuideDescription: '下面优先列出应用自己定义的，或日常高频使用的快捷键；浏览器和普通输入框的默认快捷键不在这里重复展开。',
+        gestureGuideTitle: '右键拖拽手势',
+        gestureGuideDescription: '按住鼠标右键后拖动即可触发。普通右键点击仍会优先使用页面自己的右键菜单，除非该区域被手势逻辑接管。',
+        gestureTriggers: {
+          backForward: '右键向左 / 向右拖动',
+          recent: '右键向下拖动',
+          home: '右键画圆',
+          projectHeader: '右键向上拖动',
+          codeSidebar: 'Ctrl/Cmd + 右键向右拖动',
+          learningLeftSidebar: 'Ctrl/Cmd + 右键向右拖动',
+          learningRightSidebar: 'Ctrl/Cmd + 右键向左拖动',
+        },
+        groups: {
+          global: {
+            title: '全局',
+            description: '由应用注册的系统级快捷键。',
+          },
+          code: {
+            title: '代码工作区',
+            description: '适用于项目代码页和 Monaco 编辑器。',
+          },
+          learning: {
+            title: '学习中心',
+            description: '覆盖笔记编辑、侧栏切换和 Markdown 编辑辅助。',
+          },
+          terminal: {
+            title: '终端与快速导入',
+            description: '内置终端和快速转录导入窗口里的快捷键。',
+          },
+          gestureGlobal: {
+            title: '全局导航手势',
+            description: '主应用页面里可用的右键拖拽导航。',
+          },
+          gestureSidebar: {
+            title: '侧栏手势',
+            description: '在代码页和学习中心里，按住 Ctrl/Cmd 再右键拖拽时，会优先触发侧栏手势而不是普通右键菜单。',
+          },
+        },
+        items: {
+          globalHome: {
+            title: '回到首页',
+            description: '显示主窗口并直接回到首页。',
+          },
+          globalTheme: {
+            title: '切换浅色/深色主题',
+            description: '快速在当前浅色和深色主题之间切换。',
+          },
+          globalCapture: {
+            title: '快速转录导入',
+            description: '从任意位置打开快速转录导入窗口。',
+          },
+          globalRecent: {
+            title: '开关最近项目抽屉',
+            description: '打开或关闭最近项目抽屉。',
+          },
+          globalRoutes: {
+            title: '开关路由目录',
+            description: '打开路由目录弹窗，快速跳转页面。',
+          },
+          homeSearch: {
+            title: '聚焦首页搜索框',
+            description: '把焦点移动到首页的项目搜索框。',
+          },
+          codeViewMode: {
+            title: '切换文件/搜索模式',
+            description: '在代码页中切换左侧工作区的文件树和内容搜索模式。',
+          },
+          codeGlobalSearch: {
+            title: '聚焦工作区搜索',
+            description: '在代码页打开或聚焦项目级内容搜索。',
+          },
+          codeFind: {
+            title: '当前文件查找',
+            description: '在当前编辑器或 Markdown 预览中打开查找。',
+          },
+          codeReplace: {
+            title: '当前文件替换',
+            description: '在当前编辑器中打开替换。',
+          },
+          codeSave: {
+            title: '保存当前文件',
+            description: '保存代码工作区当前打开的文件。',
+          },
+          codeCopyLineDown: {
+            title: '向下复制当前行',
+            description: '在 Monaco 编辑器里把当前行向下复制一份。',
+          },
+          codeDeleteLine: {
+            title: '删除当前行',
+            description: '在 Monaco 编辑器里删除当前行。',
+          },
+          learningSave: {
+            title: '保存当前笔记',
+            description: '在学习中心当前笔记有未保存修改时执行保存。',
+          },
+          learningLeftSidebar: {
+            title: '切换左侧栏',
+            description: '折叠或展开学习中心左侧的分类和笔记侧栏。',
+          },
+          learningRightSidebar: {
+            title: '切换右侧栏',
+            description: '折叠或展开学习中心右侧的笔记信息侧栏。',
+          },
+          learningUndoRedo: {
+            title: '撤销 / 重做',
+            description: 'Markdown 编辑器里使用 Ctrl/Cmd+Z 撤销，使用 Ctrl/Cmd+Shift+Z 或 Ctrl/Cmd+Y 重做。',
+          },
+          learningIndent: {
+            title: 'Markdown 缩进 / 反缩进',
+            description: '用 Tab 和 Shift+Tab 对选中的 Markdown 行做缩进或反缩进。',
+          },
+          learningContinueList: {
+            title: '继续 Markdown 列表',
+            description: '在列表项里按 Enter，会自动续写下一行列表。',
+          },
+          terminalCopy: {
+            title: '复制选区',
+            description: '把当前终端选中的内容复制到剪贴板。',
+          },
+          terminalPaste: {
+            title: '粘贴到终端',
+            description: '把剪贴板文本粘贴到内置终端。',
+          },
+          terminalSelectAll: {
+            title: '全选并复制',
+            description: '选中整个终端缓冲区，并复制当前选区内容。',
+          },
+          captureSubmit: {
+            title: '提交快速导入',
+            description: '在快速转录导入窗口中导入当前内容。',
+          },
+          captureLineBreak: {
+            title: '插入换行',
+            description: '在快速转录导入编辑框里保留换行，而不是直接导入。',
+          },
+          captureClose: {
+            title: '关闭快速导入窗口',
+            description: '不导入内容，直接关闭快速转录导入窗口。',
+          },
+          gestureBackForward: {
+            title: '后退 / 前进导航',
+            description: '右键水平拖动可执行后退或前进。在项目详情页里，也会按顺序切换代码、AI Commit、转录这几个面板。',
+          },
+          gestureRecent: {
+            title: '开关最近项目抽屉',
+            description: '右键向下拖动可打开或关闭最近项目抽屉。',
+          },
+          gestureHome: {
+            title: '回到首页',
+            description: '右键画圆可直接回到首页。',
+          },
+          gestureProjectHeader: {
+            title: '切换项目栏',
+            description: '在项目详情页里，右键向上拖动可收起或展开顶部项目栏。',
+          },
+          gestureCodeSidebar: {
+            title: '代码页左侧栏',
+            description: '在代码页里按住 Ctrl/Cmd，并按住右键向右拖动，可折叠或展开左侧文件栏。',
+          },
+          gestureLearningLeftSidebar: {
+            title: '学习中心左侧栏',
+            description: '在学习中心里按住 Ctrl/Cmd，并按住右键向右拖动，可折叠或展开左侧笔记侧栏。',
+          },
+          gestureLearningRightSidebar: {
+            title: '学习中心右侧栏',
+            description: '在学习中心里按住 Ctrl/Cmd，并按住右键向左拖动，可折叠或展开右侧信息侧栏。',
+          },
+        },
       },
       dataCache: {
         cacheStorage: '缓存存储',
