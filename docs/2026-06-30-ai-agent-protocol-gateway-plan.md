@@ -500,7 +500,7 @@ MVP 满足以下条件即可：
 
 - 新增 `src/core/electron/main/ai-gateway/` 独立 domain，包含配置规范化、provider registry、HTTP server 生命周期、协议转换 adapter 和 SSE 工具。
 - 新增本地入口：`/v1/messages`、`/v1/responses`、`/v1/chat/completions`。
-- 已支持 `openai_chat` 上游 provider；`openai_responses`、`anthropic_messages` 已进入配置模型，但第一阶段请求时仍明确报错。
+- 已支持 `openai_chat` 上游 provider；`openai_responses`、`anthropic_messages` 已进入配置模型。初始 MVP 只转换 `openai_chat`，后续已为 Claude route 补充 `anthropic_messages` 上游透传。
 - 已支持 Anthropic Messages -> Chat Completions -> Anthropic Messages 的非流式和文本流式转换。
 - 已支持 OpenAI Responses -> Chat Completions -> OpenAI Responses 的非流式和文本流式转换。
 - 已新增 IPC/preload 链路：状态、配置保存、启动、停止、Claude/Codex 接管、Claude/Codex 恢复。
@@ -513,7 +513,7 @@ MVP 满足以下条件即可：
 
 - Claude / Anthropic Messages 的 `tools`、`tool_use`、`tool_result` 已支持桥接到 `openai_chat` 的 `tools`、`tool_calls`、`tool` message；Responses tools 与非空 reasoning 仍按 MVP 规则明确拒绝。
 - 流式事件已补到 Claude tool use 所需的最小事件集合，但仍需要后续用真实 Claude Code / Codex CLI 抓包校准。
-- 尚未实现非 `openai_chat` 上游的反向转换。
+- 尚未实现 `openai_responses` 上游的反向转换；`anthropic_messages` 上游仅在 Claude `/v1/messages` route 中做同协议透传。
 - 尚未执行完整打包 build；本仓库规则要求默认不执行 build。
 
 ## 2026-06-30 追加实施：Claude Profile 级网关路由
@@ -559,4 +559,15 @@ ANTHROPIC_MODEL=<AI / Agents 里原来配置的模型名>
 
 - profile 级 Claude 请求依赖 profile path 区分来源；普通模型路由仍只由 Gateway 页里手工配置的 route 决定。
 - route 目前按精确模型名匹配，尚未实现通配符、优先级或复杂条件。
-- 非 `openai_chat` 上游仍未完成反向转换。
+- `anthropic_messages` provider 可用于 Claude profile route 透传；`openai_responses` 上游仍未完成反向转换。
+
+## 2026-07-01 追加实施：Anthropic Messages 上游透传
+
+已为 Claude / Anthropic Messages route 增加 `anthropic_messages` provider 分支：
+
+- `/v1/messages` 和 `/profiles/<profileId>/v1/messages` 会按路由选择 provider。
+- 选中 `openai_chat` provider 时，继续走 Anthropic Messages -> Chat Completions -> Anthropic Messages 转换。
+- 选中 `anthropic_messages` provider 时，不做协议转换，直接把请求透传到上游 Anthropic Messages 兼容入口，并记录 ingress、normalized、upstream、client 四段日志。
+- 上游 URL 规则：`https://api.deepseek.com/anthropic` 会拼成 `https://api.deepseek.com/anthropic/v1/messages`；已包含 `/v1` 或 `/v1/messages` 时不会重复拼接。
+- 非流式透传会保留上游 status/body 返回给 Claude Code；流式透传会解析 SSE 以生成日志预览，再按 Anthropic SSE 事件发回客户端。
+- 鉴权优先使用 Claude profile 请求带来的 token；没有请求 token 时使用 provider 的 API Key 或 API Key 环境变量。

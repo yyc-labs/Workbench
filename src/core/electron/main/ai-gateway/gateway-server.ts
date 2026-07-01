@@ -266,10 +266,51 @@ function resolveUpstreamAuth(
   }
 }
 
+function buildAnthropicAuthHeaders(
+  provider: AiGatewayProviderConfig,
+  incomingHeaders: Record<string, HeaderValue>,
+  apiTokenOverride: string
+): { auth: ResolvedUpstreamAuth; headers: Record<string, string> } {
+  const auth = resolveUpstreamAuth(provider, apiTokenOverride)
+  if (!auth.token) return { auth, headers: {} }
+
+  const incomingAuthorization = getHeaderValue(incomingHeaders, 'authorization')
+  const incomingXApiKey = getHeaderValue(incomingHeaders, 'x-api-key')
+    || getHeaderValue(incomingHeaders, 'api-key')
+
+  if (auth.source === 'request-token') {
+    if (incomingAuthorization && !incomingXApiKey) {
+      return {
+        auth,
+        headers: { authorization: incomingAuthorization },
+      }
+    }
+    return {
+      auth,
+      headers: { 'x-api-key': auth.token },
+    }
+  }
+
+  return {
+    auth,
+    headers: {
+      authorization: `Bearer ${auth.token}`,
+      'x-api-key': auth.token,
+    },
+  }
+}
+
 function toChatCompletionsUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '')
   if (/\/chat\/completions$/i.test(trimmed)) return trimmed
   return `${trimmed}/chat/completions`
+}
+
+export function toAnthropicMessagesUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, '')
+  if (/\/(?:v1\/)?messages$/i.test(trimmed)) return trimmed
+  if (/\/v1$/i.test(trimmed)) return `${trimmed}/messages`
+  return `${trimmed}/v1/messages`
 }
 
 function parseRoutedPath(pathname: string): RoutedPath {
@@ -318,6 +359,22 @@ function buildUpstreamLogDetails(
     upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
     model: chatRequest.model,
     stream: chatRequest.stream === true,
+    ...extra,
+  }
+}
+
+function buildAnthropicUpstreamLogDetails(
+  provider: AiGatewayProviderConfig,
+  request: AnthropicMessagesRequest,
+  extra?: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    providerId: provider.id,
+    providerName: provider.name,
+    protocol: provider.protocol,
+    upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+    model: request.model,
+    stream: request.stream === true,
     ...extra,
   }
 }
@@ -633,50 +690,87 @@ export class AiGatewayServer {
       const rawBody = await readRequestBody(req, maxBodyBytes)
       this.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
       const payload = parseJsonBody(rawBody) as AnthropicMessagesRequest
-      const provider = this.registry.getProviderForProfile(profileId, 'openai_chat')
-        ?? this.registry.getProviderForModel(String(payload.model || ''), 'openai_chat')
-      const chatRequest = anthropicMessagesToChatCompletion(payload, provider)
+      const provider = this.registry.getProviderForProfile(profileId)
+        ?? this.registry.getProviderForModel(String(payload.model || ''))
       const requestApiToken = profileId ? extractRequestApiToken(req.headers) : ''
       this.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
-      this.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes)
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Received Anthropic Messages request',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: chatRequest.stream === true,
-      })
-      if (chatRequest.stream) {
-        await this.proxyChatStreamAsAnthropic(provider, chatRequest, requestContext, requestApiToken, trace, res)
+
+      if (provider.protocol === 'openai_chat') {
+        const chatRequest = anthropicMessagesToChatCompletion(payload, provider)
+        this.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes)
+        this.recordGatewayLog({
+          ...requestContext,
+          level: 'info',
+          message: 'Received Anthropic Messages request',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: chatRequest.stream === true,
+        })
+        if (chatRequest.stream) {
+          await this.proxyChatStreamAsAnthropic(provider, chatRequest, requestContext, requestApiToken, trace, res)
+          this.finalizeGatewayTrace(trace)
+          return
+        }
+        const chatResponse = await this.fetchChatJson(provider, chatRequest, requestContext, trace, requestApiToken)
+        this.recordGatewayLog({
+          ...requestContext,
+          level: 'info',
+          message: 'Returned Anthropic message response',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: false,
+          statusCode: 200,
+        })
+        const clientPayload = chatCompletionToAnthropicMessage(chatResponse, chatRequest.model)
+        trace.clientResponse = buildResponseSnapshot({
+          statusCode: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' },
+          bodyValue: clientPayload,
+          contentType: 'application/json; charset=utf-8',
+          maxBodyBytes,
+        })
+        trace.statusCode = 200
+        this.finalizeGatewayTrace(trace)
+        jsonResponse(res, 200, clientPayload)
+        return
+      }
+
+      if (provider.protocol === 'anthropic_messages') {
+        const upstreamRequest = {
+          ...payload,
+          model: resolveMappedModel(String(payload.model || ''), provider.modelMap),
+        }
+        if (!upstreamRequest.model) {
+          throw new Error('Anthropic request is missing model.')
+        }
+        this.setGatewayTraceRouteData(trace, provider, upstreamRequest.model, upstreamRequest.stream === true, upstreamRequest, maxBodyBytes)
+        this.recordGatewayLog({
+          ...requestContext,
+          level: 'info',
+          message: 'Received Anthropic Messages request for Anthropic upstream passthrough',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+          model: upstreamRequest.model,
+          stream: upstreamRequest.stream === true,
+        })
+        if (upstreamRequest.stream) {
+          await this.proxyAnthropicMessagesStream(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
+          this.finalizeGatewayTrace(trace)
+          return
+        }
+        await this.proxyAnthropicMessagesJson(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
         this.finalizeGatewayTrace(trace)
         return
       }
-      const chatResponse = await this.fetchChatJson(provider, chatRequest, requestContext, trace, requestApiToken)
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Returned Anthropic message response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: false,
-        statusCode: 200,
-      })
-      const clientPayload = chatCompletionToAnthropicMessage(chatResponse, chatRequest.model)
-      trace.clientResponse = buildResponseSnapshot({
-        statusCode: 200,
-        headers: { 'content-type': 'application/json; charset=utf-8' },
-        bodyValue: clientPayload,
-        contentType: 'application/json; charset=utf-8',
-        maxBodyBytes,
-      })
-      trace.statusCode = 200
-      this.finalizeGatewayTrace(trace)
-      jsonResponse(res, 200, clientPayload)
+
+      throw new Error(
+        `Provider "${provider.name}" uses ${provider.protocol}; openai_chat or anthropic_messages is required for Anthropic route.`
+      )
     } catch (error) {
       this.respondRouteError(res, 'anthropic', requestContext, trace, error)
     }
@@ -805,6 +899,308 @@ export class AiGatewayServer {
       jsonResponse(res, 200, chatResponse)
     } catch (error) {
       this.respondRouteError(res, 'chat', requestContext, trace, error)
+    }
+  }
+
+  private async fetchAnthropicMessages(
+    provider: AiGatewayProviderConfig,
+    payload: AnthropicMessagesRequest,
+    incomingHeaders: Record<string, HeaderValue>,
+    requestContext: RequestLogContext,
+    trace: GatewayRequestTrace | undefined,
+    apiTokenOverride = ''
+  ): Promise<Response> {
+    const controller = new AbortController()
+    const timeoutMs = provider.timeoutMs ?? 60000
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const authResult = buildAnthropicAuthHeaders(provider, incomingHeaders, apiTokenOverride)
+    const anthropicVersion = getHeaderValue(incomingHeaders, 'anthropic-version') || '2023-06-01'
+    const anthropicBeta = getHeaderValue(incomingHeaders, 'anthropic-beta')
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: payload.stream ? 'text/event-stream' : 'application/json',
+      'anthropic-version': anthropicVersion,
+      ...authResult.headers,
+    }
+    if (anthropicBeta) headers['anthropic-beta'] = anthropicBeta
+
+    if (trace) {
+      trace.meta.authSource = authResult.auth.source
+      trace.meta.authToken = authResult.auth.token || '(empty)'
+      trace.upstreamRequest = buildRequestSnapshot({
+        method: 'POST',
+        path: '/v1/messages',
+        url: toAnthropicMessagesUrl(provider.baseUrl),
+        headers,
+        bodyValue: payload,
+        contentType: 'application/json; charset=utf-8',
+        maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
+      })
+    }
+
+    try {
+      this.recordGatewayLog({
+        ...requestContext,
+        level: 'info',
+        message: 'Resolved upstream auth for Anthropic passthrough request',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: payload.stream === true,
+        authSource: authResult.auth.source,
+        authToken: authResult.auth.token ? '[masked]' : '(empty)',
+      }, buildAnthropicUpstreamLogDetails(provider, payload, {
+        authSource: authResult.auth.source,
+        hasAuthToken: Boolean(authResult.auth.token),
+        timeoutMs,
+      }))
+      debugAiGateway('Forwarding request to upstream Anthropic Messages', buildAnthropicUpstreamLogDetails(provider, payload, {
+        timeoutMs,
+      }))
+      const response = await fetch(toAnthropicMessagesUrl(provider.baseUrl), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      })
+      if (trace) {
+        trace.upstreamResponse = buildResponseSnapshot({
+          statusCode: response.status,
+          headers: response.headers,
+          contentType: getResponseContentType(response),
+        })
+      }
+      debugAiGateway('Received upstream Anthropic response headers', buildAnthropicUpstreamLogDetails(provider, payload, {
+        status: response.status,
+        contentType: response.headers.get('content-type') || '',
+      }))
+      return response
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new Error(`Upstream Anthropic request timed out after ${timeoutMs}ms.`)
+      }
+      this.recordGatewayLog({
+        ...requestContext,
+        level: 'warn',
+        message: 'Upstream Anthropic request failed before a response was received',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: payload.stream === true,
+        authSource: authResult.auth.source,
+        authToken: authResult.auth.token ? '[masked]' : '(empty)',
+        bodyPreview: error instanceof Error ? error.message : String(error),
+      }, buildAnthropicUpstreamLogDetails(provider, payload, {
+        error: error instanceof Error ? error.message : String(error),
+        timeoutMs,
+      }))
+      throw error
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  private writePassthroughResponse(
+    res: ServerResponse,
+    statusCode: number,
+    contentType: string,
+    bodyText: string
+  ): void {
+    const headers: Record<string, string | number> = {}
+    if (contentType) headers['content-type'] = contentType
+    headers['content-length'] = Buffer.byteLength(bodyText)
+    res.writeHead(statusCode, headers)
+    res.end(bodyText)
+  }
+
+  private async proxyAnthropicMessagesJson(
+    provider: AiGatewayProviderConfig,
+    payload: AnthropicMessagesRequest,
+    incomingHeaders: Record<string, HeaderValue>,
+    requestContext: RequestLogContext,
+    apiTokenOverride: string,
+    trace: GatewayRequestTrace,
+    res: ServerResponse
+  ): Promise<void> {
+    const response = await this.fetchAnthropicMessages(provider, { ...payload, stream: false }, incomingHeaders, requestContext, trace, apiTokenOverride)
+    const responseText = await readResponseText(response)
+    const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8'
+    const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
+    trace.upstreamResponse = buildResponseSnapshot({
+      statusCode: response.status,
+      headers: response.headers,
+      bodyText: responseText,
+      contentType,
+      maxBodyBytes,
+    })
+    trace.clientResponse = buildResponseSnapshot({
+      statusCode: response.status,
+      headers: { 'content-type': contentType },
+      bodyText: responseText,
+      contentType,
+      maxBodyBytes,
+    })
+    trace.statusCode = response.status
+    this.recordGatewayLog({
+      ...requestContext,
+      level: response.ok ? 'info' : 'warn',
+      message: response.ok
+        ? 'Returned Anthropic passthrough response'
+        : 'Upstream Anthropic passthrough returned non-OK response',
+      providerId: provider.id,
+      providerName: provider.name,
+      upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+      model: payload.model,
+      stream: false,
+      statusCode: response.status,
+      contentType,
+      bodyPreview: response.ok ? undefined : responseText,
+    }, buildAnthropicUpstreamLogDetails(provider, payload, {
+      status: response.status,
+      contentType,
+      bodyPreview: response.ok ? undefined : responseText,
+    }))
+    this.writePassthroughResponse(res, response.status, contentType, responseText)
+  }
+
+  private async proxyAnthropicMessagesStream(
+    provider: AiGatewayProviderConfig,
+    payload: AnthropicMessagesRequest,
+    incomingHeaders: Record<string, HeaderValue>,
+    requestContext: RequestLogContext,
+    apiTokenOverride: string,
+    trace: GatewayRequestTrace,
+    res: ServerResponse
+  ): Promise<void> {
+    const response = await this.fetchAnthropicMessages(provider, { ...payload, stream: true }, incomingHeaders, requestContext, trace, apiTokenOverride)
+    const contentType = response.headers.get('content-type') || ''
+    const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
+    if (!response.ok || !response.body || !/text\/event-stream/i.test(contentType)) {
+      const responseText = await readResponseText(response)
+      const resolvedContentType = contentType || 'application/json; charset=utf-8'
+      trace.upstreamResponse = buildResponseSnapshot({
+        statusCode: response.status,
+        headers: response.headers,
+        bodyText: responseText,
+        contentType: resolvedContentType,
+        maxBodyBytes,
+      })
+      trace.clientResponse = buildResponseSnapshot({
+        statusCode: response.status,
+        headers: { 'content-type': resolvedContentType },
+        bodyText: responseText,
+        contentType: resolvedContentType,
+        maxBodyBytes,
+      })
+      trace.statusCode = response.status
+      this.recordGatewayLog({
+        ...requestContext,
+        level: 'warn',
+        message: response.ok
+          ? 'Upstream Anthropic stream returned non-SSE response'
+          : 'Upstream Anthropic stream returned non-OK response',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: true,
+        statusCode: response.status,
+        contentType: resolvedContentType,
+        bodyPreview: responseText,
+      }, buildAnthropicUpstreamLogDetails(provider, payload, {
+        status: response.status,
+        contentType: resolvedContentType,
+        bodyPreview: responseText,
+      }))
+      this.writePassthroughResponse(res, response.status, resolvedContentType, responseText)
+      return
+    }
+
+    this.recordGatewayLog({
+      ...requestContext,
+      level: 'info',
+      message: 'Streaming Anthropic passthrough response',
+      providerId: provider.id,
+      providerName: provider.name,
+      upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+      model: payload.model,
+      stream: true,
+      statusCode: 200,
+      contentType,
+    })
+    trace.stream = {
+      ...(trace.stream ?? { requested: payload.stream === true, enabled: false }),
+      enabled: true,
+    }
+    trace.upstreamResponse = buildResponseSnapshot({
+      statusCode: response.status,
+      headers: response.headers,
+      contentType,
+    })
+    trace.clientResponse = buildResponseSnapshot({
+      statusCode: 200,
+      headers: { 'content-type': 'text/event-stream; charset=utf-8' },
+      contentType: 'text/event-stream; charset=utf-8',
+    })
+    trace.statusCode = 200
+    writeSseHeaders(res)
+
+    let upstreamEventCount = 0
+    const previewEvents: unknown[] = []
+    try {
+      for await (const event of decodeSseStream(response.body)) {
+        upstreamEventCount += 1
+        if (previewEvents.length < AI_GATEWAY_MAX_DEBUG_SSE_EVENTS) {
+          previewEvents.push({
+            event: event.event || 'message',
+            data: event.data,
+          })
+        }
+        res.write(encodeSseEvent(event.event, event.data))
+      }
+      trace.stream = {
+        ...(trace.stream ?? { requested: payload.stream === true, enabled: true }),
+        upstreamEventCount,
+        previewEvents,
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      trace.level = 'warn'
+      trace.error = {
+        code: 'ai_gateway_error',
+        message,
+      }
+      trace.stream = {
+        ...(trace.stream ?? { requested: payload.stream === true, enabled: true }),
+        upstreamEventCount,
+        previewEvents,
+      }
+      this.recordGatewayLog({
+        ...requestContext,
+        level: 'warn',
+        message: 'Anthropic passthrough stream failed',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: true,
+        eventCount: upstreamEventCount,
+        bodyPreview: message,
+      }, buildAnthropicUpstreamLogDetails(provider, payload, {
+        error: message,
+        upstreamEventCount,
+      }))
+      res.write(encodeSseEvent('error', {
+        type: 'error',
+        error: {
+          type: 'api_error',
+          message,
+        },
+      }))
+    } finally {
+      res.end()
     }
   }
 

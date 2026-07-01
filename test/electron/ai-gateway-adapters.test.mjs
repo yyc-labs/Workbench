@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
@@ -15,7 +16,51 @@ const { chatCompletionToResponses } = loadTsModule('src/core/electron/main/ai-ga
 const { drainSseEvents, encodeSseEvent } = loadTsModule('src/core/electron/main/ai-gateway/adapters/sse.ts')
 const { normalizeAiGatewayConfig } = loadTsModule('src/core/electron/main/ai-gateway/gateway-config.ts')
 const { AiGatewayProviderRegistry } = loadTsModule('src/core/electron/main/ai-gateway/provider-registry.ts')
-const { extractRequestApiToken } = loadTsModule('src/core/electron/main/ai-gateway/gateway-server.ts')
+const {
+  AiGatewayServer,
+  extractRequestApiToken,
+  toAnthropicMessagesUrl,
+} = loadTsModule('src/core/electron/main/ai-gateway/gateway-server.ts')
+
+function listen(server, port = 0) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(port, '127.0.0.1', () => {
+      server.off('error', reject)
+      const address = server.address()
+      if (!address || typeof address === 'string') {
+        reject(new Error('Failed to resolve local server port.'))
+        return
+      }
+      resolve(address.port)
+    })
+  })
+}
+
+function closeServer(server) {
+  return new Promise((resolve) => {
+    server.close(() => resolve())
+  })
+}
+
+async function getFreePort() {
+  const server = createServer()
+  const port = await listen(server)
+  await closeServer(server)
+  return port
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.setEncoding('utf8')
+    req.on('data', (chunk) => {
+      body += chunk
+    })
+    req.on('end', () => resolve(body))
+    req.on('error', reject)
+  })
+}
 
 test('converts Anthropic Messages request to Chat Completions request', () => {
   const chat = anthropicMessagesToChatCompletion({
@@ -396,6 +441,124 @@ test('converts Chat tool stream chunks to Anthropic stream events', () => {
   })
 })
 
+test('buffers Chat tool stream argument deltas until the tool name is available', () => {
+  const state = createAnthropicStreamState()
+  const firstChunkEvents = chatStreamChunkToAnthropicEvents({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_1',
+              type: 'function',
+              function: {
+                arguments: '{"command":',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  }, state)
+  const secondChunkEvents = chatStreamChunkToAnthropicEvents({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: {
+                name: 'run_command',
+                arguments: '"dir"}',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  }, state)
+  const stopEvents = createAnthropicStreamStop('tool_calls', undefined, state)
+  const events = [
+    ...firstChunkEvents,
+    ...secondChunkEvents,
+    ...stopEvents,
+  ]
+
+  assert.deepEqual(firstChunkEvents, [])
+  assert.deepEqual(events.map((event) => event.event), [
+    'content_block_start',
+    'content_block_delta',
+    'content_block_delta',
+    'content_block_stop',
+    'message_delta',
+    'message_stop',
+  ])
+  assert.deepEqual(JSON.parse(events[0].data), {
+    type: 'content_block_start',
+    index: 0,
+    content_block: {
+      type: 'tool_use',
+      id: 'call_1',
+      name: 'run_command',
+      input: {},
+    },
+  })
+  assert.deepEqual(JSON.parse(events[1].data), {
+    type: 'content_block_delta',
+    index: 0,
+    delta: {
+      type: 'input_json_delta',
+      partial_json: '{"command":',
+    },
+  })
+  assert.deepEqual(JSON.parse(events[2].data), {
+    type: 'content_block_delta',
+    index: 0,
+    delta: {
+      type: 'input_json_delta',
+      partial_json: '"dir"}',
+    },
+  })
+  assert.deepEqual(JSON.parse(events[4].data).delta.stop_reason, 'tool_use')
+})
+
+test('sanitizes Chat tool stream arguments with raw newlines and Windows paths', () => {
+  const state = createAnthropicStreamState()
+  const invalidArguments = '{"path":"C:\\Users\\yyc20\\Desktop\\code-work","prompt":"Read files\n1. src/pages/Build"}'
+  const events = [
+    ...chatStreamChunkToAnthropicEvents({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: {
+                  name: 'Agent',
+                  arguments: invalidArguments,
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }, state),
+    ...createAnthropicStreamStop('tool_calls', undefined, state),
+  ]
+  const argumentText = events
+    .map((event) => JSON.parse(event.data))
+    .filter((data) => data.delta?.type === 'input_json_delta')
+    .map((data) => data.delta.partial_json)
+    .join('')
+  const parsedArguments = JSON.parse(argumentText)
+
+  assert.equal(parsedArguments.path, 'C:\\Users\\yyc20\\Desktop\\code-work')
+  assert.equal(parsedArguments.prompt, 'Read files\n1. src/pages/Build')
+})
+
 test('keeps claude profile routes scoped to /profiles/<profileId>', () => {
   const config = normalizeAiGatewayConfig({
     enabled: true,
@@ -434,6 +597,156 @@ test('keeps claude profile routes scoped to /profiles/<profileId>', () => {
 
   const profileRouted = registry.getProviderForProfile('work', 'openai_chat')
   assert.equal(profileRouted.id, 'provider-b')
+})
+
+test('allows claude profile routes to use Anthropic Messages providers', () => {
+  const config = normalizeAiGatewayConfig({
+    enabled: true,
+    activeProviderId: 'openai-provider',
+    providers: [
+      {
+        id: 'openai-provider',
+        name: 'OpenAI Provider',
+        baseUrl: 'https://openai.example/v1',
+        protocol: 'openai_chat',
+        enabled: true,
+      },
+      {
+        id: 'deepseek-anthropic',
+        name: 'DeepSeek Anthropic',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        protocol: 'anthropic_messages',
+        enabled: true,
+      },
+    ],
+    modelRoutes: [
+      {
+        id: 'claude-profile:deepseek',
+        model: '__claude_profile__:deepseek',
+        providerId: 'deepseek-anthropic',
+        upstreamModel: 'deepseek-v4-flash',
+        enabled: true,
+        source: 'claude-profile',
+        profileId: 'deepseek',
+      },
+    ],
+  })
+  const registry = new AiGatewayProviderRegistry(config)
+
+  const profileRouted = registry.getProviderForProfile('deepseek')
+  assert.equal(profileRouted.id, 'deepseek-anthropic')
+  assert.equal(profileRouted.protocol, 'anthropic_messages')
+  assert.deepEqual(profileRouted.modelMap, {
+    '__claude_profile__:deepseek': 'deepseek-v4-flash',
+  })
+})
+
+test('builds Anthropic Messages upstream URL from provider base URL', () => {
+  assert.equal(
+    toAnthropicMessagesUrl('https://api.deepseek.com/anthropic'),
+    'https://api.deepseek.com/anthropic/v1/messages'
+  )
+  assert.equal(
+    toAnthropicMessagesUrl('https://api.anthropic.com/v1'),
+    'https://api.anthropic.com/v1/messages'
+  )
+  assert.equal(
+    toAnthropicMessagesUrl('https://proxy.example/v1/messages'),
+    'https://proxy.example/v1/messages'
+  )
+})
+
+test('passes Anthropic Messages providers through and records gateway logs', async (t) => {
+  const upstreamRequests = []
+  const upstream = createServer(async (req, res) => {
+    const bodyText = await readRequestBody(req)
+    upstreamRequests.push({
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      body: JSON.parse(bodyText),
+    })
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({
+      id: 'msg_1',
+      type: 'message',
+      role: 'assistant',
+      model: 'deepseek-v4-flash',
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }))
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    activeProviderId: 'deepseek-anthropic',
+    providers: [
+      {
+        id: 'deepseek-anthropic',
+        name: 'DeepSeek Anthropic',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/anthropic`,
+        apiKey: 'sk-provider',
+        protocol: 'anthropic_messages',
+        enabled: true,
+      },
+    ],
+    modelRoutes: [
+      {
+        id: 'manual:claude-model',
+        model: 'claude-profile-model',
+        providerId: 'deepseek-anthropic',
+        upstreamModel: 'deepseek-v4-flash',
+        enabled: true,
+        source: 'manual',
+      },
+    ],
+  })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-profile-model',
+      max_tokens: 32,
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'hello' }],
+        },
+      ],
+    }),
+  })
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.content[0].text, 'ok')
+  assert.equal(upstreamRequests.length, 1)
+  assert.equal(upstreamRequests[0].method, 'POST')
+  assert.equal(upstreamRequests[0].url, '/anthropic/v1/messages')
+  assert.equal(upstreamRequests[0].body.model, 'deepseek-v4-flash')
+  assert.equal(upstreamRequests[0].headers.authorization, 'Bearer sk-provider')
+  assert.equal(upstreamRequests[0].headers['x-api-key'], 'sk-provider')
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.meta.providerId, 'deepseek-anthropic')
+  assert.equal(detail.normalizedRequest.parsed.model, 'deepseek-v4-flash')
+  assert.match(detail.upstreamRequest.url, /\/anthropic\/v1\/messages$/)
+  assert.equal(detail.clientResponse.statusCode, 200)
 })
 
 test('extracts gateway auth token from anthropic x-api-key header first', () => {

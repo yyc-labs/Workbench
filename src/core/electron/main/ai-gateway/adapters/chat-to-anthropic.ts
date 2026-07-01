@@ -99,9 +99,17 @@ export function chatCompletionToAnthropicMessage(
 type AnthropicStreamBlockKind = 'text' | 'tool'
 
 type AnthropicStreamToolBlock = {
-  anthropicIndex: number
+  anthropicIndex?: number
   id: string
   name: string
+  started: boolean
+  pendingArgumentDeltas: string[]
+  argumentSanitizer: JsonFragmentSanitizerState
+}
+
+type JsonFragmentSanitizerState = {
+  inString: boolean
+  pendingBackslash: boolean
 }
 
 export interface AnthropicStreamState {
@@ -123,11 +131,107 @@ function createContentBlockStop(index: number): GatewaySseEvent {
   }
 }
 
+function createJsonFragmentSanitizerState(): JsonFragmentSanitizerState {
+  return {
+    inString: false,
+    pendingBackslash: false,
+  }
+}
+
+function isJsonEscapeCharacter(char: string): boolean {
+  return char === '"' || char === '\\' || char === '/' || char === 'b'
+    || char === 'f' || char === 'n' || char === 'r' || char === 't'
+}
+
+function escapeControlCharacter(char: string): string {
+  if (char === '\b') return '\\b'
+  if (char === '\f') return '\\f'
+  if (char === '\n') return '\\n'
+  if (char === '\r') return '\\r'
+  if (char === '\t') return '\\t'
+  const code = char.charCodeAt(0).toString(16).padStart(4, '0')
+  return `\\u${code}`
+}
+
+function sanitizeJsonFragmentForToolInput(
+  fragment: string,
+  state: JsonFragmentSanitizerState
+): string {
+  let result = ''
+
+  for (const char of fragment) {
+    if (!state.inString) {
+      if (char === '"') state.inString = true
+      result += char
+      continue
+    }
+
+    if (state.pendingBackslash) {
+      state.pendingBackslash = false
+      if (isJsonEscapeCharacter(char)) {
+        result += `\\${char}`
+      } else if (char.charCodeAt(0) < 0x20) {
+        result += `\\\\${escapeControlCharacter(char)}`
+      } else {
+        result += `\\\\${char}`
+      }
+      continue
+    }
+
+    if (char === '\\') {
+      state.pendingBackslash = true
+      continue
+    }
+    if (char === '"') {
+      state.inString = false
+      result += char
+      continue
+    }
+    if (char.charCodeAt(0) < 0x20) {
+      result += escapeControlCharacter(char)
+      continue
+    }
+    result += char
+  }
+
+  return result
+}
+
+function flushJsonFragmentSanitizer(state: JsonFragmentSanitizerState): string {
+  if (!state.pendingBackslash) return ''
+  state.pendingBackslash = false
+  return '\\\\'
+}
+
+function sanitizeToolArgumentsDelta(
+  block: AnthropicStreamToolBlock,
+  argumentsDelta: string
+): string {
+  return sanitizeJsonFragmentForToolInput(argumentsDelta, block.argumentSanitizer)
+}
+
+function findToolBlockByAnthropicIndex(
+  state: AnthropicStreamState,
+  index: number
+): AnthropicStreamToolBlock | undefined {
+  return Array.from(state.toolBlocks.values()).find((block) => block.anthropicIndex === index)
+}
+
 function closeOpenBlock(state: AnthropicStreamState): GatewaySseEvent[] {
   if (!state.openBlock) return []
-  const event = createContentBlockStop(state.openBlock.index)
+  const events: GatewaySseEvent[] = []
+  if (state.openBlock.kind === 'tool') {
+    const toolBlock = findToolBlockByAnthropicIndex(state, state.openBlock.index)
+    const finalArgumentDelta = toolBlock
+      ? flushJsonFragmentSanitizer(toolBlock.argumentSanitizer)
+      : ''
+    if (finalArgumentDelta) {
+      events.push(createToolInputDelta(state.openBlock.index, finalArgumentDelta))
+    }
+  }
+  events.push(createContentBlockStop(state.openBlock.index))
   state.openBlock = undefined
-  return [event]
+  return events
 }
 
 function openTextBlock(state: AnthropicStreamState): GatewaySseEvent[] {
@@ -170,12 +274,21 @@ function getToolBlockState(
   }
 
   const created: AnthropicStreamToolBlock = {
-    anthropicIndex: state.nextBlockIndex++,
     id: toolCall.id?.trim() || `toolu_${randomUUID().replace(/-/g, '')}`,
     name: toolCall.function?.name?.trim() || '',
+    started: false,
+    pendingArgumentDeltas: [],
+    argumentSanitizer: createJsonFragmentSanitizerState(),
   }
   state.toolBlocks.set(toolIndex, created)
   return created
+}
+
+function ensureToolBlockIndex(state: AnthropicStreamState, block: AnthropicStreamToolBlock): number {
+  if (block.anthropicIndex === undefined) {
+    block.anthropicIndex = state.nextBlockIndex++
+  }
+  return block.anthropicIndex
 }
 
 function openToolBlock(
@@ -184,29 +297,64 @@ function openToolBlock(
   toolCall: ChatCompletionToolCall
 ): GatewaySseEvent[] {
   const block = getToolBlockState(state, toolIndex, toolCall)
-  if (state.openBlock?.kind === 'tool' && state.openBlock.index === block.anthropicIndex) {
+  if (!block.name) return []
+  const blockIndex = ensureToolBlockIndex(state, block)
+
+  if (state.openBlock?.kind === 'tool' && state.openBlock.index === blockIndex) {
     return []
   }
 
   const events = closeOpenBlock(state)
   state.openBlock = {
     kind: 'tool',
-    index: block.anthropicIndex,
+    index: blockIndex,
   }
-  events.push({
-    event: 'content_block_start',
+  if (!block.started) {
+    block.started = true
+    events.push({
+      event: 'content_block_start',
+      data: JSON.stringify({
+        type: 'content_block_start',
+        index: blockIndex,
+        content_block: {
+          type: 'tool_use',
+          id: block.id,
+          name: block.name,
+          input: {},
+        },
+      }),
+    })
+    for (const pending of block.pendingArgumentDeltas.splice(0)) {
+      if (pending) {
+        events.push(createToolInputDelta(blockIndex, pending))
+      }
+    }
+  }
+  return events
+}
+
+function createToolInputDelta(index: number, partialJson: string): GatewaySseEvent {
+  return {
+    event: 'content_block_delta',
     data: JSON.stringify({
-      type: 'content_block_start',
-      index: block.anthropicIndex,
-      content_block: {
-        type: 'tool_use',
-        id: block.id,
-        name: block.name,
-        input: {},
+      type: 'content_block_delta',
+      index,
+      delta: {
+        type: 'input_json_delta',
+        partial_json: partialJson,
       },
     }),
-  })
-  return events
+  }
+}
+
+function hasStartedToolBlocks(state: AnthropicStreamState): boolean {
+  return Array.from(state.toolBlocks.values()).some((block) => block.started)
+}
+
+function mapStreamStopReason(finishReason: string | null | undefined, state: AnthropicStreamState): string {
+  const hasToolUse = hasStartedToolBlocks(state)
+  if (finishReason === 'tool_calls') return hasToolUse ? 'tool_use' : 'end_turn'
+  return mapStopReason(finishReason) || (hasToolUse ? 'tool_use' : 'end_turn')
 }
 
 export function createAnthropicStreamStart(
@@ -268,24 +416,21 @@ export function chatStreamChunkToAnthropicEvents(
   for (let index = 0; index < deltaToolCalls.length; index += 1) {
     const toolCall = deltaToolCalls[index]
     const toolIndex = Number.isInteger(toolCall.index) ? Number(toolCall.index) : index
+    const toolBlock = getToolBlockState(state, toolIndex, toolCall)
     events.push(...openToolBlock(state, toolIndex, toolCall))
 
     const argumentsDelta = toolCall.function?.arguments
     if (typeof argumentsDelta !== 'string' || !argumentsDelta) continue
+    const sanitizedArgumentsDelta = sanitizeToolArgumentsDelta(toolBlock, argumentsDelta)
+    if (!sanitizedArgumentsDelta) continue
 
-    const toolBlock = state.toolBlocks.get(toolIndex)
-    if (!toolBlock) continue
-    events.push({
-      event: 'content_block_delta',
-      data: JSON.stringify({
-        type: 'content_block_delta',
-        index: toolBlock.anthropicIndex,
-        delta: {
-          type: 'input_json_delta',
-          partial_json: argumentsDelta,
-        },
-      }),
-    })
+    if (!toolBlock.started) {
+      toolBlock.pendingArgumentDeltas.push(sanitizedArgumentsDelta)
+      continue
+    }
+    if (toolBlock.anthropicIndex !== undefined) {
+      events.push(createToolInputDelta(toolBlock.anthropicIndex, sanitizedArgumentsDelta))
+    }
   }
 
   return events
@@ -303,7 +448,7 @@ export function createAnthropicStreamStop(
       data: JSON.stringify({
         type: 'message_delta',
         delta: {
-          stop_reason: mapStopReason(finishReason) || (state.toolBlocks.size > 0 ? 'tool_use' : 'end_turn'),
+          stop_reason: mapStreamStopReason(finishReason, state),
           stop_sequence: null,
         },
         usage: mapUsage(usage),
