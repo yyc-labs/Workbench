@@ -513,7 +513,7 @@ export class AiGatewayServer {
     trace: GatewayRequestTrace,
     provider: AiGatewayProviderConfig,
     model: string,
-    stream: boolean,
+    requestedStream: boolean,
     normalizedRequest: unknown,
     maxBodyBytes: number
   ): void {
@@ -525,7 +525,11 @@ export class AiGatewayServer {
       parsedValue: normalizedRequest,
       maxBytes: maxBodyBytes,
     })
-    trace.statusCode = stream ? 200 : trace.statusCode
+    trace.stream = {
+      requested: requestedStream,
+      enabled: false,
+    }
+    trace.statusCode = requestedStream ? 200 : trace.statusCode
   }
 
   private finalizeGatewayTrace(trace: GatewayRequestTrace): void {
@@ -552,7 +556,7 @@ export class AiGatewayServer {
         profileId: trace.meta.profileId,
         statusCode: trace.statusCode,
         durationMs,
-        stream: trace.stream?.enabled,
+        stream: trace.stream?.requested,
         eventCount: trace.stream?.upstreamEventCount,
         truncated: hasStructuredTruncation({
           ingressRequest: trace.ingressRequest,
@@ -824,6 +828,7 @@ export class AiGatewayServer {
     }
     if (trace) {
       trace.meta.authSource = auth.source
+      trace.meta.authToken = auth.token || '(empty)'
       trace.upstreamRequest = buildRequestSnapshot({
         method: 'POST',
         path: '/chat/completions',
@@ -1123,6 +1128,7 @@ export class AiGatewayServer {
       contentType: response.headers.get('content-type') || '',
     })
     trace.stream = {
+      ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: false }),
       enabled: true,
     }
     trace.clientResponse = buildResponseSnapshot({
@@ -1173,6 +1179,10 @@ export class AiGatewayServer {
       statusCode: 200,
       contentType: response.headers.get('content-type') || '',
     })
+    trace.stream = {
+      ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: false }),
+      enabled: true,
+    }
     trace.clientResponse = buildResponseSnapshot({
       statusCode: 200,
       headers: { 'content-type': 'text/event-stream; charset=utf-8' },
@@ -1245,7 +1255,7 @@ export class AiGatewayServer {
         res.write(encodeSseEvent(event.event, event.data))
       }
       trace.stream = {
-        enabled: true,
+        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
         upstreamEventCount,
         previewEvents,
       }
@@ -1257,7 +1267,7 @@ export class AiGatewayServer {
         message,
       }
       trace.stream = {
-        enabled: true,
+        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
         upstreamEventCount,
         previewEvents,
       }
@@ -1315,6 +1325,10 @@ export class AiGatewayServer {
       statusCode: 200,
       contentType: response.headers.get('content-type') || '',
     })
+    trace.stream = {
+      ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: false }),
+      enabled: true,
+    }
     trace.clientResponse = buildResponseSnapshot({
       statusCode: 200,
       headers: { 'content-type': 'text/event-stream; charset=utf-8' },
@@ -1387,7 +1401,7 @@ export class AiGatewayServer {
         res.write(encodeSseEvent(event.event, event.data))
       }
       trace.stream = {
-        enabled: true,
+        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
         upstreamEventCount,
         previewEvents,
       }
@@ -1399,7 +1413,7 @@ export class AiGatewayServer {
         message,
       }
       trace.stream = {
-        enabled: true,
+        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
         upstreamEventCount,
         previewEvents,
       }

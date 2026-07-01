@@ -19,6 +19,7 @@ type MonacoTextViewerProps = {
   readOnly: boolean
   modelNamespace: string
   onChange?: (nextValue: string) => void
+  onSave?: (currentValue: string) => void
   prepareMonaco?: (monaco: typeof import('monaco-editor')) => void | Promise<void>
   fontFamily?: string
   fontSize?: number
@@ -75,6 +76,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
   readOnly,
   modelNamespace,
   onChange,
+  onSave,
   prepareMonaco,
   fontFamily = "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
   fontSize = 12.5,
@@ -99,6 +101,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     contentWidget: null as MonacoEditor.IContentWidget | null,
   })
   const onChangeRef = useRef(onChange)
+  const onSaveRef = useRef(onSave)
   const prepareMonacoRef = useRef(prepareMonaco)
   const contentWidgetRef = useRef(contentWidget)
   const latestPropsRef = useRef({
@@ -301,6 +304,10 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
   }, [onChange])
 
   useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+
+  useEffect(() => {
     prepareMonacoRef.current = prepareMonaco
   }, [prepareMonaco])
 
@@ -361,6 +368,22 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
           onChangeRef.current?.(model.getValue())
         })
       }
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        onSaveRef.current?.(model.getValue())
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyZ, () => {
+        editor.trigger('keyboard', 'undo', null)
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyZ, () => {
+        editor.trigger('keyboard', 'redo', null)
+      })
+
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, () => {
+        editor.trigger('keyboard', 'redo', null)
+      })
 
       editorRuntimeRef.current.monaco = monaco
       editorRuntimeRef.current.model = model
@@ -443,7 +466,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     if (!model) return
     if (model.getValue() === value) return
     runtime.syncGuard = true
-    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: value }], () => null)
+    model.setValue(value)
     runtime.syncGuard = false
   }, [value])
 
