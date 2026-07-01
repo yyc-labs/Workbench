@@ -77,6 +77,7 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
       { label: t('settings.agentLogs.profile'), value: detail.meta.profileId },
       { label: t('settings.agentLogs.model'), value: detail.meta.model },
       { label: t('settings.agentLogs.authSource'), value: detail.meta.authSource },
+      { label: t('settings.agentLogs.authToken'), value: detail.meta.authToken ? <span className="font-mono text-xs">{detail.meta.authToken}</span> : undefined },
     ]
     : [
       { label: t('settings.agentLogs.provider'), value: detail.meta.provider },
@@ -112,7 +113,8 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
         ))}
         {detail.source === 'ai-gateway' && (
           <>
-            <SummaryField label={t('settings.agentLogs.stream')} value={detail.stream?.enabled ? t('common.on') : t('common.off')} />
+            <SummaryField label={t('settings.agentLogs.requestedStream')} value={detail.stream?.requested ? t('common.on') : t('common.off')} />
+            <SummaryField label={t('settings.agentLogs.actualStream')} value={detail.stream?.enabled ? t('common.on') : t('common.off')} />
             <SummaryField label={t('settings.agentLogs.eventCount')} value={detail.stream?.upstreamEventCount} />
           </>
         )}

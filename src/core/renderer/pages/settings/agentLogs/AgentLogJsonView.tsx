@@ -2,19 +2,26 @@ import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n'
+import { toPrettyJson } from './agentLogs.helpers'
+import { AgentLogCollapsibleJson } from './AgentLogCollapsibleJson'
 
 type AgentLogJsonViewProps = {
   value: unknown
 }
 
-function toPrettyJson(value: unknown): string {
-  return JSON.stringify(value, null, 2)
+function parseJsonText(jsonText: string, fallback: unknown): unknown {
+  try {
+    return JSON.parse(jsonText) as unknown
+  } catch {
+    return fallback
+  }
 }
 
 export function AgentLogJsonView({ value }: AgentLogJsonViewProps) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
   const jsonText = toPrettyJson(value)
+  const displayValue = parseJsonText(jsonText, value)
 
   useEffect(() => {
     if (!copied) return
@@ -39,9 +46,7 @@ export function AgentLogJsonView({ value }: AgentLogJsonViewProps) {
           {copied ? t('common.copied') : t('settings.agentLogs.copyJson')}
         </Button>
       </div>
-      <pre className="max-h-[620px] overflow-auto rounded-[18px] bg-[color:var(--color-background-sunken)]/70 px-4 py-4 font-mono text-xs leading-5 text-[color:var(--color-foreground)] whitespace-pre-wrap break-all">
-        {jsonText}
-      </pre>
+      <AgentLogCollapsibleJson key={jsonText} value={displayValue} />
     </div>
   )
 }
