@@ -14,6 +14,7 @@ const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
 export const TRANSCRIPT_SPLIT_BREAKPOINT_PX = 960
 export const TRANSCRIPT_SPLIT_QUERY = `(max-width: ${TRANSCRIPT_SPLIT_BREAKPOINT_PX}px)`
 export const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
+export const TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:transcript-list-sidebar-collapsed'
 
 export function normalizeTranscriptDisplayMarkdown(markdown: string): string {
   if (!markdown) return ''
@@ -34,6 +35,14 @@ export function sliceMarkdownLines(markdown: string, startLine: number, endLine:
 export function readProjectHeaderCollapsed(): boolean {
   try {
     return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function readTranscriptListSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
   } catch {
     return false
   }

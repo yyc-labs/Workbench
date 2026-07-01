@@ -10,6 +10,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Code2,
   Columns2,
@@ -72,8 +73,10 @@ import {
 import { TranscriptReferenceDrawer } from './transcript/TranscriptReferenceDrawer'
 import {
   normalizeTranscriptDisplayMarkdown,
+  readTranscriptListSidebarCollapsed,
   shouldSkipProjectPageContextMenu,
   sliceMarkdownLines,
+  TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY,
 } from './transcript/transcriptPage.utils'
 import {
   TranscriptListSidebar,
@@ -234,6 +237,7 @@ export function TranscriptPage() {
     effectiveTheme,
     isNarrowViewport,
   } = useTranscriptPageChromeState()
+  const [isTranscriptListCollapsed, setIsTranscriptListCollapsed] = useState(readTranscriptListSidebarCollapsed)
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
   const [codePreview, setCodePreview] = useState<TranscriptCodePreviewState | null>(null)
   const [editorValue, setEditorValue] = useState('')
@@ -270,6 +274,17 @@ export function TranscriptPage() {
     if (!projectId) return
     void loadProjectTranscripts(projectId)
   }, [loadProjectTranscripts, projectId])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY,
+        isTranscriptListCollapsed ? '1' : '0'
+      )
+    } catch {
+      // localStorage can be unavailable in restricted WebViews.
+    }
+  }, [isTranscriptListCollapsed])
 
   useEffect(() => {
     if (!projectId) return
@@ -597,15 +612,16 @@ export function TranscriptPage() {
     void openTranscript({ projectId, transcriptId })
   }, [openTranscript, projectId])
 
-  const handleSaveTranscript = useCallback(async () => {
-    if (!session || !isDirty || isSavingTranscript) return
+  const handleSaveTranscript = useCallback(async (nextRawText = editorValue) => {
+    const hasChanges = session ? nextRawText !== session.rawText : false
+    if (!session || !hasChanges || isSavingTranscript) return
     setIsSavingTranscript(true)
     setSaveError(null)
     try {
       const updated = await window.electronAPI.updateTranscript({
         projectId: session.projectId,
         transcriptId: session.id,
-        rawText: editorValue,
+        rawText: nextRawText,
         title: session.title,
       })
       useAppStore.getState().upsertTranscriptSession(updated, { activate: true })
@@ -617,7 +633,7 @@ export function TranscriptPage() {
     } finally {
       setIsSavingTranscript(false)
     }
-  }, [editorValue, isDirty, isSavingTranscript, session, t])
+  }, [editorValue, isSavingTranscript, session, t])
 
   const refreshShareEntries = useCallback(async () => {
     if (!session) return
@@ -800,6 +816,10 @@ export function TranscriptPage() {
     : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
   const transcriptCountLabel = t('transcript.savedSessions', { count: summaries.length })
+  const showTranscriptListSidebar = isNarrowViewport || !isTranscriptListCollapsed
+  const transcriptLayoutGridStyle = !isNarrowViewport && isTranscriptListCollapsed
+    ? { gridTemplateColumns: '44px minmax(0,1fr)' }
+    : undefined
   const renderProjectLinksButton = () => {
     return (
       <ProjectLinksTrigger
@@ -862,25 +882,61 @@ export function TranscriptPage() {
             }}
           />
 
-          <div className="grid min-h-0 flex-1 gap-4 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]">
-            <TranscriptListSidebar
-              listStatus={listStatus}
-              summaries={summaries}
-              resolvedActiveTranscriptId={resolvedActiveTranscriptId}
-              deletingTranscriptId={deletingTranscriptId}
-              transcriptCountLabel={transcriptCountLabel}
-              locale={locale}
-              formatDateTime={formatDateTime}
-              formatTranscriptSourceType={formatTranscriptSourceType}
-              onRefreshList={() => {
-                void loadProjectTranscripts(projectId)
-              }}
-              onSelectTranscript={handleSelectTranscript}
-              onDeleteTranscript={(payload) => {
-                setDeleteConfirmTarget(payload)
-              }}
-              t={t}
-            />
+          <div
+            className="grid min-h-0 flex-1 gap-4 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]"
+            style={transcriptLayoutGridStyle}
+          >
+            {!isNarrowViewport && isTranscriptListCollapsed && (
+              <div className="relative flex h-full min-h-0 items-center justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="z-20 h-8 w-8 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/96 shadow-[0_8px_20px_rgba(15,23,42,0.10)] backdrop-blur-md"
+                  onClick={() => setIsTranscriptListCollapsed(false)}
+                  aria-label={t('transcript.expandListSidebar')}
+                  title={t('transcript.expandListSidebar')}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
+
+            {showTranscriptListSidebar && (
+              <div className="relative flex h-full min-h-0">
+                <TranscriptListSidebar
+                  listStatus={listStatus}
+                  summaries={summaries}
+                  resolvedActiveTranscriptId={resolvedActiveTranscriptId}
+                  deletingTranscriptId={deletingTranscriptId}
+                  transcriptCountLabel={transcriptCountLabel}
+                  locale={locale}
+                  formatDateTime={formatDateTime}
+                  formatTranscriptSourceType={formatTranscriptSourceType}
+                  onRefreshList={() => {
+                    void loadProjectTranscripts(projectId)
+                  }}
+                  onSelectTranscript={handleSelectTranscript}
+                  onDeleteTranscript={(payload) => {
+                    setDeleteConfirmTarget(payload)
+                  }}
+                  t={t}
+                />
+                {!isNarrowViewport && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute -right-4 top-1/2 z-20 h-8 w-8 -translate-y-1/2 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-card)]/96 shadow-[0_8px_20px_rgba(15,23,42,0.10)] backdrop-blur-md"
+                    onClick={() => setIsTranscriptListCollapsed(true)}
+                    aria-label={t('transcript.collapseListSidebar')}
+                    title={t('transcript.collapseListSidebar')}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            )}
 
             <TranscriptMainContent
               resolvedActiveTranscriptId={resolvedActiveTranscriptId}
@@ -893,6 +949,9 @@ export function TranscriptPage() {
               previewScrollRef={previewScrollRef}
               editorValue={editorValue}
               setEditorValue={setEditorValue}
+              onSaveTranscript={(currentValue) => {
+                void handleSaveTranscript(currentValue)
+              }}
               onOpenShareModal={handleOpenShareModal}
               setTranscriptMode={setTranscriptMode}
               t={t}

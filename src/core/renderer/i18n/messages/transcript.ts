@@ -61,6 +61,7 @@ export const transcriptMessages = {
       allChangesSaved: 'All changes saved',
       savedAt: 'Saved at {value}',
       saveFailed: 'Failed to save transcript.',
+      saveShortcutHint: 'Save transcript (Ctrl/Cmd+S)',
       share: 'Share',
       shareTitle: 'Share over LAN',
       shareDescription: 'Generate a link anyone on your local network can open to view this transcript preview.',
@@ -115,6 +116,8 @@ export const transcriptMessages = {
       backToHome: 'Back to Home',
       collapseProjectHeader: 'Collapse project header',
       expandProjectHeader: 'Expand project header',
+      collapseListSidebar: 'Collapse transcript list',
+      expandListSidebar: 'Expand transcript list',
       sourceTypes: {
         'process-output': 'Process Output',
         'tmux-capture': 'Tmux Capture',
@@ -235,6 +238,7 @@ export const transcriptMessages = {
       allChangesSaved: '所有修改已保存',
       savedAt: '已保存于 {value}',
       saveFailed: '保存转录失败。',
+      saveShortcutHint: '保存转录（Ctrl/Cmd+S）',
       share: '共享',
       shareTitle: '局域网共享',
       shareDescription: '生成一个链接，局域网内的任何人打开即可查看这份转录预览。',
@@ -289,6 +293,8 @@ export const transcriptMessages = {
       backToHome: '返回首页',
       collapseProjectHeader: '收起项目栏',
       expandProjectHeader: '展开项目栏',
+      collapseListSidebar: '收起转录列表',
+      expandListSidebar: '展开转录列表',
       sourceTypes: {
         'process-output': '进程输出',
         'tmux-capture': 'Tmux 捕获',

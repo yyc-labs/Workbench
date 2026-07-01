@@ -567,6 +567,7 @@ export interface AiGatewayLogDetail {
     model?: string
     durationMs?: number
     authSource?: string
+    authToken?: string
   }
   ingressRequest?: StructuredHttpRequestSnapshot
   normalizedRequest?: StructuredJsonSnapshot
@@ -574,6 +575,7 @@ export interface AiGatewayLogDetail {
   upstreamResponse?: StructuredHttpResponseSnapshot
   clientResponse?: StructuredHttpResponseSnapshot
   stream?: {
+    requested?: boolean
     enabled: boolean
     upstreamEventCount?: number
     previewEvents?: unknown[]

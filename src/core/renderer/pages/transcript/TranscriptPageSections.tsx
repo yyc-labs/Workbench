@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -6,11 +7,14 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Code2,
   Columns2,
   Eye,
   FileText,
+  Folder,
+  FolderOpen,
   RefreshCw,
   Share2,
   Trash2,
@@ -209,6 +213,7 @@ export function TranscriptPageHeader({
                 className="h-9 rounded-full px-4"
                 onClick={onSaveTranscript}
                 disabled={saveButtonDisabled}
+                title={t('transcript.saveShortcutHint')}
               >
                 {isSavingTranscript ? <RefreshCw className="animate-spin" /> : <Check className="h-4 w-4" />}
                 {isSavingTranscript ? t('common.saving') : t('common.save')}
@@ -357,6 +362,7 @@ export function TranscriptPageHeader({
                     className="h-9 rounded-full px-4"
                     onClick={onSaveTranscript}
                     disabled={saveButtonDisabled}
+                    title={t('transcript.saveShortcutHint')}
                   >
                     {isSavingTranscript ? <RefreshCw className="animate-spin" /> : <Check className="h-4 w-4" />}
                     {isSavingTranscript ? t('common.saving') : t('common.save')}
@@ -419,8 +425,62 @@ export function TranscriptListSidebar({
   onDeleteTranscript,
   t,
 }: TranscriptListSidebarProps) {
+  const sourceGroups = useMemo(() => {
+    const groups = new Map<string, {
+      id: string
+      label: string
+      summaries: TranscriptSessionSummary[]
+    }>()
+
+    for (const summary of summaries) {
+      const id = summary.sourceType
+      const existing = groups.get(id)
+      if (existing) {
+        existing.summaries.push(summary)
+        continue
+      }
+      groups.set(id, {
+        id,
+        label: formatTranscriptSourceType(locale, id),
+        summaries: [summary],
+      })
+    }
+
+    return Array.from(groups.values())
+  }, [formatTranscriptSourceType, locale, summaries])
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(() => new Set())
+
+  useEffect(() => {
+    setCollapsedGroupIds((current) => {
+      const validGroupIds = new Set(sourceGroups.map((group) => group.id))
+      const activeGroupId = sourceGroups.find((group) => (
+        group.summaries.some((summary) => summary.id === resolvedActiveTranscriptId)
+      ))?.id
+      const next = new Set(Array.from(current).filter((id) => validGroupIds.has(id)))
+      if (activeGroupId) {
+        next.delete(activeGroupId)
+      }
+      if (next.size === current.size && Array.from(next).every((id) => current.has(id))) {
+        return current
+      }
+      return next
+    })
+  }, [resolvedActiveTranscriptId, sourceGroups])
+
+  const toggleSourceGroup = (groupId: string) => {
+    setCollapsedGroupIds((current) => {
+      const next = new Set(current)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      return next
+    })
+  }
+
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
+    <aside className="flex h-full w-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
       <div className="border-b border-[color:var(--color-border)] px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -474,63 +534,86 @@ export function TranscriptListSidebar({
             </div>
           </div>
         ) : (
-          <div className="space-y-2">
-            {summaries.map((summary) => {
-              const isActive = summary.id === resolvedActiveTranscriptId
-              const isDeleting = deletingTranscriptId === summary.id
+          <div className="space-y-1">
+            {sourceGroups.map((group) => {
+              const isCollapsed = collapsedGroupIds.has(group.id)
               return (
-                <div
-                  key={summary.id}
-                  className={`flex items-start gap-2 rounded-[18px] border px-3 py-3 transition-colors ${
-                    isActive
-                      ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-primary)]/8'
-                      : 'border-transparent bg-[color:var(--color-background)] hover:border-[color:var(--color-border)] hover:bg-[color:var(--color-accent)]/45'
-                  }`}
-                >
+                <div key={group.id} className="min-w-0">
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                    onClick={() => onSelectTranscript(summary.id)}
-                    disabled={isDeleting}
+                    className="code-tree-row font-semibold text-[color:var(--color-muted-foreground)]"
+                    style={{ paddingLeft: 10, paddingRight: 10 }}
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleSourceGroup(group.id)}
+                    title={group.label}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">
-                          {summary.title}
-                        </p>
-                        <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {formatTranscriptSourceType(locale, summary.sourceType)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                        {t('transcript.refs', { count: summary.referenceCount })}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                      {t('transcript.updatedAt', {
-                        value: formatDateTime(summary.updatedAt, {
+                    {isCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                    )}
+                    {isCollapsed ? (
+                      <Folder className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
+                    ) : (
+                      <FolderOpen className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
+                    )}
+                    <span className="block min-w-0 flex-1 truncate">{group.label}</span>
+                    <span className="shrink-0 font-mono text-[10px] font-medium text-[color:var(--color-muted-foreground)]">
+                      {group.summaries.length}
+                    </span>
+                  </button>
+
+                  {!isCollapsed && (
+                    <div className="mt-0.5">
+                      {group.summaries.map((summary) => {
+                        const isActive = summary.id === resolvedActiveTranscriptId
+                        const isDeleting = deletingTranscriptId === summary.id
+                        const updatedLabel = formatDateTime(summary.updatedAt, {
                           month: '2-digit',
                           day: '2-digit',
                           hour: '2-digit',
                           minute: '2-digit',
                           hour12: false,
-                        }),
+                        })
+                        const rowTitle = `${summary.title}\n${t('transcript.updatedAt', { value: updatedLabel })}\n${t('transcript.refs', { count: summary.referenceCount })}`
+
+                        return (
+                          <div key={summary.id} className="group relative min-w-0">
+                            <button
+                              type="button"
+                              className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} disabled:cursor-not-allowed disabled:opacity-60`}
+                              style={{ paddingLeft: 28, paddingRight: 36 }}
+                              onClick={() => onSelectTranscript(summary.id)}
+                              disabled={isDeleting}
+                              title={rowTitle}
+                            >
+                              <span className="inline-block h-3.5 w-3.5 shrink-0" />
+                              <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                              <span className="block min-w-0 flex-1 truncate">{summary.title}</span>
+                              <span className="shrink-0 font-mono text-[10px] text-[color:var(--color-muted-foreground)]">
+                                {updatedLabel}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                isActive || isDeleting ? 'opacity-100' : 'group-hover:opacity-100'
+                              }`}
+                              onClick={() => onDeleteTranscript({ id: summary.id, title: summary.title })}
+                              disabled={isDeleting || deletingTranscriptId !== null}
+                              title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
+                            >
+                              {isDeleting ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        )
                       })}
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => onDeleteTranscript({ id: summary.id, title: summary.title })}
-                    disabled={isDeleting || deletingTranscriptId !== null}
-                    title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
-                  >
-                    {isDeleting ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -552,6 +635,7 @@ type TranscriptMainContentProps = {
   previewScrollRef: React.RefObject<HTMLDivElement>
   editorValue: string
   setEditorValue: (value: string) => void
+  onSaveTranscript: (currentValue?: string) => void
   onOpenShareModal: () => void
   setTranscriptMode: (sessionId: string, mode: TranscriptViewerMode) => void
   t: (
@@ -572,6 +656,7 @@ export function TranscriptMainContent({
   previewScrollRef,
   editorValue,
   setEditorValue,
+  onSaveTranscript,
   onOpenShareModal,
   setTranscriptMode,
   t,
@@ -686,6 +771,7 @@ export function TranscriptMainContent({
                     language={inferLanguageFromRelativePath('transcript.md')}
                     readOnly={false}
                     onChange={setEditorValue}
+                    onSave={onSaveTranscript}
                     modelNamespace="transcript-viewer"
                     stickyScroll
                   />
