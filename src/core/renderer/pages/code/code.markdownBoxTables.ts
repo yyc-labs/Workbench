@@ -21,6 +21,8 @@ import {
   parseVerticalFlow,
 } from './code.markdownBoxTables.parsers'
 
+const MARKDOWN_FENCE_START_LINE_PATTERN = /^[ \t]{0,3}(?:`{3,}|~{3,})/
+
 function transformParagraphToTable(
   node: MarkdownParagraphNode,
   source: string
@@ -43,6 +45,57 @@ function transformParagraphToTable(
     align: Array.from({ length: parsed.columnCount }, () => null),
     position: node.position,
     children: parsed.rows.map((cells, rowIndex) => {
+      const rowLineStart = cells.startLine
+      const rowLineEnd = Math.max(cells.startLine, cells.endLine)
+      return {
+        type: 'tableRow',
+        position: {
+          start: { line: rowLineStart, column: 1 },
+          end: { line: rowLineEnd, column: Math.max(1, cells.cells.join(' | ').length + 1) },
+        },
+        children: cells.cells.map((cell) => ({
+          type: 'tableCell',
+          children: parseInlineMarkdownChildren(cell),
+          position: {
+            start: { line: rowLineStart, column: 1 },
+            end: { line: rowLineEnd, column: Math.max(1, cell.length + 1) },
+          },
+        })),
+      }
+    }),
+  }
+}
+
+function transformCodeBlockToTable(
+  node: MarkdownNode,
+  source: string
+): MarkdownNode | null {
+  if (node.type !== 'code') return null
+  if (typeof node.value !== 'string' || !node.value) return null
+
+  const startOffset = node.position?.start.offset
+  const endOffset = node.position?.end.offset
+  const sourceStartLine = node.position?.start.line
+
+  if (typeof sourceStartLine !== 'number') return null
+
+  let startLine = sourceStartLine
+  if (typeof startOffset === 'number' && typeof endOffset === 'number' && endOffset > startOffset) {
+    const rawBlock = source.slice(startOffset, endOffset)
+    const firstLine = rawBlock.split('\n', 1)[0] ?? ''
+    if (MARKDOWN_FENCE_START_LINE_PATTERN.test(firstLine.trimEnd())) {
+      startLine += 1
+    }
+  }
+
+  const parsed = parseBoxTable(node.value, startLine)
+  if (!parsed) return null
+
+  return {
+    type: 'table',
+    align: Array.from({ length: parsed.columnCount }, () => null),
+    position: node.position,
+    children: parsed.rows.map((cells) => {
       const rowLineStart = cells.startLine
       const rowLineEnd = Math.max(cells.startLine, cells.endLine)
       return {
@@ -497,6 +550,12 @@ function transformTree(node: MarkdownParentNode, source: string): void {
         node.children[index] = diagramReplacement
         continue
       }
+    }
+
+    const codeTableReplacement = transformCodeBlockToTable(child, source)
+    if (codeTableReplacement) {
+      node.children[index] = codeTableReplacement
+      continue
     }
 
     if (isParentNode(child)) {

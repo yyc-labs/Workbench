@@ -34,6 +34,40 @@ test('parseBoxTable parses box drawing tables with multiline rows', () => {
   )
 })
 
+test('parseBoxTable splits bordered table body lines without row separators', () => {
+  const table = [
+    '   ┌───┬──────────────────────────────────────────────────┬────────────────────────────────────────────────────────────┐                            ',
+    '   │   │ 入参 relativePath                                │ 使用组件                                                   │                            ',
+    '   ├───┼──────────────────────────────────────────────────┼────────────────────────────────────────────────────────────┤                            ',
+    '   │ 1 │ GaLKQioiGjnofR4X3HjwrN_anarci_api_smoke.fasta    │ ANARCIInference                                            │                            ',
+    '   │ 2 │ data/ESM-IF1/5YH2.pdb                            │ ESMIF1Inference                                            │                            ',
+    '   │ 3 │ data/ESM-IF1/5YH2_mutated_seqs.fasta             │ ESMIF1Inference                                            │                            ',
+    '   │ 4 │ V7f5PkhoqMsttG6kmCxCC9_5YH2_mutated_seqs.fasta   │ ESMIF1Inference                                            │                            ',
+    '   │ 5 │ PuzTaNFb4mxWfcgHrKoTpJ_some_proteins_small.fasta │ ESMFoldInference (用2次)                                   │                            ',
+    '   │ 6 │ data/Freesasa/1ubq.pdb                           │ FreeSASAInference                                          │                            ',
+    '   │ 7 │ 动态变量 trimmed（用户输入的 URL，非字面量）     │ AlphaFold3Inference / Boltz2Inference (ensureFullUrl 函数) │                            ',
+    '   └───┴──────────────────────────────────────────────────┴────────────────────────────────────────────────────────────┘',
+  ].join('\n')
+
+  const parsed = parseBoxTable(table, 1)
+
+  assert.equal(parsed?.columnCount, 3)
+  assert.deepEqual(parsed?.rows.map((row) => row.cells), [
+    ['', '入参 relativePath', '使用组件'],
+    ['1', 'GaLKQioiGjnofR4X3HjwrN_anarci_api_smoke.fasta', 'ANARCIInference'],
+    ['2', 'data/ESM-IF1/5YH2.pdb', 'ESMIF1Inference'],
+    ['3', 'data/ESM-IF1/5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
+    ['4', 'V7f5PkhoqMsttG6kmCxCC9_5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
+    ['5', 'PuzTaNFb4mxWfcgHrKoTpJ_some_proteins_small.fasta', 'ESMFoldInference (用2次)'],
+    ['6', 'data/Freesasa/1ubq.pdb', 'FreeSASAInference'],
+    ['7', '动态变量 trimmed（用户输入的 URL，非字面量）', 'AlphaFold3Inference / Boltz2Inference (ensureFullUrl 函数)'],
+  ])
+  assert.deepEqual(
+    parsed?.rows.map((row) => [row.startLine, row.endLine]),
+    [[2, 2], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10]]
+  )
+})
+
 test('parseBoxTable parses transcript cli-style segmented tables without outer borders', () => {
   const table = [
     '项目                                       当前是否可改            代码来源            说明                                     前端建议',

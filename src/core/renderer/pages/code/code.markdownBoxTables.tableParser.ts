@@ -21,6 +21,11 @@ type ParsedSegmentedRowLine = {
   lineNumber: number
 }
 
+type ParsedBorderedRowLine = {
+  cells: string[]
+  lineNumber: number
+}
+
 const SEGMENTED_RULE_MIN_WIDTH = 3
 const SEGMENTED_RULE_COLUMN_TOLERANCE = 2
 
@@ -88,6 +93,19 @@ function normalizeReferenceWrappedCell(value: string): string {
 
 function normalizeRowCells(cells: string[]): string[] {
   return cells.map((cell) => normalizeReferenceWrappedCell(cell))
+}
+
+function isCompleteBorderedRowLine(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((cell) => cell.trim().length > 0)
+}
+
+function shouldStartNewBorderedRow(
+  pendingRowLines: ParsedBorderedRowLine[],
+  cells: string[]
+): boolean {
+  const firstPendingLine = pendingRowLines[0]
+  if (!firstPendingLine) return false
+  return isCompleteBorderedRowLine(firstPendingLine.cells) && isCompleteBorderedRowLine(cells)
 }
 
 function extractSegmentedRuleColumns(line: LineInfo): SegmentedRuleColumn[] {
@@ -327,7 +345,7 @@ function parseBorderedBoxTable(source: string, startLine: number): ParsedBoxTabl
 
   const rows: ParsedBoxTableRow[] = []
   let columnCount: number | null = null
-  let pendingRowLines: Array<{ cells: string[]; lineNumber: number }> = []
+  let pendingRowLines: ParsedBorderedRowLine[] = []
 
   const flushPendingRow = (): boolean => {
     if (pendingRowLines.length <= 0) return true
@@ -369,6 +387,10 @@ function parseBorderedBoxTable(source: string, startLine: number): ParsedBoxTabl
 
     const cells = extractCellsFromContentLine(line.text)
     if (!cells || cells.length <= 0) return null
+
+    if (shouldStartNewBorderedRow(pendingRowLines, cells) && !flushPendingRow()) {
+      return null
+    }
 
     pendingRowLines.push({
       cells,
