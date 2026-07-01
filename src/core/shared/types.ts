@@ -579,6 +579,14 @@ export interface AiGatewayLogDetail {
     enabled: boolean
     upstreamEventCount?: number
     previewEvents?: unknown[]
+    merged?: {
+      upstreamText?: StructuredJsonSnapshot
+      upstreamPayload?: StructuredJsonSnapshot
+      clientText?: StructuredJsonSnapshot
+      clientPayload?: StructuredJsonSnapshot
+      finishReason?: string | null
+      usage?: unknown
+    }
   }
   error?: {
     code?: string

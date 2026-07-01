@@ -10,6 +10,7 @@ import {
   extractTextBlocks,
   formatBytes,
   isRecord,
+  snapshotValue,
   stringifyUnknown,
   toDisplayString,
 } from './agentLogs.display'
@@ -210,6 +211,98 @@ function BodySummary({ step }: { step: AgentLogFlowStep }) {
   )
 }
 
+function SnapshotMeta({ snapshot }: { snapshot: NonNullable<AgentLogFlowStep['mergedStream']>['payload'] }) {
+  const { t } = useI18n()
+  if (!snapshot?.truncated && !snapshot?.parseError && typeof snapshot?.sizeBytes !== 'number') return null
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
+      {typeof snapshot?.sizeBytes === 'number' ? (
+        <span>{formatBytes(snapshot.sizeBytes)}</span>
+      ) : null}
+      {snapshot?.truncated ? (
+        <span className="rounded-full bg-[color:var(--color-destructive-background)] px-2 py-0.5 text-[color:var(--color-destructive)]">
+          {t('settings.agentLogs.truncated')}
+        </span>
+      ) : null}
+      {snapshot?.parseError ? (
+        <span>{t('settings.agentLogs.parseError')}: {snapshot.parseError}</span>
+      ) : null}
+    </div>
+  )
+}
+
+function PayloadBlock({
+  label,
+  snapshot,
+}: {
+  label: string
+  snapshot: NonNullable<AgentLogFlowStep['mergedStream']>['payload']
+}) {
+  const value = snapshotValue(snapshot)
+  if (typeof value === 'undefined') return null
+
+  return (
+    <div className="rounded-[18px] border bg-[color:var(--color-card)] px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)]">
+        <Braces className="h-3.5 w-3.5" strokeWidth={1.8} />
+        {label}
+      </div>
+      <SnapshotMeta snapshot={snapshot} />
+      <AgentLogCollapsibleJson
+        value={value}
+        defaultExpandedDepth={2}
+        defaultCollapsedPaths={['rawText', 'content']}
+        importantPaths={['output_text', 'content', 'stop_reason', 'usage', 'choices']}
+        maxHeightClassName="max-h-[420px]"
+        className="bg-[color:var(--color-background-sunken)]/70"
+      />
+    </div>
+  )
+}
+
+function MergedStreamBlock({ step }: { step: AgentLogFlowStep }) {
+  const { t } = useI18n()
+  const mergedStream = step.mergedStream
+  if (!mergedStream) return null
+
+  const textValue = snapshotValue(mergedStream.text)
+  const hasText = typeof textValue !== 'undefined'
+  const hasPayload = typeof snapshotValue(mergedStream.payload) !== 'undefined'
+
+  return (
+    <SectionBlock
+      title={t('settings.agentLogs.mergedStream')}
+      icon={<FileText className="h-4 w-4" strokeWidth={1.8} />}
+    >
+      <div className="space-y-4">
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+          {mergedStream.description}
+        </p>
+
+        {mergedStream.notCaptured || (!hasText && !hasPayload) ? (
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">
+            {t('settings.agentLogs.mergedStreamNotCaptured')}
+          </div>
+        ) : null}
+
+        {hasText ? (
+          <TextBlock
+            label={mergedStream.textLabel}
+            text={toDisplayString(textValue)}
+            truncated={mergedStream.text?.truncated}
+          />
+        ) : null}
+
+        <PayloadBlock
+          label={mergedStream.payloadLabel}
+          snapshot={mergedStream.payload}
+        />
+      </div>
+    </SectionBlock>
+  )
+}
+
 function RawJsonBlock({ step }: { step: AgentLogFlowStep }) {
   const { t } = useI18n()
   const value = getStepBodyValue(step)
@@ -272,6 +365,8 @@ export function AgentLogStepInspector({ step }: { step: AgentLogFlowStep }) {
           ))}
         </div>
       </SectionBlock>
+
+      <MergedStreamBlock step={step} />
 
       <HeadersBlock step={step} />
 

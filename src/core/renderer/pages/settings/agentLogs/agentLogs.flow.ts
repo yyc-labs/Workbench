@@ -15,6 +15,14 @@ export type AgentLogFlowStep = {
   request?: StructuredHttpRequestSnapshot
   response?: StructuredHttpResponseSnapshot
   body?: StructuredJsonSnapshot
+  mergedStream?: {
+    text?: StructuredJsonSnapshot
+    payload?: StructuredJsonSnapshot
+    textLabel: string
+    payloadLabel: string
+    description: string
+    notCaptured: boolean
+  }
   value?: unknown
   status: AgentLogFlowStepStatus
   summary: string[]
@@ -39,6 +47,11 @@ export type AgentLogFlowLabels = {
   truncated: string
   parseError: string
   stream: string
+  mergedStream: string
+  mergedStreamDescription: string
+  upstreamMergedText: string
+  clientMergedText: string
+  finalPayload: string
 }
 
 function compact(values: Array<string | undefined | null | false>): string[] {
@@ -57,12 +70,19 @@ function snapshotWarning(snapshot: StructuredJsonSnapshot | undefined): boolean 
   return Boolean(snapshot?.truncated || snapshot?.parseError)
 }
 
-function hasStepData(step: Pick<AgentLogFlowStep, 'request' | 'response' | 'body' | 'value'>): boolean {
-  return Boolean(step.request || step.response || step.body || typeof step.value !== 'undefined')
+function mergedStreamWarning(mergedStream: AgentLogFlowStep['mergedStream']): boolean {
+  return Boolean(
+    snapshotWarning(mergedStream?.text)
+      || snapshotWarning(mergedStream?.payload)
+  )
+}
+
+function hasStepData(step: Pick<AgentLogFlowStep, 'request' | 'response' | 'body' | 'mergedStream' | 'value'>): boolean {
+  return Boolean(step.request || step.response || step.body || step.mergedStream || typeof step.value !== 'undefined')
 }
 
 function resolveStatus(
-  step: Pick<AgentLogFlowStep, 'id' | 'request' | 'response' | 'body' | 'value'>,
+  step: Pick<AgentLogFlowStep, 'id' | 'request' | 'response' | 'body' | 'mergedStream' | 'value'>,
   errorStepId: string | null,
 ): AgentLogFlowStepStatus {
   const hasData = hasStepData(step)
@@ -70,7 +90,7 @@ function resolveStatus(
   if (step.response && step.response.statusCode >= 400) return 'error'
   if (errorStepId === step.id) return 'error'
   if (!hasData) return 'missing'
-  if (requestBodyWarning(step.request) || responseBodyWarning(step.response) || snapshotWarning(step.body)) return 'warn'
+  if (requestBodyWarning(step.request) || responseBodyWarning(step.response) || snapshotWarning(step.body) || mergedStreamWarning(step.mergedStream)) return 'warn'
   return 'ok'
 }
 
@@ -96,6 +116,35 @@ function snapshotFlags(snapshot: StructuredJsonSnapshot | undefined, labels: Age
     snapshot?.truncated ? labels.truncated : undefined,
     snapshot?.parseError ? labels.parseError : undefined,
   ])
+}
+
+function mergedStreamFlags(
+  mergedStream: AgentLogFlowStep['mergedStream'],
+  labels: AgentLogFlowLabels,
+): string[] {
+  return Array.from(new Set([
+    ...snapshotFlags(mergedStream?.text, labels),
+    ...snapshotFlags(mergedStream?.payload, labels),
+  ]))
+}
+
+function buildMergedStreamStep(
+  detail: Extract<AgentLogDetail, { source: 'ai-gateway' }>,
+  kind: 'upstream' | 'client',
+  labels: AgentLogFlowLabels,
+): AgentLogFlowStep['mergedStream'] | undefined {
+  if (!detail.stream?.enabled) return undefined
+  const merged = detail.stream.merged
+  const text = kind === 'upstream' ? merged?.upstreamText : merged?.clientText
+  const payload = kind === 'upstream' ? merged?.upstreamPayload : merged?.clientPayload
+  return {
+    text,
+    payload,
+    textLabel: kind === 'upstream' ? labels.upstreamMergedText : labels.clientMergedText,
+    payloadLabel: labels.finalPayload,
+    description: labels.mergedStreamDescription,
+    notCaptured: !text && !payload,
+  }
 }
 
 function valueSize(value: unknown): string | undefined {
@@ -187,25 +236,31 @@ export function buildAgentLogFlowSteps(
         id: 'provider-response',
         title: labels.upstreamResponse,
         response: detail.upstreamResponse,
+        mergedStream: buildMergedStreamStep(detail, 'upstream', labels),
         status: 'missing',
         summary: compact([
           statusCodeSummary(detail.upstreamResponse),
           detail.stream?.enabled ? labels.stream : undefined,
           typeof detail.stream?.upstreamEventCount === 'number' ? `${detail.stream.upstreamEventCount}` : undefined,
+          detail.stream?.merged?.upstreamText || detail.stream?.merged?.upstreamPayload ? labels.mergedStream : undefined,
           bodySizeSummary(detail.upstreamResponse?.body),
           ...snapshotFlags(detail.upstreamResponse?.body, labels),
+          ...mergedStreamFlags(buildMergedStreamStep(detail, 'upstream', labels), labels),
         ]),
       },
       {
         id: 'client-response',
         title: labels.clientResponse,
         response: detail.clientResponse,
+        mergedStream: buildMergedStreamStep(detail, 'client', labels),
         status: 'missing',
         summary: compact([
           statusCodeSummary(detail.clientResponse),
           detail.stream?.enabled ? labels.stream : undefined,
+          detail.stream?.merged?.clientText || detail.stream?.merged?.clientPayload ? labels.mergedStream : undefined,
           bodySizeSummary(detail.clientResponse?.body),
           ...snapshotFlags(detail.clientResponse?.body, labels),
+          ...mergedStreamFlags(buildMergedStreamStep(detail, 'client', labels), labels),
         ]),
       },
     ]

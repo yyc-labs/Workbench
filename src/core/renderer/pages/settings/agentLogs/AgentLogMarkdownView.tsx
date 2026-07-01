@@ -113,6 +113,7 @@ export function AgentLogMarkdownView({ markdown, loading }: AgentLogMarkdownView
             <AgentLogCollapsibleJson
               key={`${index}:${block.raw}`}
               value={block.value}
+              copyText={block.raw}
               defaultExpandedDepth={1}
               maxHeightClassName="max-h-[460px]"
               className="bg-[color:var(--color-card)]"

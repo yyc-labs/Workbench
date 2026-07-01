@@ -12,6 +12,8 @@ type AgentLogCollapsibleJsonProps = {
   importantPaths?: string[]
   expansionMode?: AgentLogJsonExpansionMode
   expansionRevision?: number
+  copyText?: string
+  showCopyButton?: boolean
   className?: string
   maxHeightClassName?: string
 }
@@ -47,6 +49,15 @@ function primitiveToJson(value: unknown): string {
   try {
     const json = JSON.stringify(value)
     return typeof json === 'string' ? json : String(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function valueToCopyText(value: unknown): string {
+  try {
+    const json = JSON.stringify(value, null, 2)
+    return typeof json === 'string' ? json : primitiveToJson(value)
   } catch {
     return String(value)
   }
@@ -345,9 +356,26 @@ export function AgentLogCollapsibleJson({
   importantPaths = [],
   expansionMode = 'default',
   expansionRevision = 0,
+  copyText,
+  showCopyButton = true,
   className,
   maxHeightClassName = 'max-h-[620px]',
 }: AgentLogCollapsibleJsonProps) {
+  const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  const resolvedCopyText = copyText ?? valueToCopyText(value)
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1200)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(resolvedCopyText)
+    setCopied(true)
+  }
+
   return (
     <div
       className={cx(
@@ -356,6 +384,21 @@ export function AgentLogCollapsibleJson({
         className,
       )}
     >
+      {showCopyButton ? (
+        <div className="sticky top-0 z-10 mb-2 flex justify-end">
+          <button
+            type="button"
+            className="button-interactive inline-flex items-center gap-1 rounded-full border bg-[color:var(--color-card)]/95 px-2.5 py-1 font-sans text-[11px] font-medium text-[color:var(--color-muted-foreground)] shadow-sm backdrop-blur transition-colors hover:text-[color:var(--color-foreground)]"
+            style={{ borderColor: 'var(--color-border)' }}
+            onClick={() => void handleCopy()}
+            aria-label={copied ? t('common.copied') : t('settings.agentLogs.copyJson')}
+            title={copied ? t('common.copied') : t('settings.agentLogs.copyJson')}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? t('common.copied') : t('settings.agentLogs.copyJson')}
+          </button>
+        </div>
+      ) : null}
       <CollapsibleJsonNode
         value={value}
         path={[]}

@@ -17,6 +17,10 @@ const { drainSseEvents, encodeSseEvent } = loadTsModule('src/core/electron/main/
 const { normalizeAiGatewayConfig } = loadTsModule('src/core/electron/main/ai-gateway/gateway-config.ts')
 const { AiGatewayProviderRegistry } = loadTsModule('src/core/electron/main/ai-gateway/provider-registry.ts')
 const {
+  buildStreamMergedSnapshot,
+  createLimitedTextAccumulator,
+} = loadTsModule('src/core/electron/main/ai-gateway/stream-trace.ts')
+const {
   AiGatewayServer,
   extractRequestApiToken,
   toAnthropicMessagesUrl,
@@ -59,6 +63,122 @@ function readRequestBody(req) {
     })
     req.on('end', () => resolve(body))
     req.on('error', reject)
+  })
+}
+
+function writeChatCompletionStream(res, text = 'Hello') {
+  const splitAt = Math.max(1, Math.floor(text.length / 2))
+  const chunks = [text.slice(0, splitAt), text.slice(splitAt)].filter(Boolean)
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+  for (const chunk of chunks) {
+    res.write(encodeSseEvent(undefined, {
+      id: 'chatcmpl_1',
+      object: 'chat.completion.chunk',
+      model: 'gpt-upstream',
+      choices: [{ index: 0, delta: { content: chunk }, finish_reason: null }],
+    }))
+  }
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_1',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+  }))
+  res.write('data: [DONE]\n\n')
+  res.end()
+}
+
+function writeChatToolCallStream(res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_1',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          content: '            ',
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'run_command', arguments: '' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_1',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: { arguments: '{"command":' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_1',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              function: { arguments: '"ls -la"}' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_1',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+    usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+  }))
+  res.write('data: [DONE]\n\n')
+  res.end()
+}
+
+function createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort, maxBodyBytes = 4096 }) {
+  return normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    maxBodyBytes,
+    activeProviderId: 'openai-chat',
+    providers: [
+      {
+        id: 'openai-chat',
+        name: 'OpenAI Chat',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/v1`,
+        apiKey: 'sk-provider',
+        protocol: 'openai_chat',
+        enabled: true,
+      },
+    ],
   })
 }
 
@@ -281,6 +401,52 @@ test('converts Chat tool response to Anthropic tool_use message response', () =>
       id: 'call_1',
       name: 'run_command',
       input: { command: 'dir' },
+    },
+  ])
+})
+
+test('drops whitespace-only Chat content when converting tool calls to Anthropic', () => {
+  const message = chatCompletionToAnthropicMessage({
+    object: 'chat.completion',
+    model: 'GLM-5.1-ALi',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: '            ',
+          tool_calls: [
+            {
+              id: 'call_aa8da16fd9e8422799e8ab90',
+              index: 0,
+              type: 'function',
+              function: {
+                name: 'Bash',
+                arguments: '{"command": "ls -la", "description": "List all files in current directory"}',
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+    usage: {
+      prompt_tokens: 26582,
+      completion_tokens: 23,
+      total_tokens: 26605,
+    },
+  }, 'fallback')
+
+  assert.equal(message.stop_reason, 'tool_use')
+  assert.deepEqual(message.content, [
+    {
+      type: 'tool_use',
+      id: 'call_aa8da16fd9e8422799e8ab90',
+      name: 'Bash',
+      input: {
+        command: 'ls -la',
+        description: 'List all files in current directory',
+      },
     },
   ])
 })
@@ -523,6 +689,48 @@ test('buffers Chat tool stream argument deltas until the tool name is available'
   assert.deepEqual(JSON.parse(events[4].data).delta.stop_reason, 'tool_use')
 })
 
+test('drops whitespace-only Chat stream content when the same chunk contains tool calls', () => {
+  const state = createAnthropicStreamState()
+  const events = [
+    ...chatStreamChunkToAnthropicEvents({
+      choices: [
+        {
+          delta: {
+            content: '            ',
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: {
+                  name: 'Bash',
+                  arguments: '{"command":"ls -la"}',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }, state),
+    ...createAnthropicStreamStop('tool_calls', undefined, state),
+  ]
+
+  assert.deepEqual(events.map((event) => event.event), [
+    'content_block_start',
+    'content_block_delta',
+    'content_block_stop',
+    'message_delta',
+    'message_stop',
+  ])
+  assert.equal(JSON.parse(events[0].data).content_block.type, 'tool_use')
+  assert.equal(JSON.parse(events[0].data).content_block.name, 'Bash')
+  assert.deepEqual(JSON.parse(events[1].data).delta, {
+    type: 'input_json_delta',
+    partial_json: '{"command":"ls -la"}',
+  })
+  assert.equal(JSON.parse(events[3].data).delta.stop_reason, 'tool_use')
+})
+
 test('sanitizes Chat tool stream arguments with raw newlines and Windows paths', () => {
   const state = createAnthropicStreamState()
   const invalidArguments = '{"path":"C:\\Users\\yyc20\\Desktop\\code-work","prompt":"Read files\n1. src/pages/Build"}'
@@ -656,6 +864,25 @@ test('builds Anthropic Messages upstream URL from provider base URL', () => {
   )
 })
 
+test('limits merged stream text snapshots by UTF-8 bytes', () => {
+  const accumulator = createLimitedTextAccumulator(5)
+  accumulator.append('你a')
+  accumulator.append('好')
+
+  const snapshot = accumulator.snapshot()
+  assert.equal(snapshot.rawText, '你a')
+  assert.equal(snapshot.sizeBytes, 7)
+  assert.equal(snapshot.truncated, true)
+
+  const merged = buildStreamMergedSnapshot({
+    clientText: '你a好',
+    maxBodyBytes: 5,
+  })
+  assert.equal(merged.clientText.rawText, '你a')
+  assert.equal(merged.clientText.sizeBytes, 7)
+  assert.equal(merged.clientText.truncated, true)
+})
+
 test('passes Anthropic Messages providers through and records gateway logs', async (t) => {
   const upstreamRequests = []
   const upstream = createServer(async (req, res) => {
@@ -747,6 +974,380 @@ test('passes Anthropic Messages providers through and records gateway logs', asy
   assert.equal(detail.normalizedRequest.parsed.model, 'deepseek-v4-flash')
   assert.match(detail.upstreamRequest.url, /\/anthropic\/v1\/messages$/)
   assert.equal(detail.clientResponse.statusCode, 200)
+})
+
+test('records merged stream text and payload for Responses streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeChatCompletionStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      input: 'hello',
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /response\.completed/)
+  assert.match(bodyText, /Hello/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'responses')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 3)
+  assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.finishReason, 'stop')
+  assert.equal(detail.stream.merged.usage.prompt_tokens, 2)
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.content, 'Hello')
+  assert.equal(detail.stream.merged.clientPayload.parsed.output_text, 'Hello')
+})
+
+test('records merged stream text for raw Chat streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeChatCompletionStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      messages: [{ role: 'user', content: 'hello' }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /\[DONE\]/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'chat')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 3)
+  assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.content, 'Hello')
+  assert.equal(detail.stream.merged.clientPayload.parsed.choices[0].message.content, 'Hello')
+})
+
+test('records merged stream text for Chat to Anthropic streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeChatCompletionStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /message_start/)
+  assert.match(bodyText, /content_block_delta/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 3)
+  assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.content, 'Hello')
+  assert.equal(detail.stream.merged.clientPayload.parsed.content[0].text, 'Hello')
+  assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'end_turn')
+})
+
+test('records merged stream tool_use for Chat to Anthropic streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeChatToolCallStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list files' }] }],
+      tools: [
+        {
+          name: 'run_command',
+          input_schema: {
+            type: 'object',
+            properties: { command: { type: 'string' } },
+            required: ['command'],
+          },
+        },
+      ],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /tool_use/)
+  assert.match(bodyText, /input_json_delta/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 4)
+  assert.equal(
+    detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].function.arguments,
+    '{"command":"ls -la"}'
+  )
+  assert.equal(detail.stream.merged.clientPayload.parsed.content[0].type, 'tool_use')
+  assert.equal(detail.stream.merged.clientPayload.parsed.content[0].id, 'call_1')
+  assert.equal(detail.stream.merged.clientPayload.parsed.content[0].name, 'run_command')
+  assert.deepEqual(detail.stream.merged.clientPayload.parsed.content[0].input, { command: 'ls -la' })
+  assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'tool_use')
+})
+
+test('records merged stream text for Anthropic passthrough streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+    res.write(encodeSseEvent('message_start', {
+      type: 'message_start',
+      message: {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-upstream',
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 },
+      },
+    }))
+    res.write(encodeSseEvent('content_block_delta', {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'text_delta', text: 'Hello' },
+    }))
+    res.write(encodeSseEvent('message_delta', {
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn', stop_sequence: null },
+      usage: { output_tokens: 1 },
+    }))
+    res.write(encodeSseEvent('message_stop', { type: 'message_stop' }))
+    res.end()
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    maxBodyBytes: 4096,
+    activeProviderId: 'anthropic-provider',
+    providers: [
+      {
+        id: 'anthropic-provider',
+        name: 'Anthropic Provider',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/anthropic`,
+        apiKey: 'sk-provider',
+        protocol: 'anthropic_messages',
+        enabled: true,
+      },
+    ],
+  })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /message_stop/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 4)
+  assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.content[0].text, 'Hello')
+  assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'end_turn')
+})
+
+test('records merged stream tool_use for Anthropic passthrough streams', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+    res.write(encodeSseEvent('message_start', {
+      type: 'message_start',
+      message: {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-upstream',
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 0 },
+      },
+    }))
+    res.write(encodeSseEvent('content_block_start', {
+      type: 'content_block_start',
+      index: 0,
+      content_block: {
+        type: 'tool_use',
+        id: 'toolu_1',
+        name: 'run_command',
+        input: {},
+      },
+    }))
+    res.write(encodeSseEvent('content_block_delta', {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{"command":' },
+    }))
+    res.write(encodeSseEvent('content_block_delta', {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '"ls -la"}' },
+    }))
+    res.write(encodeSseEvent('content_block_stop', {
+      type: 'content_block_stop',
+      index: 0,
+    }))
+    res.write(encodeSseEvent('message_delta', {
+      type: 'message_delta',
+      delta: { stop_reason: 'tool_use', stop_sequence: null },
+      usage: { output_tokens: 1 },
+    }))
+    res.write(encodeSseEvent('message_stop', { type: 'message_stop' }))
+    res.end()
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    maxBodyBytes: 4096,
+    activeProviderId: 'anthropic-provider',
+    providers: [
+      {
+        id: 'anthropic-provider',
+        name: 'Anthropic Provider',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/anthropic`,
+        apiKey: 'sk-provider',
+        protocol: 'anthropic_messages',
+        enabled: true,
+      },
+    ],
+  })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'list files' }] }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /tool_use/)
+  assert.match(bodyText, /message_stop/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 7)
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.content[0].type, 'tool_use')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.content[0].id, 'toolu_1')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.content[0].name, 'run_command')
+  assert.deepEqual(detail.stream.merged.upstreamPayload.parsed.content[0].input, { command: 'ls -la' })
+  assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'tool_use')
 })
 
 test('extracts gateway auth token from anthropic x-api-key header first', () => {

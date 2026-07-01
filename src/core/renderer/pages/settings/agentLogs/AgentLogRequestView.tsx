@@ -31,6 +31,11 @@ export function AgentLogRequestView({ detail }: { detail: AgentLogDetail }) {
     truncated: t('settings.agentLogs.truncated'),
     parseError: t('settings.agentLogs.parseError'),
     stream: t('settings.agentLogs.stream'),
+    mergedStream: t('settings.agentLogs.mergedStream'),
+    mergedStreamDescription: t('settings.agentLogs.mergedStreamDescription'),
+    upstreamMergedText: t('settings.agentLogs.upstreamMergedText'),
+    clientMergedText: t('settings.agentLogs.clientMergedText'),
+    finalPayload: t('settings.agentLogs.finalPayload'),
   }), [t])
   const steps = useMemo(() => buildAgentLogFlowSteps(detail, labels), [detail, labels])
 

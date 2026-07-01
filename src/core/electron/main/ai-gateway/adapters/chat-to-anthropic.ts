@@ -9,7 +9,7 @@ import type {
 function extractText(response: ChatCompletionResponse): string {
   const choice = response.choices?.[0]
   const content = choice?.message?.content
-  return typeof content === 'string' ? content : ''
+  return typeof content === 'string' && content.trim() ? content : ''
 }
 
 function extractDeltaText(response: ChatCompletionResponse): string {
@@ -397,7 +397,8 @@ export function chatStreamChunkToAnthropicEvents(
 ): GatewaySseEvent[] {
   const events: GatewaySseEvent[] = []
   const delta = extractDeltaText(chunk)
-  if (delta) {
+  const deltaToolCalls = extractDeltaToolCalls(chunk)
+  if (delta && (delta.trim() || deltaToolCalls.length === 0)) {
     events.push(...openTextBlock(state))
     events.push({
       event: 'content_block_delta',
@@ -412,7 +413,6 @@ export function chatStreamChunkToAnthropicEvents(
     })
   }
 
-  const deltaToolCalls = extractDeltaToolCalls(chunk)
   for (let index = 0; index < deltaToolCalls.length; index += 1) {
     const toolCall = deltaToolCalls[index]
     const toolIndex = Number.isInteger(toolCall.index) ? Number(toolCall.index) : index
