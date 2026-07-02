@@ -45,6 +45,7 @@ import { AiGatewayServer } from './gateway-server'
 
 type AiGatewayServiceOptions = {
   getCapability: () => Capability | null
+  isLogCaptureEnabled?: () => boolean
 }
 
 function normalizeConfigFromApp(appConfig: AppConfig): AiGatewayConfig {
@@ -93,6 +94,7 @@ export class AiGatewayService {
     this.server = new AiGatewayServer({
       getConfig: () => this.getConfig(),
       registry: this.registry,
+      isLogCaptureEnabled: options.isLogCaptureEnabled,
     })
   }
 

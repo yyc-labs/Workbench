@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { AgentLogDetail, AgentLogSummary } from '../../../shared/types'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useI18n } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
 import { AgentLogDetailPane } from './agentLogs/AgentLogDetailPane'
 import { AgentLogFiltersBar } from './agentLogs/AgentLogFiltersBar'
 import { agentLogKey, matchesAgentLogFilters } from './agentLogs/agentLogs.helpers'
@@ -16,6 +18,8 @@ const DEFAULT_FILTERS: AgentLogFilters = {
 
 export function SettingsAgentLogsPanel() {
   const { t } = useI18n()
+  const agentLogsEnabled = useAppStore((s) => s.config.agentLogs?.enabled ?? true)
+  const setAgentLogConfig = useAppStore((s) => s.setAgentLogConfig)
   const [summaries, setSummaries] = useState<AgentLogSummary[]>([])
   const [filters, setFilters] = useState<AgentLogFilters>(DEFAULT_FILTERS)
   const [selection, setSelection] = useState<AgentLogSelection | null>(null)
@@ -26,6 +30,8 @@ export function SettingsAgentLogsPanel() {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [loadingMarkdown, setLoadingMarkdown] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [savingCapture, setSavingCapture] = useState(false)
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const deferredFilters = useDeferredValue(filters)
 
@@ -150,6 +156,18 @@ export function SettingsAgentLogsPanel() {
     }
   }, [filteredSummaries, selection])
 
+  const handleLogCaptureToggle = async (enabled: boolean) => {
+    setSavingCapture(true)
+    setError(null)
+    try {
+      await setAgentLogConfig({ enabled })
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : t('settings.agentLogs.captureSaveError'))
+    } finally {
+      setSavingCapture(false)
+    }
+  }
+
   const handleClearLogs = async () => {
     setClearing(true)
     setError(null)
@@ -160,6 +178,7 @@ export function SettingsAgentLogsPanel() {
       setSelection(null)
       setMobileView('list')
       await loadSummaries()
+      setClearConfirmOpen(false)
     } catch (clearError) {
       setError(clearError instanceof Error ? clearError.message : t('settings.agentLogs.clearError'))
     } finally {
@@ -186,9 +205,12 @@ export function SettingsAgentLogsPanel() {
         filtered={filteredSummaries.length}
         onChange={setFilters}
         onRefresh={() => void loadSummaries()}
-        onClear={() => void handleClearLogs()}
+        onClear={() => setClearConfirmOpen(true)}
         clearing={clearing}
         clearDisabled={summaries.length === 0}
+        logCaptureEnabled={agentLogsEnabled}
+        logCaptureSaving={savingCapture}
+        onLogCaptureToggle={(enabled) => void handleLogCaptureToggle(enabled)}
       />
 
       <div className="quiet-control flex rounded-full p-1 lg:hidden">
@@ -243,6 +265,18 @@ export function SettingsAgentLogsPanel() {
           />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        onClose={() => setClearConfirmOpen(false)}
+        onConfirm={handleClearLogs}
+        ariaLabel={t('settings.agentLogs.clearConfirmLabel')}
+        title={t('settings.agentLogs.clearConfirmTitle')}
+        description={t('settings.agentLogs.clearConfirmDescription', { count: summaries.length })}
+        confirmLabel={t('settings.agentLogs.clearConfirmAction')}
+        confirmVariant="destructive"
+        busy={clearing}
+      />
     </div>
   )
 }

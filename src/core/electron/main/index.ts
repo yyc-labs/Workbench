@@ -113,10 +113,12 @@ const learningService = createLearningService({
 })
 const aiGatewayService = createAiGatewayService({
   getCapability: () => bootCapability,
+  isLogCaptureEnabled: () => loadConfig().agentLogs?.enabled !== false,
 })
 
 const agentHookGateway = new AgentHookGateway({
   getConfig: () => loadConfig().agentHooks,
+  isLogCaptureEnabled: () => loadConfig().agentLogs?.enabled !== false,
   onEvent: (event) => {
     mainWindow?.webContents.send(IPC.AGENT_HOOK_EVENT, event)
     void feishuNotifier.notifyIfNeeded(event).catch(() => undefined)

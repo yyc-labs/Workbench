@@ -29,6 +29,7 @@ export type SettingsActionsSlice = Pick<
   | 'loadCodexSettings'
   | 'saveCodexSettings'
   | 'saveCodexGatewayBinding'
+  | 'setAgentLogConfig'
   | 'setAgentHookConfig'
   | 'setShortcutPreferences'
   | 'setClaudeRuntimeProfiles'
@@ -201,6 +202,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: result.appConfig,
     })
     return result
+  },
+
+  setAgentLogConfig: async (agentLogs) => {
+    const updated = await window.electronAPI.setConfig({ agentLogs })
+    set((state) => ({
+      config: {
+        ...state.config,
+        agentLogs: updated.agentLogs,
+      },
+    }))
   },
 
   setAgentHookConfig: async (agentHooks) => {

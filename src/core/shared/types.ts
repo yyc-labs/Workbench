@@ -534,6 +534,10 @@ export interface AgentHookGatewayStatus {
 export type AgentLogSource = 'ai-gateway' | 'agent-hooks'
 export type AgentLogLevel = 'info' | 'warn' | 'error'
 
+export interface AgentLogsConfig {
+  enabled?: boolean
+}
+
 export interface AgentLogSummary {
   id: string
   source: AgentLogSource
@@ -1255,6 +1259,8 @@ export interface AppConfig {
   codexGatewayBindings?: CodexGatewayBindingMap
   /** Local lifecycle hook gateway for Claude Code and Codex CLI events */
   agentHooks?: AgentHookGatewayConfig
+  /** In-memory Agent Logs capture for AI Gateway traffic and Agent Hook events */
+  agentLogs?: AgentLogsConfig
   /** Local model protocol gateway for Claude/Codex compatible CLIs */
   aiGateway?: AiGatewayConfig
   /** User-configurable global shortcut behavior */

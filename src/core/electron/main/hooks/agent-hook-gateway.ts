@@ -21,6 +21,7 @@ import {
 
 type AgentHookGatewayOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
+  isLogCaptureEnabled?: () => boolean
   onEvent: (event: AgentHookEnvelope) => void
   listProjects?: () => TranscriptImportProjectTarget[]
   onTranscriptImport?: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
@@ -234,6 +235,7 @@ function readRequestBody(req: IncomingMessage, maxBodyBytes: number): Promise<st
 
 export class AgentHookGateway {
   private readonly getConfig: AgentHookGatewayOptions['getConfig']
+  private readonly isLogCaptureEnabled: () => boolean
   private readonly onEvent: AgentHookGatewayOptions['onEvent']
   private readonly listProjects?: AgentHookGatewayOptions['listProjects']
   private readonly onTranscriptImport?: AgentHookGatewayOptions['onTranscriptImport']
@@ -247,6 +249,7 @@ export class AgentHookGateway {
 
   constructor(options: AgentHookGatewayOptions) {
     this.getConfig = options.getConfig
+    this.isLogCaptureEnabled = options.isLogCaptureEnabled ?? (() => true)
     this.onEvent = options.onEvent
     this.listProjects = options.listProjects
     this.onTranscriptImport = options.onTranscriptImport
@@ -325,6 +328,7 @@ export class AgentHookGateway {
   }
 
   private appendRecentLogDetail(detail: AgentHookLogDetail): void {
+    if (!this.isLogCaptureEnabled()) return
     this.recentLogDetails.unshift(detail)
     const { recentEventLimit } = this.resolveConfig()
     if (this.recentLogDetails.length > recentEventLimit) {
@@ -646,10 +650,12 @@ export class AgentHookGateway {
   }
 
   private pushEvent(event: AgentHookEnvelope): void {
-    this.recentEvents.unshift(event)
-    const { recentEventLimit } = this.resolveConfig()
-    if (this.recentEvents.length > recentEventLimit) {
-      this.recentEvents = this.recentEvents.slice(0, recentEventLimit)
+    if (this.isLogCaptureEnabled()) {
+      this.recentEvents.unshift(event)
+      const { recentEventLimit } = this.resolveConfig()
+      if (this.recentEvents.length > recentEventLimit) {
+        this.recentEvents = this.recentEvents.slice(0, recentEventLimit)
+      }
     }
     this.onEvent(event)
   }

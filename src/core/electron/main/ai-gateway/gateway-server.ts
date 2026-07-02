@@ -58,6 +58,7 @@ import {
 type AiGatewayServerOptions = {
   getConfig: () => AiGatewayConfig
   registry: AiGatewayProviderRegistry
+  isLogCaptureEnabled?: () => boolean
 }
 
 type RouteKind = 'anthropic' | 'responses' | 'chat'
@@ -729,6 +730,7 @@ function buildAnthropicUpstreamLogDetails(
 export class AiGatewayServer {
   private readonly getConfig: AiGatewayServerOptions['getConfig']
   private readonly registry: AiGatewayProviderRegistry
+  private readonly isLogCaptureEnabled: () => boolean
   private server: Server | null = null
   private recentLogs: AiGatewayLogEntry[] = []
   private recentLogDetails: AiGatewayLogDetail[] = []
@@ -740,6 +742,7 @@ export class AiGatewayServer {
   constructor(options: AiGatewayServerOptions) {
     this.getConfig = options.getConfig
     this.registry = options.registry
+    this.isLogCaptureEnabled = options.isLogCaptureEnabled ?? (() => true)
   }
 
   async start(configInput?: AiGatewayConfig): Promise<void> {
@@ -833,6 +836,7 @@ export class AiGatewayServer {
   }
 
   private appendRecentLog(entry: Omit<AiGatewayLogEntry, 'id' | 'timestamp'>): void {
+    if (!this.isLogCaptureEnabled()) return
     this.recentLogs.unshift({
       ...entry,
       id: randomUUID(),
@@ -844,6 +848,7 @@ export class AiGatewayServer {
   }
 
   private appendRecentLogDetail(detail: AiGatewayLogDetail): void {
+    if (!this.isLogCaptureEnabled()) return
     this.recentLogDetails.unshift(detail)
     if (this.recentLogDetails.length > AI_GATEWAY_RECENT_LOG_LIMIT) {
       this.recentLogDetails = this.recentLogDetails.slice(0, AI_GATEWAY_RECENT_LOG_LIMIT)
@@ -854,6 +859,7 @@ export class AiGatewayServer {
     entry: Omit<AiGatewayLogEntry, 'id' | 'timestamp'>,
     consoleDetails?: Record<string, unknown>
   ): void {
+    if (!this.isLogCaptureEnabled()) return
     this.appendRecentLog(entry)
     if (entry.level === 'info' && !isAiGatewayDebugEnabled()) return
     logAiGateway(entry.level, entry.message, consoleDetails ?? {
@@ -944,6 +950,7 @@ export class AiGatewayServer {
   private finalizeGatewayTrace(trace: GatewayRequestTrace): void {
     if (trace.finalized) return
     trace.finalized = true
+    if (!this.isLogCaptureEnabled()) return
     const durationMs = Math.max(0, Date.now() - trace.startedAt)
     trace.meta.requestId = trace.id
     trace.meta.durationMs = durationMs

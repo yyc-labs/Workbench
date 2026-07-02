@@ -333,6 +333,7 @@ export interface AppState {
   loadCodexSettings: () => Promise<CodexSettingsSnapshot>
   saveCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSnapshot>
   saveCodexGatewayBinding: (payload: CodexGatewayBindingSaveInput) => Promise<CodexGatewayBindingResult>
+  setAgentLogConfig: (agentLogs: NonNullable<AppConfig['agentLogs']>) => Promise<void>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
   setShortcutPreferences: (shortcutPreferences: NonNullable<AppConfig['shortcutPreferences']>) => Promise<void>
   setClaudeRuntimeProfiles: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>

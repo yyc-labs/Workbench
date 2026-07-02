@@ -15,6 +15,9 @@ type AgentLogFiltersBarProps = {
   onClear: () => void
   clearing: boolean
   clearDisabled: boolean
+  logCaptureEnabled: boolean
+  logCaptureSaving: boolean
+  onLogCaptureToggle: (enabled: boolean) => void
 }
 
 const LEVEL_OPTIONS: SelectOption[] = [
@@ -65,6 +68,9 @@ export function AgentLogFiltersBar({
   onClear,
   clearing,
   clearDisabled,
+  logCaptureEnabled,
+  logCaptureSaving,
+  onLogCaptureToggle,
 }: AgentLogFiltersBarProps) {
   const { t } = useI18n()
 
@@ -83,6 +89,21 @@ export function AgentLogFiltersBar({
               {filtered} / {total}
             </span>
           </div>
+
+          <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              className="checkbox"
+              checked={logCaptureEnabled}
+              disabled={logCaptureSaving}
+              onChange={(event) => onLogCaptureToggle(event.target.checked)}
+            />
+            <span>
+              {logCaptureEnabled
+                ? t('settings.agentLogs.captureEnabled')
+                : t('settings.agentLogs.captureDisabled')}
+            </span>
+          </label>
 
           <div className="quiet-control inline-flex max-w-full flex-wrap gap-1 rounded-full p-1">
             <SourceButton
@@ -124,6 +145,15 @@ export function AgentLogFiltersBar({
           </Button>
         </div>
       </div>
+
+      {!logCaptureEnabled && (
+        <div className="mt-4 rounded-[18px] px-4 py-3 text-sm leading-6" style={{
+          background: 'var(--color-warning-background)',
+          color: 'var(--color-warning)',
+        }}>
+          {t('settings.agentLogs.captureDisabledHint')}
+        </div>
+      )}
 
       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(240px,1fr)_150px_150px] 2xl:grid-cols-[minmax(320px,1fr)_170px_170px]">
         <label className="quiet-control flex h-11 items-center gap-3 rounded-full px-4">

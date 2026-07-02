@@ -8,6 +8,7 @@ import type {
   AiCommitProfile,
   AiRuntimeProfile,
   AppConfig,
+  AgentLogsConfig,
   ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
   ClaudeRuntimeProfileGatewayBinding,
@@ -57,6 +58,10 @@ const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
     receiveIdType: 'open_id',
     notifyOn: ['stop', 'permission-request'],
   },
+}
+
+const DEFAULT_AGENT_LOGS_CONFIG: AgentLogsConfig = {
+  enabled: true,
 }
 
 const DEFAULT_CLAUDE_RUNTIME_PROFILE_ID = 'default'
@@ -130,6 +135,7 @@ const DEFAULT_CONFIG: AppConfig = {
   codexSettingsSnapshots: {},
   codexGatewayBindings: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
+  agentLogs: DEFAULT_AGENT_LOGS_CONFIG,
   aiGateway: defaultAiGatewayConfig(),
   shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
 }
@@ -778,6 +784,20 @@ function normalizeAgentHookConfig(
   }
 }
 
+function normalizeAgentLogsConfig(
+  value: AppConfig['agentLogs'] | unknown
+): NonNullable<AppConfig['agentLogs']> {
+  const raw = value && typeof value === 'object'
+    ? value as Partial<AgentLogsConfig>
+    : {}
+
+  return {
+    enabled: typeof raw.enabled === 'boolean'
+      ? raw.enabled
+      : DEFAULT_AGENT_LOGS_CONFIG.enabled,
+  }
+}
+
 function normalizeCacheLocationConfig(
   value: AppConfig['cacheLocation'] | unknown
 ): AppCacheLocationConfig {
@@ -905,6 +925,7 @@ export function loadConfig(): AppConfig {
       codexGatewayBindings: normalizeCodexGatewayBindings(parsed.codexGatewayBindings),
       aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
+      agentLogs: normalizeAgentLogsConfig(parsed.agentLogs),
       aiGateway: normalizeAiGatewayConfig(parsed.aiGateway),
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
@@ -956,6 +977,7 @@ export function loadConfig(): AppConfig {
       aiRuntimeProfiles: runtimeProfiles.profiles,
       activeAiRuntimeProfileId: runtimeProfiles.activeProfileId,
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
+      agentLogs: normalizeAgentLogsConfig(DEFAULT_CONFIG.agentLogs),
       aiGateway: normalizeAiGatewayConfig(DEFAULT_CONFIG.aiGateway),
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
@@ -999,6 +1021,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
       ? normalizeAgentHookConfig(partial.agentHooks)
       : current.agentHooks,
+    agentLogs: Object.prototype.hasOwnProperty.call(partial, 'agentLogs')
+      ? normalizeAgentLogsConfig(partial.agentLogs)
+      : normalizeAgentLogsConfig(current.agentLogs),
     aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway')
       ? normalizeAiGatewayConfig(partial.aiGateway)
       : normalizeAiGatewayConfig(current.aiGateway),

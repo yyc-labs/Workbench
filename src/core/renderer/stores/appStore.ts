@@ -29,6 +29,9 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     cacheLocation: { mode: 'default' },
     codexProviderApiKeys: {},
     codexSettingsSnapshots: {},
+    agentLogs: {
+      enabled: true,
+    },
     shortcutPreferences: {
       quickTranscriptCaptureOpenViewer: false,
     },
