@@ -1,18 +1,14 @@
 import { AlertTriangle, Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { projectDisplayName } from '../../lib/projectDisplay'
 import type {
   AiEnvironmentConfig,
   AiExecutionMode,
   AiRuntimeProfile,
-  BackendMode,
   Capability,
-  ManagedProcessSnapshot,
   RuntimeEntrypointConfig,
   RuntimeEntrypointTarget,
   RuntimeEntrypointWslPrefix,
   RuntimeEntry,
-  TerminalProcessInventory,
 } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -32,8 +28,11 @@ import {
   runtimeEntrypointConfigsToHistory,
   splitWslEntrypointPath,
 } from '../../../shared/runtimeEntrypoint'
-import { backendLabel, formatSince } from './settings.helpers'
 import { SettingsAiRuntimeProfilesPanel } from './SettingsAiRuntimeProfilesPanel'
+import { RuntimeDiagnosticsCard } from './runtime/RuntimeDiagnosticsCard'
+import type { RuntimeDiagnosticsState } from './runtime/settingsRuntimeShared'
+import { RuntimeTerminalInventory } from './runtime/RuntimeTerminalInventory'
+import { useTerminalProcessInventory } from './runtime/useTerminalProcessInventory'
 
 type WindowsAiRunningShell = 'pwsh' | 'cmd'
 
@@ -132,26 +131,11 @@ function SettingsRuntimePanel({
   const [historyPendingTarget, setHistoryPendingTarget] = useState<string | 'clear-all' | null>(null)
   const [historyMutationError, setHistoryMutationError] = useState<string | null>(null)
   const [historyDeleteConfirmTarget, setHistoryDeleteConfirmTarget] = useState<string | 'clear-all' | null>(null)
-  const [diag, setDiag] = useState<{
-    mode: AiExecutionMode
-    providerLabel: string
-    supported: boolean
-    availableModes: AiExecutionMode[]
-    issues: string[]
-    hasWsl: boolean
-    hasTmux: boolean
-    launcherScriptExists?: boolean
-    launcherScriptExecutable?: boolean
-  } | null>(null)
+  const [diag, setDiag] = useState<RuntimeDiagnosticsState | null>(null)
   const [loading, setLoading] = useState(false)
-  const [inventoryLoading, setInventoryLoading] = useState(false)
-  const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
-  const [stopAllLoading, setStopAllLoading] = useState(false)
-  const [stopSummary, setStopSummary] = useState<string | null>(null)
   const [saveModeLoading, setSaveModeLoading] = useState(false)
   const [keepAliveEnabled, setKeepAliveEnabled] = useState(runtimeKeepAliveOnQuit)
   const [keepAliveSaving, setKeepAliveSaving] = useState(false)
-  const [activeTerminalActionKey, setActiveTerminalActionKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (skipNextScriptPathSyncRef.current) {
@@ -219,143 +203,6 @@ function SettingsRuntimePanel({
       window.removeEventListener('keydown', handleEscape)
     }
   }, [scriptHistoryOpen])
-
-  const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
-  const classifyManagedProcess = (item: ManagedProcessSnapshot): 'tmux' | 'project' | 'idle' => {
-    if (item.processId.includes('::toolbox')) return 'idle'
-    if (item.backend === 'tmux') return 'tmux'
-    return 'project'
-  }
-
-  const refreshInventory = async (silent = false) => {
-    if (!silent) setInventoryLoading(true)
-    try {
-      const data = await window.electronAPI.listTerminalProcesses()
-      setInventory(data)
-    } finally {
-      if (!silent) setInventoryLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void refreshInventory()
-  }, [])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refreshInventory(true)
-    }, 5000)
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [])
-
-  const projectManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project')
-  const idleManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'idle')
-  const sessionRows = (() => {
-    const rows = new Map<string, {
-      sessionName: string
-      projectLabel?: string
-      mode?: string
-      status?: string
-      createdAt?: number
-      startTime?: number
-      managedProcessId?: string
-      closeBy: 'session' | 'process'
-    }>()
-
-    const ensureRow = (sessionName: string) => {
-      let row = rows.get(sessionName)
-      if (!row) {
-        row = {
-          sessionName,
-          closeBy: 'process',
-        }
-        rows.set(sessionName, row)
-      }
-      return row
-    }
-
-    for (const item of inventory?.managedProcesses || []) {
-      if (!item.sessionName) continue
-      const row = ensureRow(item.sessionName)
-      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
-      row.startTime ||= item.startTime
-      row.managedProcessId ||= item.processId
-    }
-
-    for (const item of inventory?.runtimeSessions || []) {
-      if (!item.sessionName) continue
-      const row = ensureRow(item.sessionName)
-      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
-      row.mode ||= item.mode
-      row.status ||= item.status
-      row.createdAt ||= item.createdAt
-      row.closeBy = 'session'
-    }
-
-    for (const item of inventory?.tmuxSessions || []) {
-      if (!item.sessionName) continue
-      const row = ensureRow(item.sessionName)
-      row.projectLabel ||= projectNameMap.get(item.projectId) || item.projectId
-      row.status ||= item.status
-      row.createdAt ||= item.createdAt
-      row.closeBy = 'session'
-    }
-
-    return Array.from(rows.values()).sort((a, b) => {
-      const left = a.createdAt || a.startTime || 0
-      const right = b.createdAt || b.startTime || 0
-      return right - left
-    })
-  })()
-  const activeSessionRows = sessionRows.filter((item) => item.status === 'attached')
-  const inactiveSessionRows = sessionRows.filter((item) => item.status !== 'attached')
-
-  const closeManagedProcess = async (processId: string) => {
-    const actionKey = `process:${processId}`
-    setActiveTerminalActionKey(actionKey)
-    try {
-      await window.electronAPI.stopProcess(processId)
-      await refreshInventory()
-    } finally {
-      setActiveTerminalActionKey((current) => current === actionKey ? null : current)
-    }
-  }
-
-  const closeTmuxSession = async (sessionName: string) => {
-    const actionKey = `session:${sessionName}`
-    setActiveTerminalActionKey(actionKey)
-    try {
-      await window.electronAPI.killTmuxSession(sessionName)
-      await refreshInventory()
-    } finally {
-      setActiveTerminalActionKey((current) => current === actionKey ? null : current)
-    }
-  }
-
-  const closeAllTerminals = async () => {
-    setStopAllLoading(true)
-    setStopSummary(null)
-    try {
-      const result = await window.electronAPI.stopAllTerminalProcesses()
-      setStopSummary(
-        t('settingsRuntime.stopSummary', {
-          managed: result.managedStopped,
-          tmux: result.tmuxKilled,
-          skipped: result.tmuxSkipped > 0 ? t('settingsRuntime.stopSummarySkipped', { count: result.tmuxSkipped }) : '',
-        })
-      )
-      await refreshInventory()
-    } finally {
-      setStopAllLoading(false)
-    }
-  }
-
-  const renderDiagStatus = (value?: boolean) => {
-    if (typeof value !== 'boolean') return t('settingsRuntime.notAvailable')
-    return value ? t('settingsRuntime.yes') : t('settingsRuntime.no')
-  }
 
   const canShowWslPathOptions = capability?.hostPlatform === 'windows'
     && (supportsWindowsWslOption(capability) || scriptTarget === 'wsl')
@@ -589,6 +436,18 @@ function SettingsRuntimePanel({
     : runtimeEntrypointHistoryEntries.find((item) => getRuntimeEntrypointHistoryKey(item) === historyDeleteConfirmTarget)?.path
       ?? historyDeleteConfirmTarget
       ?? ''
+  const {
+    inventoryLoading,
+    stopAllLoading,
+    stopSummary,
+    projectManagedRows,
+    sessionGroups,
+    idleManagedRows,
+    refreshInventory,
+    closeManagedProcess,
+    closeSessionRow,
+    closeAllTerminals,
+  } = useTerminalProcessInventory(projects)
 
   return (
     <div className="space-y-8">
@@ -945,196 +804,25 @@ function SettingsRuntimePanel({
         </label>
       </div>
 
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.diagnostics')}</h3>
-          <Button
-            variant="outline"
-            className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-            onClick={() => void runDiagnostics()}
-            loading={loading}
-          >
-            {loading ? t('settingsRuntime.checking') : t('settingsRuntime.runCheck')}
-          </Button>
-        </div>
-        {diag && (
-          <div className="rounded-[22px] border px-5 py-4 surface-card space-y-1 text-xs" style={{ borderColor: 'var(--color-border)' }}>
-            <p>{t('settingsRuntime.diagMode')}: {diag.mode}</p>
-            <p>{t('settingsRuntime.diagProvider')}: {diag.providerLabel}</p>
-            <p>{t('settingsRuntime.diagSupported')}: {diag.supported ? t('settingsRuntime.yes') : t('settingsRuntime.no')}</p>
-            <p>{t('settingsRuntime.diagWsl')}: {diag.hasWsl ? 'OK' : t('settingsRuntime.missing')}</p>
-            <p>{t('settingsRuntime.diagTmux')}: {diag.hasTmux ? 'OK' : t('settingsRuntime.missing')}</p>
-            <p>{t('settingsRuntime.diagScriptExists')}: {renderDiagStatus(diag.launcherScriptExists)}</p>
-            <p>{t('settingsRuntime.diagScriptExecutable')}: {renderDiagStatus(diag.launcherScriptExecutable)}</p>
-            {diag.issues.length > 0 && (
-              <div className="mt-2 text-[color:var(--color-destructive)] whitespace-pre-line">
-                {diag.issues.map((it) => `- ${it}`).join('\n')}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <RuntimeDiagnosticsCard
+        diag={diag}
+        loading={loading}
+        onRunCheck={() => void runDiagnostics()}
+      />
 
-      <div>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h3 className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.terminalProcesses')}</h3>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-              onClick={() => void refreshInventory()}
-              disabled={stopAllLoading}
-              loading={inventoryLoading}
-            >
-              {inventoryLoading ? t('settingsRuntime.refreshing') : t('settingsRuntime.refresh')}
-            </Button>
-            <Button
-              variant="outline"
-              className="h-8 rounded-full px-3 text-xs"
-              onClick={() => void closeAllTerminals()}
-              loading={stopAllLoading}
-            >
-              {stopAllLoading ? t('settingsRuntime.stopping') : t('settingsRuntime.closeAllTerminals')}
-            </Button>
-          </div>
-        </div>
-        {stopSummary && (
-          <p className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">{stopSummary}</p>
-        )}
-        <div className="space-y-3">
-          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-[color:var(--color-foreground)]">
-                {usesTmuxRuntime ? t('settings.runtimePanel.managedProjectGroup') : t('settings.runtimePanel.unmanagedProjectGroup')}
-              </p>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">{projectManaged.length}</span>
-            </div>
-            {projectManaged.length === 0 ? (
-              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
-            ) : (
-              <div className="space-y-1.5">
-                {projectManaged.map((item) => (
-                  <div key={`m-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                      {projectNameMap.get(item.projectId) || item.projectId} · {backendLabel(item.backend)} · {formatSince(item.startTime)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => void closeManagedProcess(item.processId)}
-                      disabled={activeTerminalActionKey !== null}
-                      loading={activeTerminalActionKey === `process:${item.processId}`}
-                    >
-                      {t('settingsRuntime.close')}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.sessions')}</p>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">{sessionRows.length}</span>
-            </div>
-            {sessionRows.length === 0 ? (
-              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
-            ) : (
-              <div className="space-y-3">
-                {[
-                  { key: 'active', label: t('common.active'), items: activeSessionRows },
-                  { key: 'inactive', label: t('common.background'), items: inactiveSessionRows },
-                ].map((group) => (
-                  <div key={group.key}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <p className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{group.label}</p>
-                      <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{group.items.length}</span>
-                    </div>
-                    {group.items.length === 0 ? (
-                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {group.items.map((item) => {
-                          const meta = [
-                            item.sessionName,
-                            item.mode,
-                            item.status,
-                            item.createdAt ? formatSince(item.createdAt) : item.startTime ? formatSince(item.startTime) : undefined,
-                          ].filter(Boolean)
-                          return (
-                            <div key={`session-${group.key}-${item.sessionName}`} className="flex items-center justify-between gap-3 text-xs">
-                              <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                                {item.projectLabel ? `${item.projectLabel} · ${meta.join(' · ')}` : meta.join(' · ')}
-                              </span>
-                              <Button
-                                variant="outline"
-                                className="h-7 rounded-full px-2 text-[11px]"
-                                onClick={() => void (
-                                  item.closeBy === 'session'
-                                    ? closeTmuxSession(item.sessionName)
-                                    : item.managedProcessId
-                                      ? closeManagedProcess(item.managedProcessId)
-                                      : Promise.resolve()
-                                )}
-                                disabled={activeTerminalActionKey !== null}
-                                loading={activeTerminalActionKey === (
-                                  item.closeBy === 'session'
-                                    ? `session:${item.sessionName}`
-                                    : item.managedProcessId
-                                      ? `process:${item.managedProcessId}`
-                                      : null
-                                )}
-                              >
-                                {t('settingsRuntime.close')}
-                              </Button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.cleanable')}</p>
-              <span className="text-xs text-[color:var(--color-muted-foreground)]">{idleManaged.length}</span>
-            </div>
-            {idleManaged.length === 0 ? (
-              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.none')}</p>
-            ) : (
-              <div className="space-y-1.5">
-                {idleManaged.map((item) => (
-                  <div key={`idle-m-${item.processId}`} className="flex items-center justify-between gap-3 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">
-                      {item.processId} · {backendLabel(item.backend)} · {formatSince(item.startTime)}
-                    </span>
-                    <Button
-                      variant="outline"
-                      className="h-7 rounded-full px-2 text-[11px]"
-                      onClick={() => void closeManagedProcess(item.processId)}
-                      disabled={activeTerminalActionKey !== null}
-                      loading={activeTerminalActionKey === `process:${item.processId}`}
-                    >
-                      {t('settingsRuntime.close')}
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-            {usesTmuxRuntime
-              ? t('settings.runtimePanel.managedCleanupHint')
-              : t('settings.runtimePanel.unmanagedCleanupHint')}
-          </p>
-        </div>
-      </div>
+      <RuntimeTerminalInventory
+        usesTmuxRuntime={usesTmuxRuntime}
+        inventoryLoading={inventoryLoading}
+        stopAllLoading={stopAllLoading}
+        stopSummary={stopSummary}
+        projectManagedRows={projectManagedRows}
+        sessionGroups={sessionGroups}
+        idleManagedRows={idleManagedRows}
+        onRefresh={() => void refreshInventory()}
+        onCloseAll={() => void closeAllTerminals()}
+        onCloseManagedProcess={(processId) => void closeManagedProcess(processId)}
+        onCloseSessionRow={(row) => void closeSessionRow(row)}
+      />
     </div>
   )
 }
