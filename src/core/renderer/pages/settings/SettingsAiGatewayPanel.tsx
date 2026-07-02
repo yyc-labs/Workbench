@@ -1,5 +1,5 @@
-import { AlertTriangle, Link2, Play, Plus, RefreshCw, RotateCcw, Router, Save, Square, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, ChevronDown, Link2, Play, Plus, RefreshCw, RotateCcw, Router, Save, Square, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type {
   AiGatewayClientCli,
   AiGatewayConfig,
@@ -279,11 +279,93 @@ function BindingCard({
   )
 }
 
-function GatewayGuideCard() {
+function ExpandableCard({
+  title,
+  description,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string
+  description: string
+  open: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  return (
+    <div className="rounded-[28px] border px-6 py-5 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+      <button
+        type="button"
+        className="flex w-full items-start justify-between gap-4 text-left"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <div>
+          <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{description}</p>
+        </div>
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]">
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={1.8} />
+        </span>
+      </button>
+      {open ? <div className="mt-5">{children}</div> : null}
+    </div>
+  )
+}
+
+function GatewayQuickStartCard() {
   const { t } = useI18n()
+  const steps = [
+    {
+      title: t('settings.aiGateway.quickStartProviderTitle'),
+      description: t('settings.aiGateway.quickStartProviderDescription'),
+    },
+    {
+      title: t('settings.aiGateway.quickStartStartTitle'),
+      description: t('settings.aiGateway.quickStartStartDescription'),
+    },
+    {
+      title: t('settings.aiGateway.quickStartRouteTitle'),
+      description: t('settings.aiGateway.quickStartRouteDescription'),
+    },
+    {
+      title: t('settings.aiGateway.quickStartLeaveAloneTitle'),
+      description: t('settings.aiGateway.quickStartLeaveAloneDescription'),
+    },
+  ]
 
   return (
     <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
+      <div>
+        <p className="section-label mb-3">{t('settings.aiGateway.kicker')}</p>
+        <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.quickStartTitle')}</h3>
+        <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.quickStartDescription')}</p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={step.title} className="rounded-[20px] bg-[color:var(--color-card)] px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">
+              {index + 1}
+            </div>
+            <h4 className="mt-2 text-sm font-semibold text-[color:var(--color-foreground)]">{step.title}</h4>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{step.description}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-[18px] bg-[color:var(--color-background-sunken)]/55 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+        {t('settings.aiGateway.quickStartFootnote')}
+      </div>
+    </div>
+  )
+}
+
+function GatewayGuideContent() {
+  const { t } = useI18n()
+
+  return (
+    <div className="space-y-5">
       <div>
         <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.guideTitle')}</h3>
         <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.guideDescription')}</p>
@@ -331,6 +413,51 @@ function GatewayGuideCard() {
   )
 }
 
+function GatewayAdvancedMeaningCard() {
+  const { t } = useI18n()
+  const items = [
+    {
+      title: t('settings.aiGateway.advancedMeaningHostPortTitle'),
+      description: t('settings.aiGateway.advancedMeaningHostPortDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningProviderIdTitle'),
+      description: t('settings.aiGateway.advancedMeaningProviderIdDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningTimeoutTitle'),
+      description: t('settings.aiGateway.advancedMeaningTimeoutDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningModelMapTitle'),
+      description: t('settings.aiGateway.advancedMeaningModelMapDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningCapabilitiesTitle'),
+      description: t('settings.aiGateway.advancedMeaningCapabilitiesDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningEnabledTitle'),
+      description: t('settings.aiGateway.advancedMeaningEnabledDescription'),
+    },
+    {
+      title: t('settings.aiGateway.advancedMeaningBindingsTitle'),
+      description: t('settings.aiGateway.advancedMeaningBindingsDescription'),
+    },
+  ]
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {items.map((item) => (
+        <div key={item.title} className="rounded-[20px] bg-[color:var(--color-card)] px-4 py-4">
+          <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{item.title}</h4>
+          <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{item.description}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function SettingsAiGatewayPanel({
   profiles = [],
   activeProfileId,
@@ -347,6 +474,12 @@ export function SettingsAiGatewayPanel({
   const [error, setError] = useState('')
   const [savedHint, setSavedHint] = useState('')
   const [deleteConfirmProviderDraftId, setDeleteConfirmProviderDraftId] = useState<string | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
+  const [relationshipsOpen, setRelationshipsOpen] = useState(false)
+  const [serverOpen, setServerOpen] = useState(false)
+  const [providerAdvancedOpen, setProviderAdvancedOpen] = useState(false)
+  const [advancedMeaningOpen, setAdvancedMeaningOpen] = useState(false)
+  const [bindingsOpen, setBindingsOpen] = useState(false)
 
   const activeProviderIndex = providers.findIndex((provider) => provider.draftId === selectedProviderDraftId)
   const activeProvider = activeProviderIndex >= 0 ? providers[activeProviderIndex] : null
@@ -613,100 +746,118 @@ export function SettingsAiGatewayPanel({
         )}
       </div>
 
-      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
-        <div>
-          <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipTitle')}</h3>
-          <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipDescription')}</p>
-        </div>
+      <GatewayQuickStartCard />
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
-            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</div>
-            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
-              {t('settings.aiGateway.relationshipCount', { count: String(claudeGatewayProfiles.length) })}
+      <ExpandableCard
+        title={t('settings.aiGateway.relationshipTitle')}
+        description={t('settings.aiGateway.relationshipDescription')}
+        open={relationshipsOpen}
+        onToggle={() => setRelationshipsOpen((current) => !current)}
+      >
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</div>
+              <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.relationshipCount', { count: String(claudeGatewayProfiles.length) })}
+              </div>
             </div>
-          </div>
-          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
-            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</div>
-            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
-              {t('settings.aiGateway.relationshipCount', { count: String(codexGatewayScopes.length) })}
+            <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</div>
+              <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.relationshipCount', { count: String(codexGatewayScopes.length) })}
+              </div>
             </div>
-          </div>
-          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
-            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipWarnings')}</div>
-            <div className={`mt-1 text-sm font-medium ${invalidCodexBindingCount > 0 ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-foreground)]'}`}>
-              {t('settings.aiGateway.relationshipCount', { count: String(invalidCodexBindingCount) })}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
-            <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</h4>
-            <div className="mt-3 space-y-2">
-              {claudeGatewayProfiles.length > 0 ? claudeGatewayProfiles.map((profile) => (
-                <div key={profile.id} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
-                  <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{profile.name || profile.id}</span>
-                  <span className="shrink-0 text-[color:var(--color-muted-foreground)]">{profile.gateway?.providerId}</span>
-                </div>
-              )) : (
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoClaudeProfiles')}</p>
-              )}
+            <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipWarnings')}</div>
+              <div className={`mt-1 text-sm font-medium ${invalidCodexBindingCount > 0 ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-foreground)]'}`}>
+                {t('settings.aiGateway.relationshipCount', { count: String(invalidCodexBindingCount) })}
+              </div>
             </div>
           </div>
 
-          <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
-            <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</h4>
-            <div className="mt-3 space-y-2">
-              {codexGatewayScopes.length > 0 ? codexGatewayScopes.map((binding) => {
-                const issue = getCodexGatewayBindingIssue(binding, config)
-                return (
-                  <div key={binding.scopeKey} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
-                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{binding.scopeKey}</span>
-                    <span className={issue ? 'shrink-0 text-[color:var(--color-destructive)]' : 'shrink-0 text-[color:var(--color-muted-foreground)]'}>
-                      {issue ? t('settings.aiGateway.relationshipInvalid') : binding.providerId}
-                    </span>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+              <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</h4>
+              <div className="mt-3 space-y-2">
+                {claudeGatewayProfiles.length > 0 ? claudeGatewayProfiles.map((profile) => (
+                  <div key={profile.id} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{profile.name || profile.id}</span>
+                    <span className="shrink-0 text-[color:var(--color-muted-foreground)]">{profile.gateway?.providerId}</span>
                   </div>
-                )
-              }) : (
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoCodexScopes')}</p>
-              )}
+                )) : (
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoClaudeProfiles')}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+              <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</h4>
+              <div className="mt-3 space-y-2">
+                {codexGatewayScopes.length > 0 ? codexGatewayScopes.map((binding) => {
+                  const issue = getCodexGatewayBindingIssue(binding, config)
+                  return (
+                    <div key={binding.scopeKey} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
+                      <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{binding.scopeKey}</span>
+                      <span className={issue ? 'shrink-0 text-[color:var(--color-destructive)]' : 'shrink-0 text-[color:var(--color-muted-foreground)]'}>
+                        {issue ? t('settings.aiGateway.relationshipInvalid') : binding.providerId}
+                      </span>
+                    </div>
+                  )
+                }) : (
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoCodexScopes')}</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </ExpandableCard>
 
-      <GatewayGuideCard />
+      <ExpandableCard
+        title={t('settings.aiGateway.guideTitle')}
+        description={t('settings.aiGateway.guideDescription')}
+        open={guideOpen}
+        onToggle={() => setGuideOpen((current) => !current)}
+      >
+        <GatewayGuideContent />
+      </ExpandableCard>
 
-      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex items-center gap-3">
-          <Router className="h-5 w-5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
-          <div>
-            <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.serverTitle')}</h3>
-            <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.serverDescription')}</p>
+      <ExpandableCard
+        title={t('settings.aiGateway.serverTitle')}
+        description={t('settings.aiGateway.serverDefaultsHint')}
+        open={serverOpen}
+        onToggle={() => setServerOpen((current) => !current)}
+      >
+        <div className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Router className="h-5 w-5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
+            <div>
+              <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.serverTitle')}</h4>
+              <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.serverDescription')}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.host')}</p>
+              <Input
+                value={config?.host ?? ''}
+                onChange={(event) => updateConfigDraft({ host: event.target.value })}
+                disabled={inputDisabled}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.port')}</p>
+              <Input
+                type="number"
+                value={config?.port ?? ''}
+                onChange={(event) => updateConfigDraft({ port: Number(event.target.value) })}
+                disabled={inputDisabled}
+              />
+            </div>
           </div>
         </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.host')}</p>
-            <Input
-              value={config?.host ?? ''}
-              onChange={(event) => updateConfigDraft({ host: event.target.value })}
-              disabled={inputDisabled}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.port')}</p>
-            <Input
-              type="number"
-              value={config?.port ?? ''}
-              onChange={(event) => updateConfigDraft({ port: Number(event.target.value) })}
-              disabled={inputDisabled}
-            />
-          </div>
-        </div>
-      </div>
+      </ExpandableCard>
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -753,28 +904,8 @@ export function SettingsAiGatewayPanel({
 
           {activeProvider && (
             <>
-              {!isProviderUsageEmpty(activeProviderUsage ?? { claudeProfiles: [], codexScopes: [], manualRoutes: [] }) && (
-                <div className="md:col-span-2 flex flex-wrap gap-2">
-                  {activeProviderUsage?.claudeProfiles.map((name) => (
-                    <span key={`claude:${name}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
-                      {t('settings.aiGateway.usedByClaude', { value: name })}
-                    </span>
-                  ))}
-                  {activeProviderUsage?.codexScopes.map((scopeKey) => (
-                    <span key={`codex:${scopeKey}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
-                      {t('settings.aiGateway.usedByCodex', { value: scopeKey })}
-                    </span>
-                  ))}
-                  {activeProviderUsage?.manualRoutes.map((modelName) => (
-                    <span key={`manual:${modelName}`} className="rounded-full bg-[color:var(--color-card)] px-3 py-1 text-xs text-[color:var(--color-muted-foreground)]">
-                      {t('settings.aiGateway.usedByRoute', { value: modelName })}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerId')}</p>
-                <Input value={activeProvider.id} onChange={(event) => updateProvider('id', event.target.value)} disabled={inputDisabled} />
+              <div className="md:col-span-2 rounded-[18px] bg-[color:var(--color-background-sunken)]/55 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {t('settings.aiGateway.providerRoutingHint')}
               </div>
               <div className="space-y-1.5">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerName')}</p>
@@ -796,66 +927,10 @@ export function SettingsAiGatewayPanel({
                 />
               </div>
               <div className="space-y-1.5">
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutMs')}</p>
-                <Input
-                  type="number"
-                  value={activeProvider.timeoutMs ?? ''}
-                  onChange={(event) => updateProvider('timeoutMs', Number(event.target.value))}
-                  disabled={inputDisabled}
-                />
-              </div>
-              <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
-                <div>
-                  <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>
-                  <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesDescription')}</p>
-                </div>
-                <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                  {t('settings.aiGateway.capabilitiesDefaultsHint')}
-                </div>
-                <div className="space-y-4">
-                  {CAPABILITY_GROUPS.map((group) => (
-                    <div key={group.key} className="space-y-2">
-                      <div>
-                        <h5 className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">
-                          {t(group.titleKey as Parameters<typeof t>[0])}
-                        </h5>
-                        <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                          {t(group.descriptionKey as Parameters<typeof t>[0])}
-                        </p>
-                      </div>
-                      <div className="grid gap-2 lg:grid-cols-2">
-                        {CAPABILITY_OPTIONS.filter((option) => option.group === group.key).map((option) => (
-                          <label
-                            key={option.key}
-                            className="quiet-control flex min-h-[74px] items-start gap-3 rounded-[16px] px-4 py-3 text-[color:var(--color-foreground)]"
-                          >
-                            <input
-                              className="mt-0.5"
-                              type="checkbox"
-                              checked={activeProvider.capabilities?.[option.key] === true}
-                              onChange={(event) => updateProviderCapability(option.key, event.target.checked)}
-                              disabled={inputDisabled}
-                            />
-                            <span className="min-w-0">
-                              <span className="block text-sm font-medium">
-                                {t(option.labelKey as Parameters<typeof t>[0])}
-                              </span>
-                              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                                {t(option.descriptionKey as Parameters<typeof t>[0])}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1.5">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.apiKeyEnv')}</p>
                 <Input value={activeProvider.apiKeyEnv ?? ''} onChange={(event) => updateProvider('apiKeyEnv', event.target.value)} disabled={inputDisabled} />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 md:col-span-2">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.apiKey')}</p>
                 <Input
                   type="password"
@@ -865,47 +940,157 @@ export function SettingsAiGatewayPanel({
                   placeholder="sk-..."
                 />
               </div>
-              <div className="space-y-1.5 md:col-span-2">
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.modelMap')}</p>
-                <textarea
-                  value={activeProvider.modelMapText}
-                  onChange={(event) => updateProvider('modelMapText', event.target.value)}
-                  disabled={inputDisabled}
-                  placeholder={t('settings.aiGateway.modelMapPlaceholder')}
-                  className="quiet-control min-h-[96px] w-full rounded-[18px] px-4 py-3 font-mono text-sm text-[color:var(--color-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.modelMapHint')}</p>
-              </div>
-              <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3">
-                <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
-                  <input
-                    type="checkbox"
-                    checked={activeProvider.enabled}
-                    onChange={(event) => updateProvider('enabled', event.target.checked)}
-                    disabled={inputDisabled}
-                  />
-                  {t('settings.aiGateway.providerEnabled')}
-                </label>
-                <Button
-                  variant="outline"
-                  className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
-                  onClick={handleDeleteProvider}
-                  disabled={inputDisabled || providers.length <= 1}
+              <div className="md:col-span-2 rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+                <button
+                  type="button"
+                  className="flex w-full items-start justify-between gap-4 text-left"
+                  onClick={() => setProviderAdvancedOpen((current) => !current)}
+                  aria-expanded={providerAdvancedOpen}
                 >
-                  <Trash2 className="h-4 w-4" />
-                  {t('common.delete')}
-                </Button>
+                  <div>
+                    <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.providerAdvancedTitle')}</h4>
+                    <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerAdvancedDescription')}</p>
+                  </div>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]">
+                    <ChevronDown className={`h-4 w-4 transition-transform ${providerAdvancedOpen ? 'rotate-180' : ''}`} strokeWidth={1.8} />
+                  </span>
+                </button>
+
+                {providerAdvancedOpen && (
+                  <div className="mt-4 grid gap-4 md:grid-cols-2">
+                    {!isProviderUsageEmpty(activeProviderUsage ?? { claudeProfiles: [], codexScopes: [], manualRoutes: [] }) && (
+                      <div className="md:col-span-2 flex flex-wrap gap-2">
+                        {activeProviderUsage?.claudeProfiles.map((name) => (
+                          <span key={`claude:${name}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
+                            {t('settings.aiGateway.usedByClaude', { value: name })}
+                          </span>
+                        ))}
+                        {activeProviderUsage?.codexScopes.map((scopeKey) => (
+                          <span key={`codex:${scopeKey}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
+                            {t('settings.aiGateway.usedByCodex', { value: scopeKey })}
+                          </span>
+                        ))}
+                        {activeProviderUsage?.manualRoutes.map((modelName) => (
+                          <span key={`manual:${modelName}`} className="rounded-full bg-[color:var(--color-card)] px-3 py-1 text-xs text-[color:var(--color-muted-foreground)]">
+                            {t('settings.aiGateway.usedByRoute', { value: modelName })}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerId')}</p>
+                      <Input value={activeProvider.id} onChange={(event) => updateProvider('id', event.target.value)} disabled={inputDisabled} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutMs')}</p>
+                      <Input
+                        type="number"
+                        value={activeProvider.timeoutMs ?? ''}
+                        onChange={(event) => updateProvider('timeoutMs', Number(event.target.value))}
+                        disabled={inputDisabled}
+                      />
+                    </div>
+                    <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
+                      <div>
+                        <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesDescription')}</p>
+                      </div>
+                      <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                        {t('settings.aiGateway.capabilitiesDefaultsHint')}
+                      </div>
+                      <div className="space-y-4">
+                        {CAPABILITY_GROUPS.map((group) => (
+                          <div key={group.key} className="space-y-2">
+                            <div>
+                              <h5 className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">
+                                {t(group.titleKey as Parameters<typeof t>[0])}
+                              </h5>
+                              <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                                {t(group.descriptionKey as Parameters<typeof t>[0])}
+                              </p>
+                            </div>
+                            <div className="grid gap-2 lg:grid-cols-2">
+                              {CAPABILITY_OPTIONS.filter((option) => option.group === group.key).map((option) => (
+                                <label
+                                  key={option.key}
+                                  className="quiet-control flex min-h-[74px] items-start gap-3 rounded-[16px] px-4 py-3 text-[color:var(--color-foreground)]"
+                                >
+                                  <input
+                                    className="mt-0.5"
+                                    type="checkbox"
+                                    checked={activeProvider.capabilities?.[option.key] === true}
+                                    onChange={(event) => updateProviderCapability(option.key, event.target.checked)}
+                                    disabled={inputDisabled}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-medium">
+                                      {t(option.labelKey as Parameters<typeof t>[0])}
+                                    </span>
+                                    <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                                      {t(option.descriptionKey as Parameters<typeof t>[0])}
+                                    </span>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.modelMap')}</p>
+                      <textarea
+                        value={activeProvider.modelMapText}
+                        onChange={(event) => updateProvider('modelMapText', event.target.value)}
+                        disabled={inputDisabled}
+                        placeholder={t('settings.aiGateway.modelMapPlaceholder')}
+                        className="quiet-control min-h-[96px] w-full rounded-[18px] px-4 py-3 font-mono text-sm text-[color:var(--color-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                      <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.modelMapHint')}</p>
+                    </div>
+                    <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3">
+                      <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
+                        <input
+                          type="checkbox"
+                          checked={activeProvider.enabled}
+                          onChange={(event) => updateProvider('enabled', event.target.checked)}
+                          disabled={inputDisabled}
+                        />
+                        {t('settings.aiGateway.providerEnabled')}
+                      </label>
+                      <Button
+                        variant="outline"
+                        className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
+                        onClick={handleDeleteProvider}
+                        disabled={inputDisabled || providers.length <= 1}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {t('common.delete')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
         </div>
       </div>
 
-      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
-        <div>
-          <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.bindingsTitle')}</h3>
-          <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.bindingsDescription')}</p>
-        </div>
+      <ExpandableCard
+        title={t('settings.aiGateway.advancedMeaningTitle')}
+        description={t('settings.aiGateway.advancedMeaningDescription')}
+        open={advancedMeaningOpen}
+        onToggle={() => setAdvancedMeaningOpen((current) => !current)}
+      >
+        <GatewayAdvancedMeaningCard />
+      </ExpandableCard>
+
+      <ExpandableCard
+        title={t('settings.aiGateway.bindingsTitle')}
+        description={t('settings.aiGateway.bindingsDescription')}
+        open={bindingsOpen}
+        onToggle={() => setBindingsOpen((current) => !current)}
+      >
         <div className="grid gap-4 lg:grid-cols-2">
           <BindingCard
             cli="claude"
@@ -922,7 +1107,7 @@ export function SettingsAiGatewayPanel({
             onRestore={(cli) => void handleBindingAction(cli, 'restore')}
           />
         </div>
-      </div>
+      </ExpandableCard>
 
       <ModalShell
         open={Boolean(deleteConfirmProvider)}
