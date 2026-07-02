@@ -1,22 +1,26 @@
 import { randomUUID } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import type {
-  AgentLogLevel,
   AiGatewayConfig,
   AiGatewayLogDetail,
   AiGatewayLogEntry,
-  AiGatewayLogRoute,
-  AiGatewayProtocolConversionKind,
   AiGatewayProviderConfig,
-  StructuredHttpRequestSnapshot,
+  AiGatewayProtocolConversionKind,
   StructuredJsonSnapshot,
 } from '../../../shared/types'
 import {
-  buildJsonSnapshot,
   buildRequestSnapshot,
   buildResponseSnapshot,
-  hasStructuredTruncation,
 } from '../agent-logs/log-snapshots'
+import {
+  emptyResponse,
+  getContentType,
+  getHeaderValue,
+  getResponseContentType,
+  jsonResponse,
+  writeSseHeaders,
+  type HeaderValue,
+} from './gateway-http'
 import {
   AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
   getAiGatewayAnthropicBaseUrl,
@@ -24,6 +28,17 @@ import {
   getAiGatewayOpenAiBaseUrl,
   normalizeAiGatewayConfig,
 } from './gateway-config'
+import { parseRoutedPath, routeErrorPayload, type RouteKind } from './gateway-routes'
+import {
+  beginGatewayTrace as beginGatewayTraceHelper,
+  buildGatewayTraceDetail,
+  updateGatewayTraceIngressBody as updateGatewayTraceIngressBodyHelper,
+  updateGatewayTraceProtocolDiagnostics as updateGatewayTraceProtocolDiagnosticsHelper,
+  applyToolValidationReport as applyToolValidationReportHelper,
+  setGatewayTraceRouteData as setGatewayTraceRouteDataHelper,
+  type GatewayRequestTrace,
+  type RequestLogContext,
+} from './gateway-trace'
 import { AiGatewayProviderRegistry } from './provider-registry'
 import type {
   AnthropicMessagesRequest,
@@ -33,18 +48,14 @@ import type {
   JsonObject,
   OpenAiResponsesRequest,
 } from './protocol-types'
-import { GatewayRouteError, hasNonEmptyObject, resolveMappedModel, UnsupportedGatewayFeatureError } from './protocol-types'
-import { anthropicMessagesToChatCompletion } from './adapters/anthropic-to-chat'
-import { responsesToChatCompletion } from './adapters/responses-to-chat'
+import { GatewayRouteError } from './protocol-types'
 import {
-  chatCompletionToAnthropicMessage,
   chatStreamChunkToAnthropicEvents,
   createAnthropicStreamStart,
   createAnthropicStreamState,
   createAnthropicStreamStop,
 } from './adapters/chat-to-anthropic'
 import {
-  chatCompletionToResponses,
   chatStreamChunkToResponsesEvents,
   createResponsesStreamIds,
   createResponsesStreamStart,
@@ -60,10 +71,29 @@ import {
   anthropicToolsToValidationTools,
   toolValidationFailureMessage,
   validateAnthropicToolUseBlocks,
-  validateChatCompletionToolCalls,
   validateChatToolCalls,
   type ToolValidationReport,
 } from './tool-validation'
+import {
+  buildAnthropicAuthHeaders,
+  buildAnthropicUpstreamLogDetails,
+  buildResponsesUpstreamLogDetails,
+  buildUpstreamLogDetails,
+  extractRequestApiToken,
+  isAbortError,
+  readResponseText,
+  resolveUpstreamAuth,
+  toAnthropicMessagesUrl,
+  toChatCompletionsUrl,
+  toResponsesUrl,
+} from './gateway-upstream'
+import {
+  handleAnthropicMessagesRoute,
+  handleChatCompletionsRoute,
+  handleResponsesRoute,
+} from './gateway-request-handlers'
+
+export { extractRequestApiToken, toAnthropicMessagesUrl } from './gateway-upstream'
 
 type AiGatewayServerOptions = {
   getConfig: () => AiGatewayConfig
@@ -71,101 +101,10 @@ type AiGatewayServerOptions = {
   isLogCaptureEnabled?: () => boolean
 }
 
-type RouteKind = 'anthropic' | 'responses' | 'chat'
-
-type RoutedPath = {
-  path: string
-  profileId?: string
-}
-
-type RequestLogContext = {
-  route: AiGatewayLogRoute
-  requestMethod: string
-  requestPath: string
-  profileId?: string
-}
-
-type HeaderValue = string | string[] | undefined
-type ResolvedUpstreamAuth = {
-  token: string
-  source: string
-}
-
-type GatewayRequestTrace = {
-  id: string
-  startedAt: number
-  title: string
-  level: AgentLogLevel
-  requestContext: RequestLogContext
-  ingressRequest: StructuredHttpRequestSnapshot
-  meta: AiGatewayLogDetail['meta']
-  normalizedRequest?: StructuredJsonSnapshot
-  upstreamRequest?: AiGatewayLogDetail['upstreamRequest']
-  upstreamResponse?: AiGatewayLogDetail['upstreamResponse']
-  clientResponse?: AiGatewayLogDetail['clientResponse']
-  stream?: AiGatewayLogDetail['stream']
-  protocolDiagnostics?: AiGatewayLogDetail['protocolDiagnostics']
-  error?: AiGatewayLogDetail['error']
-  statusCode?: number
-  finalized: boolean
-}
-
 const AI_GATEWAY_DEBUG_ENV = 'IDE_ELECTRON_AI_GATEWAY_DEBUG'
 const AI_GATEWAY_LOG_PREVIEW_CHARS = 1200
 const AI_GATEWAY_MAX_DEBUG_SSE_EVENTS = 6
 const AI_GATEWAY_RECENT_LOG_LIMIT = 200
-
-function jsonResponse(res: ServerResponse, statusCode: number, payload: unknown): void {
-  const body = JSON.stringify(payload)
-  res.writeHead(statusCode, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(body),
-  })
-  res.end(body)
-}
-
-function emptyResponse(res: ServerResponse, statusCode: number): void {
-  res.writeHead(statusCode)
-  res.end()
-}
-
-function writeSseHeaders(res: ServerResponse): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache, no-transform',
-    connection: 'keep-alive',
-    'x-accel-buffering': 'no',
-  })
-  res.socket?.setNoDelay(true)
-  res.flushHeaders?.()
-}
-
-function routeErrorPayload(kind: RouteKind, message: string, code = 'ai_gateway_error'): JsonObject {
-  if (kind === 'anthropic') {
-    return {
-      type: 'error',
-      error: {
-        type: code,
-        message,
-      },
-    }
-  }
-
-  return {
-    error: {
-      message,
-      type: code,
-      code,
-    },
-  }
-}
-
-function routeTitle(route: AiGatewayLogRoute): string {
-  if (route === 'anthropic') return 'Anthropic request'
-  if (route === 'responses') return 'Responses request'
-  if (route === 'chat') return 'Chat Completions request'
-  return 'Gateway request'
-}
 
 function isAiGatewayDebugEnabled(): boolean {
   const value = (process.env[AI_GATEWAY_DEBUG_ENV] ?? '').trim().toLowerCase()
@@ -194,159 +133,6 @@ function logAiGateway(level: 'info' | 'warn' | 'error', message: string, details
 function debugAiGateway(message: string, details?: Record<string, unknown>): void {
   if (!isAiGatewayDebugEnabled()) return
   logAiGateway('info', message, details)
-}
-
-function readRequestBody(req: IncomingMessage, maxBodyBytes: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let body = ''
-    let bytes = 0
-    req.setEncoding('utf8')
-    req.on('data', (chunk: string) => {
-      bytes += Buffer.byteLength(chunk)
-      if (bytes > maxBodyBytes) {
-        reject(new Error('REQUEST_BODY_TOO_LARGE'))
-        req.destroy()
-        return
-      }
-      body += chunk
-    })
-    req.on('end', () => resolve(body))
-    req.on('error', reject)
-  })
-}
-
-function parseJsonBody(rawBody: string): JsonObject {
-  if (!rawBody.trim()) return {}
-  const parsed = JSON.parse(rawBody) as unknown
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Request body must be a JSON object.')
-  }
-  return parsed as JsonObject
-}
-
-function getHeaderValue(headers: Record<string, HeaderValue>, name: string): string | undefined {
-  const value = headers[name]
-  if (Array.isArray(value)) {
-    return value.find((item) => typeof item === 'string' && item.trim())?.trim()
-  }
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
-}
-
-function getContentType(headers: Record<string, HeaderValue>): string | undefined {
-  return getHeaderValue(headers, 'content-type')
-}
-
-function getResponseContentType(response: Response): string | undefined {
-  return response.headers.get('content-type') || undefined
-}
-
-export function extractRequestApiToken(headers: Record<string, HeaderValue>): string {
-  const headerToken = getHeaderValue(headers, 'x-api-key')
-    || getHeaderValue(headers, 'api-key')
-  if (headerToken) return headerToken
-
-  const authorization = getHeaderValue(headers, 'authorization')
-  if (!authorization) return ''
-  const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i)
-  if (bearerMatch?.[1]?.trim()) return bearerMatch[1].trim()
-  return authorization
-}
-
-function resolveUpstreamAuth(
-  provider: AiGatewayProviderConfig,
-  apiTokenOverride: string
-): ResolvedUpstreamAuth {
-  const override = apiTokenOverride.trim()
-  if (override) {
-    return {
-      token: override,
-      source: 'request-token',
-    }
-  }
-
-  const inlineToken = provider.apiKey?.trim()
-  if (inlineToken) {
-    return {
-      token: inlineToken,
-      source: 'provider.apiKey',
-    }
-  }
-
-  const envName = provider.apiKeyEnv?.trim()
-  if (envName) {
-    return {
-      token: (process.env[envName] ?? '').trim(),
-      source: `process.env.${envName}`,
-    }
-  }
-
-  return {
-    token: '',
-    source: 'none',
-  }
-}
-
-function buildAnthropicAuthHeaders(
-  provider: AiGatewayProviderConfig,
-  incomingHeaders: Record<string, HeaderValue>,
-  apiTokenOverride: string
-): { auth: ResolvedUpstreamAuth; headers: Record<string, string> } {
-  const auth = resolveUpstreamAuth(provider, apiTokenOverride)
-  if (!auth.token) return { auth, headers: {} }
-
-  const incomingAuthorization = getHeaderValue(incomingHeaders, 'authorization')
-  const incomingXApiKey = getHeaderValue(incomingHeaders, 'x-api-key')
-    || getHeaderValue(incomingHeaders, 'api-key')
-
-  if (auth.source === 'request-token') {
-    if (incomingAuthorization && !incomingXApiKey) {
-      return {
-        auth,
-        headers: { authorization: incomingAuthorization },
-      }
-    }
-    return {
-      auth,
-      headers: { 'x-api-key': auth.token },
-    }
-  }
-
-  return {
-    auth,
-    headers: {
-      authorization: `Bearer ${auth.token}`,
-      'x-api-key': auth.token,
-    },
-  }
-}
-
-function toChatCompletionsUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, '')
-  if (/\/chat\/completions$/i.test(trimmed)) return trimmed
-  return `${trimmed}/chat/completions`
-}
-
-function toResponsesUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, '')
-  if (/\/responses$/i.test(trimmed)) return trimmed
-  if (/\/v1$/i.test(trimmed)) return `${trimmed}/responses`
-  return `${trimmed}/v1/responses`
-}
-
-export function toAnthropicMessagesUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/, '')
-  if (/\/(?:v1\/)?messages$/i.test(trimmed)) return trimmed
-  if (/\/v1$/i.test(trimmed)) return `${trimmed}/messages`
-  return `${trimmed}/v1/messages`
-}
-
-function parseRoutedPath(pathname: string): RoutedPath {
-  const match = pathname.match(/^\/profiles\/([^/]+)(\/.*)?$/)
-  if (!match) return { path: pathname }
-  return {
-    profileId: decodeURIComponent(match[1] ?? ''),
-    path: match[2] || '/',
-  }
 }
 
 function extractFinishReason(chunk: ChatCompletionResponse): string | null | undefined {
@@ -704,69 +490,6 @@ function readAnthropicPassthroughEvent(
   return {}
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
-
-async function readResponseText(response: Response): Promise<string> {
-  try {
-    return await response.text()
-  } catch {
-    return ''
-  }
-}
-
-function buildUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  chatRequest: ChatCompletionRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
-  return {
-    providerId: provider.id,
-    providerName: provider.name,
-    protocol: provider.protocol,
-    capabilities: provider.capabilities,
-    upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-    model: chatRequest.model,
-    stream: chatRequest.stream === true,
-    ...extra,
-  }
-}
-
-function buildAnthropicUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  request: AnthropicMessagesRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
-  return {
-    providerId: provider.id,
-    providerName: provider.name,
-    protocol: provider.protocol,
-    capabilities: provider.capabilities,
-    upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-    model: request.model,
-    stream: request.stream === true,
-    ...extra,
-  }
-}
-
-function buildResponsesUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  request: OpenAiResponsesRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
-  return {
-    providerId: provider.id,
-    providerName: provider.name,
-    protocol: provider.protocol,
-    capabilities: provider.capabilities,
-    upstreamUrl: toResponsesUrl(provider.baseUrl),
-    model: request.model,
-    stream: request.stream === true,
-    ...extra,
-  }
-}
-
 export class AiGatewayServer {
   private readonly getConfig: AiGatewayServerOptions['getConfig']
   private readonly registry: AiGatewayProviderRegistry
@@ -921,28 +644,7 @@ export class AiGatewayServer {
   }
 
   private beginGatewayTrace(req: IncomingMessage, requestContext: RequestLogContext): GatewayRequestTrace {
-    const requestUrl = new URL(req.url || '/', 'http://localhost')
-    return {
-      id: randomUUID(),
-      startedAt: Date.now(),
-      title: routeTitle(requestContext.route),
-      level: 'info',
-      requestContext,
-      ingressRequest: buildRequestSnapshot({
-        method: req.method || requestContext.requestMethod,
-        path: requestUrl.pathname,
-        url: req.url || requestUrl.pathname,
-        query: requestUrl.searchParams,
-        headers: req.headers,
-        contentType: getContentType(req.headers),
-      }),
-      meta: {
-        requestId: '',
-        route: requestContext.route,
-        profileId: requestContext.profileId,
-      },
-      finalized: false,
-    }
+    return beginGatewayTraceHelper(req, requestContext)
   }
 
   private updateGatewayTraceIngressBody(
@@ -951,17 +653,7 @@ export class AiGatewayServer {
     parsedBody: unknown | undefined,
     maxBodyBytes: number
   ): void {
-    trace.ingressRequest = buildRequestSnapshot({
-      method: trace.ingressRequest.method,
-      path: trace.ingressRequest.path,
-      url: trace.ingressRequest.url,
-      query: trace.ingressRequest.query,
-      headers: trace.ingressRequest.headers,
-      bodyText: rawBody,
-      bodyValue: parsedBody,
-      contentType: trace.ingressRequest.body?.contentType ?? getContentType({ 'content-type': trace.ingressRequest.headers['content-type'] }),
-      maxBodyBytes,
-    })
+    updateGatewayTraceIngressBodyHelper(trace, rawBody, parsedBody, maxBodyBytes)
   }
 
   private setGatewayTraceRouteData(
@@ -976,44 +668,26 @@ export class AiGatewayServer {
       lossyWarnings?: string[]
     }
   ): void {
-    trace.meta.providerId = provider.id
-    trace.meta.providerName = provider.name
-    trace.meta.model = model
-    trace.normalizedRequest = buildJsonSnapshot({
-      contentType: 'application/json; charset=utf-8',
-      parsedValue: normalizedRequest,
-      maxBytes: maxBodyBytes,
-    })
-    trace.stream = {
-      requested: requestedStream,
-      enabled: false,
-    }
-    trace.protocolDiagnostics = {
-      ...(trace.protocolDiagnostics ?? {}),
-      providerCapabilities: provider.capabilities,
-      conversion: diagnostics?.conversion ?? trace.protocolDiagnostics?.conversion,
-      lossyWarnings: diagnostics?.lossyWarnings ?? trace.protocolDiagnostics?.lossyWarnings,
-    }
-    trace.statusCode = requestedStream ? 200 : trace.statusCode
+    setGatewayTraceRouteDataHelper(
+      trace,
+      provider,
+      model,
+      requestedStream,
+      normalizedRequest,
+      maxBodyBytes,
+      diagnostics
+    )
   }
 
   private updateGatewayTraceProtocolDiagnostics(
     trace: GatewayRequestTrace,
     diagnostics: NonNullable<AiGatewayLogDetail['protocolDiagnostics']>
   ): void {
-    trace.protocolDiagnostics = {
-      ...(trace.protocolDiagnostics ?? {}),
-      ...diagnostics,
-      lossyWarnings: diagnostics.lossyWarnings ?? trace.protocolDiagnostics?.lossyWarnings,
-      toolValidation: diagnostics.toolValidation ?? trace.protocolDiagnostics?.toolValidation,
-    }
+    updateGatewayTraceProtocolDiagnosticsHelper(trace, diagnostics)
   }
 
   private applyToolValidationReport(trace: GatewayRequestTrace, report: ToolValidationReport): void {
-    if (report.entries.length === 0) return
-    this.updateGatewayTraceProtocolDiagnostics(trace, {
-      toolValidation: report.entries,
-    })
+    applyToolValidationReportHelper(trace, report)
   }
 
   private recordToolValidation(
@@ -1058,49 +732,7 @@ export class AiGatewayServer {
     if (trace.finalized) return
     trace.finalized = true
     if (!this.isLogCaptureEnabled()) return
-    const durationMs = Math.max(0, Date.now() - trace.startedAt)
-    trace.meta.requestId = trace.id
-    trace.meta.durationMs = durationMs
-
-    const detail: AiGatewayLogDetail = {
-      source: 'ai-gateway',
-      summary: {
-        id: trace.id,
-        source: 'ai-gateway',
-        title: trace.title,
-        timestamp: trace.startedAt,
-        level: trace.level,
-        route: trace.requestContext.route,
-        requestMethod: trace.requestContext.requestMethod,
-        requestPath: trace.requestContext.requestPath,
-        providerId: trace.meta.providerId,
-        providerName: trace.meta.providerName,
-        model: trace.meta.model,
-        profileId: trace.meta.profileId,
-        statusCode: trace.statusCode,
-        durationMs,
-        stream: trace.stream?.requested,
-        eventCount: trace.stream?.upstreamEventCount,
-        truncated: hasStructuredTruncation({
-          ingressRequest: trace.ingressRequest,
-          normalizedRequest: trace.normalizedRequest,
-          upstreamRequest: trace.upstreamRequest,
-          upstreamResponse: trace.upstreamResponse,
-          clientResponse: trace.clientResponse,
-          stream: trace.stream,
-        }),
-      },
-      meta: trace.meta,
-      ingressRequest: trace.ingressRequest,
-      normalizedRequest: trace.normalizedRequest,
-      protocolDiagnostics: trace.protocolDiagnostics,
-      upstreamRequest: trace.upstreamRequest,
-      upstreamResponse: trace.upstreamResponse,
-      clientResponse: trace.clientResponse,
-      stream: trace.stream,
-      error: trace.error,
-    }
-    this.appendRecentLogDetail(detail)
+    this.appendRecentLogDetail(buildGatewayTraceDetail(trace))
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -1126,338 +758,73 @@ export class AiGatewayServer {
 
     const maxBodyBytes = config.maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     if (routedPath.path === '/v1/messages' || routedPath.path === '/messages') {
-      await this.handleAnthropicMessages(req, res, maxBodyBytes, routedPath.profileId)
+      await handleAnthropicMessagesRoute(req, res, maxBodyBytes, {
+        registry: this.registry,
+        beginGatewayTrace: this.beginGatewayTrace.bind(this),
+        updateGatewayTraceIngressBody: this.updateGatewayTraceIngressBody.bind(this),
+        setGatewayTraceRouteData: this.setGatewayTraceRouteData.bind(this),
+        applyToolValidationReport: this.applyToolValidationReport.bind(this),
+        recordToolValidation: this.recordToolValidation.bind(this),
+        finalizeGatewayTrace: this.finalizeGatewayTrace.bind(this),
+        recordGatewayLog: this.recordGatewayLog.bind(this),
+        respondRouteError: this.respondRouteError.bind(this),
+        fetchChatJson: this.fetchChatJson.bind(this),
+        proxyChatStreamAsAnthropic: this.proxyChatStreamAsAnthropic.bind(this),
+        proxyAnthropicMessagesStream: this.proxyAnthropicMessagesStream.bind(this),
+        proxyAnthropicMessagesJson: this.proxyAnthropicMessagesJson.bind(this),
+        proxyResponsesStream: this.proxyResponsesStream.bind(this),
+        proxyResponsesJson: this.proxyResponsesJson.bind(this),
+        proxyChatStreamAsResponses: this.proxyChatStreamAsResponses.bind(this),
+        proxyChatStreamRaw: this.proxyChatStreamRaw.bind(this),
+      }, routedPath.profileId)
       return
     }
     if (routedPath.path === '/v1/responses' || routedPath.path === '/responses') {
-      await this.handleResponses(req, res, maxBodyBytes)
+      await handleResponsesRoute(req, res, maxBodyBytes, {
+        registry: this.registry,
+        beginGatewayTrace: this.beginGatewayTrace.bind(this),
+        updateGatewayTraceIngressBody: this.updateGatewayTraceIngressBody.bind(this),
+        setGatewayTraceRouteData: this.setGatewayTraceRouteData.bind(this),
+        applyToolValidationReport: this.applyToolValidationReport.bind(this),
+        recordToolValidation: this.recordToolValidation.bind(this),
+        finalizeGatewayTrace: this.finalizeGatewayTrace.bind(this),
+        recordGatewayLog: this.recordGatewayLog.bind(this),
+        respondRouteError: this.respondRouteError.bind(this),
+        fetchChatJson: this.fetchChatJson.bind(this),
+        proxyChatStreamAsAnthropic: this.proxyChatStreamAsAnthropic.bind(this),
+        proxyAnthropicMessagesStream: this.proxyAnthropicMessagesStream.bind(this),
+        proxyAnthropicMessagesJson: this.proxyAnthropicMessagesJson.bind(this),
+        proxyResponsesStream: this.proxyResponsesStream.bind(this),
+        proxyResponsesJson: this.proxyResponsesJson.bind(this),
+        proxyChatStreamAsResponses: this.proxyChatStreamAsResponses.bind(this),
+        proxyChatStreamRaw: this.proxyChatStreamRaw.bind(this),
+      })
       return
     }
     if (routedPath.path === '/v1/chat/completions' || routedPath.path === '/chat/completions') {
-      await this.handleChatCompletions(req, res, maxBodyBytes)
+      await handleChatCompletionsRoute(req, res, maxBodyBytes, {
+        registry: this.registry,
+        beginGatewayTrace: this.beginGatewayTrace.bind(this),
+        updateGatewayTraceIngressBody: this.updateGatewayTraceIngressBody.bind(this),
+        setGatewayTraceRouteData: this.setGatewayTraceRouteData.bind(this),
+        applyToolValidationReport: this.applyToolValidationReport.bind(this),
+        recordToolValidation: this.recordToolValidation.bind(this),
+        finalizeGatewayTrace: this.finalizeGatewayTrace.bind(this),
+        recordGatewayLog: this.recordGatewayLog.bind(this),
+        respondRouteError: this.respondRouteError.bind(this),
+        fetchChatJson: this.fetchChatJson.bind(this),
+        proxyChatStreamAsAnthropic: this.proxyChatStreamAsAnthropic.bind(this),
+        proxyAnthropicMessagesStream: this.proxyAnthropicMessagesStream.bind(this),
+        proxyAnthropicMessagesJson: this.proxyAnthropicMessagesJson.bind(this),
+        proxyResponsesStream: this.proxyResponsesStream.bind(this),
+        proxyResponsesJson: this.proxyResponsesJson.bind(this),
+        proxyChatStreamAsResponses: this.proxyChatStreamAsResponses.bind(this),
+        proxyChatStreamRaw: this.proxyChatStreamRaw.bind(this),
+      })
       return
     }
 
     emptyResponse(res, 404)
-  }
-
-  private async handleAnthropicMessages(
-    req: IncomingMessage,
-    res: ServerResponse,
-    maxBodyBytes: number,
-    profileId?: string
-  ): Promise<void> {
-    const requestContext: RequestLogContext = {
-      route: 'anthropic',
-      requestMethod: req.method || 'POST',
-      requestPath: req.url || '/v1/messages',
-      profileId,
-    }
-    const trace = this.beginGatewayTrace(req, requestContext)
-    try {
-      const rawBody = await readRequestBody(req, maxBodyBytes)
-      this.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
-      const payload = parseJsonBody(rawBody) as AnthropicMessagesRequest
-      const provider = this.registry.getProviderForProfile(profileId)
-        ?? this.registry.getProviderForModel(String(payload.model || ''))
-      const requestApiToken = profileId ? extractRequestApiToken(req.headers) : ''
-      this.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
-
-      if (provider.protocol === 'openai_chat') {
-        if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-        }
-        if (Array.isArray(payload.tools) && payload.tools.length > 0 && provider.capabilities?.supportsTools === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support tools.`)
-        }
-        const chatRequest = anthropicMessagesToChatCompletion(payload, provider)
-        if (chatRequest.parallel_tool_calls === true && provider.capabilities?.supportsParallelToolCalls === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support parallel tool calls.`)
-        }
-        this.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
-          conversion: 'lossy_conversion',
-          lossyWarnings: [
-            'Anthropic Messages to OpenAI Chat is a lossy conversion; provider tool-use prompting and content-block semantics are not equivalent.',
-          ],
-        })
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Received Anthropic Messages request',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: chatRequest.stream === true,
-        })
-        if (chatRequest.stream) {
-          await this.proxyChatStreamAsAnthropic(provider, chatRequest, requestContext, requestApiToken, trace, res)
-          this.finalizeGatewayTrace(trace)
-          return
-        }
-        const chatResponse = await this.fetchChatJson(provider, chatRequest, requestContext, trace, requestApiToken)
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Received upstream Chat response for Anthropic conversion',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: false,
-          statusCode: 200,
-        })
-        const validationReport = validateChatCompletionToolCalls(chatResponse, chatRequest.tools)
-        this.applyToolValidationReport(trace, validationReport)
-        this.recordToolValidation(provider, requestContext, chatRequest.model, false, validationReport)
-        assertToolValidationPassed(validationReport)
-        const clientPayload = chatCompletionToAnthropicMessage(chatResponse, chatRequest.model)
-        trace.clientResponse = buildResponseSnapshot({
-          statusCode: 200,
-          headers: { 'content-type': 'application/json; charset=utf-8' },
-          bodyValue: clientPayload,
-          contentType: 'application/json; charset=utf-8',
-          maxBodyBytes,
-        })
-        trace.statusCode = 200
-        this.finalizeGatewayTrace(trace)
-        jsonResponse(res, 200, clientPayload)
-        return
-      }
-
-      if (provider.protocol === 'anthropic_messages') {
-        if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-        }
-        const upstreamRequest = {
-          ...payload,
-          model: resolveMappedModel(String(payload.model || ''), provider.modelMap),
-        }
-        if (!upstreamRequest.model) {
-          throw new Error('Anthropic request is missing model.')
-        }
-        this.setGatewayTraceRouteData(trace, provider, upstreamRequest.model, upstreamRequest.stream === true, upstreamRequest, maxBodyBytes, {
-          conversion: 'passthrough',
-        })
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Received Anthropic Messages request for Anthropic upstream passthrough',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-          model: upstreamRequest.model,
-          stream: upstreamRequest.stream === true,
-        })
-        if (upstreamRequest.stream) {
-          await this.proxyAnthropicMessagesStream(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
-          this.finalizeGatewayTrace(trace)
-          return
-        }
-        await this.proxyAnthropicMessagesJson(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
-        this.finalizeGatewayTrace(trace)
-        return
-      }
-
-      throw new Error(
-        `Provider "${provider.name}" uses ${provider.protocol}; openai_chat or anthropic_messages is required for Anthropic route.`
-      )
-    } catch (error) {
-      this.respondRouteError(res, 'anthropic', requestContext, trace, error)
-    }
-  }
-
-  private async handleResponses(
-    req: IncomingMessage,
-    res: ServerResponse,
-    maxBodyBytes: number
-  ): Promise<void> {
-    const requestContext: RequestLogContext = {
-      route: 'responses',
-      requestMethod: req.method || 'POST',
-      requestPath: req.url || '/v1/responses',
-    }
-    const trace = this.beginGatewayTrace(req, requestContext)
-    try {
-      const rawBody = await readRequestBody(req, maxBodyBytes)
-      this.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
-      const payload = parseJsonBody(rawBody) as OpenAiResponsesRequest
-      const provider = this.registry.getProviderForModel(String(payload.model || ''))
-      this.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
-
-      if (provider.protocol === 'openai_responses') {
-        if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-        }
-        if (Array.isArray(payload.tools) && payload.tools.length > 0 && provider.capabilities?.supportsTools === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support Responses tools.`)
-        }
-        if (hasNonEmptyObject(payload.reasoning) && provider.capabilities?.supportsReasoning === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support Responses reasoning.`)
-        }
-        const upstreamRequest = {
-          ...payload,
-          model: resolveMappedModel(String(payload.model || ''), provider.modelMap),
-        }
-        if (!upstreamRequest.model) {
-          throw new Error('Responses request is missing model.')
-        }
-        this.setGatewayTraceRouteData(trace, provider, upstreamRequest.model, upstreamRequest.stream === true, upstreamRequest, maxBodyBytes, {
-          conversion: 'passthrough',
-        })
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Received OpenAI Responses request for native upstream passthrough',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toResponsesUrl(provider.baseUrl),
-          model: upstreamRequest.model,
-          stream: upstreamRequest.stream === true,
-        })
-        if (upstreamRequest.stream) {
-          await this.proxyResponsesStream(provider, upstreamRequest, requestContext, trace, res)
-          this.finalizeGatewayTrace(trace)
-          return
-        }
-        await this.proxyResponsesJson(provider, upstreamRequest, requestContext, trace, res)
-        this.finalizeGatewayTrace(trace)
-        return
-      }
-
-      if (provider.protocol === 'openai_chat') {
-        if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-          throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-        }
-        const chatRequest = responsesToChatCompletion(payload, provider)
-        this.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
-          conversion: 'lossy_conversion',
-          lossyWarnings: [
-            'OpenAI Responses to Chat Completions is a downgrade path; Responses tools, reasoning, and rich output items are not preserved.',
-          ],
-        })
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Received OpenAI Responses request for Chat downgrade',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: chatRequest.stream === true,
-        })
-        if (chatRequest.stream) {
-          await this.proxyChatStreamAsResponses(provider, chatRequest, requestContext, '', trace, res)
-          this.finalizeGatewayTrace(trace)
-          return
-        }
-        const chatResponse = await this.fetchChatJson(provider, chatRequest, requestContext, trace)
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'info',
-          message: 'Returned Responses response from Chat downgrade',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: false,
-          statusCode: 200,
-        })
-        const clientPayload = chatCompletionToResponses(chatResponse, chatRequest.model)
-        trace.clientResponse = buildResponseSnapshot({
-          statusCode: 200,
-          headers: { 'content-type': 'application/json; charset=utf-8' },
-          bodyValue: clientPayload,
-          contentType: 'application/json; charset=utf-8',
-          maxBodyBytes,
-        })
-        trace.statusCode = 200
-        this.finalizeGatewayTrace(trace)
-        jsonResponse(res, 200, clientPayload)
-        return
-      }
-
-      throw new Error(
-        `Provider "${provider.name}" uses ${provider.protocol}; openai_responses or openai_chat is required for Responses route.`
-      )
-    } catch (error) {
-      this.respondRouteError(res, 'responses', requestContext, trace, error)
-    }
-  }
-
-  private async handleChatCompletions(
-    req: IncomingMessage,
-    res: ServerResponse,
-    maxBodyBytes: number
-  ): Promise<void> {
-    const requestContext: RequestLogContext = {
-      route: 'chat',
-      requestMethod: req.method || 'POST',
-      requestPath: req.url || '/v1/chat/completions',
-    }
-    const trace = this.beginGatewayTrace(req, requestContext)
-    try {
-      const rawBody = await readRequestBody(req, maxBodyBytes)
-      this.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
-      const payload = parseJsonBody(rawBody) as ChatCompletionRequest
-      const provider = this.registry.getProviderForModel(String(payload.model || ''), 'openai_chat')
-      if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-      }
-      if (Array.isArray(payload.tools) && payload.tools.length > 0 && provider.capabilities?.supportsTools === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support tools.`)
-      }
-      if (payload.parallel_tool_calls === true && provider.capabilities?.supportsParallelToolCalls === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support parallel tool calls.`)
-      }
-      const chatRequest = {
-        ...payload,
-        model: resolveMappedModel(String(payload.model || ''), provider.modelMap),
-      }
-      this.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
-      this.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
-        conversion: 'passthrough',
-      })
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Received Chat Completions request',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: chatRequest.stream === true,
-      })
-      if (chatRequest.stream === true) {
-        await this.proxyChatStreamRaw(provider, chatRequest, requestContext, '', trace, res)
-        this.finalizeGatewayTrace(trace)
-        return
-      }
-      const chatResponse = await this.fetchChatJson(provider, chatRequest, requestContext, trace)
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Returned Chat Completions response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: false,
-        statusCode: 200,
-      })
-      trace.clientResponse = buildResponseSnapshot({
-        statusCode: 200,
-        headers: { 'content-type': 'application/json; charset=utf-8' },
-        bodyValue: chatResponse,
-        contentType: 'application/json; charset=utf-8',
-        maxBodyBytes,
-      })
-      trace.statusCode = 200
-      this.finalizeGatewayTrace(trace)
-      jsonResponse(res, 200, chatResponse)
-    } catch (error) {
-      this.respondRouteError(res, 'chat', requestContext, trace, error)
-    }
   }
 
   private async fetchAnthropicMessages(
