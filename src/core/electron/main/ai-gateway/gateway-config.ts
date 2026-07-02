@@ -69,7 +69,9 @@ function normalizeProviderId(value: unknown, fallback: string): string {
 }
 
 function normalizeRouteSource(value: unknown): AiGatewayModelRoute['source'] {
-  return value === 'claude-profile' ? 'claude-profile' : 'manual'
+  if (value === 'claude-profile') return 'claude-profile'
+  if (value === 'codex-scope') return 'codex-scope'
+  return 'manual'
 }
 
 function normalizeModelRoute(value: unknown, index: number): AiGatewayModelRoute | null {
@@ -92,6 +94,8 @@ function normalizeModelRoute(value: unknown, index: number): AiGatewayModelRoute
     enabled: normalizeBoolean(raw.enabled, true),
     source,
     profileId: normalizeOptionalString(raw.profileId),
+    scopeKey: normalizeOptionalString(raw.scopeKey),
+    cli: raw.cli === 'codex' ? 'codex' : undefined,
   }
 }
 

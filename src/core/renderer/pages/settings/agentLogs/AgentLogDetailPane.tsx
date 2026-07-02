@@ -138,7 +138,7 @@ export function AgentLogDetailPane({
   error,
 }: AgentLogDetailPaneProps) {
   const { t } = useI18n()
-  const [activeTab, setActiveTab] = useState<AgentLogDetailTab>('request')
+  const [activeTab, setActiveTab] = useState<AgentLogDetailTab>('summary')
   const jsonValue = useMemo(() => detailToJson(detail), [detail])
   const tabs = (
     <div className="quiet-control inline-flex max-w-full flex-wrap gap-1 rounded-full p-1">
@@ -170,7 +170,7 @@ export function AgentLogDetailPane({
   )
 
   useEffect(() => {
-    setActiveTab('request')
+    setActiveTab('summary')
   }, [detail?.summary.id, detail?.summary.source])
 
   return (

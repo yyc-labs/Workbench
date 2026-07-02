@@ -271,8 +271,10 @@ export interface AiGatewayModelRoute {
   providerId: string
   upstreamModel?: string
   enabled: boolean
-  source?: 'manual' | 'claude-profile'
+  source?: 'manual' | 'claude-profile' | 'codex-scope'
   profileId?: string
+  scopeKey?: string
+  cli?: 'codex'
 }
 
 export interface AiGatewayClientBindingBackup {
@@ -347,6 +349,31 @@ export interface AiGatewaySaveConfigResult {
 }
 
 export interface AiGatewayBindingResult {
+  config: AiGatewayConfig
+  status: AiGatewayStatus
+  appConfig: AppConfig
+}
+
+export interface CodexGatewayBinding {
+  enabled: boolean
+  scopeKey: string
+  providerId: string
+  directSnapshot?: CodexSettingsSnapshot
+  updatedAt?: string
+}
+
+export type CodexGatewayBindingMap = Record<string, CodexGatewayBinding>
+
+export interface CodexGatewayBindingSaveInput {
+  enabled: boolean
+  providerId?: string
+  providerApiKeys: Record<string, string>
+  config: CodexConfig
+}
+
+export interface CodexGatewayBindingResult {
+  binding: CodexGatewayBinding
+  snapshot: CodexSettingsSnapshot
   config: AiGatewayConfig
   status: AiGatewayStatus
   appConfig: AppConfig
@@ -1221,6 +1248,8 @@ export interface AppConfig {
   codexProviderApiKeys?: Record<string, Record<string, string>>
   /** Cached Codex settings snapshots grouped by Codex scope */
   codexSettingsSnapshots?: CodexSettingsSnapshotMap
+  /** Codex Gateway bindings grouped by Codex scope */
+  codexGatewayBindings?: CodexGatewayBindingMap
   /** Local lifecycle hook gateway for Claude Code and Codex CLI events */
   agentHooks?: AgentHookGatewayConfig
   /** Local model protocol gateway for Claude/Codex compatible CLIs */

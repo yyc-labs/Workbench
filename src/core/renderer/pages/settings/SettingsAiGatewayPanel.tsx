@@ -1,4 +1,4 @@
-import { Link2, Play, Plus, RefreshCw, RotateCcw, Router, Save, Square, Trash2 } from 'lucide-react'
+import { AlertTriangle, Link2, Play, Plus, RefreshCw, RotateCcw, Router, Save, Square, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   AiGatewayClientCli,
@@ -8,14 +8,20 @@ import type {
   AiGatewayUpstreamProtocol,
   ClaudeRuntimeProfile,
 } from '../../../shared/types'
+import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
 import {
+  getCodexGatewayBindingIssue,
+  getCodexScopesUsingGateway,
+} from '../../lib/codexGatewaySummary'
+import {
   syncClaudeGatewayProfileConfigs,
   withClaudeProfileModelRoutes,
 } from '../../lib/claudeGatewayProfiles'
+import { useAppStore } from '../../stores/appStore'
 
 type ProviderDraft = AiGatewayProviderConfig & {
   draftId: string
@@ -93,6 +99,18 @@ function createNewProviderDraft(index: number): ProviderDraft {
     enabled: true,
     timeoutMs: 60000,
   }
+}
+
+type ProviderUsage = {
+  claudeProfiles: string[]
+  codexScopes: string[]
+  manualRoutes: string[]
+}
+
+function isProviderUsageEmpty(usage: ProviderUsage): boolean {
+  return usage.claudeProfiles.length === 0
+    && usage.codexScopes.length === 0
+    && usage.manualRoutes.length === 0
 }
 
 function BindingCard({
@@ -218,6 +236,7 @@ export function SettingsAiGatewayPanel({
   onProfilesSave,
 }: SettingsAiGatewayPanelProps) {
   const { t } = useI18n()
+  const codexGatewayBindings = useAppStore((s) => s.config.codexGatewayBindings ?? {})
   const [config, setConfig] = useState<AiGatewayConfig | null>(null)
   const [status, setStatus] = useState<AiGatewayStatus | null>(null)
   const [providers, setProviders] = useState<ProviderDraft[]>([])
@@ -226,14 +245,42 @@ export function SettingsAiGatewayPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [savedHint, setSavedHint] = useState('')
+  const [deleteConfirmProviderDraftId, setDeleteConfirmProviderDraftId] = useState<string | null>(null)
 
   const activeProviderIndex = providers.findIndex((provider) => provider.draftId === selectedProviderDraftId)
   const activeProvider = activeProviderIndex >= 0 ? providers[activeProviderIndex] : null
+  const deleteConfirmProvider = providers.find((provider) => provider.draftId === deleteConfirmProviderDraftId) ?? null
   const providerOptions = providers.map((provider) => ({
     value: provider.draftId,
     label: provider.name || provider.id,
   }))
   const inputDisabled = loading || saving
+  const claudeGatewayProfiles = profiles.filter((profile) => profile.gateway?.enabled)
+  const codexGatewayScopes = getCodexScopesUsingGateway(codexGatewayBindings)
+  const invalidCodexBindingCount = codexGatewayScopes.filter((binding) => (
+    getCodexGatewayBindingIssue(binding, config) !== null
+  )).length
+
+  const getProviderUsage = (providerId: string): ProviderUsage => ({
+    claudeProfiles: profiles
+      .filter((profile) => profile.gateway?.enabled && profile.gateway.providerId === providerId)
+      .map((profile) => profile.name || profile.id),
+    codexScopes: codexGatewayScopes
+      .filter((binding) => binding.providerId === providerId)
+      .map((binding) => binding.scopeKey),
+    manualRoutes: (config?.modelRoutes ?? [])
+      .filter((route) => (
+        route.enabled
+        && route.providerId === providerId
+        && route.source !== 'claude-profile'
+        && route.source !== 'codex-scope'
+      ))
+      .map((route) => route.model),
+  })
+  const activeProviderUsage = activeProvider ? getProviderUsage(activeProvider.id) : null
+  const deleteConfirmProviderUsage = deleteConfirmProvider
+    ? getProviderUsage(deleteConfirmProvider.id)
+    : null
 
   const statusCards = useMemo(() => ([
     {
@@ -393,9 +440,19 @@ export function SettingsAiGatewayPanel({
 
   const handleDeleteProvider = () => {
     if (!activeProvider || providers.length <= 1) return
-    const nextProviders = providers.filter((provider) => provider.draftId !== activeProvider.draftId)
+    const usage = getProviderUsage(activeProvider.id)
+    if (!isProviderUsageEmpty(usage)) {
+      setDeleteConfirmProviderDraftId(activeProvider.draftId)
+      return
+    }
+    deleteProviderDraft(activeProvider.draftId)
+  }
+
+  const deleteProviderDraft = (draftId: string) => {
+    const nextProviders = providers.filter((provider) => provider.draftId !== draftId)
     setProviders(nextProviders)
     setSelectedProviderDraftId(nextProviders[0]?.draftId ?? '')
+    setDeleteConfirmProviderDraftId(null)
   }
 
   return (
@@ -445,6 +502,69 @@ export function SettingsAiGatewayPanel({
         {status?.error && (
           <p className="mt-4 text-xs text-[color:var(--color-destructive)]">{status.error}</p>
         )}
+      </div>
+
+      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
+        <div>
+          <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipTitle')}</h3>
+          <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipDescription')}</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {t('settings.aiGateway.relationshipCount', { count: String(claudeGatewayProfiles.length) })}
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {t('settings.aiGateway.relationshipCount', { count: String(codexGatewayScopes.length) })}
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipWarnings')}</div>
+            <div className={`mt-1 text-sm font-medium ${invalidCodexBindingCount > 0 ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-foreground)]'}`}>
+              {t('settings.aiGateway.relationshipCount', { count: String(invalidCodexBindingCount) })}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+            <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipClaudeProfiles')}</h4>
+            <div className="mt-3 space-y-2">
+              {claudeGatewayProfiles.length > 0 ? claudeGatewayProfiles.map((profile) => (
+                <div key={profile.id} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
+                  <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{profile.name || profile.id}</span>
+                  <span className="shrink-0 text-[color:var(--color-muted-foreground)]">{profile.gateway?.providerId}</span>
+                </div>
+              )) : (
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoClaudeProfiles')}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+            <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.relationshipCodexScopes')}</h4>
+            <div className="mt-3 space-y-2">
+              {codexGatewayScopes.length > 0 ? codexGatewayScopes.map((binding) => {
+                const issue = getCodexGatewayBindingIssue(binding, config)
+                return (
+                  <div key={binding.scopeKey} className="flex items-center justify-between gap-3 rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-xs">
+                    <span className="min-w-0 truncate text-[color:var(--color-foreground)]">{binding.scopeKey}</span>
+                    <span className={issue ? 'shrink-0 text-[color:var(--color-destructive)]' : 'shrink-0 text-[color:var(--color-muted-foreground)]'}>
+                      {issue ? t('settings.aiGateway.relationshipInvalid') : binding.providerId}
+                    </span>
+                  </div>
+                )
+              }) : (
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.relationshipNoCodexScopes')}</p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       <GatewayGuideCard />
@@ -524,6 +644,25 @@ export function SettingsAiGatewayPanel({
 
           {activeProvider && (
             <>
+              {!isProviderUsageEmpty(activeProviderUsage ?? { claudeProfiles: [], codexScopes: [], manualRoutes: [] }) && (
+                <div className="md:col-span-2 flex flex-wrap gap-2">
+                  {activeProviderUsage?.claudeProfiles.map((name) => (
+                    <span key={`claude:${name}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
+                      {t('settings.aiGateway.usedByClaude', { value: name })}
+                    </span>
+                  ))}
+                  {activeProviderUsage?.codexScopes.map((scopeKey) => (
+                    <span key={`codex:${scopeKey}`} className="rounded-full bg-[color:var(--color-primary)]/10 px-3 py-1 text-xs text-[color:var(--color-primary)]">
+                      {t('settings.aiGateway.usedByCodex', { value: scopeKey })}
+                    </span>
+                  ))}
+                  {activeProviderUsage?.manualRoutes.map((modelName) => (
+                    <span key={`manual:${modelName}`} className="rounded-full bg-[color:var(--color-card)] px-3 py-1 text-xs text-[color:var(--color-muted-foreground)]">
+                      {t('settings.aiGateway.usedByRoute', { value: modelName })}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="space-y-1.5">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerId')}</p>
                 <Input value={activeProvider.id} onChange={(event) => updateProvider('id', event.target.value)} disabled={inputDisabled} />
@@ -628,6 +767,82 @@ export function SettingsAiGatewayPanel({
           />
         </div>
       </div>
+
+      <ModalShell
+        open={Boolean(deleteConfirmProvider)}
+        onClose={() => {
+          if (saving) return
+          setDeleteConfirmProviderDraftId(null)
+        }}
+        widthClassName="max-w-[600px]"
+        ariaLabel={t('settings.aiGateway.deleteProviderConfirmLabel')}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <div
+              className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{
+                background: 'var(--color-destructive-background)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.deleteProviderConfirmTitle')}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {t('settings.aiGateway.deleteProviderConfirmHint', {
+                  provider: deleteConfirmProvider?.name || deleteConfirmProvider?.id || '',
+                })}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {deleteConfirmProviderUsage?.claudeProfiles.map((name) => (
+              <div key={`delete-claude:${name}`} className="rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-sm text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.usedByClaude', { value: name })}
+              </div>
+            ))}
+            {deleteConfirmProviderUsage?.codexScopes.map((scopeKey) => (
+              <div key={`delete-codex:${scopeKey}`} className="rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-sm text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.usedByCodex', { value: scopeKey })}
+              </div>
+            ))}
+            {deleteConfirmProviderUsage?.manualRoutes.map((modelName) => (
+              <div key={`delete-route:${modelName}`} className="rounded-[14px] bg-[color:var(--color-card)] px-3 py-2 text-sm text-[color:var(--color-foreground)]">
+                {t('settings.aiGateway.usedByRoute', { value: modelName })}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4"
+              onClick={() => setDeleteConfirmProviderDraftId(null)}
+              disabled={saving}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="h-10 px-4"
+              onClick={() => {
+                if (!deleteConfirmProvider) return
+                deleteProviderDraft(deleteConfirmProvider.draftId)
+              }}
+              disabled={saving || !deleteConfirmProvider}
+            >
+              {t('settings.aiGateway.deleteProviderAnyway')}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
 
       <div className="flex flex-wrap items-center gap-3">
         <Button

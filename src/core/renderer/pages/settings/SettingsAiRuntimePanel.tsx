@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, Loader2, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   AiEnvironmentConfig,
@@ -37,10 +37,54 @@ type RuntimeEnvField = {
   key: keyof ClaudeBashrcConfig
   label: string
   value: string
-  onChange: (value: string) => void
   placeholder: string
   type?: 'password'
   hint?: { __html: string }
+}
+
+type ClaudeModelFieldKey =
+  | 'anthropicModel'
+  | 'anthropicDefaultOpusModel'
+  | 'anthropicDefaultSonnetModel'
+  | 'anthropicDefaultHaikuModel'
+  | 'claudeCodeSubagentModel'
+
+type ClaudeModelEditMode = 'shared' | 'custom'
+
+const CLAUDE_MODEL_FIELD_KEYS: ClaudeModelFieldKey[] = [
+  'anthropicModel',
+  'anthropicDefaultOpusModel',
+  'anthropicDefaultSonnetModel',
+  'anthropicDefaultHaikuModel',
+  'claudeCodeSubagentModel',
+]
+
+function isClaudeModelFieldKey(key: keyof ClaudeBashrcConfig): key is ClaudeModelFieldKey {
+  return CLAUDE_MODEL_FIELD_KEYS.includes(key as ClaudeModelFieldKey)
+}
+
+function getPrimaryClaudeModel(config: ClaudeBashrcConfig): string {
+  return config.anthropicModel
+    || config.anthropicDefaultSonnetModel
+    || config.anthropicDefaultOpusModel
+    || config.anthropicDefaultHaikuModel
+    || config.claudeCodeSubagentModel
+}
+
+function areClaudeModelsUnified(config: ClaudeBashrcConfig): boolean {
+  const primary = getPrimaryClaudeModel(config).trim()
+  return CLAUDE_MODEL_FIELD_KEYS.every((key) => config[key].trim() === primary)
+}
+
+function withSharedClaudeModel(config: ClaudeBashrcConfig, model: string): ClaudeBashrcConfig {
+  return {
+    ...config,
+    anthropicModel: model,
+    anthropicDefaultOpusModel: model,
+    anthropicDefaultSonnetModel: model,
+    anthropicDefaultHaikuModel: model,
+    claudeCodeSubagentModel: model,
+  }
 }
 
 function cloneConfig(config: ClaudeBashrcConfig): ClaudeBashrcConfig {
@@ -98,6 +142,8 @@ function SettingsAiRuntimePanel({
   const [anthropicDefaultSonnetModel, setAnthropicDefaultSonnetModel] = useState('deepseek-v4-pro[1m]')
   const [anthropicDefaultHaikuModel, setAnthropicDefaultHaikuModel] = useState('deepseek-v4-flash')
   const [claudeCodeSubagentModel, setClaudeCodeSubagentModel] = useState('deepseek-v4-flash')
+  const [modelEditMode, setModelEditMode] = useState<ClaudeModelEditMode>('custom')
+  const [sharedModel, setSharedModel] = useState('deepseek-v4-pro[1m]')
   const [loaded, setLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedHint, setSavedHint] = useState<string | null>(null)
@@ -105,8 +151,7 @@ function SettingsAiRuntimePanel({
   const [profileDrafts, setProfileDrafts] = useState<ClaudeRuntimeProfile[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<string>('')
   const [profileNameDraft, setProfileNameDraft] = useState('')
-  const [profileAction, setProfileAction] = useState<'select' | 'create' | 'rename' | 'delete' | 'docs' | null>(null)
-  const [pendingProfileId, setPendingProfileId] = useState<string | null>(null)
+  const [profileAction, setProfileAction] = useState<'create' | 'rename' | 'delete' | 'docs' | null>(null)
   const [deleteConfirmProfileId, setDeleteConfirmProfileId] = useState<string | null>(null)
   const [aiGatewayConfig, setAiGatewayConfig] = useState<AiGatewayConfig | null>(null)
   const [gatewayLoading, setGatewayLoading] = useState(false)
@@ -188,7 +233,10 @@ function SettingsAiRuntimePanel({
       : cloneConfig(currentConfig)
   ), [activeProfileWithCurrentConfig, aiGatewayConfig, currentConfig])
 
-  const applyConfig = (result: ClaudeBashrcConfig) => {
+  const applyConfig = (
+    result: ClaudeBashrcConfig,
+    options: { inferModelMode?: boolean } = {}
+  ) => {
     setAnthropicBaseUrl(result.anthropicBaseUrl)
     setAnthropicAuthToken(result.anthropicAuthToken)
     setAnthropicModel(result.anthropicModel)
@@ -196,6 +244,10 @@ function SettingsAiRuntimePanel({
     setAnthropicDefaultSonnetModel(result.anthropicDefaultSonnetModel)
     setAnthropicDefaultHaikuModel(result.anthropicDefaultHaikuModel)
     setClaudeCodeSubagentModel(result.claudeCodeSubagentModel)
+    setSharedModel(getPrimaryClaudeModel(result))
+    if (options.inferModelMode ?? true) {
+      setModelEditMode(areClaudeModelsUnified(result) ? 'shared' : 'custom')
+    }
   }
 
   useEffect(() => {
@@ -219,15 +271,11 @@ function SettingsAiRuntimePanel({
       : normalizedProfiles[0]!.id
     setProfileDrafts(normalizedProfiles)
     setSelectedProfileId(nextActiveProfileId)
-    setProfileNameDraft(normalizedProfiles.find((profile) => profile.id === nextActiveProfileId)?.name ?? '')
-  }, [activeProfileId, profiles])
-
-  useEffect(() => {
-    if (!activeProfile) return
-    if (!supportsWindowsEnvConfig && !activeProfile.gateway?.enabled) return
-    applyConfig(getClaudeProfileDirectConfig(activeProfile))
+    const nextActiveProfile = normalizedProfiles.find((profile) => profile.id === nextActiveProfileId) ?? normalizedProfiles[0]!
+    setProfileNameDraft(nextActiveProfile.name)
+    applyConfig(getClaudeProfileDirectConfig(nextActiveProfile))
     setLoaded(true)
-  }, [activeProfile, supportsWindowsEnvConfig])
+  }, [activeProfileId, profiles])
 
   useEffect(() => {
     let mounted = true
@@ -251,48 +299,10 @@ function SettingsAiRuntimePanel({
   }, [])
 
   useEffect(() => {
-    let mounted = true
-    setLoaded(false)
     setSavedHint(null)
     setError(null)
-
-    if (!capabilityReady) {
-      return () => {
-        mounted = false
-      }
-    }
-
-    if (!supportsShellEnvConfig && !supportsWindowsEnvConfig) {
-      setLoaded(true)
-      return () => {
-        mounted = false
-      }
-    }
-
-    if (supportsWindowsEnvConfig) {
-      setLoaded(true)
-      return () => {
-        mounted = false
-      }
-    }
-
-    void window.electronAPI.getClaudeBashrcConfig()
-      .then((result: ClaudeBashrcConfig) => {
-        if (!mounted) return
-        applyConfig(result)
-        setLoaded(true)
-      })
-      .catch((loadError) => {
-        if (!mounted) return
-        const message = loadError instanceof Error ? loadError.message : String(loadError)
-        setError(message || t('settings.aiRuntime.loadError'))
-        setLoaded(true)
-      })
-
-    return () => {
-      mounted = false
-    }
-  }, [capabilityReady, supportsShellEnvConfig, supportsWindowsEnvConfig, t])
+    if (capabilityReady) setLoaded(true)
+  }, [capabilityReady])
 
   useEffect(() => {
     if (!activeProfile) return
@@ -304,14 +314,12 @@ function SettingsAiRuntimePanel({
       key: 'anthropicBaseUrl',
       label: 'ANTHROPIC_BASE_URL',
       value: anthropicBaseUrl,
-      onChange: setAnthropicBaseUrl,
       placeholder: 'https://api.deepseek.com/anthropic',
     },
     {
       key: 'anthropicAuthToken',
       label: 'ANTHROPIC_AUTH_TOKEN',
       value: anthropicAuthToken,
-      onChange: setAnthropicAuthToken,
       placeholder: loaded ? 'sk-...' : (supportsWindowsEnvConfig ? 'Loading...' : 'Loading ~/.bashrc...'),
       type: 'password' as const,
       hint: tHtml(supportsWindowsEnvConfig ? 'settings.aiRuntime.tokenHintWindows' : 'settings.aiRuntime.tokenHint'),
@@ -320,35 +328,30 @@ function SettingsAiRuntimePanel({
       key: 'anthropicModel',
       label: 'ANTHROPIC_MODEL',
       value: anthropicModel,
-      onChange: setAnthropicModel,
       placeholder: 'deepseek-v4-pro[1m]',
     },
     {
       key: 'anthropicDefaultOpusModel',
       label: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
       value: anthropicDefaultOpusModel,
-      onChange: setAnthropicDefaultOpusModel,
       placeholder: 'deepseek-v4-pro[1m]',
     },
     {
       key: 'anthropicDefaultSonnetModel',
       label: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
       value: anthropicDefaultSonnetModel,
-      onChange: setAnthropicDefaultSonnetModel,
       placeholder: 'deepseek-v4-pro[1m]',
     },
     {
       key: 'anthropicDefaultHaikuModel',
       label: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
       value: anthropicDefaultHaikuModel,
-      onChange: setAnthropicDefaultHaikuModel,
       placeholder: 'deepseek-v4-flash',
     },
     {
       key: 'claudeCodeSubagentModel',
       label: 'CLAUDE_CODE_SUBAGENT_MODEL',
       value: claudeCodeSubagentModel,
-      onChange: setClaudeCodeSubagentModel,
       placeholder: 'deepseek-v4-flash',
     },
   ]), [
@@ -360,8 +363,18 @@ function SettingsAiRuntimePanel({
     anthropicModel,
     claudeCodeSubagentModel,
     loaded,
-    t,
+    supportsWindowsEnvConfig,
+    tHtml,
   ])
+
+  const connectionFields = useMemo(
+    () => envFields.filter((field) => !isClaudeModelFieldKey(field.key)),
+    [envFields]
+  )
+  const modelFields = useMemo(
+    () => envFields.filter((field) => isClaudeModelFieldKey(field.key)),
+    [envFields]
+  )
 
   const shellCommand = useMemo(() => ([
     `export ANTHROPIC_BASE_URL=${runtimeConfig.anthropicBaseUrl || 'https://api.deepseek.com/anthropic'}`,
@@ -389,6 +402,38 @@ function SettingsAiRuntimePanel({
     return cloneConfig(currentConfig)
   }
 
+  const updateCurrentConfigField = (key: keyof ClaudeBashrcConfig, value: string) => {
+    const nextConfig: ClaudeBashrcConfig = {
+      ...currentConfig,
+      [key]: value,
+    }
+    applyConfig(nextConfig, { inferModelMode: false })
+    updateActiveProfileDraft((profile) => ({
+      ...profile,
+      config: nextConfig,
+    }))
+  }
+
+  const updateSharedModel = (value: string) => {
+    const nextConfig = withSharedClaudeModel(currentConfig, value)
+    applyConfig(nextConfig, { inferModelMode: false })
+    setModelEditMode('shared')
+    setSharedModel(value)
+    updateActiveProfileDraft((profile) => ({
+      ...profile,
+      config: nextConfig,
+    }))
+  }
+
+  const handleModelEditModeChange = (nextMode: ClaudeModelEditMode) => {
+    setModelEditMode(nextMode)
+    setSavedHint(null)
+    setError(null)
+    if (nextMode === 'shared') {
+      updateSharedModel(sharedModel || getPrimaryClaudeModel(currentConfig))
+    }
+  }
+
   const buildRuntimeConfigForProfile = (profile: ClaudeRuntimeProfile): ClaudeBashrcConfig => {
     if (!profile.gateway?.enabled) return cloneConfig(profile.config)
     if (!aiGatewayConfig) throw new Error(t('settings.aiRuntime.gatewayConfigMissing'))
@@ -413,81 +458,29 @@ function SettingsAiRuntimePanel({
     setAiGatewayConfig(result.config)
   }
 
-  const updateActiveGatewayBinding = async (partial: { enabled?: boolean; providerId?: string }) => {
+  const updateActiveGatewayDraft = (partial: { enabled?: boolean; providerId?: string }) => {
     if (!activeProfile || !aiGatewayConfig) return
-    setSaving(true)
     setSavedHint(null)
     setError(null)
-    try {
-      const updatedProfile = applyClaudeProfileGatewayBinding(activeProfile, aiGatewayConfig, {
-        enabled: profileGatewayEnabled,
-        providerId: activeGatewayProviderId,
-        directConfig: buildDirectConfigFromCurrent(),
-        ...partial,
-      })
-      const saveApi = supportsWindowsEnvConfig
-        ? window.electronAPI.setWindowsUserEnv
-        : window.electronAPI.setClaudeBashrcConfig
-      const savedRuntimeConfig = await saveApi(buildRuntimeConfigForProfile(updatedProfile))
-      const savedProfileConfig = mergeSavedRuntimeConfigForProfile(updatedProfile, savedRuntimeConfig)
-      const savedProfile = {
-        ...updatedProfile,
-        config: savedProfileConfig,
-      }
-      applyConfig(savedProfileConfig)
-      const nextProfiles = profileDrafts.map((profile) => (
-        profile.id === savedProfile.id ? savedProfile : profile
-      ))
-      setProfileDrafts(nextProfiles)
-      await onProfilesSave(nextProfiles, savedProfile.id)
-      await persistGatewayRoutes(nextProfiles)
-      setSavedHint(partial.enabled === false
-        ? t('settings.aiRuntime.gatewayDisabledHint')
-        : t('settings.aiRuntime.gatewayEnabledHint'))
-    } catch (gatewayError) {
-      const message = gatewayError instanceof Error ? gatewayError.message : String(gatewayError)
-      setError(message || t('settings.aiRuntime.gatewayUpdateError'))
-    } finally {
-      setSaving(false)
-    }
+    updateActiveProfileDraft((profile) => applyClaudeProfileGatewayBinding(profile, aiGatewayConfig, {
+      enabled: partial.enabled ?? profileGatewayEnabled,
+      providerId: partial.providerId ?? activeGatewayProviderId,
+      directConfig: buildDirectConfigFromCurrent(),
+    }))
   }
 
-  const handleSelectProfile = async (profileId: string) => {
+  const handleSelectProfile = (profileId: string) => {
     const nextProfile = profileDrafts.find((profile) => profile.id === profileId)
-    if (!nextProfile || (!supportsShellEnvConfig && !supportsWindowsEnvConfig)) {
+    if (!nextProfile) {
       setSelectedProfileId(profileId)
       return
     }
 
-    setProfileAction('select')
-    setPendingProfileId(profileId)
-    setSaving(true)
     setSavedHint(null)
     setError(null)
-    try {
-      const saveApi = supportsWindowsEnvConfig
-        ? window.electronAPI.setWindowsUserEnv
-        : window.electronAPI.setClaudeBashrcConfig
-      const savedRuntimeConfig = await saveApi(buildRuntimeConfigForProfile(nextProfile))
-      const savedProfileConfig = mergeSavedRuntimeConfigForProfile(nextProfile, savedRuntimeConfig)
-      applyConfig(savedProfileConfig)
-      const nextProfiles = profileDrafts.map((profile) => (
-        profile.id === nextProfile.id
-          ? { ...profile, config: savedProfileConfig }
-          : profile
-      ))
-      setProfileDrafts(nextProfiles)
-      setSelectedProfileId(profileId)
-      await onProfilesSave(nextProfiles, profileId)
-      setSavedHint(t('settings.aiRuntime.profileSwitchedHint', { value: nextProfile.name }))
-    } catch (switchError) {
-      const message = switchError instanceof Error ? switchError.message : String(switchError)
-      setError(message || t('settings.aiRuntime.saveError'))
-    } finally {
-      setSaving(false)
-      setProfileAction(null)
-      setPendingProfileId(null)
-    }
+    setSelectedProfileId(profileId)
+    setProfileNameDraft(nextProfile.name)
+    applyConfig(getClaudeProfileDirectConfig(nextProfile))
   }
 
   const handleCreateProfile = async () => {
@@ -504,11 +497,8 @@ function SettingsAiRuntimePanel({
     setProfileNameDraft(nextProfile.name)
     setSavedHint(null)
     setError(null)
-    try {
-      await onProfilesSave(nextProfiles, nextProfile.id)
-    } finally {
-      setProfileAction(null)
-    }
+    applyConfig(getClaudeProfileDirectConfig(nextProfile))
+    setProfileAction(null)
   }
 
   const handleDeleteProfile = async () => {
@@ -516,17 +506,15 @@ function SettingsAiRuntimePanel({
     setProfileAction('delete')
     const nextProfiles = profileDrafts.filter((profile) => profile.id !== deleteConfirmProfile.id)
     const nextActiveProfileId = nextProfiles[0]!.id
+    const nextActiveProfile = nextProfiles[0]!
     setProfileDrafts(nextProfiles)
     setSelectedProfileId(nextActiveProfileId)
+    setProfileNameDraft(nextActiveProfile.name)
+    applyConfig(getClaudeProfileDirectConfig(nextActiveProfile))
     setSavedHint(null)
     setError(null)
-    try {
-      await onProfilesSave(nextProfiles, nextActiveProfileId)
-      await persistGatewayRoutes(nextProfiles)
-      setDeleteConfirmProfileId(null)
-    } finally {
-      setProfileAction(null)
-    }
+    setDeleteConfirmProfileId(null)
+    setProfileAction(null)
   }
 
   const handleRenameProfile = async () => {
@@ -540,11 +528,7 @@ function SettingsAiRuntimePanel({
     setProfileNameDraft(nextName)
     setSavedHint(null)
     setError(null)
-    try {
-      await onProfilesSave(nextProfiles, selectedProfileId)
-    } finally {
-      setProfileAction(null)
-    }
+    setProfileAction(null)
   }
 
   const handleSaveCurrentIntoProfile = async () => {
@@ -593,7 +577,10 @@ function SettingsAiRuntimePanel({
             config: savedProfileConfig,
           }
           : profile
-      ))
+      )).map((profile, index) => ({
+        ...profile,
+        name: sanitizeProfileName(profile.name, t('settings.aiRuntime.newProfileName', { value: index + 1 })),
+      }))
       setProfileDrafts(nextProfiles)
       await onProfilesSave(nextProfiles, activeProfile.id)
       await persistGatewayRoutes(nextProfiles)
@@ -687,16 +674,15 @@ function SettingsAiRuntimePanel({
             {profileDrafts.map((profile) => (
               <button
                 key={profile.id}
-                onClick={() => void handleSelectProfile(profile.id)}
+                onClick={() => handleSelectProfile(profile.id)}
                 disabled={saving}
                 className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all disabled:opacity-50 ${
                   selectedProfileId === profile.id
                     ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
                     : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                 }`}
-                aria-busy={profileAction === 'select' && pendingProfileId === profile.id || undefined}
+                aria-current={selectedProfileId === profile.id ? 'page' : undefined}
               >
-                {profileAction === 'select' && pendingProfileId === profile.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                 {profile.name}
               </button>
             ))}
@@ -715,7 +701,14 @@ function SettingsAiRuntimePanel({
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
               <Input
                 value={profileNameDraft}
-                onChange={(event) => setProfileNameDraft(event.target.value)}
+                onChange={(event) => {
+                  const nextName = event.target.value
+                  setProfileNameDraft(nextName)
+                  updateActiveProfileDraft((profile) => ({
+                    ...profile,
+                    name: nextName,
+                  }))
+                }}
                 className="quiet-control h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
                 placeholder={t('settings.aiRuntime.profileNamePlaceholder')}
                 disabled={saving}
@@ -771,7 +764,7 @@ function SettingsAiRuntimePanel({
               <input
                 type="checkbox"
                 checked={profileGatewayEnabled}
-                onChange={(event) => void updateActiveGatewayBinding({ enabled: event.target.checked })}
+                onChange={(event) => updateActiveGatewayDraft({ enabled: event.target.checked })}
                 disabled={inputDisabled || gatewayLoading || !aiGatewayConfig || !activeProfile}
               />
               {t('settings.aiRuntime.gatewayUseProfile')}
@@ -785,7 +778,7 @@ function SettingsAiRuntimePanel({
                 ariaLabel={t('settings.aiRuntime.gatewayProvider')}
                 value={activeGatewayProviderId}
                 options={gatewayProviderOptions}
-                onChange={(value) => void updateActiveGatewayBinding({ enabled: profileGatewayEnabled, providerId: value })}
+                onChange={(value) => updateActiveGatewayDraft({ enabled: profileGatewayEnabled, providerId: value })}
                 disabled={inputDisabled || gatewayLoading || !aiGatewayConfig || gatewayProviderOptions.length === 0 || !activeProfile}
                 triggerClassName="h-11"
               />
@@ -815,22 +808,13 @@ function SettingsAiRuntimePanel({
           )}
         </div>
 
-        {envFields.map((field) => (
+        {connectionFields.map((field) => (
           <div key={field.label} className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{field.label}</p>
             <Input
               type={field.type}
               value={field.value}
-              onChange={(event) => {
-                field.onChange(event.target.value)
-                updateActiveProfileDraft((profile) => ({
-                  ...profile,
-                  config: {
-                    ...profile.config,
-                    [field.key]: event.target.value,
-                  },
-                }))
-              }}
+              onChange={(event) => updateCurrentConfigField(field.key, event.target.value)}
               className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
               placeholder={field.placeholder}
               disabled={inputDisabled}
@@ -840,6 +824,65 @@ function SettingsAiRuntimePanel({
             )}
           </div>
         ))}
+
+        <div className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/35 px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiRuntime.modelModeTitle')}</h4>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiRuntime.modelModeDescription')}</p>
+            </div>
+            <div className="quiet-control inline-flex rounded-full p-1">
+              {(['shared', 'custom'] as const).map((modeValue) => (
+                <button
+                  key={modeValue}
+                  type="button"
+                  onClick={() => handleModelEditModeChange(modeValue)}
+                  disabled={inputDisabled}
+                  className={`button-interactive rounded-full px-3.5 py-1.5 text-xs font-medium transition-all disabled:opacity-50 ${
+                    modelEditMode === modeValue
+                      ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                >
+                  {modeValue === 'shared'
+                    ? t('settings.aiRuntime.modelModeShared')
+                    : t('settings.aiRuntime.modelModeCustom')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {modelEditMode === 'shared' ? (
+            <div className="mt-4 space-y-1.5">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiRuntime.sharedModel')}</p>
+              <Input
+                value={sharedModel}
+                onChange={(event) => updateSharedModel(event.target.value)}
+                className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+                placeholder="deepseek-v4-pro[1m]"
+                disabled={inputDisabled}
+              />
+              <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">
+                {t('settings.aiRuntime.sharedModelHint')}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              {modelFields.map((field) => (
+                <div key={field.label} className="space-y-1.5">
+                  <p className="text-xs text-[color:var(--color-muted-foreground)]">{field.label}</p>
+                  <Input
+                    value={field.value}
+                    onChange={(event) => updateCurrentConfigField(field.key, event.target.value)}
+                    className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+                    placeholder={field.placeholder}
+                    disabled={inputDisabled}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {supportsWindowsEnvConfig && (
           <div className="rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3">

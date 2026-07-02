@@ -13,8 +13,14 @@ export function displayText(value: string): string {
     .replace(/\\t/g, '\t')
 }
 
+export function displayJsonString(value: string): string {
+  return value
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\n/g, '\n')
+}
+
 export function stringifyUnknown(value: unknown): string {
-  if (typeof value === 'string') return displayText(value)
+  if (typeof value === 'string') return displayJsonString(value)
   try {
     return JSON.stringify(value, null, 2)
   } catch {

@@ -1,7 +1,7 @@
 import { Check, ChevronRight, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../../../i18n'
-import { displayText, isRecord } from './agentLogs.display'
+import { displayJsonString, isRecord } from './agentLogs.display'
 
 export type AgentLogJsonExpansionMode = 'default' | 'expand-all' | 'collapse-all' | 'expand-important'
 
@@ -138,7 +138,7 @@ function LongStringJsonNode({
   trailingComma?: boolean
 }) {
   const { t } = useI18n()
-  const text = displayText(value)
+  const text = displayJsonString(value)
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
   const preview = text.length > 260 ? `${text.slice(0, 260)}...` : text
@@ -190,7 +190,7 @@ function PrimitiveJsonNode({
   trailingComma,
 }: Pick<JsonNodeProps, 'value' | 'label' | 'index' | 'trailingComma'>) {
   if (typeof value === 'string') {
-    const text = displayText(value)
+    const text = displayJsonString(value)
     if (text.length > 260 || text.split('\n').length > 4) {
       return (
         <LongStringJsonNode

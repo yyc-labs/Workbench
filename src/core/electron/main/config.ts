@@ -14,6 +14,8 @@ import type {
   CloseWindowBehavior,
   CodexConfig,
   CodexEnvironmentScope,
+  CodexGatewayBinding,
+  CodexGatewayBindingMap,
   CodexModelProviderConfig,
   CodexSettingsSnapshot,
   CodexSettingsSnapshotMap,
@@ -124,6 +126,7 @@ const DEFAULT_CONFIG: AppConfig = {
   aiCommit: defaultAiCommitConfig(),
   codexProviderApiKeys: {},
   codexSettingsSnapshots: {},
+  codexGatewayBindings: {},
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
   aiGateway: defaultAiGatewayConfig(),
   shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
@@ -529,6 +532,45 @@ function normalizeCodexSettingsSnapshots(
   return normalizedMap
 }
 
+function normalizeSingleCodexGatewayBinding(
+  scopeKey: string,
+  input: unknown
+): CodexGatewayBinding | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const normalizedScopeKey = scopeKey.trim()
+  if (!normalizedScopeKey) return undefined
+
+  const raw = input as Partial<CodexGatewayBinding>
+  const providerId = typeof raw.providerId === 'string' ? raw.providerId.trim() : ''
+  const directSnapshot = normalizeSingleCodexSettingsSnapshot(raw.directSnapshot)
+  const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt.trim() : ''
+
+  return {
+    enabled: Boolean(raw.enabled),
+    scopeKey: typeof raw.scopeKey === 'string' && raw.scopeKey.trim()
+      ? raw.scopeKey.trim()
+      : normalizedScopeKey,
+    providerId,
+    directSnapshot,
+    updatedAt: updatedAt || undefined,
+  }
+}
+
+function normalizeCodexGatewayBindings(
+  input: AppConfig['codexGatewayBindings'] | unknown,
+): CodexGatewayBindingMap {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
+
+  return Object.fromEntries(
+    Object.entries(input as Record<string, unknown>)
+      .map(([scopeKey, value]) => {
+        const normalized = normalizeSingleCodexGatewayBinding(scopeKey, value)
+        return normalized ? [normalized.scopeKey, normalized] as const : null
+      })
+      .filter((entry): entry is readonly [string, CodexGatewayBinding] => Boolean(entry)),
+  )
+}
+
 function normalizeClaudeRuntimeProfileGateway(
   input: unknown
 ): ClaudeRuntimeProfileGatewayBinding | undefined {
@@ -854,6 +896,7 @@ export function loadConfig(): AppConfig {
         parsed.codexSettingsSnapshots,
         (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
       ),
+      codexGatewayBindings: normalizeCodexGatewayBindings(parsed.codexGatewayBindings),
       aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
       aiGateway: normalizeAiGatewayConfig(parsed.aiGateway),
@@ -899,6 +942,7 @@ export function loadConfig(): AppConfig {
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
       codexProviderApiKeys: normalizeCodexProviderApiKeys(DEFAULT_CONFIG.codexProviderApiKeys),
       codexSettingsSnapshots: normalizeCodexSettingsSnapshots(DEFAULT_CONFIG.codexSettingsSnapshots),
+      codexGatewayBindings: normalizeCodexGatewayBindings(DEFAULT_CONFIG.codexGatewayBindings),
       aiCommit: normalizeAiCommitConfig(DEFAULT_CONFIG.aiCommit),
       aiRuntimeProfiles: runtimeProfiles.profiles,
       activeAiRuntimeProfileId: runtimeProfiles.activeProfileId,
@@ -937,6 +981,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     codexSettingsSnapshots: Object.prototype.hasOwnProperty.call(partial, 'codexSettingsSnapshots')
       ? normalizeCodexSettingsSnapshots(partial.codexSettingsSnapshots)
       : current.codexSettingsSnapshots,
+    codexGatewayBindings: Object.prototype.hasOwnProperty.call(partial, 'codexGatewayBindings')
+      ? normalizeCodexGatewayBindings(partial.codexGatewayBindings)
+      : current.codexGatewayBindings,
     aiCommit: Object.prototype.hasOwnProperty.call(partial, 'aiCommit')
       ? normalizeAiCommitConfig(partial.aiCommit)
       : normalizeAiCommitConfig(current.aiCommit),

@@ -7,6 +7,9 @@ import type {
   AiGatewayLogEntry,
   AiGatewaySaveConfigResult,
   AiGatewayStatus,
+  CodexGatewayBinding,
+  CodexGatewayBindingResult,
+  CodexGatewayBindingSaveInput,
 } from '../../shared/types'
 
 export function createAiGatewayInvokeApi() {
@@ -34,5 +37,11 @@ export function createAiGatewayInvokeApi() {
 
     restoreAiGatewayClientBinding: (cli: AiGatewayClientCli) =>
       ipcRenderer.invoke(IPC.AI_GATEWAY_RESTORE_CLIENT_BINDING, cli) as Promise<AiGatewayBindingResult>,
+
+    getCodexGatewayBinding: () =>
+      ipcRenderer.invoke(IPC.AI_GATEWAY_GET_CODEX_BINDING) as Promise<CodexGatewayBinding | null>,
+
+    saveCodexGatewayBinding: (input: CodexGatewayBindingSaveInput) =>
+      ipcRenderer.invoke(IPC.AI_GATEWAY_SAVE_CODEX_BINDING, input) as Promise<CodexGatewayBindingResult>,
   }
 }

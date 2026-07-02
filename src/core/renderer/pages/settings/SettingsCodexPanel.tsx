@@ -1,9 +1,12 @@
-import { AlertTriangle, KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { AlertTriangle, KeyRound, Plus, RefreshCw, Router, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
+  AiGatewayConfig,
+  AiGatewayStatus,
   Capability,
   CodexConfig,
   CodexEnvironmentScope,
+  CodexGatewayBinding,
   CodexModelProviderConfig,
   CodexSettingsSnapshot,
 } from '../../../shared/types'
@@ -13,6 +16,14 @@ import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
+import {
+  getCodexActiveDirectProvider,
+  getCodexDisplaySnapshot,
+  getCodexEffectiveBaseUrl,
+  getCodexGatewayBindingIssue,
+  getCodexGatewayProvider,
+  isCodexLocalRouterSnapshot,
+} from '../../lib/codexGatewaySummary'
 import { useAppStore } from '../../stores/appStore'
 
 type SettingsCodexPanelProps = {
@@ -154,16 +165,24 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const { t, tHtml } = useI18n()
   const loadCodexSettings = useAppStore((s) => s.loadCodexSettings)
   const saveCodexSettings = useAppStore((s) => s.saveCodexSettings)
+  const saveCodexGatewayBinding = useAppStore((s) => s.saveCodexGatewayBinding)
   const aiEnvironment = useAppStore((s) => s.config.aiEnvironment)
   const cachedSnapshots = useAppStore((s) => s.config.codexSettingsSnapshots ?? {})
+  const codexGatewayBindings = useAppStore((s) => s.config.codexGatewayBindings ?? {})
   const [loaded, setLoaded] = useState(false)
+  const [gatewayLoading, setGatewayLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedHint, setSavedHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [gatewayError, setGatewayError] = useState<string | null>(null)
+  const [gatewayConfig, setGatewayConfig] = useState<AiGatewayConfig | null>(null)
+  const [gatewayStatus, setGatewayStatus] = useState<AiGatewayStatus | null>(null)
   const [resolvedScopeKey, setResolvedScopeKey] = useState<string | null>(null)
   const [scope, setScope] = useState<CodexSettingsSnapshot['scope'] | null>(null)
   const [configExists, setConfigExists] = useState(false)
+  const [useGatewayMode, setUseGatewayMode] = useState(false)
+  const [selectedGatewayProviderId, setSelectedGatewayProviderId] = useState('')
   const [selectedProviderDraftId, setSelectedProviderDraftId] = useState('')
   const [model, setModel] = useState('')
   const [modelReasoningEffort, setModelReasoningEffort] = useState('')
@@ -172,6 +191,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [providers, setProviders] = useState<ProviderDraft[]>([])
   const [deleteConfirmProviderDraftId, setDeleteConfirmProviderDraftId] = useState<string | null>(null)
   const cachedSnapshot = resolvedScopeKey ? cachedSnapshots[resolvedScopeKey] : undefined
+  const codexGatewayBinding = resolvedScopeKey ? codexGatewayBindings[resolvedScopeKey] : undefined
 
   useEffect(() => {
     let mounted = true
@@ -204,10 +224,40 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   }, [aiEnvironment, capability])
 
   useEffect(() => {
+    let mounted = true
+    setGatewayLoading(true)
+    setGatewayError(null)
+
+    Promise.all([
+      window.electronAPI.getAiGatewayConfig(),
+      window.electronAPI.getAiGatewayStatus(),
+    ])
+      .then(([nextConfig, nextStatus]) => {
+        if (!mounted) return
+        setGatewayConfig(nextConfig)
+        setGatewayStatus(nextStatus)
+      })
+      .catch((loadError) => {
+        if (!mounted) return
+        const message = loadError instanceof Error ? loadError.message : String(loadError)
+        setGatewayError(message || t('settings.codex.gatewayLoadError'))
+      })
+      .finally(() => {
+        if (!mounted) return
+        setGatewayLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [t])
+
+  useEffect(() => {
     if (!loaded) return
     setError(null)
     setSavedHint(null)
-    applySnapshotToState(cachedSnapshot ?? createEmptySnapshot(), {
+    const displaySnapshot = getCodexDisplaySnapshot(cachedSnapshot, codexGatewayBinding)
+    applySnapshotToState(displaySnapshot ?? createEmptySnapshot(), {
       setScope,
       setConfigExists,
       setSelectedProviderDraftId,
@@ -217,8 +267,16 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setApprovalsReviewer,
       setProviders,
     })
+    const nextGatewayMode = Boolean(codexGatewayBinding?.enabled)
+    setUseGatewayMode(nextGatewayMode)
+    setSelectedGatewayProviderId(
+      codexGatewayBinding?.providerId
+      || gatewayConfig?.activeProviderId
+      || gatewayConfig?.providers[0]?.id
+      || ''
+    )
     setDeleteConfirmProviderDraftId(null)
-  }, [cachedSnapshot, loaded])
+  }, [cachedSnapshot, codexGatewayBinding, gatewayConfig, loaded])
 
   const normalizedProviderKeys = useMemo(
     () => providers.map((provider) => normalizeProviderKey(provider.key)),
@@ -245,6 +303,39 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const activeProviderApiKey = activeProvider?.apiKey ?? ''
   const deleteConfirmProvider = providers.find((provider) => provider.draftId === deleteConfirmProviderDraftId) ?? null
   const hasCachedSnapshot = Boolean(cachedSnapshot)
+  const gatewayProviderOptions = useMemo<SelectOption[]>(
+    () => (gatewayConfig?.providers ?? []).map((provider) => ({
+      value: provider.id,
+      label: provider.enabled
+        ? provider.name || provider.id
+        : `${provider.name || provider.id} (${t('settings.codex.gatewayProviderDisabled')})`,
+      disabled: !provider.enabled,
+    })),
+    [gatewayConfig, t]
+  )
+  const selectedGatewayProvider = gatewayConfig?.providers.find((provider) => provider.id === selectedGatewayProviderId)
+    ?? null
+  const bindingIssue = getCodexGatewayBindingIssue(codexGatewayBinding, gatewayConfig)
+  const gatewayBoundProvider = getCodexGatewayProvider(codexGatewayBinding, gatewayConfig)
+  const directSummaryProvider = getCodexActiveDirectProvider(
+    getCodexDisplaySnapshot(cachedSnapshot, codexGatewayBinding)
+  )
+  const effectiveBaseUrl = getCodexEffectiveBaseUrl(
+    getCodexDisplaySnapshot(cachedSnapshot, codexGatewayBinding),
+    useGatewayMode ? ({
+      enabled: true,
+      scopeKey: resolvedScopeKey ?? '',
+      providerId: selectedGatewayProviderId,
+    } as CodexGatewayBinding) : undefined,
+    gatewayStatus
+  )
+  const localRouterActive = isCodexLocalRouterSnapshot(cachedSnapshot)
+  const gatewayValidationError = useGatewayMode && !selectedGatewayProvider
+    ? t('settings.codex.gatewayProviderRequired')
+    : useGatewayMode && selectedGatewayProvider && !selectedGatewayProvider.enabled
+      ? t('settings.codex.gatewayProviderDisabledError')
+      : null
+  const formValidationError = validationError || gatewayValidationError
 
   const handleProviderChange = (
     index: number,
@@ -289,16 +380,44 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         .map((provider) => [normalizeProviderKey(provider.key), provider.apiKey.trim()] as const)
         .filter(([key]) => Boolean(key)),
     )
+    const nextConfig = buildConfig(
+      sourceProviders,
+      currentProvider,
+      model,
+      modelReasoningEffort,
+      preferredAuthMethod,
+      approvalsReviewer,
+    )
+
+    if (useGatewayMode || codexGatewayBinding?.enabled) {
+      if (useGatewayMode && !selectedGatewayProviderId) {
+        throw new Error(t('settings.codex.gatewayProviderRequired'))
+      }
+      const result = await saveCodexGatewayBinding({
+        enabled: useGatewayMode,
+        providerId: selectedGatewayProviderId,
+        providerApiKeys: normalizedProviderApiKeys,
+        config: nextConfig,
+      })
+      const displaySnapshot = getCodexDisplaySnapshot(result.snapshot, result.binding) ?? result.snapshot
+      setGatewayConfig(result.config)
+      setGatewayStatus(result.status)
+      applySnapshotToState(displaySnapshot, {
+        setScope,
+        setConfigExists,
+        setSelectedProviderDraftId,
+        setModel,
+        setModelReasoningEffort,
+        setPreferredAuthMethod,
+        setApprovalsReviewer,
+        setProviders,
+      })
+      return
+    }
+
     const saved = await saveCodexSettings({
       providerApiKeys: normalizedProviderApiKeys,
-      config: buildConfig(
-        sourceProviders,
-        currentProvider,
-        model,
-        modelReasoningEffort,
-        preferredAuthMethod,
-        approvalsReviewer,
-      ),
+      config: nextConfig,
     })
 
     applySnapshotToState(saved, {
@@ -352,7 +471,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
     try {
       const snapshot = await loadCodexSettings()
-      applySnapshotToState(snapshot, {
+      const displaySnapshot = getCodexDisplaySnapshot(snapshot, codexGatewayBinding) ?? snapshot
+      applySnapshotToState(displaySnapshot, {
         setScope,
         setConfigExists,
         setSelectedProviderDraftId,
@@ -377,8 +497,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       return
     }
 
-    if (validationError) {
-      setError(validationError)
+    if (formValidationError) {
+      setError(formValidationError)
       return
     }
 
@@ -388,7 +508,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
     try {
       await saveProviderDrafts(providers, activeProviderKey)
-      setSavedHint(t('settings.codex.savedHint'))
+      setSavedHint(useGatewayMode ? t('settings.codex.gatewaySavedHint') : t('settings.codex.savedHint'))
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
       setError(message || t('settings.codex.saveError'))
@@ -397,7 +517,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
     }
   }
 
-  const inputDisabled = !loaded || saving || syncing || !hasCachedSnapshot
+  const inputDisabled = !loaded || gatewayLoading || saving || syncing || !hasCachedSnapshot
   const currentProviderValue = activeProvider?.key.trim() || activeProvider?.name.trim() || ''
   const providerOptions = useMemo<SelectOption[]>(
     () => providers.map((provider) => ({
@@ -476,6 +596,117 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]">
+              <Router className="h-5 w-5" strokeWidth={1.8} />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
+                {t('settings.codex.gatewayModeTitle')}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                {t('settings.codex.gatewayModeDescription')}
+              </p>
+            </div>
+          </div>
+          <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
+            <input
+              type="checkbox"
+              checked={useGatewayMode}
+              onChange={(event) => {
+                setUseGatewayMode(event.target.checked)
+                setSavedHint(null)
+                setError(null)
+              }}
+              disabled={inputDisabled}
+            />
+            {t('settings.codex.useGatewayMode')}
+          </label>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.connectionMode')}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {useGatewayMode ? t('settings.codex.connectionGateway') : t('settings.codex.connectionDirect')}
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.currentModel')}</div>
+            <div className="mt-1 truncate text-sm font-medium text-[color:var(--color-foreground)]">
+              {model || t('settings.codex.notSynced')}
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.directProvider')}</div>
+            <div className="mt-1 truncate text-sm font-medium text-[color:var(--color-foreground)]">
+              {directSummaryProvider?.providerName ?? currentProviderValue ?? t('settings.codex.notSynced')}
+            </div>
+          </div>
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
+            <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.gatewayBindingStatus')}</div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
+              {localRouterActive ? t('settings.codex.gatewayBound') : t('settings.codex.gatewayNotBound')}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.gatewayProvider')}</p>
+            <Select
+              ariaLabel={t('settings.codex.gatewayProvider')}
+              value={selectedGatewayProviderId}
+              options={gatewayProviderOptions}
+              onChange={setSelectedGatewayProviderId}
+              placeholder={t('settings.codex.gatewayProviderPlaceholder')}
+              disabled={!useGatewayMode || inputDisabled || gatewayProviderOptions.length === 0}
+              triggerClassName="h-11"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.effectiveBaseUrl')}</p>
+            <div className="quiet-control h-11 rounded-full px-4 py-3 font-mono text-xs text-[color:var(--color-foreground)] truncate">
+              {effectiveBaseUrl || t('settings.codex.notSynced')}
+            </div>
+          </div>
+        </div>
+
+        {useGatewayMode && selectedGatewayProvider && (
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+            {t('settings.codex.gatewayEnabledSummary', {
+              provider: selectedGatewayProvider.name || selectedGatewayProvider.id,
+            })}
+          </div>
+        )}
+        {!useGatewayMode && gatewayConfig && (
+          <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+            {t('settings.codex.gatewayDirectWarning', {
+              provider: gatewayConfig.activeProviderId,
+            })}
+          </div>
+        )}
+        {codexGatewayBinding?.enabled && gatewayBoundProvider && (
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">
+            {t('settings.codex.gatewayBoundProvider', {
+              provider: gatewayBoundProvider.name || gatewayBoundProvider.id,
+            })}
+          </p>
+        )}
+        {bindingIssue && (
+          <p className="text-xs text-[color:var(--color-destructive)]">
+            {bindingIssue === 'missing-provider'
+              ? t('settings.codex.gatewayMissingProvider')
+              : t('settings.codex.gatewayDisabledProvider')}
+          </p>
+        )}
+        {gatewayError && (
+          <p className="text-xs text-[color:var(--color-destructive)]">{gatewayError}</p>
+        )}
       </div>
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
@@ -751,19 +982,23 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
           <Button
             className="h-10 rounded-full px-5 text-sm"
             onClick={() => void handleSave()}
-            disabled={inputDisabled || Boolean(validationError) || !hasCachedSnapshot}
+            disabled={inputDisabled || Boolean(formValidationError) || !hasCachedSnapshot}
             loading={saving}
           >
             <Save className="h-4 w-4" />
-            {saving ? t('common.saving') : t('settings.codex.save')}
+            {saving
+              ? t('common.saving')
+              : useGatewayMode
+                ? t('settings.codex.saveGateway')
+                : t('settings.codex.save')}
           </Button>
         </div>
 
         {savedHint && (
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{savedHint}</p>
         )}
-        {(validationError || error) && (
-          <p className="text-xs text-[color:var(--color-destructive)]">{validationError || error}</p>
+        {(formValidationError || error) && (
+          <p className="text-xs text-[color:var(--color-destructive)]">{formValidationError || error}</p>
         )}
       </div>
 

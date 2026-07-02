@@ -1,10 +1,26 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
 import type { RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
-import type { AiGatewayClientCli } from '../../../shared/types'
+import type { AiGatewayClientCli, CodexGatewayBindingSaveInput } from '../../../shared/types'
 
 function normalizeCli(value: unknown): AiGatewayClientCli {
   return value === 'codex' ? 'codex' : 'claude'
+}
+
+function normalizeCodexGatewayBindingInput(value: unknown): CodexGatewayBindingSaveInput {
+  const raw = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Partial<CodexGatewayBindingSaveInput>
+    : {}
+  return {
+    enabled: Boolean(raw.enabled),
+    providerId: typeof raw.providerId === 'string' ? raw.providerId : undefined,
+    providerApiKeys: raw.providerApiKeys && typeof raw.providerApiKeys === 'object'
+      ? raw.providerApiKeys
+      : {},
+    config: raw.config && typeof raw.config === 'object'
+      ? raw.config
+      : {} as CodexGatewayBindingSaveInput['config'],
+  }
 }
 
 export function registerAiGatewayIpcHandlers(
@@ -40,5 +56,13 @@ export function registerAiGatewayIpcHandlers(
 
   ipcMain.handle(IPC.AI_GATEWAY_RESTORE_CLIENT_BINDING, async (_event, cli: unknown) => {
     return deps.aiGatewayService.restoreClientBinding(normalizeCli(cli))
+  })
+
+  ipcMain.handle(IPC.AI_GATEWAY_GET_CODEX_BINDING, async () => {
+    return deps.aiGatewayService.getCodexGatewayBinding()
+  })
+
+  ipcMain.handle(IPC.AI_GATEWAY_SAVE_CODEX_BINDING, async (_event, input: unknown) => {
+    return deps.aiGatewayService.saveCodexGatewayBinding(normalizeCodexGatewayBindingInput(input))
   })
 }

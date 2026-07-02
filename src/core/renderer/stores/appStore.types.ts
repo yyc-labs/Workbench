@@ -13,6 +13,9 @@ import type {
   AiGatewayStatus,
   ClaudeBashrcConfig,
   CodexEnvironmentScope,
+  CodexGatewayBinding,
+  CodexGatewayBindingResult,
+  CodexGatewayBindingSaveInput,
   CodexSettingsInput,
   CodexSettingsSaveResult,
   CodexSettingsSnapshot,
@@ -254,6 +257,8 @@ declare global {
       stopAiGateway: () => Promise<AiGatewayStatus>
       applyAiGatewayClientBinding: (cli: AiGatewayClientCli) => Promise<AiGatewayBindingResult>
       restoreAiGatewayClientBinding: (cli: AiGatewayClientCli) => Promise<AiGatewayBindingResult>
+      getCodexGatewayBinding: () => Promise<CodexGatewayBinding | null>
+      saveCodexGatewayBinding: (input: CodexGatewayBindingSaveInput) => Promise<CodexGatewayBindingResult>
       getLatestCommit: (repoRoot: string) => Promise<{
         hash: string
         shortHash: string
@@ -323,6 +328,7 @@ export interface AppState {
   setAiRuntimeProfiles: (profiles: AiRuntimeProfile[], activeProfileId: string) => Promise<void>
   loadCodexSettings: () => Promise<CodexSettingsSnapshot>
   saveCodexSettings: (payload: CodexSettingsInput) => Promise<CodexSettingsSnapshot>
+  saveCodexGatewayBinding: (payload: CodexGatewayBindingSaveInput) => Promise<CodexGatewayBindingResult>
   setAgentHookConfig: (agentHooks: NonNullable<AppConfig['agentHooks']>) => Promise<void>
   setShortcutPreferences: (shortcutPreferences: NonNullable<AppConfig['shortcutPreferences']>) => Promise<void>
   setClaudeRuntimeProfiles: (profiles: ClaudeRuntimeProfile[], activeProfileId: string) => Promise<void>

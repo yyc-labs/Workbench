@@ -1,6 +1,14 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import type { AiRuntimeProfile, ClaudeRuntimeProfile, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption } from '../../shared/types'
+import type {
+  AiRuntimeProfile,
+  ClaudeRuntimeProfile,
+  CodexGatewayBindingResult,
+  CodexGatewayBindingSaveInput,
+  CodexSettingsInput,
+  CodexSettingsSnapshot,
+  ProjectDocTagOption,
+} from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
 
 const RUNTIME_MODE_SWITCH_COOLDOWN_MS = 1200
@@ -19,6 +27,7 @@ export type SettingsActionsSlice = Pick<
   | 'setAiRuntimeProfiles'
   | 'loadCodexSettings'
   | 'saveCodexSettings'
+  | 'saveCodexGatewayBinding'
   | 'setAgentHookConfig'
   | 'setShortcutPreferences'
   | 'setClaudeRuntimeProfiles'
@@ -171,6 +180,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: appConfig,
     })
     return snapshot
+  },
+
+  saveCodexGatewayBinding: async (
+    payload: CodexGatewayBindingSaveInput
+  ): Promise<CodexGatewayBindingResult> => {
+    const result = await window.electronAPI.saveCodexGatewayBinding(payload)
+    set({
+      config: result.appConfig,
+    })
+    return result
   },
 
   setAgentHookConfig: async (agentHooks) => {

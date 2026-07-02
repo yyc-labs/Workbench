@@ -31,6 +31,8 @@ export const IPC = {
   AI_GATEWAY_STOP: 'ai-gateway:stop',
   AI_GATEWAY_APPLY_CLIENT_BINDING: 'ai-gateway:apply-client-binding',
   AI_GATEWAY_RESTORE_CLIENT_BINDING: 'ai-gateway:restore-client-binding',
+  AI_GATEWAY_GET_CODEX_BINDING: 'ai-gateway:get-codex-binding',
+  AI_GATEWAY_SAVE_CODEX_BINDING: 'ai-gateway:save-codex-binding',
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
   GIT_LIST_REPOSITORIES: 'git:listRepositories',
   GIT_GET_REPOSITORY_SNAPSHOT: 'git:getRepositorySnapshot',
