@@ -49,11 +49,14 @@ export function useCodeWorkspaceRestoreState({
   const pendingRevealRetryTimerRef = useRef<number | null>(null)
   const pendingRevealRetryCountRef = useRef(0)
   const lastAutoRevealedCursorKeyRef = useRef<string | null>(null)
-  const revealInEditor = useCallback((location: RevealLocation | null): boolean => {
+  const revealInEditor = useCallback((location: RevealLocation | null, highlight = false): boolean => {
     if (!location) return false
     const editor = editorRef.current
     if (!editor) return false
     editor.revealPosition(location.lineNumber, location.column)
+    if (highlight) {
+      editor.highlightLine(location.lineNumber)
+    }
     return true
   }, [editorRef])
   const revealPendingLocation = useCallback((location: RevealLocation | null): boolean => {
@@ -64,7 +67,7 @@ export function useCodeWorkspaceRestoreState({
       handled = revealPreviewPosition(location.lineNumber, location.column) || handled
     }
     if (isShowingEditor) {
-      handled = revealInEditor(location) || handled
+      handled = revealInEditor(location, true) || handled
     }
     return handled
   }, [isShowingEditor, isShowingPreview, revealInEditor, revealPreviewPosition])

@@ -33,6 +33,7 @@ import type {
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
   CloseWindowBehavior,
+  LaunchOnLoginDisplayMode,
 } from '../../shared/types'
 
 const DEFAULT_CACHE_LOCATION: AppCacheLocationConfig = { mode: 'default' }
@@ -56,6 +57,7 @@ export function SettingsPage() {
   const setThemeConfig = useAppStore((s) => s.setTheme)
   const setLocaleConfig = useAppStore((s) => s.setLocale)
   const setLaunchOnLoginConfig = useAppStore((s) => s.setLaunchOnLogin)
+  const setLaunchOnLoginDisplayModeConfig = useAppStore((s) => s.setLaunchOnLoginDisplayMode)
   const setCloseWindowBehaviorConfig = useAppStore((s) => s.setCloseWindowBehavior)
   const setCacheLocationConfig = useAppStore((s) => s.setCacheLocation)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
@@ -67,6 +69,9 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
+  const [launchOnLoginDisplayMode, setLaunchOnLoginDisplayMode] = useState<LaunchOnLoginDisplayMode>(
+    config.launchOnLoginDisplayMode ?? 'tray'
+  )
   const [closeWindowBehavior, setCloseWindowBehavior] = useState<CloseWindowBehavior>(
     config.closeWindowBehavior ?? 'quit'
   )
@@ -100,6 +105,10 @@ export function SettingsPage() {
   useEffect(() => {
     setLaunchOnLogin(config.launchOnLogin ?? false)
   }, [config.launchOnLogin])
+
+  useEffect(() => {
+    setLaunchOnLoginDisplayMode(config.launchOnLoginDisplayMode ?? 'tray')
+  }, [config.launchOnLoginDisplayMode])
 
   useEffect(() => {
     setCloseWindowBehavior(config.closeWindowBehavior ?? 'quit')
@@ -166,6 +175,11 @@ export function SettingsPage() {
   const handleLaunchOnLoginChange = async (enabled: boolean) => {
     setLaunchOnLogin(enabled)
     await setLaunchOnLoginConfig(enabled)
+  }
+
+  const handleLaunchOnLoginDisplayModeChange = async (mode: LaunchOnLoginDisplayMode) => {
+    setLaunchOnLoginDisplayMode(mode)
+    await setLaunchOnLoginDisplayModeConfig(mode)
   }
 
   const handleCloseWindowBehaviorChange = async (behavior: CloseWindowBehavior) => {
@@ -315,12 +329,14 @@ export function SettingsPage() {
                   theme={theme}
                   locale={locale}
                   launchOnLogin={launchOnLogin}
+                  launchOnLoginDisplayMode={launchOnLoginDisplayMode}
                   closeWindowBehavior={closeWindowBehavior}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
                   onThemeChange={handleThemeChange}
                   onLocaleChange={handleLocaleChange}
                   onLaunchOnLoginChange={handleLaunchOnLoginChange}
+                  onLaunchOnLoginDisplayModeChange={handleLaunchOnLoginDisplayModeChange}
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                 />
               )}

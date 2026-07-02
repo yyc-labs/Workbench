@@ -12,6 +12,7 @@ import type {
   ClaudeBashrcConfig,
   ClaudeRuntimeProfileGatewayBinding,
   CloseWindowBehavior,
+  LaunchOnLoginDisplayMode,
   CodexConfig,
   CodexEnvironmentScope,
   CodexGatewayBinding,
@@ -105,6 +106,7 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'system',
   locale: 'system',
   launchOnLogin: false,
+  launchOnLoginDisplayMode: 'tray',
   closeWindowBehavior: 'quit',
   cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
@@ -243,6 +245,10 @@ function normalizeBooleanFlag(value: unknown, fallback: boolean): boolean {
 
 function normalizeCloseWindowBehavior(value: unknown): CloseWindowBehavior {
   return value === 'tray' ? 'tray' : 'quit'
+}
+
+function normalizeLaunchOnLoginDisplayMode(value: unknown): LaunchOnLoginDisplayMode {
+  return value === 'window' ? 'window' : 'tray'
 }
 
 function normalizeAiCommitProfiles(
@@ -911,6 +917,9 @@ export function loadConfig(): AppConfig {
       parsed.launchOnLogin,
       DEFAULT_CONFIG.launchOnLogin ?? false
     )
+    cachedConfig.launchOnLoginDisplayMode = normalizeLaunchOnLoginDisplayMode(
+      parsed.launchOnLoginDisplayMode
+    )
     cachedConfig.closeWindowBehavior = normalizeCloseWindowBehavior(parsed.closeWindowBehavior)
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
@@ -1003,6 +1012,12 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
     ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false)
     : current.launchOnLogin ?? false
+  updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(
+    partial,
+    'launchOnLoginDisplayMode'
+  )
+    ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode)
+    : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)
   updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior')
     ? normalizeCloseWindowBehavior(partial.closeWindowBehavior)
     : normalizeCloseWindowBehavior(current.closeWindowBehavior)

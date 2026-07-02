@@ -24,6 +24,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     theme: initialThemeMode,
     locale: 'system',
     launchOnLogin: false,
+    launchOnLoginDisplayMode: 'tray',
     closeWindowBehavior: 'quit',
     cacheLocation: { mode: 'default' },
     codexProviderApiKeys: {},

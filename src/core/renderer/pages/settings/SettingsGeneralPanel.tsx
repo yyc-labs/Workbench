@@ -2,6 +2,7 @@ import { ThemeSegmentedControl } from './ThemeSegmentedControl'
 import type {
   AppLocale,
   CloseWindowBehavior,
+  LaunchOnLoginDisplayMode,
 } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import type { ThemeMode } from './settings.types'
@@ -10,12 +11,14 @@ type GeneralPanelProps = {
   theme: ThemeMode
   locale: AppLocale
   launchOnLogin: boolean
+  launchOnLoginDisplayMode: LaunchOnLoginDisplayMode
   closeWindowBehavior: CloseWindowBehavior
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
   onThemeChange: (next: ThemeMode) => void
   onLocaleChange: (next: NonNullable<AppLocale>) => void
   onLaunchOnLoginChange: (enabled: boolean) => void | Promise<void>
+  onLaunchOnLoginDisplayModeChange: (mode: LaunchOnLoginDisplayMode) => void | Promise<void>
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
 }
 
@@ -23,12 +26,14 @@ function SettingsGeneralPanel({
   theme,
   locale,
   launchOnLogin,
+  launchOnLoginDisplayMode,
   closeWindowBehavior,
   supportsLaunchOnLogin,
   supportsCloseWindowBehavior,
   onThemeChange,
   onLocaleChange,
   onLaunchOnLoginChange,
+  onLaunchOnLoginDisplayModeChange,
   onCloseWindowBehaviorChange,
 }: GeneralPanelProps) {
   const { t } = useI18n()
@@ -91,6 +96,34 @@ function SettingsGeneralPanel({
               </span>
             </span>
           </label>
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-medium text-[color:var(--color-foreground)]">
+              {t('settings.general.launchOnLoginDisplayMode')}
+            </p>
+            <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
+              {[
+                { value: 'tray', label: t('settings.general.launchOnLoginDisplayTray') },
+                { value: 'window', label: t('settings.general.launchOnLoginDisplayWindow') },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    void onLaunchOnLoginDisplayModeChange(opt.value as LaunchOnLoginDisplayMode)
+                  }}
+                  className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    launchOnLoginDisplayMode === opt.value
+                      ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
+                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+              {t('settings.general.launchOnLoginDisplayHint')}
+            </p>
+          </div>
         </div>
       )}
 

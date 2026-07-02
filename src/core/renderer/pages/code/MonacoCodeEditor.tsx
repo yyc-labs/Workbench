@@ -22,12 +22,18 @@ export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
   setScrollTop: (scrollTop: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
+  highlightLine: (lineNumber: number) => void
   openSearch: (mode?: 'find' | 'replace') => void
 }
 
 interface PendingRevealPosition {
   lineNumber: number
   column: number
+  modelKey: string
+}
+
+interface PendingHighlightLine {
+  lineNumber: number
   modelKey: string
 }
 
@@ -44,6 +50,8 @@ interface MonacoCodeEditorProps {
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
   onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
 }
+
+const REVEAL_HIGHLIGHT_DURATION_MS = 2200
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({
   value,
@@ -66,6 +74,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const filePathRef = useRef(filePath)
   const activeModelKeyRef = useRef(toMonacoModelCacheKey(filePath))
   const pendingRevealRef = useRef<PendingRevealPosition | null>(null)
+  const pendingHighlightLineRef = useRef<PendingHighlightLine | null>(null)
+  const revealHighlightDecorationsRef = useRef<string[]>([])
+  const revealHighlightClearTimerRef = useRef<number | null>(null)
   const syncGuardRef = useRef(false)
   const onSaveRef = useRef(onSave)
   const onPasteImageRef = useRef(onPasteImage)
@@ -111,16 +122,69 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     return true
   }
 
-  const flushPendingReveal = () => {
-    const pending = pendingRevealRef.current
-    if (!pending) return
+  const clearRevealHighlight = () => {
+    if (revealHighlightClearTimerRef.current != null) {
+      window.clearTimeout(revealHighlightClearTimerRef.current)
+      revealHighlightClearTimerRef.current = null
+    }
 
     const editor = editorRef.current
-    if (!editor) return
-    if (activeModelKeyRef.current !== pending.modelKey) return
+    if (!editor || revealHighlightDecorationsRef.current.length <= 0) {
+      revealHighlightDecorationsRef.current = []
+      return
+    }
 
-    if (revealPositionInEditor(editor, pending.lineNumber, pending.column)) {
-      pendingRevealRef.current = null
+    revealHighlightDecorationsRef.current = editor.deltaDecorations(
+      revealHighlightDecorationsRef.current,
+      []
+    )
+  }
+
+  const highlightLineInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number) => {
+    const monaco = monacoRef.current
+    const model = editor.getModel()
+    if (!monaco || !model) return false
+
+    const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
+    revealHighlightDecorationsRef.current = editor.deltaDecorations(
+      revealHighlightDecorationsRef.current,
+      [{
+        range: new monaco.Range(safeLine, 1, safeLine, model.getLineMaxColumn(safeLine)),
+        options: {
+          isWholeLine: true,
+          className: 'monaco-code-editor-reveal-line',
+          linesDecorationsClassName: 'monaco-code-editor-reveal-line-gutter',
+          lineNumberClassName: 'monaco-code-editor-reveal-line-number',
+        },
+      }]
+    )
+
+    if (revealHighlightClearTimerRef.current != null) {
+      window.clearTimeout(revealHighlightClearTimerRef.current)
+    }
+    revealHighlightClearTimerRef.current = window.setTimeout(() => {
+      clearRevealHighlight()
+    }, REVEAL_HIGHLIGHT_DURATION_MS)
+
+    return true
+  }
+
+  const flushPendingReveal = () => {
+    const editor = editorRef.current
+    if (!editor) return
+
+    const pendingReveal = pendingRevealRef.current
+    if (pendingReveal && activeModelKeyRef.current === pendingReveal.modelKey) {
+      if (revealPositionInEditor(editor, pendingReveal.lineNumber, pendingReveal.column)) {
+        pendingRevealRef.current = null
+      }
+    }
+
+    const pendingHighlight = pendingHighlightLineRef.current
+    if (pendingHighlight && activeModelKeyRef.current === pendingHighlight.modelKey) {
+      if (highlightLineInEditor(editor, pendingHighlight.lineNumber)) {
+        pendingHighlightLineRef.current = null
+      }
     }
   }
 
@@ -164,6 +228,13 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       pendingRevealRef.current = {
         lineNumber,
         column,
+        modelKey: toMonacoModelCacheKey(filePathRef.current),
+      }
+      flushPendingReveal()
+    },
+    highlightLine: (lineNumber: number) => {
+      pendingHighlightLineRef.current = {
+        lineNumber,
         modelKey: toMonacoModelCacheKey(filePathRef.current),
       }
       flushPendingReveal()
@@ -443,6 +514,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       }
       const editor = editorRef.current
       if (editor) {
+        clearRevealHighlight()
         editor.dispose()
         editorRef.current = null
       }
@@ -475,6 +547,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
     const currentModel = modelRef.current
     const nextKey = toMonacoModelCacheKey(filePath)
+    const previousKey = activeModelKeyRef.current
     let nextModel = modelCacheRef.current.get(nextKey) ?? null
 
     if (!nextModel) {
@@ -483,6 +556,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     }
     touchMonacoModelCacheEntry(modelCacheRef.current, nextKey, nextModel)
     evictStaleMonacoModels(modelCacheRef.current, nextKey)
+
+    if (previousKey !== nextKey) {
+      clearRevealHighlight()
+    }
 
     if (currentModel !== nextModel) {
       modelRef.current = nextModel

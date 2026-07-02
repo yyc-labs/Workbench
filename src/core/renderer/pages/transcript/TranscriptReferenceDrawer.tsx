@@ -28,6 +28,7 @@ const DRAWER_TRANSITION_MS = 220
 const DRAWER_CONTENT_REVEAL_MS = 80
 const REFERENCE_CONTEXT_BEFORE_LINES = 50
 const REFERENCE_CONTEXT_AFTER_LINES = 150
+const REFERENCE_REVEAL_TOP_OFFSET_LINES = 8
 
 function buildReferenceLabel(reference: TranscriptReference): string {
   const line = reference.lineNumber ?? 1
@@ -176,7 +177,7 @@ export function TranscriptReferenceDrawer({
   useEffect(() => {
     if (!open || status !== 'ready' || !reference) return
     const timer = window.setTimeout(() => {
-      viewerRef.current?.revealPosition(preview.relativeRevealLine, column, REFERENCE_CONTEXT_BEFORE_LINES)
+      viewerRef.current?.revealPosition(preview.relativeRevealLine, column, REFERENCE_REVEAL_TOP_OFFSET_LINES)
       viewerRef.current?.highlightLine(preview.relativeRevealLine)
     }, 0)
     return () => {

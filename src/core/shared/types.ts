@@ -15,6 +15,7 @@ export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 export type AppLocale = 'system' | 'en-US' | 'zh-CN'
 export type CloseWindowBehavior = 'tray' | 'quit'
+export type LaunchOnLoginDisplayMode = 'tray' | 'window'
 export type AppCacheLocationMode = 'default' | 'install' | 'custom'
 
 export type ProcessStatus = 'running' | 'stopping' | 'stopped' | 'error'
@@ -1214,6 +1215,8 @@ export interface AppConfig {
   locale?: AppLocale
   /** Launch app automatically after Windows sign-in. */
   launchOnLogin?: boolean
+  /** Control whether Windows sign-in startup shows the main window or starts in tray. */
+  launchOnLoginDisplayMode?: LaunchOnLoginDisplayMode
   /** Control whether closing the main window quits the app or hides it to tray. */
   closeWindowBehavior?: CloseWindowBehavior
   /** Chromium session/cache storage location. Changes apply after restart. */

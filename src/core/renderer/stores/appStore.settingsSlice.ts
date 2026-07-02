@@ -18,6 +18,7 @@ export type SettingsActionsSlice = Pick<
   | 'setTheme'
   | 'setLocale'
   | 'setLaunchOnLogin'
+  | 'setLaunchOnLoginDisplayMode'
   | 'setCloseWindowBehavior'
   | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
@@ -66,6 +67,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         launchOnLogin: updated.launchOnLogin ?? false,
+      },
+    }))
+  },
+
+  setLaunchOnLoginDisplayMode: async (mode) => {
+    const updated = await window.electronAPI.setConfig({ launchOnLoginDisplayMode: mode })
+    set((state) => ({
+      config: {
+        ...state.config,
+        launchOnLoginDisplayMode: updated.launchOnLoginDisplayMode ?? 'tray',
       },
     }))
   },

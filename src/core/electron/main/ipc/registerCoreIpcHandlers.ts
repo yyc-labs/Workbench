@@ -32,6 +32,7 @@ import {
 } from '../doc-link-secret-store'
 import { applyWindowBackground } from '../window/createWindow'
 import { openFolder, openVsCode } from '../shell/openers'
+import { buildInteractiveRelaunchArgs } from '../launchArgs'
 import { syncWindowsLaunchOnLogin } from '../launchOnLogin'
 import { describeAppCacheLocation, rememberAppCacheLocation } from '../cache-location'
 import {
@@ -146,7 +147,10 @@ export function registerCoreIpcHandlers(
           nativeTheme.shouldUseDarkColors
         )
       }
-      if (Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')) {
+      if (
+        Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
+        || Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode')
+      ) {
         syncWindowsLaunchOnLogin(updated)
       }
       if (Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')) {
@@ -158,7 +162,7 @@ export function registerCoreIpcHandlers(
 
   ipcMain.handle(IPC.APP_RESTART, () => {
     setTimeout(() => {
-      app.relaunch()
+      app.relaunch({ args: buildInteractiveRelaunchArgs(process.argv) })
       app.quit()
     }, 50)
     return true

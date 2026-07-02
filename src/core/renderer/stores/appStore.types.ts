@@ -319,6 +319,9 @@ export interface AppState {
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
   setLaunchOnLogin: (enabled: boolean) => Promise<void>
+  setLaunchOnLoginDisplayMode: (
+    mode: NonNullable<AppConfig['launchOnLoginDisplayMode']>
+  ) => Promise<void>
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
