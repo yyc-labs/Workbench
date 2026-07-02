@@ -24,12 +24,12 @@ import type {
   ShortcutPreferencesConfig,
 } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 import {
   defaultAiRuntimeProfileIdForCli,
   defaultAiRuntimeProfiles,
   isCliTool,
 } from '../../shared/aiRuntimeProfiles'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../renderer/lib/projectDocLinks'
 import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'

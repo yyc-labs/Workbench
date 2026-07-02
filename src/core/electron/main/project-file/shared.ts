@@ -180,12 +180,12 @@ export function normalizeRelativeInput(relativePath: string): string {
 }
 
 export function validateRelativePathLooksSafe(relativePath: string): void {
-  if (path.isAbsolute(relativePath)) {
-    throw new ProjectFileServiceError('Absolute paths are not allowed.')
-  }
-
   if (/^[A-Za-z]:[\\/]/.test(relativePath)) {
     throw new ProjectFileServiceError('Windows absolute paths are not allowed.')
+  }
+
+  if (path.isAbsolute(relativePath)) {
+    throw new ProjectFileServiceError('Absolute paths are not allowed.')
   }
 }
 

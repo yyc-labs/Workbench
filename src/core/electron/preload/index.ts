@@ -1,4 +1,5 @@
 import { contextBridge } from 'electron'
+import type { ElectronApi } from '../../shared/electronApi'
 import { createAgentLogsInvokeApi } from './invokeApi.agentLogs'
 import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
 import { createCoreInvokeApi } from './invokeApi.core'
@@ -19,8 +20,8 @@ const api = {
   ...createLearningInvokeApi(),
   ...createRuntimeInvokeApi(),
   ...createSubscriptionApi(),
-}
+} satisfies ElectronApi
 
 contextBridge.exposeInMainWorld('electronAPI', api)
 
-export type ElectronAPI = typeof api
+export type ElectronAPI = ElectronApi

@@ -4,9 +4,10 @@ import type {
   ProjectDocLinkTag,
   ProjectDocTagOption,
 } from '../../shared/types'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 import type { ResolvedLocale } from '../i18n/messages'
 
-export const PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS: ReadonlyArray<ProjectDocTagOption> = []
+export { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS }
 
 export function normalizeProjectDocLinkKind(value: ProjectDocLinkKind | string | null | undefined): ProjectDocLinkKind {
   return value === 'ssh' ? 'ssh' : 'url'

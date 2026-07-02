@@ -9,6 +9,7 @@ import type {
   AiCommitUndoResult,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
+  ClaudeBashrcConfig,
   CodexSettingsInput,
   CodexSettingsSaveResult,
   TranscriptCaptureInitialText,
@@ -52,10 +53,10 @@ export function createCoreInvokeApi() {
 
     getClaudeBashrcConfig: () => ipcRenderer.invoke(IPC.CLAUDE_BASHRC_GET),
 
-    setClaudeBashrcConfig: (config: Record<string, unknown>) =>
+    setClaudeBashrcConfig: (config: ClaudeBashrcConfig) =>
       ipcRenderer.invoke(IPC.CLAUDE_BASHRC_SET, config),
 
-    setWindowsUserEnv: (config: Record<string, unknown>) =>
+    setWindowsUserEnv: (config: ClaudeBashrcConfig) =>
       ipcRenderer.invoke(IPC.WINDOWS_USER_ENV_SET, config),
 
     setDocLinkSecret: (projectId: string, linkId: string, secret: string) =>
