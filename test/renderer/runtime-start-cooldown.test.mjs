@@ -65,6 +65,15 @@ test('startRuntime waits for a short mode-switch cooldown before diagnostics', a
       setConfig: async (partial) => ({
         aiEnvironment: partial.aiEnvironment,
       }),
+      getCapability: async () => ({
+        hostPlatform: 'windows',
+        backend: 'wsl',
+        hasPty: true,
+        hasWslInstalled: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslShell: '/bin/bash',
+      }),
       getRuntimeDiagnostics: async () => {
         diagnosticsCallTime = now
         return {

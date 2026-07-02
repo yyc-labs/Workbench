@@ -21,39 +21,46 @@ const {
 } = require(resolveFromRepo('src/core/electron/main/wsl-bridge.ts'))
 
 test('windows-wsl diagnostics ignore legacy runtime launcher script path', async () => {
-  const diagnostics = await windowsWslProvider.diagnose({
-    capability: {
-      hostPlatform: 'windows',
-      backend: 'tmux',
-      hasPty: true,
-      hasWsl: true,
-      hasTmux: true,
-      wslDistro: 'Ubuntu',
-      wslShell: 'bash',
-      wslEnv: undefined,
-    },
-    config: {
-      mode: 'windows-wsl',
-      runtimeEntrypoint: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
-      runtimePassProjectPath: true,
-    },
-    aiCommitConfig: {
-      enabled: true,
-      apiBaseUrl: 'https://api.openai.com/v1',
-      apiKey: '',
-      model: 'gpt-4o-mini',
-      wslPwshPath: '/snap/bin/pwsh',
-      split: false,
-      splitMaxBatches: 4,
-      maxBullets: 8,
-    },
-  })
+  const originalHasTmux = wslBridge.hasTmux
+  wslBridge.hasTmux = async () => true
 
-  assert.equal(diagnostics.supported, true)
-  assert.deepEqual(diagnostics.issues, [])
-  assert.equal(diagnostics.launcherScript, undefined)
-  assert.equal(diagnostics.launcherScriptExists, undefined)
-  assert.equal(diagnostics.launcherScriptExecutable, undefined)
+  try {
+    const diagnostics = await windowsWslProvider.diagnose({
+      capability: {
+        hostPlatform: 'windows',
+        backend: 'tmux',
+        hasPty: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslDistro: 'Ubuntu',
+        wslShell: 'bash',
+        wslEnv: undefined,
+      },
+      config: {
+        mode: 'windows-wsl',
+        runtimeEntrypoint: '$HOME/tools/claude-code-script/start-claude-with-env.sh',
+        runtimePassProjectPath: true,
+      },
+      aiCommitConfig: {
+        enabled: true,
+        apiBaseUrl: 'https://api.openai.com/v1',
+        apiKey: '',
+        model: 'gpt-4o-mini',
+        wslPwshPath: '/snap/bin/pwsh',
+        split: false,
+        splitMaxBatches: 4,
+        maxBullets: 8,
+      },
+    })
+
+    assert.equal(diagnostics.supported, true)
+    assert.deepEqual(diagnostics.issues, [])
+    assert.equal(diagnostics.launcherScript, undefined)
+    assert.equal(diagnostics.launcherScriptExists, undefined)
+    assert.equal(diagnostics.launcherScriptExecutable, undefined)
+  } finally {
+    wslBridge.hasTmux = originalHasTmux
+  }
 })
 
 test('custom-script runtime launch passes project path and cli arg', async () => {
