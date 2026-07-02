@@ -44,6 +44,27 @@ test('replaceDirectoryNodes preserves loaded lazy directory when root load resol
   assert.deepEqual(rootResolvedLater.map((node) => node.relativePath), ['src', 'package.json'])
 })
 
+test('replaceDirectoryNodes can discard loaded descendants for manual root refresh', () => {
+  const loadedChildFirst = replaceDirectoryNodes([], 'src/core', [
+    file('src/core/App.tsx'),
+  ])
+
+  const manuallyRefreshedRoot = replaceDirectoryNodes(loadedChildFirst, null, [
+    directory('src'),
+    file('package.json'),
+  ], {
+    preserveLoadedDescendants: false,
+  })
+
+  const src = findDirectoryNode(manuallyRefreshedRoot, 'src')
+  const core = findDirectoryNode(manuallyRefreshedRoot, 'src/core')
+
+  assert.equal(src?.isLoaded, false)
+  assert.equal(src?.children, undefined)
+  assert.equal(core, null)
+  assert.deepEqual(manuallyRefreshedRoot.map((node) => node.relativePath), ['src', 'package.json'])
+})
+
 test('replaceDirectoryNodes inserts missing parent branch for out-of-order nested loads', () => {
   const tree = replaceDirectoryNodes([], 'src/core/renderer', [
     file('src/core/renderer/App.tsx'),

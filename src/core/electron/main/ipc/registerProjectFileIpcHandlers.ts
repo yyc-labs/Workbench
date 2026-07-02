@@ -11,7 +11,7 @@ import {
   writeProjectFile,
   writeProjectImageFile,
 } from '../project-file-service'
-import type { ProjectFileContentSearchOptions } from '../../../shared/types'
+import type { ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../../shared/types'
 import { withProjectFileErrors } from './registerIpcHandlers.shared'
 
 export function registerProjectFileIpcHandlers(): void {
@@ -19,8 +19,12 @@ export function registerProjectFileIpcHandlers(): void {
     return withProjectFileErrors(() => getProjectFileAutoLoadDecision(projectPath))
   })
 
-  ipcMain.handle(IPC.PROJECT_FILE_TREE, async (_event, projectPath: string) => {
-    return withProjectFileErrors(() => listProjectFiles(projectPath))
+  ipcMain.handle(IPC.PROJECT_FILE_TREE, async (
+    _event,
+    projectPath: string,
+    options?: ProjectFileTreeOptions
+  ) => {
+    return withProjectFileErrors(() => listProjectFiles(projectPath, options))
   })
 
   ipcMain.handle(

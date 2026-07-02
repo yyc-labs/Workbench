@@ -1426,6 +1426,10 @@ export interface ProjectFileTreeResult {
   }
 }
 
+export interface ProjectFileTreeOptions {
+  invalidateCache?: boolean
+}
+
 export interface ProjectFileAutoLoadDecision {
   shouldAutoLoad: boolean
   reason: 'ok' | 'large-project'

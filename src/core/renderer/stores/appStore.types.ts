@@ -26,6 +26,7 @@ import type {
   ProjectFileNode,
   ProjectFileReadResult,
   ProjectFileStatResult,
+  ProjectFileTreeOptions,
   ProjectFileTreeResult,
   ProjectFileWriteImageResult,
   ProjectFileWriteResult,
@@ -143,7 +144,7 @@ declare global {
       getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
       listRuntimeSessions: () => Promise<RuntimeSessionInfo[]>
       listRuntimeEntries: () => Promise<RuntimeEntry[]>
-      listProjectFiles: (projectPath: string) => Promise<ProjectFileTreeResult>
+      listProjectFiles: (projectPath: string, options?: ProjectFileTreeOptions) => Promise<ProjectFileTreeResult>
       listProjectDirectoryFiles: (
         projectPath: string,
         directoryRelativePath: string | null

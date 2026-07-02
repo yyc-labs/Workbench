@@ -24,6 +24,10 @@ export function mergeKnownFilePaths(previous: Set<string>, nodes: ProjectFileNod
   return next
 }
 
+type ReplaceDirectoryNodesOptions = {
+  preserveLoadedDescendants?: boolean
+}
+
 function directoryPathSegments(relativePath: string): string[] {
   return relativePath.replace(/\\/g, '/').split('/').map((item) => item.trim()).filter(Boolean)
 }
@@ -51,8 +55,10 @@ function createDirectoryBranch(
 
 function mergeLoadedDirectoryChildren(
   nextChildren: ProjectFileNode[],
-  previousChildren: ProjectFileNode[] | undefined
+  previousChildren: ProjectFileNode[] | undefined,
+  options: ReplaceDirectoryNodesOptions
 ): ProjectFileNode[] {
+  if (options.preserveLoadedDescendants === false) return sortProjectNodes(nextChildren)
   if (!previousChildren || previousChildren.length <= 0) return sortProjectNodes(nextChildren)
 
   const previousDirectories = new Map<string, ProjectFileNode>()
@@ -92,7 +98,7 @@ function mergeLoadedDirectoryChildren(
     return {
       ...nextChild,
       hasChildren: true,
-      children: mergeLoadedDirectoryChildren(nextGrandChildren, previousGrandChildren),
+      children: mergeLoadedDirectoryChildren(nextGrandChildren, previousGrandChildren, options),
     }
   }))
 }
@@ -100,7 +106,8 @@ function mergeLoadedDirectoryChildren(
 function upsertDirectoryBranch(
   nodes: ProjectFileNode[],
   directoryRelativePath: string,
-  sortedChildren: ProjectFileNode[]
+  sortedChildren: ProjectFileNode[],
+  options: ReplaceDirectoryNodesOptions
 ): ProjectFileNode[] {
   const segments = directoryPathSegments(directoryRelativePath)
   if (segments.length <= 0) return sortedChildren
@@ -113,7 +120,7 @@ function upsertDirectoryBranch(
 
       found = true
       if (depth === segments.length - 1) {
-        const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, item.children)
+        const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, item.children, options)
         return {
           ...item,
           hasChildren: mergedChildren.length > 0,
@@ -143,14 +150,15 @@ function upsertDirectoryBranch(
 function replaceDirectoryNodesInTree(
   nodes: ProjectFileNode[],
   directoryRelativePath: string,
-  sortedChildren: ProjectFileNode[]
+  sortedChildren: ProjectFileNode[],
+  options: ReplaceDirectoryNodesOptions
 ): { nodes: ProjectFileNode[]; found: boolean } {
   let found = false
   const nextNodes = nodes.map((node) => {
     if (node.kind !== 'directory') return node
     if (node.relativePath === directoryRelativePath) {
       found = true
-      const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, node.children)
+      const mergedChildren = mergeLoadedDirectoryChildren(sortedChildren, node.children, options)
       return {
         ...node,
         hasChildren: mergedChildren.length > 0,
@@ -160,7 +168,7 @@ function replaceDirectoryNodesInTree(
     }
     if (!node.children || node.children.length <= 0) return node
 
-    const replaced = replaceDirectoryNodesInTree(node.children, directoryRelativePath, sortedChildren)
+    const replaced = replaceDirectoryNodesInTree(node.children, directoryRelativePath, sortedChildren, options)
     if (!replaced.found) return node
 
     found = true
@@ -180,17 +188,18 @@ function replaceDirectoryNodesInTree(
 export function replaceDirectoryNodes(
   nodes: ProjectFileNode[],
   directoryRelativePath: string | null,
-  nextChildren: ProjectFileNode[]
+  nextChildren: ProjectFileNode[],
+  options: ReplaceDirectoryNodesOptions = {}
 ): ProjectFileNode[] {
   const sortedChildren = sortProjectNodes(nextChildren)
   if (directoryRelativePath == null) {
-    return mergeLoadedDirectoryChildren(sortedChildren, nodes)
+    return mergeLoadedDirectoryChildren(sortedChildren, nodes, options)
   }
 
-  const replaced = replaceDirectoryNodesInTree(nodes, directoryRelativePath, sortedChildren)
+  const replaced = replaceDirectoryNodesInTree(nodes, directoryRelativePath, sortedChildren, options)
   return replaced.found
     ? replaced.nodes
-    : upsertDirectoryBranch(nodes, directoryRelativePath, sortedChildren)
+    : upsertDirectoryBranch(nodes, directoryRelativePath, sortedChildren, options)
 }
 
 export function findDirectoryNode(nodes: ProjectFileNode[], relativePath: string): ProjectFileNode | null {

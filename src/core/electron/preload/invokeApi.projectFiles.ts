@@ -1,13 +1,14 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
-import type { ProjectFileContentSearchOptions } from '../../shared/types'
+import type { ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../shared/types'
 
 export function createProjectFileInvokeApi() {
   return {
     getProjectFileAutoLoadDecision: (projectPath: string) =>
       ipcRenderer.invoke(IPC.PROJECT_FILE_AUTOLOAD_DECISION, projectPath),
 
-    listProjectFiles: (projectPath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath),
+    listProjectFiles: (projectPath: string, options?: ProjectFileTreeOptions) =>
+      ipcRenderer.invoke(IPC.PROJECT_FILE_TREE, projectPath, options),
 
     listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) =>
       ipcRenderer.invoke(IPC.PROJECT_FILE_TREE_DIRECTORY, projectPath, directoryRelativePath),

@@ -49,6 +49,7 @@ type LoadTreeOptions = {
 type LoadDirectoryOptions = {
   force?: boolean
   reason?: DirectoryLoadReason
+  suppressError?: boolean
 }
 
 type SkippedListingCounts = {
@@ -121,6 +122,20 @@ function emptySkippedCounts(): SkippedListingCounts {
   }
 }
 
+function directoryRefreshDepth(relativePath: string): number {
+  return relativePath.split('/').filter(Boolean).length
+}
+
+function sortDirectoryPathsForRefresh(paths: Iterable<string>): string[] {
+  return Array.from(new Set(paths))
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .sort((left, right) => (
+      directoryRefreshDepth(left) - directoryRefreshDepth(right)
+      || left.localeCompare(right)
+    ))
+}
+
 function totalSkippedCounts(
   rootSkipped: SkippedListingCounts,
   directorySkipped: Map<string, SkippedListingCounts>
@@ -166,6 +181,7 @@ export function useCodeWorkspaceExplorerState({
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
   const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
+  const [fileSearchRefreshRequest, setFileSearchRefreshRequest] = useState(0)
   const [isSearchingFiles, setIsSearchingFiles] = useState(false)
   const [fileSearchError, setFileSearchError] = useState<string | null>(null)
   const [contentSearchQuery, setContentSearchQuery] = useState('')
@@ -176,6 +192,7 @@ export function useCodeWorkspaceExplorerState({
     totalMatches: 0,
     limited: false,
   })
+  const [expandedDirectoryRefreshRequest, setExpandedDirectoryRefreshRequest] = useState(0)
   const [isSearchingContent, setIsSearchingContent] = useState(false)
   const [contentSearchError, setContentSearchError] = useState<string | null>(null)
   const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
@@ -185,6 +202,8 @@ export function useCodeWorkspaceExplorerState({
   const contentSearchRequestSeqRef = useRef(0)
   const treeStateRef = useRef<FileTreeState>(tree)
   const treeNodesRef = useRef<ProjectFileNode[]>([])
+  const expandedDirectoriesRef = useRef<Set<string>>(new Set())
+  const pendingExpandedDirectoryRefreshRef = useRef<string[]>([])
   const directoryLoadGenerationRef = useRef(0)
   const directoryLoadPromisesRef = useRef<Map<string, Promise<boolean>>>(new Map())
   const directoryLoadedAtMsRef = useRef<Map<string, number>>(new Map())
@@ -196,6 +215,10 @@ export function useCodeWorkspaceExplorerState({
   useEffect(() => {
     treeNodesRef.current = tree.nodes
   }, [tree.nodes])
+
+  useEffect(() => {
+    expandedDirectoriesRef.current = expandedDirectories
+  }, [expandedDirectories])
 
   const loadDirectory = useCallback(async (
     directoryRelativePath: string | null,
@@ -271,6 +294,12 @@ export function useCodeWorkspaceExplorerState({
         setTree((prev) => {
           const nextLoadingDirectories = new Set(prev.loadingDirectories)
           nextLoadingDirectories.delete(loadingKey)
+          if (options.suppressError) {
+            return {
+              ...prev,
+              loadingDirectories: nextLoadingDirectories,
+            }
+          }
           return {
             ...prev,
             status: prev.nodes.length > 0 ? 'ready' : 'error',
@@ -293,13 +322,19 @@ export function useCodeWorkspaceExplorerState({
   }, [projectPath])
 
   const loadTree = useCallback(async (_options: LoadTreeOptions = {}) => {
+    const reason = _options.reason ?? 'initial-load'
+    const isManualRefresh = reason === 'manual-refresh'
     const requestSeq = treeLoadRequestSeqRef.current + 1
     treeLoadRequestSeqRef.current = requestSeq
     const refreshStartedAtMs = Date.now()
     const currentTree = treeStateRef.current
     const hasLoadedRoot = currentTree.status === 'ready' || currentTree.lastRootLoadedAtMs != null
+    const shouldResetDirectoryLoads = !hasLoadedRoot || isManualRefresh
+    const expandedDirectoriesToRefresh = isManualRefresh
+      ? sortDirectoryPathsForRefresh(expandedDirectoriesRef.current)
+      : []
 
-    if (!hasLoadedRoot) {
+    if (shouldResetDirectoryLoads) {
       directoryLoadGenerationRef.current += 1
       directoryLoadPromisesRef.current.clear()
       directoryLoadedAtMsRef.current.clear()
@@ -312,7 +347,7 @@ export function useCodeWorkspaceExplorerState({
         return {
           ...prev,
           error: null,
-          loadingDirectories: new Set(prev.loadingDirectories),
+          loadingDirectories: shouldResetDirectoryLoads ? new Set() : new Set(prev.loadingDirectories),
           isRefreshingRoot: true,
           lastRootRefreshStartedAtMs: refreshStartedAtMs,
         }
@@ -340,7 +375,10 @@ export function useCodeWorkspaceExplorerState({
     setFileSearchError(null)
 
     try {
-      const result = await window.electronAPI.listProjectFiles(projectPath)
+      const result = await window.electronAPI.listProjectFiles(
+        projectPath,
+        isManualRefresh ? { invalidateCache: true } : undefined
+      )
       const sortedNodes = sortProjectNodes(result.nodes)
       if (treeLoadRequestSeqRef.current !== requestSeq) return
       const loadedAtMs = Date.now()
@@ -350,14 +388,16 @@ export function useCodeWorkspaceExplorerState({
       }
       const skipped = totalSkippedCounts(rootSkippedRef.current, directorySkippedRef.current)
       setTree((prev) => {
-        const mergedNodes = replaceDirectoryNodes(prev.nodes, null, sortedNodes)
+        const mergedNodes = replaceDirectoryNodes(prev.nodes, null, sortedNodes, {
+          preserveLoadedDescendants: !isManualRefresh,
+        })
         return {
           ...prev,
           status: 'ready',
           nodes: mergedNodes,
           error: null,
           knownFilePaths: mergeKnownFilePaths(new Set(), mergedNodes),
-          loadingDirectories: hasLoadedRoot ? new Set(prev.loadingDirectories) : new Set(),
+          loadingDirectories: hasLoadedRoot && !shouldResetDirectoryLoads ? new Set(prev.loadingDirectories) : new Set(),
           isRefreshingRoot: false,
           lastRootLoadedAtMs: loadedAtMs,
           lastRootRefreshStartedAtMs: refreshStartedAtMs,
@@ -366,6 +406,13 @@ export function useCodeWorkspaceExplorerState({
           autoLoadBlocked: false,
         }
       })
+      if (isManualRefresh && expandedDirectoriesToRefresh.length > 0) {
+        pendingExpandedDirectoryRefreshRef.current = expandedDirectoriesToRefresh
+        setExpandedDirectoryRefreshRequest((prev) => prev + 1)
+      }
+      if (isManualRefresh) {
+        setFileSearchRefreshRequest((prev) => prev + 1)
+      }
     } catch (error) {
       if (treeLoadRequestSeqRef.current !== requestSeq) return
       setTree((prev) => {
@@ -374,7 +421,7 @@ export function useCodeWorkspaceExplorerState({
             ...prev,
             status: 'ready',
             error: error instanceof Error ? error.message : String(error),
-            loadingDirectories: hasLoadedRoot ? new Set(prev.loadingDirectories) : new Set(),
+            loadingDirectories: hasLoadedRoot && !shouldResetDirectoryLoads ? new Set(prev.loadingDirectories) : new Set(),
             isRefreshingRoot: false,
             lastRootRefreshStartedAtMs: refreshStartedAtMs,
           }
@@ -401,6 +448,40 @@ export function useCodeWorkspaceExplorerState({
       }
     }
   }, [projectPath])
+
+  useEffect(() => {
+    if (expandedDirectoryRefreshRequest <= 0) return
+    if (tree.status !== 'ready' || tree.isRefreshingRoot) return
+
+    const directoriesToRefresh = pendingExpandedDirectoryRefreshRef.current
+    if (directoriesToRefresh.length <= 0) return
+
+    let cancelled = false
+    void (async () => {
+      for (const directoryRelativePath of directoriesToRefresh) {
+        if (cancelled) return
+        if (!expandedDirectoriesRef.current.has(directoryRelativePath)) continue
+        await loadDirectory(directoryRelativePath, {
+          force: true,
+          reason: 'manual-refresh',
+          suppressError: true,
+        })
+      }
+
+      if (!cancelled && pendingExpandedDirectoryRefreshRef.current === directoriesToRefresh) {
+        pendingExpandedDirectoryRefreshRef.current = []
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    expandedDirectoryRefreshRequest,
+    loadDirectory,
+    tree.isRefreshingRoot,
+    tree.status,
+  ])
 
   const refreshRootIfStale = useCallback(() => {
     if (!shouldRefreshRootOnSidebarReveal({
@@ -524,7 +605,7 @@ export function useCodeWorkspaceExplorerState({
         if (searchRequestSeqRef.current !== requestSeq) return
         setIsSearchingFiles(false)
       })
-  }, [fileSearchQuery, projectPath])
+  }, [fileSearchQuery, fileSearchRefreshRequest, projectPath])
 
   useEffect(() => {
     if (!activeRelativePath) return

@@ -4,6 +4,7 @@ import path from 'node:path'
 import type {
   ProjectFileAutoLoadDecision,
   ProjectFileNode,
+  ProjectFileTreeOptions,
   ProjectFileTreeResult,
 } from '../../../shared/types'
 import {
@@ -46,6 +47,10 @@ function setProjectFileListCache(rootRealPath: string, paths: string[]): void {
     paths,
     updatedAtMs: Date.now(),
   })
+}
+
+function invalidateProjectFileListCache(rootRealPath: string): void {
+  projectFileListCache.delete(rootRealPath)
 }
 
 function getProjectFileListFromCache(rootRealPath: string): string[] | null {
@@ -281,8 +286,15 @@ export async function listProjectDirectoryFiles(
   return listProjectDirectoryChildren(rootRealPath, directoryRelativePath)
 }
 
-export async function listProjectFiles(projectPath: string): Promise<ProjectFileTreeResult> {
-  return listProjectDirectoryFiles(projectPath, null)
+export async function listProjectFiles(
+  projectPath: string,
+  options: ProjectFileTreeOptions = {}
+): Promise<ProjectFileTreeResult> {
+  const rootRealPath = await resolveRoot(projectPath)
+  if (options.invalidateCache) {
+    invalidateProjectFileListCache(rootRealPath)
+  }
+  return listProjectDirectoryChildren(rootRealPath, null)
 }
 
 export async function getProjectFileAutoLoadDecision(projectPath: string): Promise<ProjectFileAutoLoadDecision> {
