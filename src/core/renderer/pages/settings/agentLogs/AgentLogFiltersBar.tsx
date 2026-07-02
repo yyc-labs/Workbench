@@ -1,6 +1,5 @@
-import { Filter, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { Filter, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
-import { Input } from '../../../components/ui/input'
 import { Select, type SelectOption } from '../../../components/ui/select'
 import { useI18n } from '../../../i18n'
 import type { AgentLogFilterLevel, AgentLogFilterRoute, AgentLogFilterSource, AgentLogFilters } from './agentLogs.types'
@@ -156,14 +155,32 @@ export function AgentLogFiltersBar({
       )}
 
       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(240px,1fr)_150px_150px] 2xl:grid-cols-[minmax(320px,1fr)_170px_170px]">
-        <label className="quiet-control flex h-11 items-center gap-3 rounded-full px-4">
-          <Search className="h-4 w-4 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
-          <Input
+        <label className="quiet-control relative flex h-11 items-center rounded-full px-4 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-0">
+          <Search
+            className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]"
+            strokeWidth={1.8}
+          />
+          <input
+            type="text"
             value={filters.query}
             onChange={(event) => onChange({ ...filters, query: event.target.value })}
             placeholder={t('settings.agentLogs.searchPlaceholder')}
-            className="h-auto border-0 bg-transparent px-0 py-0"
+            className="h-full min-w-0 w-full bg-transparent pl-8 pr-10 text-base text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] focus:outline-none md:text-sm"
           />
+          <button
+            type="button"
+            className={`button-interactive absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
+              filters.query
+                ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                : 'pointer-events-none opacity-0'
+            }`}
+            onClick={() => onChange({ ...filters, query: '' })}
+            aria-label={t('common.clearSearch')}
+            title={t('common.clearSearch')}
+            tabIndex={filters.query ? 0 : -1}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </label>
 
         <Select

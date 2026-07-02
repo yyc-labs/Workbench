@@ -55,15 +55,22 @@ export function AgentLogRequestView({ detail }: { detail: AgentLogDetail }) {
         {t('settings.agentLogs.requestViewHint')}
       </div>
 
-      <AgentLogFlowMap
-        steps={steps}
-        activeStepId={activeStep?.id ?? ''}
-        onSelectStep={setActiveStepId}
-      />
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 540px), 1fr))' }}
+      >
+        <div className="self-start">
+          <AgentLogFlowMap
+            steps={steps}
+            activeStepId={activeStep?.id ?? ''}
+            onSelectStep={setActiveStepId}
+          />
+        </div>
 
-      {activeStep ? (
-        <AgentLogStepInspector step={activeStep} />
-      ) : null}
+        {activeStep ? (
+          <AgentLogStepInspector step={activeStep} />
+        ) : null}
+      </div>
     </div>
   )
 }

@@ -175,9 +175,7 @@ export function HomePage() {
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
 
-      const api = window.electronAPI as unknown as {
-        getPathForFile?: (file: File) => string
-      }
+      const api = window.electronAPI
       const getPathForFile = typeof api.getPathForFile === 'function' ? api.getPathForFile : undefined
 
       const pathSet = new Set<string>()

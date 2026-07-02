@@ -21,8 +21,10 @@ export function displayJsonString(value: string): string {
 
 export function stringifyUnknown(value: unknown): string {
   if (typeof value === 'string') return displayJsonString(value)
+  if (typeof value === 'undefined') return 'undefined'
   try {
-    return JSON.stringify(value, null, 2)
+    const json = JSON.stringify(value, null, 2)
+    return typeof json === 'string' ? json : String(value)
   } catch {
     return String(value)
   }

@@ -12,6 +12,8 @@ type AgentLogCollapsibleJsonProps = {
   importantPaths?: string[]
   expansionMode?: AgentLogJsonExpansionMode
   expansionRevision?: number
+  focusedPath?: string[]
+  searchQuery?: string
   copyText?: string
   showCopyButton?: boolean
   className?: string
@@ -29,6 +31,8 @@ type JsonNodeProps = {
   importantPaths: string[]
   expansionMode: AgentLogJsonExpansionMode
   expansionRevision: number
+  focusedPath?: string[]
+  searchQuery: string
   trailingComma?: boolean
 }
 
@@ -73,6 +77,48 @@ function pathMatches(path: string[], patterns: string[]): boolean {
   ))
 }
 
+function pathLabel(path: string[]): string {
+  if (path.length === 0) return '$'
+  return path.reduce((label, segment) => {
+    if (/^\d+$/.test(segment)) return `${label}[${segment}]`
+    return `${label}.${segment}`
+  }, '$')
+}
+
+function pathsEqual(left: string[], right: string[] | undefined): boolean {
+  if (!right || left.length !== right.length) return false
+  return left.every((segment, index) => segment === right[index])
+}
+
+function hasPathDescendant(path: string[], descendant: string[] | undefined): boolean {
+  if (!descendant || path.length >= descendant.length) return false
+  return path.every((segment, index) => segment === descendant[index])
+}
+
+function primitiveSearchText(value: unknown): string {
+  if (typeof value === 'string') return displayJsonString(value)
+  if (isExpandable(value)) return ''
+  return primitiveToJson(value)
+}
+
+function nodeMatchesSearch(value: unknown, path: string[], query: string): boolean {
+  if (!query) return false
+  return pathLabel(path).toLowerCase().includes(query)
+    || primitiveSearchText(value).toLowerCase().includes(query)
+}
+
+function hasSearchMatch(value: unknown, path: string[], query: string): boolean {
+  if (!query) return false
+  if (nodeMatchesSearch(value, path, query)) return true
+  if (!isExpandable(value)) return false
+
+  const entries = Array.isArray(value)
+    ? value.map((item, itemIndex) => [String(itemIndex), item] as const)
+    : Object.entries(value)
+
+  return entries.some(([entryKey, child]) => hasSearchMatch(child, [...path, entryKey], query))
+}
+
 function hasImportantDescendant(value: unknown, path: string[], importantPaths: string[]): boolean {
   if (pathMatches(path, importantPaths)) return true
   if (!isExpandable(value)) return false
@@ -92,8 +138,12 @@ function shouldExpandNode({
   defaultCollapsedPaths,
   importantPaths,
   expansionMode,
-}: Pick<JsonNodeProps, 'value' | 'path' | 'depth' | 'defaultExpandedDepth' | 'defaultCollapsedPaths' | 'importantPaths' | 'expansionMode'>): boolean {
+  focusedPath,
+  searchQuery,
+}: Pick<JsonNodeProps, 'value' | 'path' | 'depth' | 'defaultExpandedDepth' | 'defaultCollapsedPaths' | 'importantPaths' | 'expansionMode' | 'focusedPath' | 'searchQuery'>): boolean {
   if (depth === 0) return true
+  if (hasPathDescendant(path, focusedPath)) return true
+  if (searchQuery && hasSearchMatch(value, path, searchQuery)) return true
   if (expansionMode === 'expand-all') return true
   if (expansionMode === 'collapse-all') return false
 
@@ -246,9 +296,21 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
     importantPaths,
     expansionMode,
     expansionRevision,
+    focusedPath,
+    searchQuery,
     trailingComma,
   } = props
   const [expanded, setExpanded] = useState(() => shouldExpandNode(props))
+  const focusedPathKey = focusedPath?.join('\u0000') ?? ''
+  const pathKey = path.join('\u0000')
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
+  const focused = pathsEqual(path, focusedPath)
+  const matched = nodeMatchesSearch(value, path, normalizedSearchQuery)
+  const nodeHighlightClassName = focused
+    ? 'bg-[color:var(--color-primary)]/10 ring-1 ring-[color:var(--color-primary)]/25'
+    : matched
+      ? 'bg-[color:var(--color-warning-background)]/65 ring-1 ring-[color:var(--color-warning)]/20'
+      : undefined
 
   useEffect(() => {
     setExpanded(shouldExpandNode(props))
@@ -256,21 +318,25 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
     expansionRevision,
     expansionMode,
     value,
-    path.join('.'),
+    pathKey,
     depth,
     defaultExpandedDepth,
     defaultCollapsedPaths.join('|'),
     importantPaths.join('|'),
+    focusedPathKey,
+    normalizedSearchQuery,
   ])
 
   if (!isExpandable(value)) {
     return (
-      <PrimitiveJsonNode
-        value={value}
-        label={label}
-        index={index}
-        trailingComma={trailingComma}
-      />
+      <div className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}>
+        <PrimitiveJsonNode
+          value={value}
+          label={label}
+          index={index}
+          trailingComma={trailingComma}
+        />
+      </div>
     )
   }
 
@@ -282,12 +348,14 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
 
   if (entries.length === 0) {
     return (
-      <EmptyJsonNode
-        value={value}
-        label={label}
-        index={index}
-        trailingComma={trailingComma}
-      />
+      <div className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}>
+        <EmptyJsonNode
+          value={value}
+          label={label}
+          index={index}
+          trailingComma={trailingComma}
+        />
+      </div>
     )
   }
 
@@ -296,7 +364,10 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
       <button
         type="button"
         onClick={() => setExpanded((current) => !current)}
-        className="button-interactive flex min-w-0 items-baseline gap-1 rounded-[10px] px-1 py-0.5 text-left transition-colors hover:bg-[color:var(--color-card)]"
+        className={cx(
+          'button-interactive flex min-w-0 items-baseline gap-1 rounded-[10px] px-1 py-0.5 text-left transition-colors hover:bg-[color:var(--color-card)]',
+          nodeHighlightClassName,
+        )}
       >
         <ChevronRight
           className={cx(
@@ -335,6 +406,8 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
                 importantPaths={importantPaths}
                 expansionMode={expansionMode}
                 expansionRevision={expansionRevision}
+                focusedPath={focusedPath}
+                searchQuery={searchQuery}
                 trailingComma={entryIndex < entries.length - 1}
               />
             ))}
@@ -356,6 +429,8 @@ export function AgentLogCollapsibleJson({
   importantPaths = [],
   expansionMode = 'default',
   expansionRevision = 0,
+  focusedPath,
+  searchQuery = '',
   copyText,
   showCopyButton = true,
   className,
@@ -408,6 +483,8 @@ export function AgentLogCollapsibleJson({
         importantPaths={importantPaths}
         expansionMode={expansionMode}
         expansionRevision={expansionRevision}
+        focusedPath={focusedPath}
+        searchQuery={searchQuery.trim().toLowerCase()}
       />
     </div>
   )

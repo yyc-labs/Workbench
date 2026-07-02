@@ -56,9 +56,9 @@ function SummaryField({
     : value
 
   return (
-    <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
-      <div className="text-xs text-[color:var(--color-muted-foreground)]">{label}</div>
-      <div className="mt-1 min-h-5 break-words text-sm font-medium text-[color:var(--color-foreground)]">
+    <div className="flex min-w-0 flex-col gap-1 rounded-[12px] bg-[color:var(--color-background-sunken)]/55 px-3 py-2 sm:flex-row sm:items-baseline">
+      <div className="text-[11px] uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)] sm:w-28 sm:shrink-0">{label}</div>
+      <div className="min-h-5 min-w-0 text-sm font-medium text-[color:var(--color-foreground)] [overflow-wrap:anywhere]">
         {displayValue}
       </div>
     </div>
@@ -90,35 +90,39 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <SummaryField label={t('settings.agentLogs.source')} value={sourceLabel} />
-        <SummaryField label={t('settings.agentLogs.level')} value={summary.level} />
-        <SummaryField
-          label={t('settings.agentLogs.timestamp')}
-          value={formatDateTime(summary.timestamp, {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          })}
-        />
-        <SummaryField label={t('settings.agentLogs.status')} value={summary.statusCode} />
-        <SummaryField label={t('settings.agentLogs.duration')} value={typeof summary.durationMs === 'number' ? `${summary.durationMs}ms` : undefined} />
-        <SummaryField label={t('settings.agentLogs.truncation')} value={summary.truncated ? t('settings.agentLogs.truncated') : t('settings.agentLogs.notTruncated')} />
+      <div className="rounded-[18px] border bg-[color:var(--color-card)] p-3" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="grid gap-2">
+          <SummaryField label={t('settings.agentLogs.source')} value={sourceLabel} />
+          <SummaryField label={t('settings.agentLogs.level')} value={summary.level} />
+          <SummaryField
+            label={t('settings.agentLogs.timestamp')}
+            value={formatDateTime(summary.timestamp, {
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
+          />
+          <SummaryField label={t('settings.agentLogs.status')} value={summary.statusCode} />
+          <SummaryField label={t('settings.agentLogs.duration')} value={typeof summary.durationMs === 'number' ? `${summary.durationMs}ms` : undefined} />
+          <SummaryField label={t('settings.agentLogs.truncation')} value={summary.truncated ? t('settings.agentLogs.truncated') : t('settings.agentLogs.notTruncated')} />
+        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {mainMeta.map((item) => (
-          <SummaryField key={item.label} label={item.label} value={item.value} />
-        ))}
-        {detail.source === 'ai-gateway' && (
-          <>
-            <SummaryField label={t('settings.agentLogs.requestedStream')} value={detail.stream?.requested ? t('common.on') : t('common.off')} />
-            <SummaryField label={t('settings.agentLogs.actualStream')} value={detail.stream?.enabled ? t('common.on') : t('common.off')} />
-            <SummaryField label={t('settings.agentLogs.eventCount')} value={detail.stream?.upstreamEventCount} />
-          </>
-        )}
+      <div className="rounded-[18px] border bg-[color:var(--color-card)] p-3" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="grid gap-2">
+          {mainMeta.map((item) => (
+            <SummaryField key={item.label} label={item.label} value={item.value} />
+          ))}
+          {detail.source === 'ai-gateway' && (
+            <>
+              <SummaryField label={t('settings.agentLogs.requestedStream')} value={detail.stream?.requested ? t('common.on') : t('common.off')} />
+              <SummaryField label={t('settings.agentLogs.actualStream')} value={detail.stream?.enabled ? t('common.on') : t('common.off')} />
+              <SummaryField label={t('settings.agentLogs.eventCount')} value={detail.stream?.upstreamEventCount} />
+            </>
+          )}
+        </div>
       </div>
 
       {detail.error ? (

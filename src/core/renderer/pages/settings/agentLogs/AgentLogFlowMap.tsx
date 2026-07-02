@@ -1,4 +1,3 @@
-import { ArrowRight } from 'lucide-react'
 import { useI18n } from '../../../i18n'
 import type { AgentLogFlowStep, AgentLogFlowStepStatus } from './agentLogs.flow'
 
@@ -11,21 +10,21 @@ type AgentLogFlowMapProps = {
 function statusClassName(status: AgentLogFlowStepStatus, active: boolean): string {
   if (status === 'error') {
     return active
-      ? 'border-[color:var(--color-destructive)]/45 bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)]'
-      : 'border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)]/70 text-[color:var(--color-destructive)]'
+      ? 'border-[color:var(--color-destructive)]/45 bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)] shadow-sm'
+      : 'border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)]/45 text-[color:var(--color-destructive)]'
   }
   if (status === 'warn') {
     return active
-      ? 'border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-      : 'border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]/65 text-[color:var(--color-warning)]'
+      ? 'border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)] shadow-sm'
+      : 'border-[color:var(--color-warning)]/25 bg-[color:var(--color-warning-background)]/45 text-[color:var(--color-warning)]'
   }
   if (status === 'missing') {
     return active
-      ? 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] text-[color:var(--color-foreground)]'
-      : 'border-[color:var(--color-border)] bg-[color:var(--color-card)]/70 text-[color:var(--color-muted-foreground)]'
+      ? 'border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] text-[color:var(--color-foreground)] shadow-sm'
+      : 'border-[color:var(--color-border)] bg-[color:var(--color-card)]/65 text-[color:var(--color-muted-foreground)]'
   }
   return active
-    ? 'border-[color:var(--color-success)]/35 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+    ? 'border-[color:var(--color-success)]/35 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] shadow-sm'
     : 'border-[color:var(--color-border)] bg-[color:var(--color-card)] text-[color:var(--color-foreground)]'
 }
 
@@ -47,7 +46,7 @@ export function AgentLogFlowMap({ steps, activeStepId, onSelectStep }: AgentLogF
   const { t } = useI18n()
 
   return (
-    <section className="rounded-[22px] border bg-[color:var(--color-background-sunken)]/35 px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
+    <section className="rounded-[22px] border bg-[color:var(--color-background-sunken)]/35 px-3 py-3" style={{ borderColor: 'var(--color-border)' }}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.agentLogs.flowMap')}</h4>
@@ -55,37 +54,44 @@ export function AgentLogFlowMap({ steps, activeStepId, onSelectStep }: AgentLogF
         </div>
       </div>
 
-      <div className="-mx-1 overflow-x-auto px-1 pb-1">
-        <div className="flex min-w-max items-stretch gap-2">
-          {steps.map((step, index) => {
-            const active = step.id === activeStepId
-            return (
-              <div key={step.id} className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectStep(step.id)}
-                  className={`button-interactive w-[170px] rounded-[18px] border px-3 py-3 text-left transition-all hover:-translate-y-0.5 ${statusClassName(step.status, active)}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2 w-2 shrink-0 rounded-full ${statusDotClassName(step.status)}`} />
+      <div className="max-h-[380px] space-y-2 overflow-auto pr-1">
+        {steps.map((step, index) => {
+          const active = step.id === activeStepId
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => onSelectStep(step.id)}
+              className={`button-interactive group relative w-full rounded-[18px] border px-3 py-3 text-left transition-colors ${statusClassName(step.status, active)}`}
+            >
+              {index < steps.length - 1 ? (
+                <span className="absolute bottom-[-10px] left-[21px] h-3 w-px bg-[color:var(--color-border)]" />
+              ) : null}
+              <div className="flex min-w-0 gap-3">
+                <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ring-4 ring-[color:var(--color-background-sunken)] ${statusDotClassName(step.status)}`} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center justify-between gap-2">
                     <span className="truncate text-sm font-semibold">{step.title}</span>
-                  </div>
-                  <div className="mt-2 text-[11px] font-medium uppercase tracking-[0.12em] opacity-80">
-                    {statusLabel(step.status, t)}
-                  </div>
-                  <div className="mt-2 min-h-8 space-y-1 text-xs leading-4 opacity-85">
-                    {(step.summary.length > 0 ? step.summary.slice(0, 2) : [t('settings.agentLogs.notCapturedYet')]).map((item) => (
-                      <div key={item} className="truncate">{item}</div>
+                    <span className="shrink-0 rounded-full bg-[color:var(--color-card)]/60 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] opacity-80">
+                      {statusLabel(step.status, t)}
+                    </span>
+                  </span>
+                  <span className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-[11px] leading-4 opacity-85">
+                    {(step.summary.length > 0 ? step.summary.slice(0, 3) : [t('settings.agentLogs.notCapturedYet')]).map((item) => (
+                      <span
+                        key={item}
+                        className="max-w-full truncate rounded-full bg-[color:var(--color-card)]/55 px-2 py-0.5"
+                        title={item}
+                      >
+                        {item}
+                      </span>
                     ))}
-                  </div>
-                </button>
-                {index < steps.length - 1 ? (
-                  <ArrowRight className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
-                ) : null}
+                  </span>
+                </span>
               </div>
-            )
-          })}
-        </div>
+            </button>
+          )
+        })}
       </div>
     </section>
   )

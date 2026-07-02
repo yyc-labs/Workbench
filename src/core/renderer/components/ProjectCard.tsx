@@ -220,12 +220,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   }, [isStoppingRuntime, stopRuntime, project.id])
 
   useEffect(() => {
-    const api = window.electronAPI as unknown as {
-      onAiCommitStatus?: (
-        cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void
-      ) => () => void
-      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-    }
+    const api = window.electronAPI
 
     if (!menuPos || typeof api.onAiCommitStatus !== 'function') return
 

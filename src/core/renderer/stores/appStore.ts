@@ -7,8 +7,8 @@ import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../lib/projectDocLinks'
 import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../../shared/aiRuntimeProfiles'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 
 export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   isAppReady: false,

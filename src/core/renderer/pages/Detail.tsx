@@ -304,12 +304,7 @@ export function DetailPage() {
 
   useEffect(() => {
     if (!projectId) return
-    const api = window.electronAPI as unknown as {
-      onAiCommitStatus?: (
-        cb: (d: { projectId: string; status: Exclude<AiCommitStatus, 'idle'> }) => void
-      ) => () => void
-      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-    }
+    const api = window.electronAPI
 
     const cleanup = typeof api.onAiCommitStatus === 'function'
       ? api.onAiCommitStatus(({ projectId: pid, status }) => {

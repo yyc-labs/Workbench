@@ -172,11 +172,7 @@ export function useAiCommitFlow({
 
   useEffect(() => {
     if (!projectId || !toolProcessId) return
-    const api = window.electronAPI as unknown as {
-      onAiCommitOutput?: (cb: (d: { projectId: string; data: string }) => void) => () => void
-      onAiCommitStatus?: (cb: (d: { projectId: string; status: 'running' | 'success' | 'error' }) => void) => () => void
-      getAiCommitState?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-    }
+    const api = window.electronAPI
 
     if (typeof api.onAiCommitOutput !== 'function' || typeof api.onAiCommitStatus !== 'function') {
       useAppStore.getState().appendOutput(
@@ -284,9 +280,7 @@ export function useAiCommitFlow({
       setAiCommitUndoEffectiveRemainingMs(effectiveRemaining)
       if (effectiveRemaining <= 0) {
         setAiCommitUndo(null)
-        const api = window.electronAPI as unknown as {
-          closeAiCommitUndo?: (projectId: string, reason?: 'expired') => Promise<AiCommitTaskSnapshot | null>
-        }
+        const api = window.electronAPI
         if (projectId && typeof api.closeAiCommitUndo === 'function') {
           void api.closeAiCommitUndo(projectId, 'expired')
         }
@@ -315,9 +309,7 @@ export function useAiCommitFlow({
         window.clearTimeout(previousTimer)
       }
 
-      const api = window.electronAPI as unknown as {
-        closeAiCommitUndo?: (projectId: string, reason?: 'left-pane') => Promise<AiCommitTaskSnapshot | null>
-      }
+      const api = window.electronAPI
 
       const timer = window.setTimeout(() => {
         pendingUndoCloseTimers.delete(projectId)
@@ -381,9 +373,7 @@ export function useAiCommitFlow({
       return
     }
 
-    const api = window.electronAPI as unknown as {
-      listGitRepositories?: (workspacePath: string) => Promise<DetailGitRepositoryList>
-    }
+    const api = window.electronAPI
 
     if (typeof api.listGitRepositories !== 'function') {
       setGitRepositoriesError('Git repository list API is unavailable. Please restart Electron app process.')
@@ -418,9 +408,7 @@ export function useAiCommitFlow({
       return
     }
 
-    const api = window.electronAPI as unknown as {
-      getGitRepositorySnapshot?: (repoRoot: string) => Promise<DetailGitSnapshot>
-    }
+    const api = window.electronAPI
 
     if (typeof api.getGitRepositorySnapshot !== 'function') {
       setGitSnapshotError('Git repository API is unavailable. Please restart Electron app process.')
@@ -465,13 +453,7 @@ export function useAiCommitFlow({
     setAiCommitCanceling(false)
     setAiCommitUndoError(null)
 
-    const api = window.electronAPI as unknown as {
-      runAiCommit?: (
-        projectId: string,
-        repoRoot: string,
-        override?: AiCommitRunOverride
-      ) => Promise<boolean>
-    }
+    const api = window.electronAPI
 
     if (typeof api.runAiCommit !== 'function') {
       useAppStore.getState().appendOutput(
@@ -510,9 +492,7 @@ export function useAiCommitFlow({
 
   const handleCancelAiCommit = useCallback(async () => {
     if (!projectId || aiCommitStatus !== 'running' || aiCommitCanceling) return
-    const api = window.electronAPI as unknown as {
-      cancelAiCommit?: (projectId: string) => Promise<boolean>
-    }
+    const api = window.electronAPI
 
     if (typeof api.cancelAiCommit !== 'function') {
       useAppStore.getState().appendOutput(
@@ -543,9 +523,7 @@ export function useAiCommitFlow({
 
   const handleUndoAiCommit = useCallback(async () => {
     if (!projectId || !aiCommitUndoActionAvailable || aiCommitUndoRunning) return
-    const api = window.electronAPI as unknown as {
-      undoAiCommit?: (projectId: string) => Promise<AiCommitUndoResult>
-    }
+    const api = window.electronAPI
     if (typeof api.undoAiCommit !== 'function') {
       setAiCommitUndoError(translateCurrent('detail.operationConfirmUndoTitle'))
       return
@@ -571,9 +549,7 @@ export function useAiCommitFlow({
 
   const handleBeginUndoAiCommitAuth = useCallback(async (): Promise<boolean> => {
     if (!projectId || !aiCommitUndoAvailable || aiCommitUndoRunning) return false
-    const api = window.electronAPI as unknown as {
-      beginAiCommitUndoAuth?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-    }
+    const api = window.electronAPI
     if (typeof api.beginAiCommitUndoAuth !== 'function') {
       setAiCommitUndoError(translateCurrent('detail.operationConfirmUndoTitle'))
       return false
@@ -596,9 +572,7 @@ export function useAiCommitFlow({
 
   const handleCancelUndoAiCommitAuth = useCallback(async (): Promise<void> => {
     if (!projectId) return
-    const api = window.electronAPI as unknown as {
-      cancelAiCommitUndoAuth?: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
-    }
+    const api = window.electronAPI
     if (typeof api.cancelAiCommitUndoAuth !== 'function') return
 
     try {
