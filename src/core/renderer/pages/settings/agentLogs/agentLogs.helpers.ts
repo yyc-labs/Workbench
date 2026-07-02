@@ -49,6 +49,7 @@ export function detailToJson(detail: AgentLogDetail | null): unknown {
       meta: detail.meta,
       ingressRequest: detail.ingressRequest,
       normalizedRequest: detail.normalizedRequest,
+      protocolDiagnostics: detail.protocolDiagnostics,
       upstreamRequest: detail.upstreamRequest,
       upstreamResponse: detail.upstreamResponse,
       clientResponse: detail.clientResponse,

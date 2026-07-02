@@ -25,6 +25,7 @@ export type AgentLogFlowStep = {
   }
   value?: unknown
   status: AgentLogFlowStepStatus
+  diagnosticStatus?: AgentLogFlowStepStatus
   summary: string[]
 }
 
@@ -52,6 +53,10 @@ export type AgentLogFlowLabels = {
   upstreamMergedText: string
   clientMergedText: string
   finalPayload: string
+  protocolDiagnostics: string
+  protocolDiagnosticsDescription: string
+  lossyWarnings: string
+  toolValidation: string
 }
 
 function compact(values: Array<string | undefined | null | false>): string[] {
@@ -82,13 +87,14 @@ function hasStepData(step: Pick<AgentLogFlowStep, 'request' | 'response' | 'body
 }
 
 function resolveStatus(
-  step: Pick<AgentLogFlowStep, 'id' | 'request' | 'response' | 'body' | 'mergedStream' | 'value'>,
+  step: Pick<AgentLogFlowStep, 'id' | 'request' | 'response' | 'body' | 'mergedStream' | 'value' | 'diagnosticStatus'>,
   errorStepId: string | null,
 ): AgentLogFlowStepStatus {
   const hasData = hasStepData(step)
 
   if (step.response && step.response.statusCode >= 400) return 'error'
   if (errorStepId === step.id) return 'error'
+  if (step.diagnosticStatus) return step.diagnosticStatus
   if (!hasData) return 'missing'
   if (requestBodyWarning(step.request) || responseBodyWarning(step.response) || snapshotWarning(step.body) || mergedStreamWarning(step.mergedStream)) return 'warn'
   return 'ok'
@@ -158,9 +164,21 @@ function valueSize(value: unknown): string | undefined {
 
 function gatewayErrorStepId(detail: Extract<AgentLogDetail, { source: 'ai-gateway' }>): string | null {
   if (!detail.error) return null
+  if (detail.error.code === 'tool_validation_failed') return 'protocol-diagnostics'
   if (!detail.upstreamResponse || detail.upstreamResponse.statusCode >= 400) return 'provider-response'
   if (!detail.clientResponse || detail.clientResponse.statusCode >= 400) return 'client-response'
   return 'provider-response'
+}
+
+function protocolDiagnosticsStatus(
+  detail: Extract<AgentLogDetail, { source: 'ai-gateway' }>
+): AgentLogFlowStepStatus {
+  const diagnostics = detail.protocolDiagnostics
+  if (!diagnostics) return 'missing'
+  if (diagnostics.toolValidation?.some((entry) => !entry.schemaValid || !entry.forwarded)) return 'error'
+  if ((diagnostics.lossyWarnings?.length ?? 0) > 0) return 'warn'
+  if (diagnostics.toolValidation?.some((entry) => (entry.diagnosticWarnings?.length ?? 0) > 0)) return 'warn'
+  return 'ok'
 }
 
 function hookErrorStepId(detail: Extract<AgentLogDetail, { source: 'agent-hooks' }>): string | null {
@@ -216,6 +234,23 @@ export function buildAgentLogFlowSteps(
           detail.stream?.requested ? labels.stream : undefined,
           bodySizeSummary(detail.normalizedRequest),
           ...snapshotFlags(detail.normalizedRequest, labels),
+        ]),
+      },
+      {
+        id: 'protocol-diagnostics',
+        title: labels.protocolDiagnostics,
+        description: labels.protocolDiagnosticsDescription,
+        value: detail.protocolDiagnostics,
+        status: 'missing',
+        diagnosticStatus: protocolDiagnosticsStatus(detail),
+        summary: compact([
+          detail.protocolDiagnostics?.conversion,
+          (detail.protocolDiagnostics?.lossyWarnings?.length ?? 0) > 0
+            ? `${labels.lossyWarnings}: ${detail.protocolDiagnostics?.lossyWarnings?.length}`
+            : undefined,
+          (detail.protocolDiagnostics?.toolValidation?.length ?? 0) > 0
+            ? `${labels.toolValidation}: ${detail.protocolDiagnostics?.toolValidation?.length}`
+            : undefined,
         ]),
       },
       {

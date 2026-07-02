@@ -3,6 +3,7 @@ import type {
   AiGatewayClientCli,
   AiGatewayConfig,
   AiGatewayModelRoute,
+  AiGatewayProviderCapabilities,
   AiGatewayProviderConfig,
   AiGatewayUpstreamProtocol,
 } from '../../../shared/types'
@@ -47,6 +48,74 @@ function normalizeProtocol(value: unknown): AiGatewayUpstreamProtocol {
   return typeof value === 'string' && SUPPORTED_PROTOCOLS.has(value as AiGatewayUpstreamProtocol)
     ? value as AiGatewayUpstreamProtocol
     : 'openai_chat'
+}
+
+export function defaultAiGatewayProviderCapabilities(
+  protocol: AiGatewayUpstreamProtocol
+): Required<AiGatewayProviderCapabilities> {
+  if (protocol === 'openai_responses') {
+    return {
+      supportsStreaming: true,
+      supportsTools: true,
+      supportsStrictTools: true,
+      supportsParallelToolCalls: true,
+      supportsDeveloperMessages: true,
+      supportsReasoning: true,
+      supportsResponsesInputItems: true,
+      supportsAnthropicContentBlocks: false,
+      supportsImages: true,
+      supportsDocuments: false,
+    }
+  }
+
+  if (protocol === 'anthropic_messages') {
+    return {
+      supportsStreaming: true,
+      supportsTools: true,
+      supportsStrictTools: true,
+      supportsParallelToolCalls: true,
+      supportsDeveloperMessages: false,
+      supportsReasoning: false,
+      supportsResponsesInputItems: false,
+      supportsAnthropicContentBlocks: true,
+      supportsImages: true,
+      supportsDocuments: true,
+    }
+  }
+
+  return {
+    supportsStreaming: true,
+    supportsTools: true,
+    supportsStrictTools: false,
+    supportsParallelToolCalls: true,
+    supportsDeveloperMessages: false,
+    supportsReasoning: false,
+    supportsResponsesInputItems: false,
+    supportsAnthropicContentBlocks: false,
+    supportsImages: false,
+    supportsDocuments: false,
+  }
+}
+
+function normalizeProviderCapabilities(
+  value: unknown,
+  protocol: AiGatewayUpstreamProtocol
+): Required<AiGatewayProviderCapabilities> {
+  const defaults = defaultAiGatewayProviderCapabilities(protocol)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults
+  const raw = value as Partial<AiGatewayProviderCapabilities>
+  return {
+    supportsStreaming: normalizeBoolean(raw.supportsStreaming, defaults.supportsStreaming),
+    supportsTools: normalizeBoolean(raw.supportsTools, defaults.supportsTools),
+    supportsStrictTools: normalizeBoolean(raw.supportsStrictTools, defaults.supportsStrictTools),
+    supportsParallelToolCalls: normalizeBoolean(raw.supportsParallelToolCalls, defaults.supportsParallelToolCalls),
+    supportsDeveloperMessages: normalizeBoolean(raw.supportsDeveloperMessages, defaults.supportsDeveloperMessages),
+    supportsReasoning: normalizeBoolean(raw.supportsReasoning, defaults.supportsReasoning),
+    supportsResponsesInputItems: normalizeBoolean(raw.supportsResponsesInputItems, defaults.supportsResponsesInputItems),
+    supportsAnthropicContentBlocks: normalizeBoolean(raw.supportsAnthropicContentBlocks, defaults.supportsAnthropicContentBlocks),
+    supportsImages: normalizeBoolean(raw.supportsImages, defaults.supportsImages),
+    supportsDocuments: normalizeBoolean(raw.supportsDocuments, defaults.supportsDocuments),
+  }
 }
 
 function normalizeModelMap(value: unknown): Record<string, string> | undefined {
@@ -121,14 +190,16 @@ function normalizeProvider(value: unknown, index: number): AiGatewayProviderConf
   const id = normalizeProviderId(raw.id, index === 0 ? AI_GATEWAY_DEFAULT_PROVIDER_ID : `provider-${index + 1}`)
   const name = normalizeString(raw.name, id)
   const baseUrl = normalizeString(raw.baseUrl, 'https://api.openai.com/v1')
+  const protocol = normalizeProtocol(raw.protocol)
   return {
     id,
     name,
     baseUrl,
     apiKeyEnv: normalizeOptionalString(raw.apiKeyEnv) ?? 'OPENAI_API_KEY',
     apiKey: normalizeOptionalString(raw.apiKey),
-    protocol: normalizeProtocol(raw.protocol),
+    protocol,
     modelMap: normalizeModelMap(raw.modelMap),
+    capabilities: normalizeProviderCapabilities(raw.capabilities, protocol),
     enabled: normalizeBoolean(raw.enabled, true),
     timeoutMs: normalizeTimeout(raw.timeoutMs),
   }
@@ -142,6 +213,7 @@ function defaultProvider(): AiGatewayProviderConfig {
     apiKeyEnv: 'OPENAI_API_KEY',
     protocol: 'openai_chat',
     modelMap: {},
+    capabilities: defaultAiGatewayProviderCapabilities('openai_chat'),
     enabled: true,
     timeoutMs: 60000,
   }

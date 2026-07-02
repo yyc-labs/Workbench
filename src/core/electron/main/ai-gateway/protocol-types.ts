@@ -1,6 +1,6 @@
 export type JsonObject = Record<string, unknown>
 
-export type ChatMessageRole = 'system' | 'user' | 'assistant' | 'tool'
+export type ChatMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool'
 
 export interface ChatCompletionTool {
   type: 'function'
@@ -8,6 +8,7 @@ export interface ChatCompletionTool {
     name: string
     description?: string
     parameters?: JsonObject
+    strict?: boolean
   }
 }
 
@@ -104,13 +105,29 @@ export interface GatewaySseEvent {
   data: string
 }
 
-export class UnsupportedGatewayFeatureError extends Error {
-  readonly statusCode = 400
-  readonly code = 'unsupported_feature'
+export class GatewayRouteError extends Error {
+  readonly statusCode: number
+  readonly code: string
 
-  constructor(message: string) {
+  constructor(message: string, code: string, statusCode = 400) {
     super(message)
+    this.name = 'GatewayRouteError'
+    this.code = code
+    this.statusCode = statusCode
+  }
+}
+
+export class UnsupportedGatewayFeatureError extends GatewayRouteError {
+  constructor(message: string) {
+    super(message, 'unsupported_feature', 400)
     this.name = 'UnsupportedGatewayFeatureError'
+  }
+}
+
+export class ToolValidationGatewayError extends GatewayRouteError {
+  constructor(message: string) {
+    super(message, 'tool_validation_failed', 400)
+    this.name = 'ToolValidationGatewayError'
   }
 }
 

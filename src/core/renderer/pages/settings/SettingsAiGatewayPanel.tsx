@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type {
   AiGatewayClientCli,
   AiGatewayConfig,
+  AiGatewayProviderCapabilities,
   AiGatewayProviderConfig,
   AiGatewayStatus,
   AiGatewayUpstreamProtocol,
@@ -39,6 +40,104 @@ const PROTOCOL_OPTIONS: SelectOption[] = [
   { value: 'openai_responses', label: 'openai_responses' },
   { value: 'anthropic_messages', label: 'anthropic_messages' },
 ]
+
+const CAPABILITY_OPTIONS: Array<{
+  key: keyof AiGatewayProviderCapabilities
+  labelKey: string
+  descriptionKey: string
+  group: 'common' | 'advanced'
+}> = [
+  {
+    key: 'supportsStreaming',
+    labelKey: 'settings.aiGateway.capabilityStreaming',
+    descriptionKey: 'settings.aiGateway.capabilityStreamingHint',
+    group: 'common',
+  },
+  {
+    key: 'supportsTools',
+    labelKey: 'settings.aiGateway.capabilityTools',
+    descriptionKey: 'settings.aiGateway.capabilityToolsHint',
+    group: 'common',
+  },
+  {
+    key: 'supportsParallelToolCalls',
+    labelKey: 'settings.aiGateway.capabilityParallelTools',
+    descriptionKey: 'settings.aiGateway.capabilityParallelToolsHint',
+    group: 'common',
+  },
+  {
+    key: 'supportsStrictTools',
+    labelKey: 'settings.aiGateway.capabilityStrictTools',
+    descriptionKey: 'settings.aiGateway.capabilityStrictToolsHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsDeveloperMessages',
+    labelKey: 'settings.aiGateway.capabilityDeveloperMessages',
+    descriptionKey: 'settings.aiGateway.capabilityDeveloperMessagesHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsReasoning',
+    labelKey: 'settings.aiGateway.capabilityReasoning',
+    descriptionKey: 'settings.aiGateway.capabilityReasoningHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsResponsesInputItems',
+    labelKey: 'settings.aiGateway.capabilityResponsesItems',
+    descriptionKey: 'settings.aiGateway.capabilityResponsesItemsHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsAnthropicContentBlocks',
+    labelKey: 'settings.aiGateway.capabilityAnthropicBlocks',
+    descriptionKey: 'settings.aiGateway.capabilityAnthropicBlocksHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsImages',
+    labelKey: 'settings.aiGateway.capabilityImages',
+    descriptionKey: 'settings.aiGateway.capabilityImagesHint',
+    group: 'advanced',
+  },
+  {
+    key: 'supportsDocuments',
+    labelKey: 'settings.aiGateway.capabilityDocuments',
+    descriptionKey: 'settings.aiGateway.capabilityDocumentsHint',
+    group: 'advanced',
+  },
+]
+
+const CAPABILITY_GROUPS: Array<{
+  key: 'common' | 'advanced'
+  titleKey: string
+  descriptionKey: string
+}> = [
+  {
+    key: 'common',
+    titleKey: 'settings.aiGateway.capabilitiesCommonTitle',
+    descriptionKey: 'settings.aiGateway.capabilitiesCommonDescription',
+  },
+  {
+    key: 'advanced',
+    titleKey: 'settings.aiGateway.capabilitiesAdvancedTitle',
+    descriptionKey: 'settings.aiGateway.capabilitiesAdvancedDescription',
+  },
+]
+
+const DEFAULT_OPENAI_CHAT_CAPABILITIES: AiGatewayProviderCapabilities = {
+  supportsStreaming: true,
+  supportsTools: true,
+  supportsStrictTools: false,
+  supportsParallelToolCalls: true,
+  supportsDeveloperMessages: false,
+  supportsReasoning: false,
+  supportsResponsesInputItems: false,
+  supportsAnthropicContentBlocks: false,
+  supportsImages: false,
+  supportsDocuments: false,
+}
 
 function modelMapToText(modelMap: Record<string, string> | undefined): string {
   return Object.entries(modelMap ?? {})
@@ -80,6 +179,7 @@ function draftToProvider(draft: ProviderDraft): AiGatewayProviderConfig {
     apiKey: draft.apiKey?.trim() || undefined,
     protocol: draft.protocol,
     modelMap: parseModelMap(draft.modelMapText),
+    capabilities: draft.capabilities,
     enabled: draft.enabled,
     timeoutMs: Number.isFinite(Number(draft.timeoutMs)) ? Number(draft.timeoutMs) : undefined,
   }
@@ -96,6 +196,7 @@ function createNewProviderDraft(index: number): ProviderDraft {
     protocol: 'openai_chat',
     modelMap: {},
     modelMapText: '',
+    capabilities: DEFAULT_OPENAI_CHAT_CAPABILITIES,
     enabled: true,
     timeoutMs: 60000,
   }
@@ -432,6 +533,14 @@ export function SettingsAiGatewayPanel({
     )))
   }
 
+  const updateProviderCapability = (key: keyof AiGatewayProviderCapabilities, value: boolean) => {
+    if (!activeProvider) return
+    updateProvider('capabilities', {
+      ...(activeProvider.capabilities ?? {}),
+      [key]: value,
+    })
+  }
+
   const handleAddProvider = () => {
     const draft = createNewProviderDraft(providers.length)
     setProviders((current) => [...current, draft])
@@ -694,6 +803,53 @@ export function SettingsAiGatewayPanel({
                   onChange={(event) => updateProvider('timeoutMs', Number(event.target.value))}
                   disabled={inputDisabled}
                 />
+              </div>
+              <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
+                <div>
+                  <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesDescription')}</p>
+                </div>
+                <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                  {t('settings.aiGateway.capabilitiesDefaultsHint')}
+                </div>
+                <div className="space-y-4">
+                  {CAPABILITY_GROUPS.map((group) => (
+                    <div key={group.key} className="space-y-2">
+                      <div>
+                        <h5 className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">
+                          {t(group.titleKey as Parameters<typeof t>[0])}
+                        </h5>
+                        <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                          {t(group.descriptionKey as Parameters<typeof t>[0])}
+                        </p>
+                      </div>
+                      <div className="grid gap-2 lg:grid-cols-2">
+                        {CAPABILITY_OPTIONS.filter((option) => option.group === group.key).map((option) => (
+                          <label
+                            key={option.key}
+                            className="quiet-control flex min-h-[74px] items-start gap-3 rounded-[16px] px-4 py-3 text-[color:var(--color-foreground)]"
+                          >
+                            <input
+                              className="mt-0.5"
+                              type="checkbox"
+                              checked={activeProvider.capabilities?.[option.key] === true}
+                              onChange={(event) => updateProviderCapability(option.key, event.target.checked)}
+                              disabled={inputDisabled}
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium">
+                                {t(option.labelKey as Parameters<typeof t>[0])}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                                {t(option.descriptionKey as Parameters<typeof t>[0])}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.apiKeyEnv')}</p>

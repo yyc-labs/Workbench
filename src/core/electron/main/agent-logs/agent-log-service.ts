@@ -30,6 +30,7 @@ function buildGatewayMarkdown(detail: AiGatewayLogDetail): string {
     buildJsonBlock('Meta', detail.meta),
     buildJsonBlock('Ingress Request', detail.ingressRequest),
     buildJsonBlock('Normalized Request', detail.normalizedRequest),
+    buildJsonBlock('Protocol Diagnostics', detail.protocolDiagnostics),
     buildJsonBlock('Upstream Request', detail.upstreamRequest),
     buildJsonBlock('Upstream Response', detail.upstreamResponse),
     buildJsonBlock('Client Response', detail.clientResponse),

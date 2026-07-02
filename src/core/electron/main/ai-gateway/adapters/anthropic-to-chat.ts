@@ -163,7 +163,7 @@ function anthropicMessageToChatMessages(message: unknown): ChatCompletionMessage
   return anthropicUserMessageToChatMessages(role, message.content)
 }
 
-function anthropicToolsToChatTools(tools: unknown): ChatCompletionTool[] {
+function anthropicToolsToChatTools(tools: unknown, useStrictTools: boolean): ChatCompletionTool[] {
   if (!Array.isArray(tools)) return []
 
   return tools.map((tool, index): ChatCompletionTool => {
@@ -183,6 +183,9 @@ function anthropicToolsToChatTools(tools: unknown): ChatCompletionTool[] {
     if (description) converted.function.description = description
     if (isJsonObject(tool.input_schema)) {
       converted.function.parameters = tool.input_schema
+    }
+    if (useStrictTools) {
+      converted.function.strict = true
     }
     return converted
   })
@@ -240,7 +243,7 @@ function anthropicToolChoiceToChatToolChoice(
 
 export function anthropicMessagesToChatCompletion(
   input: AnthropicMessagesRequest,
-  provider: Pick<AiGatewayProviderConfig, 'modelMap'> = {}
+  provider: Pick<AiGatewayProviderConfig, 'modelMap' | 'capabilities'> = {}
 ): ChatCompletionRequest {
   const model = resolveMappedModel(String(input.model || ''), provider.modelMap)
   if (!model) {
@@ -253,7 +256,7 @@ export function anthropicMessagesToChatCompletion(
   const system = flattenSystem(input.system)
   if (system) {
     chatMessages.unshift({
-      role: 'system',
+      role: provider.capabilities?.supportsDeveloperMessages ? 'developer' : 'system',
       content: system,
     })
   }
@@ -275,7 +278,7 @@ export function anthropicMessagesToChatCompletion(
   if (topP !== undefined) request.top_p = topP
   if (input.stream === true) request.stream = true
 
-  const tools = anthropicToolsToChatTools(input.tools)
+  const tools = anthropicToolsToChatTools(input.tools, provider.capabilities?.supportsStrictTools === true)
   if (tools.length > 0) {
     request.tools = tools
     const toolChoice = anthropicToolChoiceToChatToolChoice(input.tool_choice)

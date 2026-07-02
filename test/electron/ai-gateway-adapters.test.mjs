@@ -17,6 +17,10 @@ const { drainSseEvents, encodeSseEvent } = loadTsModule('src/core/electron/main/
 const { normalizeAiGatewayConfig } = loadTsModule('src/core/electron/main/ai-gateway/gateway-config.ts')
 const { AiGatewayProviderRegistry } = loadTsModule('src/core/electron/main/ai-gateway/provider-registry.ts')
 const {
+  assertToolValidationPassed,
+  validateChatToolCalls,
+} = loadTsModule('src/core/electron/main/ai-gateway/tool-validation.ts')
+const {
   buildStreamMergedSnapshot,
   createLimitedTextAccumulator,
 } = loadTsModule('src/core/electron/main/ai-gateway/stream-trace.ts')
@@ -47,6 +51,12 @@ function closeServer(server) {
   })
 }
 
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function getFreePort() {
   const server = createServer()
   const port = await listen(server)
@@ -64,6 +74,23 @@ function readRequestBody(req) {
     req.on('end', () => resolve(body))
     req.on('error', reject)
   })
+}
+
+async function readStreamUntil(reader, decoder, predicate, timeoutMs = 1000) {
+  let received = ''
+  const deadline = Date.now() + timeoutMs
+  while (!predicate(received)) {
+    const remainingMs = deadline - Date.now()
+    assert.ok(remainingMs > 0, `Timed out waiting for stream chunk. Received: ${received}`)
+    const result = await Promise.race([
+      reader.read(),
+      delay(remainingMs).then(() => ({ timedOut: true })),
+    ])
+    assert.equal(result.timedOut, undefined, `Timed out waiting for stream chunk. Received: ${received}`)
+    assert.equal(result.done, false)
+    received += decoder.decode(result.value, { stream: true })
+  }
+  return received
 }
 
 function writeChatCompletionStream(res, text = 'Hello') {
@@ -84,6 +111,31 @@ function writeChatCompletionStream(res, text = 'Hello') {
     model: 'gpt-upstream',
     choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
     usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 },
+  }))
+  res.write('data: [DONE]\n\n')
+  res.end()
+}
+
+async function writeDelayedChatCompletionStream(res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_delayed',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: { content: 'First' }, finish_reason: null }],
+  }))
+  await delay(150)
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_delayed',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: { content: 'Second' }, finish_reason: null }],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_delayed',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
   }))
   res.write('data: [DONE]\n\n')
   res.end()
@@ -162,6 +214,39 @@ function writeChatToolCallStream(res) {
   res.end()
 }
 
+function writeInvalidChatToolCallStream(res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_invalid',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_invalid',
+              type: 'function',
+              function: { name: 'Write', arguments: '{"file_path":"void","content":""}' },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_invalid',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+  }))
+  res.write('data: [DONE]\n\n')
+  res.end()
+}
+
 function createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort, maxBodyBytes = 4096 }) {
   return normalizeAiGatewayConfig({
     enabled: true,
@@ -176,6 +261,26 @@ function createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort, maxBodyBytes
         baseUrl: `http://127.0.0.1:${upstreamPort}/v1`,
         apiKey: 'sk-provider',
         protocol: 'openai_chat',
+        enabled: true,
+      },
+    ],
+  })
+}
+
+function createOpenAiResponsesGatewayConfig({ gatewayPort, upstreamPort, maxBodyBytes = 4096 }) {
+  return normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    maxBodyBytes,
+    activeProviderId: 'openai-responses',
+    providers: [
+      {
+        id: 'openai-responses',
+        name: 'OpenAI Responses',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/v1`,
+        apiKey: 'sk-provider',
+        protocol: 'openai_responses',
         enabled: true,
       },
     ],
@@ -308,6 +413,71 @@ test('converts Anthropic tools and tool_result messages to Chat Completions requ
   ])
 })
 
+test('uses developer messages and strict tools when provider capabilities allow them', () => {
+  const chat = anthropicMessagesToChatCompletion({
+    model: 'claude-sonnet',
+    system: 'Follow developer policy.',
+    tools: [
+      {
+        name: 'Write',
+        input_schema: {
+          type: 'object',
+          properties: {
+            file_path: { type: 'string', pattern: '^src/' },
+          },
+          required: ['file_path'],
+          additionalProperties: false,
+        },
+      },
+    ],
+    messages: [{ role: 'user', content: 'edit a file' }],
+  }, {
+    capabilities: {
+      supportsDeveloperMessages: true,
+      supportsStrictTools: true,
+    },
+  })
+
+  assert.equal(chat.messages[0].role, 'developer')
+  assert.equal(chat.tools[0].function.strict, true)
+})
+
+test('validates tool arguments against declared schemas and records diagnostic warnings', () => {
+  const report = validateChatToolCalls([
+    {
+      id: 'call_1',
+      index: 0,
+      type: 'function',
+      function: {
+        name: 'Write',
+        arguments: '{"file_path":"void","content":""}',
+      },
+    },
+  ], [
+    {
+      type: 'function',
+      function: {
+        name: 'Write',
+        parameters: {
+          type: 'object',
+          properties: {
+            file_path: { type: 'string', pattern: '^src/' },
+            content: { type: 'string' },
+          },
+          required: ['file_path', 'content'],
+          additionalProperties: false,
+        },
+      },
+    },
+  ])
+
+  assert.equal(report.valid, false)
+  assert.equal(report.entries[0].forwarded, false)
+  assert.match(report.entries[0].validationErrors.join('\n'), /must match pattern/)
+  assert.match(report.entries[0].diagnosticWarnings.join('\n'), /code token/)
+  assert.throws(() => assertToolValidationPassed(report), /tool call "Write" failed validation/i)
+})
+
 test('converts Responses request to Chat Completions request', () => {
   const chat = responsesToChatCompletion({
     model: 'codex-model',
@@ -340,6 +510,31 @@ test('rejects unsupported Responses reasoning', () => {
     input: 'hello',
     reasoning: { effort: 'high' },
   }), /reasoning options are not supported/)
+})
+
+test('normalizes provider capability defaults by upstream protocol', () => {
+  const config = normalizeAiGatewayConfig({
+    providers: [
+      {
+        id: 'chat',
+        name: 'Chat',
+        baseUrl: 'https://chat.example/v1',
+        protocol: 'openai_chat',
+      },
+      {
+        id: 'responses',
+        name: 'Responses',
+        baseUrl: 'https://responses.example/v1',
+        protocol: 'openai_responses',
+      },
+    ],
+  })
+
+  assert.equal(config.providers[0].capabilities.supportsTools, true)
+  assert.equal(config.providers[0].capabilities.supportsStrictTools, false)
+  assert.equal(config.providers[0].capabilities.supportsResponsesInputItems, false)
+  assert.equal(config.providers[1].capabilities.supportsStrictTools, true)
+  assert.equal(config.providers[1].capabilities.supportsResponsesInputItems, true)
 })
 
 test('converts Chat response to Anthropic message response', () => {
@@ -1016,6 +1211,128 @@ test('records merged stream text and payload for Responses streams', async (t) =
   assert.equal(detail.stream.merged.usage.prompt_tokens, 2)
   assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.content, 'Hello')
   assert.equal(detail.stream.merged.clientPayload.parsed.output_text, 'Hello')
+  assert.equal(detail.protocolDiagnostics.conversion, 'lossy_conversion')
+  assert.match(detail.protocolDiagnostics.lossyWarnings[0], /downgrade/)
+})
+
+test('passes OpenAI Responses providers through natively', async (t) => {
+  const upstreamRequests = []
+  const upstream = createServer(async (req, res) => {
+    const bodyText = await readRequestBody(req)
+    upstreamRequests.push({
+      method: req.method,
+      url: req.url,
+      headers: req.headers,
+      body: JSON.parse(bodyText),
+    })
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({
+      id: 'resp_1',
+      object: 'response',
+      status: 'completed',
+      model: 'gpt-responses-upstream',
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'ok' }],
+        },
+      ],
+      output_text: 'ok',
+    }))
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiResponsesGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      input: 'hello',
+      tools: [
+        {
+          type: 'function',
+          name: 'lookup',
+          parameters: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
+        },
+      ],
+      reasoning: { effort: 'low' },
+    }),
+  })
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.output_text, 'ok')
+  assert.equal(upstreamRequests.length, 1)
+  assert.equal(upstreamRequests[0].method, 'POST')
+  assert.equal(upstreamRequests[0].url, '/v1/responses')
+  assert.equal(upstreamRequests[0].body.model, 'gpt-requested')
+  assert.deepEqual(upstreamRequests[0].body.reasoning, { effort: 'low' })
+  assert.equal(upstreamRequests[0].body.tools[0].name, 'lookup')
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'responses')
+  assert.equal(detail.protocolDiagnostics.conversion, 'passthrough')
+  assert.equal(detail.meta.providerId, 'openai-responses')
+  assert.match(detail.upstreamRequest.url, /\/v1\/responses$/)
+  assert.equal(detail.clientResponse.body.parsed.output_text, 'ok')
+})
+
+test('passes native Responses stream bytes through before complete SSE event', async (t) => {
+  let upstreamFinished = false
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+    res.write('event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"Hel')
+    await delay(150)
+    upstreamFinished = true
+    res.write('lo"}\n\n')
+    res.end()
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiResponsesGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      input: 'hello',
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.ok(response.body)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  try {
+    await readStreamUntil(reader, decoder, (received) => received.includes('"delta":"Hel'))
+    assert.equal(upstreamFinished, false)
+  } finally {
+    while (!(await reader.read()).done) {
+      // Drain the short fake stream so local HTTP sockets close cleanly.
+    }
+  }
 })
 
 test('records merged stream text for raw Chat streams', async (t) => {
@@ -1102,6 +1419,54 @@ test('records merged stream text for Chat to Anthropic streams', async (t) => {
   assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'end_turn')
 })
 
+test('flushes Chat to Anthropic text deltas before upstream stream ends', async (t) => {
+  let upstreamFinished = false
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    await writeDelayedChatCompletionStream(res)
+    upstreamFinished = true
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.ok(response.body)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let received = ''
+  try {
+    while (!received.includes('"text":"First"')) {
+      const { done, value } = await reader.read()
+      assert.equal(done, false)
+      received += decoder.decode(value, { stream: true })
+    }
+    assert.equal(upstreamFinished, false)
+  } finally {
+    await reader.cancel().catch(() => undefined)
+  }
+})
+
 test('records merged stream tool_use for Chat to Anthropic streams', async (t) => {
   const upstream = createServer(async (req, res) => {
     await readRequestBody(req)
@@ -1159,6 +1524,66 @@ test('records merged stream tool_use for Chat to Anthropic streams', async (t) =
   assert.equal(detail.stream.merged.clientPayload.parsed.content[0].name, 'run_command')
   assert.deepEqual(detail.stream.merged.clientPayload.parsed.content[0].input, { command: 'ls -la' })
   assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'tool_use')
+})
+
+test('rejects invalid Chat tool stream arguments before forwarding Anthropic tool_use', async (t) => {
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeInvalidChatToolCallStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'write file' }] }],
+      tools: [
+        {
+          name: 'Write',
+          input_schema: {
+            type: 'object',
+            properties: {
+              file_path: { type: 'string', pattern: '^src/' },
+              content: { type: 'string' },
+            },
+            required: ['file_path', 'content'],
+            additionalProperties: false,
+          },
+        },
+      ],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /tool_validation_failed/)
+  assert.doesNotMatch(bodyText, /"type":"tool_use"/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.error.code, 'tool_validation_failed')
+  assert.equal(detail.protocolDiagnostics.toolValidation[0].forwarded, false)
+  assert.match(detail.protocolDiagnostics.toolValidation[0].validationErrors.join('\n'), /must match pattern/)
+  assert.match(detail.protocolDiagnostics.toolValidation[0].diagnosticWarnings.join('\n'), /code token/)
+  assert.equal(
+    detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].function.arguments,
+    '{"file_path":"void","content":""}'
+  )
 })
 
 test('records merged stream text for Anthropic passthrough streams', async (t) => {
@@ -1243,6 +1668,71 @@ test('records merged stream text for Anthropic passthrough streams', async (t) =
   assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
   assert.equal(detail.stream.merged.upstreamPayload.parsed.content[0].text, 'Hello')
   assert.equal(detail.stream.merged.clientPayload.parsed.stop_reason, 'end_turn')
+})
+
+test('passes Anthropic passthrough stream bytes through before complete SSE event', async (t) => {
+  let upstreamFinished = false
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+    res.write('event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel')
+    await delay(150)
+    upstreamFinished = true
+    res.write('lo"}}\n\n')
+    res.end()
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = normalizeAiGatewayConfig({
+    enabled: true,
+    host: '127.0.0.1',
+    port: gatewayPort,
+    maxBodyBytes: 4096,
+    activeProviderId: 'anthropic-provider',
+    providers: [
+      {
+        id: 'anthropic-provider',
+        name: 'Anthropic Provider',
+        baseUrl: `http://127.0.0.1:${upstreamPort}/anthropic`,
+        apiKey: 'sk-provider',
+        protocol: 'anthropic_messages',
+        enabled: true,
+      },
+    ],
+  })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.ok(response.body)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  try {
+    await readStreamUntil(reader, decoder, (received) => received.includes('"text":"Hel'))
+    assert.equal(upstreamFinished, false)
+  } finally {
+    while (!(await reader.read()).done) {
+      // Drain the short fake stream so local HTTP sockets close cleanly.
+    }
+  }
 })
 
 test('records merged stream tool_use for Anthropic passthrough streams', async (t) => {

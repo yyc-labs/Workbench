@@ -603,7 +603,11 @@ input[type='checkbox'] {
   -webkit-appearance: none;
   appearance: none;
   inline-size: var(--checkbox-size);
+  min-inline-size: var(--checkbox-size);
   block-size: var(--checkbox-size);
+  min-block-size: var(--checkbox-size);
+  flex: 0 0 var(--checkbox-size);
+  aspect-ratio: 1 / 1;
   margin: 0;
   border-radius: var(--checkbox-radius);
   border: 1px solid var(--checkbox-border);

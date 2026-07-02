@@ -15,6 +15,7 @@ import { flattenTextContent } from './content'
 
 function normalizeRole(value: unknown): ChatMessageRole {
   if (value === 'assistant') return 'assistant'
+  if (value === 'developer') return 'developer'
   if (value === 'system') return 'system'
   return 'user'
 }
@@ -50,7 +51,7 @@ function collectInputMessages(input: unknown): ChatCompletionMessage[] {
 
 export function responsesToChatCompletion(
   input: OpenAiResponsesRequest,
-  provider: Pick<AiGatewayProviderConfig, 'modelMap'> = {}
+  provider: Pick<AiGatewayProviderConfig, 'modelMap' | 'capabilities'> = {}
 ): ChatCompletionRequest {
   if (hasNonEmptyArray(input.tools)) {
     throw new UnsupportedGatewayFeatureError('Responses tools are not supported by AI Gateway MVP.')
@@ -68,7 +69,7 @@ export function responsesToChatCompletion(
   const instructions = flattenTextContent(input.instructions, 'Responses instructions')
   if (instructions) {
     messages.unshift({
-      role: 'system',
+      role: provider.capabilities?.supportsDeveloperMessages ? 'developer' : 'system',
       content: instructions,
     })
   }

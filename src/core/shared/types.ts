@@ -253,6 +253,20 @@ export type AiGatewayUpstreamProtocol =
 export type AiGatewayClientCli = 'claude' | 'codex'
 export type AiGatewayLogLevel = 'info' | 'warn' | 'error'
 export type AiGatewayLogRoute = 'anthropic' | 'responses' | 'chat' | 'health' | 'unknown'
+export type AiGatewayProtocolConversionKind = 'passthrough' | 'lossless_conversion' | 'lossy_conversion'
+
+export interface AiGatewayProviderCapabilities {
+  supportsStreaming?: boolean
+  supportsTools?: boolean
+  supportsStrictTools?: boolean
+  supportsParallelToolCalls?: boolean
+  supportsDeveloperMessages?: boolean
+  supportsReasoning?: boolean
+  supportsResponsesInputItems?: boolean
+  supportsAnthropicContentBlocks?: boolean
+  supportsImages?: boolean
+  supportsDocuments?: boolean
+}
 
 export interface AiGatewayProviderConfig {
   id: string
@@ -262,6 +276,7 @@ export interface AiGatewayProviderConfig {
   apiKey?: string
   protocol: AiGatewayUpstreamProtocol
   modelMap?: Record<string, string>
+  capabilities?: AiGatewayProviderCapabilities
   enabled: boolean
   timeoutMs?: number
 }
@@ -587,6 +602,25 @@ export interface StructuredHttpResponseSnapshot {
   body?: StructuredJsonSnapshot
 }
 
+export interface AiGatewayToolValidationEntry {
+  index: number
+  id?: string
+  name?: string
+  rawArguments?: string
+  parsedArguments?: unknown
+  schemaValid: boolean
+  validationErrors: string[]
+  diagnosticWarnings?: string[]
+  forwarded: boolean
+}
+
+export interface AiGatewayProtocolDiagnostics {
+  conversion?: AiGatewayProtocolConversionKind
+  providerCapabilities?: AiGatewayProviderCapabilities
+  lossyWarnings?: string[]
+  toolValidation?: AiGatewayToolValidationEntry[]
+}
+
 export interface AiGatewayLogDetail {
   source: 'ai-gateway'
   summary: AgentLogSummary
@@ -603,6 +637,7 @@ export interface AiGatewayLogDetail {
   }
   ingressRequest?: StructuredHttpRequestSnapshot
   normalizedRequest?: StructuredJsonSnapshot
+  protocolDiagnostics?: AiGatewayProtocolDiagnostics
   upstreamRequest?: StructuredHttpRequestSnapshot
   upstreamResponse?: StructuredHttpResponseSnapshot
   clientResponse?: StructuredHttpResponseSnapshot
