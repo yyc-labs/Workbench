@@ -298,6 +298,11 @@ export class AgentHookGateway {
     return this.recentLogDetails.slice()
   }
 
+  clearRecentLogs(): void {
+    this.recentEvents = []
+    this.recentLogDetails = []
+  }
+
   getStatus(): AgentHookGatewayStatus {
     const config = this.resolveConfig()
     const host = this.server ? this.activeHost : config.host

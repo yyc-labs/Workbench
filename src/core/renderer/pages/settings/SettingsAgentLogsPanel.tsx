@@ -25,6 +25,7 @@ export function SettingsAgentLogsPanel() {
   const [loadingSummaries, setLoadingSummaries] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [loadingMarkdown, setLoadingMarkdown] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const deferredFilters = useDeferredValue(filters)
 
@@ -149,6 +150,23 @@ export function SettingsAgentLogsPanel() {
     }
   }, [filteredSummaries, selection])
 
+  const handleClearLogs = async () => {
+    setClearing(true)
+    setError(null)
+    try {
+      await window.electronAPI.clearAgentLogs()
+      setDetail(null)
+      setMarkdown('')
+      setSelection(null)
+      setMobileView('list')
+      await loadSummaries()
+    } catch (clearError) {
+      setError(clearError instanceof Error ? clearError.message : t('settings.agentLogs.clearError'))
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <div className="space-y-6 lg:space-y-7">
       <div>
@@ -168,6 +186,9 @@ export function SettingsAgentLogsPanel() {
         filtered={filteredSummaries.length}
         onChange={setFilters}
         onRefresh={() => void loadSummaries()}
+        onClear={() => void handleClearLogs()}
+        clearing={clearing}
+        clearDisabled={summaries.length === 0}
       />
 
       <div className="quiet-control flex rounded-full p-1 lg:hidden">

@@ -21,6 +21,7 @@ export const IPC = {
   AGENT_HOOK_GET_STATUS: 'agent-hook:get-status',
   AGENT_HOOK_GET_RECENT_EVENTS: 'agent-hook:get-recent-events',
   AGENT_LOGS_LIST: 'agent-logs:list',
+  AGENT_LOGS_CLEAR: 'agent-logs:clear',
   AGENT_LOGS_GET_DETAIL: 'agent-logs:get-detail',
   AGENT_LOGS_GET_MARKDOWN: 'agent-logs:get-markdown',
   AI_GATEWAY_GET_STATUS: 'ai-gateway:get-status',

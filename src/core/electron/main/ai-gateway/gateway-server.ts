@@ -814,6 +814,11 @@ export class AiGatewayServer {
     return this.recentLogDetails.slice()
   }
 
+  clearRecentLogs(): void {
+    this.recentLogs = []
+    this.recentLogDetails = []
+  }
+
   getActiveEndpoint(): { host: string; port: number; url: string; anthropicBaseUrl: string; openAiBaseUrl: string } {
     const config = this.server
       ? { host: this.activeHost, port: this.activePort }

@@ -14,6 +14,11 @@ export function registerAgentLogsIpcHandlers(
     return deps.agentLogService.listSummaries()
   })
 
+  ipcMain.handle(IPC.AGENT_LOGS_CLEAR, () => {
+    deps.agentLogService.clearAll()
+    return true
+  })
+
   ipcMain.handle(IPC.AGENT_LOGS_GET_DETAIL, (_event, payload: unknown) => {
     const request = payload && typeof payload === 'object'
       ? payload as { source?: unknown; id?: unknown }

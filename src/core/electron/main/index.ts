@@ -132,6 +132,8 @@ const agentHookGateway = new AgentHookGateway({
 const agentLogService = createAgentLogService({
   getAiGatewayLogs: () => aiGatewayService.getRecentLogDetails(),
   getAgentHookLogs: () => agentHookGateway.getRecentLogDetails(),
+  clearAiGatewayLogs: () => aiGatewayService.clearRecentLogs(),
+  clearAgentHookLogs: () => agentHookGateway.clearRecentLogs(),
 })
 
 function createMainWindow(): void {

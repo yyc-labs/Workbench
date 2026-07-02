@@ -247,6 +247,7 @@ declare global {
       getAgentHookStatus: () => Promise<AgentHookGatewayStatus>
       getAgentHookRecentEvents: () => Promise<AgentHookEnvelope[]>
       getAgentLogSummaries: () => Promise<AgentLogSummary[]>
+      clearAgentLogs: () => Promise<boolean>
       getAgentLogDetail: (source: AgentLogSource, id: string) => Promise<AgentLogDetail | null>
       getAgentLogMarkdown: (source: AgentLogSource, id: string) => Promise<string>
       getAiGatewayStatus: () => Promise<AiGatewayStatus>

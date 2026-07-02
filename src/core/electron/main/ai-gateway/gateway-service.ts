@@ -131,6 +131,10 @@ export class AiGatewayService {
     return this.server.getRecentLogDetails()
   }
 
+  clearRecentLogs(): void {
+    this.server.clearRecentLogs()
+  }
+
   async start(persistEnabled = true): Promise<AiGatewayStatus> {
     let config = this.getConfig()
     if (persistEnabled && !config.enabled) {

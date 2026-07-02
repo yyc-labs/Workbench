@@ -1,4 +1,4 @@
-import { Filter, RefreshCw, Search } from 'lucide-react'
+import { Filter, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Select, type SelectOption } from '../../../components/ui/select'
@@ -12,6 +12,9 @@ type AgentLogFiltersBarProps = {
   filtered: number
   onChange: (next: AgentLogFilters) => void
   onRefresh: () => void
+  onClear: () => void
+  clearing: boolean
+  clearDisabled: boolean
 }
 
 const LEVEL_OPTIONS: SelectOption[] = [
@@ -59,6 +62,9 @@ export function AgentLogFiltersBar({
   filtered,
   onChange,
   onRefresh,
+  onClear,
+  clearing,
+  clearDisabled,
 }: AgentLogFiltersBarProps) {
   const { t } = useI18n()
 
@@ -96,15 +102,27 @@ export function AgentLogFiltersBar({
             />
           </div>
         </div>
-        <Button
-          variant="outline"
-          className="h-10 justify-self-start rounded-full px-4 text-sm lg:justify-self-end"
-          onClick={onRefresh}
-          loading={loading}
-        >
-          <RefreshCw className="h-4 w-4" />
-          {t('settings.agentLogs.refresh')}
-        </Button>
+        <div className="flex flex-wrap justify-self-start gap-2 lg:justify-self-end">
+          <Button
+            variant="outline"
+            className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)]"
+            onClick={onClear}
+            loading={clearing}
+            disabled={clearDisabled}
+          >
+            <Trash2 className="h-4 w-4" />
+            {t('settings.agentLogs.clear')}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-10 rounded-full px-4 text-sm"
+            onClick={onRefresh}
+            loading={loading}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {t('settings.agentLogs.refresh')}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(240px,1fr)_150px_150px] 2xl:grid-cols-[minmax(320px,1fr)_170px_170px]">

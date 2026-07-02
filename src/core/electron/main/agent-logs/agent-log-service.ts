@@ -9,6 +9,8 @@ import type {
 type AgentLogServiceOptions = {
   getAiGatewayLogs: () => AiGatewayLogDetail[]
   getAgentHookLogs: () => AgentHookLogDetail[]
+  clearAiGatewayLogs: () => void
+  clearAgentHookLogs: () => void
 }
 
 function compareByTimestampDesc(a: AgentLogSummary, b: AgentLogSummary): number {
@@ -52,10 +54,14 @@ function buildHookMarkdown(detail: AgentHookLogDetail): string {
 export class AgentLogService {
   private readonly getAiGatewayLogs: AgentLogServiceOptions['getAiGatewayLogs']
   private readonly getAgentHookLogs: AgentLogServiceOptions['getAgentHookLogs']
+  private readonly clearAiGatewayLogs: AgentLogServiceOptions['clearAiGatewayLogs']
+  private readonly clearAgentHookLogs: AgentLogServiceOptions['clearAgentHookLogs']
 
   constructor(options: AgentLogServiceOptions) {
     this.getAiGatewayLogs = options.getAiGatewayLogs
     this.getAgentHookLogs = options.getAgentHookLogs
+    this.clearAiGatewayLogs = options.clearAiGatewayLogs
+    this.clearAgentHookLogs = options.clearAgentHookLogs
   }
 
   listSummaries(): AgentLogSummary[] {
@@ -80,6 +86,11 @@ export class AgentLogService {
     return detail.source === 'ai-gateway'
       ? buildGatewayMarkdown(detail)
       : buildHookMarkdown(detail)
+  }
+
+  clearAll(): void {
+    this.clearAiGatewayLogs()
+    this.clearAgentHookLogs()
   }
 }
 

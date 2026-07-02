@@ -11,6 +11,9 @@ export function createAgentLogsInvokeApi() {
     getAgentLogSummaries: () =>
       ipcRenderer.invoke(IPC.AGENT_LOGS_LIST) as Promise<AgentLogSummary[]>,
 
+    clearAgentLogs: () =>
+      ipcRenderer.invoke(IPC.AGENT_LOGS_CLEAR) as Promise<boolean>,
+
     getAgentLogDetail: (source: AgentLogSource, id: string) =>
       ipcRenderer.invoke(IPC.AGENT_LOGS_GET_DETAIL, { source, id }) as Promise<AgentLogDetail | null>,
 
