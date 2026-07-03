@@ -13,9 +13,11 @@ import {
 import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
+import type { MainLocale } from '../mainI18n'
 
 type GitServiceDependencies = {
   getDefaultWslDistro: () => string
+  getLocale: () => MainLocale
 }
 
 export function createGitService(deps: GitServiceDependencies) {
@@ -30,6 +32,7 @@ export function createGitService(deps: GitServiceDependencies) {
     setGitFileStage,
   } = createGitFileOperations({
     runner: gitCommandRunner,
+    getLocale: deps.getLocale,
     readGitRepositorySnapshot,
   })
 

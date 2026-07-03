@@ -8,6 +8,7 @@ type AgentLogSummaryListProps = {
   selectedKey: string | null
   emptyReason: 'none' | 'filtered'
   onSelect: (item: AgentLogSummary) => void
+  onOpenItem?: (item: AgentLogSummary) => void
 }
 
 function levelClassName(level: AgentLogSummary['level']): string {
@@ -32,6 +33,7 @@ export function AgentLogSummaryList({
   selectedKey,
   emptyReason,
   onSelect,
+  onOpenItem,
 }: AgentLogSummaryListProps) {
   const { t, formatDateTime } = useI18n()
 
@@ -63,6 +65,7 @@ export function AgentLogSummaryList({
               key={key}
               type="button"
               onClick={() => onSelect(item)}
+              onDoubleClick={() => onOpenItem?.(item)}
               className={`button-interactive w-full rounded-[18px] px-3.5 py-3 text-left transition-colors ${
                 isActive
                   ? 'bg-[color:var(--color-card)] shadow-sm'

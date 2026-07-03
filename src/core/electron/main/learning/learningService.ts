@@ -9,9 +9,11 @@ import type {
   LearningUpdateNotePayload,
 } from '../../../shared/types'
 import type { LearningRepository } from './learningRepository'
+import { translateMain, type MainLocale } from '../mainI18n'
 
 type LearningServiceDependencies = {
   repository: LearningRepository
+  getLocale: () => MainLocale
 }
 
 export interface LearningService {
@@ -76,11 +78,11 @@ function normalizeTitle(value: string | undefined, contentMd: string): string {
   return 'Untitled Note'
 }
 
-function defaultContent(): string {
+function defaultContent(locale: MainLocale): string {
   return [
-    '# 新学习记录',
+    `# ${translateMain(locale, 'learning.defaults.newNoteTitle')}`,
     '',
-    '今天学习到：',
+    translateMain(locale, 'learning.defaults.introLine'),
     '',
     '1. ',
     '2. ',
@@ -170,9 +172,10 @@ export function createLearningService(deps: LearningServiceDependencies): Learni
 
     createNote: async (payload) => {
       const now = Date.now()
+      const locale = deps.getLocale()
       const contentMd = typeof payload?.contentMd === 'string' && payload.contentMd.trim()
         ? payload.contentMd
-        : defaultContent()
+        : defaultContent(locale)
       const note: LearningNote = {
         id: createId('ln'),
         title: normalizeTitle(payload?.title, contentMd),

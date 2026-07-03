@@ -1,7 +1,8 @@
 import { Check, ChevronRight, Copy } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../../i18n'
 import { displayJsonString, isRecord } from './agentLogs.display'
+import { toPrettyJson } from './agentLogs.helpers'
 
 export type AgentLogJsonExpansionMode = 'default' | 'expand-all' | 'collapse-all' | 'expand-important'
 
@@ -16,6 +17,7 @@ type AgentLogCollapsibleJsonProps = {
   searchQuery?: string
   copyText?: string
   showCopyButton?: boolean
+  persistenceKey?: string
   className?: string
   maxHeightClassName?: string
 }
@@ -31,12 +33,28 @@ type JsonNodeProps = {
   importantPaths: string[]
   expansionMode: AgentLogJsonExpansionMode
   expansionRevision: number
+  treeMetadata: JsonTreeMetadata
+  expansionOverrides: Record<string, boolean>
+  onExpansionOverrideChange: (pathKey: string, expanded: boolean | undefined) => void
   focusedPath?: string[]
   searchQuery: string
   trailingComma?: boolean
 }
 
 type JsonRecord = Record<string, unknown>
+type JsonTreeMetadata = {
+  importantBranchKeys: Set<string>
+  searchBranchKeys: Set<string>
+  searchMatchKeys: Set<string>
+  focusedBranchKeys: Set<string>
+}
+
+const PATH_SEPARATOR = '\u0000'
+const LARGE_NODE_ENTRY_THRESHOLD = 120
+const INITIAL_ARRAY_CHILDREN = 32
+const INITIAL_OBJECT_CHILDREN = 40
+const CHILD_BATCH_SIZE = 120
+const expansionOverrideCache = new Map<string, Record<string, boolean>>()
 
 function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
@@ -60,8 +78,7 @@ function primitiveToJson(value: unknown): string {
 
 function valueToCopyText(value: unknown): string {
   try {
-    const json = JSON.stringify(value, null, 2)
-    return typeof json === 'string' ? json : primitiveToJson(value)
+    return toPrettyJson(value)
   } catch {
     return String(value)
   }
@@ -73,8 +90,15 @@ function pathMatches(path: string[], patterns: string[]): boolean {
   return patterns.some((pattern) => (
     joined === pattern
     || joined.endsWith(`.${pattern}`)
-    || path.includes(pattern)
   ))
+}
+
+function toPathKey(path: string[]): string {
+  return path.join(PATH_SEPARATOR)
+}
+
+function appendPathKey(pathKey: string, segment: string): string {
+  return pathKey ? `${pathKey}${PATH_SEPARATOR}${segment}` : segment
 }
 
 function pathLabel(path: string[]): string {
@@ -90,11 +114,6 @@ function pathsEqual(left: string[], right: string[] | undefined): boolean {
   return left.every((segment, index) => segment === right[index])
 }
 
-function hasPathDescendant(path: string[], descendant: string[] | undefined): boolean {
-  if (!descendant || path.length >= descendant.length) return false
-  return path.every((segment, index) => segment === descendant[index])
-}
-
 function primitiveSearchText(value: unknown): string {
   if (typeof value === 'string') return displayJsonString(value)
   if (isExpandable(value)) return ''
@@ -107,52 +126,109 @@ function nodeMatchesSearch(value: unknown, path: string[], query: string): boole
     || primitiveSearchText(value).toLowerCase().includes(query)
 }
 
-function hasSearchMatch(value: unknown, path: string[], query: string): boolean {
-  if (!query) return false
-  if (nodeMatchesSearch(value, path, query)) return true
-  if (!isExpandable(value)) return false
-
-  const entries = Array.isArray(value)
-    ? value.map((item, itemIndex) => [String(itemIndex), item] as const)
-    : Object.entries(value)
-
-  return entries.some(([entryKey, child]) => hasSearchMatch(child, [...path, entryKey], query))
+function addPathBranch(target: Set<string>, path: string[]): void {
+  let branchKey = ''
+  for (const segment of path) {
+    branchKey = appendPathKey(branchKey, segment)
+    target.add(branchKey)
+  }
 }
 
-function hasImportantDescendant(value: unknown, path: string[], importantPaths: string[]): boolean {
-  if (pathMatches(path, importantPaths)) return true
-  if (!isExpandable(value)) return false
+function buildJsonTreeMetadata(
+  value: unknown,
+  importantPaths: string[],
+  normalizedSearchQuery: string,
+  focusedPath?: string[],
+): JsonTreeMetadata {
+  const importantBranchKeys = new Set<string>()
+  const searchBranchKeys = new Set<string>()
+  const searchMatchKeys = new Set<string>()
+  const focusedBranchKeys = new Set<string>()
 
-  const entries = Array.isArray(value)
-    ? value.map((item, itemIndex) => [String(itemIndex), item] as const)
-    : Object.entries(value)
+  if (focusedPath && focusedPath.length > 0) {
+    addPathBranch(focusedBranchKeys, focusedPath)
+  }
 
-  return entries.some(([entryKey, child]) => hasImportantDescendant(child, [...path, entryKey], importantPaths))
+  const visit = (node: unknown, path: string[], pathKey: string) => {
+    if (path.length > 0 && pathMatches(path, importantPaths)) {
+      addPathBranch(importantBranchKeys, path)
+    }
+
+    if (path.length > 0 && normalizedSearchQuery && nodeMatchesSearch(node, path, normalizedSearchQuery)) {
+      searchMatchKeys.add(pathKey)
+      addPathBranch(searchBranchKeys, path)
+    }
+
+    if (!isExpandable(node)) return
+
+    const entries = Array.isArray(node)
+      ? node.map((item, itemIndex) => [String(itemIndex), item] as const)
+      : Object.entries(node)
+
+    for (const [entryKey, child] of entries) {
+      const childPath = [...path, entryKey]
+      visit(child, childPath, appendPathKey(pathKey, entryKey))
+    }
+  }
+
+  visit(value, [], '')
+
+  return {
+    importantBranchKeys,
+    searchBranchKeys,
+    searchMatchKeys,
+    focusedBranchKeys,
+  }
+}
+
+function initialVisibleChildrenCount(entryCount: number, isArray: boolean): number {
+  if (entryCount <= LARGE_NODE_ENTRY_THRESHOLD) return entryCount
+  return isArray ? INITIAL_ARRAY_CHILDREN : INITIAL_OBJECT_CHILDREN
+}
+
+function requiredVisibleChildrenCount(
+  entries: ReadonlyArray<readonly [string, unknown]>,
+  pathKey: string,
+  treeMetadata: JsonTreeMetadata,
+  baseCount: number,
+): number {
+  let requiredCount = baseCount
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const childKey = appendPathKey(pathKey, entries[index][0])
+    if (
+      treeMetadata.focusedBranchKeys.has(childKey)
+      || treeMetadata.searchBranchKeys.has(childKey)
+      || treeMetadata.importantBranchKeys.has(childKey)
+    ) {
+      requiredCount = Math.max(requiredCount, index + 1)
+    }
+  }
+
+  return Math.min(entries.length, requiredCount)
 }
 
 function shouldExpandNode({
-  value,
   path,
+  pathKey,
   depth,
   defaultExpandedDepth,
   defaultCollapsedPaths,
-  importantPaths,
   expansionMode,
-  focusedPath,
+  treeMetadata,
   searchQuery,
-}: Pick<JsonNodeProps, 'value' | 'path' | 'depth' | 'defaultExpandedDepth' | 'defaultCollapsedPaths' | 'importantPaths' | 'expansionMode' | 'focusedPath' | 'searchQuery'>): boolean {
+}: Pick<JsonNodeProps, 'path' | 'depth' | 'defaultExpandedDepth' | 'defaultCollapsedPaths' | 'expansionMode' | 'treeMetadata' | 'searchQuery'> & {
+  pathKey: string
+}): boolean {
   if (depth === 0) return true
-  if (hasPathDescendant(path, focusedPath)) return true
-  if (searchQuery && hasSearchMatch(value, path, searchQuery)) return true
+  if (treeMetadata.focusedBranchKeys.has(pathKey)) return true
+  if (searchQuery && treeMetadata.searchBranchKeys.has(pathKey)) return true
   if (expansionMode === 'expand-all') return true
   if (expansionMode === 'collapse-all') return false
-
-  const important = pathMatches(path, importantPaths)
-  const hasImportantChild = hasImportantDescendant(value, path, importantPaths)
-
-  if (expansionMode === 'expand-important') return important || hasImportantChild
-  if (important || hasImportantChild) return true
+  const importantBranch = treeMetadata.importantBranchKeys.has(pathKey)
+  if (expansionMode === 'expand-important') return importantBranch
   if (pathMatches(path, defaultCollapsedPaths)) return false
+  if (importantBranch) return true
   return depth < defaultExpandedDepth
 }
 
@@ -285,6 +361,7 @@ function collapsedSummary(value: JsonRecord | unknown[]): string {
 }
 
 function CollapsibleJsonNode(props: JsonNodeProps) {
+  const { t } = useI18n()
   const {
     value,
     label,
@@ -296,40 +373,57 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
     importantPaths,
     expansionMode,
     expansionRevision,
+    treeMetadata,
+    expansionOverrides,
+    onExpansionOverrideChange,
     focusedPath,
     searchQuery,
     trailingComma,
   } = props
-  const [expanded, setExpanded] = useState(() => shouldExpandNode(props))
-  const focusedPathKey = focusedPath?.join('\u0000') ?? ''
-  const pathKey = path.join('\u0000')
+  const pathKey = toPathKey(path)
   const normalizedSearchQuery = searchQuery.trim().toLowerCase()
   const focused = pathsEqual(path, focusedPath)
-  const matched = nodeMatchesSearch(value, path, normalizedSearchQuery)
+  const matched = treeMetadata.searchMatchKeys.has(pathKey)
+  const expandable = isExpandable(value)
+  const entries = expandable
+    ? Array.isArray(value)
+      ? value.map((item, itemIndex) => [String(itemIndex), item] as const)
+      : Object.entries(value)
+    : []
+  const defaultVisibleChildren = useMemo(
+    () => requiredVisibleChildrenCount(
+      entries,
+      pathKey,
+      treeMetadata,
+      initialVisibleChildrenCount(entries.length, Array.isArray(value)),
+    ),
+    [entries, pathKey, treeMetadata, value],
+  )
+  const [visibleChildrenCount, setVisibleChildrenCount] = useState(defaultVisibleChildren)
+  const opening = Array.isArray(value) ? '[' : '{'
+  const closing = Array.isArray(value) ? ']' : '}'
+  const defaultExpanded = shouldExpandNode({ ...props, pathKey })
+  const allowManualOverride = expansionMode === 'default'
+    && !(searchQuery && treeMetadata.searchBranchKeys.has(pathKey))
+    && !treeMetadata.focusedBranchKeys.has(pathKey)
+  const manualOverride = allowManualOverride ? expansionOverrides[pathKey] : undefined
+  const expanded = typeof manualOverride === 'boolean' ? manualOverride : defaultExpanded
   const nodeHighlightClassName = focused
     ? 'bg-[color:var(--color-primary)]/10 ring-1 ring-[color:var(--color-primary)]/25'
-    : matched
-      ? 'bg-[color:var(--color-warning-background)]/65 ring-1 ring-[color:var(--color-warning)]/20'
-      : undefined
+      : matched
+        ? 'bg-[color:var(--color-warning-background)]/65 ring-1 ring-[color:var(--color-warning)]/20'
+        : undefined
 
   useEffect(() => {
-    setExpanded(shouldExpandNode(props))
-  }, [
-    expansionRevision,
-    expansionMode,
-    value,
-    pathKey,
-    depth,
-    defaultExpandedDepth,
-    defaultCollapsedPaths.join('|'),
-    importantPaths.join('|'),
-    focusedPathKey,
-    normalizedSearchQuery,
-  ])
+    setVisibleChildrenCount(defaultVisibleChildren)
+  }, [defaultVisibleChildren, expansionRevision])
 
-  if (!isExpandable(value)) {
+  if (!expandable) {
     return (
-      <div className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}>
+      <div
+        className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}
+        data-agent-log-json-focused={focused ? 'true' : undefined}
+      >
         <PrimitiveJsonNode
           value={value}
           label={label}
@@ -340,15 +434,17 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
     )
   }
 
-  const entries = Array.isArray(value)
-    ? value.map((item, itemIndex) => [String(itemIndex), item] as const)
-    : Object.entries(value)
-  const opening = Array.isArray(value) ? '[' : '{'
-  const closing = Array.isArray(value) ? ']' : '}'
+  const toggleExpanded = () => {
+    const nextExpanded = !expanded
+    onExpansionOverrideChange(pathKey, nextExpanded === defaultExpanded ? undefined : nextExpanded)
+  }
 
   if (entries.length === 0) {
     return (
-      <div className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}>
+      <div
+        className={cx('rounded-[10px] px-1 py-0.5', nodeHighlightClassName)}
+        data-agent-log-json-focused={focused ? 'true' : undefined}
+      >
         <EmptyJsonNode
           value={value}
           label={label}
@@ -363,7 +459,8 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
     <div className="min-w-0">
       <button
         type="button"
-        onClick={() => setExpanded((current) => !current)}
+        onClick={toggleExpanded}
+        data-agent-log-json-focused={focused ? 'true' : undefined}
         className={cx(
           'button-interactive flex min-w-0 items-baseline gap-1 rounded-[10px] px-1 py-0.5 text-left transition-colors hover:bg-[color:var(--color-card)]',
           nodeHighlightClassName,
@@ -393,7 +490,7 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
       {expanded ? (
         <>
           <div className="ml-4 space-y-1 border-l pl-3" style={{ borderColor: 'var(--color-border)' }}>
-            {entries.map(([entryKey, child], entryIndex) => (
+            {entries.slice(0, visibleChildrenCount).map(([entryKey, child], entryIndex) => (
               <CollapsibleJsonNode
                 key={entryKey}
                 value={child}
@@ -406,12 +503,35 @@ function CollapsibleJsonNode(props: JsonNodeProps) {
                 importantPaths={importantPaths}
                 expansionMode={expansionMode}
                 expansionRevision={expansionRevision}
+                treeMetadata={treeMetadata}
+                expansionOverrides={expansionOverrides}
+                onExpansionOverrideChange={onExpansionOverrideChange}
                 focusedPath={focusedPath}
                 searchQuery={searchQuery}
-                trailingComma={entryIndex < entries.length - 1}
+                trailingComma={entryIndex < Math.min(entries.length, visibleChildrenCount) - 1}
               />
             ))}
           </div>
+          {visibleChildrenCount < entries.length ? (
+            <div className="ml-4 mt-2 flex flex-wrap gap-2 pl-3">
+              <button
+                type="button"
+                className="button-interactive rounded-full bg-[color:var(--color-card)] px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+                onClick={() => setVisibleChildrenCount((current) => Math.min(entries.length, current + CHILD_BATCH_SIZE))}
+              >
+                {t('settings.agentLogs.showMoreJsonItems', { count: Math.min(CHILD_BATCH_SIZE, entries.length - visibleChildrenCount) })}
+              </button>
+              {entries.length - visibleChildrenCount > CHILD_BATCH_SIZE ? (
+                <button
+                  type="button"
+                  className="button-interactive rounded-full bg-[color:var(--color-card)] px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]"
+                  onClick={() => setVisibleChildrenCount(entries.length)}
+                >
+                  {t('settings.agentLogs.showAllJsonItems', { count: entries.length })}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <div className="ml-1 text-[color:var(--color-foreground)]">
             {closing}
             {trailingComma ? <span className="text-[color:var(--color-muted-foreground)]">,</span> : null}
@@ -433,12 +553,32 @@ export function AgentLogCollapsibleJson({
   searchQuery = '',
   copyText,
   showCopyButton = true,
+  persistenceKey,
   className,
   maxHeightClassName = 'max-h-[620px]',
 }: AgentLogCollapsibleJsonProps) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
-  const resolvedCopyText = copyText ?? valueToCopyText(value)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [expansionOverrides, setExpansionOverrides] = useState<Record<string, boolean>>(
+    () => (persistenceKey ? expansionOverrideCache.get(persistenceKey) ?? {} : {}),
+  )
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase()
+  const focusedPathKey = focusedPath?.join(PATH_SEPARATOR) ?? ''
+  const importantPathsKey = importantPaths.join('|')
+  const treeMetadata = useMemo(
+    () => buildJsonTreeMetadata(value, importantPaths, normalizedSearchQuery, focusedPath),
+    [focusedPathKey, importantPathsKey, normalizedSearchQuery, value],
+  )
+
+  useEffect(() => {
+    setExpansionOverrides(persistenceKey ? expansionOverrideCache.get(persistenceKey) ?? {} : {})
+  }, [persistenceKey])
+
+  useEffect(() => {
+    if (!persistenceKey) return
+    expansionOverrideCache.set(persistenceKey, expansionOverrides)
+  }, [expansionOverrides, persistenceKey])
 
   useEffect(() => {
     if (!copied) return
@@ -446,13 +586,56 @@ export function AgentLogCollapsibleJson({
     return () => window.clearTimeout(timer)
   }, [copied])
 
+  useEffect(() => {
+    if (!focusedPath || focusedPath.length === 0) return
+
+    let frameId = 0
+    let cancelled = false
+
+    const scrollFocusedNode = (remainingAttempts: number) => {
+      if (cancelled) return
+
+      const target = containerRef.current?.querySelector<HTMLElement>('[data-agent-log-json-focused="true"]')
+      if (target) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        return
+      }
+
+      if (remainingAttempts <= 0) return
+      frameId = window.requestAnimationFrame(() => scrollFocusedNode(remainingAttempts - 1))
+    }
+
+    frameId = window.requestAnimationFrame(() => scrollFocusedNode(8))
+
+    return () => {
+      cancelled = true
+      if (frameId) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [focusedPath, expansionRevision])
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(resolvedCopyText)
+    await navigator.clipboard.writeText(copyText ?? valueToCopyText(value))
     setCopied(true)
+  }
+
+  const handleExpansionOverrideChange = (pathKey: string, expanded: boolean | undefined) => {
+    setExpansionOverrides((current) => {
+      if (typeof expanded === 'undefined') {
+        if (!(pathKey in current)) return current
+        const next = { ...current }
+        delete next[pathKey]
+        return next
+      }
+      if (current[pathKey] === expanded) return current
+      return { ...current, [pathKey]: expanded }
+    })
   }
 
   return (
     <div
+      ref={containerRef}
       className={cx(
         maxHeightClassName,
         'overflow-auto rounded-[18px] bg-[color:var(--color-background-sunken)]/70 px-4 py-4 font-mono text-xs leading-5 text-[color:var(--color-foreground)]',
@@ -483,8 +666,11 @@ export function AgentLogCollapsibleJson({
         importantPaths={importantPaths}
         expansionMode={expansionMode}
         expansionRevision={expansionRevision}
+        treeMetadata={treeMetadata}
+        expansionOverrides={expansionOverrides}
+        onExpansionOverrideChange={handleExpansionOverrideChange}
         focusedPath={focusedPath}
-        searchQuery={searchQuery.trim().toLowerCase()}
+        searchQuery={normalizedSearchQuery}
       />
     </div>
   )

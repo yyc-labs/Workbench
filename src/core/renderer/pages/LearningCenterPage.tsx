@@ -56,7 +56,7 @@ const LEARNING_EDITOR_HISTORY_LIMIT = 200
 
 export function LearningCenterPage() {
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const [notes, setNotes] = useState<LearningNoteSummary[]>([])
   const [categories, setCategories] = useState<LearningCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
@@ -286,7 +286,7 @@ export function LearningCenterPage() {
   const handleSubmitFrontmatter = async () => {
     const nextTitle = frontmatterTitle.trim()
     if (!nextTitle) {
-      setFrontmatterError('标题不能为空')
+      setFrontmatterError(t('learning.page.titleRequired'))
       return
     }
 
@@ -321,7 +321,7 @@ export function LearningCenterPage() {
       setSaveState('saved')
       resetFrontmatterDialog()
     } catch (error) {
-      const message = error instanceof Error ? error.message : '保存失败'
+      const message = error instanceof Error ? error.message : t('learning.page.saveFailed')
       setFrontmatterError(message)
       if (frontmatterDialogMode === 'edit') {
         setSaveState('error')
@@ -349,7 +349,7 @@ export function LearningCenterPage() {
       setSaveState('saved')
     } catch (error) {
       setSaveState('error')
-      setSaveError(error instanceof Error ? error.message : 'Save failed.')
+      setSaveError(error instanceof Error ? error.message : t('learning.page.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -405,7 +405,7 @@ export function LearningCenterPage() {
         }
       }
     } catch (error) {
-      setCategoryCreateError(error instanceof Error ? error.message : '新增分类失败')
+      setCategoryCreateError(error instanceof Error ? error.message : t('learning.page.createCategoryFailed'))
     } finally {
       setIsCreatingCategory(false)
     }
@@ -415,7 +415,7 @@ export function LearningCenterPage() {
     if (!selectedManageCategory) return
     const name = categoryEditInput.trim()
     if (!name) {
-      setCategoryEditError('分类名称不能为空')
+      setCategoryEditError(t('learning.page.categoryNameRequired'))
       return
     }
     setIsUpdatingCategory(true)
@@ -427,7 +427,7 @@ export function LearningCenterPage() {
       })
       setCategories(next)
     } catch (error) {
-      setCategoryEditError(error instanceof Error ? error.message : '重命名分类失败')
+      setCategoryEditError(error instanceof Error ? error.message : t('learning.page.renameCategoryFailed'))
     } finally {
       setIsUpdatingCategory(false)
     }
@@ -435,7 +435,9 @@ export function LearningCenterPage() {
 
   const handleDeleteCategory = async () => {
     if (!selectedManageCategory) return
-    const shouldDelete = window.confirm(`确定删除分类“${selectedManageCategory.name}”吗？使用该分类的笔记会变为未分类。`)
+    const shouldDelete = window.confirm(
+      t('learning.page.deleteCategoryConfirm', { value: selectedManageCategory.name })
+    )
     if (!shouldDelete) return
 
     setIsDeletingCategory(true)
@@ -460,7 +462,7 @@ export function LearningCenterPage() {
         current.trim().toLowerCase() === selectedManageCategory.name.trim().toLowerCase() ? '' : current
       ))
     } catch (error) {
-      setCategoryEditError(error instanceof Error ? error.message : '删除分类失败')
+      setCategoryEditError(error instanceof Error ? error.message : t('learning.page.deleteCategoryFailed'))
     } finally {
       setIsDeletingCategory(false)
     }
@@ -576,7 +578,13 @@ export function LearningCenterPage() {
     const selectionStart = editorContextMenu?.selectionStart ?? textarea.selectionStart ?? 0
     const selectionEnd = editorContextMenu?.selectionEnd ?? textarea.selectionEnd ?? selectionStart
     syncEditorSnapshotSelection(selectionStart, selectionEnd)
-    const result = applyLearningMarkdownInsert(editorContent, selectionStart, selectionEnd, request)
+    const result = applyLearningMarkdownInsert(
+      editorContent,
+      selectionStart,
+      selectionEnd,
+      request,
+      locale
+    )
     applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
     closeEditorContextMenu()
     textarea.focus()
@@ -668,10 +676,10 @@ export function LearningCenterPage() {
   const saveButtonLabel = saving
     ? t('common.saving')
     : saveState === 'error'
-      ? '重试保存'
+      ? t('learning.page.retrySave')
       : hasUnsavedChanges
-        ? '保存修改'
-        : '已保存'
+        ? t('learning.page.saveChanges')
+        : t('learning.page.saved')
   const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
   const layoutGridColumns = useMemo(() => {
     if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 340px'

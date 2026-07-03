@@ -1,4 +1,5 @@
 import type { TranscriptShareImage } from '../../../shared/types'
+import { readEffectiveTheme } from '../../hooks/useEffectiveTheme'
 
 export interface TranscriptShareSnapshotI18n {
   copied: string
@@ -242,7 +243,7 @@ export function buildTranscriptShareSnapshot(
   const css = collectDocumentCss()
   const runtimeScript = buildSnapshotRuntimeScript(i18n)
   const themeMode = document.documentElement.getAttribute('data-theme-mode') || 'system'
-  const theme = document.documentElement.getAttribute('data-theme') || 'light'
+  const theme = readEffectiveTheme()
   const safeTitle = escapeHtmlAttribute(title || 'Transcript')
   // Drop classes that depend on the app's outer scroll container (kept out of the snapshot).
   const articleClass = (article.getAttribute('class') || 'code-markdown-content')

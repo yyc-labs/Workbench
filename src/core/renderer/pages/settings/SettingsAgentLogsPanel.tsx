@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { AgentLogDetail, AgentLogSummary } from '../../../shared/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useI18n } from '../../i18n'
@@ -8,6 +8,7 @@ import { AgentLogFiltersBar } from './agentLogs/AgentLogFiltersBar'
 import { agentLogKey, matchesAgentLogFilters } from './agentLogs/agentLogs.helpers'
 import type { AgentLogFilters, AgentLogSelection } from './agentLogs/agentLogs.types'
 import { AgentLogSummaryList } from './agentLogs/AgentLogSummaryList'
+import { AgentLogViewerModal } from './agentLogs/AgentLogViewerModal'
 
 const DEFAULT_FILTERS: AgentLogFilters = {
   source: 'all',
@@ -25,14 +26,14 @@ export function SettingsAgentLogsPanel() {
   const [selection, setSelection] = useState<AgentLogSelection | null>(null)
   const [mobileView, setMobileView] = useState<'list' | 'detail'>('list')
   const [detail, setDetail] = useState<AgentLogDetail | null>(null)
-  const [markdown, setMarkdown] = useState('')
+  const [viewerOpen, setViewerOpen] = useState(false)
   const [loadingSummaries, setLoadingSummaries] = useState(false)
   const [loadingDetail, setLoadingDetail] = useState(false)
-  const [loadingMarkdown, setLoadingMarkdown] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [savingCapture, setSavingCapture] = useState(false)
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() => document.visibilityState === 'visible')
   const deferredFilters = useDeferredValue(filters)
 
   const filteredSummaries = useMemo(
@@ -47,7 +48,19 @@ export function SettingsAgentLogsPanel() {
     setMobileView('detail')
   }
 
-  const loadSummaries = async () => {
+  const openFullscreenViewer = async () => {
+    try {
+      const maximized = await window.electronAPI.isWindowMaximized()
+      if (!maximized) {
+        await window.electronAPI.toggleMaximizeWindow()
+      }
+    } catch {
+      // Opening the viewer is still more important than failing to maximize first.
+    }
+    setViewerOpen(true)
+  }
+
+  const loadSummaries = useCallback(async () => {
     setLoadingSummaries(true)
     setError(null)
     try {
@@ -64,30 +77,37 @@ export function SettingsAgentLogsPanel() {
     } finally {
       setLoadingSummaries(false)
     }
-  }
+  }, [t])
 
   useEffect(() => {
+    const syncVisibility = () => setIsDocumentVisible(document.visibilityState === 'visible')
+    syncVisibility()
+    document.addEventListener('visibilitychange', syncVisibility)
+    return () => document.removeEventListener('visibilitychange', syncVisibility)
+  }, [])
+
+  useEffect(() => {
+    if (viewerOpen || !isDocumentVisible) return
+
     void loadSummaries()
     const timer = window.setInterval(() => {
       void loadSummaries().catch(() => undefined)
     }, 3500)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [isDocumentVisible, loadSummaries, viewerOpen])
 
   useEffect(() => {
     if (!selection) {
       setDetail(null)
-      setMarkdown('')
       setMobileView('list')
+      setViewerOpen(false)
       return
     }
 
     let canceled = false
     setLoadingDetail(true)
-    setLoadingMarkdown(true)
     setError(null)
     setDetail(null)
-    setMarkdown('')
 
     window.electronAPI.getAgentLogDetail(selection.source, selection.id)
       .then((nextDetail) => {
@@ -106,23 +126,6 @@ export function SettingsAgentLogsPanel() {
       .finally(() => {
         if (!canceled) {
           setLoadingDetail(false)
-        }
-      })
-
-    window.electronAPI.getAgentLogMarkdown(selection.source, selection.id)
-      .then((nextMarkdown) => {
-        if (!canceled) {
-          setMarkdown(nextMarkdown)
-        }
-      })
-      .catch((loadError) => {
-        if (!canceled) {
-          setMarkdown(loadError instanceof Error ? loadError.message : t('settings.agentLogs.markdownError'))
-        }
-      })
-      .finally(() => {
-        if (!canceled) {
-          setLoadingMarkdown(false)
         }
       })
 
@@ -174,9 +177,9 @@ export function SettingsAgentLogsPanel() {
     try {
       await window.electronAPI.clearAgentLogs()
       setDetail(null)
-      setMarkdown('')
       setSelection(null)
       setMobileView('list')
+      setViewerOpen(false)
       await loadSummaries()
       setClearConfirmOpen(false)
     } catch (clearError) {
@@ -246,24 +249,29 @@ export function SettingsAgentLogsPanel() {
             selectedKey={selectedKey}
             emptyReason={summaries.length > 0 ? 'filtered' : 'none'}
             onSelect={handleSelectLog}
+            onOpenItem={(item) => {
+              handleSelectLog(item)
+              void openFullscreenViewer()
+            }}
           />
         </div>
-        <div className={`${mobileView === 'detail' ? 'block' : 'hidden'} lg:block`}>
-          <button
-            type="button"
-            onClick={() => setMobileView('list')}
-            className="button-interactive mb-3 inline-flex rounded-full px-3 py-2 text-sm text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-card)] hover:text-[color:var(--color-foreground)] lg:hidden"
-          >
-            {t('settings.agentLogs.backToList')}
-          </button>
-          <AgentLogDetailPane
-            detail={detail}
-            loading={loadingDetail}
-            markdown={markdown}
-            markdownLoading={loadingMarkdown}
-            error={error}
-          />
-        </div>
+        {!viewerOpen ? (
+          <div className={`${mobileView === 'detail' ? 'block' : 'hidden'} lg:block`}>
+            <button
+              type="button"
+              onClick={() => setMobileView('list')}
+              className="button-interactive mb-3 inline-flex rounded-full px-3 py-2 text-sm text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-card)] hover:text-[color:var(--color-foreground)] lg:hidden"
+            >
+              {t('settings.agentLogs.backToList')}
+            </button>
+            <AgentLogDetailPane
+              detail={detail}
+              loading={loadingDetail}
+              error={error}
+              onOpenFullscreen={() => void openFullscreenViewer()}
+            />
+          </div>
+        ) : null}
       </div>
 
       <ConfirmDialog
@@ -276,6 +284,14 @@ export function SettingsAgentLogsPanel() {
         confirmLabel={t('settings.agentLogs.clearConfirmAction')}
         confirmVariant="destructive"
         busy={clearing}
+      />
+
+      <AgentLogViewerModal
+        open={viewerOpen}
+        detail={detail}
+        loading={loadingDetail}
+        error={error}
+        onClose={() => setViewerOpen(false)}
       />
     </div>
   )

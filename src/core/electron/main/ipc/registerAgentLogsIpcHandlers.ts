@@ -26,12 +26,4 @@ export function registerAgentLogsIpcHandlers(
     const id = typeof request.id === 'string' ? request.id : ''
     return deps.agentLogService.getDetail(normalizeSource(request.source), id)
   })
-
-  ipcMain.handle(IPC.AGENT_LOGS_GET_MARKDOWN, (_event, payload: unknown) => {
-    const request = payload && typeof payload === 'object'
-      ? payload as { source?: unknown; id?: unknown }
-      : {}
-    const id = typeof request.id === 'string' ? request.id : ''
-    return deps.agentLogService.getMarkdown(normalizeSource(request.source), id)
-  })
 }

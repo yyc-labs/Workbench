@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../../components/ui/button'
+import { useI18n } from '../../i18n'
 
 type LearningSidebarRailButtonProps = {
   side: 'left' | 'right'
@@ -14,9 +15,10 @@ export function LearningSidebarRailButton({
   onClick,
   className,
 }: LearningSidebarRailButtonProps) {
+  const { t } = useI18n()
   const label = side === 'left'
-    ? (collapsed ? '展开左侧学习目录' : '收起左侧学习目录')
-    : (collapsed ? '展开右侧笔记信息' : '收起右侧笔记信息')
+    ? (collapsed ? t('learning.sidebarRail.expandLeft') : t('learning.sidebarRail.collapseLeft'))
+    : (collapsed ? t('learning.sidebarRail.expandRight') : t('learning.sidebarRail.collapseRight'))
   const Icon = side === 'left'
     ? (collapsed ? ChevronRight : ChevronLeft)
     : (collapsed ? ChevronLeft : ChevronRight)

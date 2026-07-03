@@ -1,7 +1,9 @@
 import { AlertTriangle, Braces, FileText, Rows3, Search } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { useI18n } from '../../../i18n'
+import { getStepBodyJsonPathPrefix, joinJsonPath } from './agentLogs.anchors'
 import { AgentLogCollapsibleJson } from './AgentLogCollapsibleJson'
 import { AgentLogExpandableText } from './AgentLogExpandableText'
 import { AgentLogMessageList } from './AgentLogMessageList'
@@ -85,16 +87,33 @@ function TextBlock({
   label,
   text,
   truncated,
+  focusPath,
+  onFocusPath,
 }: {
   label: string
   text: string
   truncated?: boolean
+  focusPath?: string[]
+  onFocusPath?: (path: string[]) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="rounded-[18px] border bg-[color:var(--color-card)] px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
-      <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)]">
-        <FileText className="h-3.5 w-3.5" strokeWidth={1.8} />
-        {label}
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)]">
+          <FileText className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {label}
+        </div>
+        {focusPath && onFocusPath ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-7 rounded-full px-2.5 text-[11px]"
+            onClick={() => onFocusPath(focusPath)}
+          >
+            {t('settings.agentLogs.revealInJson')}
+          </Button>
+        ) : null}
       </div>
       <AgentLogExpandableText text={text} truncated={truncated} />
     </div>
@@ -280,9 +299,13 @@ function HeadersBlock({ step }: { step: AgentLogFlowStep }) {
 function BodySummary({
   step,
   onFocusPath,
+  bodyPathPrefix,
+  onFocusJsonPath,
 }: {
   step: AgentLogFlowStep
   onFocusPath: (path: string[]) => void
+  bodyPathPrefix?: string[]
+  onFocusJsonPath?: (path: string[]) => void
 }) {
   const { t } = useI18n()
   const value = getStepBodyValue(step)
@@ -309,6 +332,8 @@ function BodySummary({
           label={t('settings.agentLogs.systemPrompt')}
           text={extractTextBlocks(record.system).join('\n\n')}
           truncated={snapshot?.truncated}
+          focusPath={joinJsonPath(bodyPathPrefix, ['system'])}
+          onFocusPath={onFocusJsonPath}
         />
       ) : null}
 
@@ -317,13 +342,15 @@ function BodySummary({
           label={t('settings.agentLogs.instructions')}
           text={extractTextBlocks(record.instructions).join('\n\n')}
           truncated={snapshot?.truncated}
+          focusPath={joinJsonPath(bodyPathPrefix, ['instructions'])}
+          onFocusPath={onFocusJsonPath}
         />
       ) : null}
 
-      <AgentLogMessageList value={value} />
+      <AgentLogMessageList value={value} pathPrefix={bodyPathPrefix} onFocusPath={onFocusJsonPath} />
 
       {record?.tools ? (
-        <AgentLogToolSummary value={record.tools} />
+        <AgentLogToolSummary value={record.tools} pathPrefix={bodyPathPrefix} onFocusPath={onFocusJsonPath} />
       ) : null}
 
       {!record ? (
@@ -331,6 +358,8 @@ function BodySummary({
           label={t('settings.agentLogs.bodySummary')}
           text={toDisplayString(value)}
           truncated={snapshot?.truncated}
+          focusPath={bodyPathPrefix}
+          onFocusPath={onFocusJsonPath}
         />
       ) : null}
     </div>
@@ -361,18 +390,35 @@ function SnapshotMeta({ snapshot }: { snapshot: NonNullable<AgentLogFlowStep['me
 function PayloadBlock({
   label,
   snapshot,
+  focusPath,
+  onFocusPath,
 }: {
   label: string
   snapshot: NonNullable<AgentLogFlowStep['mergedStream']>['payload']
+  focusPath?: string[]
+  onFocusPath?: (path: string[]) => void
 }) {
+  const { t } = useI18n()
   const value = snapshotValue(snapshot)
   if (typeof value === 'undefined') return null
 
   return (
     <div className="rounded-[18px] border bg-[color:var(--color-card)] px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
-      <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)]">
-        <Braces className="h-3.5 w-3.5" strokeWidth={1.8} />
-        {label}
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs font-medium text-[color:var(--color-muted-foreground)]">
+          <Braces className="h-3.5 w-3.5" strokeWidth={1.8} />
+          {label}
+        </div>
+        {focusPath && onFocusPath ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-7 rounded-full px-2.5 text-[11px]"
+            onClick={() => onFocusPath(focusPath)}
+          >
+            {t('settings.agentLogs.revealInJson')}
+          </Button>
+        ) : null}
       </div>
       <SnapshotMeta snapshot={snapshot} />
       <AgentLogCollapsibleJson
@@ -387,7 +433,13 @@ function PayloadBlock({
   )
 }
 
-function MergedStreamBlock({ step }: { step: AgentLogFlowStep }) {
+function MergedStreamBlock({
+  step,
+  onFocusJsonPath,
+}: {
+  step: AgentLogFlowStep
+  onFocusJsonPath?: (path: string[]) => void
+}) {
   const { t } = useI18n()
   const mergedStream = step.mergedStream
   if (!mergedStream) return null
@@ -395,6 +447,16 @@ function MergedStreamBlock({ step }: { step: AgentLogFlowStep }) {
   const textValue = snapshotValue(mergedStream.text)
   const hasText = typeof textValue !== 'undefined'
   const hasPayload = typeof snapshotValue(mergedStream.payload) !== 'undefined'
+  const textFocusPath = step.id === 'provider-response'
+    ? ['stream', 'merged', 'upstreamText']
+    : step.id === 'client-response'
+      ? ['stream', 'merged', 'clientText']
+      : undefined
+  const payloadFocusPath = step.id === 'provider-response'
+    ? ['stream', 'merged', 'upstreamPayload']
+    : step.id === 'client-response'
+      ? ['stream', 'merged', 'clientPayload']
+      : undefined
 
   return (
     <SectionBlock
@@ -417,12 +479,16 @@ function MergedStreamBlock({ step }: { step: AgentLogFlowStep }) {
             label={mergedStream.textLabel}
             text={toDisplayString(textValue)}
             truncated={mergedStream.text?.truncated}
+            focusPath={textFocusPath}
+            onFocusPath={onFocusJsonPath}
           />
         ) : null}
 
         <PayloadBlock
           label={mergedStream.payloadLabel}
           snapshot={mergedStream.payload}
+          focusPath={payloadFocusPath}
+          onFocusPath={onFocusJsonPath}
         />
       </div>
     </SectionBlock>
@@ -459,11 +525,28 @@ function RawJsonBlock({
   )
 }
 
-export function AgentLogStepInspector({ step }: { step: AgentLogFlowStep }) {
+export function AgentLogStepInspector({
+  step,
+  jsonRootPath = [],
+  onFocusJsonPath,
+}: {
+  step: AgentLogFlowStep
+  jsonRootPath?: string[]
+  onFocusJsonPath?: (path: string[]) => void
+}) {
   const { t } = useI18n()
   const [focusedBodyPath, setFocusedBodyPath] = useState<string[] | undefined>(undefined)
   const fields = overviewFields(step, t)
   const hasCapturedData = Boolean(step.request || step.response || step.body || typeof step.value !== 'undefined')
+  const bodyPathPrefix = useMemo(() => getStepBodyJsonPathPrefix(step, jsonRootPath), [step, jsonRootPath])
+
+  const handleFocusBodyPath = (path: string[]) => {
+    setFocusedBodyPath(path)
+    const resolvedPath = joinJsonPath(bodyPathPrefix, path)
+    if (resolvedPath && onFocusJsonPath) {
+      onFocusJsonPath(resolvedPath)
+    }
+  }
 
   useEffect(() => {
     setFocusedBodyPath(undefined)
@@ -504,7 +587,7 @@ export function AgentLogStepInspector({ step }: { step: AgentLogFlowStep }) {
         </div>
       </SectionBlock>
 
-      <MergedStreamBlock step={step} />
+      <MergedStreamBlock step={step} onFocusJsonPath={onFocusJsonPath} />
 
       <HeadersBlock step={step} />
 
@@ -512,7 +595,12 @@ export function AgentLogStepInspector({ step }: { step: AgentLogFlowStep }) {
         title={t('settings.agentLogs.bodySummary')}
         icon={<FileText className="h-4 w-4" strokeWidth={1.8} />}
       >
-        <BodySummary step={step} onFocusPath={setFocusedBodyPath} />
+        <BodySummary
+          step={step}
+          onFocusPath={handleFocusBodyPath}
+          bodyPathPrefix={bodyPathPrefix}
+          onFocusJsonPath={onFocusJsonPath}
+        />
       </SectionBlock>
 
       <RawJsonBlock step={step} focusedPath={focusedBodyPath} />

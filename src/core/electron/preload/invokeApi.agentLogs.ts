@@ -16,8 +16,5 @@ export function createAgentLogsInvokeApi() {
 
     getAgentLogDetail: (source: AgentLogSource, id: string) =>
       ipcRenderer.invoke(IPC.AGENT_LOGS_GET_DETAIL, { source, id }) as Promise<AgentLogDetail | null>,
-
-    getAgentLogMarkdown: (source: AgentLogSource, id: string) =>
-      ipcRenderer.invoke(IPC.AGENT_LOGS_GET_MARKDOWN, { source, id }) as Promise<string>,
   }
 }

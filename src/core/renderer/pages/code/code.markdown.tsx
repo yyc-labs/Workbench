@@ -1,31 +1,34 @@
-import { Children, createElement, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { Check, Copy, Maximize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import type { Element as HastElement } from 'hast'
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
-import {
-  ArchitectureDiagramBlock,
-  parseArchitectureDiagramProp,
-} from './code.markdownArchitectureDiagram'
-import { BoxDiagramBlock, parseBoxDiagramLinesProp } from './code.markdownBoxDiagram'
-import {
-  BoxFlowBlock,
-  parseBoxFlowProp,
-  parseVerticalFlowProp,
-  VerticalFlowBlock,
-} from './code.markdownFlowDiagram'
 import { MermaidBlock } from './code.markdownMermaid'
+import {
+  createSourceTrackedBlockComponent,
+  createStructuredBlockComponent,
+  getSourceLineDataProps,
+  type MarkdownStructuredBlockClickPayload,
+  type MarkdownStructuredBlockKind,
+  type SourceLineDataProps,
+  shouldIgnoreStructuredBlockActivation,
+} from './code.markdownStructuredBlocks'
 import {
   isWindowsAbsolutePath,
   normalizeAbsoluteMarkdownFileUrl,
   toFileUrlFromAbsolutePath,
 } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
+
+export type {
+  MarkdownStructuredBlockClickPayload,
+  MarkdownStructuredBlockKind,
+  SourceLineDataProps,
+} from './code.markdownStructuredBlocks'
 
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_CHAR_THRESHOLD = 180_000
 const MARKDOWN_DISABLE_SYNTAX_HIGHLIGHT_LINE_THRESHOLD = 3500
@@ -36,27 +39,6 @@ export const MARKDOWN_PASTE_IMAGE_DIRECTORY = '.attachments'
 const MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR = '[data-source-start-line][data-source-end-line]'
 const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_CLASS = 'code-markdown-source-reveal'
 const MARKDOWN_PREVIEW_REVEAL_HIGHLIGHT_DURATION_MS = 1800
-
-type SourceTrackedMarkdownNode = Pick<HastElement, 'position'>
-
-export type SourceLineDataProps = {
-  'data-source-start-line': number
-  'data-source-end-line': number
-}
-
-export type MarkdownStructuredBlockKind =
-  | 'table'
-  | 'box-flow'
-  | 'vertical-flow'
-  | 'box-diagram'
-  | 'mermaid'
-  | 'architecture-diagram'
-
-export type MarkdownStructuredBlockClickPayload = {
-  kind: MarkdownStructuredBlockKind
-  startLine: number
-  endLine: number
-}
 
 export type MarkdownCodeBlockExpandPayload = {
   codeText: string
@@ -317,385 +299,6 @@ export function shouldDisableMarkdownSyntaxHighlight(markdown: string): boolean 
 function canHighlightMarkdownCodeBlock(codeText: string): boolean {
   if (codeText.length > MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_CHAR_THRESHOLD) return false
   return countTextLines(codeText) <= MARKDOWN_CODE_BLOCK_DISABLE_HIGHLIGHT_LINE_THRESHOLD
-}
-
-function getSourceLineDataProps(
-  node: SourceTrackedMarkdownNode | null | undefined,
-  lineOffset: number
-): SourceLineDataProps | undefined {
-  const startLine = node?.position?.start.line
-  const endLine = node?.position?.end.line
-  if (typeof startLine !== 'number' || typeof endLine !== 'number') {
-    return undefined
-  }
-
-  return {
-    'data-source-start-line': Math.max(1, Math.floor(startLine) + lineOffset),
-    'data-source-end-line': Math.max(1, Math.floor(endLine) + lineOffset),
-  }
-}
-
-type MarkdownBlockProps<TagName extends keyof JSX.IntrinsicElements> =
-  JSX.IntrinsicElements[TagName] & ExtraProps
-
-function createSourceTrackedBlockComponent<TagName extends keyof JSX.IntrinsicElements>(
-  tagName: TagName,
-  lineOffset: number
-): NonNullable<Components[TagName]> {
-  return function SourceTrackedBlock({
-    children,
-    node,
-    ...props
-  }: MarkdownBlockProps<TagName>) {
-    const sourceLineProps = getSourceLineDataProps(node as HastElement | undefined, lineOffset)
-    return createElement(tagName, { ...props, ...sourceLineProps }, children)
-  } as NonNullable<Components[TagName]>
-}
-
-function normalizeMarkdownClassNames(value: unknown): string[] {
-  if (typeof value === 'string') {
-    return value.split(/\s+/).map((item) => item.trim()).filter(Boolean)
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => normalizeMarkdownClassNames(item))
-  }
-  return []
-}
-
-function resolveStructuredBlockKind(
-  tagName: 'div' | 'table',
-  className: unknown
-): MarkdownStructuredBlockKind | null {
-  if (tagName === 'table') {
-    return 'table'
-  }
-
-  const classNames = new Set(normalizeMarkdownClassNames(className))
-  if (classNames.has('code-markdown-box-flow')) {
-    return 'box-flow'
-  }
-  if (classNames.has('code-markdown-vertical-flow')) {
-    return 'vertical-flow'
-  }
-  if (classNames.has('code-markdown-architecture-diagram')) {
-    return 'architecture-diagram'
-  }
-  if (classNames.has('code-markdown-box-diagram')) {
-    return 'box-diagram'
-  }
-  return null
-}
-
-function shouldIgnoreStructuredBlockActivation(
-  target: EventTarget | null,
-  currentTarget: EventTarget | null
-): boolean {
-  const selection = window.getSelection()
-  if (selection && !selection.isCollapsed && selection.toString().trim()) {
-    return true
-  }
-
-  if (!(target instanceof Element) || !(currentTarget instanceof Element)) {
-    return false
-  }
-
-  const interactiveAncestor = target.closest(
-    'a,button,input,select,textarea,summary,[role="button"],[role="link"]'
-  )
-  return Boolean(
-    interactiveAncestor
-    && interactiveAncestor !== currentTarget
-    && currentTarget.contains(interactiveAncestor)
-  )
-}
-
-function createStructuredBlockComponent<TagName extends 'div' | 'table'>(
-  tagName: TagName,
-  lineOffset: number,
-  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
-): NonNullable<Components[TagName]> {
-  return function StructuredMarkdownBlock({
-    children,
-    node,
-    ...props
-  }: MarkdownBlockProps<TagName>) {
-    const sourceLineProps = getSourceLineDataProps(node as HastElement | undefined, lineOffset)
-    const rawClassName = (props as { className?: unknown }).className
-    const structuredBlockKind = resolveStructuredBlockKind(tagName, rawClassName)
-
-    if (!structuredBlockKind || !sourceLineProps) {
-      return createElement(tagName, { ...props, ...sourceLineProps }, children)
-    }
-
-    if (!onStructuredBlockClick) {
-      if (
-        tagName === 'div'
-        && structuredBlockKind === 'box-flow'
-        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-flow')
-      ) {
-        const flow = parseBoxFlowProp(
-          (props as { ['data-box-flow']?: unknown })['data-box-flow']
-        )
-        if (flow) {
-          return (
-            <BoxFlowBlock
-              {...props}
-              {...sourceLineProps}
-              className={rawClassName as string | undefined}
-              flow={flow}
-            />
-          )
-        }
-      }
-      if (
-        tagName === 'div'
-        && structuredBlockKind === 'vertical-flow'
-        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-vertical-flow')
-      ) {
-        const flow = parseVerticalFlowProp(
-          (props as { ['data-vertical-flow']?: unknown })['data-vertical-flow']
-        )
-        if (flow) {
-          return (
-            <VerticalFlowBlock
-              {...props}
-              {...sourceLineProps}
-              className={rawClassName as string | undefined}
-              flow={flow}
-            />
-          )
-        }
-      }
-      if (
-        tagName === 'div'
-        && structuredBlockKind === 'architecture-diagram'
-        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-architecture-diagram')
-      ) {
-        const diagram = parseArchitectureDiagramProp(
-          (props as { ['data-architecture-diagram']?: unknown })['data-architecture-diagram']
-        )
-        if (diagram) {
-          return (
-            <ArchitectureDiagramBlock
-              {...props}
-              {...sourceLineProps}
-              className={rawClassName as string | undefined}
-              diagram={diagram}
-            />
-          )
-        }
-      }
-      if (
-        tagName === 'div'
-        && structuredBlockKind === 'box-diagram'
-        && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-diagram')
-      ) {
-        const diagramLines = parseBoxDiagramLinesProp(
-          (props as { ['data-diagram-lines']?: unknown })['data-diagram-lines']
-        )
-        return (
-          <BoxDiagramBlock
-            {...props}
-            {...sourceLineProps}
-            className={rawClassName as string | undefined}
-            lines={diagramLines}
-          />
-        )
-      }
-      return createElement(tagName, { ...props, ...sourceLineProps }, children)
-    }
-
-    const resolvedClassName = [
-      ...normalizeMarkdownClassNames(rawClassName),
-      'code-markdown-zoomable-structure',
-    ].join(' ')
-
-    const activate = () => {
-      onStructuredBlockClick({
-        kind: structuredBlockKind,
-        startLine: sourceLineProps['data-source-start-line'],
-        endLine: sourceLineProps['data-source-end-line'],
-      })
-    }
-
-    const ariaLabel = `Open larger ${structuredBlockKind} preview`
-    const title = (props as { title?: string }).title
-    const resolvedTitle = [title, 'Click to enlarge'].filter(Boolean).join('\n')
-
-    if (
-      tagName === 'div'
-      && structuredBlockKind === 'box-flow'
-      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-flow')
-    ) {
-      const flow = parseBoxFlowProp(
-        (props as { ['data-box-flow']?: unknown })['data-box-flow']
-      )
-      if (flow) {
-        return (
-          <BoxFlowBlock
-            {...props}
-            {...sourceLineProps}
-            className={resolvedClassName || undefined}
-            flow={flow}
-            tabIndex={0}
-            title={resolvedTitle || undefined}
-            aria-label={ariaLabel}
-            data-structured-block-kind={structuredBlockKind}
-            role="button"
-            onClick={(event) => {
-              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
-                return
-              }
-              activate()
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') {
-                return
-              }
-              event.preventDefault()
-              activate()
-            }}
-          />
-        )
-      }
-    }
-
-    if (
-      tagName === 'div'
-      && structuredBlockKind === 'vertical-flow'
-      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-vertical-flow')
-    ) {
-      const flow = parseVerticalFlowProp(
-        (props as { ['data-vertical-flow']?: unknown })['data-vertical-flow']
-      )
-      if (flow) {
-        return (
-          <VerticalFlowBlock
-            {...props}
-            {...sourceLineProps}
-            className={resolvedClassName || undefined}
-            flow={flow}
-            tabIndex={0}
-            title={resolvedTitle || undefined}
-            aria-label={ariaLabel}
-            data-structured-block-kind={structuredBlockKind}
-            role="button"
-            onClick={(event) => {
-              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
-                return
-              }
-              activate()
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') {
-                return
-              }
-              event.preventDefault()
-              activate()
-            }}
-          />
-        )
-      }
-    }
-
-    if (
-      tagName === 'div'
-      && structuredBlockKind === 'architecture-diagram'
-      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-architecture-diagram')
-    ) {
-      const diagram = parseArchitectureDiagramProp(
-        (props as { ['data-architecture-diagram']?: unknown })['data-architecture-diagram']
-      )
-      if (diagram) {
-        return (
-          <ArchitectureDiagramBlock
-            {...props}
-            {...sourceLineProps}
-            className={resolvedClassName || undefined}
-            diagram={diagram}
-            tabIndex={0}
-            title={resolvedTitle || undefined}
-            aria-label={ariaLabel}
-            data-structured-block-kind={structuredBlockKind}
-            role="button"
-            onClick={(event) => {
-              if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
-                return
-              }
-              activate()
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') {
-                return
-              }
-              event.preventDefault()
-              activate()
-            }}
-          />
-        )
-      }
-    }
-
-    if (
-      tagName === 'div'
-      && structuredBlockKind === 'box-diagram'
-      && normalizeMarkdownClassNames(rawClassName).includes('code-markdown-box-diagram')
-    ) {
-      const diagramLines = parseBoxDiagramLinesProp(
-        (props as { ['data-diagram-lines']?: unknown })['data-diagram-lines']
-      )
-      return (
-        <BoxDiagramBlock
-          {...props}
-          {...sourceLineProps}
-          className={resolvedClassName || undefined}
-          lines={diagramLines}
-          tabIndex={0}
-          title={resolvedTitle || undefined}
-          aria-label={ariaLabel}
-          data-structured-block-kind={structuredBlockKind}
-          role="button"
-          onClick={(event) => {
-            if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
-              return
-            }
-            activate()
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') {
-              return
-            }
-            event.preventDefault()
-            activate()
-          }}
-        />
-      )
-    }
-
-    return createElement(tagName, {
-      ...props,
-      ...sourceLineProps,
-      className: resolvedClassName || undefined,
-      tabIndex: 0,
-      title: resolvedTitle || undefined,
-      'aria-label': ariaLabel,
-      'data-structured-block-kind': structuredBlockKind,
-      ...(tagName === 'div' ? { role: 'button' as const } : {}),
-      onClick: (event: ReactMouseEvent<HTMLElement>) => {
-        if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) {
-          return
-        }
-        activate()
-      },
-      onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => {
-        if (event.key !== 'Enter' && event.key !== ' ') {
-          return
-        }
-        event.preventDefault()
-        activate()
-      },
-    }, children)
-  } as NonNullable<Components[TagName]>
 }
 
 function parseSourceLineAttribute(value: string | null): number | null {

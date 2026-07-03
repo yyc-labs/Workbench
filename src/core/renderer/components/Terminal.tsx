@@ -2,6 +2,7 @@ import { useEffect, useRef, memo } from 'react'
 import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
 import { useAppStore } from '../stores/appStore'
 
 interface TerminalProps {
@@ -65,24 +66,23 @@ const DARK_SOFT_THEME: ITheme = {
 
 const XTERM_SCROLLBACK_LINES = 200
 
-function resolveTerminalTheme(variant: 'default' | 'soft'): ITheme {
-  const currentTheme = document.documentElement.getAttribute('data-theme')
-  if (currentTheme === 'light') return LIGHT_THEME
+function resolveTerminalTheme(theme: 'light' | 'dark', variant: 'default' | 'soft'): ITheme {
+  if (theme === 'light') return LIGHT_THEME
   return variant === 'soft' ? DARK_SOFT_THEME : DARK_THEME
 }
 
 export const Terminal = memo(function Terminal({ projectId, variant = 'default' }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
   const projectIdRef = useRef(projectId)
   projectIdRef.current = projectId
   const sendInput = useAppStore((s) => s.sendInput)
+  const effectiveTheme = useEffectiveTheme()
 
   useEffect(() => {
     if (!containerRef.current) return
 
-    const initialTheme = resolveTerminalTheme(variant)
+    const initialTheme = resolveTerminalTheme(effectiveTheme, variant)
     const term = new XTerm({
       // rendererType: 'canvas',
       cursorBlink: true,
@@ -100,18 +100,8 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
       theme: initialTheme,
     })
 
-    const applyResolvedTheme = () => {
-      const theme = resolveTerminalTheme(variant)
-      // xterm requires assigning a new object reference for theme updates.
-      term.options.theme = { ...theme }
-      if (containerRef.current) {
-        containerRef.current.style.backgroundColor = theme.background ?? ''
-      }
-    }
-
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
-    fitAddonRef.current = fitAddon
 
     term.open(containerRef.current)
     containerRef.current.style.backgroundColor = initialTheme.background ?? ''
@@ -176,22 +166,23 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
     })
     observer.observe(containerRef.current)
 
-    const themeObserver = new MutationObserver(() => {
-      applyResolvedTheme()
-    })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    })
-
     return () => {
       clearTimeout(fitTimer)
       observer.disconnect()
-      themeObserver.disconnect()
       term.dispose()
       xtermRef.current = null
     }
-  }, [projectId, sendInput, variant])
+  }, [projectId, sendInput])
+
+  useEffect(() => {
+    const theme = resolveTerminalTheme(effectiveTheme, variant)
+    if (xtermRef.current) {
+      xtermRef.current.options.theme = { ...theme }
+    }
+    if (containerRef.current) {
+      containerRef.current.style.backgroundColor = theme.background ?? ''
+    }
+  }, [effectiveTheme, variant])
 
   // ── Output: buffer at rAF rate ────────────────────────────
   useEffect(() => {

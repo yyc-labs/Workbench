@@ -4,7 +4,9 @@ import type {
   StructuredHttpResponseSnapshot,
   StructuredJsonSnapshot,
 } from '../../../../shared/types'
+import type { useI18n } from '../../../i18n'
 import { formatBytes, isRecord, snapshotValue } from './agentLogs.display'
+import { estimateJsonSizeBytes } from './agentLogs.helpers'
 
 export type AgentLogFlowStepStatus = 'ok' | 'warn' | 'error' | 'missing'
 
@@ -57,6 +59,42 @@ export type AgentLogFlowLabels = {
   protocolDiagnosticsDescription: string
   lossyWarnings: string
   toolValidation: string
+}
+
+type AgentLogTranslator = ReturnType<typeof useI18n>['t']
+
+export function createAgentLogFlowLabels(
+  t: AgentLogTranslator,
+): AgentLogFlowLabels {
+  return {
+    ingressRequest: t('settings.agentLogs.ingressRequest'),
+    ingressGatewayDescription: t('settings.agentLogs.ingressGatewayDescription'),
+    ingressHookDescription: t('settings.agentLogs.ingressHookDescription'),
+    normalizedRequest: t('settings.agentLogs.normalizedRequest'),
+    normalizedRequestDescription: t('settings.agentLogs.normalizedRequestDescription'),
+    upstreamRequest: t('settings.agentLogs.upstreamRequest'),
+    upstreamRequestDescription: t('settings.agentLogs.upstreamRequestDescription'),
+    upstreamResponse: t('settings.agentLogs.upstreamResponse'),
+    clientResponse: t('settings.agentLogs.clientResponse'),
+    normalizedEnvelope: t('settings.agentLogs.normalizedEnvelope'),
+    normalizedEnvelopeDescription: t('settings.agentLogs.normalizedEnvelopeDescription'),
+    payload: t('settings.agentLogs.payload'),
+    sideEffects: t('settings.agentLogs.sideEffects'),
+    sideEffectsDescription: t('settings.agentLogs.sideEffectsDescription'),
+    notCapturedYet: t('settings.agentLogs.notCapturedYet'),
+    truncated: t('settings.agentLogs.truncated'),
+    parseError: t('settings.agentLogs.parseError'),
+    stream: t('settings.agentLogs.stream'),
+    mergedStream: t('settings.agentLogs.mergedStream'),
+    mergedStreamDescription: t('settings.agentLogs.mergedStreamDescription'),
+    upstreamMergedText: t('settings.agentLogs.upstreamMergedText'),
+    clientMergedText: t('settings.agentLogs.clientMergedText'),
+    finalPayload: t('settings.agentLogs.finalPayload'),
+    protocolDiagnostics: t('settings.agentLogs.protocolDiagnostics'),
+    protocolDiagnosticsDescription: t('settings.agentLogs.protocolDiagnosticsDescription'),
+    lossyWarnings: t('settings.agentLogs.lossyWarnings'),
+    toolValidation: t('settings.agentLogs.toolValidation'),
+  }
 }
 
 function compact(values: Array<string | undefined | null | false>): string[] {
@@ -155,11 +193,7 @@ function buildMergedStreamStep(
 
 function valueSize(value: unknown): string | undefined {
   if (typeof value === 'undefined') return undefined
-  try {
-    return formatBytes(JSON.stringify(value).length)
-  } catch {
-    return undefined
-  }
+  return formatBytes(estimateJsonSizeBytes(value))
 }
 
 function gatewayErrorStepId(detail: Extract<AgentLogDetail, { source: 'ai-gateway' }>): string | null {

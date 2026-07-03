@@ -23,7 +23,6 @@ export const IPC = {
   AGENT_LOGS_LIST: 'agent-logs:list',
   AGENT_LOGS_CLEAR: 'agent-logs:clear',
   AGENT_LOGS_GET_DETAIL: 'agent-logs:get-detail',
-  AGENT_LOGS_GET_MARKDOWN: 'agent-logs:get-markdown',
   AI_GATEWAY_GET_STATUS: 'ai-gateway:get-status',
   AI_GATEWAY_GET_CONFIG: 'ai-gateway:get-config',
   AI_GATEWAY_GET_RECENT_LOGS: 'ai-gateway:get-recent-logs',

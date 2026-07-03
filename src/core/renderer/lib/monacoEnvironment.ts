@@ -3,6 +3,7 @@ import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
 import CssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
 import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
 
 export type MonacoThemeName = 'vs' | 'vs-dark'
 
@@ -69,6 +70,5 @@ export function installMonacoFindWidgetHoverGuard(container: HTMLElement): () =>
 }
 
 export function resolveMonacoTheme(): MonacoThemeName {
-  if (typeof document === 'undefined') return 'vs'
-  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'vs-dark' : 'vs'
+  return readEffectiveTheme() === 'dark' ? 'vs-dark' : 'vs'
 }

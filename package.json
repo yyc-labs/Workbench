@@ -20,6 +20,7 @@
     "ai:commit:split:dry": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi -Split -SplitDryRun",
     "ai:commit:split": "pwsh -File script/auto-git-commit/auto_commit.ps1 -All -UseAi -Split",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "verify": "npm run typecheck && npm test",
     "postinstall": "electron-rebuild -f -w node-pty",
     "rebuild:pty": "electron-rebuild -f -w node-pty",
     "test": "node --test test/**/*.test.mjs"

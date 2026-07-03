@@ -4,10 +4,13 @@ import type { ReactNode } from 'react'
 import type { AgentLogDetail } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n'
+import { getAgentLogHeaderFocusPath } from './agentLogs.anchors'
 
 type AgentLogDetailHeaderProps = {
   detail: AgentLogDetail
-  tabs: ReactNode
+  tabs?: ReactNode
+  actions?: ReactNode
+  onFocusJsonPath?: (path: string[]) => void
 }
 
 function badgeClassName(tone: 'neutral' | 'success' | 'warn' | 'error'): string {
@@ -17,15 +20,37 @@ function badgeClassName(tone: 'neutral' | 'success' | 'warn' | 'error'): string 
   return 'bg-[color:var(--color-card)] text-[color:var(--color-muted-foreground)]'
 }
 
-function DetailBadge({ tone = 'neutral', children }: { tone?: 'neutral' | 'success' | 'warn' | 'error'; children: ReactNode }) {
+function DetailBadge({
+  tone = 'neutral',
+  children,
+  onClick,
+}: {
+  tone?: 'neutral' | 'success' | 'warn' | 'error'
+  children: ReactNode
+  onClick?: () => void
+}) {
+  const className = `inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-medium ${badgeClassName(tone)}`
+  if (onClick) {
+    return (
+      <button type="button" className={`button-interactive ${className}`} onClick={onClick}>
+        <span className="truncate">{children}</span>
+      </button>
+    )
+  }
+
   return (
-    <span className={`inline-flex max-w-full items-center rounded-full px-3 py-1 text-xs font-medium ${badgeClassName(tone)}`}>
+    <span className={className}>
       <span className="truncate">{children}</span>
     </span>
   )
 }
 
-export function AgentLogDetailHeader({ detail, tabs }: AgentLogDetailHeaderProps) {
+export function AgentLogDetailHeader({
+  detail,
+  tabs,
+  actions,
+  onFocusJsonPath,
+}: AgentLogDetailHeaderProps) {
   const { t, formatDateTime } = useI18n()
   const [copied, setCopied] = useState(false)
   const sourceLabel = detail.source === 'ai-gateway'
@@ -40,6 +65,13 @@ export function AgentLogDetailHeader({ detail, tabs }: AgentLogDetailHeaderProps
     : detail.summary.level === 'warn' || detail.summary.truncated
       ? 'warn'
       : 'success'
+  const requestIdFocusPath = getAgentLogHeaderFocusPath(detail, 'requestId')
+  const statusFocusPath = getAgentLogHeaderFocusPath(detail, 'status')
+  const durationFocusPath = getAgentLogHeaderFocusPath(detail, 'duration')
+  const providerFocusPath = getAgentLogHeaderFocusPath(detail, 'provider')
+  const modelFocusPath = getAgentLogHeaderFocusPath(detail, 'model')
+  const eventFocusPath = getAgentLogHeaderFocusPath(detail, 'event')
+  const timestampFocusPath = getAgentLogHeaderFocusPath(detail, 'timestamp')
 
   useEffect(() => {
     if (!copied) return
@@ -64,9 +96,19 @@ export function AgentLogDetailHeader({ detail, tabs }: AgentLogDetailHeaderProps
             {detail.summary.title}
           </h3>
           <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2">
-            <span className="max-w-[min(100%,420px)] truncate rounded-full bg-[color:var(--color-card)] px-3 py-1 font-mono text-[11px] text-[color:var(--color-muted-foreground)]">
-              {t('settings.agentLogs.requestId')}: {requestId}
-            </span>
+            {requestIdFocusPath && onFocusJsonPath ? (
+              <button
+                type="button"
+                onClick={() => onFocusJsonPath(requestIdFocusPath)}
+                className="button-interactive max-w-[min(100%,420px)] truncate rounded-full bg-[color:var(--color-card)] px-3 py-1 font-mono text-[11px] text-[color:var(--color-muted-foreground)]"
+              >
+                {t('settings.agentLogs.requestId')}: {requestId}
+              </button>
+            ) : (
+              <span className="max-w-[min(100%,420px)] truncate rounded-full bg-[color:var(--color-card)] px-3 py-1 font-mono text-[11px] text-[color:var(--color-muted-foreground)]">
+                {t('settings.agentLogs.requestId')}: {requestId}
+              </span>
+            )}
             <Button
               type="button"
               variant="outline"
@@ -78,27 +120,43 @@ export function AgentLogDetailHeader({ detail, tabs }: AgentLogDetailHeaderProps
             </Button>
           </div>
         </div>
-        {tabs}
+        {(actions || tabs) ? (
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+            {actions}
+            {tabs}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2">
         <DetailBadge tone={statusTone}>{detail.summary.level}</DetailBadge>
         {typeof detail.summary.statusCode === 'number' ? (
-          <DetailBadge tone={detail.summary.statusCode >= 400 ? 'error' : 'neutral'}>
+          <DetailBadge
+            tone={detail.summary.statusCode >= 400 ? 'error' : 'neutral'}
+            onClick={statusFocusPath && onFocusJsonPath ? () => onFocusJsonPath(statusFocusPath) : undefined}
+          >
             {t('settings.agentLogs.status')}: {detail.summary.statusCode}
           </DetailBadge>
         ) : null}
         {typeof detail.summary.durationMs === 'number' ? (
-          <DetailBadge>{t('settings.agentLogs.duration')}: {detail.summary.durationMs}ms</DetailBadge>
+          <DetailBadge onClick={durationFocusPath && onFocusJsonPath ? () => onFocusJsonPath(durationFocusPath) : undefined}>
+            {t('settings.agentLogs.duration')}: {detail.summary.durationMs}ms
+          </DetailBadge>
         ) : null}
         {detail.source === 'ai-gateway' && (detail.meta.providerName || detail.meta.providerId) ? (
-          <DetailBadge>{detail.meta.providerName || detail.meta.providerId}</DetailBadge>
+          <DetailBadge onClick={providerFocusPath && onFocusJsonPath ? () => onFocusJsonPath(providerFocusPath) : undefined}>
+            {detail.meta.providerName || detail.meta.providerId}
+          </DetailBadge>
         ) : null}
         {detail.source === 'ai-gateway' && detail.meta.model ? (
-          <DetailBadge>{detail.meta.model}</DetailBadge>
+          <DetailBadge onClick={modelFocusPath && onFocusJsonPath ? () => onFocusJsonPath(modelFocusPath) : undefined}>
+            {detail.meta.model}
+          </DetailBadge>
         ) : null}
         {detail.source === 'agent-hooks' ? (
-          <DetailBadge>{detail.meta.canonicalEvent || detail.meta.providerEvent}</DetailBadge>
+          <DetailBadge onClick={eventFocusPath && onFocusJsonPath ? () => onFocusJsonPath(eventFocusPath) : undefined}>
+            {detail.meta.canonicalEvent || detail.meta.providerEvent}
+          </DetailBadge>
         ) : null}
         {detail.source === 'ai-gateway' && detail.stream?.enabled ? (
           <DetailBadge tone="warn">{t('settings.agentLogs.stream')}</DetailBadge>
@@ -111,7 +169,7 @@ export function AgentLogDetailHeader({ detail, tabs }: AgentLogDetailHeaderProps
             {detail.error.code ? `${detail.error.code}: ` : ''}{detail.error.message}
           </DetailBadge>
         ) : null}
-        <DetailBadge>
+        <DetailBadge onClick={timestampFocusPath && onFocusJsonPath ? () => onFocusJsonPath(timestampFocusPath) : undefined}>
           {formatDateTime(detail.summary.timestamp, {
             month: '2-digit',
             day: '2-digit',

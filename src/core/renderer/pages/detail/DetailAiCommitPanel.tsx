@@ -1,5 +1,5 @@
 import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
@@ -13,7 +13,6 @@ import { DetailAiCommitWorkingTreePanel } from './DetailAiCommitWorkingTreePanel
 import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
 import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
 import type {
-  BranchManagerMode,
   IndexedBranchCandidate,
   MiddlePanelMode,
   OperationConfirmState,
@@ -23,7 +22,6 @@ import {
   computeOperationState,
   getGitOperationItems,
   PanelGitOperationKind,
-  pickDefaultDiffViewMode,
   type OperationCardState,
 } from './detail.gitOperations'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
@@ -32,14 +30,11 @@ import type {
   AiFlowNode,
   DetailGitRepositorySummary,
   DetailGitSnapshot,
-  GitDiffViewMode,
-  GitConflictFileResult,
-  GitFileDiffResult,
-  GitOperationKind,
   GitOperationResult,
-  GitResolveConflictResult,
   GitSetFileStageResult,
 } from './detail.types'
+import { useDetailBranchManagerState } from './useDetailBranchManagerState'
+import { useDetailGitDiffState } from './useDetailGitDiffState'
 
 type DetailAiCommitPanelProps = {
   projectHeaderCollapsed?: boolean
@@ -169,32 +164,8 @@ function DetailAiCommitPanel({
   const [operationConfirmInput, setOperationConfirmInput] = useState('')
   const [operationConfirm, setOperationConfirm] = useState<OperationConfirmState>(null)
   const [operationLogs, setOperationLogs] = useState<GitOperationResult[]>([])
-  const [branchManagerMode, setBranchManagerMode] = useState<BranchManagerMode | null>(null)
-  const [gitGuideOpen, setGitGuideOpen] = useState(false)
-  const [currentManagerInput, setCurrentManagerInput] = useState('')
-  const [currentManagerDeleteTarget, setCurrentManagerDeleteTarget] = useState('')
-  const [upstreamManagerRemoteName, setUpstreamManagerRemoteName] = useState('origin')
-  const [upstreamManagerBranchName, setUpstreamManagerBranchName] = useState('')
-  const [upstreamManagerDangerInput, setUpstreamManagerDangerInput] = useState('')
-  const [branchManagerLoading, setBranchManagerLoading] = useState(false)
-  const [branchManagerError, setBranchManagerError] = useState<string | null>(null)
   const [stagingFilePath, setStagingFilePath] = useState<string | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
-  const [diffDrawerOpen, setDiffDrawerOpen] = useState(false)
-  const [activeDiffFilePath, setActiveDiffFilePath] = useState<string | null>(null)
-  const [diffViewMode, setDiffViewMode] = useState<GitDiffViewMode>('unstaged')
-  const [diffLoading, setDiffLoading] = useState(false)
-  const [diffContent, setDiffContent] = useState('')
-  const [diffError, setDiffError] = useState<string | null>(null)
-  const [diffTruncated, setDiffTruncated] = useState(false)
-  const [conflictLoading, setConflictLoading] = useState(false)
-  const [conflictData, setConflictData] = useState<GitConflictFileResult | null>(null)
-  const [conflictError, setConflictError] = useState<string | null>(null)
-  const [conflictSaving, setConflictSaving] = useState(false)
-  const currentBranchInputRef = useRef<HTMLInputElement | null>(null)
-  const upstreamBranchInputRef = useRef<HTMLInputElement | null>(null)
-  const diffRequestSeqRef = useRef(0)
-  const conflictRequestSeqRef = useRef(0)
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
@@ -232,11 +203,73 @@ function DetailAiCommitPanel({
   const branchBehind = branch?.behind ?? 0
   const hasUpstream = Boolean(branch?.upstream)
   const upstreamGone = branch?.upstreamGone ?? false
-  const activeDiffFile = activeDiffFilePath ? changedFilesMap.get(activeDiffFilePath) ?? null : null
-  const activeDiffSupportsUnstaged = Boolean(activeDiffFile && (activeDiffFile.unstaged || activeDiffFile.scope === 'untracked'))
-  const activeDiffSupportsStaged = Boolean(activeDiffFile?.staged)
   const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || isGitSnapshotChecking || changedFilesSuppressed
   const aiCommitBlockedReason = changedFilesSuppressed ? t('detail.aiCommitBlockedDescription') : null
+  const appendOperationLog = useCallback((result: GitOperationResult) => {
+    setOperationLogs((prev) => [result, ...prev].slice(0, 50))
+  }, [])
+  const {
+    branchManagerDangerText,
+    branchManagerError,
+    branchManagerLoading,
+    branchManagerMode,
+    currentBranchInputRef,
+    currentManagerDeleteTarget,
+    currentManagerInput,
+    gitGuideOpen,
+    handleCreateLocalBranch,
+    handleCreateRemoteBranchFromUpstream,
+    handleDeleteLocalBranch,
+    handleSetUpstream,
+    setBranchManagerMode,
+    setCurrentManagerDeleteTarget,
+    setCurrentManagerInput,
+    setGitGuideOpen,
+    setUpstreamManagerBranchName,
+    setUpstreamManagerDangerInput,
+    setUpstreamManagerRemoteName,
+    upstreamBranchInputRef,
+    upstreamManagerBranchName,
+    upstreamManagerDangerInput,
+    upstreamManagerRemoteName,
+  } = useDetailBranchManagerState({
+    activePane,
+    branchUpstream: branch?.upstream,
+    gitSnapshot,
+    onOperationResult: appendOperationLog,
+    onRefreshGitSnapshot,
+    t,
+  })
+  const {
+    activeDiffFile,
+    activeDiffFilePath,
+    activeDiffSupportsStaged,
+    activeDiffSupportsUnstaged,
+    conflictData,
+    conflictError,
+    conflictLoading,
+    conflictSaving,
+    diffContent,
+    diffDrawerOpen,
+    diffError,
+    diffLoading,
+    diffTruncated,
+    diffViewMode,
+    handleDiffDrawerClose,
+    handleDiffDrawerSelectFile,
+    handleDiffViewModeChange,
+    handleLoadConflict,
+    handleSaveConflict,
+    openDiffDrawerForFile,
+  } = useDetailGitDiffState({
+    activePane,
+    changedFiles,
+    changedFilesMap,
+    gitSnapshot,
+    onFileActionErrorChange: setFileActionError,
+    onRefreshGitSnapshot,
+    t,
+  })
   const preflightItems = useMemo<PreflightItem[]>(() => {
     if (isGitSnapshotChecking) {
       return [{
@@ -348,13 +381,6 @@ function DetailAiCommitPanel({
     [remoteBranches, currentBranch]
   )
 
-  const branchManagerDangerText = `${(upstreamManagerRemoteName.trim() || 'origin')}/${upstreamManagerBranchName.trim()}`
-  const conflictSavingRef = useRef(conflictSaving)
-
-  useEffect(() => {
-    conflictSavingRef.current = conflictSaving
-  }, [conflictSaving])
-
   useEffect(() => {
     if (jumpToAiLogToken <= 0) return
     setMiddlePanelMode('ai-log')
@@ -363,17 +389,8 @@ function DetailAiCommitPanel({
   useEffect(() => {
     if (activePane === 'aicommit') return
     setMergeSearchValue('')
-    setBranchManagerMode(null)
-    setGitGuideOpen(false)
     setOperationConfirm(null)
     setOperationConfirmInput('')
-    setDiffDrawerOpen(false)
-    setActiveDiffFilePath(null)
-    setDiffContent('')
-    setDiffError(null)
-    setDiffTruncated(false)
-    setConflictData(null)
-    setConflictError(null)
   }, [activePane])
 
   useEffect(() => {
@@ -393,110 +410,6 @@ function DetailAiCommitPanel({
     if (aiCommitUndoActionAvailable) return
     setOperationConfirm(null)
   }, [aiCommitUndoActionAvailable, operationConfirm])
-
-  useEffect(() => {
-    if (!branchManagerMode) return
-    setBranchManagerError(null)
-    if (branchManagerMode === 'current') {
-      setCurrentManagerDeleteTarget('')
-      setCurrentManagerInput('')
-      return
-    }
-    const upstream = branch?.upstream || ''
-    const match = upstream.match(/^([^/]+)\/(.+)$/)
-    if (match) {
-      setUpstreamManagerRemoteName(match[1])
-      setUpstreamManagerBranchName(match[2])
-    } else {
-      setUpstreamManagerRemoteName('origin')
-      setUpstreamManagerBranchName('')
-    }
-    setUpstreamManagerDangerInput('')
-  }, [branchManagerMode, branch?.upstream])
-
-  useEffect(() => {
-    if (!branchManagerMode) return
-    const targetRef = branchManagerMode === 'current' ? currentBranchInputRef : upstreamBranchInputRef
-    const frame = window.requestAnimationFrame(() => {
-      targetRef.current?.focus()
-    })
-    return () => {
-      window.cancelAnimationFrame(frame)
-    }
-  }, [branchManagerMode])
-
-  useEffect(() => {
-    if (!diffDrawerOpen) return
-    if (activeDiffFilePath && changedFilesMap.has(activeDiffFilePath)) return
-    if (changedFiles.length <= 0) {
-      setDiffDrawerOpen(false)
-      setActiveDiffFilePath(null)
-      setDiffContent('')
-      setDiffError(null)
-      setDiffTruncated(false)
-      setConflictData(null)
-      setConflictError(null)
-      return
-    }
-    setActiveDiffFilePath(changedFiles[0].path)
-  }, [changedFiles, changedFilesMap, diffDrawerOpen, activeDiffFilePath])
-
-  useEffect(() => {
-    if (!activeDiffFile) {
-      setDiffViewMode('unstaged')
-      return
-    }
-    if (diffViewMode === 'staged' && !activeDiffSupportsStaged) {
-      setDiffViewMode(activeDiffSupportsUnstaged ? 'unstaged' : 'staged')
-      return
-    }
-    if (diffViewMode === 'unstaged' && !activeDiffSupportsUnstaged && activeDiffSupportsStaged) {
-      setDiffViewMode('staged')
-    }
-  }, [activeDiffFile, diffViewMode, activeDiffSupportsStaged, activeDiffSupportsUnstaged])
-
-  useEffect(() => {
-    if (!diffDrawerOpen) return
-    if (!activeDiffFilePath || !activeDiffFile) return
-    if (activeDiffFile.scope === 'conflicted') return
-    if (diffViewMode === 'staged' && !activeDiffSupportsStaged) return
-    if (diffViewMode === 'unstaged' && !activeDiffSupportsUnstaged) return
-    void loadDiff(activeDiffFilePath, diffViewMode === 'staged')
-  }, [
-    gitSnapshot?.checkedAt,
-    diffDrawerOpen,
-    activeDiffFilePath,
-    activeDiffFile,
-    diffViewMode,
-    activeDiffSupportsStaged,
-    activeDiffSupportsUnstaged,
-  ])
-
-  useEffect(() => {
-    if (diffLoading) return
-    if (diffError || diffContent) return
-    if (!activeDiffFilePath || !changedFilesMap.has(activeDiffFilePath)) return
-    const file = changedFilesMap.get(activeDiffFilePath)
-    if (!file) return
-    if (file.scope === 'conflicted') return
-    if (file.scope === 'untracked' && diffViewMode === 'unstaged') return
-    if (file.kind === 'deleted') return
-    setDiffContent('(no diff output)')
-  }, [diffLoading, diffError, diffContent, activeDiffFilePath, changedFilesMap, diffViewMode])
-
-  useEffect(() => {
-    if (!diffDrawerOpen) return
-    if (!activeDiffFilePath || !activeDiffFile) return
-    if (activeDiffFile.scope !== 'conflicted') return
-    void loadConflict(activeDiffFilePath)
-  }, [diffDrawerOpen, activeDiffFilePath, activeDiffFile, gitSnapshot?.checkedAt])
-
-  useEffect(() => {
-    return () => {
-      diffRequestSeqRef.current += 1
-      conflictRequestSeqRef.current += 1
-    }
-  }, [])
 
   const operationStates = useMemo<Record<PanelGitOperationKind, OperationCardState>>(() => {
     if (gitOperationsUnavailable) {
@@ -615,111 +528,11 @@ function DetailAiCommitPanel({
     }
   }
 
-  const loadDiff = useCallback(async (filePath: string, staged: boolean) => {
-    if (!gitSnapshot) return
-    const requestSeq = diffRequestSeqRef.current + 1
-    diffRequestSeqRef.current = requestSeq
-    setDiffLoading(true)
-    setDiffError(null)
-    setDiffTruncated(false)
-    try {
-      const result: GitFileDiffResult = await window.electronAPI.getGitFileDiff({
-        repoRoot: gitSnapshot.repoRoot,
-        filePath,
-        staged,
-      })
-      if (requestSeq !== diffRequestSeqRef.current) return
-      if (!result.ok) {
-        setDiffContent('')
-        setDiffError(result.error || result.output || t('detail.gitDiffLoadFailed'))
-        return
-      }
-      setDiffTruncated(Boolean(result.outputLimit))
-      setDiffContent(result.output)
-    } catch (error) {
-      if (requestSeq !== diffRequestSeqRef.current) return
-      setDiffContent('')
-      setDiffError(error instanceof Error ? error.message : String(error))
-      setDiffTruncated(false)
-    } finally {
-      if (requestSeq === diffRequestSeqRef.current) setDiffLoading(false)
-    }
-  }, [gitSnapshot])
-
-  const loadConflict = useCallback(async (filePath: string) => {
-    if (!gitSnapshot) return
-    const requestSeq = conflictRequestSeqRef.current + 1
-    conflictRequestSeqRef.current = requestSeq
-    setConflictLoading(true)
-    setConflictError(null)
-    try {
-      const result: GitConflictFileResult = await window.electronAPI.getGitConflictFile({
-        repoRoot: gitSnapshot.repoRoot,
-        filePath,
-      })
-      if (requestSeq !== conflictRequestSeqRef.current) return
-      if (!result.ok) {
-        setConflictData(null)
-        setConflictError(result.error || result.output || t('detail.gitConflictLoadFailed'))
-        return
-      }
-      setConflictData(result)
-    } catch (error) {
-      if (requestSeq !== conflictRequestSeqRef.current) return
-      setConflictData(null)
-      setConflictError(error instanceof Error ? error.message : String(error))
-    } finally {
-      if (requestSeq === conflictRequestSeqRef.current) setConflictLoading(false)
-    }
-  }, [gitSnapshot])
-
-  const saveConflict = useCallback(async (payload: { filePath: string; content: string; markResolved: boolean }) => {
-    if (!gitSnapshot) return
-    if (conflictSavingRef.current) return
-    setConflictSaving(true)
-    setConflictError(null)
+  const handleOpenDiffDrawerForFile = useCallback((filePath: string) => {
+    if (!changedFilesMap.has(filePath)) return
     setFileActionError(null)
-    try {
-      const result: GitResolveConflictResult = await window.electronAPI.resolveGitConflictFile({
-        repoRoot: gitSnapshot.repoRoot,
-        filePath: payload.filePath,
-        content: payload.content,
-        markResolved: payload.markResolved,
-      })
-      if (!result.ok) {
-        const msg = result.error || result.output || t('detail.gitConflictSaveFailed')
-        setConflictError(msg)
-        setFileActionError(msg)
-        return
-      }
-      if (!payload.markResolved) {
-        await loadConflict(payload.filePath)
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setConflictError(message)
-      setFileActionError(message)
-    } finally {
-      await onRefreshGitSnapshot()
-      setConflictSaving(false)
-    }
-  }, [gitSnapshot, loadConflict, onRefreshGitSnapshot])
-
-  const openDiffDrawerForFile = useCallback((filePath: string) => {
-    const target = changedFilesMap.get(filePath)
-    if (!target) return
-    setFileActionError(null)
-    setConflictError(null)
-    setDiffDrawerOpen(true)
-    setActiveDiffFilePath(filePath)
-    const initialMode = pickDefaultDiffViewMode(target)
-    setDiffViewMode(initialMode)
-    if (target.scope !== 'conflicted') {
-      setConflictData(null)
-      return
-    }
-    void loadConflict(filePath)
-  }, [changedFilesMap, loadConflict])
+    openDiffDrawerForFile(filePath)
+  }, [changedFilesMap, openDiffDrawerForFile])
 
   const requestGitOperation = (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
@@ -797,151 +610,6 @@ function DetailAiCommitPanel({
     }
   }
 
-  const runBranchManagerOperation = useCallback(async (request: {
-    operation: GitOperationKind
-    targetBranch?: string
-    remoteName?: string
-  }): Promise<GitOperationResult> => {
-    if (!gitSnapshot) {
-      return {
-        repoRoot: '',
-        operation: request.operation,
-        ok: false,
-        checkedAt: Date.now(),
-        command: '',
-        output: t('detail.gitSnapshotUnavailable'),
-        exitCode: null,
-        error: t('detail.gitSnapshotUnavailable'),
-      }
-    }
-    return window.electronAPI.runGitOperation({
-      repoRoot: gitSnapshot.repoRoot,
-      operation: request.operation,
-      targetBranch: request.targetBranch,
-      remoteName: request.remoteName,
-    })
-  }, [gitSnapshot])
-
-  const handleCreateLocalBranch = useCallback(async () => {
-    const branchName = currentManagerInput.trim()
-    if (!branchName || branchManagerLoading) return
-    setBranchManagerLoading(true)
-    setBranchManagerError(null)
-    try {
-      const result = await runBranchManagerOperation({
-        operation: 'create-local-branch',
-        targetBranch: branchName,
-      })
-      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
-      if (!result.ok) {
-        setBranchManagerError(result.error || result.output || t('detail.gitBranchCreateLocalFailed'))
-        return
-      }
-      setCurrentManagerInput('')
-    } catch (error) {
-      setBranchManagerError(error instanceof Error ? error.message : String(error))
-    } finally {
-      await onRefreshGitSnapshot()
-      setBranchManagerLoading(false)
-    }
-  }, [branchManagerLoading, currentManagerInput, onRefreshGitSnapshot, runBranchManagerOperation])
-
-  const handleDeleteLocalBranch = useCallback(async () => {
-    const branchName = currentManagerDeleteTarget.trim()
-    if (!branchName || branchManagerLoading) return
-    setBranchManagerLoading(true)
-    setBranchManagerError(null)
-    try {
-      const result = await runBranchManagerOperation({
-        operation: 'delete-local-branch',
-        targetBranch: branchName,
-      })
-      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
-      if (!result.ok) {
-        setBranchManagerError(result.error || result.output || t('detail.gitBranchDeleteLocalFailed'))
-        return
-      }
-      setCurrentManagerDeleteTarget('')
-    } catch (error) {
-      setBranchManagerError(error instanceof Error ? error.message : String(error))
-    } finally {
-      await onRefreshGitSnapshot()
-      setBranchManagerLoading(false)
-    }
-  }, [branchManagerLoading, currentManagerDeleteTarget, onRefreshGitSnapshot, runBranchManagerOperation])
-
-  const handleSetUpstream = useCallback(async () => {
-    const remoteName = upstreamManagerRemoteName.trim() || 'origin'
-    const branchName = upstreamManagerBranchName.trim()
-    if (!branchName || branchManagerLoading) return
-    if (upstreamManagerDangerInput.trim() !== branchManagerDangerText) return
-    setBranchManagerLoading(true)
-    setBranchManagerError(null)
-    try {
-      const result = await runBranchManagerOperation({
-        operation: 'set-upstream',
-        targetBranch: branchName,
-        remoteName,
-      })
-      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
-      if (!result.ok) {
-        setBranchManagerError(result.error || result.output || t('detail.gitBranchSetUpstreamFailed'))
-        return
-      }
-      setUpstreamManagerDangerInput('')
-      setBranchManagerMode(null)
-    } catch (error) {
-      setBranchManagerError(error instanceof Error ? error.message : String(error))
-    } finally {
-      await onRefreshGitSnapshot()
-      setBranchManagerLoading(false)
-    }
-  }, [
-    branchManagerDangerText,
-    branchManagerLoading,
-    onRefreshGitSnapshot,
-    runBranchManagerOperation,
-    upstreamManagerBranchName,
-    upstreamManagerDangerInput,
-    upstreamManagerRemoteName,
-  ])
-
-  const handleCreateRemoteBranchFromUpstream = useCallback(async () => {
-    const remoteName = upstreamManagerRemoteName.trim() || 'origin'
-    const branchName = upstreamManagerBranchName.trim()
-    if (!branchName || branchManagerLoading) return
-    if (upstreamManagerDangerInput.trim() !== branchManagerDangerText) return
-    setBranchManagerLoading(true)
-    setBranchManagerError(null)
-    try {
-      const result = await runBranchManagerOperation({
-        operation: 'create-remote-branch',
-        targetBranch: branchName,
-        remoteName,
-      })
-      setOperationLogs((prev) => [result, ...prev].slice(0, 50))
-      if (!result.ok) {
-        setBranchManagerError(result.error || result.output || t('detail.gitBranchCreateRemoteFailed'))
-        return
-      }
-      setUpstreamManagerDangerInput('')
-      setBranchManagerMode(null)
-    } catch (error) {
-      setBranchManagerError(error instanceof Error ? error.message : String(error))
-    } finally {
-      await onRefreshGitSnapshot()
-      setBranchManagerLoading(false)
-    }
-  }, [
-    branchManagerDangerText,
-    branchManagerLoading,
-    onRefreshGitSnapshot,
-    runBranchManagerOperation,
-    upstreamManagerBranchName,
-    upstreamManagerDangerInput,
-    upstreamManagerRemoteName,
-  ])
-
   const pendingOperationLabel = operationConfirm
     ? operationConfirm.operation === 'undo-ai-commit'
       ? t('detail.operationConfirmUndoConfirm')
@@ -970,32 +638,6 @@ function DetailAiCommitPanel({
       ? t('detail.operationConfirmUndoHelper')
       : t('detail.operationConfirmUndoHelperGrace')
     : operationConfirm?.helperText
-  const handleDiffDrawerClose = useCallback(() => {
-    setDiffDrawerOpen(false)
-  }, [])
-  const handleDiffDrawerSelectFile = useCallback((filePath: string) => {
-    const file = changedFilesMap.get(filePath)
-    if (!file) return
-    setActiveDiffFilePath(filePath)
-    const mode = pickDefaultDiffViewMode(file)
-    setDiffViewMode(mode)
-    if (file.scope === 'conflicted') {
-      void loadConflict(filePath)
-    } else {
-      setConflictData(null)
-      setConflictError(null)
-    }
-  }, [changedFilesMap, loadConflict])
-  const handleDiffViewModeChange = useCallback((mode: GitDiffViewMode) => {
-    if (mode === diffViewMode) return
-    setDiffViewMode(mode)
-  }, [diffViewMode])
-  const handleLoadConflict = useCallback((filePath: string) => {
-    void loadConflict(filePath)
-  }, [loadConflict])
-  const handleSaveConflict = useCallback((payload: { filePath: string; content: string; markResolved: boolean }) => {
-    void saveConflict(payload)
-  }, [saveConflict])
   const gitRepositoryControls = (
     <DetailGitRepositorySelector
       repositories={gitRepositories}
@@ -1079,7 +721,7 @@ function DetailAiCommitPanel({
             conflictedCount={conflictedCount}
             fileActionError={fileActionError}
             gitSnapshotLoading={isGitSnapshotChecking}
-            onOpenDiff={openDiffDrawerForFile}
+            onOpenDiff={handleOpenDiffDrawerForFile}
             onRefresh={onRefreshGitSnapshot}
             onSetFileStaged={setFileStaged}
             stagingFilePath={stagingFilePath}

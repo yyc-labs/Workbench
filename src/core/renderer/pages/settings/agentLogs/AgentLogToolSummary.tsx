@@ -1,12 +1,15 @@
 import { Braces } from 'lucide-react'
 import { useMemo } from 'react'
+import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n'
+import { joinJsonPath } from './agentLogs.anchors'
 import { isRecord, stringifyUnknown } from './agentLogs.display'
 import { AgentLogCollapsibleJson } from './AgentLogCollapsibleJson'
 
 type ToolSummary = {
   name: string
   hasSchema: boolean
+  path?: string[]
 }
 
 function toolName(value: unknown, index: number): string {
@@ -30,6 +33,7 @@ function summarizeTools(value: unknown): ToolSummary[] {
     return value.map((item, index) => ({
       name: toolName(item, index),
       hasSchema: hasSchema(item),
+      path: ['tools', String(index)],
     }))
   }
 
@@ -37,15 +41,25 @@ function summarizeTools(value: unknown): ToolSummary[] {
     return Object.entries(value).map(([name, item]) => ({
       name,
       hasSchema: hasSchema(item),
+      path: ['tools', name],
     }))
   }
 
   return []
 }
 
-export function AgentLogToolSummary({ value }: { value: unknown }) {
+export function AgentLogToolSummary({
+  value,
+  pathPrefix,
+  onFocusPath,
+}: {
+  value: unknown
+  pathPrefix?: string[]
+  onFocusPath?: (path: string[]) => void
+}) {
   const { t } = useI18n()
   const tools = useMemo(() => summarizeTools(value), [value])
+  const toolsRootPath = joinJsonPath(pathPrefix, ['tools'])
 
   if (typeof value === 'undefined') return null
 
@@ -63,17 +77,36 @@ export function AgentLogToolSummary({ value }: { value: unknown }) {
 
       {tools.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {tools.slice(0, 18).map((tool) => (
-            <span
+          {tools.slice(0, 18).map((tool) => {
+            const resolvedPath = joinJsonPath(pathPrefix, tool.path)
+            const content = (
+              <>
+                <span className="truncate">{tool.name}</span>
+                <span className={tool.hasSchema ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-muted-foreground)]'}>
+                  {tool.hasSchema ? t('settings.agentLogs.schemaAvailable') : t('settings.agentLogs.schemaMissing')}
+                </span>
+              </>
+            )
+
+            return onFocusPath && resolvedPath ? (
+              <button
+                key={tool.name}
+                type="button"
+                className="button-interactive inline-flex max-w-full items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-card)]"
+                onClick={() => onFocusPath(resolvedPath)}
+                title={t('settings.agentLogs.revealInJson')}
+              >
+                {content}
+              </button>
+            ) : (
+              <span
               key={tool.name}
               className="inline-flex max-w-full items-center gap-2 rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs text-[color:var(--color-muted-foreground)]"
             >
-              <span className="truncate">{tool.name}</span>
-              <span className={tool.hasSchema ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-muted-foreground)]'}>
-                {tool.hasSchema ? t('settings.agentLogs.schemaAvailable') : t('settings.agentLogs.schemaMissing')}
+                {content}
               </span>
-            </span>
-          ))}
+            )
+          })}
           {tools.length > 18 ? (
             <span className="rounded-full bg-[color:var(--color-background-sunken)]/70 px-3 py-1 text-xs text-[color:var(--color-muted-foreground)]">
               +{tools.length - 18}
@@ -87,10 +120,20 @@ export function AgentLogToolSummary({ value }: { value: unknown }) {
       )}
 
       <details>
-        <summary className="cursor-pointer text-xs font-medium text-[color:var(--color-muted-foreground)]">
-          {t('settings.agentLogs.toolSchemas')}
-        </summary>
+        <summary className="cursor-pointer text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('settings.agentLogs.toolSchemas')}</summary>
         <div className="mt-3">
+          {onFocusPath && pathPrefix ? (
+            <div className="mb-3 flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-7 rounded-full px-2.5 text-[11px]"
+                onClick={() => onFocusPath(toolsRootPath ?? pathPrefix)}
+              >
+                {t('settings.agentLogs.revealInJson')}
+              </Button>
+            </div>
+          ) : null}
           <AgentLogCollapsibleJson
             value={value}
             defaultExpandedDepth={1}

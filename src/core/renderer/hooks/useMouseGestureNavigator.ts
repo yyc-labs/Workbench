@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { translate, useLocale } from '../i18n'
 import { resolveProjectDetailGestureTarget } from '../lib/projectPaneNavigation'
 
 type GesturePoint = { x: number; y: number }
@@ -18,6 +19,8 @@ type GesturePreview = {
   action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | null
   label: string
 }
+
+type GestureLocale = ReturnType<typeof useLocale>
 
 const EMPTY_HINT: MouseGestureHint = {
   visible: false,
@@ -159,7 +162,12 @@ function detectCircleGesture(rawPoints: GesturePoint[]): boolean {
   return true
 }
 
+function translateGesture(locale: GestureLocale, key: string): string {
+  return translate(locale, key as never)
+}
+
 function toPreview(
+  locale: GestureLocale,
   dx: number,
   dy: number,
   points: GesturePoint[],
@@ -173,7 +181,7 @@ function toPreview(
     return {
       status: 'ready',
       action: 'home',
-      label: '松开后回到首页',
+      label: translateGesture(locale, 'common.mouseGesture.releaseHome'),
     }
   }
 
@@ -189,7 +197,9 @@ function toPreview(
     return {
       status: 'ready',
       action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed ? '松开后展开项目栏' : '松开后收起项目栏',
+      label: projectHeaderCollapsed
+        ? translateGesture(locale, 'common.mouseGesture.releaseExpandProjectHeader')
+        : translateGesture(locale, 'common.mouseGesture.releaseCollapseProjectHeader'),
     }
   }
 
@@ -197,7 +207,9 @@ function toPreview(
     return {
       status: 'ready',
       action: 'recent',
-      label: recentDrawerOpen ? '松开后关闭最近项目' : '松开后打开最近项目',
+      label: recentDrawerOpen
+        ? translateGesture(locale, 'common.mouseGesture.releaseCloseRecentProjects')
+        : translateGesture(locale, 'common.mouseGesture.releaseOpenRecentProjects'),
     }
   }
 
@@ -206,7 +218,9 @@ function toPreview(
     return {
       status: 'ready',
       action,
-      label: action === 'back' ? '松开后后退' : '松开后前进',
+      label: action === 'back'
+        ? translateGesture(locale, 'common.mouseGesture.releaseBack')
+        : translateGesture(locale, 'common.mouseGesture.releaseForward'),
     }
   }
 
@@ -214,7 +228,9 @@ function toPreview(
     return {
       status: 'pending',
       action: 'recent',
-      label: recentDrawerOpen ? '继续向下拖动（关闭最近项目）…' : '继续向下拖动（最近项目）…',
+      label: recentDrawerOpen
+        ? translateGesture(locale, 'common.mouseGesture.continueDownCloseRecentProjects')
+        : translateGesture(locale, 'common.mouseGesture.continueDownOpenRecentProjects'),
     }
   }
 
@@ -222,7 +238,9 @@ function toPreview(
     return {
       status: 'pending',
       action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed ? '继续向上拖动（展开项目栏）…' : '继续向上拖动（收起项目栏）…',
+      label: projectHeaderCollapsed
+        ? translateGesture(locale, 'common.mouseGesture.continueUpExpandProjectHeader')
+        : translateGesture(locale, 'common.mouseGesture.continueUpCollapseProjectHeader'),
     }
   }
 
@@ -232,11 +250,11 @@ function toPreview(
       action: null,
       label: allowRecentGesture
         ? (allowProjectHeaderGesture && isDetailRoute
-          ? '无效手势：请向上/向下/水平拖动或画圆'
-          : '无效手势：请向下/水平拖动或画圆')
+          ? translateGesture(locale, 'common.mouseGesture.invalidUpDownHorizontalCircle')
+          : translateGesture(locale, 'common.mouseGesture.invalidDownHorizontalCircle'))
         : (allowProjectHeaderGesture && isDetailRoute
-          ? '无效手势：请向上/水平拖动或画圆'
-          : '无效手势：请水平拖动或画圆'),
+          ? translateGesture(locale, 'common.mouseGesture.invalidUpHorizontalCircle')
+          : translateGesture(locale, 'common.mouseGesture.invalidHorizontalCircle')),
     }
   }
 
@@ -244,20 +262,21 @@ function toPreview(
     return {
       status: 'pending',
       action: dx < 0 ? 'back' : 'forward',
-      label: '继续拖动（水平或圆圈）…',
+      label: translateGesture(locale, 'common.mouseGesture.continueHorizontalCircle'),
     }
   }
 
   return {
     status: 'invalid',
     action: dx < 0 ? 'back' : 'forward',
-    label: '无效手势：距离不足',
+    label: translateGesture(locale, 'common.mouseGesture.invalidTooShort'),
   }
 }
 
 export function useMouseGestureNavigator(): MouseGestureHint {
   const location = useLocation()
   const navigate = useNavigate()
+  const locale = useLocale()
   const [hint, setHint] = useState<MouseGestureHint>(EMPTY_HINT)
   const stateRef = useRef({
     tracking: false,
@@ -396,6 +415,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       if (!state.activated) return
       const gesturePoints = [...state.points, { x: e.clientX, y: e.clientY }]
       const preview = toPreview(
+        locale,
         state.lastDx,
         state.lastDy,
         gesturePoints,
@@ -539,7 +559,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       setGestureActive(false)
       clearSuppressTimer()
     }
-  }, [location.pathname, navigate])
+  }, [locale, location.pathname, navigate])
 
   return hint
 }

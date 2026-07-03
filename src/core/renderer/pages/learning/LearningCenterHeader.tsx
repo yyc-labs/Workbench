@@ -27,12 +27,12 @@ export function LearningCenterHeader({ onBack, onCreateNote }: LearningCenterHea
       <div className="min-w-0 flex-1">
         <div className="text-base font-semibold text-[color:var(--color-foreground)]">{t('common.learningCenter')}</div>
         <div className="text-xs text-[color:var(--color-muted-foreground)]">
-          用 Markdown 长期保存和整理你的学习记录
+          {t('learning.header.subtitle')}
         </div>
       </div>
       <Button size="sm" className="gap-1.5" onClick={onCreateNote}>
         <Plus className="h-4 w-4" />
-        新建笔记
+        {t('learning.header.createNote')}
       </Button>
     </header>
   )

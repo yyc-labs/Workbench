@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react'
 
 export type EffectiveTheme = 'light' | 'dark'
 
+export function resolveEffectiveTheme(themeAttribute: string | null | undefined): EffectiveTheme {
+  return themeAttribute === 'dark' ? 'dark' : 'light'
+}
+
 export function readEffectiveTheme(): EffectiveTheme {
   if (typeof document === 'undefined') return 'dark'
-  return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+  return resolveEffectiveTheme(document.documentElement.getAttribute('data-theme'))
 }
 
 export function useEffectiveTheme(): EffectiveTheme {
@@ -13,7 +17,7 @@ export function useEffectiveTheme(): EffectiveTheme {
   useEffect(() => {
     const root = document.documentElement
     const syncTheme = () => {
-      setTheme(root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light')
+      setTheme(resolveEffectiveTheme(root.getAttribute('data-theme')))
     }
 
     syncTheme()

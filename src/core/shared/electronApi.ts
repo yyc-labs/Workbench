@@ -191,7 +191,6 @@ export interface AgentLogsElectronApi {
   getAgentLogSummaries: () => Promise<AgentLogSummary[]>
   clearAgentLogs: () => Promise<boolean>
   getAgentLogDetail: (source: AgentLogSource, id: string) => Promise<AgentLogDetail | null>
-  getAgentLogMarkdown: (source: AgentLogSource, id: string) => Promise<string>
 }
 
 export interface AiGatewayElectronApi {

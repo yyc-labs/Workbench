@@ -1,20 +1,20 @@
 import { Braces, FileText, MessageSquareText } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AgentLogDetail } from '../../../../shared/types'
+import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n'
-import { detailToJson } from './agentLogs.helpers'
 import type { AgentLogDetailTab } from './agentLogs.types'
 import { AgentLogDetailHeader } from './AgentLogDetailHeader'
 import { AgentLogJsonView } from './AgentLogJsonView'
 import { AgentLogMarkdownView } from './AgentLogMarkdownView'
 import { AgentLogRequestView } from './AgentLogRequestView'
+import { useAgentLogViewerModel } from './useAgentLogViewerModel'
 
 type AgentLogDetailPaneProps = {
   detail: AgentLogDetail | null
   loading: boolean
-  markdown: string
-  markdownLoading: boolean
   error: string | null
+  onOpenFullscreen?: () => void
 }
 
 function DetailTabButton({
@@ -56,8 +56,8 @@ function SummaryField({
     : value
 
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-[12px] bg-[color:var(--color-background-sunken)]/55 px-3 py-2 sm:flex-row sm:items-baseline">
-      <div className="text-[11px] uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)] sm:w-28 sm:shrink-0">{label}</div>
+    <div className="flex min-w-0 flex-col gap-1 rounded-[12px] bg-[color:var(--color-background-sunken)]/55 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{label}</div>
       <div className="min-h-5 min-w-0 text-sm font-medium text-[color:var(--color-foreground)] [overflow-wrap:anywhere]">
         {displayValue}
       </div>
@@ -91,7 +91,10 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
   return (
     <div className="space-y-4">
       <div className="rounded-[18px] border bg-[color:var(--color-card)] p-3" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="grid gap-2">
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))' }}
+        >
           <SummaryField label={t('settings.agentLogs.source')} value={sourceLabel} />
           <SummaryField label={t('settings.agentLogs.level')} value={summary.level} />
           <SummaryField
@@ -111,7 +114,10 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
       </div>
 
       <div className="rounded-[18px] border bg-[color:var(--color-card)] p-3" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="grid gap-2">
+        <div
+          className="grid gap-2"
+          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))' }}
+        >
           {mainMeta.map((item) => (
             <SummaryField key={item.label} label={item.label} value={item.value} />
           ))}
@@ -137,13 +143,34 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
 export function AgentLogDetailPane({
   detail,
   loading,
-  markdown,
-  markdownLoading,
   error,
+  onOpenFullscreen,
 }: AgentLogDetailPaneProps) {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<AgentLogDetailTab>('summary')
-  const jsonValue = useMemo(() => detailToJson(detail), [detail])
+  const [activeSectionId, setActiveSectionId] = useState('')
+  const [focusedJsonPath, setFocusedJsonPath] = useState<string[] | undefined>(undefined)
+  const {
+    defaultSectionId,
+    detailKey,
+    jsonValue,
+    sectionJsonById,
+    sections,
+  } = useAgentLogViewerModel(detail)
+  const handleFocusJsonPath = (path: string[] | undefined, sectionId?: string) => {
+    if (sectionId) {
+      setActiveSectionId(sectionId)
+    }
+    setFocusedJsonPath(path)
+    setActiveTab('json')
+  }
+  const handleSelectSection = (sectionId: string) => {
+    setActiveSectionId(sectionId)
+    const section = sections.find((entry) => entry.id === sectionId)
+    if (section?.defaultFocusPath) {
+      setFocusedJsonPath(section.defaultFocusPath)
+    }
+  }
   const tabs = (
     <div className="quiet-control inline-flex max-w-full flex-wrap gap-1 rounded-full p-1">
       <DetailTabButton
@@ -174,8 +201,17 @@ export function AgentLogDetailPane({
   )
 
   useEffect(() => {
+    if (!detail) {
+      setActiveTab('summary')
+      setActiveSectionId('')
+      setFocusedJsonPath(undefined)
+      return
+    }
     setActiveTab('summary')
-  }, [detail?.summary.id, detail?.summary.source])
+    const nextSectionId = defaultSectionId
+    setActiveSectionId((current) => sections.some((section) => section.id === current) ? current : nextSectionId)
+    setFocusedJsonPath((current) => current ?? sections.find((section) => section.id === nextSectionId)?.defaultFocusPath)
+  }, [defaultSectionId, detail, detailKey, sections])
 
   return (
     <div className="quiet-control min-h-[520px] rounded-[24px] p-4">
@@ -189,7 +225,21 @@ export function AgentLogDetailPane({
         </div>
       ) : (
         <div className="space-y-5">
-          <AgentLogDetailHeader detail={detail} tabs={tabs} />
+          <AgentLogDetailHeader
+            detail={detail}
+            tabs={tabs}
+            actions={onOpenFullscreen ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 rounded-full px-3 text-xs"
+                onClick={onOpenFullscreen}
+              >
+                {t('settings.agentLogs.openFullscreen')}
+              </Button>
+            ) : undefined}
+            onFocusJsonPath={(path) => handleFocusJsonPath(path)}
+          />
 
           {error ? (
             <div className="rounded-[16px] bg-[color:var(--color-destructive-background)] px-4 py-3 text-sm text-[color:var(--color-destructive)]">
@@ -198,10 +248,35 @@ export function AgentLogDetailPane({
           ) : null}
 
           {activeTab === 'summary' && <SummaryView detail={detail} />}
-          {activeTab === 'request' && <AgentLogRequestView detail={detail} />}
-          {activeTab === 'json' && <AgentLogJsonView value={jsonValue} />}
+          {activeTab === 'request' && (
+            <AgentLogRequestView
+              detailKey={detailKey}
+              defaultStepId={defaultSectionId}
+              steps={sections}
+              onFocusJsonPath={handleFocusJsonPath}
+            />
+          )}
+          {activeTab === 'json' && (
+            <AgentLogJsonView
+              value={jsonValue}
+              focusedPath={focusedJsonPath}
+              onFocusPathChange={setFocusedJsonPath}
+              persistenceKey={detailKey ? `${detailKey}:detail-json` : undefined}
+            />
+          )}
           {activeTab === 'markdown' && (
-            <AgentLogMarkdownView markdown={markdown} loading={markdownLoading} />
+            <AgentLogMarkdownView
+              detail={detail}
+              loading={loading}
+              sections={sections}
+              sectionJsonById={sectionJsonById}
+              activeSectionId={activeSectionId}
+              onSelectSection={handleSelectSection}
+              onFocusPath={handleFocusJsonPath}
+              maxHeightClassName="max-h-[620px]"
+              domIdPrefix="agent-log-detail-pane"
+              focusedPath={focusedJsonPath}
+            />
           )}
         </div>
       )}

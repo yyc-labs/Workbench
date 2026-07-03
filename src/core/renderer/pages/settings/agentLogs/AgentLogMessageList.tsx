@@ -2,6 +2,7 @@ import { MessageSquareText } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n'
+import { joinJsonPath } from './agentLogs.anchors'
 import { AgentLogExpandableText } from './AgentLogExpandableText'
 import { extractTextBlocks, isRecord, stringifyUnknown } from './agentLogs.display'
 
@@ -11,6 +12,7 @@ type AgentLogMessageRow = {
   name?: string
   contentType: string
   text: string
+  path?: string[]
 }
 
 function roleLabel(message: Record<string, unknown>, index: number): string {
@@ -61,6 +63,7 @@ function rowsFromMessages(value: unknown): AgentLogMessageRow[] {
         name: typeof message.name === 'string' ? message.name : undefined,
         contentType: contentType(message.content ?? message.text ?? message.input ?? message.result),
         text: messageText(message),
+        path: ['messages', String(index)],
       }
     })
   }
@@ -72,6 +75,7 @@ function rowsFromMessages(value: unknown): AgentLogMessageRow[] {
         role: 'input',
         contentType: 'text',
         text: value.input,
+        path: ['input'],
       }]
     }
 
@@ -98,6 +102,7 @@ function rowsFromMessages(value: unknown): AgentLogMessageRow[] {
           name: typeof item.name === 'string' ? item.name : undefined,
           contentType: contentType(item.content ?? item.text ?? item.input),
           text: extractTextBlocks(item.content ?? item.text ?? item.input).join('\n\n'),
+          path: ['input', String(index)],
         }
       })
     }
@@ -107,6 +112,7 @@ function rowsFromMessages(value: unknown): AgentLogMessageRow[] {
       role: 'input',
       contentType: contentType(value.input),
       text: stringifyUnknown(value.input),
+      path: ['input'],
     }]
   }
 
@@ -130,7 +136,15 @@ function roleTone(role: string): string {
   }
 }
 
-export function AgentLogMessageList({ value }: { value: unknown }) {
+export function AgentLogMessageList({
+  value,
+  pathPrefix,
+  onFocusPath,
+}: {
+  value: unknown
+  pathPrefix?: string[]
+  onFocusPath?: (path: string[]) => void
+}) {
   const { t } = useI18n()
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => rowsFromMessages(value), [value])
@@ -174,14 +188,26 @@ export function AgentLogMessageList({ value }: { value: unknown }) {
           className="rounded-[18px] border bg-[color:var(--color-card)] px-4 py-3"
           style={{ borderColor: 'var(--color-border)' }}
         >
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${roleTone(row.role)}`}>
-              {row.role}
-            </span>
-            <span className="text-xs font-medium text-[color:var(--color-foreground)]">{row.label}</span>
-            <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{row.contentType}</span>
-            {row.name ? (
-              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{row.name}</span>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${roleTone(row.role)}`}>
+                {row.role}
+              </span>
+              <span className="text-xs font-medium text-[color:var(--color-foreground)]">{row.label}</span>
+              <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{row.contentType}</span>
+              {row.name ? (
+                <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{row.name}</span>
+              ) : null}
+            </div>
+            {onFocusPath && row.path ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-7 rounded-full px-2.5 text-[11px]"
+                onClick={() => onFocusPath(joinJsonPath(pathPrefix ?? [], row.path ?? []) ?? [])}
+              >
+                {t('settings.agentLogs.revealInJson')}
+              </Button>
             ) : null}
           </div>
           <AgentLogExpandableText text={row.text} collapsedLines={row.role === 'tool' ? 6 : 10} />

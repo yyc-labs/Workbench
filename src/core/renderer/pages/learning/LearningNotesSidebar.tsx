@@ -73,7 +73,7 @@ export function LearningNotesSidebar({
             <Input
               value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder="搜索学习记录..."
+              placeholder={t('learning.notes.searchPlaceholder')}
               className="h-10 rounded-full pl-11 pr-10"
             />
             <button
@@ -93,7 +93,7 @@ export function LearningNotesSidebar({
           </div>
         </div>
         <div className="border-b border-[color:var(--color-border)] px-4 py-4">
-          <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">分类</div>
+          <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.categoriesTitle')}</div>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -104,7 +104,7 @@ export function LearningNotesSidebar({
               }`}
               onClick={() => onSelectCategory('all')}
             >
-              全部
+              {t('learning.notes.all')}
             </button>
             {categories.map((category) => (
               <button
@@ -123,12 +123,12 @@ export function LearningNotesSidebar({
           </div>
           {selectedManageCategory ? (
             <div className="mt-3 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/40 p-3">
-              <div className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">管理当前分类</div>
+              <div className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.notes.manageCategory')}</div>
               <div className="flex gap-2">
                 <Input
                   value={categoryEditInput}
                   onChange={(event) => onCategoryEditInputChange(event.target.value)}
-                  placeholder="分类名称"
+                  placeholder={t('learning.notes.categoryNamePlaceholder')}
                   className="h-9"
                   disabled={isUpdatingCategory || isDeletingCategory}
                   onKeyDown={(event) => {
@@ -146,7 +146,7 @@ export function LearningNotesSidebar({
                   onClick={() => void onRenameCategory()}
                   loading={isUpdatingCategory}
                   disabled={isDeletingCategory}
-                  title="重命名分类"
+                  title={t('learning.notes.renameCategory')}
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -158,7 +158,7 @@ export function LearningNotesSidebar({
                   onClick={() => void onDeleteCategory()}
                   loading={isDeletingCategory}
                   disabled={isUpdatingCategory}
-                  title="删除分类"
+                  title={t('learning.notes.deleteCategory')}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -172,7 +172,7 @@ export function LearningNotesSidebar({
             <Input
               value={categoryInput}
               onChange={(event) => onCategoryInputChange(event.target.value)}
-              placeholder="新分类"
+              placeholder={t('learning.notes.newCategoryPlaceholder')}
               className="h-9"
               disabled={isCreatingCategory}
               onKeyDown={(event) => {
@@ -189,7 +189,7 @@ export function LearningNotesSidebar({
               className="h-9 w-9 rounded-full"
               onClick={() => void onCreateCategory()}
               loading={isCreatingCategory}
-              title="新增分类"
+              title={t('learning.notes.addCategory')}
             >
               <FolderPlus className="h-4 w-4" />
             </Button>
@@ -199,7 +199,7 @@ export function LearningNotesSidebar({
           ) : null}
         </div>
         <div className="px-4 pb-2 pt-4">
-          <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">笔记</div>
+          <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.notesTitle')}</div>
         </div>
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-2 p-3">
@@ -218,15 +218,15 @@ export function LearningNotesSidebar({
                   onClick={() => onSelectNote(note.id)}
                 >
                   <div className="line-clamp-1 text-sm font-medium text-[color:var(--color-foreground)]">{note.title}</div>
-                  <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{note.excerpt || '暂无摘要'}</div>
+                  <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{note.excerpt || t('learning.notes.emptyExcerpt')}</div>
                   <div className="flex items-center justify-between gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
                     <span>{formatDateTime(note.updatedAt)}</span>
-                    <span>{note.status === 'organized' ? '已整理' : '草稿'}</span>
+                    <span>{note.status === 'organized' ? t('learning.notes.statusOrganized') : t('learning.notes.statusDraft')}</span>
                   </div>
                 </button>
               ))
             ) : (
-              <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">还没有学习记录</div>
+              <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.notes.emptyNotes')}</div>
             )}
           </div>
         </ScrollArea>

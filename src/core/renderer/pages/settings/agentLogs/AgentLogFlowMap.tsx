@@ -5,6 +5,7 @@ type AgentLogFlowMapProps = {
   steps: AgentLogFlowStep[]
   activeStepId: string
   onSelectStep: (stepId: string) => void
+  maxHeightClassName?: string
 }
 
 function statusClassName(status: AgentLogFlowStepStatus, active: boolean): string {
@@ -42,7 +43,12 @@ function statusLabel(status: AgentLogFlowStepStatus, t: ReturnType<typeof useI18
   return t('settings.agentLogs.stepStatusOk')
 }
 
-export function AgentLogFlowMap({ steps, activeStepId, onSelectStep }: AgentLogFlowMapProps) {
+export function AgentLogFlowMap({
+  steps,
+  activeStepId,
+  onSelectStep,
+  maxHeightClassName = 'max-h-[380px]',
+}: AgentLogFlowMapProps) {
   const { t } = useI18n()
 
   return (
@@ -54,7 +60,7 @@ export function AgentLogFlowMap({ steps, activeStepId, onSelectStep }: AgentLogF
         </div>
       </div>
 
-      <div className="max-h-[380px] space-y-2 overflow-auto pr-1">
+      <div className={`${maxHeightClassName} space-y-2 overflow-auto pr-1`}>
         {steps.map((step, index) => {
           const active = step.id === activeStepId
           return (

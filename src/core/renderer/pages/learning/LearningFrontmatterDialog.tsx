@@ -47,10 +47,10 @@ export function LearningFrontmatterDialog({
   const { t } = useI18n()
   const statusOptions: SelectOption[] = useMemo(
     () => [
-      { value: 'draft', label: '草稿' },
-      { value: 'organized', label: '已整理' },
+      { value: 'draft', label: t('learning.frontmatter.statusDraft') },
+      { value: 'organized', label: t('learning.frontmatter.statusOrganized') },
     ],
-    []
+    [t]
   )
   const categoryOptions: ComboboxOption[] = useMemo(
     () => categories.map((category) => ({
@@ -60,8 +60,8 @@ export function LearningFrontmatterDialog({
     [categories]
   )
   const uncategorizedOption = useMemo<ComboboxOption[]>(
-    () => [{ value: '', label: '未分类' }],
-    []
+    () => [{ value: '', label: t('learning.frontmatter.uncategorized') }],
+    [t]
   )
 
   const handleClose = () => {
@@ -74,7 +74,7 @@ export function LearningFrontmatterDialog({
       open={open}
       onClose={handleClose}
       widthClassName="max-w-[640px]"
-      ariaLabel={mode === 'create' ? '新建学习记录' : '编辑笔记信息'}
+      ariaLabel={mode === 'create' ? t('learning.frontmatter.createAria') : t('learning.frontmatter.editAria')}
       panelClassName="p-0 overflow-hidden"
     >
       <div className="flex flex-col">
@@ -82,12 +82,12 @@ export function LearningFrontmatterDialog({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-base font-semibold text-[color:var(--color-foreground)]">
-                {mode === 'create' ? '先填写 frontmatter' : '编辑 frontmatter'}
+                {mode === 'create' ? t('learning.frontmatter.createTitle') : t('learning.frontmatter.editTitle')}
               </div>
               <div className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
                 {mode === 'create'
-                  ? '先确定标题、分类、标签和状态，再进入正文编辑与预览分栏。'
-                  : '元信息单独维护，主区域继续专注 Markdown 正文。'}
+                  ? t('learning.frontmatter.createDescription')
+                  : t('learning.frontmatter.editDescription')}
               </div>
             </div>
             <button
@@ -104,32 +104,32 @@ export function LearningFrontmatterDialog({
 
         <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标题</div>
+            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.frontmatter.titleLabel')}</div>
             <Input
               value={title}
               onChange={(event) => onTitleChange(event.target.value)}
-              placeholder="例如：DNS 与 Nginx 基础整理"
+              placeholder={t('learning.frontmatter.titlePlaceholder')}
               disabled={submitting}
             />
           </div>
           <div>
-            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">分类</div>
+            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.frontmatter.categoryLabel')}</div>
             <Combobox
               ariaLabel="learning-frontmatter-category"
               value={categoryInput}
               options={categoryOptions}
               pinnedOptions={uncategorizedOption}
               onChange={onCategoryInputChange}
-              placeholder="可直接输入新分类"
+              placeholder={t('learning.frontmatter.categoryPlaceholder')}
               allowCreate
-              toggleAriaLabel={categoryInput.trim() ? '收起分类建议' : '展开分类建议'}
-              emptyText="还没有分类"
+              toggleAriaLabel={categoryInput.trim() ? t('learning.frontmatter.categoryToggleClose') : t('learning.frontmatter.categoryToggleOpen')}
+              emptyText={t('learning.frontmatter.categoryEmpty')}
               isOptionSelected={(option, currentValue) => option.value === currentValue.trim()}
               createIcon={<FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />}
               createLabel={(nextValue) => (
                 <span className="flex min-w-0 items-center gap-2">
                   <FolderPlus className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" />
-                  <span className="truncate">新建分类 “{nextValue}”</span>
+                  <span className="truncate">{t('learning.frontmatter.createCategory', { value: nextValue })}</span>
                 </span>
               )}
               filterOption={(option, query) => {
@@ -140,11 +140,11 @@ export function LearningFrontmatterDialog({
               disabled={submitting}
             />
             <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
-              可直接输入新分类，会自动创建。
+              {t('learning.frontmatter.categoryHint')}
             </div>
           </div>
           <div>
-            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">状态</div>
+            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.frontmatter.statusLabel')}</div>
             <Select
               ariaLabel="learning-frontmatter-status"
               value={status}
@@ -154,15 +154,15 @@ export function LearningFrontmatterDialog({
             />
           </div>
           <div className="sm:col-span-2">
-            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">标签</div>
+            <div className="mb-1.5 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.frontmatter.tagsLabel')}</div>
             <Input
               value={tags}
               onChange={(event) => onTagsChange(event.target.value)}
-              placeholder="例如：dns, nginx, web"
+              placeholder={t('learning.frontmatter.tagsPlaceholder')}
               disabled={submitting}
             />
             <div className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">
-              使用逗号分隔，会写入 Markdown frontmatter。
+              {t('learning.frontmatter.tagsHint')}
             </div>
           </div>
           {error ? (
@@ -177,14 +177,14 @@ export function LearningFrontmatterDialog({
             onClick={handleClose}
             disabled={submitting}
           >
-            取消
+            {t('common.cancel')}
           </Button>
           <Button
             className="rounded-full"
             onClick={() => void onSubmit()}
             loading={submitting}
           >
-            {mode === 'create' ? '创建并开始编辑' : '保存 frontmatter'}
+            {mode === 'create' ? t('learning.frontmatter.createSubmit') : t('learning.frontmatter.saveSubmit')}
           </Button>
         </div>
       </div>

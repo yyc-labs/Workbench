@@ -10,10 +10,20 @@
   transition: background 0.2s;
 }
 
-.btn-start { background: #22c55e; color: #fff; }
-.btn-start:hover { opacity: 0.9; }
-.btn-stop { background: #ef4444; color: #fff; }
-.btn-stop:hover { opacity: 0.9; }
+.btn-start {
+  background: var(--color-success);
+  color: var(--color-primary-foreground);
+}
+.btn-start:hover {
+  background: color-mix(in srgb, var(--color-success) 88%, var(--color-background));
+}
+.btn-stop {
+  background: var(--color-destructive);
+  color: var(--color-destructive-foreground);
+}
+.btn-stop:hover {
+  background: color-mix(in srgb, var(--color-destructive) 88%, var(--color-background));
+}
 
 .btn-ghost {
   background: transparent;
@@ -75,7 +85,9 @@
 .text-secondary { color: var(--color-muted-foreground); font-size: 14px; }
 .project-type-badge {
   display: inline-block; padding: 2px 8px;
-  border-radius: 4px; color: #fff;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
   font-size: 11px; font-weight: 600; text-transform: uppercase;
 }
 

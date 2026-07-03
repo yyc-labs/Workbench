@@ -4,6 +4,7 @@ import { Clock3, Map } from 'lucide-react'
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { useI18n } from '../i18n'
+import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
 import {
   navigateHomeWithStartupDefaultReset,
   useMouseGestureNavigator,
@@ -387,8 +388,7 @@ function GlobalThemeShortcutListener() {
 
   useEffect(() => {
     return window.electronAPI.onGlobalThemeShortcut(() => {
-      const currentTheme =
-        document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+      const currentTheme = readEffectiveTheme()
       void setTheme(currentTheme === 'dark' ? 'light' : 'dark')
     })
   }, [setTheme])

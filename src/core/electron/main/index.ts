@@ -42,6 +42,7 @@ import {
   isWindowsAutostartLaunch,
   syncWindowsLaunchOnLogin,
 } from './launchOnLogin'
+import { resolveMainLocale, translateMain } from './mainI18n'
 import { createAppTray, type AppTrayController } from './tray'
 import { projectIdFromPath } from '../../shared/rules'
 import type {
@@ -78,6 +79,7 @@ const aiEnvironmentController = new AiEnvironmentController(
 )
 const gitService = createGitService({
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
+  getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
 })
 const runtimeService = createRuntimeService({
   getCapability: () => bootCapability,
@@ -105,11 +107,13 @@ const transcriptService = createTranscriptService({
 })
 const feishuNotifier = new FeishuNotifier({
   getConfig: () => loadConfig().agentHooks,
+  getLocale: () => loadConfig().locale,
 })
 const transcriptShareService = createTranscriptShareService()
 const learningRepository = createLearningRepository()
 const learningService = createLearningService({
   repository: learningRepository,
+  getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
 })
 const aiGatewayService = createAiGatewayService({
   getCapability: () => bootCapability,
@@ -419,9 +423,12 @@ function openMainWindowFromTray(): void {
 
 function buildTrayMenuTemplate() {
   const isVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible())
+  const locale = resolveMainLocale(loadConfig().locale, app.getLocale())
   return [
     {
-      label: isVisible ? '隐藏主窗口' : '显示主窗口',
+      label: isVisible
+        ? translateMain(locale, 'tray.hideMainWindow')
+        : translateMain(locale, 'tray.showMainWindow'),
       click: () => {
         if (isVisible) {
           hideMainWindowToTray()
@@ -434,13 +441,13 @@ function buildTrayMenuTemplate() {
       type: 'separator' as const,
     },
     {
-      label: '打开首页',
+      label: translateMain(locale, 'tray.openHome'),
       click: () => {
         navigateMainWindow('/')
       },
     },
     {
-      label: '打开设置',
+      label: translateMain(locale, 'tray.openSettings'),
       click: () => {
         navigateMainWindow('/settings/general')
       },
@@ -449,7 +456,7 @@ function buildTrayMenuTemplate() {
       type: 'separator' as const,
     },
     {
-      label: '退出 IDE Electron',
+      label: translateMain(locale, 'tray.quitApp'),
       click: () => {
         app.quit()
       },

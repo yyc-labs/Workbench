@@ -1,12 +1,20 @@
 import { basename } from 'path'
 import type {
+  AppLocale,
   AgentHookEnvelope,
   AgentHookFeishuNotifyEvent,
   AgentHookGatewayConfig,
 } from '../../../shared/types'
+import {
+  resolveMainLocale,
+  toFeishuLocaleTag,
+  translateMain,
+  type MainLocale,
+} from '../mainI18n'
 
 type FeishuNotifierOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
+  getLocale: () => AppLocale | undefined
 }
 
 type CachedTenantToken = {
@@ -76,31 +84,31 @@ function escapeCardText(value: string | undefined): string {
   return (value || '-').replace(/[`<>]/g, ' ')
 }
 
-function getProjectName(cwd: string | undefined): string {
-  if (!cwd) return 'Unknown Project'
+function getProjectName(cwd: string | undefined, locale: MainLocale): string {
+  if (!cwd) return translateMain(locale, 'feishu.unknownProject')
   const trimmed = cwd.replace(/[\\/]+$/, '')
   return basename(trimmed) || trimmed
 }
 
-function formatEventTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString('zh-CN', {
+function formatEventTime(timestamp: number, locale: MainLocale): string {
+  return new Date(timestamp).toLocaleString(locale, {
     hour12: false,
   })
 }
 
-function eventStatusLabel(event: AgentHookEnvelope): string {
-  if (event.canonicalEvent === 'permission-request') return '等待确认'
-  if (event.canonicalEvent === 'session-end') return '会话结束'
-  return '已完成'
+function eventStatusLabel(event: AgentHookEnvelope, locale: MainLocale): string {
+  if (event.canonicalEvent === 'permission-request') return translateMain(locale, 'feishu.waitingApproval')
+  if (event.canonicalEvent === 'session-end') return translateMain(locale, 'feishu.sessionEnded')
+  return translateMain(locale, 'feishu.completed')
 }
 
-function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown> {
+function buildInteractiveCard(event: AgentHookEnvelope, locale: MainLocale): Record<string, unknown> {
   const provider = providerLabel(event.provider)
-  const projectName = getProjectName(event.cwd)
+  const projectName = getProjectName(event.cwd, locale)
   const session = shortId(event.sessionId)
   const turn = shortId(event.turnId)
-  const time = formatEventTime(event.receivedAt)
-  const status = eventStatusLabel(event)
+  const time = formatEventTime(event.receivedAt, locale)
+  const status = eventStatusLabel(event, locale)
   const toolName = escapeCardText(event.toolName)
   const permissionMode = escapeCardText(event.permissionMode)
   const showPermissionDetails = event.canonicalEvent === 'permission-request' || Boolean(event.toolName || event.permissionMode)
@@ -118,7 +126,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
         tag: 'div',
         text: {
           tag: 'lark_md',
-          content: `**Agent**\n${provider}`,
+          content: `**${translateMain(locale, 'feishu.agentLabel')}**\n${provider}`,
         },
       },
       {
@@ -132,7 +140,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
             elements: [
               {
                 tag: 'markdown',
-                content: `**事件**\n${escapeCardText(event.providerEvent)}`,
+                content: `**${translateMain(locale, 'feishu.eventLabel')}**\n${escapeCardText(event.providerEvent)}`,
               },
             ],
           },
@@ -143,7 +151,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
             elements: [
               {
                 tag: 'markdown',
-                content: `**时间**\n${escapeCardText(time)}`,
+                content: `**${translateMain(locale, 'feishu.timeLabel')}**\n${escapeCardText(time)}`,
               },
             ],
           },
@@ -161,7 +169,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
               elements: [
                 {
                   tag: 'markdown',
-                  content: `**工具**\n${toolName}`,
+                  content: `**${translateMain(locale, 'feishu.toolLabel')}**\n${toolName}`,
                 },
               ],
             },
@@ -172,7 +180,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
               elements: [
                 {
                   tag: 'markdown',
-                  content: `**权限模式**\n${permissionMode}`,
+                  content: `**${translateMain(locale, 'feishu.permissionModeLabel')}**\n${permissionMode}`,
                 },
               ],
             },
@@ -183,7 +191,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
         tag: 'div',
         text: {
           tag: 'lark_md',
-          content: `**目录**\n\`${escapeCardText(event.cwd)}\``,
+          content: `**${translateMain(locale, 'feishu.directoryLabel')}**\n\`${escapeCardText(event.cwd)}\``,
         },
       },
       {
@@ -191,7 +199,7 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
         elements: [
           {
             tag: 'plain_text',
-            content: `session ${session}  |  turn ${turn}`,
+            content: `${translateMain(locale, 'feishu.sessionLabel')} ${session}  |  ${translateMain(locale, 'feishu.turnLabel')} ${turn}`,
           },
         ],
       },
@@ -199,57 +207,66 @@ function buildInteractiveCard(event: AgentHookEnvelope): Record<string, unknown>
   }
 }
 
-function buildPostMessage(event: AgentHookEnvelope): Record<string, unknown> {
+function buildPostMessage(event: AgentHookEnvelope, locale: MainLocale): Record<string, unknown> {
   const provider = providerLabel(event.provider)
-  const projectName = getProjectName(event.cwd)
+  const projectName = getProjectName(event.cwd, locale)
   const session = shortId(event.sessionId)
   const turn = shortId(event.turnId)
-  const time = formatEventTime(event.receivedAt)
-  const status = eventStatusLabel(event)
+  const time = formatEventTime(event.receivedAt, locale)
+  const status = eventStatusLabel(event, locale)
   const content: Array<Array<{ tag: 'text'; text: string }>> = [
-    [{ tag: 'text', text: `Agent: ${provider}` }],
-    [{ tag: 'text', text: `事件: ${event.providerEvent}` }],
-    [{ tag: 'text', text: `时间: ${time}` }],
-    [{ tag: 'text', text: `目录: ${event.cwd || '-'}` }],
+    [{ tag: 'text', text: `${translateMain(locale, 'feishu.agentLabel')}: ${provider}` }],
+    [{ tag: 'text', text: `${translateMain(locale, 'feishu.eventLabel')}: ${event.providerEvent}` }],
+    [{ tag: 'text', text: `${translateMain(locale, 'feishu.timeLabel')}: ${time}` }],
+    [{ tag: 'text', text: `${translateMain(locale, 'feishu.directoryLabel')}: ${event.cwd || '-'}` }],
   ]
 
-  if (event.toolName) content.push([{ tag: 'text', text: `工具: ${event.toolName}` }])
-  if (event.permissionMode) content.push([{ tag: 'text', text: `权限模式: ${event.permissionMode}` }])
-  content.push([{ tag: 'text', text: `Session: ${session}   Turn: ${turn}` }])
+  if (event.toolName) {
+    content.push([{ tag: 'text', text: `${translateMain(locale, 'feishu.toolLabel')}: ${event.toolName}` }])
+  }
+  if (event.permissionMode) {
+    content.push([{ tag: 'text', text: `${translateMain(locale, 'feishu.permissionModeLabel')}: ${event.permissionMode}` }])
+  }
+  content.push([{
+    tag: 'text',
+    text: `${translateMain(locale, 'feishu.sessionLabel')}: ${session}   ${translateMain(locale, 'feishu.turnLabel')}: ${turn}`,
+  }])
 
   return {
-    zh_cn: {
+    [toFeishuLocaleTag(locale)]: {
       title: `${projectName} ${status}`,
       content,
     },
   }
 }
 
-function buildPlainText(event: AgentHookEnvelope): string {
+function buildPlainText(event: AgentHookEnvelope, locale: MainLocale): string {
   const provider = providerLabel(event.provider)
-  const projectName = getProjectName(event.cwd)
+  const projectName = getProjectName(event.cwd, locale)
   const parts = [
-    `${projectName} ${eventStatusLabel(event)}`,
-    `Agent: ${provider}`,
-    `事件: ${event.providerEvent}`,
-    `时间: ${formatEventTime(event.receivedAt)}`,
+    `${projectName} ${eventStatusLabel(event, locale)}`,
+    `${translateMain(locale, 'feishu.agentLabel')}: ${provider}`,
+    `${translateMain(locale, 'feishu.eventLabel')}: ${event.providerEvent}`,
+    `${translateMain(locale, 'feishu.timeLabel')}: ${formatEventTime(event.receivedAt, locale)}`,
   ]
-  if (event.cwd) parts.push(`目录: ${event.cwd}`)
-  if (event.toolName) parts.push(`工具: ${event.toolName}`)
-  if (event.permissionMode) parts.push(`权限模式: ${event.permissionMode}`)
-  if (event.sessionId) parts.push(`Session: ${shortId(event.sessionId)}`)
-  if (event.turnId) parts.push(`Turn: ${shortId(event.turnId)}`)
+  if (event.cwd) parts.push(`${translateMain(locale, 'feishu.directoryLabel')}: ${event.cwd}`)
+  if (event.toolName) parts.push(`${translateMain(locale, 'feishu.toolLabel')}: ${event.toolName}`)
+  if (event.permissionMode) parts.push(`${translateMain(locale, 'feishu.permissionModeLabel')}: ${event.permissionMode}`)
+  if (event.sessionId) parts.push(`${translateMain(locale, 'feishu.sessionLabel')}: ${shortId(event.sessionId)}`)
+  if (event.turnId) parts.push(`${translateMain(locale, 'feishu.turnLabel')}: ${shortId(event.turnId)}`)
   return parts.join('\n')
 }
 
 export class FeishuNotifier {
   private readonly getConfig: FeishuNotifierOptions['getConfig']
+  private readonly getLocale: FeishuNotifierOptions['getLocale']
   private cachedTenantToken: CachedTenantToken | null = null
   private readonly sentEventIds = new Set<string>()
   private readonly pendingEventIds = new Set<string>()
 
   constructor(options: FeishuNotifierOptions) {
     this.getConfig = options.getConfig
+    this.getLocale = options.getLocale
   }
 
   async notifyIfNeeded(event: AgentHookEnvelope): Promise<void> {
@@ -316,13 +333,18 @@ export class FeishuNotifier {
     receiveIdType: 'open_id' | 'user_id' | 'union_id' | 'email' | 'chat_id',
     event: AgentHookEnvelope
   ): Promise<void> {
+    const locale = resolveMainLocale(
+      this.getLocale(),
+      Intl.DateTimeFormat().resolvedOptions().locale
+    )
+
     try {
       await this.sendMessage({
         tenantAccessToken,
         receiveId,
         receiveIdType,
         msgType: 'interactive',
-        content: buildInteractiveCard(event),
+        content: buildInteractiveCard(event, locale),
       })
       return
     } catch {
@@ -335,7 +357,7 @@ export class FeishuNotifier {
         receiveId,
         receiveIdType,
         msgType: 'post',
-        content: buildPostMessage(event),
+        content: buildPostMessage(event, locale),
       })
       return
     } catch {
@@ -347,7 +369,7 @@ export class FeishuNotifier {
       receiveId,
       receiveIdType,
       msgType: 'text',
-      content: { text: buildPlainText(event) },
+      content: { text: buildPlainText(event, locale) },
     })
   }
 

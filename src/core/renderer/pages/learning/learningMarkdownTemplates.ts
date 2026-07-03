@@ -1,3 +1,6 @@
+import type { ResolvedLocale } from '../../i18n/messages'
+import { learningMessages } from '../../i18n/messages/learning'
+
 export type LearningMarkdownTemplateKey =
   | 'heading1'
   | 'heading2'
@@ -42,6 +45,78 @@ const LIST_CHILD_INDENT = '  '
 const ORDERED_LIST_MARKER_RE = /^(\s*)(\d+)\.\s+/
 const BULLET_LIST_MARKER_RE = /^(\s*)[-+*]\s+/
 const TASK_LIST_MARKER_RE = /^(\s*)[-+*]\s+\[(?: |x|X)\]\s+/
+
+function translateLearningMarkdown(
+  locale: ResolvedLocale,
+  key: string,
+  values?: Record<string, number | string>
+): string {
+  const normalizedKey = key.replace(/^learning\./, '')
+  const tree = learningMessages[locale].learning as Record<string, unknown>
+  const segments = normalizedKey.split('.')
+  let current: unknown = tree
+
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object' || !(segment in current)) {
+      return key
+    }
+    current = (current as Record<string, unknown>)[segment]
+  }
+
+  if (typeof current !== 'string') return key
+  if (!values) return current
+  return current.replace(/\{(\w+)\}/g, (_, name: string) => {
+    const value = values[name]
+    return value === undefined ? `{${name}}` : String(value)
+  })
+}
+
+function getTemplateText(locale: ResolvedLocale) {
+  return {
+    placeholders: {
+      listItem: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.listItem'),
+      taskItem: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.taskItem'),
+      boldText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.boldText'),
+      italicText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.italicText'),
+      strikethroughText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.strikethroughText'),
+      quoteText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.quoteText'),
+      imageAltText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.imageAltText'),
+      linkText: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.linkText'),
+      heading1: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.heading1'),
+      heading2: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.heading2'),
+      heading3: translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.heading3'),
+    },
+    sections: {
+      knowledgePoints: {
+        title: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.knowledgePoints.title'),
+        coreConcept: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.knowledgePoints.coreConcept'),
+        principle: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.knowledgePoints.principle'),
+        example: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.knowledgePoints.example'),
+      },
+      summary: {
+        title: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.summary.title'),
+        conclusionOne: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.summary.conclusionOne'),
+        conclusionTwo: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.summary.conclusionTwo'),
+        nextAction: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.summary.nextAction'),
+      },
+      reviewChecklist: {
+        title: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.reviewChecklist.title'),
+        conceptDefinition: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.reviewChecklist.conceptDefinition'),
+        keyCommand: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.reviewChecklist.keyCommand'),
+        commonIssue: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.reviewChecklist.commonIssue'),
+      },
+      pitfalls: {
+        title: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.pitfalls.title'),
+        commonConfusion: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.pitfalls.commonConfusion'),
+        correctUsage: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.pitfalls.correctUsage'),
+      },
+      references: {
+        title: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.references.title'),
+        documentTitle: translateLearningMarkdown(locale, 'learning.markdown.templates.sections.references.documentTitle'),
+      },
+    },
+  }
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -208,40 +283,44 @@ function getListTemplateLines(
   template: 'bulletList' | 'orderedList' | 'taskList',
   count: number,
   orderedStartNumber: number,
+  locale: ResolvedLocale,
   indent = ''
 ): string[] {
+  const text = getTemplateText(locale)
   if (template === 'bulletList') {
-    return Array.from({ length: count }, (_, index) => `${indent}- ${index === 0 ? '列表项' : ''}`)
+    return Array.from({ length: count }, (_, index) => `${indent}- ${index === 0 ? text.placeholders.listItem : ''}`)
   }
   if (template === 'orderedList') {
-    return Array.from({ length: count }, (_, index) => `${indent}${orderedStartNumber + index}. ${index === 0 ? '列表项' : ''}`)
+    return Array.from({ length: count }, (_, index) => `${indent}${orderedStartNumber + index}. ${index === 0 ? text.placeholders.listItem : ''}`)
   }
-  return Array.from({ length: count }, (_, index) => `${indent}- [ ] ${index === 0 ? '待办事项' : ''}`)
+  return Array.from({ length: count }, (_, index) => `${indent}- [ ] ${index === 0 ? text.placeholders.taskItem : ''}`)
 }
 
 function getListTemplateSelectionOffsets(
   template: 'bulletList' | 'orderedList' | 'taskList',
+  locale: ResolvedLocale,
   orderedStartNumber: number,
   indent = ''
 ): { selectionStartOffset: number; selectionEndOffset: number } {
+  const text = getTemplateText(locale)
   if (template === 'bulletList') {
     const markerLength = `${indent}- `.length
     return {
       selectionStartOffset: markerLength,
-      selectionEndOffset: markerLength + '列表项'.length,
+      selectionEndOffset: markerLength + text.placeholders.listItem.length,
     }
   }
   if (template === 'orderedList') {
     const markerLength = `${indent}${orderedStartNumber}. `.length
     return {
       selectionStartOffset: markerLength,
-      selectionEndOffset: markerLength + '列表项'.length,
+      selectionEndOffset: markerLength + text.placeholders.listItem.length,
     }
   }
   const markerLength = `${indent}- [ ] `.length
   return {
     selectionStartOffset: markerLength,
-    selectionEndOffset: markerLength + '待办事项'.length,
+    selectionEndOffset: markerLength + text.placeholders.taskItem.length,
   }
 }
 
@@ -249,7 +328,8 @@ function insertHeading(
   value: string,
   start: number,
   end: number,
-  level: 1 | 2 | 3
+  level: 1 | 2 | 3,
+  locale: ResolvedLocale
 ): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
@@ -257,7 +337,12 @@ function insertHeading(
   end = collapsed.end
 
   const prefix = `${'#'.repeat(level)} `
-  const headingText = level === 1 ? '一级标题' : level === 2 ? '二级标题' : '三级标题'
+  const text = getTemplateText(locale)
+  const headingText = level === 1
+    ? text.placeholders.heading1
+    : level === 2
+      ? text.placeholders.heading2
+      : text.placeholders.heading3
   const replacement = `${prefix}${headingText}`
   return replaceRange(value, start, end, replacement, prefix.length, replacement.length)
 }
@@ -280,6 +365,7 @@ function insertListTemplate(
   start: number,
   end: number,
   template: 'bulletList' | 'orderedList' | 'taskList',
+  locale: ResolvedLocale,
   count = 1
 ): LearningMarkdownEditResult {
   const safeCount = clamp(Math.floor(count), 1, 12)
@@ -291,8 +377,8 @@ function insertListTemplate(
   const nestedIndent = getNestedListChildIndent(value, start)
   if (nestedIndent) {
     const orderedStartNumber = 1
-    const replacement = `\n${getListTemplateLines(template, safeCount, orderedStartNumber, nestedIndent).join('\n')}`
-    const selectionOffsets = getListTemplateSelectionOffsets(template, orderedStartNumber, nestedIndent)
+    const replacement = `\n${getListTemplateLines(template, safeCount, orderedStartNumber, locale, nestedIndent).join('\n')}`
+    const selectionOffsets = getListTemplateSelectionOffsets(template, locale, orderedStartNumber, nestedIndent)
     return replaceRange(
       value,
       start,
@@ -306,8 +392,8 @@ function insertListTemplate(
   const orderedStartNumber = template === 'orderedList'
     ? getOrderedListStartNumber(value, getLineStart(value, start))
     : 0
-  const replacement = getListTemplateLines(template, safeCount, orderedStartNumber || 1).join('\n')
-  const selectionOffsets = getListTemplateSelectionOffsets(template, orderedStartNumber || 1)
+  const replacement = getListTemplateLines(template, safeCount, orderedStartNumber || 1, locale).join('\n')
+  const selectionOffsets = getListTemplateSelectionOffsets(template, locale, orderedStartNumber || 1)
   return replaceRange(
     value,
     start,
@@ -318,17 +404,30 @@ function insertListTemplate(
   )
 }
 
-function insertBlockquote(value: string, start: number, end: number): LearningMarkdownEditResult {
+function insertBlockquote(
+  value: string,
+  start: number,
+  end: number,
+  locale: ResolvedLocale
+): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
   end = collapsed.end
-  return replaceRange(value, start, end, '> 引用', 2, 4)
+  const quoteText = getTemplateText(locale).placeholders.quoteText
+  return replaceRange(value, start, end, `> ${quoteText}`, 2, 2 + quoteText.length)
 }
 
-function insertLink(value: string, start: number, end: number, asImage: boolean): LearningMarkdownEditResult {
+function insertLink(
+  value: string,
+  start: number,
+  end: number,
+  asImage: boolean,
+  locale: ResolvedLocale
+): LearningMarkdownEditResult {
   const { selectedText } = normalizeRange(value, start, end)
-  const label = selectedText || (asImage ? '图片描述' : '链接文字')
+  const text = getTemplateText(locale)
+  const label = selectedText || (asImage ? text.placeholders.imageAltText : text.placeholders.linkText)
   const url = asImage ? 'https://example.com/image.png' : 'https://example.com'
   const prefix = asImage ? '![' : '['
   const replacement = `${prefix}${label}](${url})`
@@ -337,12 +436,18 @@ function insertLink(value: string, start: number, end: number, asImage: boolean)
   return replaceRange(value, start, end, replacement, urlStart, urlEnd)
 }
 
-export function buildMarkdownTable(rows: number, columns: number): string {
+export function buildMarkdownTable(rows: number, columns: number, locale: ResolvedLocale = 'zh-CN'): string {
   const safeRows = clamp(Math.floor(rows), 1, 12)
   const safeColumns = clamp(Math.floor(columns), 1, 12)
-  const header = Array.from({ length: safeColumns }, (_, index) => `列${index + 1}`)
+  const header = Array.from(
+    { length: safeColumns },
+    (_, index) => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableHeader', { count: index + 1 })
+  )
   const delimiter = Array.from({ length: safeColumns }, () => '---')
-  const bodyRow = Array.from({ length: safeColumns }, () => '内容')
+  const bodyRow = Array.from(
+    { length: safeColumns },
+    () => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableCell')
+  )
   const bodyRows = Array.from({ length: Math.max(0, safeRows - 1) }, () => bodyRow)
   const allRows = [header, delimiter, ...bodyRows]
   return allRows.map((row) => `| ${row.join(' | ')} |`).join('\n')
@@ -353,15 +458,16 @@ function insertTable(
   start: number,
   end: number,
   rows: number,
-  columns: number
+  columns: number,
+  locale: ResolvedLocale
 ): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
   end = collapsed.end
 
-  const table = buildMarkdownTable(rows, columns)
-  const firstHeader = '列1'
+  const table = buildMarkdownTable(rows, columns, locale)
+  const firstHeader = translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableHeader', { count: 1 })
   const headerOffset = table.indexOf(firstHeader)
   return replaceRangeWithBlock(value, start, end, table, headerOffset, headerOffset + firstHeader.length)
 }
@@ -402,40 +508,42 @@ export function applyLearningMarkdownInsert(
   value: string,
   start: number,
   end: number,
-  request: LearningMarkdownInsertRequest
+  request: LearningMarkdownInsertRequest,
+  locale: ResolvedLocale = 'zh-CN'
 ): LearningMarkdownEditResult {
   const normalized = normalizeRange(value, start, end)
+  const text = getTemplateText(locale)
   if (request.kind === 'table') {
-    return insertTable(value, normalized.start, normalized.end, request.rows, request.columns)
+    return insertTable(value, normalized.start, normalized.end, request.rows, request.columns, locale)
   }
 
   switch (request.template) {
     case 'heading1':
-      return insertHeading(value, normalized.start, normalized.end, 1)
+      return insertHeading(value, normalized.start, normalized.end, 1, locale)
     case 'heading2':
-      return insertHeading(value, normalized.start, normalized.end, 2)
+      return insertHeading(value, normalized.start, normalized.end, 2, locale)
     case 'heading3':
-      return insertHeading(value, normalized.start, normalized.end, 3)
+      return insertHeading(value, normalized.start, normalized.end, 3, locale)
     case 'bold':
-      return wrapInline(value, normalized.start, normalized.end, '**', '**', '加粗文本')
+      return wrapInline(value, normalized.start, normalized.end, '**', '**', text.placeholders.boldText)
     case 'italic':
-      return wrapInline(value, normalized.start, normalized.end, '*', '*', '斜体文本')
+      return wrapInline(value, normalized.start, normalized.end, '*', '*', text.placeholders.italicText)
     case 'strikethrough':
-      return wrapInline(value, normalized.start, normalized.end, '~~', '~~', '删除线文本')
+      return wrapInline(value, normalized.start, normalized.end, '~~', '~~', text.placeholders.strikethroughText)
     case 'inlineCode':
       return wrapInline(value, normalized.start, normalized.end, '`', '`', 'code')
     case 'codeBlock':
       return insertCodeBlock(value, normalized.start, normalized.end)
     case 'blockquote':
-      return insertBlockquote(value, normalized.start, normalized.end)
+      return insertBlockquote(value, normalized.start, normalized.end, locale)
     case 'bulletList':
     case 'orderedList':
     case 'taskList':
-      return insertListTemplate(value, normalized.start, normalized.end, request.template, request.count)
+      return insertListTemplate(value, normalized.start, normalized.end, request.template, locale, request.count)
     case 'link':
-      return insertLink(value, normalized.start, normalized.end, false)
+      return insertLink(value, normalized.start, normalized.end, false, locale)
     case 'image':
-      return insertLink(value, normalized.start, normalized.end, true)
+      return insertLink(value, normalized.start, normalized.end, true, locale)
     case 'horizontalRule':
       return insertHorizontalRule(value, normalized.start, normalized.end)
     case 'knowledgePoints':
@@ -444,13 +552,13 @@ export function applyLearningMarkdownInsert(
         normalized.start,
         normalized.end,
         [
-          '## 知识点',
+          `## ${text.sections.knowledgePoints.title}`,
           '',
-          '- 核心概念：',
-          '- 原理说明：',
-          '- 示例：',
+          `- ${text.sections.knowledgePoints.coreConcept}`,
+          `- ${text.sections.knowledgePoints.principle}`,
+          `- ${text.sections.knowledgePoints.example}`,
         ],
-        '核心概念：'
+        text.sections.knowledgePoints.coreConcept
       )
     case 'summarySection':
       return insertPresetBlock(
@@ -458,13 +566,13 @@ export function applyLearningMarkdownInsert(
         normalized.start,
         normalized.end,
         [
-          '## 总结',
+          `## ${text.sections.summary.title}`,
           '',
-          '1. 结论一',
-          '2. 结论二',
-          '3. 后续行动',
+          `1. ${text.sections.summary.conclusionOne}`,
+          `2. ${text.sections.summary.conclusionTwo}`,
+          `3. ${text.sections.summary.nextAction}`,
         ],
-        '结论一'
+        text.sections.summary.conclusionOne
       )
     case 'reviewChecklist':
       return insertPresetBlock(
@@ -472,13 +580,13 @@ export function applyLearningMarkdownInsert(
         normalized.start,
         normalized.end,
         [
-          '## 待复习',
+          `## ${text.sections.reviewChecklist.title}`,
           '',
-          '- [ ] 概念定义',
-          '- [ ] 关键命令',
-          '- [ ] 常见问题',
+          `- [ ] ${text.sections.reviewChecklist.conceptDefinition}`,
+          `- [ ] ${text.sections.reviewChecklist.keyCommand}`,
+          `- [ ] ${text.sections.reviewChecklist.commonIssue}`,
         ],
-        '概念定义'
+        text.sections.reviewChecklist.conceptDefinition
       )
     case 'pitfallsSection':
       return insertPresetBlock(
@@ -486,13 +594,13 @@ export function applyLearningMarkdownInsert(
         normalized.start,
         normalized.end,
         [
-          '## 易错点',
+          `## ${text.sections.pitfalls.title}`,
           '',
-          '> 容易混淆：',
+          `> ${text.sections.pitfalls.commonConfusion}`,
           '>',
-          '> 正确写法：',
+          `> ${text.sections.pitfalls.correctUsage}`,
         ],
-        '容易混淆：'
+        text.sections.pitfalls.commonConfusion
       )
     case 'referencesSection':
       return insertPresetBlock(
@@ -500,9 +608,9 @@ export function applyLearningMarkdownInsert(
         normalized.start,
         normalized.end,
         [
-          '## 参考资料',
+          `## ${text.sections.references.title}`,
           '',
-          '- [文档标题](https://example.com)',
+          `- [${text.sections.references.documentTitle}](https://example.com)`,
         ],
         'https://example.com'
       )

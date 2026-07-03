@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
-import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
+import type { ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
+import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { useSidebarGesture } from '../../hooks/useSidebarGesture'
@@ -26,14 +26,7 @@ import {
   removeCodeFilePathFromDrawerState,
   toggleFavoriteCodeFilePath,
 } from './code.helpers'
-import { copyTextToClipboard } from './code.clipboard'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
-import {
-  joinProjectPath,
-  normalizeRelativePathForCopy,
-  removeRelativePathSlashes,
-  resolveTreeNodeFolderPath,
-} from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
@@ -44,6 +37,7 @@ import {
   normalizeProjectCodeSession,
 } from './useProjectCodeSession'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
+import { useCodeTreePathActions } from './useCodeTreePathActions'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
@@ -722,44 +716,25 @@ export function CodeWorkspacePanel({
     })
     void loadDirectory(relativePath)
   }, [expandedDirectories, hasSearchQuery, loadDirectory])
-  const handleSelectTreeFile = useCallback((relativePath: string) => {
-    void openFile(relativePath)
-    if (isNarrowViewport) {
-      setIsExplorerOpen(false)
-    }
-  }, [isNarrowViewport, openFile])
-  const handleOpenTreeNodeFolder = useCallback(async (relativePath: string, nodeKind: ProjectFileNodeKind) => {
-    const folderPath = resolveTreeNodeFolderPath(projectPath, relativePath, nodeKind)
-    const revealPath = nodeKind === 'file'
-      ? joinProjectPath(projectPath, relativePath)
-      : undefined
-    await window.electronAPI.openFolder(folderPath, revealPath)
-  }, [projectPath])
-  const handleCopyTreeNodeName = useCallback((nodeName: string) => {
-    void copyTextToClipboard(nodeName)
-  }, [])
-  const handleCopyTreeNodeRelativePath = useCallback((relativePath: string) => {
-    void copyTextToClipboard(normalizeRelativePathForCopy(relativePath))
-  }, [])
-  const handleCopyTreeNodeRelativePathWithoutSlashes = useCallback((relativePath: string) => {
-    void copyTextToClipboard(removeRelativePathSlashes(relativePath))
-  }, [])
-
-  const openFileFromQuickDrawer = useCallback((relativePath: string) => {
-    void openFileWithTreeLocate(relativePath)
-    if (isNarrowViewport) {
-      setIsExplorerOpen(false)
-    }
-    setIsQuickDrawerOpen(false)
-  }, [isNarrowViewport, openFileWithTreeLocate])
-
-  const handleOpenContentSearchResult = useCallback((relativePath: string, lineNumber: number, column: number) => {
-    void openContentSearchMatch(relativePath, lineNumber, column)
-    setActiveContentSearchLocation({ relativePath, lineNumber, column })
-    if (isNarrowViewport) {
-      setIsExplorerOpen(false)
-    }
-  }, [isNarrowViewport, openContentSearchMatch])
+  const {
+    handleCopyTreeNodeName,
+    handleCopyTreeNodeRelativePath,
+    handleCopyTreeNodeRelativePathWithoutSlashes,
+    handleOpenContentSearchResult,
+    handleOpenSmartEmptyFile,
+    handleOpenTreeNodeFolder,
+    handleSelectTreeFile,
+    openFileFromQuickDrawer,
+  } = useCodeTreePathActions({
+    isNarrowViewport,
+    openContentSearchMatch,
+    openFile,
+    openFileWithTreeLocate,
+    projectPath,
+    setActiveContentSearchLocation,
+    setIsExplorerOpen,
+    setIsQuickDrawerOpen,
+  })
 
   useEffect(() => {
     const revealTarget = (location.state as CodeWorkspaceNavigationState | null)?.revealTarget
@@ -779,13 +754,6 @@ export function CodeWorkspacePanel({
 
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, openContentSearchMatch])
-
-  const handleOpenSmartEmptyFile = useCallback((relativePath: string) => {
-    void openFileWithTreeLocate(relativePath)
-    if (isNarrowViewport) {
-      setIsExplorerOpen(false)
-    }
-  }, [isNarrowViewport, openFileWithTreeLocate])
 
   const handleOpenTranscriptReference = useCallback((item: CodeTranscriptReferenceItem) => {
     void openTranscript({

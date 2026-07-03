@@ -6,6 +6,8 @@ import type { LearningNote } from '../../../shared/types'
 import { Button, type ButtonProps } from '../../components/ui/button'
 import { Card } from '../../components/ui/card'
 import { ScrollArea } from '../../components/ui/scroll-area'
+import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
+import { useI18n } from '../../i18n'
 import {
   createMarkdownComponents,
   shouldDisableMarkdownSyntaxHighlight,
@@ -52,6 +54,8 @@ export function LearningEditorPanel({
   onEditorSelectionSync,
   onSave,
 }: LearningEditorPanelProps) {
+  const { t } = useI18n()
+  const effectiveTheme = useEffectiveTheme()
   const enableMarkdownSyntaxHighlight = useMemo(
     () => !shouldDisableMarkdownSyntaxHighlight(editorContent),
     [editorContent]
@@ -61,8 +65,8 @@ export function LearningEditorPanel({
     activeRelativePath: null,
     enableMarkdownSyntaxHighlight,
     projectPath: '',
-    themeMode: typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
-  }), [enableMarkdownSyntaxHighlight])
+    themeMode: effectiveTheme,
+  }), [effectiveTheme, enableMarkdownSyntaxHighlight])
 
   const editorPreviewGridColumns = editorDisplayMode === 'preview'
     ? 'minmax(0,1fr)'
@@ -77,12 +81,12 @@ export function LearningEditorPanel({
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:var(--color-border)] px-5 py-4">
             <div className="min-w-0">
               <div className="line-clamp-1 text-sm font-semibold text-[color:var(--color-foreground)]">
-                {editorTitle || '未命名笔记'}
+                {editorTitle || t('learning.editor.untitledNote')}
               </div>
               <div className="text-xs text-[color:var(--color-muted-foreground)]">
                 {editorDisplayMode === 'preview'
-                  ? '纯预览模式，专注查看 Markdown 渲染结果'
-                  : '分栏模式，左侧编辑正文，右侧实时预览'}
+                  ? t('learning.editor.previewModeDescription')
+                  : t('learning.editor.splitModeDescription')}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -96,7 +100,7 @@ export function LearningEditorPanel({
                     : 'text-[color:var(--color-muted-foreground)]'}
                   onClick={() => onEditorDisplayModeChange('split')}
                 >
-                  分栏
+                  {t('learning.editor.split')}
                 </Button>
                 <Button
                   type="button"
@@ -107,7 +111,7 @@ export function LearningEditorPanel({
                     : 'text-[color:var(--color-muted-foreground)]'}
                   onClick={() => onEditorDisplayModeChange('preview')}
                 >
-                  纯预览
+                  {t('learning.editor.previewOnly')}
                 </Button>
               </div>
               <Button
@@ -135,9 +139,9 @@ export function LearningEditorPanel({
             {editorDisplayMode === 'split' ? (
               <div className="flex min-h-0 flex-col border-r border-[color:var(--color-border)]">
                 <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                  <div className="text-sm font-semibold text-[color:var(--color-foreground)]">编辑</div>
+                  <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.editor.editTitle')}</div>
                   <div className="text-xs text-[color:var(--color-muted-foreground)]">
-                    Markdown 正文编辑区
+                    {t('learning.editor.editDescription')}
                   </div>
                 </div>
                 <div className="min-h-0 flex-1 px-5 py-4">
@@ -150,7 +154,7 @@ export function LearningEditorPanel({
                     onMouseUp={onEditorSelectionSync}
                     onContextMenu={onEditorContextMenu}
                     className="h-full min-h-[420px] w-full resize-none rounded-[22px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-4 py-4 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none"
-                    placeholder="开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式"
+                    placeholder={t('learning.editor.placeholder')}
                   />
                 </div>
               </div>
@@ -158,11 +162,11 @@ export function LearningEditorPanel({
 
             <div className="flex min-h-0 flex-col">
               <div className="border-b border-[color:var(--color-border)] px-5 py-4">
-                <div className="text-sm font-semibold text-[color:var(--color-foreground)]">预览</div>
+                <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.editor.previewTitle')}</div>
                 <div className="text-xs text-[color:var(--color-muted-foreground)]">
                   {editorDisplayMode === 'preview'
-                    ? '完整宽度显示 Markdown 渲染结果'
-                    : 'Markdown 渲染结果'}
+                    ? t('learning.editor.previewOnlyDescription')
+                    : t('learning.editor.previewDescription')}
                 </div>
               </div>
               <ScrollArea
@@ -190,7 +194,7 @@ export function LearningEditorPanel({
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">
-          先新建一篇学习记录
+          {t('learning.editor.emptyState')}
         </div>
       )}
     </Card>

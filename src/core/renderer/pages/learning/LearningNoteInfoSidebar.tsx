@@ -48,8 +48,8 @@ export function LearningNoteInfoSidebar({
         <div className="border-b border-[color:var(--color-border)] px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-[color:var(--color-foreground)]">笔记信息</div>
-              <div className="text-xs text-[color:var(--color-muted-foreground)]">frontmatter、状态和保存状态</div>
+              <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.info.title')}</div>
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('learning.info.subtitle')}</div>
             </div>
             <Button
               variant="outline"
@@ -59,7 +59,7 @@ export function LearningNoteInfoSidebar({
               disabled={!selectedNote}
             >
               <Pencil className="h-3.5 w-3.5" />
-              编辑信息
+              {t('learning.info.editInfo')}
             </Button>
           </div>
         </div>
@@ -67,17 +67,17 @@ export function LearningNoteInfoSidebar({
           <section className="space-y-2">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
               <NotebookPen className="h-3.5 w-3.5" />
-              标题
+              {t('learning.info.sectionTitle')}
             </div>
             <div className="text-sm font-medium text-[color:var(--color-foreground)]">
-              {editorTitle || selectedNote?.title || '未命名笔记'}
+              {editorTitle || selectedNote?.title || t('learning.editor.untitledNote')}
             </div>
           </section>
 
           <section className="space-y-2">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
               <FolderPlus className="h-3.5 w-3.5" />
-              分类
+              {t('learning.info.category')}
             </div>
             <div className="text-sm text-[color:var(--color-foreground)]">{selectedCategoryName}</div>
           </section>
@@ -85,7 +85,7 @@ export function LearningNoteInfoSidebar({
           <section className="space-y-2">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
               <Tags className="h-3.5 w-3.5" />
-              标签
+              {t('learning.info.tags')}
             </div>
             <div className="flex flex-wrap gap-2">
               {tags.length > 0 ? tags.map((tag) => (
@@ -96,26 +96,28 @@ export function LearningNoteInfoSidebar({
                   {tag}
                 </span>
               )) : (
-                <span className="text-sm text-[color:var(--color-muted-foreground)]">暂无标签</span>
+                <span className="text-sm text-[color:var(--color-muted-foreground)]">{t('learning.info.noTags')}</span>
               )}
             </div>
           </section>
 
           <section className="space-y-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">状态</div>
-            <div className="text-sm text-[color:var(--color-foreground)]">{editorStatus === 'organized' ? '已整理' : '草稿'}</div>
-          </section>
-
-          <section className="space-y-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">时间</div>
-            <div className="space-y-1 text-sm text-[color:var(--color-foreground)]">
-              <div>创建：{selectedNote ? formatDateTime(selectedNote.createdAt) : '--'}</div>
-              <div>更新：{selectedNote ? formatDateTime(selectedNote.updatedAt) : '--'}</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('learning.info.status')}</div>
+            <div className="text-sm text-[color:var(--color-foreground)]">
+              {editorStatus === 'organized' ? t('learning.info.statusOrganized') : t('learning.info.statusDraft')}
             </div>
           </section>
 
           <section className="space-y-2">
-            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">保存状态</div>
+            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('learning.info.dates')}</div>
+            <div className="space-y-1 text-sm text-[color:var(--color-foreground)]">
+              <div>{t('learning.info.createdAt', { value: selectedNote ? formatDateTime(selectedNote.createdAt) : '--' })}</div>
+              <div>{t('learning.info.updatedAt', { value: selectedNote ? formatDateTime(selectedNote.updatedAt) : '--' })}</div>
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('learning.info.saveState')}</div>
             <div className={`text-sm ${
               saveState === 'error'
                 ? 'text-[color:var(--color-destructive)]'
@@ -124,12 +126,12 @@ export function LearningNoteInfoSidebar({
                   : 'text-[color:var(--color-muted-foreground)]'
             }`}>
               {saveState === 'error'
-                ? (saveError || '保存失败')
+                ? (saveError || t('learning.info.saveFailed'))
                 : saveState === 'saved'
-                  ? '已保存'
+                  ? t('learning.info.saved')
                   : hasUnsavedChanges
-                    ? '有未保存修改'
-                    : '未修改'}
+                    ? t('learning.info.unsavedChanges')
+                    : t('learning.info.unchanged')}
             </div>
           </section>
 
@@ -141,7 +143,7 @@ export function LearningNoteInfoSidebar({
             disabled={!selectedNoteId}
           >
             <Trash2 className="h-4 w-4" />
-            删除笔记
+            {t('learning.info.deleteNote')}
           </Button>
         </div>
       </Card>

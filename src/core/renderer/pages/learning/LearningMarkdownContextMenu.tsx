@@ -24,6 +24,7 @@ import {
   Table2,
   Type,
 } from 'lucide-react'
+import { useI18n } from '../../i18n'
 import type { LearningMarkdownInsertRequest, LearningMarkdownTemplateKey } from './learningMarkdownTemplates'
 
 interface LearningMarkdownContextMenuProps {
@@ -49,86 +50,6 @@ type MenuCategory = {
   key: MenuCategoryKey
   label: string
   description: string
-}
-
-const MENU_CATEGORIES: MenuCategory[] = [
-  { key: 'basic', label: '基础格式', description: '标题、强调、代码' },
-  { key: 'structure', label: '结构内容', description: '列表、链接、引用' },
-  { key: 'learning', label: '学习模板', description: '总结、复习、知识点' },
-  { key: 'table', label: '表格', description: '选择行列插入' },
-]
-
-const LIST_COUNT_CHILDREN: MenuNode[] = Array.from({ length: 5 }, (_, index) => ({
-  id: `count-${index + 1}`,
-  label: `${index + 1} 项`,
-  description: '插入',
-  count: index + 1,
-}))
-
-const CATEGORY_NODES: Record<Exclude<MenuCategoryKey, 'table'>, MenuNode[]> = {
-  basic: [
-    {
-      id: 'heading',
-      label: '标题',
-      description: 'H1 / H2 / H3',
-      icon: <Heading1 className="h-3.5 w-3.5" />,
-      children: [
-        { id: 'heading1', label: '一级标题', description: '# Heading', icon: <Heading1 className="h-3.5 w-3.5" />, template: 'heading1' },
-        { id: 'heading2', label: '二级标题', description: '## Heading', icon: <Heading2 className="h-3.5 w-3.5" />, template: 'heading2' },
-        { id: 'heading3', label: '三级标题', description: '### Heading', icon: <Heading3 className="h-3.5 w-3.5" />, template: 'heading3' },
-      ],
-    },
-    { id: 'bold', label: '加粗', description: '**text**', icon: <Bold className="h-3.5 w-3.5" />, template: 'bold' },
-    { id: 'italic', label: '斜体', description: '*text*', icon: <Type className="h-3.5 w-3.5" />, template: 'italic' },
-    { id: 'strikethrough', label: '删除线', description: '~~text~~', icon: <Strikethrough className="h-3.5 w-3.5" />, template: 'strikethrough' },
-    { id: 'inlineCode', label: '行内代码', description: '`code`', icon: <Code className="h-3.5 w-3.5" />, template: 'inlineCode' },
-    { id: 'codeBlock', label: '代码块', description: '```', icon: <FileCode2 className="h-3.5 w-3.5" />, template: 'codeBlock' },
-  ],
-  structure: [
-    { id: 'blockquote', label: '引用', description: '> quote', icon: <Quote className="h-3.5 w-3.5" />, template: 'blockquote' },
-    {
-      id: 'list',
-      label: '列表',
-      description: '无序 / 有序 / 任务',
-      icon: <List className="h-3.5 w-3.5" />,
-      children: [
-        {
-          id: 'bulletList',
-          label: '无序列表',
-          description: '- item',
-          icon: <List className="h-3.5 w-3.5" />,
-          template: 'bulletList',
-          children: LIST_COUNT_CHILDREN,
-        },
-        {
-          id: 'orderedList',
-          label: '有序列表',
-          description: '1. item',
-          icon: <ListOrdered className="h-3.5 w-3.5" />,
-          template: 'orderedList',
-          children: LIST_COUNT_CHILDREN,
-        },
-        {
-          id: 'taskList',
-          label: '任务列表',
-          description: '- [ ] task',
-          icon: <ListChecks className="h-3.5 w-3.5" />,
-          template: 'taskList',
-          children: LIST_COUNT_CHILDREN,
-        },
-      ],
-    },
-    { id: 'link', label: '链接', description: '[text](url)', icon: <Link2 className="h-3.5 w-3.5" />, template: 'link' },
-    { id: 'image', label: '图片', description: '![alt](url)', icon: <Image className="h-3.5 w-3.5" />, template: 'image' },
-    { id: 'horizontalRule', label: '分隔线', description: '---', icon: <Minus className="h-3.5 w-3.5" />, template: 'horizontalRule' },
-  ],
-  learning: [
-    { id: 'knowledgePoints', label: '知识点', description: '概念 / 原理 / 示例', icon: <BookMarked className="h-3.5 w-3.5" />, template: 'knowledgePoints' },
-    { id: 'summarySection', label: '总结', description: '结论归纳', icon: <NotebookTabs className="h-3.5 w-3.5" />, template: 'summarySection' },
-    { id: 'reviewChecklist', label: '待复习', description: '任务清单', icon: <ListTodo className="h-3.5 w-3.5" />, template: 'reviewChecklist' },
-    { id: 'pitfallsSection', label: '易错点', description: '混淆与正确写法', icon: <CircleHelp className="h-3.5 w-3.5" />, template: 'pitfallsSection' },
-    { id: 'referencesSection', label: '参考资料', description: '文档与链接', icon: <FileText className="h-3.5 w-3.5" />, template: 'referencesSection' },
-  ],
 }
 
 function clampMenuPosition(x: number, y: number, width: number, height: number) {
@@ -241,11 +162,212 @@ export function LearningMarkdownContextMenu({
   onApply,
   onClose,
 }: LearningMarkdownContextMenuProps) {
+  const { t } = useI18n()
   const [activeCategory, setActiveCategory] = useState<MenuCategoryKey>('basic')
   const [activeLevel2Id, setActiveLevel2Id] = useState<string | null>(null)
   const [activeLevel3Id, setActiveLevel3Id] = useState<string | null>(null)
   const [hoverRows, setHoverRows] = useState(3)
   const [hoverColumns, setHoverColumns] = useState(3)
+
+  const menuCategories = useMemo<MenuCategory[]>(() => [
+    {
+      key: 'basic',
+      label: t('learning.markdown.menu.categories.basic.label'),
+      description: t('learning.markdown.menu.categories.basic.description'),
+    },
+    {
+      key: 'structure',
+      label: t('learning.markdown.menu.categories.structure.label'),
+      description: t('learning.markdown.menu.categories.structure.description'),
+    },
+    {
+      key: 'learning',
+      label: t('learning.markdown.menu.categories.learning.label'),
+      description: t('learning.markdown.menu.categories.learning.description'),
+    },
+    {
+      key: 'table',
+      label: t('learning.markdown.menu.categories.table.label'),
+      description: t('learning.markdown.menu.categories.table.description'),
+    },
+  ], [t])
+
+  const listCountChildren = useMemo<MenuNode[]>(() => (
+    Array.from({ length: 5 }, (_, index) => ({
+      id: `count-${index + 1}`,
+      label: t('learning.markdown.menu.listCountLabel', { count: index + 1 }),
+      description: t('learning.markdown.menu.insert'),
+      count: index + 1,
+    }))
+  ), [t])
+
+  const categoryNodesMap = useMemo<Record<Exclude<MenuCategoryKey, 'table'>, MenuNode[]>>(() => ({
+    basic: [
+      {
+        id: 'heading',
+        label: t('learning.markdown.menu.items.heading.label'),
+        description: t('learning.markdown.menu.items.heading.description'),
+        icon: <Heading1 className="h-3.5 w-3.5" />,
+        children: [
+          {
+            id: 'heading1',
+            label: t('learning.markdown.menu.items.heading1.label'),
+            description: t('learning.markdown.menu.items.heading1.description'),
+            icon: <Heading1 className="h-3.5 w-3.5" />,
+            template: 'heading1',
+          },
+          {
+            id: 'heading2',
+            label: t('learning.markdown.menu.items.heading2.label'),
+            description: t('learning.markdown.menu.items.heading2.description'),
+            icon: <Heading2 className="h-3.5 w-3.5" />,
+            template: 'heading2',
+          },
+          {
+            id: 'heading3',
+            label: t('learning.markdown.menu.items.heading3.label'),
+            description: t('learning.markdown.menu.items.heading3.description'),
+            icon: <Heading3 className="h-3.5 w-3.5" />,
+            template: 'heading3',
+          },
+        ],
+      },
+      {
+        id: 'bold',
+        label: t('learning.markdown.menu.items.bold.label'),
+        description: t('learning.markdown.menu.items.bold.description'),
+        icon: <Bold className="h-3.5 w-3.5" />,
+        template: 'bold',
+      },
+      {
+        id: 'italic',
+        label: t('learning.markdown.menu.items.italic.label'),
+        description: t('learning.markdown.menu.items.italic.description'),
+        icon: <Type className="h-3.5 w-3.5" />,
+        template: 'italic',
+      },
+      {
+        id: 'strikethrough',
+        label: t('learning.markdown.menu.items.strikethrough.label'),
+        description: t('learning.markdown.menu.items.strikethrough.description'),
+        icon: <Strikethrough className="h-3.5 w-3.5" />,
+        template: 'strikethrough',
+      },
+      {
+        id: 'inlineCode',
+        label: t('learning.markdown.menu.items.inlineCode.label'),
+        description: t('learning.markdown.menu.items.inlineCode.description'),
+        icon: <Code className="h-3.5 w-3.5" />,
+        template: 'inlineCode',
+      },
+      {
+        id: 'codeBlock',
+        label: t('learning.markdown.menu.items.codeBlock.label'),
+        description: t('learning.markdown.menu.items.codeBlock.description'),
+        icon: <FileCode2 className="h-3.5 w-3.5" />,
+        template: 'codeBlock',
+      },
+    ],
+    structure: [
+      {
+        id: 'blockquote',
+        label: t('learning.markdown.menu.items.blockquote.label'),
+        description: t('learning.markdown.menu.items.blockquote.description'),
+        icon: <Quote className="h-3.5 w-3.5" />,
+        template: 'blockquote',
+      },
+      {
+        id: 'list',
+        label: t('learning.markdown.menu.items.list.label'),
+        description: t('learning.markdown.menu.items.list.description'),
+        icon: <List className="h-3.5 w-3.5" />,
+        children: [
+          {
+            id: 'bulletList',
+            label: t('learning.markdown.menu.items.bulletList.label'),
+            description: t('learning.markdown.menu.items.bulletList.description'),
+            icon: <List className="h-3.5 w-3.5" />,
+            template: 'bulletList',
+            children: listCountChildren,
+          },
+          {
+            id: 'orderedList',
+            label: t('learning.markdown.menu.items.orderedList.label'),
+            description: t('learning.markdown.menu.items.orderedList.description'),
+            icon: <ListOrdered className="h-3.5 w-3.5" />,
+            template: 'orderedList',
+            children: listCountChildren,
+          },
+          {
+            id: 'taskList',
+            label: t('learning.markdown.menu.items.taskList.label'),
+            description: t('learning.markdown.menu.items.taskList.description'),
+            icon: <ListChecks className="h-3.5 w-3.5" />,
+            template: 'taskList',
+            children: listCountChildren,
+          },
+        ],
+      },
+      {
+        id: 'link',
+        label: t('learning.markdown.menu.items.link.label'),
+        description: t('learning.markdown.menu.items.link.description'),
+        icon: <Link2 className="h-3.5 w-3.5" />,
+        template: 'link',
+      },
+      {
+        id: 'image',
+        label: t('learning.markdown.menu.items.image.label'),
+        description: t('learning.markdown.menu.items.image.description'),
+        icon: <Image className="h-3.5 w-3.5" />,
+        template: 'image',
+      },
+      {
+        id: 'horizontalRule',
+        label: t('learning.markdown.menu.items.horizontalRule.label'),
+        description: t('learning.markdown.menu.items.horizontalRule.description'),
+        icon: <Minus className="h-3.5 w-3.5" />,
+        template: 'horizontalRule',
+      },
+    ],
+    learning: [
+      {
+        id: 'knowledgePoints',
+        label: t('learning.markdown.menu.items.knowledgePoints.label'),
+        description: t('learning.markdown.menu.items.knowledgePoints.description'),
+        icon: <BookMarked className="h-3.5 w-3.5" />,
+        template: 'knowledgePoints',
+      },
+      {
+        id: 'summarySection',
+        label: t('learning.markdown.menu.items.summarySection.label'),
+        description: t('learning.markdown.menu.items.summarySection.description'),
+        icon: <NotebookTabs className="h-3.5 w-3.5" />,
+        template: 'summarySection',
+      },
+      {
+        id: 'reviewChecklist',
+        label: t('learning.markdown.menu.items.reviewChecklist.label'),
+        description: t('learning.markdown.menu.items.reviewChecklist.description'),
+        icon: <ListTodo className="h-3.5 w-3.5" />,
+        template: 'reviewChecklist',
+      },
+      {
+        id: 'pitfallsSection',
+        label: t('learning.markdown.menu.items.pitfallsSection.label'),
+        description: t('learning.markdown.menu.items.pitfallsSection.description'),
+        icon: <CircleHelp className="h-3.5 w-3.5" />,
+        template: 'pitfallsSection',
+      },
+      {
+        id: 'referencesSection',
+        label: t('learning.markdown.menu.items.referencesSection.label'),
+        description: t('learning.markdown.menu.items.referencesSection.description'),
+        icon: <FileText className="h-3.5 w-3.5" />,
+        template: 'referencesSection',
+      },
+    ],
+  }), [listCountChildren, t])
 
   const menuMaxHeight = Math.min(560, Math.max(360, window.innerHeight - 24))
   const menuHeaderHeight = 58
@@ -253,7 +375,7 @@ export function LearningMarkdownContextMenu({
   const baseWidth = 520
   const position = clampMenuPosition(x, y, baseWidth, menuMaxHeight)
 
-  const categoryNodes = activeCategory === 'table' ? [] : CATEGORY_NODES[activeCategory]
+  const categoryNodes = activeCategory === 'table' ? [] : categoryNodesMap[activeCategory]
   const level2Node = useMemo(
     () => categoryNodes.find((item) => item.id === activeLevel2Id) ?? null,
     [activeLevel2Id, categoryNodes]
@@ -303,7 +425,7 @@ export function LearningMarkdownContextMenu({
     setActiveLevel3Id(null)
   }, [activeCategory])
 
-  const activeCategoryMeta = MENU_CATEGORIES.find((category) => category.key === activeCategory) ?? MENU_CATEGORIES[0]
+  const activeCategoryMeta = menuCategories.find((category) => category.key === activeCategory) ?? menuCategories[0]
 
   return createPortal(
     <>
@@ -321,9 +443,11 @@ export function LearningMarkdownContextMenu({
         onContextMenu={(event) => event.preventDefault()}
       >
         <div className="border-b border-[color:var(--color-border)]/80 px-4 py-3">
-          <div className="text-xs font-medium text-[color:var(--color-foreground)]">插入 Markdown 格式</div>
+          <div className="text-xs font-medium text-[color:var(--color-foreground)]">
+            {t('learning.markdown.menu.title')}
+          </div>
           <div className="mt-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-            只有需要时才会继续展开子菜单
+            {t('learning.markdown.menu.subtitle')}
           </div>
         </div>
 
@@ -332,7 +456,7 @@ export function LearningMarkdownContextMenu({
             className="border-r border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/40 p-2"
             style={{ height: menuBodyHeight }}
           >
-            {MENU_CATEGORIES.map((category) => {
+            {menuCategories.map((category) => {
               const active = category.key === activeCategory
               const Icon = category.key === 'table' ? Table2 : ChevronRight
               return (
@@ -367,13 +491,20 @@ export function LearningMarkdownContextMenu({
             {activeCategory === 'table' ? (
               <div className="h-[calc(100%-40px)] overflow-auto px-1">
                 <div className="mb-3 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  当前选择：{hoverRows} 行 × {hoverColumns} 列
+                  {t('learning.markdown.menu.table.selectionSummary', {
+                    rows: hoverRows,
+                    columns: hoverColumns,
+                  })}
                 </div>
                 <div className="grid grid-cols-6 gap-1.5">
                   {Array.from({ length: 36 }, (_, index) => {
                     const row = Math.floor(index / 6) + 1
                     const column = (index % 6) + 1
                     const active = row <= hoverRows && column <= hoverColumns
+                    const sizeLabel = t('learning.markdown.menu.table.cellAria', {
+                      rows: row,
+                      columns: column,
+                    })
                     return (
                       <button
                         key={`${row}-${column}`}
@@ -393,14 +524,14 @@ export function LearningMarkdownContextMenu({
                           setHoverColumns(column)
                         }}
                         onClick={() => handleTableApply(row, column)}
-                        aria-label={`${row} 行 ${column} 列`}
-                        title={`${row} 行 ${column} 列`}
+                        aria-label={sizeLabel}
+                        title={sizeLabel}
                       />
                     )
                   })}
                 </div>
                 <div className="mt-4 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/45 px-3 py-3 text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">
-                  第一行会作为表头，后续行会生成占位内容，插入后可直接改字。
+                  {t('learning.markdown.menu.table.help')}
                 </div>
               </div>
             ) : (

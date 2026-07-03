@@ -23,6 +23,7 @@ import type {
   GitSetFileStageRequest,
   GitSetFileStageResult,
 } from '../../../shared/types'
+import { translateMain, type MainLocale } from '../mainI18n'
 
 const GIT_DIFF_OUTPUT_LIMIT_BYTES = 512 * 1024
 const GIT_CONFLICT_STAGE_OUTPUT_LIMIT_BYTES = 512 * 1024
@@ -30,6 +31,7 @@ const GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES = 1024 * 1024
 
 type GitFileOperationDependencies = {
   runner: GitCommandRunner
+  getLocale: () => MainLocale
   readGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
 }
 
@@ -41,22 +43,31 @@ function firstNonEmptyLine(input: string): string | undefined {
   return lines.find(Boolean)
 }
 
-function buildEmptyGitDiffHint(filePath: string, file?: GitChangedFile, eolInfo?: string): string {
+function buildEmptyGitDiffHint(
+  filePath: string,
+  locale: MainLocale,
+  file?: GitChangedFile,
+  eolInfo?: string
+): string {
   const lines = [
-    '(no textual patch output)',
-    'Git 状态显示该文件存在变更，但当前 diff 为空。',
-    '这通常是 CRLF/LF 行尾规范化导致的显示差异。',
-    `文件: ${filePath}`,
+    translateMain(locale, 'git.noTextualPatchOutput'),
+    translateMain(locale, 'git.diffEmptyHint'),
+    translateMain(locale, 'git.diffEmptyCause'),
+    translateMain(locale, 'git.file', { value: filePath }),
   ]
 
   if (file) {
-    lines.push(`状态: scope=${file.scope}, index=${file.indexStatus}, worktree=${file.worktreeStatus}`)
+    lines.push(translateMain(locale, 'git.status', {
+      scope: file.scope,
+      index: file.indexStatus,
+      worktree: file.worktreeStatus,
+    }))
   }
   if (eolInfo) {
-    lines.push(`EOL: ${eolInfo}`)
+    lines.push(translateMain(locale, 'git.eol', { value: eolInfo }))
   }
 
-  lines.push('可执行: git ls-files --eol -- "<file>" 进一步确认。')
+  lines.push(translateMain(locale, 'git.confirmCommand'))
   return lines.join('\n')
 }
 
@@ -108,6 +119,7 @@ function hasConflictMarker(content: string): boolean {
 
 export function createGitFileOperations({
   runner,
+  getLocale,
   readGitRepositorySnapshot,
 }: GitFileOperationDependencies) {
   const { runGitCommand } = runner
@@ -620,7 +632,7 @@ export function createGitFileOperations({
 
     if (ok && !output && changedFile && changedFile.scope !== 'conflicted') {
       const eolInfo = await readGitFileEolInfo(resolvedRepoRoot, filePath)
-      output = buildEmptyGitDiffHint(filePath, changedFile, eolInfo)
+      output = buildEmptyGitDiffHint(filePath, getLocale(), changedFile, eolInfo)
     }
 
     return {

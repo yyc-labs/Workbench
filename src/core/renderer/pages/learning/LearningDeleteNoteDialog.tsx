@@ -1,6 +1,7 @@
 import type { LearningNote } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
+import { useI18n } from '../../i18n'
 
 type LearningDeleteNoteDialogProps = {
   isDeleting: boolean
@@ -17,6 +18,7 @@ export function LearningDeleteNoteDialog({
   onClose,
   onDelete,
 }: LearningDeleteNoteDialogProps) {
+  const { t } = useI18n()
   return (
     <ModalShell
       open={open}
@@ -25,15 +27,15 @@ export function LearningDeleteNoteDialog({
         onClose()
       }}
       widthClassName="max-w-[420px]"
-      ariaLabel="删除学习记录"
+      ariaLabel={t('learning.delete.modalAria')}
     >
       <div className="space-y-5">
         <div>
-          <div className="text-base font-semibold text-[color:var(--color-foreground)]">删除这篇学习记录？</div>
+          <div className="text-base font-semibold text-[color:var(--color-foreground)]">{t('learning.delete.title')}</div>
           <div className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-            删除后不可恢复。当前笔记：
+            {t('learning.delete.description')}
             <span className="ml-1 font-medium text-[color:var(--color-foreground)]">
-              {selectedNote?.title || '未命名笔记'}
+              {selectedNote?.title || t('learning.editor.untitledNote')}
             </span>
           </div>
         </div>
@@ -44,7 +46,7 @@ export function LearningDeleteNoteDialog({
             onClick={onClose}
             disabled={isDeleting}
           >
-            取消
+            {t('common.cancel')}
           </Button>
           <Button
             variant="destructive"
@@ -52,7 +54,7 @@ export function LearningDeleteNoteDialog({
             onClick={() => void onDelete()}
             loading={isDeleting}
           >
-            删除
+            {t('common.delete')}
           </Button>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   AiEnvironmentConfig,
   AiExecutionMode,
@@ -21,10 +21,8 @@ import {
   composeWslEntrypointPath,
   createRuntimeEntrypointConfigFromPath,
   createWslRuntimeEntrypointConfig,
-  dedupeRuntimeEntrypointConfigs,
   isLikelyWslEntrypointPath,
   normalizeRuntimeEntrypointConfig,
-  normalizeRuntimeEntrypointHistoryEntries,
   runtimeEntrypointConfigsToHistory,
   splitWslEntrypointPath,
 } from '../../../shared/runtimeEntrypoint'
@@ -32,6 +30,7 @@ import { SettingsAiRuntimeProfilesPanel } from './SettingsAiRuntimeProfilesPanel
 import { RuntimeDiagnosticsCard } from './runtime/RuntimeDiagnosticsCard'
 import type { RuntimeDiagnosticsState } from './runtime/settingsRuntimeShared'
 import { RuntimeTerminalInventory } from './runtime/RuntimeTerminalInventory'
+import { useRuntimeEntrypointHistoryState } from './runtime/useRuntimeEntrypointHistoryState'
 import { useTerminalProcessInventory } from './runtime/useTerminalProcessInventory'
 
 type WindowsAiRunningShell = 'pwsh' | 'cmd'
@@ -58,10 +57,6 @@ function supportsWindowsWslOption(capability: Capability | null): boolean {
   return capability?.hostPlatform === 'windows' && Boolean(capability.hasWsl || capability.hasWslInstalled)
 }
 
-function getRuntimeEntrypointHistoryKey(entry: RuntimeEntrypointConfig): string {
-  return `${entry.target}:${entry.path}`
-}
-
 function SettingsRuntimePanel({
   capability,
   aiEnvironment,
@@ -76,8 +71,6 @@ function SettingsRuntimePanel({
   runtimeEntries,
 }: RuntimePanelProps) {
   const { t } = useI18n()
-  const historyContainerRef = useRef<HTMLDivElement | null>(null)
-  const skipNextScriptPathSyncRef = useRef(false)
   const getDefaultMode = (): AiExecutionMode => {
     if (capability?.hostPlatform === 'windows') {
       return 'windows-native'
@@ -120,52 +113,12 @@ function SettingsRuntimePanel({
   const [wslPathSuffix, setWslPathSuffix] = useState(
     initialEntrypointConfig?.wslRelativePath ?? initialWslParts.relativePath
   )
-  const [scriptHistoryOpen, setScriptHistoryOpen] = useState(false)
-  const [runtimeEntrypointHistoryEntries, setRuntimeEntrypointHistoryEntries] = useState<RuntimeEntrypointConfig[]>(
-    aiEnvironment?.runtimeEntrypointHistoryEntries
-      ?? normalizeRuntimeEntrypointHistoryEntries(undefined, aiEnvironment?.runtimeEntrypointHistory, initialEntrypointConfig)
-      ?? []
-  )
   const [runtimePassProjectPath, setRuntimePassProjectPath] = useState(aiEnvironment?.runtimePassProjectPath ?? true)
-  const [historyMutationPending, setHistoryMutationPending] = useState(false)
-  const [historyPendingTarget, setHistoryPendingTarget] = useState<string | 'clear-all' | null>(null)
-  const [historyMutationError, setHistoryMutationError] = useState<string | null>(null)
-  const [historyDeleteConfirmTarget, setHistoryDeleteConfirmTarget] = useState<string | 'clear-all' | null>(null)
   const [diag, setDiag] = useState<RuntimeDiagnosticsState | null>(null)
   const [loading, setLoading] = useState(false)
   const [saveModeLoading, setSaveModeLoading] = useState(false)
   const [keepAliveEnabled, setKeepAliveEnabled] = useState(runtimeKeepAliveOnQuit)
   const [keepAliveSaving, setKeepAliveSaving] = useState(false)
-
-  useEffect(() => {
-    if (skipNextScriptPathSyncRef.current) {
-      skipNextScriptPathSyncRef.current = false
-      return
-    }
-    const nextConfig = normalizeRuntimeEntrypointConfig(aiEnvironment?.runtimeEntrypointConfig, runtimeLauncherScript)
-    const parts = splitWslEntrypointPath(nextConfig?.path)
-    setScriptPath(runtimeLauncherScript)
-    setScriptTarget(nextConfig?.target ?? 'native')
-    setWslPathPrefix(nextConfig?.wslPrefix ?? parts.prefix)
-    setWslPathSuffix(nextConfig?.wslRelativePath ?? parts.relativePath)
-  }, [
-    runtimeLauncherScript,
-    aiEnvironment?.runtimeEntrypointConfig?.target,
-    aiEnvironment?.runtimeEntrypointConfig?.wslPrefix,
-    aiEnvironment?.runtimeEntrypointConfig?.wslRelativePath,
-  ])
-
-  useEffect(() => {
-    setRuntimeEntrypointHistoryEntries(
-      aiEnvironment?.runtimeEntrypointHistoryEntries
-        ?? normalizeRuntimeEntrypointHistoryEntries(
-          undefined,
-          aiEnvironment?.runtimeEntrypointHistory,
-          aiEnvironment?.runtimeEntrypointConfig ?? aiEnvironment?.runtimeEntrypoint,
-        )
-        ?? []
-    )
-  }, [aiEnvironment?.runtimeEntrypointHistory, aiEnvironment?.runtimeEntrypointHistoryEntries, aiEnvironment?.runtimeEntrypoint, aiEnvironment?.runtimeEntrypointConfig])
 
   useEffect(() => {
     setExecutionMode(resolveMode(aiEnvironment?.mode))
@@ -182,27 +135,6 @@ function SettingsRuntimePanel({
   useEffect(() => {
     setKeepAliveEnabled(runtimeKeepAliveOnQuit)
   }, [runtimeKeepAliveOnQuit])
-
-  useEffect(() => {
-    if (!scriptHistoryOpen) return
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Node)) return
-      if (!historyContainerRef.current?.contains(target)) setScriptHistoryOpen(false)
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setScriptHistoryOpen(false)
-    }
-
-    window.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('keydown', handleEscape)
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('keydown', handleEscape)
-    }
-  }, [scriptHistoryOpen])
 
   const canShowWslPathOptions = capability?.hostPlatform === 'windows'
     && (supportsWindowsWslOption(capability) || scriptTarget === 'wsl')
@@ -225,12 +157,6 @@ function SettingsRuntimePanel({
     }
     return createRuntimeEntrypointConfigFromPath(normalizedNativeScriptPath, 'native')
   }, [normalizedNativeScriptPath, scriptTarget, wslPathPrefix, wslPathSuffix])
-  const mergedRuntimeEntrypointHistoryEntries = useMemo(() => {
-    return dedupeRuntimeEntrypointConfigs([
-      currentRuntimeEntrypointConfig,
-      ...runtimeEntrypointHistoryEntries,
-    ])
-  }, [currentRuntimeEntrypointConfig, runtimeEntrypointHistoryEntries])
   const buildAiEnvironmentPayload = (
     nextRuntimeEntrypointConfig: RuntimeEntrypointConfig | undefined,
     nextRuntimeEntrypointHistoryEntries: RuntimeEntrypointConfig[],
@@ -250,6 +176,48 @@ function SettingsRuntimePanel({
       : aiEnvironment?.runtimeEntrypointHistory,
     runtimePassProjectPath,
     aiCommitEntrypoint: aiEnvironment?.aiCommitEntrypoint,
+  })
+  const applyDraftConfig = useMemo(() => (config: RuntimeEntrypointConfig | undefined) => {
+    const parts = splitWslEntrypointPath(config?.path)
+    if (config?.target === 'wsl') {
+      setScriptTarget('wsl')
+      setWslPathPrefix(config.wslPrefix ?? parts.prefix)
+      setWslPathSuffix(config.wslRelativePath ?? parts.relativePath)
+      setScriptPath(config.path)
+      return
+    }
+
+    setScriptTarget(config?.target ?? 'native')
+    setScriptPath(config?.path ?? runtimeLauncherScript)
+    setWslPathPrefix(parts.prefix)
+    setWslPathSuffix(parts.relativePath)
+  }, [runtimeLauncherScript])
+  const {
+    handleConfirmRuntimeEntrypointHistoryDelete,
+    handleSelectRuntimeEntrypoint,
+    historyContainerRef,
+    historyDeleteConfirmIsClearAll,
+    historyDeleteConfirmTarget,
+    historyDeleteConfirmValue,
+    historyMutationError,
+    historyMutationPending,
+    historyPendingTarget,
+    mergedRuntimeEntrypointHistoryEntries,
+    openRuntimeEntrypointClearConfirm,
+    openRuntimeEntrypointDeleteConfirm,
+    runtimeEntrypointHistoryEntries,
+    scriptHistoryOpen,
+    selectedRuntimeEntrypointHistoryKey,
+    setHistoryDeleteConfirmTarget,
+    setScriptHistoryOpen,
+  } = useRuntimeEntrypointHistoryState({
+    aiEnvironment,
+    applyDraftConfig,
+    buildAiEnvironmentPayload,
+    currentRuntimeEntrypointConfig,
+    onAiEnvironmentSave,
+    runtimeLauncherScript,
+    t,
   })
 
   const runDiagnostics = async () => {
@@ -282,113 +250,6 @@ function SettingsRuntimePanel({
     } finally {
       setSaveModeLoading(false)
     }
-  }
-
-  const handleSelectRuntimeEntrypoint = (entry: RuntimeEntrypointConfig) => {
-    if (entry.target === 'wsl') {
-      const parts = splitWslEntrypointPath(entry.path)
-      setScriptTarget('wsl')
-      setWslPathPrefix(entry.wslPrefix ?? parts.prefix)
-      setWslPathSuffix(entry.wslRelativePath ?? parts.relativePath)
-      setScriptPath(entry.path)
-    } else {
-      setScriptTarget('native')
-      setScriptPath(entry.path)
-    }
-    setScriptHistoryOpen(false)
-  }
-
-  const handleDeleteRuntimeEntrypoint = (historyKey: string) => {
-    if (historyMutationPending) return
-    const persistedRuntimeEntrypointConfig = normalizeRuntimeEntrypointConfig(
-      aiEnvironment?.runtimeEntrypointConfig,
-      aiEnvironment?.runtimeEntrypoint,
-    )
-    const nextHistoryEntries = runtimeEntrypointHistoryEntries.filter((item) => getRuntimeEntrypointHistoryKey(item) !== historyKey)
-    const currentHistoryKey = currentRuntimeEntrypointConfig ? getRuntimeEntrypointHistoryKey(currentRuntimeEntrypointConfig) : null
-    const nextPersistedEntrypointConfig = currentHistoryKey === historyKey
-      ? nextHistoryEntries[0]
-      : persistedRuntimeEntrypointConfig
-    const nextDraftConfig = currentHistoryKey === historyKey
-      ? nextHistoryEntries[0]
-      : currentRuntimeEntrypointConfig
-    setHistoryMutationPending(true)
-    setHistoryPendingTarget(historyKey)
-    setHistoryMutationError(null)
-    skipNextScriptPathSyncRef.current = true
-    void onAiEnvironmentSave(buildAiEnvironmentPayload(nextPersistedEntrypointConfig, nextHistoryEntries))
-      .then(() => {
-        setRuntimeEntrypointHistoryEntries(nextHistoryEntries)
-        if (nextDraftConfig?.target === 'wsl') {
-          const parts = splitWslEntrypointPath(nextDraftConfig.path)
-          setScriptTarget('wsl')
-          setWslPathPrefix(nextDraftConfig.wslPrefix ?? parts.prefix)
-          setWslPathSuffix(nextDraftConfig.wslRelativePath ?? parts.relativePath)
-          setScriptPath(nextDraftConfig.path)
-        } else {
-          setScriptTarget(nextDraftConfig?.target ?? 'native')
-          setScriptPath(nextDraftConfig?.path ?? '')
-        }
-        setScriptHistoryOpen(false)
-        setHistoryDeleteConfirmTarget(null)
-      })
-      .catch((error) => {
-        skipNextScriptPathSyncRef.current = false
-        const message = error instanceof Error ? error.message : String(error)
-        setHistoryMutationError(message || t('settingsRuntime.scriptHistoryUpdateFailed'))
-      })
-      .finally(() => {
-        setHistoryMutationPending(false)
-        setHistoryPendingTarget(null)
-      })
-  }
-
-  const handleClearRuntimeEntrypointHistory = () => {
-    if (historyMutationPending || runtimeEntrypointHistoryEntries.length === 0) return
-    const persistedRuntimeEntrypointConfig = normalizeRuntimeEntrypointConfig(
-      aiEnvironment?.runtimeEntrypointConfig,
-      aiEnvironment?.runtimeEntrypoint,
-    )
-    setHistoryMutationPending(true)
-    setHistoryPendingTarget('clear-all')
-    setHistoryMutationError(null)
-    skipNextScriptPathSyncRef.current = true
-    void onAiEnvironmentSave(buildAiEnvironmentPayload(persistedRuntimeEntrypointConfig, []))
-      .then(() => {
-        setRuntimeEntrypointHistoryEntries([])
-        setScriptHistoryOpen(false)
-        setHistoryDeleteConfirmTarget(null)
-      })
-      .catch((error) => {
-        skipNextScriptPathSyncRef.current = false
-        const message = error instanceof Error ? error.message : String(error)
-        setHistoryMutationError(message || t('settingsRuntime.scriptHistoryClearFailed'))
-      })
-      .finally(() => {
-        setHistoryMutationPending(false)
-        setHistoryPendingTarget(null)
-      })
-  }
-
-  const openRuntimeEntrypointDeleteConfirm = (value: string) => {
-    if (historyMutationPending) return
-    setHistoryMutationError(null)
-    setHistoryDeleteConfirmTarget(value)
-  }
-
-  const openRuntimeEntrypointClearConfirm = () => {
-    if (historyMutationPending || runtimeEntrypointHistoryEntries.length === 0) return
-    setHistoryMutationError(null)
-    setHistoryDeleteConfirmTarget('clear-all')
-  }
-
-  const handleConfirmRuntimeEntrypointHistoryDelete = () => {
-    if (!historyDeleteConfirmTarget || historyMutationPending) return
-    if (historyDeleteConfirmTarget === 'clear-all') {
-      handleClearRuntimeEntrypointHistory()
-      return
-    }
-    handleDeleteRuntimeEntrypoint(historyDeleteConfirmTarget)
   }
 
   const handleKeepAliveToggle = async (enabled: boolean) => {
@@ -430,12 +291,6 @@ function SettingsRuntimePanel({
       description: t('settingsRuntime.windowsShellCmdDescription'),
     },
   ]
-  const historyDeleteConfirmIsClearAll = historyDeleteConfirmTarget === 'clear-all'
-  const historyDeleteConfirmValue = historyDeleteConfirmIsClearAll
-    ? t('settingsRuntime.clearAll')
-    : runtimeEntrypointHistoryEntries.find((item) => getRuntimeEntrypointHistoryKey(item) === historyDeleteConfirmTarget)?.path
-      ?? historyDeleteConfirmTarget
-      ?? ''
   const {
     inventoryLoading,
     stopAllLoading,
@@ -628,10 +483,8 @@ function SettingsRuntimePanel({
                       <div className="max-h-[260px] overflow-auto">
                         {mergedRuntimeEntrypointHistoryEntries.length > 0 ? (
                           mergedRuntimeEntrypointHistoryEntries.map((item) => {
-                            const selected = getRuntimeEntrypointHistoryKey(item) === (
-                              currentRuntimeEntrypointConfig ? getRuntimeEntrypointHistoryKey(currentRuntimeEntrypointConfig) : ''
-                            )
-                            const itemKey = getRuntimeEntrypointHistoryKey(item)
+                            const itemKey = `${item.target}:${item.path}`
+                            const selected = itemKey === selectedRuntimeEntrypointHistoryKey
                             return (
                               <div
                                 key={itemKey}
