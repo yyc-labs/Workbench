@@ -2146,6 +2146,7 @@ export class AiGatewayServer {
       }
       const toolCalls = upstreamToolCallAccumulator.snapshot()
       const validationReport = validateChatToolCalls(toolCalls, chatRequest.tools)
+      const normalizedToolCalls = validationReport.normalizedToolCalls
       this.applyToolValidationReport(trace, validationReport)
       this.recordToolValidation(provider, requestContext, chatRequest.model, true, validationReport)
       if (!validationReport.valid) {
@@ -2165,12 +2166,12 @@ export class AiGatewayServer {
         }))
         return
       }
-      if (toolCalls.length > 0) {
+      if (normalizedToolCalls.length > 0) {
         for (const mapped of chatStreamChunkToAnthropicEvents({
           choices: [
             {
               delta: {
-                tool_calls: toolCalls,
+                tool_calls: normalizedToolCalls,
               },
             },
           ],

@@ -248,6 +248,42 @@ export function writeInvalidChatToolCallStream(res) {
   res.end()
 }
 
+export function writeGrepCompatToolCallStream(res) {
+  res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_grep_compat',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [
+      {
+        index: 0,
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: 'call_grep_compat',
+              type: 'function',
+              function: {
+                name: 'Grep',
+                arguments: '{"pattern":"ToolPageRendererConfig","output_mode":"files_with_match"}',
+              },
+            },
+          ],
+        },
+        finish_reason: null,
+      },
+    ],
+  }))
+  res.write(encodeSseEvent(undefined, {
+    id: 'chatcmpl_tool_grep_compat',
+    object: 'chat.completion.chunk',
+    model: 'gpt-upstream',
+    choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+  }))
+  res.write('data: [DONE]\n\n')
+  res.end()
+}
+
 export function createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort, maxBodyBytes = 4096 }) {
   return normalizeAiGatewayConfig({
     enabled: true,

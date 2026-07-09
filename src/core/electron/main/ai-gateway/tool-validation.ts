@@ -13,9 +13,21 @@ import {
 export type ToolValidationReport = {
   valid: boolean
   entries: AiGatewayToolValidationEntry[]
+  normalizedToolCalls: ChatCompletionToolCall[]
 }
 
 type JsonSchema = JsonObject
+type NormalizedToolCallState = {
+  toolCall: ChatCompletionToolCall
+  rawArguments: string
+  parsedArguments?: unknown
+  parseError?: string
+  compatibilityWarnings: string[]
+}
+
+const LEGACY_STRING_ENUM_ALIASES: Record<string, string[]> = {
+  files_with_match: ['files_with_matches'],
+}
 
 function schemaName(tool: ChatCompletionTool): string {
   return tool.function.name.trim()
@@ -229,6 +241,115 @@ function parseToolArguments(rawArguments: string | undefined): {
   }
 }
 
+function enumStringValues(schema: JsonSchema): string[] {
+  return Array.isArray(schema.enum)
+    ? schema.enum.filter((item): item is string => typeof item === 'string')
+    : []
+}
+
+function resolveLegacyEnumAlias(value: unknown, schema: JsonSchema): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const declaredEnumValues = enumStringValues(schema)
+  if (declaredEnumValues.includes(value)) return undefined
+  const candidates = LEGACY_STRING_ENUM_ALIASES[value]
+  if (!candidates?.length) return undefined
+  return candidates.find((candidate) => declaredEnumValues.includes(candidate))
+}
+
+function normalizeArgumentsForSchema(
+  value: unknown,
+  schema: JsonSchema,
+  path: string[] = []
+): {
+  value: unknown
+  warnings: string[]
+} {
+  let normalizedValue = value
+  const warnings: string[] = []
+  const aliasedValue = resolveLegacyEnumAlias(normalizedValue, schema)
+  if (aliasedValue) {
+    warnings.push(
+      `${formatPath(path)} normalized from ${JSON.stringify(normalizedValue)} to ${JSON.stringify(aliasedValue)} for schema compatibility.`
+    )
+    normalizedValue = aliasedValue
+  }
+
+  if (Array.isArray(normalizedValue) && isJsonObject(schema.items)) {
+    let changed = false
+    const nextArray = normalizedValue.map((item, index) => {
+      const normalizedItem = normalizeArgumentsForSchema(item, schema.items as JsonSchema, [...path, String(index)])
+      warnings.push(...normalizedItem.warnings)
+      if (!isEqualJsonValue(normalizedItem.value, item)) changed = true
+      return normalizedItem.value
+    })
+    if (changed) normalizedValue = nextArray
+  }
+
+  if (isJsonObject(normalizedValue)) {
+    const properties = propertySchemas(schema)
+    const additionalProperties = isJsonObject(schema.additionalProperties)
+      ? schema.additionalProperties as JsonSchema
+      : undefined
+    let changed = false
+    const nextObject: JsonObject = { ...normalizedValue }
+    for (const [key, childValue] of Object.entries(normalizedValue)) {
+      const propertySchema = isJsonObject(properties[key])
+        ? properties[key] as JsonSchema
+        : additionalProperties
+      if (!propertySchema) continue
+      const normalizedChild = normalizeArgumentsForSchema(childValue, propertySchema, [...path, key])
+      warnings.push(...normalizedChild.warnings)
+      if (isEqualJsonValue(normalizedChild.value, childValue)) continue
+      nextObject[key] = normalizedChild.value
+      changed = true
+    }
+    if (changed) normalizedValue = nextObject
+  }
+
+  return {
+    value: normalizedValue,
+    warnings,
+  }
+}
+
+function normalizeToolCallArguments(
+  toolCall: ChatCompletionToolCall,
+  schema: JsonSchema | undefined
+): NormalizedToolCallState {
+  const rawArguments = toolCall.function?.arguments ?? ''
+  const parsed = parseToolArguments(rawArguments)
+  if (!parsed.ok) {
+    return {
+      toolCall,
+      rawArguments,
+      parseError: parsed.error,
+      compatibilityWarnings: [],
+    }
+  }
+
+  const normalized = isJsonObject(schema)
+    ? normalizeArgumentsForSchema(parsed.value, schema)
+    : { value: parsed.value, warnings: [] }
+  const normalizedArguments = normalized.warnings.length > 0
+    ? JSON.stringify(normalized.value)
+    : rawArguments
+
+  return {
+    toolCall: normalized.warnings.length > 0
+      ? {
+        ...toolCall,
+        function: {
+          ...toolCall.function,
+          arguments: normalizedArguments,
+        },
+      }
+      : toolCall,
+    rawArguments,
+    parsedArguments: normalized.value,
+    compatibilityWarnings: normalized.warnings,
+  }
+}
+
 export function validateChatToolCalls(
   toolCalls: ChatCompletionToolCall[],
   tools: ChatCompletionTool[] | undefined
@@ -239,15 +360,22 @@ export function validateChatToolCalls(
       .map((tool) => [schemaName(tool), tool.function.parameters] as const)
   )
   const hasDeclaredTools = schemasByName.size > 0
-
-  const entries = toolCalls.map((toolCall, fallbackIndex): AiGatewayToolValidationEntry => {
+  const normalizedStates = toolCalls.map((toolCall, fallbackIndex) => {
     const index = typeof toolCall.index === 'number' && Number.isInteger(toolCall.index)
       ? toolCall.index
       : fallbackIndex
     const name = toolCall.function?.name?.trim()
-    const rawArguments = toolCall.function?.arguments ?? ''
+    const schema = name ? schemasByName.get(name) : undefined
+    return {
+      index,
+      name,
+      normalized: normalizeToolCallArguments(toolCall, isJsonObject(schema) ? schema : undefined),
+    }
+  })
+
+  const entries = normalizedStates.map(({ index, name, normalized }): AiGatewayToolValidationEntry => {
     const validationErrors: string[] = []
-    let parsedArguments: unknown
+    let parsedArguments = normalized.parsedArguments
 
     if (!name) {
       validationErrors.push('Tool call is missing function.name.')
@@ -255,29 +383,30 @@ export function validateChatToolCalls(
       validationErrors.push(`Tool call "${name}" was not declared in request.tools.`)
     }
 
-    const parsed = parseToolArguments(rawArguments)
-    if (!parsed.ok) {
-      validationErrors.push(parsed.error)
+    if (normalized.parseError) {
+      validationErrors.push(normalized.parseError)
     } else {
-      parsedArguments = parsed.value
       const schema = name ? schemasByName.get(name) : undefined
-      if (isJsonObject(schema)) {
-        validationErrors.push(...validateSchema(parsed.value, schema, []))
+      if (isJsonObject(schema) && typeof parsedArguments !== 'undefined') {
+        validationErrors.push(...validateSchema(parsedArguments, schema, []))
       }
     }
 
     const schemaValid = validationErrors.length === 0
     return {
       index,
-      id: toolCall.id?.trim() || undefined,
+      id: normalized.toolCall.id?.trim() || undefined,
       name: name || undefined,
-      rawArguments,
+      rawArguments: normalized.rawArguments,
       parsedArguments,
       schemaValid,
       validationErrors,
-      diagnosticWarnings: typeof parsedArguments === 'undefined'
-        ? undefined
-        : collectDiagnosticWarnings(parsedArguments),
+      diagnosticWarnings: [
+        ...normalized.compatibilityWarnings,
+        ...(typeof parsedArguments === 'undefined'
+          ? []
+          : collectDiagnosticWarnings(parsedArguments)),
+      ],
       forwarded: schemaValid,
     }
   })
@@ -285,6 +414,7 @@ export function validateChatToolCalls(
   return {
     valid: entries.every((entry) => entry.schemaValid),
     entries,
+    normalizedToolCalls: normalizedStates.map(({ normalized }) => normalized.toolCall),
   }
 }
 

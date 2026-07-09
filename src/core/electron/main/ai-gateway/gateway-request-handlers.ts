@@ -223,7 +223,23 @@ export async function handleAnthropicMessagesRoute(
       deps.applyToolValidationReport(trace, validationReport)
       deps.recordToolValidation(provider, requestContext, chatRequest.model, false, validationReport)
       assertToolValidationPassed(validationReport)
-      const clientPayload = chatCompletionToAnthropicMessage(chatResponse, chatRequest.model)
+      const normalizedChatResponse = validationReport.normalizedToolCalls.length > 0
+        ? {
+          ...chatResponse,
+          choices: chatResponse.choices?.map((choice, index) => (
+            index !== 0 || !choice.message
+              ? choice
+              : {
+                ...choice,
+                message: {
+                  ...choice.message,
+                  tool_calls: validationReport.normalizedToolCalls,
+                },
+              }
+          )),
+        }
+        : chatResponse
+      const clientPayload = chatCompletionToAnthropicMessage(normalizedChatResponse, chatRequest.model)
       trace.clientResponse = buildResponseSnapshot({
         statusCode: 200,
         headers: { 'content-type': 'application/json; charset=utf-8' },

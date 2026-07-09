@@ -2,7 +2,7 @@
 {
   "variables": {
     "use_ccache_win": 0,
-    "clang": 1,
+    "clang": 0,
     "llvm_version": "19.1.5",
     "nasm_version": "3.01",
     "node_prefix": "\\usr\\local",
@@ -504,17 +504,16 @@
     "python": "C:\\Users\\yyc20\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
     "standalone_static_library": 1,
     "msbuild_path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe",
-    "cache": "C:\\Users\\yyc20\\AppData\\Local\\npm-cache",
-    "call": "node-gyp configure",
-    "globalconfig": "C:\\nvm4w\\nodejs\\etc\\npmrc",
-    "global_prefix": "C:\\nvm4w\\nodejs",
-    "init_module": "C:\\Users\\yyc20\\.npm-init.js",
-    "local_prefix": "D:\\tools\\ide-electron",
-    "node_gyp": "C:\\Users\\yyc20\\AppData\\Local\\nvm\\v25.8.2\\node_modules\\npm\\node_modules\\node-gyp\\bin\\node-gyp.js",
-    "npm_version": "11.11.1",
-    "prefix": "C:\\nvm4w\\nodejs",
+    "user_agent": "npm/11.11.1 node/v25.8.2 win32 x64 workspaces/false",
     "userconfig": "C:\\Users\\yyc20\\.npmrc",
-    "user_agent": "npm/11.11.1 node/v25.8.2 win32 x64 workspaces/false"
+    "prefix": "C:\\nvm4w\\nodejs",
+    "npm_version": "11.11.1",
+    "node_gyp": "C:\\Users\\yyc20\\AppData\\Local\\nvm\\v25.8.2\\node_modules\\npm\\node_modules\\node-gyp\\bin\\node-gyp.js",
+    "local_prefix": "D:\\tools\\ide-electron",
+    "init_module": "C:\\Users\\yyc20\\.npm-init.js",
+    "global_prefix": "C:\\nvm4w\\nodejs",
+    "globalconfig": "C:\\nvm4w\\nodejs\\etc\\npmrc",
+    "cache": "C:\\Users\\yyc20\\AppData\\Local\\npm-cache"
   },
   "target_defaults": {
     "include_dirs": [],

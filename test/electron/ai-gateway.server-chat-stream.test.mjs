@@ -10,6 +10,7 @@ import {
   readRequestBody,
   writeChatCompletionStream,
   writeDelayedChatCompletionStream,
+  writeGrepCompatToolCallStream,
   writeChatToolCallStream,
   writeInvalidChatToolCallStream,
 } from '../helpers/ai-gateway-test-helpers.mjs'
@@ -268,4 +269,73 @@ test('rejects invalid Chat tool stream arguments before forwarding Anthropic too
     detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].function.arguments,
     '{"file_path":"void","content":""}'
   )
+})
+
+test('normalizes compatible Chat tool stream enum aliases before forwarding Anthropic tool_use', async (t) => {
+  const { createServer } = await import('node:http')
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    writeGrepCompatToolCallStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'find config' }] }],
+      tools: [
+        {
+          name: 'Grep',
+          input_schema: {
+            type: 'object',
+            properties: {
+              pattern: { type: 'string' },
+              output_mode: {
+                type: 'string',
+                enum: ['content', 'files_with_matches', 'count'],
+              },
+            },
+            required: ['pattern', 'output_mode'],
+            additionalProperties: false,
+          },
+        },
+      ],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /files_with_matches/)
+  assert.doesNotMatch(bodyText, /tool_validation_failed/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.summary.route, 'anthropic')
+  assert.equal(detail.protocolDiagnostics.toolValidation[0].forwarded, true)
+  assert.match(
+    detail.protocolDiagnostics.toolValidation[0].diagnosticWarnings.join('\n'),
+    /\$\.output_mode normalized from "files_with_match" to "files_with_matches"/
+  )
+  assert.equal(
+    detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].function.arguments,
+    '{"pattern":"ToolPageRendererConfig","output_mode":"files_with_match"}'
+  )
+  assert.deepEqual(detail.stream.merged.clientPayload.parsed.content[0].input, {
+    pattern: 'ToolPageRendererConfig',
+    output_mode: 'files_with_matches',
+  })
 })
