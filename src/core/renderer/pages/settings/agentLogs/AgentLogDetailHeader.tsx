@@ -161,6 +161,9 @@ export function AgentLogDetailHeader({
         {detail.source === 'ai-gateway' && detail.stream?.enabled ? (
           <DetailBadge tone="warn">{t('settings.agentLogs.stream')}</DetailBadge>
         ) : null}
+        {detail.source === 'ai-gateway' && typeof detail.meta.attempt === 'number' && typeof detail.meta.maxAttempts === 'number' ? (
+          <DetailBadge>{t('settings.agentLogs.retryAttempt')}: {detail.meta.attempt} / {detail.meta.maxAttempts}</DetailBadge>
+        ) : null}
         {detail.summary.truncated ? (
           <DetailBadge tone="warn">{t('settings.agentLogs.truncated')}</DetailBadge>
         ) : null}

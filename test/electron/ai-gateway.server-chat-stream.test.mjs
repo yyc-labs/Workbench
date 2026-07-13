@@ -145,6 +145,12 @@ test('retries upstream chat stream handshake after a configured timeout delay', 
   assert.match(bodyText, /\[DONE\]/)
   assert.equal(requestCount, 2)
   assert.ok(Date.now() - startedAt >= 1025)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.meta.attempt, 2)
+  assert.equal(detail.meta.maxAttempts, 2)
+  assert.equal(detail.summary.attempt, 2)
+  assert.equal(detail.summary.maxAttempts, 2)
 })
 
 test('records merged stream text for Chat to Anthropic streams', async (t) => {

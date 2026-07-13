@@ -44,10 +44,10 @@ function normalizeTimeout(value: unknown): number | undefined {
   return Math.max(1000, Math.min(300000, Math.trunc(timeout)))
 }
 
-function normalizeRetryCount(value: unknown): number | undefined {
+function normalizeRetryCount(value: unknown, max: number): number | undefined {
   const retryCount = Number(value)
   if (!Number.isFinite(retryCount) || retryCount < 0) return undefined
-  return Math.max(0, Math.min(10, Math.trunc(retryCount)))
+  return Math.max(0, Math.min(max, Math.trunc(retryCount)))
 }
 
 function normalizeRetryDelay(value: unknown): number | undefined {
@@ -214,9 +214,9 @@ function normalizeProvider(value: unknown, index: number): AiGatewayProviderConf
     capabilities: normalizeProviderCapabilities(raw.capabilities, protocol),
     enabled: normalizeBoolean(raw.enabled, true),
     timeoutMs: normalizeTimeout(raw.timeoutMs),
-    streamRetryCount: normalizeRetryCount(raw.streamRetryCount),
+    streamRetryCount: normalizeRetryCount(raw.streamRetryCount, 30),
     streamRetryDelayMs: normalizeRetryDelay(raw.streamRetryDelayMs),
-    timeoutRetryCount: normalizeRetryCount(raw.timeoutRetryCount),
+    timeoutRetryCount: normalizeRetryCount(raw.timeoutRetryCount, 10),
     timeoutRetryDelayMs: normalizeRetryDelay(raw.timeoutRetryDelayMs),
   }
 }

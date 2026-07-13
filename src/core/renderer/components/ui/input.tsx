@@ -4,10 +4,19 @@ import { Eye, EyeOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
-  ({ className, type, disabled, ...props }, ref) => {
+  ({ className, type, disabled, onWheel, ...props }, ref) => {
     const isPasswordField = type === "password"
+    const isNumberField = type === "number"
     const [passwordVisible, setPasswordVisible] = React.useState(false)
     const resolvedType = isPasswordField ? (passwordVisible ? "text" : "password") : type
+    const handleNumberWheel = (event: React.WheelEvent<HTMLInputElement>) => {
+      if (isNumberField && !event.ctrlKey) {
+        event.preventDefault()
+        event.stopPropagation()
+        event.currentTarget.blur()
+      }
+      onWheel?.(event)
+    }
 
     if (!isPasswordField) {
       return (
@@ -19,6 +28,8 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           )}
           ref={ref}
           disabled={disabled}
+          onWheelCapture={isNumberField ? handleNumberWheel : undefined}
+          onWheel={isNumberField ? undefined : onWheel}
           {...props}
         />
       )

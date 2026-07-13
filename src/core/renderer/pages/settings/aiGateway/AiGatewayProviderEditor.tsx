@@ -285,7 +285,7 @@ export function AiGatewayProviderEditor({
                     <Input
                       type="number"
                       min={0}
-                      max={10}
+                      max={30}
                       value={activeProvider.streamRetryCount ?? ''}
                       onChange={(event) => onProviderChange('streamRetryCount', Number(event.target.value))}
                       disabled={inputDisabled}

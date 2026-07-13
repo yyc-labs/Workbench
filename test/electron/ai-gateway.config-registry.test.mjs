@@ -50,6 +50,19 @@ test('normalizes timeout retry settings independently from stream retry settings
   assert.equal(config.providers[0].streamRetryDelayMs, 700)
   assert.equal(config.providers[0].timeoutRetryCount, 1)
   assert.equal(config.providers[0].timeoutRetryDelayMs, 2400)
+
+  const cappedConfig = normalizeAiGatewayConfig({
+    providers: [{
+      id: 'provider-b',
+      name: 'Provider B',
+      baseUrl: 'https://b.example/v1',
+      protocol: 'openai_chat',
+      streamRetryCount: 99,
+      timeoutRetryCount: 99,
+    }],
+  })
+  assert.equal(cappedConfig.providers[0].streamRetryCount, 30)
+  assert.equal(cappedConfig.providers[0].timeoutRetryCount, 10)
 })
 
 test('keeps claude profile routes scoped to /profiles/<profileId>', () => {

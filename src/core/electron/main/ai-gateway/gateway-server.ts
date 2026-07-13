@@ -639,6 +639,8 @@ export class AiGatewayServer {
       contentType: entry.contentType,
       errorCode: entry.errorCode,
       eventCount: entry.eventCount,
+      attempt: entry.attempt,
+      maxAttempts: entry.maxAttempts,
       bodyPreview: entry.bodyPreview,
     })
   }
@@ -1746,6 +1748,10 @@ export class AiGatewayServer {
     let lastErrorMessage = ''
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (trace) {
+        trace.meta.attempt = attempt
+        trace.meta.maxAttempts = maxAttempts
+      }
       const controller = new AbortController()
       const timeoutMs = provider.timeoutMs ?? 60000
       const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1835,6 +1841,8 @@ export class AiGatewayServer {
             statusCode: response.status,
             contentType,
             bodyPreview: responseText,
+            attempt,
+            maxAttempts,
           }, buildUpstreamLogDetails(provider, chatRequest, {
             status: response.status,
             contentType,
@@ -2004,6 +2012,8 @@ export class AiGatewayServer {
             model: chatRequest.model,
             stream: true,
             bodyPreview: lastErrorMessage,
+            attempt,
+            maxAttempts,
           }, buildUpstreamLogDetails(provider, chatRequest, {
             error: errorMessage,
             attempt,
@@ -2046,6 +2056,8 @@ export class AiGatewayServer {
           model: chatRequest.model,
           stream: true,
           bodyPreview: errorMessage,
+          attempt,
+          maxAttempts,
         }, buildUpstreamLogDetails(provider, chatRequest, {
           error: errorMessage,
           attempt,

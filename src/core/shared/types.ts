@@ -359,6 +359,8 @@ export interface AiGatewayLogEntry {
   authToken?: string
   errorCode?: string
   eventCount?: number
+  attempt?: number
+  maxAttempts?: number
   bodyPreview?: string
 }
 
@@ -577,6 +579,8 @@ export interface AgentLogSummary {
   durationMs?: number
   stream?: boolean
   eventCount?: number
+  attempt?: number
+  maxAttempts?: number
   truncated?: boolean
   cwd?: string
   toolName?: string
@@ -638,6 +642,8 @@ export interface AiGatewayLogDetail {
     durationMs?: number
     authSource?: string
     authToken?: string
+    attempt?: number
+    maxAttempts?: number
   }
   ingressRequest?: StructuredHttpRequestSnapshot
   normalizedRequest?: StructuredJsonSnapshot

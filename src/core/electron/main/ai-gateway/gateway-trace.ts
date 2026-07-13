@@ -172,6 +172,8 @@ export function buildGatewayTraceDetail(trace: GatewayRequestTrace): AiGatewayLo
       durationMs,
       stream: trace.stream?.requested,
       eventCount: trace.stream?.upstreamEventCount,
+      attempt: trace.meta.attempt,
+      maxAttempts: trace.meta.maxAttempts,
       truncated: hasStructuredTruncation({
         ingressRequest: trace.ingressRequest,
         normalizedRequest: trace.normalizedRequest,
