@@ -32,6 +32,26 @@ test('normalizes provider capability defaults by upstream protocol', () => {
   assert.equal(config.providers[1].capabilities.supportsResponsesInputItems, true)
 })
 
+test('normalizes timeout retry settings independently from stream retry settings', () => {
+  const config = normalizeAiGatewayConfig({
+    providers: [{
+      id: 'provider-a',
+      name: 'Provider A',
+      baseUrl: 'https://a.example/v1',
+      protocol: 'openai_chat',
+      streamRetryCount: 4,
+      streamRetryDelayMs: 700,
+      timeoutRetryCount: 1,
+      timeoutRetryDelayMs: 2400,
+    }],
+  })
+
+  assert.equal(config.providers[0].streamRetryCount, 4)
+  assert.equal(config.providers[0].streamRetryDelayMs, 700)
+  assert.equal(config.providers[0].timeoutRetryCount, 1)
+  assert.equal(config.providers[0].timeoutRetryDelayMs, 2400)
+})
+
 test('keeps claude profile routes scoped to /profiles/<profileId>', () => {
   const config = normalizeAiGatewayConfig({
     enabled: true,

@@ -216,6 +216,8 @@ function normalizeProvider(value: unknown, index: number): AiGatewayProviderConf
     timeoutMs: normalizeTimeout(raw.timeoutMs),
     streamRetryCount: normalizeRetryCount(raw.streamRetryCount),
     streamRetryDelayMs: normalizeRetryDelay(raw.streamRetryDelayMs),
+    timeoutRetryCount: normalizeRetryCount(raw.timeoutRetryCount),
+    timeoutRetryDelayMs: normalizeRetryDelay(raw.timeoutRetryDelayMs),
   }
 }
 
@@ -232,6 +234,8 @@ function defaultProvider(): AiGatewayProviderConfig {
     timeoutMs: 60000,
     streamRetryCount: 0,
     streamRetryDelayMs: 500,
+    timeoutRetryCount: 0,
+    timeoutRetryDelayMs: 500,
   }
 }
 

@@ -61,6 +61,8 @@ export function providerToDraft(provider: AiGatewayProviderConfig): ProviderDraf
     ...provider,
     streamRetryCount: provider.streamRetryCount ?? 0,
     streamRetryDelayMs: provider.streamRetryDelayMs ?? 500,
+    timeoutRetryCount: provider.timeoutRetryCount ?? 0,
+    timeoutRetryDelayMs: provider.timeoutRetryDelayMs ?? 500,
     draftId: `${provider.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     modelMapText: modelMapToText(provider.modelMap),
   }
@@ -80,6 +82,8 @@ export function draftToProvider(draft: ProviderDraft): AiGatewayProviderConfig {
     timeoutMs: Number.isFinite(Number(draft.timeoutMs)) ? Number(draft.timeoutMs) : undefined,
     streamRetryCount: Number.isFinite(Number(draft.streamRetryCount)) ? Number(draft.streamRetryCount) : undefined,
     streamRetryDelayMs: Number.isFinite(Number(draft.streamRetryDelayMs)) ? Number(draft.streamRetryDelayMs) : undefined,
+    timeoutRetryCount: Number.isFinite(Number(draft.timeoutRetryCount)) ? Number(draft.timeoutRetryCount) : undefined,
+    timeoutRetryDelayMs: Number.isFinite(Number(draft.timeoutRetryDelayMs)) ? Number(draft.timeoutRetryDelayMs) : undefined,
   }
 }
 
@@ -99,6 +103,8 @@ export function createNewProviderDraft(index: number): ProviderDraft {
     timeoutMs: 60000,
     streamRetryCount: 0,
     streamRetryDelayMs: 500,
+    timeoutRetryCount: 0,
+    timeoutRetryDelayMs: 500,
   }
 }
 

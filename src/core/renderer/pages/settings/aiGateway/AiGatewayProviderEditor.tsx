@@ -304,6 +304,30 @@ export function AiGatewayProviderEditor({
                     />
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryDelayMsHint')}</p>
                   </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryCount')}</p>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={activeProvider.timeoutRetryCount ?? ''}
+                      onChange={(event) => onProviderChange('timeoutRetryCount', Number(event.target.value))}
+                      disabled={inputDisabled}
+                    />
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryCountHint')}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryDelayMs')}</p>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10000}
+                      value={activeProvider.timeoutRetryDelayMs ?? ''}
+                      onChange={(event) => onProviderChange('timeoutRetryDelayMs', Number(event.target.value))}
+                      disabled={inputDisabled}
+                    />
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryDelayMsHint')}</p>
+                  </div>
                   <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
                     <div>
                       <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>

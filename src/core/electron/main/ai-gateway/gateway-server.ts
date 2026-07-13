@@ -1735,9 +1735,13 @@ export class AiGatewayServer {
     trace?: GatewayRequestTrace,
     apiTokenOverride = ''
   ): Promise<Response> {
-    const maxRetries = Math.max(0, provider.streamRetryCount ?? 0)
-    const retryDelayMs = Math.max(0, provider.streamRetryDelayMs ?? 0)
-    const maxAttempts = maxRetries + 1
+    const maxStreamRetries = Math.max(0, provider.streamRetryCount ?? 0)
+    const streamRetryDelayMs = Math.max(0, provider.streamRetryDelayMs ?? 0)
+    const maxTimeoutRetries = Math.max(0, provider.timeoutRetryCount ?? 0)
+    const timeoutRetryDelayMs = Math.max(0, provider.timeoutRetryDelayMs ?? 0)
+    const maxAttempts = maxStreamRetries + maxTimeoutRetries + 1
+    let streamRetryAttempts = 0
+    let timeoutRetryAttempts = 0
     const upstreamUrl = toChatCompletionsUrl(provider.baseUrl)
     let lastErrorMessage = ''
 
@@ -1784,13 +1788,17 @@ export class AiGatewayServer {
             authSource: auth.source,
             hasAuthToken: Boolean(auth.token),
             timeoutMs,
-            streamRetryCount: maxRetries,
-            streamRetryDelayMs: retryDelayMs,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
+            timeoutRetryCount: maxTimeoutRetries,
+            timeoutRetryDelayMs,
           }))
           debugAiGateway('Forwarding request to upstream chat/completions', buildUpstreamLogDetails(provider, chatRequest, {
             timeoutMs,
-            streamRetryCount: maxRetries,
-            streamRetryDelayMs: retryDelayMs,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
+            timeoutRetryCount: maxTimeoutRetries,
+            timeoutRetryDelayMs,
           }))
         }
 
@@ -1802,7 +1810,8 @@ export class AiGatewayServer {
         })
         const contentType = response.headers.get('content-type') || ''
 
-        if (!response.ok && response.status >= 500 && attempt < maxAttempts) {
+        if (!response.ok && response.status >= 500 && streamRetryAttempts < maxStreamRetries) {
+          streamRetryAttempts += 1
           const responseText = await readResponseText(response)
           lastErrorMessage = responseText || `Upstream chat/completions stream failed with status ${response.status}.`
           if (trace) {
@@ -1832,18 +1841,18 @@ export class AiGatewayServer {
             bodyPreview: responseText,
             attempt,
             maxAttempts,
-            streamRetryCount: maxRetries,
+            streamRetryCount: maxStreamRetries,
           }))
           debugAiGateway('Retrying upstream chat/completions stream after retryable failure', buildUpstreamLogDetails(provider, chatRequest, {
             status: response.status,
             contentType,
             attempt,
             maxAttempts,
-            streamRetryCount: maxRetries,
-            streamRetryDelayMs: retryDelayMs,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
           }))
-          if (retryDelayMs > 0) {
-            await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+          if (streamRetryDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, streamRetryDelayMs))
           }
           continue
         }
@@ -1963,21 +1972,32 @@ export class AiGatewayServer {
             contentType,
             attempt,
             maxAttempts,
-            streamRetryCount: maxRetries,
-            streamRetryDelayMs: retryDelayMs,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
           }))
         }
         return response
       } catch (error) {
-        if (isAbortError(error)) {
-          throw new Error(`Upstream request timed out after ${timeoutMs}ms.`)
-        }
-        if (attempt < maxAttempts) {
-          lastErrorMessage = error instanceof Error ? error.message : String(error)
+        const timedOut = isAbortError(error)
+        const errorMessage = timedOut
+          ? `Upstream request timed out after ${timeoutMs}ms.`
+          : error instanceof Error ? error.message : String(error)
+        const canRetry = timedOut
+          ? timeoutRetryAttempts < maxTimeoutRetries
+          : streamRetryAttempts < maxStreamRetries
+        if (canRetry) {
+          if (timedOut) {
+            timeoutRetryAttempts += 1
+          } else {
+            streamRetryAttempts += 1
+          }
+          lastErrorMessage = errorMessage
           this.recordGatewayLog({
             ...requestContext,
             level: 'warn',
-            message: 'Upstream chat/completions stream failed and will be retried',
+            message: timedOut
+              ? 'Upstream chat/completions stream timed out and will be retried'
+              : 'Upstream chat/completions stream failed and will be retried',
             providerId: provider.id,
             providerName: provider.name,
             upstreamUrl,
@@ -1985,17 +2005,37 @@ export class AiGatewayServer {
             stream: true,
             bodyPreview: lastErrorMessage,
           }, buildUpstreamLogDetails(provider, chatRequest, {
-            error: lastErrorMessage,
+            error: errorMessage,
             attempt,
             maxAttempts,
-            streamRetryCount: maxRetries,
-            streamRetryDelayMs: retryDelayMs,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
+            timeoutRetryCount: maxTimeoutRetries,
+            timeoutRetryDelayMs,
+            timeoutMs,
           }))
+          debugAiGateway(
+            timedOut
+              ? 'Retrying upstream chat/completions stream after timeout'
+              : 'Retrying upstream chat/completions stream after failure',
+            buildUpstreamLogDetails(provider, chatRequest, {
+              error: errorMessage,
+              attempt,
+              maxAttempts,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+              timeoutRetryCount: maxTimeoutRetries,
+              timeoutRetryDelayMs,
+              timeoutMs,
+            }),
+          )
+          const retryDelayMs = timedOut ? timeoutRetryDelayMs : streamRetryDelayMs
           if (retryDelayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
           }
           continue
         }
+        const finalError = timedOut ? new Error(errorMessage) : error
         this.recordGatewayLog({
           ...requestContext,
           level: 'error',
@@ -2005,15 +2045,18 @@ export class AiGatewayServer {
           upstreamUrl,
           model: chatRequest.model,
           stream: true,
-          bodyPreview: error instanceof Error ? error.message : String(error),
+          bodyPreview: errorMessage,
         }, buildUpstreamLogDetails(provider, chatRequest, {
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
           attempt,
           maxAttempts,
-          streamRetryCount: maxRetries,
-          streamRetryDelayMs: retryDelayMs,
+          streamRetryCount: maxStreamRetries,
+          streamRetryDelayMs,
+          timeoutRetryCount: maxTimeoutRetries,
+          timeoutRetryDelayMs,
+          timeoutMs,
         }))
-        throw error
+        throw finalError
       } finally {
         clearTimeout(timer)
       }
