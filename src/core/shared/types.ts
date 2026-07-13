@@ -279,6 +279,8 @@ export interface AiGatewayProviderConfig {
   capabilities?: AiGatewayProviderCapabilities
   enabled: boolean
   timeoutMs?: number
+  streamRetryCount?: number
+  streamRetryDelayMs?: number
 }
 
 export interface AiGatewayModelRoute {

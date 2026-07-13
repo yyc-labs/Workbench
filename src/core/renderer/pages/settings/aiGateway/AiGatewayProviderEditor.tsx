@@ -280,6 +280,30 @@ export function AiGatewayProviderEditor({
                       disabled={inputDisabled}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryCount')}</p>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10}
+                      value={activeProvider.streamRetryCount ?? ''}
+                      onChange={(event) => onProviderChange('streamRetryCount', Number(event.target.value))}
+                      disabled={inputDisabled}
+                    />
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryCountHint')}</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryDelayMs')}</p>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10000}
+                      value={activeProvider.streamRetryDelayMs ?? ''}
+                      onChange={(event) => onProviderChange('streamRetryDelayMs', Number(event.target.value))}
+                      disabled={inputDisabled}
+                    />
+                    <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryDelayMsHint')}</p>
+                  </div>
                   <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
                     <div>
                       <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>

@@ -59,6 +59,8 @@ function parseModelMap(value: string): Record<string, string> | undefined {
 export function providerToDraft(provider: AiGatewayProviderConfig): ProviderDraft {
   return {
     ...provider,
+    streamRetryCount: provider.streamRetryCount ?? 0,
+    streamRetryDelayMs: provider.streamRetryDelayMs ?? 500,
     draftId: `${provider.id}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     modelMapText: modelMapToText(provider.modelMap),
   }
@@ -76,6 +78,8 @@ export function draftToProvider(draft: ProviderDraft): AiGatewayProviderConfig {
     capabilities: draft.capabilities,
     enabled: draft.enabled,
     timeoutMs: Number.isFinite(Number(draft.timeoutMs)) ? Number(draft.timeoutMs) : undefined,
+    streamRetryCount: Number.isFinite(Number(draft.streamRetryCount)) ? Number(draft.streamRetryCount) : undefined,
+    streamRetryDelayMs: Number.isFinite(Number(draft.streamRetryDelayMs)) ? Number(draft.streamRetryDelayMs) : undefined,
   }
 }
 
@@ -93,6 +97,8 @@ export function createNewProviderDraft(index: number): ProviderDraft {
     capabilities: { ...DEFAULT_OPENAI_CHAT_CAPABILITIES },
     enabled: true,
     timeoutMs: 60000,
+    streamRetryCount: 0,
+    streamRetryDelayMs: 500,
   }
 }
 

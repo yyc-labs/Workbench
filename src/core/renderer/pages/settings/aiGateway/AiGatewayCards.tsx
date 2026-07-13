@@ -222,6 +222,10 @@ export function GatewayAdvancedMeaningCard() {
       description: t('settings.aiGateway.advancedMeaningTimeoutDescription'),
     },
     {
+      title: t('settings.aiGateway.advancedMeaningStreamRetryTitle'),
+      description: t('settings.aiGateway.advancedMeaningStreamRetryDescription'),
+    },
+    {
       title: t('settings.aiGateway.advancedMeaningModelMapTitle'),
       description: t('settings.aiGateway.advancedMeaningModelMapDescription'),
     },

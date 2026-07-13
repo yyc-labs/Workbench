@@ -1735,110 +1735,291 @@ export class AiGatewayServer {
     trace?: GatewayRequestTrace,
     apiTokenOverride = ''
   ): Promise<Response> {
-    const response = await this.fetchChat(
-      provider,
-      { ...chatRequest, stream: true },
-      requestContext,
-      trace,
-      apiTokenOverride,
-    )
-    if (!response.ok) {
-      const responseText = await readResponseText(response)
-      if (trace) {
-        trace.upstreamResponse = buildResponseSnapshot({
-          statusCode: response.status,
-          headers: response.headers,
-          bodyText: responseText,
-          contentType: getResponseContentType(response),
+    const maxRetries = Math.max(0, provider.streamRetryCount ?? 0)
+    const retryDelayMs = Math.max(0, provider.streamRetryDelayMs ?? 0)
+    const maxAttempts = maxRetries + 1
+    const upstreamUrl = toChatCompletionsUrl(provider.baseUrl)
+    let lastErrorMessage = ''
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const controller = new AbortController()
+      const timeoutMs = provider.timeoutMs ?? 60000
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        accept: chatRequest.stream ? 'text/event-stream' : 'application/json',
+      }
+      const auth = resolveUpstreamAuth(provider, apiTokenOverride)
+      if (auth.token) {
+        headers.authorization = `Bearer ${auth.token}`
+      }
+      if (trace && attempt === 1) {
+        trace.meta.authSource = auth.source
+        trace.meta.authToken = auth.token || '(empty)'
+        trace.upstreamRequest = buildRequestSnapshot({
+          method: 'POST',
+          path: '/chat/completions',
+          url: upstreamUrl,
+          headers,
+          bodyValue: { ...chatRequest, stream: true },
+          contentType: 'application/json; charset=utf-8',
           maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
         })
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream chat/completions stream returned non-OK response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        statusCode: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }))
-      throw new Error(responseText || `Upstream chat/completions stream failed with status ${response.status}.`)
-    }
-    if (!response.body) {
-      if (trace) {
-        trace.upstreamResponse = buildResponseSnapshot({
-          statusCode: response.status,
-          headers: response.headers,
-          contentType: getResponseContentType(response),
+
+      try {
+        if (attempt === 1) {
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'info',
+            message: 'Resolved upstream auth for request',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            authSource: auth.source,
+            authToken: auth.token ? '[masked]' : '(empty)',
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            authSource: auth.source,
+            hasAuthToken: Boolean(auth.token),
+            timeoutMs,
+            streamRetryCount: maxRetries,
+            streamRetryDelayMs: retryDelayMs,
+          }))
+          debugAiGateway('Forwarding request to upstream chat/completions', buildUpstreamLogDetails(provider, chatRequest, {
+            timeoutMs,
+            streamRetryCount: maxRetries,
+            streamRetryDelayMs: retryDelayMs,
+          }))
+        }
+
+        const response = await fetch(upstreamUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ ...chatRequest, stream: true }),
+          signal: controller.signal,
         })
+        const contentType = response.headers.get('content-type') || ''
+
+        if (!response.ok && response.status >= 500 && attempt < maxAttempts) {
+          const responseText = await readResponseText(response)
+          lastErrorMessage = responseText || `Upstream chat/completions stream failed with status ${response.status}.`
+          if (trace) {
+            trace.upstreamResponse = buildResponseSnapshot({
+              statusCode: response.status,
+              headers: response.headers,
+              bodyText: responseText,
+              contentType: getResponseContentType(response),
+              maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
+            })
+          }
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream returned retryable response',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            statusCode: response.status,
+            contentType,
+            bodyPreview: responseText,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+            bodyPreview: responseText,
+            attempt,
+            maxAttempts,
+            streamRetryCount: maxRetries,
+          }))
+          debugAiGateway('Retrying upstream chat/completions stream after retryable failure', buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+            attempt,
+            maxAttempts,
+            streamRetryCount: maxRetries,
+            streamRetryDelayMs: retryDelayMs,
+          }))
+          if (retryDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+          }
+          continue
+        }
+
+        if (!response.ok) {
+          const responseText = await readResponseText(response)
+          if (trace) {
+            trace.upstreamResponse = buildResponseSnapshot({
+              statusCode: response.status,
+              headers: response.headers,
+              bodyText: responseText,
+              contentType: getResponseContentType(response),
+              maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
+            })
+          }
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream returned non-OK response',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            statusCode: response.status,
+            contentType,
+            bodyPreview: responseText,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+            bodyPreview: responseText,
+          }))
+          throw new Error(responseText || `Upstream chat/completions stream failed with status ${response.status}.`)
+        }
+
+        if (!response.body) {
+          if (trace) {
+            trace.upstreamResponse = buildResponseSnapshot({
+              statusCode: response.status,
+              headers: response.headers,
+              contentType: getResponseContentType(response),
+            })
+          }
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream returned empty body',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            statusCode: response.status,
+            contentType,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+          }))
+          throw new Error('Upstream chat/completions stream returned an empty body.')
+        }
+
+        if (!/text\/event-stream/i.test(contentType)) {
+          const responseText = await readResponseText(response)
+          if (trace) {
+            trace.upstreamResponse = buildResponseSnapshot({
+              statusCode: response.status,
+              headers: response.headers,
+              bodyText: responseText,
+              contentType,
+              maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
+            })
+          }
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream returned non-SSE content-type',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            statusCode: response.status,
+            contentType,
+            bodyPreview: responseText,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+            bodyPreview: responseText,
+          }))
+          throw new Error(
+            responseText
+            || `Upstream chat/completions stream returned content-type "${contentType || 'unknown'}" instead of text/event-stream.`
+          )
+        }
+
+        if (trace) {
+          trace.upstreamResponse = buildResponseSnapshot({
+            statusCode: response.status,
+            headers: response.headers,
+            contentType,
+          })
+        }
+        if (attempt > 1) {
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'info',
+            message: 'Upstream chat/completions stream recovered after retry',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            statusCode: response.status,
+            contentType,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            status: response.status,
+            contentType,
+            attempt,
+            maxAttempts,
+            streamRetryCount: maxRetries,
+            streamRetryDelayMs: retryDelayMs,
+          }))
+        }
+        return response
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw new Error(`Upstream request timed out after ${timeoutMs}ms.`)
+        }
+        if (attempt < maxAttempts) {
+          lastErrorMessage = error instanceof Error ? error.message : String(error)
+          this.recordGatewayLog({
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream failed and will be retried',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            bodyPreview: lastErrorMessage,
+          }, buildUpstreamLogDetails(provider, chatRequest, {
+            error: lastErrorMessage,
+            attempt,
+            maxAttempts,
+            streamRetryCount: maxRetries,
+            streamRetryDelayMs: retryDelayMs,
+          }))
+          if (retryDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs))
+          }
+          continue
+        }
+        this.recordGatewayLog({
+          ...requestContext,
+          level: 'error',
+          message: 'Upstream chat/completions stream retry exhausted',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl,
+          model: chatRequest.model,
+          stream: true,
+          bodyPreview: error instanceof Error ? error.message : String(error),
+        }, buildUpstreamLogDetails(provider, chatRequest, {
+          error: error instanceof Error ? error.message : String(error),
+          attempt,
+          maxAttempts,
+          streamRetryCount: maxRetries,
+          streamRetryDelayMs: retryDelayMs,
+        }))
+        throw error
+      } finally {
+        clearTimeout(timer)
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream chat/completions stream returned empty body',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        statusCode: response.status,
-        contentType: response.headers.get('content-type') || '',
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-      }))
-      throw new Error('Upstream chat/completions stream returned an empty body.')
     }
-    const contentType = response.headers.get('content-type') || ''
-    if (!/text\/event-stream/i.test(contentType)) {
-      const responseText = await readResponseText(response)
-      if (trace) {
-        trace.upstreamResponse = buildResponseSnapshot({
-          statusCode: response.status,
-          headers: response.headers,
-          bodyText: responseText,
-          contentType,
-          maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
-        })
-      }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream chat/completions stream returned non-SSE content-type',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        statusCode: response.status,
-        contentType,
-        bodyPreview: responseText,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType,
-        bodyPreview: responseText,
-      }))
-      throw new Error(
-        responseText
-        || `Upstream chat/completions stream returned content-type "${contentType || 'unknown'}" instead of text/event-stream.`
-      )
-    }
-    if (trace) {
-      trace.upstreamResponse = buildResponseSnapshot({
-        statusCode: response.status,
-        headers: response.headers,
-        contentType,
-      })
-    }
-    return response
+
+    throw new Error(lastErrorMessage || 'Upstream chat/completions stream failed.')
   }
 
   private async proxyChatStreamRaw(

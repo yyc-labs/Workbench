@@ -44,6 +44,18 @@ function normalizeTimeout(value: unknown): number | undefined {
   return Math.max(1000, Math.min(300000, Math.trunc(timeout)))
 }
 
+function normalizeRetryCount(value: unknown): number | undefined {
+  const retryCount = Number(value)
+  if (!Number.isFinite(retryCount) || retryCount < 0) return undefined
+  return Math.max(0, Math.min(10, Math.trunc(retryCount)))
+}
+
+function normalizeRetryDelay(value: unknown): number | undefined {
+  const retryDelay = Number(value)
+  if (!Number.isFinite(retryDelay) || retryDelay < 0) return undefined
+  return Math.max(0, Math.min(10000, Math.trunc(retryDelay)))
+}
+
 function normalizeProtocol(value: unknown): AiGatewayUpstreamProtocol {
   return typeof value === 'string' && SUPPORTED_PROTOCOLS.has(value as AiGatewayUpstreamProtocol)
     ? value as AiGatewayUpstreamProtocol
@@ -202,6 +214,8 @@ function normalizeProvider(value: unknown, index: number): AiGatewayProviderConf
     capabilities: normalizeProviderCapabilities(raw.capabilities, protocol),
     enabled: normalizeBoolean(raw.enabled, true),
     timeoutMs: normalizeTimeout(raw.timeoutMs),
+    streamRetryCount: normalizeRetryCount(raw.streamRetryCount),
+    streamRetryDelayMs: normalizeRetryDelay(raw.streamRetryDelayMs),
   }
 }
 
@@ -216,6 +230,8 @@ function defaultProvider(): AiGatewayProviderConfig {
     capabilities: defaultAiGatewayProviderCapabilities('openai_chat'),
     enabled: true,
     timeoutMs: 60000,
+    streamRetryCount: 0,
+    streamRetryDelayMs: 500,
   }
 }
 

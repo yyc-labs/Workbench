@@ -55,6 +55,52 @@ test('records merged stream text for raw Chat streams', async (t) => {
   assert.equal(detail.stream.merged.clientPayload.parsed.choices[0].message.content, 'Hello')
 })
 
+test('retries upstream chat stream handshake on retryable 5xx responses', async (t) => {
+  const { createServer } = await import('node:http')
+  let requestCount = 0
+  const upstream = createServer(async (req, res) => {
+    requestCount += 1
+    await readRequestBody(req)
+    if (requestCount === 1) {
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
+      res.end('upstream temporary failure')
+      return
+    }
+    writeChatCompletionStream(res)
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  config.providers[0].streamRetryCount = 1
+  config.providers[0].streamRetryDelayMs = 0
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      messages: [{ role: 'user', content: 'hello' }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /\[DONE\]/)
+  assert.equal(requestCount, 2)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.stream.enabled, true)
+  assert.equal(detail.stream.upstreamEventCount, 3)
+  assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+})
+
 test('records merged stream text for Chat to Anthropic streams', async (t) => {
   const { createServer } = await import('node:http')
   const upstream = createServer(async (req, res) => {
