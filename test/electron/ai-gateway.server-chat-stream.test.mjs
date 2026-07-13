@@ -149,6 +149,9 @@ test('retries upstream chat stream handshake after a configured timeout delay', 
   const detail = gateway.getRecentLogDetails()[0]
   assert.equal(detail.meta.attempt, 2)
   assert.equal(detail.meta.maxAttempts, 2)
+  assert.equal(detail.meta.retryType, 'timeout')
+  assert.equal(detail.meta.retryAttempt, 2)
+  assert.equal(detail.meta.maxRetryAttempts, 2)
   assert.equal(detail.summary.attempt, 2)
   assert.equal(detail.summary.maxAttempts, 2)
 })

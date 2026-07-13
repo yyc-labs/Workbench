@@ -644,6 +644,9 @@ export interface AiGatewayLogDetail {
     authToken?: string
     attempt?: number
     maxAttempts?: number
+    retryType?: 'stream' | 'timeout'
+    retryAttempt?: number
+    maxRetryAttempts?: number
   }
   ingressRequest?: StructuredHttpRequestSnapshot
   normalizedRequest?: StructuredJsonSnapshot

@@ -128,8 +128,8 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
               <SummaryField label={t('settings.agentLogs.eventCount')} value={detail.stream?.upstreamEventCount} />
               <SummaryField
                 label={t('settings.agentLogs.retryAttempt')}
-                value={typeof detail.meta.attempt === 'number' && typeof detail.meta.maxAttempts === 'number'
-                  ? `${detail.meta.attempt} / ${detail.meta.maxAttempts}`
+                value={typeof detail.meta.retryAttempt === 'number' && typeof detail.meta.maxRetryAttempts === 'number'
+                  ? `${detail.meta.retryAttempt} / ${detail.meta.maxRetryAttempts}`
                   : undefined}
               />
             </>
