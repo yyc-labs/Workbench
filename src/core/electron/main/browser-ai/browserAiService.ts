@@ -65,29 +65,37 @@ function createTaskId(): string {
 
 function errorMessage(errorCode: BrowserAiErrorCode): string {
   switch (errorCode) {
-    case 'BROWSER_NOT_FOUND': return 'Microsoft Edge could not be started.'
-    case 'CDP_UNAVAILABLE': return 'The Edge debugging connection is unavailable.'
-    case 'LOGIN_REQUIRED': return 'Please sign in to the configured web AI site in the managed Edge profile.'
-    case 'SITE_NOT_RECOGNIZED': return 'The connected page is not the configured web AI site.'
-    case 'COMPOSER_NOT_FOUND': return 'The web AI message composer could not be found.'
-    case 'SUBMIT_FAILED': return 'The prompt could not be sent to the configured web AI site.'
-    case 'RESPONSE_TIMEOUT': return 'The web AI site did not finish before the timeout.'
-    case 'RESPONSE_EMPTY': return 'The web AI site completed without a readable answer.'
-    case 'BROWSER_DISCONNECTED': return 'The Edge browser connection was closed.'
-    case 'SITE_LIMIT_OR_ERROR': return 'The configured web AI site reported a limit or site error.'
-    case 'TASK_CANCELLED': return 'The browser AI task was cancelled.'
-    case 'TASK_ALREADY_RUNNING': return 'Another browser AI task is already running.'
-    default: return 'The browser AI task could not be completed.'
+    case 'BROWSER_NOT_FOUND':
+      return 'Microsoft Edge could not be started.'
+    case 'CDP_UNAVAILABLE':
+      return 'The Edge debugging connection is unavailable.'
+    case 'LOGIN_REQUIRED':
+      return 'Please sign in to the configured web AI site in the managed Edge profile.'
+    case 'SITE_NOT_RECOGNIZED':
+      return 'The connected page is not the configured web AI site.'
+    case 'COMPOSER_NOT_FOUND':
+      return 'The web AI message composer could not be found.'
+    case 'SUBMIT_FAILED':
+      return 'The prompt could not be sent to the configured web AI site.'
+    case 'RESPONSE_TIMEOUT':
+      return 'The web AI site did not finish before the timeout.'
+    case 'RESPONSE_EMPTY':
+      return 'The web AI site completed without a readable answer.'
+    case 'BROWSER_DISCONNECTED':
+      return 'The Edge browser connection was closed.'
+    case 'SITE_LIMIT_OR_ERROR':
+      return 'The configured web AI site reported a limit or site error.'
+    case 'TASK_CANCELLED':
+      return 'The browser AI task was cancelled.'
+    case 'TASK_ALREADY_RUNNING':
+      return 'Another browser AI task is already running.'
+    default:
+      return 'The browser AI task could not be completed.'
   }
 }
 
 function isSameConnectionConfig(left: BrowserAiConfig, right: BrowserAiConfig): boolean {
-  return left.mode === right.mode
-    && left.edgeExecutablePath === right.edgeExecutablePath
-    && left.cdpPort === right.cdpPort
-    && left.site === right.site
-    && left.siteUrl === right.siteUrl
-    && left.headless === right.headless
+  return left.mode === right.mode && left.edgeExecutablePath === right.edgeExecutablePath && left.cdpPort === right.cdpPort && left.site === right.site && left.siteUrl === right.siteUrl && left.headless === right.headless
 }
 
 function defaultTaskRecordTitle(config: BrowserAiConfig, startedAt: number): string {
@@ -131,26 +139,12 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     return adapter
   }
 
-  const emit = (
-    taskId: string,
-    status: BrowserAiTaskStatus,
-    sourceLabels: string[] = [],
-    extra?: Pick<BrowserAiTaskProgressEvent, 'characterCount' | 'message' | 'errorCode'>,
-  ) => {
+  const emit = (taskId: string, status: BrowserAiTaskStatus, sourceLabels: string[] = [], extra?: Pick<BrowserAiTaskProgressEvent, 'characterCount' | 'message' | 'errorCode'>) => {
     taskStatus = status
     deps.emitProgress({ taskId, status, sourceLabels, steps: taskSteps, ...extra })
   }
 
-  const emitStep = (
-    taskId: string,
-    status: BrowserAiTaskStatus,
-    sourceLabels: string[],
-    stepId: BrowserAiTaskStep['id'],
-    stepStatus: BrowserAiTaskStep['status'],
-    message?: string,
-    detail?: string,
-    elapsedMs?: number,
-  ) => {
+  const emitStep = (taskId: string, status: BrowserAiTaskStatus, sourceLabels: string[], stepId: BrowserAiTaskStep['id'], stepStatus: BrowserAiTaskStep['status'], message?: string, detail?: string, elapsedMs?: number) => {
     const now = Date.now()
     taskSteps = taskSteps.map((step) => {
       if (step.id === stepId) return step
@@ -190,20 +184,10 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     }
   }
 
-  const buildTaskRecord = (
-    taskId: string,
-    payload: BrowserAiRunTaskPayload,
-    preview: BrowserAiContextPreview,
-    startedAt: number,
-    status: BrowserAiTaskRecord['status'],
-    completedAt?: number,
-    answer?: string,
-    errorCode?: BrowserAiErrorCode,
-    errorMessage?: string,
-  ): BrowserAiTaskRecord => {
+  const buildTaskRecord = (taskId: string, payload: BrowserAiRunTaskPayload, preview: BrowserAiContextPreview, startedAt: number, status: BrowserAiTaskRecord['status'], completedAt?: number, answer?: string, errorCode?: BrowserAiErrorCode, errorMessage?: string): BrowserAiTaskRecord => {
     const savePrompt = payload.savePrompt === true
     const sources = preview.sources.map((summary) => {
-      const source = payload.sources.find((item) => item.kind === summary.kind && item.label.trim() === summary.label)
+      const source = payload.sources.find((item) => item.kind === summary.kind && Boolean(summary.referenceId) && item.referenceId === summary.referenceId) ?? payload.sources.find((item) => item.kind === summary.kind && item.label.trim() === summary.label)
       return {
         kind: summary.kind,
         label: summary.label,
@@ -320,10 +304,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     }
   }
 
-  const navigateAndDetectLogin = async (
-    page: Page,
-    adapter: BrowserAiSiteAdapter,
-  ): Promise<'logged-in' | 'needs-login'> => {
+  const navigateAndDetectLogin = async (page: Page, adapter: BrowserAiSiteAdapter): Promise<'logged-in' | 'needs-login'> => {
     if (!adapter.matchesPage(page.url(), getConfig().siteUrl)) {
       throw new BrowserAiServiceError('SITE_NOT_RECOGNIZED', 'The connected page is not the configured web AI site.')
     }
@@ -455,11 +436,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
       try {
         preview = composeBrowserAiContext(payload)
       } catch (error) {
-        const classified = error instanceof BrowserAiServiceError
-          ? error
-          : error instanceof Error && 'code' in error
-            ? new BrowserAiServiceError((error as { code: BrowserAiErrorCode }).code, error.message)
-            : new BrowserAiServiceError('CONTEXT_INVALID', 'The browser AI context is invalid.')
+        const classified = error instanceof BrowserAiServiceError ? error : error instanceof Error && 'code' in error ? new BrowserAiServiceError((error as { code: BrowserAiErrorCode }).code, error.message) : new BrowserAiServiceError('CONTEXT_INVALID', 'The browser AI context is invalid.')
         return {
           taskId,
           status: 'failed',
@@ -557,9 +534,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
         emit(taskId, 'completed', preview.sourceLabels, { characterCount: answer.length })
         return result
       } catch (error) {
-        const classified = cancelRequested
-          ? new BrowserAiServiceError('TASK_CANCELLED', errorMessage('TASK_CANCELLED'))
-          : classifyBrowserAiError(error)
+        const classified = cancelRequested ? new BrowserAiServiceError('TASK_CANCELLED', errorMessage('TASK_CANCELLED')) : classifyBrowserAiError(error)
         const status = classified.code === 'TASK_CANCELLED' ? 'cancelled' : 'failed'
         const terminalStepId: BrowserAiTaskStep['id'] = status === 'cancelled' ? 'cancelled' : 'failed'
         if (currentStepId) {
@@ -660,10 +635,6 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
   }
 }
 
-export function createDefaultBrowserAiRepository(deps: {
-  loadConfig: () => BrowserAiConfig | undefined
-  saveConfig: (config: BrowserAiConfig) => Promise<BrowserAiConfig>
-  getRecordsRootPath: () => string
-}): BrowserAiRepository {
+export function createDefaultBrowserAiRepository(deps: { loadConfig: () => BrowserAiConfig | undefined; saveConfig: (config: BrowserAiConfig) => Promise<BrowserAiConfig>; getRecordsRootPath: () => string }): BrowserAiRepository {
   return createBrowserAiRepository(deps)
 }

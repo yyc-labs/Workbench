@@ -1,19 +1,9 @@
-import type {
-  BrowserAiContextPreview,
-  BrowserAiContextSource,
-  BrowserAiErrorCode,
-  BrowserAiRunTaskPayload,
-} from '../../../shared/types'
+import type { BrowserAiContextPreview, BrowserAiContextSource, BrowserAiErrorCode, BrowserAiRunTaskPayload } from '../../../shared/types'
 
 export const MAX_BROWSER_AI_SOURCE_CHARS = 24_000
 export const MAX_BROWSER_AI_CONTEXT_CHARS = 90_000
 
-const SOURCE_ORDER: BrowserAiContextSource['kind'][] = [
-  'skill',
-  'personal-context',
-  'learning-note',
-  'task',
-]
+const SOURCE_ORDER: BrowserAiContextSource['kind'][] = ['skill', 'personal-context', 'learning-note', 'browser-history', 'task']
 
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\[^\n\r<>"|?*]+/g
 const WSL_PATH_PATTERN = /(?<![\w/])\/mnt\/[a-zA-Z]\/[^\n\r<>"|?*]+/g
@@ -85,12 +75,9 @@ export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): Brows
   const blocks: string[] = []
   const summaries = sources.map((source) => {
     if (source.content.length > MAX_BROWSER_AI_SOURCE_CHARS) {
-      throw new BrowserAiContextError(
-        'CONTEXT_TOO_LARGE',
-        `Source "${source.label}" exceeds the ${MAX_BROWSER_AI_SOURCE_CHARS}-character limit.`,
-      )
+      throw new BrowserAiContextError('CONTEXT_TOO_LARGE', `Source "${source.label}" exceeds the ${MAX_BROWSER_AI_SOURCE_CHARS}-character limit.`)
     }
-    blocks.push(`<${kindTag(source.kind)}>\n${source.content}\n</${kindTag(source.kind)}>`) 
+    blocks.push(`<${kindTag(source.kind)}>\n${source.content}\n</${kindTag(source.kind)}>`)
     return summaryFor(source, source.content)
   })
 
@@ -104,10 +91,7 @@ export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): Brows
   }
   const prompt = blocks.join('\n\n')
   if (prompt.length > MAX_BROWSER_AI_CONTEXT_CHARS) {
-    throw new BrowserAiContextError(
-      'CONTEXT_TOO_LARGE',
-      `The combined context exceeds the ${MAX_BROWSER_AI_CONTEXT_CHARS}-character limit.`,
-    )
+    throw new BrowserAiContextError('CONTEXT_TOO_LARGE', `The combined context exceeds the ${MAX_BROWSER_AI_CONTEXT_CHARS}-character limit.`)
   }
 
   return {
@@ -116,13 +100,17 @@ export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): Brows
     sourceLabels: task ? [...summaries.map((source) => source.label), 'Current task'] : summaries.map((source) => source.label),
     sources: [
       ...summaries,
-      ...(task ? [{
-        kind: 'task' as const,
-        label: 'Current task',
-        included: true,
-        sensitive: false,
-        characterCount: task.length,
-      }] : []),
+      ...(task
+        ? [
+            {
+              kind: 'task' as const,
+              label: 'Current task',
+              included: true,
+              sensitive: false,
+              characterCount: task.length,
+            },
+          ]
+        : []),
     ],
     site: payload.site,
   }

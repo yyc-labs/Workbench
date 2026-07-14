@@ -1,14 +1,4 @@
-export type ProjectType =
-  | 'next.js'
-  | 'vite'
-  | 'android'
-  | 'nuxt'
-  | 'node'
-  | 'django'
-  | 'flask'
-  | 'fastapi'
-  | 'python'
-  | 'unknown'
+export type ProjectType = 'next.js' | 'vite' | 'android' | 'nuxt' | 'node' | 'django' | 'flask' | 'fastapi' | 'python' | 'unknown'
 
 export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
@@ -23,13 +13,7 @@ export type RunStartupMode = 'silent' | 'terminal'
 
 export type CliTool = 'claude' | 'codex'
 export type AiRuntimeProfileKind = 'native' | 'custom'
-export type AiExecutionMode =
-  | 'windows-wsl'
-  | 'windows-native'
-  | 'linux-native'
-  | 'macos-native'
-  | 'custom-script'
-  | 'disabled'
+export type AiExecutionMode = 'windows-wsl' | 'windows-native' | 'linux-native' | 'macos-native' | 'custom-script' | 'disabled'
 export type AiRuntimeProfileMode = AiExecutionMode | 'inherit'
 export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
 export type AiCommitProfileSource = 'manual' | 'claude' | 'codex'
@@ -47,13 +31,7 @@ export interface RuntimeEntrypointConfig {
   wslRelativePath?: string
 }
 
-export type StartupDefaultFilter =
-  | { type: 'all' }
-  | { type: 'pinned' }
-  | { type: 'running' }
-  | { type: 'uncategorized' }
-  | { type: 'folder'; folderId: string }
-  | { type: 'tag'; tagId: string }
+export type StartupDefaultFilter = { type: 'all' } | { type: 'pinned' } | { type: 'running' } | { type: 'uncategorized' } | { type: 'folder'; folderId: string } | { type: 'tag'; tagId: string }
 
 export interface AiCommitConfig {
   enabled?: boolean
@@ -96,11 +74,7 @@ export interface BrowserDataCacheRootInfo {
   sourceEqualsTarget: boolean
 }
 
-export type BrowserDataOperationStatus =
-  | 'deleted'
-  | 'not-found'
-  | 'failed'
-  | 'skipped-same-path'
+export type BrowserDataOperationStatus = 'deleted' | 'not-found' | 'failed' | 'skipped-same-path'
 
 export interface BrowserDataOperationItemResult {
   name: string
@@ -245,10 +219,7 @@ export interface CodexSettingsSaveResult {
   appConfig: AppConfig
 }
 
-export type AiGatewayUpstreamProtocol =
-  | 'openai_chat'
-  | 'openai_responses'
-  | 'anthropic_messages'
+export type AiGatewayUpstreamProtocol = 'openai_chat' | 'openai_responses' | 'anthropic_messages'
 
 export type AiGatewayClientCli = 'claude' | 'codex'
 export type AiGatewayLogLevel = 'info' | 'warn' | 'error'
@@ -416,13 +387,7 @@ export interface AiCommitRunOverride {
 }
 
 export type AiCommitUndoStatus = 'available' | 'closed' | 'expired' | 'undone'
-export type AiCommitUndoCloseReason =
-  | 'expired'
-  | 'left-pane'
-  | 'new-run'
-  | 'manual'
-  | 'undone'
-  | 'head-changed'
+export type AiCommitUndoCloseReason = 'expired' | 'left-pane' | 'new-run' | 'manual' | 'undone' | 'head-changed'
 
 export interface AiCommitUndoState {
   repoRoot: string
@@ -494,10 +459,7 @@ export type AgentHookCanonicalEvent =
   | 'teammate-idle'
   | 'unknown'
 
-export type AgentHookFeishuNotifyEvent =
-  | 'stop'
-  | 'session-end'
-  | 'permission-request'
+export type AgentHookFeishuNotifyEvent = 'stop' | 'session-end' | 'permission-request'
 
 export interface AgentHookEnvelope {
   schemaVersion: 1
@@ -706,12 +668,7 @@ export interface AgentHookLogDetail {
 
 export type AgentLogDetail = AiGatewayLogDetail | AgentHookLogDetail
 
-export type TranscriptSourceType =
-  | 'process-output'
-  | 'tmux-capture'
-  | 'agent-hook'
-  | 'manual-markdown'
-  | 'imported-file'
+export type TranscriptSourceType = 'process-output' | 'tmux-capture' | 'agent-hook' | 'manual-markdown' | 'imported-file'
 
 export type TranscriptCaptureInitialTextSource = 'selection' | 'clipboard' | 'empty'
 
@@ -860,6 +817,7 @@ export interface SkillUpdateCategoryPayload {
 export interface BrowserAiPreferences {
   defaultSkillIds: string[]
   defaultNoteIds: string[]
+  includeCurrentNoteByDefault: boolean
   savePromptByDefault: boolean
 }
 
@@ -868,33 +826,11 @@ export type BrowserAiMode = 'managed-edge' | 'external-cdp'
 /** The adapter used to interact with the configured web AI site. */
 export type BrowserAiSite = 'generic-web' | 'chatgpt-web'
 
-export type BrowserAiTaskStatus =
-  | 'idle'
-  | 'starting'
-  | 'connecting'
-  | 'needs-login'
-  | 'opening-page'
-  | 'sending'
-  | 'waiting-response'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+export type BrowserAiTaskStatus = 'idle' | 'starting' | 'connecting' | 'needs-login' | 'opening-page' | 'sending' | 'waiting-response' | 'completed' | 'failed' | 'cancelled'
 
 export type BrowserAiTaskRecordStatus = 'running' | 'completed' | 'failed' | 'cancelled'
 
-export type BrowserAiTaskStepId =
-  | 'prepare-task'
-  | 'connect-edge'
-  | 'open-conversation'
-  | 'check-login'
-  | 'find-composer'
-  | 'fill-prompt'
-  | 'submit-prompt'
-  | 'wait-response'
-  | 'read-answer'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+export type BrowserAiTaskStepId = 'prepare-task' | 'connect-edge' | 'open-conversation' | 'check-login' | 'find-composer' | 'fill-prompt' | 'submit-prompt' | 'wait-response' | 'read-answer' | 'completed' | 'failed' | 'cancelled'
 
 export type BrowserAiTaskStepStatus = 'pending' | 'active' | 'completed' | 'failed' | 'cancelled'
 
@@ -909,12 +845,7 @@ export interface BrowserAiTaskStep {
   detail?: string
 }
 
-export type BrowserAiConnectionStatus =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'needs-login'
-  | 'error'
+export type BrowserAiConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'needs-login' | 'error'
 
 export type BrowserAiErrorCode =
   | 'BROWSER_NOT_FOUND'
@@ -985,7 +916,7 @@ export interface BrowserAiSnapshot {
 }
 
 export interface BrowserAiContextSource {
-  kind: 'skill' | 'learning-note' | 'personal-context' | 'task'
+  kind: 'skill' | 'learning-note' | 'personal-context' | 'browser-history' | 'task'
   label: string
   content: string
   included: boolean
@@ -1086,6 +1017,7 @@ export interface BrowserAiTaskRecordSummary {
   completedAt?: number
   status: BrowserAiTaskRecordStatus
   siteName: string
+  taskExcerpt: string
   sourceLabels: string[]
   answerExcerpt: string
   errorCode?: BrowserAiErrorCode
@@ -1232,16 +1164,7 @@ export interface TranscriptShareListResult {
   entries: TranscriptShareEntry[]
 }
 
-export type GitChangeKind =
-  | 'added'
-  | 'modified'
-  | 'deleted'
-  | 'renamed'
-  | 'copied'
-  | 'untracked'
-  | 'conflicted'
-  | 'typechanged'
-  | 'unknown'
+export type GitChangeKind = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied' | 'untracked' | 'conflicted' | 'typechanged' | 'unknown'
 
 export type GitChangeScope = 'staged' | 'unstaged' | 'untracked' | 'conflicted'
 
@@ -1314,16 +1237,7 @@ export interface GitRepositorySnapshot {
   error?: string
 }
 
-export type GitOperationKind =
-  | 'fetch'
-  | 'pull'
-  | 'push'
-  | 'merge'
-  | 'switch'
-  | 'create-remote-branch'
-  | 'create-local-branch'
-  | 'delete-local-branch'
-  | 'set-upstream'
+export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'
 
 export interface GitOperationRequest {
   repoRoot: string

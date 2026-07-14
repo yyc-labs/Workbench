@@ -2,15 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { normalizeBrowserAiConfig } from './browserAiConfig'
-import type {
-  BrowserAiConfig,
-  BrowserAiErrorCode,
-  BrowserAiTaskRecord,
-  BrowserAiTaskRecordSource,
-  BrowserAiTaskRecordStatus,
-  BrowserAiTaskRecordSummary,
-  BrowserAiTaskStep,
-} from '../../../shared/types'
+import type { BrowserAiConfig, BrowserAiErrorCode, BrowserAiTaskRecord, BrowserAiTaskRecordSource, BrowserAiTaskRecordStatus, BrowserAiTaskRecordSummary, BrowserAiTaskStep } from '../../../shared/types'
 
 const RECORDS_DIR = 'records'
 const INDEX_FILE_NAME = 'index.json'
@@ -50,13 +42,11 @@ function normalizeTimestamp(value: unknown): number {
 }
 
 function normalizeStatus(value: unknown): BrowserAiTaskRecordStatus {
-  return value === 'completed' || value === 'failed' || value === 'cancelled' || value === 'running'
-    ? value
-    : 'failed'
+  return value === 'completed' || value === 'failed' || value === 'cancelled' || value === 'running' ? value : 'failed'
 }
 
 function normalizeErrorCode(value: unknown): BrowserAiErrorCode | undefined {
-  return typeof value === 'string' && value.trim() ? value as BrowserAiErrorCode : undefined
+  return typeof value === 'string' && value.trim() ? (value as BrowserAiErrorCode) : undefined
 }
 
 function normalizeSteps(value: unknown): BrowserAiTaskStep[] {
@@ -64,10 +54,8 @@ function normalizeSteps(value: unknown): BrowserAiTaskStep[] {
   return value
     .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
     .map((item) => ({
-      id: typeof item.id === 'string' ? item.id as BrowserAiTaskStep['id'] : 'failed',
-      status: item.status === 'active' || item.status === 'completed' || item.status === 'cancelled'
-        ? item.status
-        : 'failed',
+      id: typeof item.id === 'string' ? (item.id as BrowserAiTaskStep['id']) : 'failed',
+      status: item.status === 'active' || item.status === 'completed' || item.status === 'cancelled' ? item.status : 'failed',
       startedAt: Number.isFinite(Number(item.startedAt)) ? Number(item.startedAt) : undefined,
       updatedAt: normalizeTimestamp(item.updatedAt),
       completedAt: Number.isFinite(Number(item.completedAt)) ? Number(item.completedAt) : undefined,
@@ -84,9 +72,7 @@ function normalizeSources(value: unknown): BrowserAiTaskRecordSource[] {
     .map((item) => {
       const content = typeof item.content === 'string' ? item.content : undefined
       return {
-        kind: item.kind === 'skill' || item.kind === 'learning-note' || item.kind === 'personal-context' || item.kind === 'task'
-          ? item.kind
-          : 'learning-note',
+        kind: item.kind === 'skill' || item.kind === 'learning-note' || item.kind === 'personal-context' || item.kind === 'task' || item.kind === 'browser-history' ? item.kind : 'learning-note',
         label: typeof item.label === 'string' && item.label.trim() ? item.label.trim() : 'Untitled source',
         referenceId: typeof item.referenceId === 'string' && item.referenceId.trim() ? item.referenceId.trim() : undefined,
         included: item.included !== false,
@@ -127,9 +113,7 @@ function normalizeRecord(value: unknown): BrowserAiTaskRecord | null {
     errorMessage: typeof raw.errorMessage === 'string' ? raw.errorMessage : undefined,
     input: {
       task: typeof (input as { task?: unknown }).task === 'string' ? (input as { task: string }).task : undefined,
-      responseFormat: typeof (input as { responseFormat?: unknown }).responseFormat === 'string'
-        ? (input as { responseFormat: string }).responseFormat
-        : undefined,
+      responseFormat: typeof (input as { responseFormat?: unknown }).responseFormat === 'string' ? (input as { responseFormat: string }).responseFormat : undefined,
       sources: normalizeSources((input as { sources?: unknown }).sources ?? normalizedSources),
       promptSaved: (input as { promptSaved?: unknown }).promptSaved === true,
     },
@@ -146,6 +130,7 @@ function toSummary(record: BrowserAiTaskRecord): BrowserAiTaskRecordSummary {
     completedAt: record.completedAt,
     status: record.status,
     siteName: record.site.name,
+    taskExcerpt: (record.input.task ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
     sourceLabels: record.sources.filter((source) => source.included).map((source) => source.label),
     answerExcerpt: (record.answer ?? record.errorMessage ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
     errorCode: record.errorCode,
@@ -158,27 +143,33 @@ function sortSummaries(summaries: BrowserAiTaskRecordSummary[]): BrowserAiTaskRe
 
 function normalizeSummaryList(value: unknown): BrowserAiTaskRecordSummary[] {
   if (!Array.isArray(value)) return []
-  return sortSummaries(value
-    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
-    .map((item) => {
-      const status = normalizeStatus(item.status)
-      return {
-        id: typeof item.id === 'string' ? item.id.trim() : '',
-        title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : 'Browser AI task',
-        createdAt: normalizeTimestamp(item.createdAt),
-        updatedAt: normalizeTimestamp(item.updatedAt),
-        startedAt: normalizeTimestamp(item.startedAt),
-        completedAt: Number.isFinite(Number(item.completedAt)) ? Number(item.completedAt) : undefined,
-        status,
-        siteName: typeof item.siteName === 'string' && item.siteName.trim() ? item.siteName.trim() : 'Web AI',
-        sourceLabels: Array.isArray(item.sourceLabels)
-          ? item.sourceLabels.filter((label): label is string => typeof label === 'string').map((label) => label.trim()).filter(Boolean)
-          : [],
-        answerExcerpt: typeof item.answerExcerpt === 'string' ? item.answerExcerpt : '',
-        errorCode: normalizeErrorCode(item.errorCode),
-      }
-    })
-    .filter((item) => Boolean(item.id)))
+  return sortSummaries(
+    value
+      .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+      .map((item) => {
+        const status = normalizeStatus(item.status)
+        return {
+          id: typeof item.id === 'string' ? item.id.trim() : '',
+          title: typeof item.title === 'string' && item.title.trim() ? item.title.trim() : 'Browser AI task',
+          createdAt: normalizeTimestamp(item.createdAt),
+          updatedAt: normalizeTimestamp(item.updatedAt),
+          startedAt: normalizeTimestamp(item.startedAt),
+          completedAt: Number.isFinite(Number(item.completedAt)) ? Number(item.completedAt) : undefined,
+          status,
+          siteName: typeof item.siteName === 'string' && item.siteName.trim() ? item.siteName.trim() : 'Web AI',
+          taskExcerpt: typeof item.taskExcerpt === 'string' ? item.taskExcerpt : '',
+          sourceLabels: Array.isArray(item.sourceLabels)
+            ? item.sourceLabels
+                .filter((label): label is string => typeof label === 'string')
+                .map((label) => label.trim())
+                .filter(Boolean)
+            : [],
+          answerExcerpt: typeof item.answerExcerpt === 'string' ? item.answerExcerpt : '',
+          errorCode: normalizeErrorCode(item.errorCode),
+        }
+      })
+      .filter((item) => Boolean(item.id)),
+  )
 }
 
 export function createBrowserAiRepository(deps: BrowserAiRepositoryDependencies): BrowserAiRepository {
