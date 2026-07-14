@@ -1,10 +1,10 @@
 import { FolderPlus, Pencil, Search, Trash2, X } from 'lucide-react'
-import type { LearningCategory, LearningNoteSummary } from '../../../shared/types'
-import { Button } from '../../components/ui/button'
-import { Card } from '../../components/ui/card'
-import { Input } from '../../components/ui/input'
-import { ScrollArea } from '../../components/ui/scroll-area'
-import { useI18n } from '../../i18n'
+import type { LearningCategory, LearningNoteSummary } from '../../../../shared/types'
+import { Button } from '../../../components/ui/button'
+import { Card } from '../../../components/ui/card'
+import { Input } from '../../../components/ui/input'
+import { ScrollArea } from '../../../components/ui/scroll-area'
+import { useI18n } from '../../../i18n'
 import { LearningSidebarRailButton } from './LearningSidebarRailButton'
 
 type LearningNotesSidebarProps = {
@@ -67,21 +67,12 @@ export function LearningNotesSidebar({
       <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
         <div className="border-b border-[color:var(--color-border)] px-4 py-4">
           <div className="relative">
-            <Search
-              className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]"
-            />
-            <Input
-              value={searchQuery}
-              onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder={t('learning.notes.searchPlaceholder')}
-              className="h-10 rounded-full pl-11 pr-10"
-            />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
+            <Input value={searchQuery} onChange={(event) => onSearchQueryChange(event.target.value)} placeholder={t('learning.notes.searchPlaceholder')} className="h-10 rounded-full pl-11 pr-10" />
             <button
               type="button"
               className={`absolute right-3 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
-                searchQuery
-                  ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                  : 'pointer-events-none opacity-0'
+                searchQuery ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]' : 'pointer-events-none opacity-0'
               }`}
               onClick={onClearSearch}
               aria-label={t('common.clearSearch')}
@@ -95,26 +86,14 @@ export function LearningNotesSidebar({
         <div className="border-b border-[color:var(--color-border)] px-4 py-4">
           <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.categoriesTitle')}</div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-                selectedCategoryId === 'all'
-                  ? 'bg-[color:var(--color-primary)] text-white'
-                  : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => onSelectCategory('all')}
-            >
+            <button type="button" className={`rounded-full px-3 py-1.5 text-xs transition-colors ${selectedCategoryId === 'all' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`} onClick={() => onSelectCategory('all')}>
               {t('learning.notes.all')}
             </button>
             {categories.map((category) => (
               <button
                 key={category.id}
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-                  selectedCategoryId === category.id
-                    ? 'bg-[color:var(--color-primary)] text-white'
-                    : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-                }`}
+                className={`rounded-full px-3 py-1.5 text-xs transition-colors ${selectedCategoryId === category.id ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
                 onClick={() => onSelectCategory(category.id)}
               >
                 {category.name}
@@ -138,34 +117,14 @@ export function LearningNotesSidebar({
                     }
                   }}
                 />
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  className="h-9 w-9 rounded-full"
-                  onClick={() => void onRenameCategory()}
-                  loading={isUpdatingCategory}
-                  disabled={isDeletingCategory}
-                  title={t('learning.notes.renameCategory')}
-                >
+                <Button type="button" size="icon" variant="outline" className="h-9 w-9 rounded-full" onClick={() => void onRenameCategory()} loading={isUpdatingCategory} disabled={isDeletingCategory} title={t('learning.notes.renameCategory')}>
                   <Pencil className="h-4 w-4" />
                 </Button>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="destructive"
-                  className="h-9 w-9 rounded-full"
-                  onClick={() => void onDeleteCategory()}
-                  loading={isDeletingCategory}
-                  disabled={isUpdatingCategory}
-                  title={t('learning.notes.deleteCategory')}
-                >
+                <Button type="button" size="icon" variant="destructive" className="h-9 w-9 rounded-full" onClick={() => void onDeleteCategory()} loading={isDeletingCategory} disabled={isUpdatingCategory} title={t('learning.notes.deleteCategory')}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-              {categoryEditError ? (
-                <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div>
-              ) : null}
+              {categoryEditError ? <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div> : null}
             </div>
           ) : null}
           <div className="mt-3 flex gap-2">
@@ -182,21 +141,11 @@ export function LearningNotesSidebar({
                 }
               }}
             />
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="h-9 w-9 rounded-full"
-              onClick={() => void onCreateCategory()}
-              loading={isCreatingCategory}
-              title={t('learning.notes.addCategory')}
-            >
+            <Button type="button" size="icon" variant="outline" className="h-9 w-9 rounded-full" onClick={() => void onCreateCategory()} loading={isCreatingCategory} title={t('learning.notes.addCategory')}>
               <FolderPlus className="h-4 w-4" />
             </Button>
           </div>
-          {categoryCreateError ? (
-            <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div>
-          ) : null}
+          {categoryCreateError ? <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div> : null}
         </div>
         <div className="px-4 pb-2 pt-4">
           <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.notesTitle')}</div>
@@ -211,9 +160,7 @@ export function LearningNotesSidebar({
                   key={note.id}
                   type="button"
                   className={`flex w-full flex-col gap-1 rounded-[18px] border px-3 py-3 text-left transition-colors ${
-                    selectedNoteId === note.id
-                      ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8'
-                      : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
+                    selectedNoteId === note.id ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8' : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
                   }`}
                   onClick={() => onSelectNote(note.id)}
                 >
@@ -231,12 +178,7 @@ export function LearningNotesSidebar({
           </div>
         </ScrollArea>
       </Card>
-      <LearningSidebarRailButton
-        side="left"
-        collapsed={false}
-        onClick={onCollapse}
-        className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
-      />
+      <LearningSidebarRailButton side="left" collapsed={false} onClick={onCollapse} className="absolute -right-4 top-1/2 z-20 -translate-y-1/2" />
     </div>
   )
 }

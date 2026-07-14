@@ -1,24 +1,13 @@
 import { AlertCircle, Check, ChevronDown, ChevronRight, Circle, Loader2, X } from 'lucide-react'
 import { useState } from 'react'
-import type { BrowserAiTaskStep } from '../../../shared/types'
-import { useI18n } from '../../i18n'
+import type { BrowserAiTaskStep } from '../../../../shared/types'
+import { useI18n } from '../../../i18n'
 
 type LearningBrowserAiStepTimelineProps = {
   steps: BrowserAiTaskStep[]
 }
 
-const STEP_IDS = [
-  'prepare-task',
-  'connect-edge',
-  'open-conversation',
-  'check-login',
-  'find-composer',
-  'fill-prompt',
-  'submit-prompt',
-  'wait-response',
-  'read-answer',
-  'completed',
-] as const
+const STEP_IDS = ['prepare-task', 'connect-edge', 'open-conversation', 'check-login', 'find-composer', 'fill-prompt', 'submit-prompt', 'wait-response', 'read-answer', 'completed'] as const
 
 export function LearningBrowserAiStepTimeline({ steps }: LearningBrowserAiStepTimelineProps) {
   const { t } = useI18n()
@@ -44,12 +33,7 @@ export function LearningBrowserAiStepTimeline({ steps }: LearningBrowserAiStepTi
           <span className="truncate">{t('learning.browserAi.stepsTitle')}</span>
         </span>
       </button>
-      <div
-        id="learning-browser-ai-step-timeline"
-        className="grid gap-1"
-        hidden={isCollapsed}
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' }}
-      >
+      <div id="learning-browser-ai-step-timeline" className="grid gap-1" hidden={isCollapsed} style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' }}>
         {allSteps.map((step) => {
           const isActive = step.status === 'active'
           const isFailed = step.status === 'failed'
@@ -57,18 +41,22 @@ export function LearningBrowserAiStepTimeline({ steps }: LearningBrowserAiStepTi
           return (
             <div key={step.id} className="flex min-w-0 items-center gap-2.5 rounded-[10px] px-2 py-1" style={{ background: isActive ? 'color-mix(in srgb, var(--color-primary) 8%, transparent)' : 'transparent' }}>
               <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-                {isFailed ? <AlertCircle className="h-4 w-4 text-[color:var(--color-destructive)]" />
-                  : isCancelled ? <X className="h-4 w-4 text-[color:var(--color-muted-foreground)]" />
-                    : step.status === 'completed' ? <Check className="h-4 w-4 text-[color:var(--color-primary)]" />
-                      : isActive ? <Loader2 className="h-4 w-4 animate-spin text-[color:var(--color-primary)]" />
-                        : <Circle className="h-3 w-3 text-[color:var(--color-muted-foreground)]" />}
+                {isFailed ? (
+                  <AlertCircle className="h-4 w-4 text-[color:var(--color-destructive)]" />
+                ) : isCancelled ? (
+                  <X className="h-4 w-4 text-[color:var(--color-muted-foreground)]" />
+                ) : step.status === 'completed' ? (
+                  <Check className="h-4 w-4 text-[color:var(--color-primary)]" />
+                ) : isActive ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-[color:var(--color-primary)]" />
+                ) : (
+                  <Circle className="h-3 w-3 text-[color:var(--color-muted-foreground)]" />
+                )}
               </span>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <span className="shrink-0 text-xs font-medium text-[color:var(--color-foreground)]">{t(`learning.browserAi.steps.${step.id}` as never)}</span>
                 {step.id === 'wait-response' && step.elapsedMs ? (
-                  <span className="min-w-0 truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-                    {t('learning.browserAi.waitingCheck', { value: String(Math.floor(step.elapsedMs / 1000)) })}
-                  </span>
+                  <span className="min-w-0 truncate text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.waitingCheck', { value: String(Math.floor(step.elapsedMs / 1000)) })}</span>
                 ) : isFailed || isCancelled ? (
                   <span className="min-w-0 truncate text-[11px] text-[color:var(--color-muted-foreground)]">{step.detail || step.message}</span>
                 ) : null}

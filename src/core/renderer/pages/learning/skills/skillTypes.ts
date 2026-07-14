@@ -1,4 +1,4 @@
-import type { Skill, SkillCategory, SkillSummary } from '../../../shared/types'
+import type { Skill, SkillCategory, SkillSummary } from '../../../../shared/types'
 
 export type SkillEditorState = {
   title: string

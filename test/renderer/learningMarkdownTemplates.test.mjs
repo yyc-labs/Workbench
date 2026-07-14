@@ -2,10 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  applyLearningMarkdownInsert,
-  buildMarkdownTable,
-} = loadTsModule('src/core/renderer/pages/learning/learningMarkdownTemplates.ts')
+const { applyLearningMarkdownInsert, buildMarkdownTable } = loadTsModule('src/core/renderer/pages/learning/notes/learningMarkdownTemplates.ts')
 
 test('wraps selected text with bold markdown', () => {
   const result = applyLearningMarkdownInsert('hello world', 6, 11, {
@@ -208,15 +205,7 @@ test('inserts bullet list as nested children when caret is at ordered list item 
     count: 3,
   })
 
-  assert.equal(
-    result.value,
-    [
-      '5. 父项',
-      '   - 列表项',
-      '   - ',
-      '   - ',
-    ].join('\n')
-  )
+  assert.equal(result.value, ['5. 父项', '   - 列表项', '   - ', '   - '].join('\n'))
 })
 
 test('inserts ordered list as nested children when caret is at ordered list item end', () => {
@@ -227,14 +216,7 @@ test('inserts ordered list as nested children when caret is at ordered list item
     count: 2,
   })
 
-  assert.equal(
-    result.value,
-    [
-      '5. 父项',
-      '   1. 列表项',
-      '   2. ',
-    ].join('\n')
-  )
+  assert.equal(result.value, ['5. 父项', '   1. 列表项', '   2. '].join('\n'))
 })
 
 test('inserts multiple task list items when count is provided', () => {
@@ -259,15 +241,7 @@ test('creates fenced code block with selected content', () => {
 test('builds markdown table with header and body rows', () => {
   const table = buildMarkdownTable(3, 2)
 
-  assert.equal(
-    table,
-    [
-      '| 列1 | 列2 |',
-      '| --- | --- |',
-      '| 内容 | 内容 |',
-      '| 内容 | 内容 |',
-    ].join('\n')
-  )
+  assert.equal(table, ['| 列1 | 列2 |', '| --- | --- |', '| 内容 | 内容 |', '| 内容 | 内容 |'].join('\n'))
 })
 
 test('inserts table block with bounded size', () => {

@@ -28,14 +28,7 @@ function normalizeRange(value: string, start: number, end: number) {
   }
 }
 
-function replaceRange(
-  value: string,
-  start: number,
-  end: number,
-  replacement: string,
-  selectionStart: number,
-  selectionEnd: number
-): LearningMarkdownEditorEditResult {
+function replaceRange(value: string, start: number, end: number, replacement: string, selectionStart: number, selectionEnd: number): LearningMarkdownEditorEditResult {
   return {
     value: `${value.slice(0, start)}${replacement}${value.slice(end)}`,
     selectionStart,
@@ -88,12 +81,7 @@ function mapBlockPosition(lines: string[], transforms: LineTransform[], position
   return transformedCursor
 }
 
-function applyLineTransform(
-  value: string,
-  start: number,
-  end: number,
-  transformLine: (line: string) => LineTransform
-): LearningMarkdownEditorEditResult {
+function applyLineTransform(value: string, start: number, end: number, transformLine: (line: string) => LineTransform): LearningMarkdownEditorEditResult {
   const normalized = normalizeRange(value, start, end)
   const { lineStart, lineEnd } = getSelectedLineRange(value, normalized.start, normalized.end)
   const block = value.slice(lineStart, lineEnd)
@@ -115,22 +103,14 @@ function getRemovedIndentLength(line: string): number {
   return Math.min(INDENT_UNIT.length, leadingSpaces)
 }
 
-export function indentMarkdownLines(
-  value: string,
-  start: number,
-  end: number
-): LearningMarkdownEditorEditResult {
+export function indentMarkdownLines(value: string, start: number, end: number): LearningMarkdownEditorEditResult {
   return applyLineTransform(value, start, end, (line) => ({
     text: `${INDENT_UNIT}${line}`,
     mapPosition: (position) => INDENT_UNIT.length + position,
   }))
 }
 
-export function outdentMarkdownLines(
-  value: string,
-  start: number,
-  end: number
-): LearningMarkdownEditorEditResult {
+export function outdentMarkdownLines(value: string, start: number, end: number): LearningMarkdownEditorEditResult {
   return applyLineTransform(value, start, end, (line) => {
     const removedLength = getRemovedIndentLength(line)
     return {
@@ -140,11 +120,7 @@ export function outdentMarkdownLines(
   })
 }
 
-export function continueMarkdownList(
-  value: string,
-  start: number,
-  end: number
-): LearningMarkdownEditorEditResult | null {
+export function continueMarkdownList(value: string, start: number, end: number): LearningMarkdownEditorEditResult | null {
   const normalized = normalizeRange(value, start, end)
   if (normalized.start !== normalized.end) return null
 

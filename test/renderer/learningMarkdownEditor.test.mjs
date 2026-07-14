@@ -2,11 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  continueMarkdownList,
-  indentMarkdownLines,
-  outdentMarkdownLines,
-} = loadTsModule('src/core/renderer/pages/learning/learningMarkdownEditor.ts')
+const { continueMarkdownList, indentMarkdownLines, outdentMarkdownLines } = loadTsModule('src/core/renderer/pages/learning/notes/learningMarkdownEditor.ts')
 
 test('indents current ordered list line to create nested list item', () => {
   const source = ['1. 第一项', '2. 第二项', '3. 第三项'].join('\n')

@@ -1,8 +1,8 @@
 import { FolderPlus, NotebookPen, Pencil, Tags, Trash2 } from 'lucide-react'
-import type { LearningCategory, LearningNote, LearningNoteStatus } from '../../../shared/types'
-import { Button } from '../../components/ui/button'
-import { Card } from '../../components/ui/card'
-import { useI18n } from '../../i18n'
+import type { LearningCategory, LearningNote, LearningNoteStatus } from '../../../../shared/types'
+import { Button } from '../../../components/ui/button'
+import { Card } from '../../../components/ui/card'
+import { useI18n } from '../../../i18n'
 import { LearningSidebarRailButton } from './LearningSidebarRailButton'
 import type { SaveState } from './learningCenterTypes'
 import { normalizeTagInput } from './learningCenterUtils'
@@ -23,21 +23,7 @@ type LearningNoteInfoSidebarProps = {
   onOpenEditDialog: () => void
 }
 
-export function LearningNoteInfoSidebar({
-  categories,
-  editorCategoryId,
-  editorStatus,
-  editorTags,
-  editorTitle,
-  hasUnsavedChanges,
-  saveError,
-  saveState,
-  selectedNote,
-  selectedNoteId,
-  onCollapse,
-  onOpenDeleteConfirm,
-  onOpenEditDialog,
-}: LearningNoteInfoSidebarProps) {
+export function LearningNoteInfoSidebar({ categories, editorCategoryId, editorStatus, editorTags, editorTitle, hasUnsavedChanges, saveError, saveState, selectedNote, selectedNoteId, onCollapse, onOpenDeleteConfirm, onOpenEditDialog }: LearningNoteInfoSidebarProps) {
   const { t, formatDateTime } = useI18n()
   const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
   const tags = normalizeTagInput(editorTags)
@@ -51,13 +37,7 @@ export function LearningNoteInfoSidebar({
               <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.info.title')}</div>
               <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('learning.info.subtitle')}</div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={onOpenEditDialog}
-              disabled={!selectedNote}
-            >
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={onOpenEditDialog} disabled={!selectedNote}>
               <Pencil className="h-3.5 w-3.5" />
               {t('learning.info.editInfo')}
             </Button>
@@ -69,9 +49,7 @@ export function LearningNoteInfoSidebar({
               <NotebookPen className="h-3.5 w-3.5" />
               {t('learning.info.sectionTitle')}
             </div>
-            <div className="text-sm font-medium text-[color:var(--color-foreground)]">
-              {editorTitle || selectedNote?.title || t('learning.editor.untitledNote')}
-            </div>
+            <div className="text-sm font-medium text-[color:var(--color-foreground)]">{editorTitle || selectedNote?.title || t('learning.editor.untitledNote')}</div>
           </section>
 
           <section className="space-y-2">
@@ -88,14 +66,13 @@ export function LearningNoteInfoSidebar({
               {t('learning.info.tags')}
             </div>
             <div className="flex flex-wrap gap-2">
-              {tags.length > 0 ? tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-xs text-[color:var(--color-foreground)]"
-                >
-                  {tag}
-                </span>
-              )) : (
+              {tags.length > 0 ? (
+                tags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-xs text-[color:var(--color-foreground)]">
+                    {tag}
+                  </span>
+                ))
+              ) : (
                 <span className="text-sm text-[color:var(--color-muted-foreground)]">{t('learning.info.noTags')}</span>
               )}
             </div>
@@ -103,9 +80,7 @@ export function LearningNoteInfoSidebar({
 
           <section className="space-y-2">
             <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('learning.info.status')}</div>
-            <div className="text-sm text-[color:var(--color-foreground)]">
-              {editorStatus === 'organized' ? t('learning.info.statusOrganized') : t('learning.info.statusDraft')}
-            </div>
+            <div className="text-sm text-[color:var(--color-foreground)]">{editorStatus === 'organized' ? t('learning.info.statusOrganized') : t('learning.info.statusDraft')}</div>
           </section>
 
           <section className="space-y-2">
@@ -118,41 +93,18 @@ export function LearningNoteInfoSidebar({
 
           <section className="space-y-2">
             <div className="text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('learning.info.saveState')}</div>
-            <div className={`text-sm ${
-              saveState === 'error'
-                ? 'text-[color:var(--color-destructive)]'
-                : saveState === 'saved'
-                  ? 'text-[color:var(--color-success)]'
-                  : 'text-[color:var(--color-muted-foreground)]'
-            }`}>
-              {saveState === 'error'
-                ? (saveError || t('learning.info.saveFailed'))
-                : saveState === 'saved'
-                  ? t('learning.info.saved')
-                  : hasUnsavedChanges
-                    ? t('learning.info.unsavedChanges')
-                    : t('learning.info.unchanged')}
+            <div className={`text-sm ${saveState === 'error' ? 'text-[color:var(--color-destructive)]' : saveState === 'saved' ? 'text-[color:var(--color-success)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
+              {saveState === 'error' ? saveError || t('learning.info.saveFailed') : saveState === 'saved' ? t('learning.info.saved') : hasUnsavedChanges ? t('learning.info.unsavedChanges') : t('learning.info.unchanged')}
             </div>
           </section>
 
-          <Button
-            variant="destructive"
-            className="mt-4 w-full gap-1.5"
-            onClick={onOpenDeleteConfirm}
-            loading={false}
-            disabled={!selectedNoteId}
-          >
+          <Button variant="destructive" className="mt-4 w-full gap-1.5" onClick={onOpenDeleteConfirm} loading={false} disabled={!selectedNoteId}>
             <Trash2 className="h-4 w-4" />
             {t('learning.info.deleteNote')}
           </Button>
         </div>
       </Card>
-      <LearningSidebarRailButton
-        side="right"
-        collapsed={false}
-        onClick={onCollapse}
-        className="absolute -left-4 top-1/2 z-20 -translate-y-1/2"
-      />
+      <LearningSidebarRailButton side="right" collapsed={false} onClick={onCollapse} className="absolute -left-4 top-1/2 z-20 -translate-y-1/2" />
     </div>
   )
 }

@@ -1,5 +1,5 @@
-import type { ResolvedLocale } from '../../i18n/messages'
-import { learningMessages } from '../../i18n/messages/learning'
+import type { ResolvedLocale } from '../../../i18n/messages'
+import { learningMessages } from '../../../i18n/messages/learning'
 
 export type LearningMarkdownTemplateKey =
   | 'heading1'
@@ -46,11 +46,7 @@ const ORDERED_LIST_MARKER_RE = /^(\s*)(\d+)\.\s+/
 const BULLET_LIST_MARKER_RE = /^(\s*)[-+*]\s+/
 const TASK_LIST_MARKER_RE = /^(\s*)[-+*]\s+\[(?: |x|X)\]\s+/
 
-function translateLearningMarkdown(
-  locale: ResolvedLocale,
-  key: string,
-  values?: Record<string, number | string>
-): string {
+function translateLearningMarkdown(locale: ResolvedLocale, key: string, values?: Record<string, number | string>): string {
   const normalizedKey = key.replace(/^learning\./, '')
   const tree = learningMessages[locale].learning as Record<string, unknown>
   const segments = normalizedKey.split('.')
@@ -133,14 +129,7 @@ function normalizeRange(value: string, start: number, end: number) {
   }
 }
 
-function replaceRange(
-  value: string,
-  start: number,
-  end: number,
-  replacement: string,
-  selectionStartOffset: number,
-  selectionEndOffset: number
-): LearningMarkdownEditResult {
+function replaceRange(value: string, start: number, end: number, replacement: string, selectionStartOffset: number, selectionEndOffset: number): LearningMarkdownEditResult {
   const nextValue = `${value.slice(0, start)}${replacement}${value.slice(end)}`
   return {
     value: nextValue,
@@ -163,35 +152,14 @@ function computeBlockSuffix(value: string, end: number): string {
   return '\n'
 }
 
-function replaceRangeWithBlock(
-  value: string,
-  start: number,
-  end: number,
-  block: string,
-  selectionStartOffset: number,
-  selectionEndOffset: number
-): LearningMarkdownEditResult {
+function replaceRangeWithBlock(value: string, start: number, end: number, block: string, selectionStartOffset: number, selectionEndOffset: number): LearningMarkdownEditResult {
   const prefix = computeBlockPrefix(value, start)
   const suffix = computeBlockSuffix(value, end)
   const replacement = `${prefix}${block}${suffix}`
-  return replaceRange(
-    value,
-    start,
-    end,
-    replacement,
-    prefix.length + selectionStartOffset,
-    prefix.length + selectionEndOffset
-  )
+  return replaceRange(value, start, end, replacement, prefix.length + selectionStartOffset, prefix.length + selectionEndOffset)
 }
 
-function wrapInline(
-  value: string,
-  start: number,
-  end: number,
-  prefix: string,
-  suffix: string,
-  placeholder: string
-): LearningMarkdownEditResult {
+function wrapInline(value: string, start: number, end: number, prefix: string, suffix: string, placeholder: string): LearningMarkdownEditResult {
   const { selectedText } = normalizeRange(value, start, end)
   const hasSelection = start !== end
   const innerText = hasSelection ? selectedText : placeholder
@@ -279,13 +247,7 @@ function getNestedListChildIndent(value: string, position: number): string | nul
   return null
 }
 
-function getListTemplateLines(
-  template: 'bulletList' | 'orderedList' | 'taskList',
-  count: number,
-  orderedStartNumber: number,
-  locale: ResolvedLocale,
-  indent = ''
-): string[] {
+function getListTemplateLines(template: 'bulletList' | 'orderedList' | 'taskList', count: number, orderedStartNumber: number, locale: ResolvedLocale, indent = ''): string[] {
   const text = getTemplateText(locale)
   if (template === 'bulletList') {
     return Array.from({ length: count }, (_, index) => `${indent}- ${index === 0 ? text.placeholders.listItem : ''}`)
@@ -296,12 +258,7 @@ function getListTemplateLines(
   return Array.from({ length: count }, (_, index) => `${indent}- [ ] ${index === 0 ? text.placeholders.taskItem : ''}`)
 }
 
-function getListTemplateSelectionOffsets(
-  template: 'bulletList' | 'orderedList' | 'taskList',
-  locale: ResolvedLocale,
-  orderedStartNumber: number,
-  indent = ''
-): { selectionStartOffset: number; selectionEndOffset: number } {
+function getListTemplateSelectionOffsets(template: 'bulletList' | 'orderedList' | 'taskList', locale: ResolvedLocale, orderedStartNumber: number, indent = ''): { selectionStartOffset: number; selectionEndOffset: number } {
   const text = getTemplateText(locale)
   if (template === 'bulletList') {
     const markerLength = `${indent}- `.length
@@ -324,13 +281,7 @@ function getListTemplateSelectionOffsets(
   }
 }
 
-function insertHeading(
-  value: string,
-  start: number,
-  end: number,
-  level: 1 | 2 | 3,
-  locale: ResolvedLocale
-): LearningMarkdownEditResult {
+function insertHeading(value: string, start: number, end: number, level: 1 | 2 | 3, locale: ResolvedLocale): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
@@ -338,11 +289,7 @@ function insertHeading(
 
   const prefix = `${'#'.repeat(level)} `
   const text = getTemplateText(locale)
-  const headingText = level === 1
-    ? text.placeholders.heading1
-    : level === 2
-      ? text.placeholders.heading2
-      : text.placeholders.heading3
+  const headingText = level === 1 ? text.placeholders.heading1 : level === 2 ? text.placeholders.heading2 : text.placeholders.heading3
   const replacement = `${prefix}${headingText}`
   return replaceRange(value, start, end, replacement, prefix.length, replacement.length)
 }
@@ -360,14 +307,7 @@ function insertCodeBlock(value: string, start: number, end: number): LearningMar
   return replaceRangeWithBlock(value, start, end, block, codeStartOffset, codeEndOffset)
 }
 
-function insertListTemplate(
-  value: string,
-  start: number,
-  end: number,
-  template: 'bulletList' | 'orderedList' | 'taskList',
-  locale: ResolvedLocale,
-  count = 1
-): LearningMarkdownEditResult {
+function insertListTemplate(value: string, start: number, end: number, template: 'bulletList' | 'orderedList' | 'taskList', locale: ResolvedLocale, count = 1): LearningMarkdownEditResult {
   const safeCount = clamp(Math.floor(count), 1, 12)
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
@@ -379,37 +319,16 @@ function insertListTemplate(
     const orderedStartNumber = 1
     const replacement = `\n${getListTemplateLines(template, safeCount, orderedStartNumber, locale, nestedIndent).join('\n')}`
     const selectionOffsets = getListTemplateSelectionOffsets(template, locale, orderedStartNumber, nestedIndent)
-    return replaceRange(
-      value,
-      start,
-      start,
-      replacement,
-      1 + selectionOffsets.selectionStartOffset,
-      1 + selectionOffsets.selectionEndOffset
-    )
+    return replaceRange(value, start, start, replacement, 1 + selectionOffsets.selectionStartOffset, 1 + selectionOffsets.selectionEndOffset)
   }
 
-  const orderedStartNumber = template === 'orderedList'
-    ? getOrderedListStartNumber(value, getLineStart(value, start))
-    : 0
+  const orderedStartNumber = template === 'orderedList' ? getOrderedListStartNumber(value, getLineStart(value, start)) : 0
   const replacement = getListTemplateLines(template, safeCount, orderedStartNumber || 1, locale).join('\n')
   const selectionOffsets = getListTemplateSelectionOffsets(template, locale, orderedStartNumber || 1)
-  return replaceRange(
-    value,
-    start,
-    start,
-    replacement,
-    selectionOffsets.selectionStartOffset,
-    selectionOffsets.selectionEndOffset
-  )
+  return replaceRange(value, start, start, replacement, selectionOffsets.selectionStartOffset, selectionOffsets.selectionEndOffset)
 }
 
-function insertBlockquote(
-  value: string,
-  start: number,
-  end: number,
-  locale: ResolvedLocale
-): LearningMarkdownEditResult {
+function insertBlockquote(value: string, start: number, end: number, locale: ResolvedLocale): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
@@ -418,13 +337,7 @@ function insertBlockquote(
   return replaceRange(value, start, end, `> ${quoteText}`, 2, 2 + quoteText.length)
 }
 
-function insertLink(
-  value: string,
-  start: number,
-  end: number,
-  asImage: boolean,
-  locale: ResolvedLocale
-): LearningMarkdownEditResult {
+function insertLink(value: string, start: number, end: number, asImage: boolean, locale: ResolvedLocale): LearningMarkdownEditResult {
   const { selectedText } = normalizeRange(value, start, end)
   const text = getTemplateText(locale)
   const label = selectedText || (asImage ? text.placeholders.imageAltText : text.placeholders.linkText)
@@ -439,28 +352,15 @@ function insertLink(
 export function buildMarkdownTable(rows: number, columns: number, locale: ResolvedLocale = 'zh-CN'): string {
   const safeRows = clamp(Math.floor(rows), 1, 12)
   const safeColumns = clamp(Math.floor(columns), 1, 12)
-  const header = Array.from(
-    { length: safeColumns },
-    (_, index) => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableHeader', { count: index + 1 })
-  )
+  const header = Array.from({ length: safeColumns }, (_, index) => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableHeader', { count: index + 1 }))
   const delimiter = Array.from({ length: safeColumns }, () => '---')
-  const bodyRow = Array.from(
-    { length: safeColumns },
-    () => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableCell')
-  )
+  const bodyRow = Array.from({ length: safeColumns }, () => translateLearningMarkdown(locale, 'learning.markdown.templates.placeholders.tableCell'))
   const bodyRows = Array.from({ length: Math.max(0, safeRows - 1) }, () => bodyRow)
   const allRows = [header, delimiter, ...bodyRows]
   return allRows.map((row) => `| ${row.join(' | ')} |`).join('\n')
 }
 
-function insertTable(
-  value: string,
-  start: number,
-  end: number,
-  rows: number,
-  columns: number,
-  locale: ResolvedLocale
-): LearningMarkdownEditResult {
+function insertTable(value: string, start: number, end: number, rows: number, columns: number, locale: ResolvedLocale): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
@@ -472,13 +372,7 @@ function insertTable(
   return replaceRangeWithBlock(value, start, end, table, headerOffset, headerOffset + firstHeader.length)
 }
 
-function insertPresetBlock(
-  value: string,
-  start: number,
-  end: number,
-  lines: string[],
-  focusText: string
-): LearningMarkdownEditResult {
+function insertPresetBlock(value: string, start: number, end: number, lines: string[], focusText: string): LearningMarkdownEditResult {
   const collapsed = collapseSelectionForInsertion(value, start, end)
   value = collapsed.value
   start = collapsed.start
@@ -489,14 +383,7 @@ function insertPresetBlock(
   if (selectionOffset < 0) {
     return replaceRangeWithBlock(value, start, end, block, block.length, block.length)
   }
-  return replaceRangeWithBlock(
-    value,
-    start,
-    end,
-    block,
-    selectionOffset,
-    selectionOffset + focusText.length
-  )
+  return replaceRangeWithBlock(value, start, end, block, selectionOffset, selectionOffset + focusText.length)
 }
 
 function insertHorizontalRule(value: string, start: number, end: number): LearningMarkdownEditResult {
@@ -504,13 +391,7 @@ function insertHorizontalRule(value: string, start: number, end: number): Learni
   return replaceRangeWithBlock(collapsed.value, collapsed.start, collapsed.end, '---', 3, 3)
 }
 
-export function applyLearningMarkdownInsert(
-  value: string,
-  start: number,
-  end: number,
-  request: LearningMarkdownInsertRequest,
-  locale: ResolvedLocale = 'zh-CN'
-): LearningMarkdownEditResult {
+export function applyLearningMarkdownInsert(value: string, start: number, end: number, request: LearningMarkdownInsertRequest, locale: ResolvedLocale = 'zh-CN'): LearningMarkdownEditResult {
   const normalized = normalizeRange(value, start, end)
   const text = getTemplateText(locale)
   if (request.kind === 'table') {
@@ -547,73 +428,21 @@ export function applyLearningMarkdownInsert(
     case 'horizontalRule':
       return insertHorizontalRule(value, normalized.start, normalized.end)
     case 'knowledgePoints':
-      return insertPresetBlock(
-        value,
-        normalized.start,
-        normalized.end,
-        [
-          `## ${text.sections.knowledgePoints.title}`,
-          '',
-          `- ${text.sections.knowledgePoints.coreConcept}`,
-          `- ${text.sections.knowledgePoints.principle}`,
-          `- ${text.sections.knowledgePoints.example}`,
-        ],
-        text.sections.knowledgePoints.coreConcept
-      )
+      return insertPresetBlock(value, normalized.start, normalized.end, [`## ${text.sections.knowledgePoints.title}`, '', `- ${text.sections.knowledgePoints.coreConcept}`, `- ${text.sections.knowledgePoints.principle}`, `- ${text.sections.knowledgePoints.example}`], text.sections.knowledgePoints.coreConcept)
     case 'summarySection':
-      return insertPresetBlock(
-        value,
-        normalized.start,
-        normalized.end,
-        [
-          `## ${text.sections.summary.title}`,
-          '',
-          `1. ${text.sections.summary.conclusionOne}`,
-          `2. ${text.sections.summary.conclusionTwo}`,
-          `3. ${text.sections.summary.nextAction}`,
-        ],
-        text.sections.summary.conclusionOne
-      )
+      return insertPresetBlock(value, normalized.start, normalized.end, [`## ${text.sections.summary.title}`, '', `1. ${text.sections.summary.conclusionOne}`, `2. ${text.sections.summary.conclusionTwo}`, `3. ${text.sections.summary.nextAction}`], text.sections.summary.conclusionOne)
     case 'reviewChecklist':
       return insertPresetBlock(
         value,
         normalized.start,
         normalized.end,
-        [
-          `## ${text.sections.reviewChecklist.title}`,
-          '',
-          `- [ ] ${text.sections.reviewChecklist.conceptDefinition}`,
-          `- [ ] ${text.sections.reviewChecklist.keyCommand}`,
-          `- [ ] ${text.sections.reviewChecklist.commonIssue}`,
-        ],
-        text.sections.reviewChecklist.conceptDefinition
+        [`## ${text.sections.reviewChecklist.title}`, '', `- [ ] ${text.sections.reviewChecklist.conceptDefinition}`, `- [ ] ${text.sections.reviewChecklist.keyCommand}`, `- [ ] ${text.sections.reviewChecklist.commonIssue}`],
+        text.sections.reviewChecklist.conceptDefinition,
       )
     case 'pitfallsSection':
-      return insertPresetBlock(
-        value,
-        normalized.start,
-        normalized.end,
-        [
-          `## ${text.sections.pitfalls.title}`,
-          '',
-          `> ${text.sections.pitfalls.commonConfusion}`,
-          '>',
-          `> ${text.sections.pitfalls.correctUsage}`,
-        ],
-        text.sections.pitfalls.commonConfusion
-      )
+      return insertPresetBlock(value, normalized.start, normalized.end, [`## ${text.sections.pitfalls.title}`, '', `> ${text.sections.pitfalls.commonConfusion}`, '>', `> ${text.sections.pitfalls.correctUsage}`], text.sections.pitfalls.commonConfusion)
     case 'referencesSection':
-      return insertPresetBlock(
-        value,
-        normalized.start,
-        normalized.end,
-        [
-          `## ${text.sections.references.title}`,
-          '',
-          `- [${text.sections.references.documentTitle}](https://example.com)`,
-        ],
-        'https://example.com'
-      )
+      return insertPresetBlock(value, normalized.start, normalized.end, [`## ${text.sections.references.title}`, '', `- [${text.sections.references.documentTitle}](https://example.com)`], 'https://example.com')
     default: {
       const exhaustiveCheck: never = request.template
       return exhaustiveCheck

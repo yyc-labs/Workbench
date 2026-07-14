@@ -9,36 +9,23 @@ export type LearningEditorHistoryState = {
   index: number
 }
 
-export function createLearningEditorHistoryState(
-  value: string,
-  selectionStart = 0,
-  selectionEnd = selectionStart
-): LearningEditorHistoryState {
+export function createLearningEditorHistoryState(value: string, selectionStart = 0, selectionEnd = selectionStart): LearningEditorHistoryState {
   return {
-    history: [{
-      value,
-      selectionStart,
-      selectionEnd,
-    }],
+    history: [
+      {
+        value,
+        selectionStart,
+        selectionEnd,
+      },
+    ],
     index: 0,
   }
 }
 
-export function pushLearningEditorSnapshot(
-  state: LearningEditorHistoryState,
-  snapshot: LearningEditorSnapshot,
-  limit: number
-): LearningEditorHistoryState {
-  const currentIndex = state.history.length > 0
-    ? Math.min(Math.max(state.index, 0), state.history.length - 1)
-    : -1
+export function pushLearningEditorSnapshot(state: LearningEditorHistoryState, snapshot: LearningEditorSnapshot, limit: number): LearningEditorHistoryState {
+  const currentIndex = state.history.length > 0 ? Math.min(Math.max(state.index, 0), state.history.length - 1) : -1
   const currentSnapshot = currentIndex >= 0 ? state.history[currentIndex] : undefined
-  if (
-    currentSnapshot
-    && currentSnapshot.value === snapshot.value
-    && currentSnapshot.selectionStart === snapshot.selectionStart
-    && currentSnapshot.selectionEnd === snapshot.selectionEnd
-  ) {
+  if (currentSnapshot && currentSnapshot.value === snapshot.value && currentSnapshot.selectionStart === snapshot.selectionStart && currentSnapshot.selectionEnd === snapshot.selectionEnd) {
     return state
   }
 
@@ -56,19 +43,12 @@ export function pushLearningEditorSnapshot(
   }
 }
 
-export function updateLearningEditorSnapshotSelection(
-  state: LearningEditorHistoryState,
-  selectionStart: number,
-  selectionEnd: number
-): LearningEditorHistoryState {
+export function updateLearningEditorSnapshotSelection(state: LearningEditorHistoryState, selectionStart: number, selectionEnd: number): LearningEditorHistoryState {
   if (state.history.length === 0) return state
 
   const currentIndex = Math.min(Math.max(state.index, 0), state.history.length - 1)
   const currentSnapshot = state.history[currentIndex]
-  if (
-    currentSnapshot.selectionStart === selectionStart
-    && currentSnapshot.selectionEnd === selectionEnd
-  ) {
+  if (currentSnapshot.selectionStart === selectionStart && currentSnapshot.selectionEnd === selectionEnd) {
     return state
   }
 
