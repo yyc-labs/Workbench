@@ -5,9 +5,10 @@ import { useI18n } from '../../i18n'
 type LearningCenterHeaderProps = {
   onBack: () => void
   onCreateNote: () => void
+  onOpenBrowserAi: () => void
 }
 
-export function LearningCenterHeader({ onBack, onCreateNote }: LearningCenterHeaderProps) {
+export function LearningCenterHeader({ onBack, onCreateNote, onOpenBrowserAi }: LearningCenterHeaderProps) {
   const { t } = useI18n()
 
   return (
@@ -33,6 +34,9 @@ export function LearningCenterHeader({ onBack, onCreateNote }: LearningCenterHea
       <Button size="sm" className="gap-1.5" onClick={onCreateNote}>
         <Plus className="h-4 w-4" />
         {t('learning.header.createNote')}
+      </Button>
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={onOpenBrowserAi}>
+        {t('learning.browserAi.open')}
       </Button>
     </header>
   )

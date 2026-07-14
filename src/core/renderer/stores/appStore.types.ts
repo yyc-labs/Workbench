@@ -37,6 +37,14 @@ import type {
   AppCacheLocationInfo,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
+  BrowserAiConfig,
+  BrowserAiConnectionTestResult,
+  BrowserAiContextPreview,
+  BrowserAiRunTaskPayload,
+  BrowserAiSaveResultPayload,
+  BrowserAiSnapshot,
+  BrowserAiTaskProgressEvent,
+  BrowserAiTaskResult,
   Capability,
   RuntimeSessionInfo,
   TmuxSessionInfo,
@@ -82,10 +90,10 @@ import type {
   LearningCategory,
   LearningCreateCategoryPayload,
   LearningCreateNotePayload,
-  LearningNote,
   LearningNoteSummary,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
+  LearningNote,
   ProjectFileAutoLoadDecision,
 } from '../../shared/types'
 import type { ElectronApi } from '../../shared/electronApi'
@@ -120,6 +128,8 @@ export interface AppState {
   transcriptModeBySessionId: Record<string, TranscriptViewerMode | undefined>
   activeTranscriptReferenceIdBySessionId: Record<string, string | undefined>
   transcriptListStatusByProjectId: Record<string, 'idle' | 'loading' | 'ready' | 'error'>
+  browserAi: BrowserAiSnapshot | null
+  browserAiProgress: BrowserAiTaskProgressEvent | null
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
@@ -165,6 +175,16 @@ export interface AppState {
   setHomeEnvFilter: (filter: AppState['homeEnvFilter']) => void
   setHomeClassifierFilter: (filter: StartupDefaultFilter) => void
   markHomeDefaultFilterApplied: () => void
+  loadBrowserAi: () => Promise<BrowserAiSnapshot>
+  saveBrowserAiConfig: (config: BrowserAiConfig) => Promise<BrowserAiSnapshot>
+  startBrowserAi: () => Promise<BrowserAiSnapshot>
+  stopBrowserAi: () => Promise<BrowserAiSnapshot>
+  testBrowserAiConnection: () => Promise<BrowserAiConnectionTestResult>
+  openBrowserAiLogin: () => Promise<BrowserAiSnapshot>
+  composeBrowserAiPreview: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiContextPreview>
+  runBrowserAiTask: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiTaskResult>
+  cancelBrowserAiTask: () => Promise<BrowserAiSnapshot>
+  saveBrowserAiResult: (payload: BrowserAiSaveResultPayload) => Promise<LearningNote>
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
   clearProjectLastOpened: (projectId: string) => Promise<void>

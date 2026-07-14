@@ -34,6 +34,7 @@ import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
 import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/gateway-config'
+import { DEFAULT_BROWSER_AI_CONFIG, normalizeBrowserAiConfig } from './browser-ai/browserAiConfig'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -137,6 +138,7 @@ const DEFAULT_CONFIG: AppConfig = {
   agentHooks: DEFAULT_AGENT_HOOK_CONFIG,
   agentLogs: DEFAULT_AGENT_LOGS_CONFIG,
   aiGateway: defaultAiGatewayConfig(),
+  browserAi: DEFAULT_BROWSER_AI_CONFIG,
   shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
 }
 
@@ -927,6 +929,7 @@ export function loadConfig(): AppConfig {
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
       agentLogs: normalizeAgentLogsConfig(parsed.agentLogs),
       aiGateway: normalizeAiGatewayConfig(parsed.aiGateway),
+      browserAi: normalizeBrowserAiConfig(parsed.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig({
@@ -979,6 +982,7 @@ export function loadConfig(): AppConfig {
       agentHooks: normalizeAgentHookConfig(DEFAULT_CONFIG.agentHooks),
       agentLogs: normalizeAgentLogsConfig(DEFAULT_CONFIG.agentLogs),
       aiGateway: normalizeAiGatewayConfig(DEFAULT_CONFIG.aiGateway),
+      browserAi: normalizeBrowserAiConfig(DEFAULT_CONFIG.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
@@ -1027,6 +1031,9 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway')
       ? normalizeAiGatewayConfig(partial.aiGateway)
       : normalizeAiGatewayConfig(current.aiGateway),
+    browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi')
+      ? normalizeBrowserAiConfig(partial.browserAi)
+      : normalizeBrowserAiConfig(current.browserAi),
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences')
       ? normalizeShortcutPreferences(partial.shortcutPreferences)
       : normalizeShortcutPreferences(current.shortcutPreferences),

@@ -1,7 +1,7 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron'
 import path from 'path'
 import { ProcessManager } from './runner'
-import { loadConfig } from './config'
+import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
@@ -16,6 +16,10 @@ import { createTranscriptService } from './transcript/transcriptService'
 import { createTranscriptShareService } from './transcript/transcriptShareService'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
+import {
+  createBrowserAiService,
+  createDefaultBrowserAiRepository,
+} from './browser-ai/browserAiService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
@@ -114,6 +118,18 @@ const learningRepository = createLearningRepository()
 const learningService = createLearningService({
   repository: learningRepository,
   getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
+})
+const browserAiRepository = createDefaultBrowserAiRepository({
+  loadConfig: () => loadConfig().browserAi,
+  saveConfig: async (config) => (await updateConfig({ browserAi: config })).browserAi!,
+})
+const browserAiService = createBrowserAiService({
+  repository: browserAiRepository,
+  getUserDataPath: () => app.getPath('userData'),
+  learningService,
+  emitProgress: (event) => {
+    mainWindow?.webContents.send(IPC.BROWSER_AI_PROGRESS, event)
+  },
 })
 const aiGatewayService = createAiGatewayService({
   getCapability: () => bootCapability,
@@ -489,6 +505,7 @@ app.on('before-quit', async (e) => {
   await agentHookGateway.stop()
   await aiGatewayService.shutdown()
   await transcriptShareService.shutdown()
+  await browserAiService.cleanupOnBeforeQuit()
 
   setTimeout(() => {
     flushAiCommitRegistry()
@@ -549,6 +566,7 @@ app.whenReady().then(async () => {
     agentLogService,
     aiCommitService,
     aiGatewayService,
+    browserAiService,
     agentHookGateway,
     gitService,
     runtimeService,

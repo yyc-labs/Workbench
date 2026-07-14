@@ -6,6 +6,7 @@ import { shouldUseWslForRuntimeEntrypoint } from '../../shared/runtimeEntrypoint
 import type { AppConfig, Capability, SavedProject, TmuxSessionInfo } from '../../shared/types'
 
 let initAppPromise: Promise<void> | null = null
+let browserAiSubscriptionInitialized = false
 
 export type InitActionsSlice = Pick<
   AppState,
@@ -71,6 +72,28 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         capability,
         isAppReady: true,
       })
+
+      if (!browserAiSubscriptionInitialized && typeof window.electronAPI.onBrowserAiProgress === 'function') {
+        browserAiSubscriptionInitialized = true
+        window.electronAPI.onBrowserAiProgress((progress) => {
+          set((state) => ({
+            browserAiProgress: progress,
+            browserAi: state.browserAi
+              ? {
+                ...state.browserAi,
+                taskStatus: progress.status,
+                activeTaskId: progress.status === 'completed'
+                  || progress.status === 'failed'
+                  || progress.status === 'cancelled'
+                  ? undefined
+                  : progress.taskId,
+                errorCode: progress.errorCode ?? state.browserAi.errorCode,
+                errorMessage: progress.message ?? state.browserAi.errorMessage,
+              }
+              : state.browserAi,
+          }))
+        })
+      }
 
       get().rehydrateProcessUrlsFromStorage()
 

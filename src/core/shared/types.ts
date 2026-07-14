@@ -806,6 +806,148 @@ export interface LearningUpdateCategoryPayload {
   name: string
 }
 
+export type BrowserAiMode = 'managed-edge' | 'external-cdp'
+
+/** The adapter used to interact with the configured web AI site. */
+export type BrowserAiSite = 'generic-web' | 'chatgpt-web'
+
+export type BrowserAiTaskStatus =
+  | 'idle'
+  | 'starting'
+  | 'connecting'
+  | 'needs-login'
+  | 'opening-page'
+  | 'sending'
+  | 'waiting-response'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type BrowserAiConnectionStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'needs-login'
+  | 'error'
+
+export type BrowserAiErrorCode =
+  | 'BROWSER_NOT_FOUND'
+  | 'CDP_UNAVAILABLE'
+  | 'LOGIN_REQUIRED'
+  | 'SITE_NOT_RECOGNIZED'
+  | 'COMPOSER_NOT_FOUND'
+  | 'SUBMIT_FAILED'
+  | 'RESPONSE_TIMEOUT'
+  | 'RESPONSE_EMPTY'
+  | 'BROWSER_DISCONNECTED'
+  | 'SITE_LIMIT_OR_ERROR'
+  | 'CONTEXT_INVALID'
+  | 'CONTEXT_TOO_LARGE'
+  | 'TASK_ALREADY_RUNNING'
+  | 'TASK_CANCELLED'
+  | 'LEARNING_NOTE_NOT_FOUND'
+  | 'SAVE_RESULT_FAILED'
+  | 'UNKNOWN'
+
+export interface BrowserAiConfig {
+  enabled: boolean
+  mode: BrowserAiMode
+  edgeExecutablePath?: string
+  cdpHost: '127.0.0.1'
+  cdpPort?: number
+  site: BrowserAiSite
+  siteUrl: string
+  sites: BrowserAiSiteProfile[]
+  activeSiteId: string
+  keepBrowserRunning: boolean
+  headless: boolean
+  responseTimeoutMs: number
+}
+
+export interface BrowserAiSiteProfile {
+  id: string
+  name: string
+  url: string
+  site: BrowserAiSite
+}
+
+export interface BrowserAiTaskResult {
+  taskId: string
+  status: 'completed' | 'failed' | 'cancelled'
+  answer?: string
+  sourceLabels: string[]
+  startedAt: number
+  completedAt: number
+  errorCode?: BrowserAiErrorCode
+  errorMessage?: string
+}
+
+export interface BrowserAiSnapshot {
+  config: BrowserAiConfig
+  connection: BrowserAiConnectionStatus
+  browserRunning: boolean
+  profilePath: string
+  taskStatus: BrowserAiTaskStatus
+  activeTaskId?: string
+  lastResult?: BrowserAiTaskResult
+  errorCode?: BrowserAiErrorCode
+  errorMessage?: string
+}
+
+export interface BrowserAiContextSource {
+  kind: 'skill' | 'learning-note' | 'personal-context' | 'task'
+  label: string
+  content: string
+  included: boolean
+}
+
+export interface BrowserAiContextSourceSummary {
+  kind: BrowserAiContextSource['kind']
+  label: string
+  included: boolean
+  sensitive: boolean
+  characterCount: number
+}
+
+export interface BrowserAiRunTaskPayload {
+  site: BrowserAiSite
+  task: string
+  sources: BrowserAiContextSource[]
+  responseFormat?: string
+}
+
+export interface BrowserAiContextPreview {
+  prompt: string
+  characterCount: number
+  sourceLabels: string[]
+  sources: BrowserAiContextSourceSummary[]
+  site: BrowserAiSite
+}
+
+export interface BrowserAiConnectionTestResult {
+  status: BrowserAiConnectionStatus
+  site: BrowserAiSite
+  loggedIn: boolean
+  message?: string
+  errorCode?: BrowserAiErrorCode
+}
+
+export interface BrowserAiTaskProgressEvent {
+  taskId: string
+  status: BrowserAiTaskStatus
+  sourceLabels: string[]
+  characterCount?: number
+  message?: string
+  errorCode?: BrowserAiErrorCode
+}
+
+export interface BrowserAiSaveResultPayload {
+  mode: 'new-note' | 'append-note'
+  noteId?: string
+  title?: string
+  answer: string
+}
+
 export interface TranscriptImportPayload {
   projectId: string
   sourceType: TranscriptSourceType
@@ -1322,6 +1464,8 @@ export interface AppConfig {
   agentLogs?: AgentLogsConfig
   /** Local model protocol gateway for Claude/Codex compatible CLIs */
   aiGateway?: AiGatewayConfig
+  /** Browser-based AI dispatch configuration. */
+  browserAi?: BrowserAiConfig
   /** User-configurable global shortcut behavior */
   shortcutPreferences?: ShortcutPreferencesConfig
   /** sessionName → projectId mapping for tmux recovery */

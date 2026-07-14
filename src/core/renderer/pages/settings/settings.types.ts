@@ -5,6 +5,7 @@ export const SETTINGS_SECTIONS = [
   'runtime',
   'agents',
   'gateway',
+  'browser-ai',
   'transcripts',
   'hooks',
   'agent-logs',

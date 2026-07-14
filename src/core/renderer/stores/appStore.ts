@@ -7,6 +7,7 @@ import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
+import { createBrowserAiActionsSlice } from './appStore.browserAiSlice'
 import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../../shared/aiRuntimeProfiles'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 
@@ -54,6 +55,8 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   transcriptModeBySessionId: {},
   activeTranscriptReferenceIdBySessionId: {},
   transcriptListStatusByProjectId: {},
+  browserAi: null,
+  browserAiProgress: null,
 
   ...createInitActionsSlice(...args),
   ...createSettingsActionsSlice(...args),
@@ -61,4 +64,5 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createProcessActionsSlice(...args),
   ...createRuntimeActionsSlice(...args),
   ...createTranscriptActionsSlice(...args),
+  ...createBrowserAiActionsSlice(...args),
 }))

@@ -2,6 +2,7 @@ import { contextBridge } from 'electron'
 import type { ElectronApi } from '../../shared/electronApi'
 import { createAgentLogsInvokeApi } from './invokeApi.agentLogs'
 import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
+import { createBrowserAiInvokeApi } from './invokeApi.browserAi'
 import { createCoreInvokeApi } from './invokeApi.core'
 import { createGitInvokeApi } from './invokeApi.git'
 import { createLearningInvokeApi } from './invokeApi.learning'
@@ -14,6 +15,7 @@ const api = {
   ...createCoreInvokeApi(),
   ...createAgentLogsInvokeApi(),
   ...createAiGatewayInvokeApi(),
+  ...createBrowserAiInvokeApi(),
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
   ...createTranscriptInvokeApi(),

@@ -75,6 +75,7 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   runtime: 'common.routeCatalog.settingsDescriptions.runtime',
   agents: 'common.routeCatalog.settingsDescriptions.agents',
   gateway: 'common.routeCatalog.settingsDescriptions.gateway',
+  'browser-ai': 'common.routeCatalog.settingsDescriptions.browserAi',
   transcripts: 'common.routeCatalog.settingsDescriptions.transcripts',
   hooks: 'common.routeCatalog.settingsDescriptions.hooks',
   'agent-logs': 'common.routeCatalog.settingsDescriptions.agentLogs',

@@ -12,6 +12,7 @@ import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
+import type { BrowserAiService } from '../browser-ai/browserAiService'
 import type {
   Capability,
   TranscriptCaptureInitialText,
@@ -35,6 +36,7 @@ export type RegisterIpcHandlersDependencies = {
   agentLogService: AgentLogService
   aiCommitService: AiCommitService
   aiGatewayService: AiGatewayService
+  browserAiService: BrowserAiService
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService

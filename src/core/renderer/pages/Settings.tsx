@@ -16,6 +16,7 @@ import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsAgentLogsPanel } from './settings/SettingsAgentLogsPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
+import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
 import {
@@ -395,6 +396,7 @@ export function SettingsPage() {
                   onProfilesSave={setClaudeRuntimeProfiles}
                 />
               )}
+              {section === 'browser-ai' && <SettingsBrowserAiPanel />}
               {section === 'transcripts' && (
                 <SettingsTranscriptPanel
                   projects={projects}

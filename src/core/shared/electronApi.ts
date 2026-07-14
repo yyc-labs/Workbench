@@ -18,6 +18,13 @@ import type {
   AppConfig,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
+  BrowserAiConfig,
+  BrowserAiConnectionTestResult,
+  BrowserAiContextPreview,
+  BrowserAiRunTaskPayload,
+  BrowserAiSaveResultPayload,
+  BrowserAiSnapshot,
+  BrowserAiTaskResult,
   Capability,
   ClaudeBashrcConfig,
   CodexEnvironmentScope,
@@ -272,6 +279,19 @@ export interface LearningElectronApi {
   deleteLearningNote: (noteId: string) => Promise<boolean>
 }
 
+export interface BrowserAiElectronApi {
+  getBrowserAiConfig: () => Promise<BrowserAiSnapshot>
+  saveBrowserAiConfig: (config: BrowserAiConfig) => Promise<BrowserAiSnapshot>
+  startBrowserAi: () => Promise<BrowserAiSnapshot>
+  stopBrowserAi: () => Promise<BrowserAiSnapshot>
+  testBrowserAiConnection: () => Promise<BrowserAiConnectionTestResult>
+  openBrowserAiLogin: () => Promise<BrowserAiSnapshot>
+  composeBrowserAiPreview: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiContextPreview>
+  runBrowserAiTask: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiTaskResult>
+  cancelBrowserAiTask: () => Promise<BrowserAiSnapshot>
+  saveBrowserAiResult: (payload: BrowserAiSaveResultPayload) => Promise<import('./types').LearningNote>
+}
+
 export interface RuntimeElectronApi {
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
   getCapability: () => Promise<Capability>
@@ -302,6 +322,7 @@ export interface SubscriptionElectronApi {
   onAiCommitStatus: ElectronApiSubscription<AiCommitStatusEvent>
   onAgentHookEvent: ElectronApiSubscription<AgentHookEnvelope>
   onTranscriptImported: ElectronApiSubscription<TranscriptImportedEvent>
+  onBrowserAiProgress: ElectronApiSubscription<import('./types').BrowserAiTaskProgressEvent>
   onWindowState: ElectronApiSubscription<WindowStateEvent>
   onAppNavigate: ElectronApiSubscription<AppNavigateEvent>
   onCodeFocusSearch: ElectronApiSignalSubscription
@@ -318,5 +339,6 @@ export type ElectronApi =
   & ProjectFileElectronApi
   & TranscriptElectronApi
   & LearningElectronApi
+  & BrowserAiElectronApi
   & RuntimeElectronApi
   & SubscriptionElectronApi

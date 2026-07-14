@@ -11,6 +11,7 @@ const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = 
   runtime: 'settings.sections.runtime',
   agents: 'settings.sections.agents',
   gateway: 'settings.sections.gateway',
+  'browser-ai': 'settings.sections.browserAi',
   transcripts: 'settings.sections.transcripts',
   hooks: 'settings.sections.hooks',
   'agent-logs': 'settings.sections.agentLogs',

@@ -14,6 +14,7 @@ import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
 import { useSidebarGesture } from '../hooks/useSidebarGesture'
 import { useI18n } from '../i18n'
 import { LearningCenterHeader } from './learning/LearningCenterHeader'
+import { LearningBrowserAiDialog } from './learning/LearningBrowserAiDialog'
 import { LearningDeleteNoteDialog } from './learning/LearningDeleteNoteDialog'
 import { LearningEditorPanel } from './learning/LearningEditorPanel'
 import { LearningFrontmatterDialog } from './learning/LearningFrontmatterDialog'
@@ -89,6 +90,7 @@ export function LearningCenterPage() {
   const [frontmatterStatus, setFrontmatterStatus] = useState<LearningNoteStatus>('draft')
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
+  const [browserAiOpen, setBrowserAiOpen] = useState(false)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -242,6 +244,13 @@ export function LearningCenterPage() {
     setEditorStatus(updated.status)
     setEditorContent(updated.contentMd)
     setNotes((current) => [updated, ...current.filter((item) => item.id !== updated.id)])
+  }
+
+  const handleBrowserAiSaved = (saved: LearningNote) => {
+    syncUpdatedNote(saved)
+    setNotes((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
+    setSelectedNoteId(saved.id)
+    setBrowserAiOpen(false)
   }
 
   const resetFrontmatterDialog = () => {
@@ -696,6 +705,7 @@ export function LearningCenterPage() {
         <LearningCenterHeader
           onBack={() => navigate('/')}
           onCreateNote={openCreateDialog}
+          onOpenBrowserAi={() => setBrowserAiOpen(true)}
         />
 
         <div
@@ -821,6 +831,14 @@ export function LearningCenterPage() {
         selectedNote={selectedNote}
         onClose={() => setDeleteConfirmOpen(false)}
         onDelete={handleDelete}
+      />
+
+      <LearningBrowserAiDialog
+        currentNote={selectedNote}
+        notes={notes}
+        onClose={() => setBrowserAiOpen(false)}
+        onSaved={handleBrowserAiSaved}
+        open={browserAiOpen}
       />
     </div>
   )

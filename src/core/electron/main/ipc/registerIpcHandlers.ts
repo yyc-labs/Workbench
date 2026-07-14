@@ -2,6 +2,7 @@ import { registerCoreIpcHandlers } from './registerCoreIpcHandlers'
 import { registerAgentLogsIpcHandlers } from './registerAgentLogsIpcHandlers'
 import { registerGitIpcHandlers } from './registerGitIpcHandlers'
 import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
+import { registerBrowserAiIpcHandlers } from './registerBrowserAiIpcHandlers'
 import { registerLearningIpcHandlers } from './registerLearningIpcHandlers'
 import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
 import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
@@ -30,4 +31,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerLearningIpcHandlers(deps)
   registerRuntimeIpcHandlers(deps)
   registerAiGatewayIpcHandlers(deps)
+  registerBrowserAiIpcHandlers(deps)
 }

@@ -1,6 +1,10 @@
 import { ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
-import type { AgentHookEnvelope, TranscriptImportedEvent } from '../../shared/types'
+import type {
+  AgentHookEnvelope,
+  BrowserAiTaskProgressEvent,
+  TranscriptImportedEvent,
+} from '../../shared/types'
 
 type AiCommitOutputData = { projectId: string; data: string }
 type AiCommitStatusData = { projectId: string; status: 'running' | 'success' | 'error' }
@@ -66,6 +70,9 @@ export function createSubscriptionApi() {
 
     onTranscriptImported: (cb: (data: TranscriptImportedEvent) => void) =>
       subscribeIpcEvent(IPC.TRANSCRIPT_IMPORTED, cb),
+
+    onBrowserAiProgress: (cb: (data: BrowserAiTaskProgressEvent) => void) =>
+      subscribeIpcEvent(IPC.BROWSER_AI_PROGRESS, cb),
 
     onWindowState: (cb: (data: { isMaximized: boolean }) => void) =>
       subscribeIpcEvent(IPC.WINDOW_STATE, cb),
