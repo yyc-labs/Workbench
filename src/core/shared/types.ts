@@ -823,6 +823,35 @@ export type BrowserAiTaskStatus =
   | 'failed'
   | 'cancelled'
 
+export type BrowserAiTaskRecordStatus = 'running' | 'completed' | 'failed' | 'cancelled'
+
+export type BrowserAiTaskStepId =
+  | 'prepare-task'
+  | 'connect-edge'
+  | 'open-conversation'
+  | 'check-login'
+  | 'find-composer'
+  | 'fill-prompt'
+  | 'submit-prompt'
+  | 'wait-response'
+  | 'read-answer'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type BrowserAiTaskStepStatus = 'pending' | 'active' | 'completed' | 'failed' | 'cancelled'
+
+export interface BrowserAiTaskStep {
+  id: BrowserAiTaskStepId
+  status: BrowserAiTaskStepStatus
+  startedAt?: number
+  updatedAt: number
+  completedAt?: number
+  elapsedMs?: number
+  message?: string
+  detail?: string
+}
+
 export type BrowserAiConnectionStatus =
   | 'disconnected'
   | 'connecting'
@@ -847,6 +876,8 @@ export type BrowserAiErrorCode =
   | 'TASK_CANCELLED'
   | 'LEARNING_NOTE_NOT_FOUND'
   | 'SAVE_RESULT_FAILED'
+  | 'TASK_RECORD_NOT_FOUND'
+  | 'TASK_RECORD_SAVE_FAILED'
   | 'UNKNOWN'
 
 export interface BrowserAiConfig {
@@ -878,6 +909,8 @@ export interface BrowserAiTaskResult {
   sourceLabels: string[]
   startedAt: number
   completedAt: number
+  recordId?: string
+  steps: BrowserAiTaskStep[]
   errorCode?: BrowserAiErrorCode
   errorMessage?: string
 }
@@ -899,6 +932,7 @@ export interface BrowserAiContextSource {
   label: string
   content: string
   included: boolean
+  referenceId?: string
 }
 
 export interface BrowserAiContextSourceSummary {
@@ -911,9 +945,11 @@ export interface BrowserAiContextSourceSummary {
 
 export interface BrowserAiRunTaskPayload {
   site: BrowserAiSite
-  task: string
+  task?: string
   sources: BrowserAiContextSource[]
   responseFormat?: string
+  /** Explicit opt-in to retain the complete source content for later reuse. */
+  savePrompt?: boolean
 }
 
 export interface BrowserAiContextPreview {
@@ -939,6 +975,72 @@ export interface BrowserAiTaskProgressEvent {
   characterCount?: number
   message?: string
   errorCode?: BrowserAiErrorCode
+  step?: BrowserAiTaskStep
+  steps?: BrowserAiTaskStep[]
+}
+
+export interface BrowserAiTaskRecordSite {
+  site: BrowserAiSite
+  name: string
+  url: string
+}
+
+export interface BrowserAiTaskRecordSource {
+  kind: BrowserAiContextSource['kind']
+  label: string
+  referenceId?: string
+  included: boolean
+  sensitive: boolean
+  characterCount: number
+  content?: string
+}
+
+export interface BrowserAiTaskRecordInput {
+  task?: string
+  responseFormat?: string
+  sources: BrowserAiTaskRecordSource[]
+  promptSaved: boolean
+}
+
+export interface BrowserAiTaskRecord {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  startedAt: number
+  completedAt?: number
+  site: BrowserAiTaskRecordSite
+  sources: BrowserAiTaskRecordSource[]
+  status: BrowserAiTaskRecordStatus
+  answer?: string
+  steps: BrowserAiTaskStep[]
+  errorCode?: BrowserAiErrorCode
+  errorMessage?: string
+  input: BrowserAiTaskRecordInput
+}
+
+export interface BrowserAiTaskRecordSummary {
+  id: string
+  title: string
+  createdAt: number
+  updatedAt: number
+  startedAt: number
+  completedAt?: number
+  status: BrowserAiTaskRecordStatus
+  siteName: string
+  sourceLabels: string[]
+  answerExcerpt: string
+  errorCode?: BrowserAiErrorCode
+}
+
+export interface BrowserAiSaveTaskRecordPayload {
+  recordId: string
+  title: string
+  savePrompt?: boolean
+}
+
+export interface BrowserAiTaskRecordIdPayload {
+  recordId: string
 }
 
 export interface BrowserAiSaveResultPayload {

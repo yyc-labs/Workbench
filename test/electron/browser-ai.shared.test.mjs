@@ -19,6 +19,7 @@ const {
   composeBrowserAiContext,
 } = loadTsModule('src/core/electron/main/browser-ai/contextComposer.ts')
 const { genericWebAiAdapter } = loadTsModule('src/core/electron/main/browser-ai/site-adapters/genericWebAiAdapter.ts')
+const { createBrowserAiRepository } = loadTsModule('src/core/electron/main/browser-ai/browserAiRepository.ts')
 
 test('browser AI config keeps CDP on loopback and normalizes invalid values', () => {
   const config = normalizeBrowserAiConfig({
@@ -149,4 +150,59 @@ test('browser AI context rejects oversized sources and total context without sil
     }),
     (error) => error instanceof BrowserAiContextError && error.code === 'CONTEXT_TOO_LARGE',
   )
+})
+
+test('browser AI context allows source-only tasks and omits an empty task block', () => {
+  const result = composeBrowserAiContext({
+    site: 'chatgpt-web',
+    sources: [{ kind: 'learning-note', label: 'Note', content: 'Use the existing API shape.', included: true }],
+  })
+
+  assert.deepEqual(result.sourceLabels, ['Note'])
+  assert.doesNotMatch(result.prompt, /<task>/)
+  assert.equal(result.sources.some((source) => source.kind === 'task'), false)
+})
+
+test('browser AI context rejects an empty task with no usable source', () => {
+  assert.throws(
+    () => composeBrowserAiContext({ site: 'chatgpt-web', task: '  ', sources: [] }),
+    (error) => error instanceof BrowserAiContextError && error.code === 'CONTEXT_INVALID',
+  )
+})
+
+test('browser AI task repository keeps detail files and a time-sorted summary index', async () => {
+  const fs = await import('node:fs/promises')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ide-browser-ai-'))
+  const config = { enabled: true, mode: 'managed-edge', cdpHost: '127.0.0.1', site: 'generic-web', siteUrl: 'https://example.com', sites: [{ id: 'example', name: 'Example', url: 'https://example.com', site: 'generic-web' }], activeSiteId: 'example', keepBrowserRunning: false, headless: false, responseTimeoutMs: 10_000 }
+  const repository = createBrowserAiRepository({
+    loadConfig: () => config,
+    saveConfig: async (nextConfig) => nextConfig,
+    getRecordsRootPath: () => root,
+  })
+  const createRecord = (id, updatedAt) => ({
+    id,
+    title: id,
+    createdAt: updatedAt - 100,
+    updatedAt,
+    startedAt: updatedAt - 100,
+    completedAt: updatedAt,
+    site: { site: 'generic-web', name: 'Example', url: 'https://example.com' },
+    sources: [{ kind: 'learning-note', label: 'Note', included: true, sensitive: false, characterCount: 4 }],
+    status: 'completed',
+    answer: `Answer ${id}`,
+    steps: [],
+    input: { task: `Task ${id}`, sources: [], promptSaved: false },
+  })
+
+  await repository.saveTaskRecord(createRecord('older', 10))
+  await repository.saveTaskRecord(createRecord('newer', 20))
+  assert.deepEqual((await repository.listTaskRecords()).map((record) => record.id), ['newer', 'older'])
+  assert.equal((await repository.getTaskRecord('newer')).answer, 'Answer newer')
+  const renamed = await repository.renameTaskRecord('newer', 'Renamed task')
+  assert.equal(renamed.title, 'Renamed task')
+  assert.equal(await repository.deleteTaskRecord('older'), true)
+  assert.deepEqual((await repository.listTaskRecords()).map((record) => record.id), ['newer'])
+  await fs.rm(root, { recursive: true, force: true })
 })

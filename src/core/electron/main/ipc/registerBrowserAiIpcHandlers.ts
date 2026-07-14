@@ -3,6 +3,7 @@ import { IPC } from '../ipc'
 import type {
   BrowserAiConfig,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
 } from '../../../shared/types'
 import type { RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
@@ -32,5 +33,17 @@ export function registerBrowserAiIpcHandlers(deps: RegisterIpcHandlersDependenci
     IPC.BROWSER_AI_SAVE_RESULT,
     (_event, payload: BrowserAiSaveResultPayload) => deps.browserAiService.saveResult(payload),
   )
+  ipcMain.handle(IPC.BROWSER_AI_LIST_RECORDS, () => deps.browserAiService.listTaskRecords())
+  ipcMain.handle(
+    IPC.BROWSER_AI_GET_RECORD,
+    (_event, recordId: string) => deps.browserAiService.getTaskRecord(recordId),
+  )
+  ipcMain.handle(
+    IPC.BROWSER_AI_SAVE_RECORD,
+    (_event, payload: BrowserAiSaveTaskRecordPayload) => deps.browserAiService.saveTaskRecord(payload),
+  )
+  ipcMain.handle(
+    IPC.BROWSER_AI_DELETE_RECORD,
+    (_event, recordId: string) => deps.browserAiService.deleteTaskRecord(recordId),
+  )
 }
-

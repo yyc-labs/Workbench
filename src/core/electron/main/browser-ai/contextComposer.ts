@@ -70,11 +70,10 @@ function summaryFor(source: BrowserAiContextSource, content: string) {
 
 export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): BrowserAiContextPreview {
   const task = normalizeContent(payload.task || '')
-  if (!task) {
-    throw new BrowserAiContextError('CONTEXT_INVALID', 'A task question is required.')
-  }
-
   const sources = orderedSources(payload.sources ?? []).filter((source) => source.kind !== 'task')
+  if (!task && sources.length === 0) {
+    throw new BrowserAiContextError('CONTEXT_INVALID', 'A task or at least one selected source is required.')
+  }
   const blocks: string[] = []
   const summaries = sources.map((source) => {
     if (source.content.length > MAX_BROWSER_AI_SOURCE_CHARS) {
@@ -88,7 +87,7 @@ export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): Brows
   })
 
   const responseFormat = normalizeContent(payload.responseFormat || '')
-  blocks.push(`<task>\n${task}\n</task>`)
+  if (task) blocks.push(`<task>\n${task}\n</task>`)
   if (responseFormat) {
     if (responseFormat.length > MAX_BROWSER_AI_SOURCE_CHARS) {
       throw new BrowserAiContextError('CONTEXT_TOO_LARGE', 'The response format is too long.')
@@ -106,16 +105,16 @@ export function composeBrowserAiContext(payload: BrowserAiRunTaskPayload): Brows
   return {
     prompt,
     characterCount: prompt.length,
-    sourceLabels: [...summaries.map((source) => source.label), 'Current task'],
+    sourceLabels: task ? [...summaries.map((source) => source.label), 'Current task'] : summaries.map((source) => source.label),
     sources: [
       ...summaries,
-      {
-        kind: 'task',
+      ...(task ? [{
+        kind: 'task' as const,
         label: 'Current task',
         included: true,
         sensitive: false,
         characterCount: task.length,
-      },
+      }] : []),
     ],
     site: payload.site,
   }

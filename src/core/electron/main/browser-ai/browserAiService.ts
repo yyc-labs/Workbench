@@ -6,7 +6,11 @@ import type {
   BrowserAiContextPreview,
   BrowserAiErrorCode,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
+  BrowserAiTaskRecord,
+  BrowserAiTaskRecordSummary,
+  BrowserAiTaskStep,
   BrowserAiSite,
   BrowserAiSnapshot,
   BrowserAiTaskProgressEvent,
@@ -43,6 +47,10 @@ export interface BrowserAiService {
   runTask: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiTaskResult>
   cancelTask: () => Promise<BrowserAiSnapshot>
   saveResult: (payload: BrowserAiSaveResultPayload) => Promise<LearningNote>
+  listTaskRecords: () => Promise<BrowserAiTaskRecordSummary[]>
+  getTaskRecord: (recordId: string) => Promise<BrowserAiTaskRecord | null>
+  saveTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) => Promise<BrowserAiTaskRecord>
+  deleteTaskRecord: (recordId: string) => Promise<boolean>
   cleanupOnBeforeQuit: () => Promise<void>
 }
 
@@ -82,6 +90,12 @@ function isSameConnectionConfig(left: BrowserAiConfig, right: BrowserAiConfig): 
     && left.headless === right.headless
 }
 
+function defaultTaskRecordTitle(config: BrowserAiConfig, startedAt: number): string {
+  const activeSite = config.sites.find((site) => site.id === config.activeSiteId)
+  const siteName = activeSite?.name || config.site
+  return `${siteName} · ${new Date(startedAt).toLocaleString()}`
+}
+
 export function createBrowserAiService(deps: BrowserAiServiceDependencies): BrowserAiService {
   const launcher: EdgeLauncher = createEdgeLauncher()
   let browser: Browser | null = null
@@ -97,6 +111,8 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
   let cancelRequested = false
   let lastResult: BrowserAiTaskResult | undefined
   let profilePath = ''
+  let taskSteps: BrowserAiTaskStep[] = []
+  let currentStepId: BrowserAiTaskStep['id'] | undefined
 
   const getConfig = () => deps.repository.getConfig()
 
@@ -122,7 +138,103 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     extra?: Pick<BrowserAiTaskProgressEvent, 'characterCount' | 'message' | 'errorCode'>,
   ) => {
     taskStatus = status
-    deps.emitProgress({ taskId, status, sourceLabels, ...extra })
+    deps.emitProgress({ taskId, status, sourceLabels, steps: taskSteps, ...extra })
+  }
+
+  const emitStep = (
+    taskId: string,
+    status: BrowserAiTaskStatus,
+    sourceLabels: string[],
+    stepId: BrowserAiTaskStep['id'],
+    stepStatus: BrowserAiTaskStep['status'],
+    message?: string,
+    detail?: string,
+    elapsedMs?: number,
+  ) => {
+    const now = Date.now()
+    taskSteps = taskSteps.map((step) => {
+      if (step.id === stepId) return step
+      if (step.status !== 'active' || stepStatus !== 'active') return step
+      return {
+        ...step,
+        status: 'completed',
+        updatedAt: now,
+        completedAt: now,
+        elapsedMs: step.startedAt ? now - step.startedAt : step.elapsedMs,
+      }
+    })
+    const existing = taskSteps.find((step) => step.id === stepId)
+    const startedAt = existing?.startedAt ?? (stepStatus === 'active' ? now : undefined)
+    const nextStep: BrowserAiTaskStep = {
+      id: stepId,
+      status: stepStatus,
+      startedAt,
+      updatedAt: now,
+      completedAt: stepStatus === 'completed' || stepStatus === 'failed' || stepStatus === 'cancelled' ? now : undefined,
+      elapsedMs: elapsedMs ?? (startedAt && stepStatus !== 'active' ? now - startedAt : undefined),
+      message: message ?? existing?.message,
+      detail: detail ?? existing?.detail,
+    }
+    taskSteps = [...taskSteps.filter((step) => step.id !== stepId), nextStep]
+    currentStepId = stepStatus === 'active' ? stepId : currentStepId === stepId ? undefined : currentStepId
+    taskStatus = status
+    deps.emitProgress({ taskId, status, sourceLabels, steps: taskSteps, step: nextStep })
+  }
+
+  const getTaskRecordSite = (config: BrowserAiConfig) => {
+    const activeSite = config.sites.find((site) => site.id === config.activeSiteId)
+    return {
+      site: config.site,
+      name: activeSite?.name || config.site,
+      url: config.siteUrl,
+    }
+  }
+
+  const buildTaskRecord = (
+    taskId: string,
+    payload: BrowserAiRunTaskPayload,
+    preview: BrowserAiContextPreview,
+    startedAt: number,
+    status: BrowserAiTaskRecord['status'],
+    completedAt?: number,
+    answer?: string,
+    errorCode?: BrowserAiErrorCode,
+    errorMessage?: string,
+  ): BrowserAiTaskRecord => {
+    const savePrompt = payload.savePrompt === true
+    const sources = preview.sources.map((summary) => {
+      const source = payload.sources.find((item) => item.kind === summary.kind && item.label.trim() === summary.label)
+      return {
+        kind: summary.kind,
+        label: summary.label,
+        referenceId: source?.referenceId,
+        included: summary.included,
+        sensitive: summary.sensitive,
+        characterCount: summary.characterCount,
+        content: savePrompt ? source?.content : undefined,
+      }
+    })
+    return {
+      id: taskId,
+      title: defaultTaskRecordTitle(getConfig(), startedAt),
+      createdAt: startedAt,
+      updatedAt: completedAt ?? Date.now(),
+      startedAt,
+      completedAt,
+      site: getTaskRecordSite(getConfig()),
+      sources,
+      status,
+      answer,
+      steps: taskSteps,
+      errorCode,
+      errorMessage,
+      input: {
+        task: payload.task?.trim() || undefined,
+        responseFormat: payload.responseFormat?.trim() || undefined,
+        sources,
+        promptSaved: savePrompt,
+      },
+    }
   }
 
   const getSnapshot = (): BrowserAiSnapshot => ({
@@ -333,6 +445,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
           sourceLabels: [],
           startedAt,
           completedAt: Date.now(),
+          steps: [],
           errorCode: 'TASK_ALREADY_RUNNING',
           errorMessage: errorMessage('TASK_ALREADY_RUNNING'),
         }
@@ -353,6 +466,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
           sourceLabels: [],
           startedAt,
           completedAt: Date.now(),
+          steps: [],
           errorCode: classified.code,
           errorMessage: classified.message,
         }
@@ -369,6 +483,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
           sourceLabels: preview.sourceLabels,
           startedAt,
           completedAt: Date.now(),
+          steps: [],
           errorCode: classified.code,
           errorMessage: classified.message,
         }
@@ -384,42 +499,59 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
       cancelRequested = false
       connectionErrorCode = undefined
       connectionErrorMessage = undefined
-      emit(taskId, 'starting', preview.sourceLabels, {
-        characterCount: preview.characterCount,
-        message: 'Preparing browser AI task.',
-      })
+      taskSteps = []
+      currentStepId = undefined
+      emitStep(taskId, 'starting', preview.sourceLabels, 'prepare-task', 'active', 'Preparing browser AI task.')
+      const initialRecord = buildTaskRecord(taskId, payload, preview, startedAt, 'running')
+      await deps.repository.saveTaskRecord(initialRecord).catch(() => undefined)
 
       try {
-        emit(taskId, 'connecting', preview.sourceLabels, { message: 'Connecting to Edge.' })
+        emitStep(taskId, 'connecting', preview.sourceLabels, 'connect-edge', 'active', 'Connecting to Edge.')
         await ensureConnected()
+        emitStep(taskId, 'connecting', preview.sourceLabels, 'connect-edge', 'completed', 'Connected to Edge.')
         activePage = await context!.newPage()
-        emit(taskId, 'opening-page', preview.sourceLabels, { message: 'Opening a new AI conversation.' })
+        emitStep(taskId, 'opening-page', preview.sourceLabels, 'open-conversation', 'active', 'Opening a new AI conversation.')
         await adapter.openNewConversation(activePage, getConfig().siteUrl)
         if (!adapter.matchesPage(activePage.url(), getConfig().siteUrl)) {
           throw new BrowserAiServiceError('SITE_NOT_RECOGNIZED', 'The connected page is not the configured web AI site.')
         }
+        emitStep(taskId, 'opening-page', preview.sourceLabels, 'open-conversation', 'completed', 'AI conversation opened.')
+        emitStep(taskId, 'opening-page', preview.sourceLabels, 'check-login', 'active', 'Checking login state.')
         const loginState = await navigateAndDetectLogin(activePage, adapter)
         if (loginState === 'needs-login') {
-          emit(taskId, 'needs-login', preview.sourceLabels, {
-            errorCode: 'LOGIN_REQUIRED',
-            message: errorMessage('LOGIN_REQUIRED'),
-          })
+          emitStep(taskId, 'needs-login', preview.sourceLabels, 'check-login', 'failed', errorMessage('LOGIN_REQUIRED'))
           throw new BrowserAiServiceError('LOGIN_REQUIRED', errorMessage('LOGIN_REQUIRED'))
         }
-        emit(taskId, 'sending', preview.sourceLabels, { message: 'Sending the selected context.' })
-        await adapter.submitPrompt(activePage, preview.prompt)
-        emit(taskId, 'waiting-response', preview.sourceLabels, { message: 'Waiting for the answer.' })
-        await adapter.waitForCompletion(activePage, getConfig().responseTimeoutMs, () => cancelRequested)
+        emitStep(taskId, 'opening-page', preview.sourceLabels, 'check-login', 'completed', 'Login state confirmed.')
+        await adapter.submitPrompt(activePage, preview.prompt, (step) => {
+          emitStep(taskId, 'sending', preview.sourceLabels, step.id, step.status, step.message, step.detail, step.elapsedMs)
+        })
+        emitStep(taskId, 'waiting-response', preview.sourceLabels, 'wait-response', 'active', 'Waiting for the answer.')
+        await adapter.waitForCompletion(
+          activePage,
+          getConfig().responseTimeoutMs,
+          () => cancelRequested,
+          (step) => emitStep(taskId, 'waiting-response', preview.sourceLabels, step.id, step.status, step.message, step.detail, step.elapsedMs),
+        )
+        emitStep(taskId, 'waiting-response', preview.sourceLabels, 'wait-response', 'completed', 'The answer is ready.')
+        emitStep(taskId, 'waiting-response', preview.sourceLabels, 'read-answer', 'active', 'Reading the answer.')
         const answer = (await adapter.readAnswer(activePage)).trim()
         if (!answer) throw new BrowserAiServiceError('RESPONSE_EMPTY', errorMessage('RESPONSE_EMPTY'))
+        emitStep(taskId, 'waiting-response', preview.sourceLabels, 'read-answer', 'completed', 'Answer read.')
+        emitStep(taskId, 'completed', preview.sourceLabels, 'completed', 'completed', 'Browser AI task completed.')
 
+        const completedAt = Date.now()
+        const record = buildTaskRecord(taskId, payload, preview, startedAt, 'completed', completedAt, answer)
+        await deps.repository.saveTaskRecord(record).catch(() => undefined)
         const result: BrowserAiTaskResult = {
           taskId,
           status: 'completed',
           answer,
           sourceLabels: preview.sourceLabels,
           startedAt,
-          completedAt: Date.now(),
+          completedAt,
+          recordId: taskId,
+          steps: taskSteps,
         }
         lastResult = result
         emit(taskId, 'completed', preview.sourceLabels, { characterCount: answer.length })
@@ -429,28 +561,36 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
           ? new BrowserAiServiceError('TASK_CANCELLED', errorMessage('TASK_CANCELLED'))
           : classifyBrowserAiError(error)
         const status = classified.code === 'TASK_CANCELLED' ? 'cancelled' : 'failed'
+        const terminalStepId: BrowserAiTaskStep['id'] = status === 'cancelled' ? 'cancelled' : 'failed'
+        if (currentStepId) {
+          emitStep(taskId, status, preview.sourceLabels, currentStepId, status === 'cancelled' ? 'cancelled' : 'failed', classified.message)
+        }
+        emitStep(taskId, status, preview.sourceLabels, terminalStepId, 'completed', classified.message)
+        const completedAt = Date.now()
+        const record = buildTaskRecord(taskId, payload, preview, startedAt, status, completedAt, undefined, classified.code, classified.message)
+        await deps.repository.saveTaskRecord(record).catch(() => undefined)
         const result: BrowserAiTaskResult = {
           taskId,
           status,
           sourceLabels: preview.sourceLabels,
           startedAt,
-          completedAt: Date.now(),
+          completedAt,
+          recordId: taskId,
+          steps: taskSteps,
           errorCode: classified.code,
           errorMessage: classified.message,
         }
         lastResult = result
         if (classified.code === 'LOGIN_REQUIRED') connection = 'needs-login'
         if (classified.code === 'BROWSER_DISCONNECTED') connection = 'disconnected'
-        emit(taskId, status, preview.sourceLabels, {
-          errorCode: classified.code,
-          message: classified.message,
-        })
+        emit(taskId, status, preview.sourceLabels, { errorCode: classified.code, message: classified.message })
         return result
       } finally {
         await closeOwnedPage(activePage)
         activePage = null
         activeTaskId = undefined
         cancelRequested = false
+        currentStepId = undefined
         if (taskStatus !== 'completed' && taskStatus !== 'failed' && taskStatus !== 'cancelled') {
           taskStatus = 'idle'
         }
@@ -492,6 +632,25 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
       })
     },
 
+    listTaskRecords: () => deps.repository.listTaskRecords(),
+
+    getTaskRecord: (recordId) => deps.repository.getTaskRecord(recordId),
+
+    saveTaskRecord: async (payload) => {
+      const record = await deps.repository.getTaskRecord(payload.recordId)
+      if (!record) throw new BrowserAiServiceError('TASK_RECORD_NOT_FOUND', 'The browser AI task record was not found.')
+      const title = payload.title.trim()
+      if (!title) throw new BrowserAiServiceError('TASK_RECORD_SAVE_FAILED', 'A browser AI task name is required.')
+      if (payload.savePrompt === true && !record.input.promptSaved) {
+        throw new BrowserAiServiceError('TASK_RECORD_SAVE_FAILED', 'The complete prompt was not retained for this task.')
+      }
+      const updated = await deps.repository.renameTaskRecord(record.id, title)
+      if (!updated) throw new BrowserAiServiceError('TASK_RECORD_NOT_FOUND', 'The browser AI task record was not found.')
+      return updated
+    },
+
+    deleteTaskRecord: (recordId) => deps.repository.deleteTaskRecord(recordId),
+
     cleanupOnBeforeQuit: async () => {
       cancelRequested = true
       await disconnect(!getConfig().keepBrowserRunning)
@@ -504,6 +663,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
 export function createDefaultBrowserAiRepository(deps: {
   loadConfig: () => BrowserAiConfig | undefined
   saveConfig: (config: BrowserAiConfig) => Promise<BrowserAiConfig>
+  getRecordsRootPath: () => string
 }): BrowserAiRepository {
   return createBrowserAiRepository(deps)
 }

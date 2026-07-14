@@ -9,12 +9,14 @@ import {
   type SyntheticEvent as ReactSyntheticEvent,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
+import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
 import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
 import { useSidebarGesture } from '../hooks/useSidebarGesture'
 import { useI18n } from '../i18n'
 import { LearningCenterHeader } from './learning/LearningCenterHeader'
 import { LearningBrowserAiDialog } from './learning/LearningBrowserAiDialog'
+import { LearningBrowserAiHistoryDialog } from './learning/LearningBrowserAiHistoryDialog'
+import { LearningBrowserAiPreferencesDialog } from './learning/LearningBrowserAiPreferencesDialog'
 import { LearningDeleteNoteDialog } from './learning/LearningDeleteNoteDialog'
 import { LearningEditorPanel } from './learning/LearningEditorPanel'
 import { LearningFrontmatterDialog } from './learning/LearningFrontmatterDialog'
@@ -91,6 +93,9 @@ export function LearningCenterPage() {
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
   const [browserAiOpen, setBrowserAiOpen] = useState(false)
+  const [browserAiHistoryOpen, setBrowserAiHistoryOpen] = useState(false)
+  const [browserAiPreferencesOpen, setBrowserAiPreferencesOpen] = useState(false)
+  const [browserAiInitialRecord, setBrowserAiInitialRecord] = useState<BrowserAiTaskRecord | null>(null)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -251,6 +256,12 @@ export function LearningCenterPage() {
     setNotes((current) => [saved, ...current.filter((item) => item.id !== saved.id)])
     setSelectedNoteId(saved.id)
     setBrowserAiOpen(false)
+  }
+
+  const handleBrowserAiReload = (record: BrowserAiTaskRecord) => {
+    setBrowserAiInitialRecord(record)
+    setBrowserAiHistoryOpen(false)
+    setBrowserAiOpen(true)
   }
 
   const resetFrontmatterDialog = () => {
@@ -705,7 +716,9 @@ export function LearningCenterPage() {
         <LearningCenterHeader
           onBack={() => navigate('/')}
           onCreateNote={openCreateDialog}
-          onOpenBrowserAi={() => setBrowserAiOpen(true)}
+          onOpenBrowserAi={() => { setBrowserAiInitialRecord(null); setBrowserAiOpen(true) }}
+          onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
+          onOpenBrowserAiHistory={() => setBrowserAiHistoryOpen(true)}
         />
 
         <div
@@ -834,11 +847,28 @@ export function LearningCenterPage() {
       />
 
       <LearningBrowserAiDialog
+        categories={categories}
         currentNote={selectedNote}
         notes={notes}
+        initialRecord={browserAiInitialRecord}
         onClose={() => setBrowserAiOpen(false)}
         onSaved={handleBrowserAiSaved}
         open={browserAiOpen}
+      />
+
+      <LearningBrowserAiHistoryDialog
+        currentNote={selectedNote}
+        onClose={() => setBrowserAiHistoryOpen(false)}
+        onReload={handleBrowserAiReload}
+        onSaved={handleBrowserAiSaved}
+        open={browserAiHistoryOpen}
+      />
+
+      <LearningBrowserAiPreferencesDialog
+        categories={categories}
+        notes={notes}
+        onClose={() => setBrowserAiPreferencesOpen(false)}
+        open={browserAiPreferencesOpen}
       />
     </div>
   )

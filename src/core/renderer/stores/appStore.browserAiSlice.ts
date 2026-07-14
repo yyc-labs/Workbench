@@ -3,8 +3,11 @@ import type {
   BrowserAiConfig,
   BrowserAiContextPreview,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
   BrowserAiSnapshot,
+  BrowserAiTaskRecord,
+  BrowserAiTaskRecordSummary,
   BrowserAiTaskProgressEvent,
   BrowserAiTaskResult,
   LearningNote,
@@ -23,6 +26,10 @@ export type BrowserAiActionsSlice = Pick<
   | 'runBrowserAiTask'
   | 'cancelBrowserAiTask'
   | 'saveBrowserAiResult'
+  | 'loadBrowserAiTaskRecords'
+  | 'loadBrowserAiTaskRecord'
+  | 'saveBrowserAiTaskRecord'
+  | 'deleteBrowserAiTaskRecord'
 >
 
 function applyProgressSnapshot(
@@ -78,8 +85,10 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
     window.electronAPI.composeBrowserAiPreview(payload),
 
   runBrowserAiTask: async (payload: BrowserAiRunTaskPayload): Promise<BrowserAiTaskResult> => {
+    set({ browserAiSteps: [], browserAiProgress: null })
     const result = await window.electronAPI.runBrowserAiTask(payload)
     set((state) => ({
+      browserAiSteps: result.steps,
       browserAi: state.browserAi
         ? {
           ...state.browserAi,
@@ -102,6 +111,53 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
 
   saveBrowserAiResult: (payload: BrowserAiSaveResultPayload): Promise<LearningNote> =>
     window.electronAPI.saveBrowserAiResult(payload),
+
+  loadBrowserAiTaskRecords: async (): Promise<BrowserAiTaskRecordSummary[]> => {
+    const records = await window.electronAPI.listBrowserAiTaskRecords()
+    set({ browserAiTaskRecords: records })
+    return records
+  },
+
+  loadBrowserAiTaskRecord: async (recordId: string): Promise<BrowserAiTaskRecord | null> => {
+    const record = await window.electronAPI.getBrowserAiTaskRecord(recordId)
+    set({ browserAiTaskRecord: record })
+    return record
+  },
+
+  saveBrowserAiTaskRecord: async (payload: BrowserAiSaveTaskRecordPayload): Promise<BrowserAiTaskRecord> => {
+    const record = await window.electronAPI.saveBrowserAiTaskRecord(payload)
+    set((state) => ({
+      browserAiTaskRecord: record,
+      browserAiTaskRecords: [
+        {
+          id: record.id,
+          title: record.title,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+          startedAt: record.startedAt,
+          completedAt: record.completedAt,
+          status: record.status,
+          siteName: record.site.name,
+          sourceLabels: record.sources.filter((source) => source.included).map((source) => source.label),
+          answerExcerpt: (record.answer ?? record.errorMessage ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
+          errorCode: record.errorCode,
+        },
+        ...state.browserAiTaskRecords.filter((item) => item.id !== record.id),
+      ],
+    }))
+    return record
+  },
+
+  deleteBrowserAiTaskRecord: async (recordId: string): Promise<boolean> => {
+    const deleted = await window.electronAPI.deleteBrowserAiTaskRecord(recordId)
+    if (deleted) {
+      set((state) => ({
+        browserAiTaskRecords: state.browserAiTaskRecords.filter((item) => item.id !== recordId),
+        browserAiTaskRecord: state.browserAiTaskRecord?.id === recordId ? null : state.browserAiTaskRecord,
+      }))
+    }
+    return deleted
+  },
 })
 
 export function applyBrowserAiProgress(
@@ -109,8 +165,12 @@ export function applyBrowserAiProgress(
   progress: BrowserAiTaskProgressEvent,
 ): void {
   set((state) => ({
+    ...(state.browserAiProgress && state.browserAiProgress.taskId !== progress.taskId
+      ? {}
+      : {
     browserAiProgress: progress,
+    browserAiSteps: progress.steps ?? state.browserAiSteps,
     browserAi: applyProgressSnapshot(state.browserAi, progress),
+      }),
   }))
 }
-

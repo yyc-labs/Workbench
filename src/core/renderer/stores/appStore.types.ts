@@ -41,9 +41,13 @@ import type {
   BrowserAiConnectionTestResult,
   BrowserAiContextPreview,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
   BrowserAiSnapshot,
+  BrowserAiTaskRecord,
+  BrowserAiTaskRecordSummary,
   BrowserAiTaskProgressEvent,
+  BrowserAiTaskStep,
   BrowserAiTaskResult,
   Capability,
   RuntimeSessionInfo,
@@ -130,6 +134,9 @@ export interface AppState {
   transcriptListStatusByProjectId: Record<string, 'idle' | 'loading' | 'ready' | 'error'>
   browserAi: BrowserAiSnapshot | null
   browserAiProgress: BrowserAiTaskProgressEvent | null
+  browserAiSteps: BrowserAiTaskStep[]
+  browserAiTaskRecords: BrowserAiTaskRecordSummary[]
+  browserAiTaskRecord: BrowserAiTaskRecord | null
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
@@ -185,6 +192,10 @@ export interface AppState {
   runBrowserAiTask: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiTaskResult>
   cancelBrowserAiTask: () => Promise<BrowserAiSnapshot>
   saveBrowserAiResult: (payload: BrowserAiSaveResultPayload) => Promise<LearningNote>
+  loadBrowserAiTaskRecords: () => Promise<BrowserAiTaskRecordSummary[]>
+  loadBrowserAiTaskRecord: (recordId: string) => Promise<BrowserAiTaskRecord | null>
+  saveBrowserAiTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) => Promise<BrowserAiTaskRecord>
+  deleteBrowserAiTaskRecord: (recordId: string) => Promise<boolean>
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
   clearProjectLastOpened: (projectId: string) => Promise<void>

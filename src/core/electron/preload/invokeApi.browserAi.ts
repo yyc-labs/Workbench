@@ -5,6 +5,7 @@ import type {
   BrowserAiConnectionTestResult,
   BrowserAiContextPreview,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
   BrowserAiSnapshot,
   BrowserAiTaskResult,
@@ -28,6 +29,12 @@ export function createBrowserAiInvokeApi() {
     cancelBrowserAiTask: () => ipcRenderer.invoke(IPC.BROWSER_AI_CANCEL_TASK) as Promise<BrowserAiSnapshot>,
     saveBrowserAiResult: (payload: BrowserAiSaveResultPayload) =>
       ipcRenderer.invoke(IPC.BROWSER_AI_SAVE_RESULT, payload) as Promise<LearningNote>,
+    listBrowserAiTaskRecords: () => ipcRenderer.invoke(IPC.BROWSER_AI_LIST_RECORDS),
+    getBrowserAiTaskRecord: (recordId: string) =>
+      ipcRenderer.invoke(IPC.BROWSER_AI_GET_RECORD, recordId) as Promise<import('../../shared/types').BrowserAiTaskRecord | null>,
+    saveBrowserAiTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) =>
+      ipcRenderer.invoke(IPC.BROWSER_AI_SAVE_RECORD, payload) as Promise<import('../../shared/types').BrowserAiTaskRecord>,
+    deleteBrowserAiTaskRecord: (recordId: string) =>
+      ipcRenderer.invoke(IPC.BROWSER_AI_DELETE_RECORD, recordId) as Promise<boolean>,
   }
 }
-

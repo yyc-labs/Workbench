@@ -57,6 +57,9 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   transcriptListStatusByProjectId: {},
   browserAi: null,
   browserAiProgress: null,
+  browserAiSteps: [],
+  browserAiTaskRecords: [],
+  browserAiTaskRecord: null,
 
   ...createInitActionsSlice(...args),
   ...createSettingsActionsSlice(...args),

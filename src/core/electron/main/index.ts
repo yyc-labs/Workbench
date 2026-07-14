@@ -122,6 +122,7 @@ const learningService = createLearningService({
 const browserAiRepository = createDefaultBrowserAiRepository({
   loadConfig: () => loadConfig().browserAi,
   saveConfig: async (config) => (await updateConfig({ browserAi: config })).browserAi!,
+  getRecordsRootPath: () => path.join(app.getPath('userData'), 'browser-ai'),
 })
 const browserAiService = createBrowserAiService({
   repository: browserAiRepository,

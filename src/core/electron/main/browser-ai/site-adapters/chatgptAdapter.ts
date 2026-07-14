@@ -1,6 +1,6 @@
 import type { Locator, Page } from 'playwright-core'
 import type { BrowserAiSite } from '../../../../shared/types'
-import type { BrowserAiSiteAdapter, BrowserAiLoginState } from './browserAiSiteAdapter'
+import type { BrowserAiAdapterStepUpdate, BrowserAiSiteAdapter, BrowserAiLoginState } from './browserAiSiteAdapter'
 import { isSupportedChatGptSiteUrl } from '../browserAiConfig'
 
 const LOGIN_TEXT_PATTERN = /\b(log in|login|sign up|create account)\b/i
@@ -112,16 +112,24 @@ function createAdapter(): BrowserAiSiteAdapter {
       }
     },
 
-    submitPrompt: async (page, prompt) => {
+    submitPrompt: async (page, prompt, onStep) => {
+      onStep?.({ id: 'find-composer', status: 'active', message: 'Finding the ChatGPT composer.' })
       const composer = await findComposer(page)
-      if (!composer) throw new Error('ChatGPT message composer was not found.')
+      if (!composer) {
+        onStep?.({ id: 'find-composer', status: 'failed', message: 'ChatGPT message composer was not found.' })
+        throw new Error('ChatGPT message composer was not found.')
+      }
+      onStep?.({ id: 'find-composer', status: 'completed', message: 'Message composer found.' })
+      onStep?.({ id: 'fill-prompt', status: 'active', message: 'Filling the prompt.' })
       try {
         await composer.fill(prompt)
       } catch {
         await composer.click()
         await page.keyboard.insertText(prompt)
       }
+      onStep?.({ id: 'fill-prompt', status: 'completed', message: 'Prompt filled.' })
 
+      onStep?.({ id: 'submit-prompt', status: 'active', message: 'Submitting the prompt.' })
       const sendButton = await findVisibleLocator(page, [
         page.getByRole('button', { name: /^send$|send message|submit/i }),
         page.locator('button[aria-label*="send" i]'),
@@ -129,13 +137,17 @@ function createAdapter(): BrowserAiSiteAdapter {
       ])
       if (sendButton) {
         await sendButton.click()
+        onStep?.({ id: 'submit-prompt', status: 'completed', message: 'Prompt sent.' })
         return
       }
       await composer.press('Enter')
+      onStep?.({ id: 'submit-prompt', status: 'completed', message: 'Prompt sent.' })
     },
 
-    waitForCompletion: async (page, timeoutMs, isCancelled) => {
+    waitForCompletion: async (page, timeoutMs, isCancelled, onStep) => {
       const deadline = Date.now() + timeoutMs
+      const waitStartedAt = Date.now()
+      let lastHeartbeatAt = waitStartedAt
       let previous = ''
       let stableSince = 0
       let sawAssistantText = false
@@ -164,6 +176,16 @@ function createAdapter(): BrowserAiSiteAdapter {
 
         if (sawAssistantText && stableSince > 0 && Date.now() - stableSince >= 1_800 && !(await isGenerating(page))) {
           return
+        }
+        if (Date.now() - lastHeartbeatAt >= 2_500) {
+          const elapsedMs = Date.now() - waitStartedAt
+          onStep?.({
+            id: 'wait-response',
+            status: 'active',
+            detail: `Waited ${Math.floor(elapsedMs / 1_000)} seconds; checking page content again.`,
+            elapsedMs,
+          })
+          lastHeartbeatAt = Date.now()
         }
         await wait(350)
       }

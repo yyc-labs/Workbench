@@ -22,8 +22,11 @@ import type {
   BrowserAiConnectionTestResult,
   BrowserAiContextPreview,
   BrowserAiRunTaskPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
   BrowserAiSnapshot,
+  BrowserAiTaskRecord,
+  BrowserAiTaskRecordSummary,
   BrowserAiTaskResult,
   Capability,
   ClaudeBashrcConfig,
@@ -290,6 +293,10 @@ export interface BrowserAiElectronApi {
   runBrowserAiTask: (payload: BrowserAiRunTaskPayload) => Promise<BrowserAiTaskResult>
   cancelBrowserAiTask: () => Promise<BrowserAiSnapshot>
   saveBrowserAiResult: (payload: BrowserAiSaveResultPayload) => Promise<import('./types').LearningNote>
+  listBrowserAiTaskRecords: () => Promise<BrowserAiTaskRecordSummary[]>
+  getBrowserAiTaskRecord: (recordId: string) => Promise<BrowserAiTaskRecord | null>
+  saveBrowserAiTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) => Promise<BrowserAiTaskRecord>
+  deleteBrowserAiTaskRecord: (recordId: string) => Promise<boolean>
 }
 
 export interface RuntimeElectronApi {

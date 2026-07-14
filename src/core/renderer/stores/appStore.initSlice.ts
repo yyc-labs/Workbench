@@ -59,6 +59,33 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
     if (initAppPromise) return initAppPromise
 
     initAppPromise = (async () => {
+      if (!browserAiSubscriptionInitialized && typeof window.electronAPI.onBrowserAiProgress === 'function') {
+        browserAiSubscriptionInitialized = true
+        window.electronAPI.onBrowserAiProgress((progress) => {
+          set((state) => {
+            const currentTaskId = state.browserAiProgress?.taskId ?? state.browserAi?.activeTaskId
+            if (currentTaskId && currentTaskId !== progress.taskId && progress.status !== 'starting') return state
+            return {
+              browserAiProgress: progress,
+              browserAiSteps: progress.steps ?? state.browserAiSteps,
+              browserAi: state.browserAi
+                ? {
+                  ...state.browserAi,
+                  taskStatus: progress.status,
+                  activeTaskId: progress.status === 'completed'
+                    || progress.status === 'failed'
+                    || progress.status === 'cancelled'
+                    ? undefined
+                    : progress.taskId,
+                  errorCode: progress.errorCode ?? state.browserAi.errorCode,
+                  errorMessage: progress.message ?? state.browserAi.errorMessage,
+                }
+                : state.browserAi,
+            }
+          })
+        })
+      }
+
       const config = await window.electronAPI.getConfig()
       const capability = await window.electronAPI.getCapability()
       const projects = await loadSavedProjects(config.projects, '[appStore.initApp]', {
@@ -72,28 +99,6 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         capability,
         isAppReady: true,
       })
-
-      if (!browserAiSubscriptionInitialized && typeof window.electronAPI.onBrowserAiProgress === 'function') {
-        browserAiSubscriptionInitialized = true
-        window.electronAPI.onBrowserAiProgress((progress) => {
-          set((state) => ({
-            browserAiProgress: progress,
-            browserAi: state.browserAi
-              ? {
-                ...state.browserAi,
-                taskStatus: progress.status,
-                activeTaskId: progress.status === 'completed'
-                  || progress.status === 'failed'
-                  || progress.status === 'cancelled'
-                  ? undefined
-                  : progress.taskId,
-                errorCode: progress.errorCode ?? state.browserAi.errorCode,
-                errorMessage: progress.message ?? state.browserAi.errorMessage,
-              }
-              : state.browserAi,
-          }))
-        })
-      }
 
       get().rehydrateProcessUrlsFromStorage()
 

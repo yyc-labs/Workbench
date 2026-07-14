@@ -1,9 +1,11 @@
-import { ExternalLink, Loader2, Send, X } from 'lucide-react'
+import { ExternalLink, Send, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type {
   BrowserAiContextPreview,
   BrowserAiContextSource,
+  BrowserAiTaskRecord,
   BrowserAiTaskStatus,
+  LearningCategory,
   LearningNote,
   LearningNoteSummary,
 } from '../../../shared/types'
@@ -16,11 +18,16 @@ import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { LearningBrowserAiContextPreview } from './LearningBrowserAiContextPreview'
 import { LearningBrowserAiResultPanel } from './LearningBrowserAiResultPanel'
+import { LearningBrowserAiSourceSelector } from './LearningBrowserAiSourceSelector'
+import { LearningBrowserAiStepTimeline } from './LearningBrowserAiStepTimeline'
+import { readLearningBrowserAiPreferences } from './learningBrowserAiPreferences'
 
 type LearningBrowserAiDialogProps = {
   open: boolean
   notes: LearningNoteSummary[]
+  categories: LearningCategory[]
   currentNote: LearningNote | null
+  initialRecord?: BrowserAiTaskRecord | null
   onClose: () => void
   onSaved: (note: LearningNote) => void
 }
@@ -29,10 +36,19 @@ function progressKey(status: BrowserAiTaskStatus | undefined): string {
   return status ? `learning.browserAi.status.${status}` : 'learning.browserAi.status.idle'
 }
 
-export function LearningBrowserAiDialog({ open, notes, currentNote, onClose, onSaved }: LearningBrowserAiDialogProps) {
+export function LearningBrowserAiDialog({
+  open,
+  notes,
+  categories,
+  currentNote,
+  initialRecord,
+  onClose,
+  onSaved,
+}: LearningBrowserAiDialogProps) {
   const { t } = useI18n()
   const snapshot = useAppStore((state) => state.browserAi)
   const progress = useAppStore((state) => state.browserAiProgress)
+  const storedSteps = useAppStore((state) => state.browserAiSteps)
   const composePreview = useAppStore((state) => state.composeBrowserAiPreview)
   const runTask = useAppStore((state) => state.runBrowserAiTask)
   const cancelTask = useAppStore((state) => state.cancelBrowserAiTask)
@@ -45,20 +61,41 @@ export function LearningBrowserAiDialog({ open, notes, currentNote, onClose, onS
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [task, setTask] = useState('')
   const [responseFormat, setResponseFormat] = useState('')
+  const [savePrompt, setSavePrompt] = useState(false)
   const [preview, setPreview] = useState<BrowserAiContextPreview | null>(null)
   const [answer, setAnswer] = useState<string | null>(null)
+  const [recordId, setRecordId] = useState<string | undefined>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     void loadBrowserAi()
-    setSelectedNoteIds(currentNote ? [currentNote.id] : [])
-    setTask('')
+    const preferences = readLearningBrowserAiPreferences()
+    const recordSources = initialRecord?.input.sources ?? []
+    const savedSkill = recordSources.find((source) => source.kind === 'skill')
+    const savedPersonal = recordSources.find((source) => source.kind === 'personal-context')
+    const savedNoteIds = recordSources
+      .filter((source) => source.kind === 'learning-note' && source.referenceId)
+      .map((source) => source.referenceId!)
+    setSkill(savedSkill?.content ?? '')
+    setIncludeSkill(Boolean(savedSkill))
+    setPersonalContext(savedPersonal?.content ?? '')
+    setIncludePersonalContext(Boolean(savedPersonal?.content))
+    const defaultNoteIds = preferences.defaultNoteIds.filter((id) => notes.some((note) => note.id === id))
+    setSelectedNoteIds(initialRecord
+      ? savedNoteIds
+      : defaultNoteIds.length > 0
+        ? defaultNoteIds
+        : currentNote ? [currentNote.id] : [])
+    setTask(initialRecord?.input.task ?? '')
+    setResponseFormat(initialRecord?.input.responseFormat ?? '')
+    setSavePrompt(initialRecord?.input.promptSaved ?? preferences.savePromptByDefault)
     setPreview(null)
     setAnswer(null)
+    setRecordId(undefined)
     setError(null)
-  }, [currentNote, loadBrowserAi, open])
+  }, [currentNote, initialRecord, loadBrowserAi, open])
 
   const selectedNotes = useMemo(
     () => notes.filter((note) => selectedNoteIds.includes(note.id)),
@@ -70,36 +107,50 @@ export function LearningBrowserAiDialog({ open, notes, currentNote, onClose, onS
   const targetSite = activeSite
     ? activeSite.url ? `${activeSite.name} - ${activeSite.url}` : activeSite.name
     : snapshot?.config.siteUrl ?? t('learning.browserAi.notConfigured')
+  const steps = progress?.steps?.length ? progress.steps : storedSteps
+  const taskStatus = progress && progress.taskId === snapshot?.activeTaskId ? progress.status : snapshot?.taskStatus
+  const isRunning = taskStatus === 'starting' || taskStatus === 'connecting' || taskStatus === 'opening-page' || taskStatus === 'sending' || taskStatus === 'waiting-response'
+  const hasPotentialSource = Boolean(
+    (includeSkill && skill.trim())
+    || (includePersonalContext && personalContext.trim())
+    || selectedNoteIds.length > 0,
+  )
+  const canPrepare = Boolean(task.trim() || hasPotentialSource)
 
   if (!open) return null
 
   const buildSources = async (): Promise<BrowserAiContextSource[]> => {
     const noteContents = await Promise.all(selectedNotes.map(async (note) => ({
       note,
-      content: note.id === currentNote?.id && currentNote ? currentNote.contentMd : (await window.electronAPI.getLearningNote(note.id))?.contentMd ?? '',
+      content: note.id === currentNote?.id && currentNote
+        ? currentNote.contentMd
+        : (await window.electronAPI.getLearningNote(note.id))?.contentMd ?? '',
     })))
     return [
       ...(includeSkill ? [{ kind: 'skill' as const, label: t('learning.browserAi.skillSource'), content: skill, included: true }] : []),
       ...(includePersonalContext ? [{ kind: 'personal-context' as const, label: t('learning.browserAi.personalSource'), content: personalContext, included: true }] : []),
-      ...noteContents.map(({ note, content }) => ({ kind: 'learning-note' as const, label: note.title, content, included: true })),
+      ...noteContents.map(({ note, content }) => ({ kind: 'learning-note' as const, label: note.title, referenceId: note.id, content, included: true })),
     ]
   }
 
+  const buildPayload = async () => ({
+    site: snapshot?.config.site ?? 'generic-web' as const,
+    task: task.trim() || undefined,
+    responseFormat: responseFormat.trim() || undefined,
+    savePrompt,
+    sources: await buildSources(),
+  })
+
   const preparePreview = async (): Promise<BrowserAiContextPreview | null> => {
-    if (!task.trim()) {
+    if (!canPrepare) {
       setPreview(null)
-      setError(t('learning.browserAi.taskRequired'))
+      setError(t('learning.browserAi.taskOrSourceRequired'))
       return null
     }
     setLoading(true)
     setError(null)
     try {
-      const nextPreview = await composePreview({
-        site: snapshot?.config.site ?? 'generic-web',
-        task,
-        responseFormat,
-        sources: await buildSources(),
-      })
+      const nextPreview = await composePreview(await buildPayload())
       setPreview(nextPreview)
       return nextPreview
     } catch (previewError) {
@@ -116,23 +167,19 @@ export function LearningBrowserAiDialog({ open, notes, currentNote, onClose, onS
     setLoading(true)
     setError(null)
     try {
-      const result = await runTask({
-        site: snapshot?.config.site ?? 'generic-web',
-        task,
-        responseFormat,
-        sources: await buildSources(),
-      })
-      if (result.status === 'completed') setAnswer(result.answer ?? '')
-      else setError(result.errorMessage ?? t('learning.browserAi.runFailed'))
+      const result = await runTask(await buildPayload())
+      if (result.status === 'completed') {
+        setAnswer(result.answer ?? '')
+        setRecordId(result.recordId)
+      } else {
+        setError(result.errorMessage ?? t('learning.browserAi.runFailed'))
+      }
     } catch (runError) {
       setError(runError instanceof Error ? runError.message : t('learning.browserAi.runFailed'))
     } finally {
       setLoading(false)
     }
   }
-
-  const taskStatus = progress && progress.taskId === snapshot?.activeTaskId ? progress.status : snapshot?.taskStatus
-  const isRunning = taskStatus === 'starting' || taskStatus === 'connecting' || taskStatus === 'opening-page' || taskStatus === 'sending' || taskStatus === 'waiting-response'
 
   return (
     <ModalShell
@@ -144,36 +191,77 @@ export function LearningBrowserAiDialog({ open, notes, currentNote, onClose, onS
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: 'var(--color-border)' }}>
-          <div><p className="section-label mb-2">{t('learning.browserAi.kicker')}</p><h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.dialogTitle')}</h2><p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.dialogDescription')}</p></div>
+          <div>
+            <p className="section-label mb-2">{t('learning.browserAi.kicker')}</p>
+            <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.dialogTitle')}</h2>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.dialogDescription')}</p>
+          </div>
           <Button variant="ghost" size="icon" title={t('common.close')} onClick={onClose}><X /></Button>
         </div>
         <div className="min-h-0 space-y-4 overflow-y-auto p-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="space-y-3 rounded-[18px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
               <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.sources')}</div>
-              <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]"><Checkbox checked={includeSkill} onChange={(event) => setIncludeSkill(event.target.checked)} /><span>{t('learning.browserAi.includeSkill')}</span></label>
-              {includeSkill ? <Textarea className="text-xs leading-5" value={skill} onChange={(event) => setSkill(event.target.value)} placeholder={t('learning.browserAi.skillPlaceholder')} /> : null}
-              <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]"><Checkbox checked={includePersonalContext} onChange={(event) => setIncludePersonalContext(event.target.checked)} /><span>{t('learning.browserAi.includePersonal')}</span></label>
-              {includePersonalContext ? <Textarea className="text-xs leading-5" value={personalContext} onChange={(event) => setPersonalContext(event.target.value)} placeholder={t('learning.browserAi.personalPlaceholder')} /> : null}
-              <div className="border-t pt-3" style={{ borderColor: 'var(--color-border)' }}><div className="mb-2 text-xs font-medium text-[color:var(--color-foreground)]">{t('learning.browserAi.learningNotes')}</div><div className="max-h-36 space-y-2 overflow-y-auto">{notes.map((note) => <label key={note.id} className="flex items-start gap-2 text-xs text-[color:var(--color-foreground)]"><Checkbox checked={selectedNoteIds.includes(note.id)} onChange={(event) => setSelectedNoteIds((current) => event.target.checked ? [...current, note.id] : current.filter((id) => id !== note.id))} /><span className="min-w-0"><span className="block truncate">{note.title}</span><span className="block truncate text-[color:var(--color-muted-foreground)]">{note.excerpt || t('learning.browserAi.emptyExcerpt')}</span></span></label>)}</div></div>
+              <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
+                <Checkbox checked={includeSkill} onChange={(event) => { setIncludeSkill(event.target.checked); setPreview(null) }} />
+                <span>{t('learning.browserAi.includeSkill')}</span>
+              </label>
+              {includeSkill ? <Textarea className="text-xs leading-5" value={skill} onChange={(event) => { setSkill(event.target.value); setPreview(null) }} placeholder={t('learning.browserAi.skillPlaceholder')} /> : null}
+              <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
+                <Checkbox checked={includePersonalContext} onChange={(event) => { setIncludePersonalContext(event.target.checked); setPreview(null) }} />
+                <span>{t('learning.browserAi.includePersonal')}</span>
+              </label>
+              {includePersonalContext ? <Textarea className="text-xs leading-5" value={personalContext} onChange={(event) => { setPersonalContext(event.target.value); setPreview(null) }} placeholder={t('learning.browserAi.personalPlaceholder')} /> : null}
+              <div className="border-t pt-3" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="mb-2 text-xs font-medium text-[color:var(--color-foreground)]">{t('learning.browserAi.learningNotes')}</div>
+                <LearningBrowserAiSourceSelector
+                  notes={notes}
+                  categories={categories}
+                  selectedNoteIds={selectedNoteIds}
+                  onSelectedNoteIdsChange={(ids) => { setSelectedNoteIds(ids); setPreview(null) }}
+                />
+              </div>
             </section>
             <section className="space-y-3 rounded-[18px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
-              <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.task')}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.task')}</div>
+                <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.optional')}</span>
+              </div>
               <Textarea className="min-h-32" value={task} onChange={(event) => { setTask(event.target.value); setPreview(null) }} placeholder={t('learning.browserAi.taskPlaceholder')} />
               <Input value={responseFormat} onChange={(event) => { setResponseFormat(event.target.value); setPreview(null) }} placeholder={t('learning.browserAi.responseFormatPlaceholder')} />
-              <div className="flex flex-wrap items-center gap-2"><Button variant="outline" onClick={() => void preparePreview()} loading={loading && !isRunning} disabled={!task.trim()}><ExternalLink />{t('learning.browserAi.previewAction')}</Button><span className="break-all text-xs text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.targetSite', { value: targetSite })}</span></div>
+              <label className="flex items-start gap-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                <Checkbox checked={savePrompt} onChange={(event) => setSavePrompt(event.target.checked)} />
+                <span>{t('learning.browserAi.savePrompt')}</span>
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" onClick={() => void preparePreview()} loading={loading && !isRunning} disabled={!canPrepare}>
+                  <ExternalLink />{t('learning.browserAi.previewAction')}
+                </Button>
+                <span className="break-all text-xs text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.targetSite', { value: targetSite })}</span>
+              </div>
             </section>
           </div>
 
           <LearningBrowserAiContextPreview preview={preview} />
 
-          {isRunning ? <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-[color:var(--color-accent)]/45 px-4 py-3 text-sm text-[color:var(--color-foreground)]"><Loader2 className="h-4 w-4 animate-spin" />{t(progressKey(taskStatus))}<Button variant="outline" size="sm" onClick={() => void cancelTask()}>{t('learning.browserAi.cancel')}</Button></div> : null}
+          {steps.length > 0 ? (
+            <section className="space-y-3 rounded-[18px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t(progressKey(taskStatus))}</div>
+                {isRunning ? <Button variant="outline" size="sm" onClick={() => void cancelTask()}>{t('learning.browserAi.cancel')}</Button> : null}
+              </div>
+              <LearningBrowserAiStepTimeline steps={steps} />
+            </section>
+          ) : null}
           {snapshot?.connection === 'needs-login' ? <div className="flex flex-wrap items-center gap-3 rounded-[14px] bg-[color:var(--color-accent)]/45 px-4 py-3 text-sm text-[color:var(--color-foreground)]">{t('learning.browserAi.loginRequired')}<Button variant="outline" size="sm" onClick={() => void openLogin()}>{t('learning.browserAi.openLogin')}</Button></div> : null}
           {error ? <p className="text-sm text-[color:var(--color-destructive)]">{error}</p> : null}
 
-          {answer ? <LearningBrowserAiResultPanel answer={answer} currentNote={currentNote} onRetry={() => { setAnswer(null); void handleRun() }} onSaved={onSaved} /> : null}
+          {answer ? <LearningBrowserAiResultPanel answer={answer} currentNote={currentNote} recordId={recordId} onRetry={() => { setAnswer(null); void handleRun() }} onSaved={onSaved} /> : null}
         </div>
-        <div className="flex justify-end gap-2 border-t p-4" style={{ borderColor: 'var(--color-border)' }}><Button variant="ghost" onClick={onClose}>{t('common.close')}</Button><Button onClick={() => void handleRun()} loading={loading} disabled={isRunning || !task.trim()}><Send />{t('learning.browserAi.send')}</Button></div>
+        <div className="flex justify-end gap-2 border-t p-4" style={{ borderColor: 'var(--color-border)' }}>
+          <Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>
+          <Button onClick={() => void handleRun()} loading={loading} disabled={isRunning || !canPrepare}><Send />{t('learning.browserAi.send')}</Button>
+        </div>
       </div>
     </ModalShell>
   )
