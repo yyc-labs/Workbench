@@ -1,10 +1,7 @@
 export const learningMessages = {
   'en-US': {
     learning: {
-      header: {
-        subtitle: 'Keep long-term study notes and reusable references in Markdown.',
-        createNote: 'New Note',
-      },
+      header: { subtitle: 'Keep long-term study notes and reusable references in Markdown.', createNote: 'New Note' },
       browserAi: {
         open: 'Send to Browser AI',
         kicker: 'Browser AI dispatch',
@@ -107,12 +104,7 @@ export const learningMessages = {
         noConfiguredSites: 'No configured browser AI sites',
         savePromptByDefault: 'Save complete sending content by default',
         preferencesSaveFailed: 'Could not save browser AI defaults.',
-        historyStatus: {
-          running: 'Running',
-          completed: 'Completed',
-          failed: 'Failed',
-          cancelled: 'Cancelled',
-        },
+        historyStatus: { running: 'Running', completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled' },
         steps: {
           'prepare-task': 'Prepare task',
           'connect-edge': 'Connect Edge',
@@ -125,7 +117,7 @@ export const learningMessages = {
           'read-answer': 'Read answer',
           completed: 'Completed',
           failed: 'Failed',
-          cancelled: 'Cancelled',
+          cancelled: 'Cancelled'
         },
         status: {
           idle: 'Ready',
@@ -137,8 +129,8 @@ export const learningMessages = {
           'waiting-response': 'Waiting for the web AI response',
           completed: 'Answer received',
           failed: 'Task failed',
-          cancelled: 'Task cancelled',
-        },
+          cancelled: 'Task cancelled'
+        }
       },
       skills: {
         viewNotes: 'Notes',
@@ -170,6 +162,8 @@ export const learningMessages = {
         saved: 'Saved',
         delete: 'Delete Skill',
         deleteConfirm: 'Delete skill “{value}”? This cannot be undone.',
+        deleteCategory: 'Delete category',
+        deleteCategoryConfirm: 'Delete category “{value}”? Skills using it will become uncategorized.',
         saveFailed: 'Could not save the skill.',
         deleteFailed: 'Could not delete the skill.',
         titleRequired: 'Skill title is required.',
@@ -195,7 +189,7 @@ export const learningMessages = {
         createDescription: 'Create a reusable Skill or keep it only in this task.',
         saveToSkills: 'Save to Skills for reuse',
         useOnce: 'Use once only',
-        createAction: 'Create and use',
+        createAction: 'Create and use'
       },
       editor: {
         untitledNote: 'Untitled Note',
@@ -209,13 +203,9 @@ export const learningMessages = {
         previewTitle: 'Preview',
         previewOnlyDescription: 'Render Markdown in the full available width.',
         previewDescription: 'Rendered Markdown output',
-        emptyState: 'Create a learning note first',
+        emptyState: 'Create a learning note first'
       },
-      delete: {
-        modalAria: 'Delete learning note',
-        title: 'Delete this learning note?',
-        description: 'This action cannot be undone. Current note:',
-      },
+      delete: { modalAria: 'Delete learning note', title: 'Delete this learning note?', description: 'This action cannot be undone. Current note:' },
       frontmatter: {
         statusDraft: 'Draft',
         statusOrganized: 'Organized',
@@ -240,7 +230,7 @@ export const learningMessages = {
         tagsPlaceholder: 'Example: dns, nginx, web',
         tagsHint: 'Separate tags with commas. They will be written into the Markdown frontmatter.',
         createSubmit: 'Create and Start Editing',
-        saveSubmit: 'Save Frontmatter',
+        saveSubmit: 'Save Frontmatter'
       },
       info: {
         title: 'Note Info',
@@ -261,7 +251,7 @@ export const learningMessages = {
         saved: 'Saved',
         unsavedChanges: 'Unsaved changes',
         unchanged: 'No changes',
-        deleteNote: 'Delete Note',
+        deleteNote: 'Delete Note'
       },
       notes: {
         searchPlaceholder: 'Search learning notes...',
@@ -277,14 +267,9 @@ export const learningMessages = {
         emptyExcerpt: 'No excerpt yet',
         statusDraft: 'Draft',
         statusOrganized: 'Organized',
-        emptyNotes: 'No learning notes yet',
+        emptyNotes: 'No learning notes yet'
       },
-      sidebarRail: {
-        expandLeft: 'Expand learning note list',
-        collapseLeft: 'Collapse learning note list',
-        expandRight: 'Expand note info sidebar',
-        collapseRight: 'Collapse note info sidebar',
-      },
+      sidebarRail: { expandLeft: 'Expand learning note list', collapseLeft: 'Collapse learning note list', expandRight: 'Expand note info sidebar', collapseRight: 'Collapse note info sidebar' },
       page: {
         titleRequired: 'Title is required.',
         saveFailed: 'Save failed.',
@@ -295,7 +280,7 @@ export const learningMessages = {
         deleteCategoryFailed: 'Failed to delete category.',
         retrySave: 'Retry Save',
         saveChanges: 'Save Changes',
-        saved: 'Saved',
+        saved: 'Saved'
       },
       markdown: {
         menu: {
@@ -304,118 +289,36 @@ export const learningMessages = {
           listCountLabel: '{count} item | {count} items',
           insert: 'Insert',
           categories: {
-            basic: {
-              label: 'Basic Formatting',
-              description: 'Headings, emphasis, code',
-            },
-            structure: {
-              label: 'Structure',
-              description: 'Lists, links, quotes',
-            },
-            learning: {
-              label: 'Learning Templates',
-              description: 'Summary, review, knowledge',
-            },
-            table: {
-              label: 'Table',
-              description: 'Pick rows and columns',
-            },
+            basic: { label: 'Basic Formatting', description: 'Headings, emphasis, code' },
+            structure: { label: 'Structure', description: 'Lists, links, quotes' },
+            learning: { label: 'Learning Templates', description: 'Summary, review, knowledge' },
+            table: { label: 'Table', description: 'Pick rows and columns' }
           },
           items: {
-            heading: {
-              label: 'Heading',
-              description: 'H1 / H2 / H3',
-            },
-            heading1: {
-              label: 'Heading 1',
-              description: '# Heading',
-            },
-            heading2: {
-              label: 'Heading 2',
-              description: '## Heading',
-            },
-            heading3: {
-              label: 'Heading 3',
-              description: '### Heading',
-            },
-            bold: {
-              label: 'Bold',
-              description: '**text**',
-            },
-            italic: {
-              label: 'Italic',
-              description: '*text*',
-            },
-            strikethrough: {
-              label: 'Strikethrough',
-              description: '~~text~~',
-            },
-            inlineCode: {
-              label: 'Inline Code',
-              description: '`code`',
-            },
-            codeBlock: {
-              label: 'Code Block',
-              description: '```',
-            },
-            blockquote: {
-              label: 'Quote',
-              description: '> quote',
-            },
-            list: {
-              label: 'List',
-              description: 'Bullet / ordered / task',
-            },
-            bulletList: {
-              label: 'Bullet List',
-              description: '- item',
-            },
-            orderedList: {
-              label: 'Ordered List',
-              description: '1. item',
-            },
-            taskList: {
-              label: 'Task List',
-              description: '- [ ] task',
-            },
-            link: {
-              label: 'Link',
-              description: '[text](url)',
-            },
-            image: {
-              label: 'Image',
-              description: '![alt](url)',
-            },
-            horizontalRule: {
-              label: 'Divider',
-              description: '---',
-            },
-            knowledgePoints: {
-              label: 'Knowledge Points',
-              description: 'Concept, principle, example',
-            },
-            summarySection: {
-              label: 'Summary',
-              description: 'Conclusions and next steps',
-            },
-            reviewChecklist: {
-              label: 'Review Checklist',
-              description: 'Tasks to revisit',
-            },
-            pitfallsSection: {
-              label: 'Pitfalls',
-              description: 'Common confusion and fixes',
-            },
-            referencesSection: {
-              label: 'References',
-              description: 'Docs and links',
-            },
+            heading: { label: 'Heading', description: 'H1 / H2 / H3' },
+            heading1: { label: 'Heading 1', description: '# Heading' },
+            heading2: { label: 'Heading 2', description: '## Heading' },
+            heading3: { label: 'Heading 3', description: '### Heading' },
+            bold: { label: 'Bold', description: '**text**' },
+            italic: { label: 'Italic', description: '*text*' },
+            strikethrough: { label: 'Strikethrough', description: '~~text~~' },
+            inlineCode: { label: 'Inline Code', description: '`code`' },
+            codeBlock: { label: 'Code Block', description: '```' },
+            blockquote: { label: 'Quote', description: '> quote' },
+            list: { label: 'List', description: 'Bullet / ordered / task' },
+            bulletList: { label: 'Bullet List', description: '- item' },
+            orderedList: { label: 'Ordered List', description: '1. item' },
+            taskList: { label: 'Task List', description: '- [ ] task' },
+            link: { label: 'Link', description: '[text](url)' },
+            image: { label: 'Image', description: '![alt](url)' },
+            horizontalRule: { label: 'Divider', description: '---' },
+            knowledgePoints: { label: 'Knowledge Points', description: 'Concept, principle, example' },
+            summarySection: { label: 'Summary', description: 'Conclusions and next steps' },
+            reviewChecklist: { label: 'Review Checklist', description: 'Tasks to revisit' },
+            pitfallsSection: { label: 'Pitfalls', description: 'Common confusion and fixes' },
+            referencesSection: { label: 'References', description: 'Docs and links' }
           },
-          table: {
-            selectionSummary: 'Current selection: {rows} rows x {columns} columns',
-            cellAria: '{rows} rows {columns} columns',
-            help: 'The first row becomes the header. Later rows use placeholder text that you can edit right away.',
-          },
+          table: { selectionSummary: 'Current selection: {rows} rows x {columns} columns', cellAria: '{rows} rows {columns} columns', help: 'The first row becomes the header. Later rows use placeholder text that you can edit right away.' }
         },
         templates: {
           placeholders: {
@@ -431,51 +334,23 @@ export const learningMessages = {
             tableCell: 'Content',
             heading1: 'Heading 1',
             heading2: 'Heading 2',
-            heading3: 'Heading 3',
+            heading3: 'Heading 3'
           },
           sections: {
-            knowledgePoints: {
-              title: 'Knowledge Points',
-              coreConcept: 'Core concept:',
-              principle: 'Principle:',
-              example: 'Example:',
-            },
-            summary: {
-              title: 'Summary',
-              conclusionOne: 'Conclusion one',
-              conclusionTwo: 'Conclusion two',
-              nextAction: 'Next action',
-            },
-            reviewChecklist: {
-              title: 'Review Checklist',
-              conceptDefinition: 'Concept definition',
-              keyCommand: 'Key command',
-              commonIssue: 'Common issue',
-            },
-            pitfalls: {
-              title: 'Pitfalls',
-              commonConfusion: 'Easy to confuse:',
-              correctUsage: 'Correct usage:',
-            },
-            references: {
-              title: 'References',
-              documentTitle: 'Document title',
-            },
-          },
-        },
+            knowledgePoints: { title: 'Knowledge Points', coreConcept: 'Core concept:', principle: 'Principle:', example: 'Example:' },
+            summary: { title: 'Summary', conclusionOne: 'Conclusion one', conclusionTwo: 'Conclusion two', nextAction: 'Next action' },
+            reviewChecklist: { title: 'Review Checklist', conceptDefinition: 'Concept definition', keyCommand: 'Key command', commonIssue: 'Common issue' },
+            pitfalls: { title: 'Pitfalls', commonConfusion: 'Easy to confuse:', correctUsage: 'Correct usage:' },
+            references: { title: 'References', documentTitle: 'Document title' }
+          }
+        }
       },
-      defaults: {
-        newNoteTitle: 'New Learning Note',
-        introLine: 'What I learned today:',
-      },
-    },
+      defaults: { newNoteTitle: 'New Learning Note', introLine: 'What I learned today:' }
+    }
   },
   'zh-CN': {
     learning: {
-      header: {
-        subtitle: '用 Markdown 长期保存和整理你的学习记录',
-        createNote: '新建笔记',
-      },
+      header: { subtitle: '用 Markdown 长期保存和整理你的学习记录', createNote: '新建笔记' },
       browserAi: {
         open: '发送到浏览器 AI',
         kicker: '浏览器 AI 调度',
@@ -578,12 +453,7 @@ export const learningMessages = {
         noConfiguredSites: '还没有配置浏览器 AI 站点',
         savePromptByDefault: '默认保存完整发送内容',
         preferencesSaveFailed: '浏览器 AI 默认配置保存失败。',
-        historyStatus: {
-          running: '执行中',
-          completed: '成功',
-          failed: '失败',
-          cancelled: '已取消',
-        },
+        historyStatus: { running: '执行中', completed: '成功', failed: '失败', cancelled: '已取消' },
         steps: {
           'prepare-task': '准备任务',
           'connect-edge': '连接 Edge',
@@ -596,20 +466,9 @@ export const learningMessages = {
           'read-answer': '读取回答',
           completed: '已完成',
           failed: '失败',
-          cancelled: '已取消',
+          cancelled: '已取消'
         },
-        status: {
-          idle: '准备就绪',
-          starting: '准备任务',
-          connecting: '正在连接 Edge',
-          'needs-login': '需要登录',
-          'opening-page': '正在打开新对话',
-          sending: '正在发送选中上下文',
-          'waiting-response': '等待网页 AI 回答',
-          completed: '已收到回答',
-          failed: '任务失败',
-          cancelled: '任务已取消',
-        },
+        status: { idle: '准备就绪', starting: '准备任务', connecting: '正在连接 Edge', 'needs-login': '需要登录', 'opening-page': '正在打开新对话', sending: '正在发送选中上下文', 'waiting-response': '等待网页 AI 回答', completed: '已收到回答', failed: '任务失败', cancelled: '任务已取消' }
       },
       skills: {
         viewNotes: '笔记',
@@ -641,6 +500,8 @@ export const learningMessages = {
         saved: '已保存',
         delete: '删除 Skill',
         deleteConfirm: '确定删除 Skill“{value}”吗？此操作无法撤销。',
+        deleteCategory: '删除分类',
+        deleteCategoryConfirm: '确定删除分类“{value}”吗？使用该分类的 Skill 会变为未分类。',
         saveFailed: 'Skill 保存失败。',
         deleteFailed: 'Skill 删除失败。',
         titleRequired: '请输入 Skill 标题。',
@@ -666,7 +527,7 @@ export const learningMessages = {
         createDescription: '创建可复用 Skill，或只将它用于本次任务。',
         saveToSkills: '保存到 Skills 以便复用',
         useOnce: '仅本次使用',
-        createAction: '创建并使用',
+        createAction: '创建并使用'
       },
       editor: {
         untitledNote: '未命名笔记',
@@ -680,13 +541,9 @@ export const learningMessages = {
         previewTitle: '预览',
         previewOnlyDescription: '完整宽度显示 Markdown 渲染结果',
         previewDescription: 'Markdown 渲染结果',
-        emptyState: '先新建一篇学习记录',
+        emptyState: '先新建一篇学习记录'
       },
-      delete: {
-        modalAria: '删除学习记录',
-        title: '删除这篇学习记录？',
-        description: '删除后不可恢复。当前笔记：',
-      },
+      delete: { modalAria: '删除学习记录', title: '删除这篇学习记录？', description: '删除后不可恢复。当前笔记：' },
       frontmatter: {
         statusDraft: '草稿',
         statusOrganized: '已整理',
@@ -711,7 +568,7 @@ export const learningMessages = {
         tagsPlaceholder: '例如：dns, nginx, web',
         tagsHint: '使用逗号分隔，会写入 Markdown frontmatter。',
         createSubmit: '创建并开始编辑',
-        saveSubmit: '保存 frontmatter',
+        saveSubmit: '保存 frontmatter'
       },
       info: {
         title: '笔记信息',
@@ -732,7 +589,7 @@ export const learningMessages = {
         saved: '已保存',
         unsavedChanges: '有未保存修改',
         unchanged: '未修改',
-        deleteNote: '删除笔记',
+        deleteNote: '删除笔记'
       },
       notes: {
         searchPlaceholder: '搜索学习记录...',
@@ -748,14 +605,9 @@ export const learningMessages = {
         emptyExcerpt: '暂无摘要',
         statusDraft: '草稿',
         statusOrganized: '已整理',
-        emptyNotes: '还没有学习记录',
+        emptyNotes: '还没有学习记录'
       },
-      sidebarRail: {
-        expandLeft: '展开左侧学习目录',
-        collapseLeft: '收起左侧学习目录',
-        expandRight: '展开右侧笔记信息',
-        collapseRight: '收起右侧笔记信息',
-      },
+      sidebarRail: { expandLeft: '展开左侧学习目录', collapseLeft: '收起左侧学习目录', expandRight: '展开右侧笔记信息', collapseRight: '收起右侧笔记信息' },
       page: {
         titleRequired: '标题不能为空',
         saveFailed: '保存失败',
@@ -766,7 +618,7 @@ export const learningMessages = {
         deleteCategoryFailed: '删除分类失败',
         retrySave: '重试保存',
         saveChanges: '保存修改',
-        saved: '已保存',
+        saved: '已保存'
       },
       markdown: {
         menu: {
@@ -774,119 +626,32 @@ export const learningMessages = {
           subtitle: '只有需要时才会继续展开子菜单',
           listCountLabel: '{count} 项',
           insert: '插入',
-          categories: {
-            basic: {
-              label: '基础格式',
-              description: '标题、强调、代码',
-            },
-            structure: {
-              label: '结构内容',
-              description: '列表、链接、引用',
-            },
-            learning: {
-              label: '学习模板',
-              description: '总结、复习、知识点',
-            },
-            table: {
-              label: '表格',
-              description: '选择行列插入',
-            },
-          },
+          categories: { basic: { label: '基础格式', description: '标题、强调、代码' }, structure: { label: '结构内容', description: '列表、链接、引用' }, learning: { label: '学习模板', description: '总结、复习、知识点' }, table: { label: '表格', description: '选择行列插入' } },
           items: {
-            heading: {
-              label: '标题',
-              description: 'H1 / H2 / H3',
-            },
-            heading1: {
-              label: '一级标题',
-              description: '# 一级标题',
-            },
-            heading2: {
-              label: '二级标题',
-              description: '## 二级标题',
-            },
-            heading3: {
-              label: '三级标题',
-              description: '### 三级标题',
-            },
-            bold: {
-              label: '加粗',
-              description: '**text**',
-            },
-            italic: {
-              label: '斜体',
-              description: '*text*',
-            },
-            strikethrough: {
-              label: '删除线',
-              description: '~~text~~',
-            },
-            inlineCode: {
-              label: '行内代码',
-              description: '`code`',
-            },
-            codeBlock: {
-              label: '代码块',
-              description: '```',
-            },
-            blockquote: {
-              label: '引用',
-              description: '> 引用',
-            },
-            list: {
-              label: '列表',
-              description: '无序 / 有序 / 任务',
-            },
-            bulletList: {
-              label: '无序列表',
-              description: '- item',
-            },
-            orderedList: {
-              label: '有序列表',
-              description: '1. item',
-            },
-            taskList: {
-              label: '任务列表',
-              description: '- [ ] task',
-            },
-            link: {
-              label: '链接',
-              description: '[text](url)',
-            },
-            image: {
-              label: '图片',
-              description: '![alt](url)',
-            },
-            horizontalRule: {
-              label: '分隔线',
-              description: '---',
-            },
-            knowledgePoints: {
-              label: '知识点',
-              description: '概念 / 原理 / 示例',
-            },
-            summarySection: {
-              label: '总结',
-              description: '结论归纳',
-            },
-            reviewChecklist: {
-              label: '待复习',
-              description: '任务清单',
-            },
-            pitfallsSection: {
-              label: '易错点',
-              description: '混淆与正确写法',
-            },
-            referencesSection: {
-              label: '参考资料',
-              description: '文档与链接',
-            },
+            heading: { label: '标题', description: 'H1 / H2 / H3' },
+            heading1: { label: '一级标题', description: '# 一级标题' },
+            heading2: { label: '二级标题', description: '## 二级标题' },
+            heading3: { label: '三级标题', description: '### 三级标题' },
+            bold: { label: '加粗', description: '**text**' },
+            italic: { label: '斜体', description: '*text*' },
+            strikethrough: { label: '删除线', description: '~~text~~' },
+            inlineCode: { label: '行内代码', description: '`code`' },
+            codeBlock: { label: '代码块', description: '```' },
+            blockquote: { label: '引用', description: '> 引用' },
+            list: { label: '列表', description: '无序 / 有序 / 任务' },
+            bulletList: { label: '无序列表', description: '- item' },
+            orderedList: { label: '有序列表', description: '1. item' },
+            taskList: { label: '任务列表', description: '- [ ] task' },
+            link: { label: '链接', description: '[text](url)' },
+            image: { label: '图片', description: '![alt](url)' },
+            horizontalRule: { label: '分隔线', description: '---' },
+            knowledgePoints: { label: '知识点', description: '概念 / 原理 / 示例' },
+            summarySection: { label: '总结', description: '结论归纳' },
+            reviewChecklist: { label: '待复习', description: '任务清单' },
+            pitfallsSection: { label: '易错点', description: '混淆与正确写法' },
+            referencesSection: { label: '参考资料', description: '文档与链接' }
           },
-          table: {
-            selectionSummary: '当前选择：{rows} 行 x {columns} 列',
-            cellAria: '{rows} 行 {columns} 列',
-            help: '第一行会作为表头，后续行会生成占位内容，插入后可直接改字。',
-          },
+          table: { selectionSummary: '当前选择：{rows} 行 x {columns} 列', cellAria: '{rows} 行 {columns} 列', help: '第一行会作为表头，后续行会生成占位内容，插入后可直接改字。' }
         },
         templates: {
           placeholders: {
@@ -902,43 +667,18 @@ export const learningMessages = {
             tableCell: '内容',
             heading1: '一级标题',
             heading2: '二级标题',
-            heading3: '三级标题',
+            heading3: '三级标题'
           },
           sections: {
-            knowledgePoints: {
-              title: '知识点',
-              coreConcept: '核心概念：',
-              principle: '原理说明：',
-              example: '示例：',
-            },
-            summary: {
-              title: '总结',
-              conclusionOne: '结论一',
-              conclusionTwo: '结论二',
-              nextAction: '后续行动',
-            },
-            reviewChecklist: {
-              title: '待复习',
-              conceptDefinition: '概念定义',
-              keyCommand: '关键命令',
-              commonIssue: '常见问题',
-            },
-            pitfalls: {
-              title: '易错点',
-              commonConfusion: '容易混淆：',
-              correctUsage: '正确写法：',
-            },
-            references: {
-              title: '参考资料',
-              documentTitle: '文档标题',
-            },
-          },
-        },
+            knowledgePoints: { title: '知识点', coreConcept: '核心概念：', principle: '原理说明：', example: '示例：' },
+            summary: { title: '总结', conclusionOne: '结论一', conclusionTwo: '结论二', nextAction: '后续行动' },
+            reviewChecklist: { title: '待复习', conceptDefinition: '概念定义', keyCommand: '关键命令', commonIssue: '常见问题' },
+            pitfalls: { title: '易错点', commonConfusion: '容易混淆：', correctUsage: '正确写法：' },
+            references: { title: '参考资料', documentTitle: '文档标题' }
+          }
+        }
       },
-      defaults: {
-        newNoteTitle: '新学习记录',
-        introLine: '今天学习到：',
-      },
-    },
-  },
+      defaults: { newNoteTitle: '新学习记录', introLine: '今天学习到：' }
+    }
+  }
 } as const

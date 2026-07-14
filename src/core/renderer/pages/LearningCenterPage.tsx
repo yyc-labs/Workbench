@@ -1,15 +1,7 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent as ReactChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type MouseEvent as ReactMouseEvent,
-  type SyntheticEvent as ReactSyntheticEvent,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type SyntheticEvent as ReactSyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
 import { useSidebarGesture } from '../hooks/useSidebarGesture'
 import { useI18n } from '../i18n'
@@ -26,33 +18,11 @@ import { LearningNoteInfoSidebar } from './learning/LearningNoteInfoSidebar'
 import { LearningNotesSidebar } from './learning/LearningNotesSidebar'
 import { LearningSidebarRailButton } from './learning/LearningSidebarRailButton'
 import { SkillManagementView } from './learning/SkillManagementView'
-import {
-  createLearningEditorHistoryState,
-  pushLearningEditorSnapshot,
-  updateLearningEditorSnapshotSelection,
-  type LearningEditorSnapshot,
-} from './learning/learningEditorHistory'
-import {
-  applyLearningMarkdownInsert,
-  type LearningMarkdownInsertRequest,
-} from './learning/learningMarkdownTemplates'
-import {
-  continueMarkdownList,
-  indentMarkdownLines,
-  outdentMarkdownLines,
-} from './learning/learningMarkdownEditor'
-import {
-  type FrontmatterDialogMode,
-  type LearningEditorContextMenuState,
-  type LearningEditorDisplayMode,
-  type SaveState,
-} from './learning/learningCenterTypes'
-import {
-  defaultNoteContent,
-  emptySelectionState,
-  findCategoryByName,
-  normalizeTagInput,
-} from './learning/learningCenterUtils'
+import { createLearningEditorHistoryState, pushLearningEditorSnapshot, updateLearningEditorSnapshotSelection, type LearningEditorSnapshot } from './learning/learningEditorHistory'
+import { applyLearningMarkdownInsert, type LearningMarkdownInsertRequest } from './learning/learningMarkdownTemplates'
+import { continueMarkdownList, indentMarkdownLines, outdentMarkdownLines } from './learning/learningMarkdownEditor'
+import { type FrontmatterDialogMode, type LearningEditorContextMenuState, type LearningEditorDisplayMode, type SaveState } from './learning/learningCenterTypes'
+import { defaultNoteContent, emptySelectionState, findCategoryByName, normalizeTagInput } from './learning/learningCenterUtils'
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
@@ -88,6 +58,7 @@ export function LearningCenterPage() {
   const [isDeletingCategory, setIsDeletingCategory] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [categoryDeleteConfirm, setCategoryDeleteConfirm] = useState<{ id: string; name: string } | null>(null)
   const [frontmatterDialogOpen, setFrontmatterDialogOpen] = useState(false)
   const [frontmatterDialogMode, setFrontmatterDialogMode] = useState<FrontmatterDialogMode>('create')
   const [frontmatterTitle, setFrontmatterTitle] = useState('')
@@ -112,9 +83,7 @@ export function LearningCenterPage() {
   })
   const [editorDisplayMode, setEditorDisplayMode] = useState<LearningEditorDisplayMode>(() => {
     if (typeof window === 'undefined') return 'split'
-    return window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY) === 'preview'
-      ? 'preview'
-      : 'split'
+    return window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY) === 'preview' ? 'preview' : 'split'
   })
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -125,52 +94,30 @@ export function LearningCenterPage() {
     setEditorContextMenu(null)
   }
 
-  const sidebarGestureOverlay = useSidebarGesture({
-    pageRootRef,
-    onBeforeToggle: closeEditorContextMenu,
-    onToggleLeftSidebar: () => setLeftSidebarCollapsed((current) => !current),
-    onToggleRightSidebar: () => setRightSidebarCollapsed((current) => !current),
-  })
+  const sidebarGestureOverlay = useSidebarGesture({ pageRootRef, onBeforeToggle: closeEditorContextMenu, onToggleLeftSidebar: () => setLeftSidebarCollapsed((current) => !current), onToggleRightSidebar: () => setRightSidebarCollapsed((current) => !current) })
 
   const filteredNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return notes.filter((note) => {
       if (selectedCategoryId !== 'all' && note.categoryId !== selectedCategoryId) return false
       if (!q) return true
-      const haystack = [
-        note.title,
-        note.excerpt,
-        note.tags.join(' '),
-      ].join(' ').toLowerCase()
+      const haystack = [note.title, note.excerpt, note.tags.join(' ')].join(' ').toLowerCase()
       return haystack.includes(q)
     })
   }, [notes, searchQuery, selectedCategoryId])
 
-  const selectedManageCategory = useMemo(
-    () => categories.find((item) => item.id === selectedCategoryId) ?? null,
-    [categories, selectedCategoryId]
-  )
+  const selectedManageCategory = useMemo(() => categories.find((item) => item.id === selectedCategoryId) ?? null, [categories, selectedCategoryId])
 
   const hasUnsavedChanges = useMemo(() => {
     if (!selectedNote) return false
-    return (
-      editorTitle !== selectedNote.title
-      || editorContent !== selectedNote.contentMd
-      || editorCategoryId !== (selectedNote.categoryId ?? '')
-      || editorStatus !== selectedNote.status
-      || editorTags !== selectedNote.tags.join(', ')
-    )
+    return editorTitle !== selectedNote.title || editorContent !== selectedNote.contentMd || editorCategoryId !== (selectedNote.categoryId ?? '') || editorStatus !== selectedNote.status || editorTags !== selectedNote.tags.join(', ')
   }, [editorCategoryId, editorContent, editorStatus, editorTags, editorTitle, selectedNote])
 
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       try {
-        const [nextCategories, nextNotes] = await Promise.all([
-          window.electronAPI.listLearningCategories(),
-          window.electronAPI.listLearningNotes(),
-          loadSkills(),
-        ])
+        const [nextCategories, nextNotes] = await Promise.all([window.electronAPI.listLearningCategories(), window.electronAPI.listLearningNotes(), loadSkills()])
         setCategories(nextCategories)
         setNotes(nextNotes)
         const firstNoteId = nextNotes[0]?.id ?? null
@@ -270,6 +217,10 @@ export function LearningCenterPage() {
     setBrowserAiOpen(true)
   }
 
+  const handleSkillCreateRequestHandled = useCallback(() => {
+    setSkillCreateRequest(0)
+  }, [])
+
   const resetFrontmatterDialog = () => {
     setFrontmatterDialogOpen(false)
     setFrontmatterSubmitting(false)
@@ -321,13 +272,7 @@ export function LearningCenterPage() {
     try {
       const resolvedCategoryId = await resolveFrontmatterCategoryId()
       if (frontmatterDialogMode === 'create') {
-        const created = await window.electronAPI.createLearningNote({
-          title: nextTitle,
-          categoryId: resolvedCategoryId,
-          tags: normalizeTagInput(frontmatterTags),
-          status: frontmatterStatus,
-          contentMd: defaultNoteContent(nextTitle),
-        })
+        const created = await window.electronAPI.createLearningNote({ title: nextTitle, categoryId: resolvedCategoryId, tags: normalizeTagInput(frontmatterTags), status: frontmatterStatus, contentMd: defaultNoteContent(nextTitle) })
         setNotes((current) => [created, ...current.filter((item) => item.id !== created.id)])
         setSelectedNoteId(created.id)
         resetFrontmatterDialog()
@@ -335,14 +280,7 @@ export function LearningCenterPage() {
       }
 
       if (!selectedNoteId) return
-      const updated = await window.electronAPI.updateLearningNote({
-        noteId: selectedNoteId,
-        title: nextTitle,
-        categoryId: resolvedCategoryId,
-        tags: normalizeTagInput(frontmatterTags),
-        status: frontmatterStatus,
-        contentMd: editorContent,
-      })
+      const updated = await window.electronAPI.updateLearningNote({ noteId: selectedNoteId, title: nextTitle, categoryId: resolvedCategoryId, tags: normalizeTagInput(frontmatterTags), status: frontmatterStatus, contentMd: editorContent })
       syncUpdatedNote(updated)
       setSaveState('saved')
       resetFrontmatterDialog()
@@ -363,14 +301,7 @@ export function LearningCenterPage() {
     setSaving(true)
     setSaveError(null)
     try {
-      const updated = await window.electronAPI.updateLearningNote({
-        noteId: selectedNoteId,
-        title: editorTitle,
-        categoryId: editorCategoryId || undefined,
-        tags: normalizeTagInput(editorTags),
-        status: editorStatus,
-        contentMd: editorContent,
-      })
+      const updated = await window.electronAPI.updateLearningNote({ noteId: selectedNoteId, title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent })
       syncUpdatedNote(updated)
       setSaveState('saved')
     } catch (error) {
@@ -384,10 +315,7 @@ export function LearningCenterPage() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement
-      const isTextEntryTarget = activeElement instanceof HTMLInputElement
-        || activeElement instanceof HTMLTextAreaElement
-        || activeElement instanceof HTMLSelectElement
-        || Boolean(activeElement?.closest('[contenteditable="true"]'))
+      const isTextEntryTarget = activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement || activeElement instanceof HTMLSelectElement || Boolean(activeElement?.closest('[contenteditable="true"]'))
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
@@ -447,10 +375,7 @@ export function LearningCenterPage() {
     setIsUpdatingCategory(true)
     setCategoryEditError(null)
     try {
-      const next = await window.electronAPI.updateLearningCategory({
-        categoryId: selectedManageCategory.id,
-        name,
-      })
+      const next = await window.electronAPI.updateLearningCategory({ categoryId: selectedManageCategory.id, name })
       setCategories(next)
     } catch (error) {
       setCategoryEditError(error instanceof Error ? error.message : t('learning.page.renameCategoryFailed'))
@@ -459,34 +384,26 @@ export function LearningCenterPage() {
     }
   }
 
-  const handleDeleteCategory = async () => {
-    if (!selectedManageCategory) return
-    const shouldDelete = window.confirm(
-      t('learning.page.deleteCategoryConfirm', { value: selectedManageCategory.name })
-    )
-    if (!shouldDelete) return
+  const handleDeleteCategory = () => {
+    if (!selectedManageCategory || isDeletingCategory) return
+    setCategoryEditError(null)
+    setCategoryDeleteConfirm({ id: selectedManageCategory.id, name: selectedManageCategory.name })
+  }
 
+  const confirmDeleteCategory = async () => {
+    const pendingCategory = categoryDeleteConfirm
+    if (!pendingCategory) return
     setIsDeletingCategory(true)
     setCategoryEditError(null)
     try {
-      const deletedCategoryId = selectedManageCategory.id
-      const next = await window.electronAPI.deleteLearningCategory(deletedCategoryId)
+      const next = await window.electronAPI.deleteLearningCategory(pendingCategory.id)
       setCategories(next)
       setSelectedCategoryId('all')
-      setNotes((current) => current.map((note) => (
-        note.categoryId === deletedCategoryId
-          ? { ...note, categoryId: undefined }
-          : note
-      )))
-      setSelectedNote((current) => (
-        current && current.categoryId === deletedCategoryId
-          ? { ...current, categoryId: undefined }
-          : current
-      ))
-      setEditorCategoryId((current) => (current === deletedCategoryId ? '' : current))
-      setFrontmatterCategoryInput((current) => (
-        current.trim().toLowerCase() === selectedManageCategory.name.trim().toLowerCase() ? '' : current
-      ))
+      setNotes((current) => current.map((note) => (note.categoryId === pendingCategory.id ? { ...note, categoryId: undefined } : note)))
+      setSelectedNote((current) => (current && current.categoryId === pendingCategory.id ? { ...current, categoryId: undefined } : current))
+      setEditorCategoryId((current) => (current === pendingCategory.id ? '' : current))
+      setFrontmatterCategoryInput((current) => (current.trim().toLowerCase() === pendingCategory.name.trim().toLowerCase() ? '' : current))
+      setCategoryDeleteConfirm(null)
     } catch (error) {
       setCategoryEditError(error instanceof Error ? error.message : t('learning.page.deleteCategoryFailed'))
     } finally {
@@ -510,27 +427,13 @@ export function LearningCenterPage() {
   }
 
   const pushEditorSnapshot = (snapshot: LearningEditorSnapshot) => {
-    const nextHistoryState = pushLearningEditorSnapshot(
-      {
-        history: editorHistoryRef.current,
-        index: editorHistoryIndexRef.current,
-      },
-      snapshot,
-      LEARNING_EDITOR_HISTORY_LIMIT
-    )
+    const nextHistoryState = pushLearningEditorSnapshot({ history: editorHistoryRef.current, index: editorHistoryIndexRef.current }, snapshot, LEARNING_EDITOR_HISTORY_LIMIT)
     editorHistoryRef.current = nextHistoryState.history
     editorHistoryIndexRef.current = nextHistoryState.index
   }
 
   const syncEditorSnapshotSelection = (selectionStart: number, selectionEnd: number) => {
-    const nextHistoryState = updateLearningEditorSnapshotSelection(
-      {
-        history: editorHistoryRef.current,
-        index: editorHistoryIndexRef.current,
-      },
-      selectionStart,
-      selectionEnd
-    )
+    const nextHistoryState = updateLearningEditorSnapshotSelection({ history: editorHistoryRef.current, index: editorHistoryIndexRef.current }, selectionStart, selectionEnd)
     editorHistoryRef.current = nextHistoryState.history
     editorHistoryIndexRef.current = nextHistoryState.index
   }
@@ -545,29 +448,16 @@ export function LearningCenterPage() {
     }, 0)
   }
 
-  const applyEditorEdit = (
-    textarea: HTMLTextAreaElement,
-    previousValue: string,
-    nextValue: string,
-    nextSelectionStart: number,
-    nextSelectionEnd: number
-  ) => {
+  const applyEditorEdit = (textarea: HTMLTextAreaElement, previousValue: string, nextValue: string, nextSelectionStart: number, nextSelectionEnd: number) => {
     let prefixLength = 0
     const maxPrefixLength = Math.min(previousValue.length, nextValue.length)
-    while (
-      prefixLength < maxPrefixLength
-      && previousValue[prefixLength] === nextValue[prefixLength]
-    ) {
+    while (prefixLength < maxPrefixLength && previousValue[prefixLength] === nextValue[prefixLength]) {
       prefixLength += 1
     }
 
     let previousSuffixLength = previousValue.length
     let nextSuffixLength = nextValue.length
-    while (
-      previousSuffixLength > prefixLength
-      && nextSuffixLength > prefixLength
-      && previousValue[previousSuffixLength - 1] === nextValue[nextSuffixLength - 1]
-    ) {
+    while (previousSuffixLength > prefixLength && nextSuffixLength > prefixLength && previousValue[previousSuffixLength - 1] === nextValue[nextSuffixLength - 1]) {
       previousSuffixLength -= 1
       nextSuffixLength -= 1
     }
@@ -576,22 +466,13 @@ export function LearningCenterPage() {
     textarea.setRangeText(replacement, prefixLength, previousSuffixLength, 'preserve')
     textarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
     setEditorContent(textarea.value)
-    pushEditorSnapshot({
-      value: textarea.value,
-      selectionStart: nextSelectionStart,
-      selectionEnd: nextSelectionEnd,
-    })
+    pushEditorSnapshot({ value: textarea.value, selectionStart: nextSelectionStart, selectionEnd: nextSelectionEnd })
   }
 
   const handleEditorContextMenu = (event: ReactMouseEvent<HTMLTextAreaElement>) => {
     event.preventDefault()
     const target = event.currentTarget
-    setEditorContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      selectionStart: target.selectionStart ?? 0,
-      selectionEnd: target.selectionEnd ?? 0,
-    })
+    setEditorContextMenu({ x: event.clientX, y: event.clientY, selectionStart: target.selectionStart ?? 0, selectionEnd: target.selectionEnd ?? 0 })
   }
 
   const handleApplyMarkdownInsert = (request: LearningMarkdownInsertRequest) => {
@@ -604,13 +485,7 @@ export function LearningCenterPage() {
     const selectionStart = editorContextMenu?.selectionStart ?? textarea.selectionStart ?? 0
     const selectionEnd = editorContextMenu?.selectionEnd ?? textarea.selectionEnd ?? selectionStart
     syncEditorSnapshotSelection(selectionStart, selectionEnd)
-    const result = applyLearningMarkdownInsert(
-      editorContent,
-      selectionStart,
-      selectionEnd,
-      request,
-      locale
-    )
+    const result = applyLearningMarkdownInsert(editorContent, selectionStart, selectionEnd, request, locale)
     applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
     closeEditorContextMenu()
     textarea.focus()
@@ -618,10 +493,7 @@ export function LearningCenterPage() {
 
   const handleEditorSelectionSync = (event: ReactSyntheticEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
-    syncEditorSnapshotSelection(
-      textarea.selectionStart ?? 0,
-      textarea.selectionEnd ?? textarea.selectionStart ?? 0
-    )
+    syncEditorSnapshotSelection(textarea.selectionStart ?? 0, textarea.selectionEnd ?? textarea.selectionStart ?? 0)
   }
 
   const handleEditorKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
@@ -641,10 +513,7 @@ export function LearningCenterPage() {
       return
     }
 
-    if (
-      (isModKey && event.key.toLowerCase() === 'y')
-      || (isModKey && event.shiftKey && event.key.toLowerCase() === 'z')
-    ) {
+    if ((isModKey && event.key.toLowerCase() === 'y') || (isModKey && event.shiftKey && event.key.toLowerCase() === 'z')) {
       const nextIndex = editorHistoryIndexRef.current + 1
       if (nextIndex >= editorHistoryRef.current.length) return
       event.preventDefault()
@@ -667,9 +536,7 @@ export function LearningCenterPage() {
 
     if (event.key === 'Tab') {
       event.preventDefault()
-      const result = event.shiftKey
-        ? outdentMarkdownLines(editorContent, selectionStart, selectionEnd)
-        : indentMarkdownLines(editorContent, selectionStart, selectionEnd)
+      const result = event.shiftKey ? outdentMarkdownLines(editorContent, selectionStart, selectionEnd) : indentMarkdownLines(editorContent, selectionStart, selectionEnd)
       applyEditorEdit(textarea, editorContent, result.value, result.selectionStart, result.selectionEnd)
       textarea.focus()
       return
@@ -687,25 +554,11 @@ export function LearningCenterPage() {
   const handleEditorChange = (event: ReactChangeEvent<HTMLTextAreaElement>) => {
     const textarea = event.currentTarget
     setEditorContent(textarea.value)
-    pushEditorSnapshot({
-      value: textarea.value,
-      selectionStart: textarea.selectionStart ?? textarea.value.length,
-      selectionEnd: textarea.selectionEnd ?? textarea.value.length,
-    })
+    pushEditorSnapshot({ value: textarea.value, selectionStart: textarea.selectionStart ?? textarea.value.length, selectionEnd: textarea.selectionEnd ?? textarea.value.length })
   }
 
-  const saveButtonVariant = saveState === 'error'
-    ? 'destructive'
-    : hasUnsavedChanges
-      ? 'default'
-      : 'outline'
-  const saveButtonLabel = saving
-    ? t('common.saving')
-    : saveState === 'error'
-      ? t('learning.page.retrySave')
-      : hasUnsavedChanges
-        ? t('learning.page.saveChanges')
-        : t('learning.page.saved')
+  const saveButtonVariant = saveState === 'error' ? 'destructive' : hasUnsavedChanges ? 'default' : 'outline'
+  const saveButtonLabel = saving ? t('common.saving') : saveState === 'error' ? t('learning.page.retrySave') : hasUnsavedChanges ? t('learning.page.saveChanges') : t('learning.page.saved')
   const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
   const layoutGridColumns = useMemo(() => {
     if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 340px'
@@ -722,116 +575,100 @@ export function LearningCenterPage() {
         <LearningCenterHeader
           onBack={() => navigate('/')}
           onCreateNote={openCreateDialog}
-          onCreateSkill={() => { setActiveView('skills'); setSkillCreateRequest((current) => current + 1) }}
+          onCreateSkill={() => {
+            setActiveView('skills')
+            setSkillCreateRequest((current) => current + 1)
+          }}
           view={activeView}
           onViewChange={setActiveView}
-          onOpenBrowserAi={() => { setBrowserAiInitialRecord(null); setBrowserAiOpen(true) }}
+          onOpenBrowserAi={() => {
+            setBrowserAiInitialRecord(null)
+            setBrowserAiOpen(true)
+          }}
           onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
           onOpenBrowserAiHistory={() => setActiveView('browser-tasks')}
         />
 
-        {activeView === 'skills' ? <SkillManagementView createRequest={skillCreateRequest} /> : activeView === 'browser-tasks' ? <LearningBrowserAiHistoryView
-          currentNote={selectedNote}
-          onReload={handleBrowserAiReload}
-          onSaved={handleBrowserAiSaved}
-        /> : <div
-          className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200"
-          style={{ gridTemplateColumns: layoutGridColumns }}
-        >
-          {leftSidebarCollapsed ? (
-            <LearningSidebarRailButton
-              side="left"
-              collapsed
-              onClick={() => setLeftSidebarCollapsed(false)}
-              className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2"
-            />
-          ) : null}
-          {rightSidebarCollapsed ? (
-            <LearningSidebarRailButton
-              side="right"
-              collapsed
-              onClick={() => setRightSidebarCollapsed(false)}
-              className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2"
-            />
-          ) : null}
+        {activeView === 'skills' ? (
+          <SkillManagementView createRequest={skillCreateRequest} onCreateRequestHandled={handleSkillCreateRequestHandled} />
+        ) : activeView === 'browser-tasks' ? (
+          <LearningBrowserAiHistoryView currentNote={selectedNote} onReload={handleBrowserAiReload} onSaved={handleBrowserAiSaved} />
+        ) : (
+          <div className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200" style={{ gridTemplateColumns: layoutGridColumns }}>
+            {leftSidebarCollapsed ? <LearningSidebarRailButton side="left" collapsed onClick={() => setLeftSidebarCollapsed(false)} className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2" /> : null}
+            {rightSidebarCollapsed ? <LearningSidebarRailButton side="right" collapsed onClick={() => setRightSidebarCollapsed(false)} className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2" /> : null}
 
-          {!leftSidebarCollapsed ? (
-            <LearningNotesSidebar
-              categories={categories}
-              categoryCreateError={categoryCreateError}
-              categoryEditError={categoryEditError}
-              categoryEditInput={categoryEditInput}
-              categoryInput={categoryInput}
-              filteredNotes={filteredNotes}
-              isCreatingCategory={isCreatingCategory}
-              isDeletingCategory={isDeletingCategory}
-              isUpdatingCategory={isUpdatingCategory}
-              loading={loading}
-              searchQuery={searchQuery}
-              selectedCategoryId={selectedCategoryId}
-              selectedManageCategory={selectedManageCategory}
-              selectedNoteId={selectedNoteId}
-              onCategoryEditInputChange={setCategoryEditInput}
-              onCategoryInputChange={setCategoryInput}
-              onClearSearch={() => setSearchQuery('')}
-              onCollapse={() => setLeftSidebarCollapsed(true)}
-              onCreateCategory={handleCreateCategory}
-              onDeleteCategory={handleDeleteCategory}
-              onRenameCategory={handleRenameCategory}
-              onSearchQueryChange={setSearchQuery}
-              onSelectCategory={setSelectedCategoryId}
-              onSelectNote={setSelectedNoteId}
-            />
-          ) : null}
+            {!leftSidebarCollapsed ? (
+              <LearningNotesSidebar
+                categories={categories}
+                categoryCreateError={categoryCreateError}
+                categoryEditError={categoryEditError}
+                categoryEditInput={categoryEditInput}
+                categoryInput={categoryInput}
+                filteredNotes={filteredNotes}
+                isCreatingCategory={isCreatingCategory}
+                isDeletingCategory={isDeletingCategory}
+                isUpdatingCategory={isUpdatingCategory}
+                loading={loading}
+                searchQuery={searchQuery}
+                selectedCategoryId={selectedCategoryId}
+                selectedManageCategory={selectedManageCategory}
+                selectedNoteId={selectedNoteId}
+                onCategoryEditInputChange={setCategoryEditInput}
+                onCategoryInputChange={setCategoryInput}
+                onClearSearch={() => setSearchQuery('')}
+                onCollapse={() => setLeftSidebarCollapsed(true)}
+                onCreateCategory={handleCreateCategory}
+                onDeleteCategory={handleDeleteCategory}
+                onRenameCategory={handleRenameCategory}
+                onSearchQueryChange={setSearchQuery}
+                onSelectCategory={setSelectedCategoryId}
+                onSelectNote={setSelectedNoteId}
+              />
+            ) : null}
 
-          <LearningEditorPanel
-            bothSidebarsCollapsed={bothSidebarsCollapsed}
-            editorContent={editorContent}
-            editorDisplayMode={editorDisplayMode}
-            editorTextareaRef={editorTextareaRef}
-            editorTitle={editorTitle}
-            hasUnsavedChanges={hasUnsavedChanges}
-            saveButtonDisabled={saveButtonDisabled}
-            saveButtonLabel={saveButtonLabel}
-            saveButtonVariant={saveButtonVariant}
-            saving={saving}
-            selectedNote={selectedNote}
-            onEditorChange={handleEditorChange}
-            onEditorContextMenu={handleEditorContextMenu}
-            onEditorDisplayModeChange={setEditorDisplayMode}
-            onEditorKeyDown={handleEditorKeyDown}
-            onEditorSelectionSync={handleEditorSelectionSync}
-            onSave={handleSave}
-          />
-
-          {!rightSidebarCollapsed ? (
-            <LearningNoteInfoSidebar
-              categories={categories}
-              editorCategoryId={editorCategoryId}
-              editorStatus={editorStatus}
-              editorTags={editorTags}
+            <LearningEditorPanel
+              bothSidebarsCollapsed={bothSidebarsCollapsed}
+              editorContent={editorContent}
+              editorDisplayMode={editorDisplayMode}
+              editorTextareaRef={editorTextareaRef}
               editorTitle={editorTitle}
               hasUnsavedChanges={hasUnsavedChanges}
-              saveError={saveError}
-              saveState={saveState}
+              saveButtonDisabled={saveButtonDisabled}
+              saveButtonLabel={saveButtonLabel}
+              saveButtonVariant={saveButtonVariant}
+              saving={saving}
               selectedNote={selectedNote}
-              selectedNoteId={selectedNoteId}
-              onCollapse={() => setRightSidebarCollapsed(true)}
-              onOpenDeleteConfirm={() => setDeleteConfirmOpen(true)}
-              onOpenEditDialog={openEditDialog}
+              onEditorChange={handleEditorChange}
+              onEditorContextMenu={handleEditorContextMenu}
+              onEditorDisplayModeChange={setEditorDisplayMode}
+              onEditorKeyDown={handleEditorKeyDown}
+              onEditorSelectionSync={handleEditorSelectionSync}
+              onSave={handleSave}
             />
-          ) : null}
-        </div>}
+
+            {!rightSidebarCollapsed ? (
+              <LearningNoteInfoSidebar
+                categories={categories}
+                editorCategoryId={editorCategoryId}
+                editorStatus={editorStatus}
+                editorTags={editorTags}
+                editorTitle={editorTitle}
+                hasUnsavedChanges={hasUnsavedChanges}
+                saveError={saveError}
+                saveState={saveState}
+                selectedNote={selectedNote}
+                selectedNoteId={selectedNoteId}
+                onCollapse={() => setRightSidebarCollapsed(true)}
+                onOpenDeleteConfirm={() => setDeleteConfirmOpen(true)}
+                onOpenEditDialog={openEditDialog}
+              />
+            ) : null}
+          </div>
+        )}
       </div>
 
-      {editorContextMenu ? (
-        <LearningMarkdownContextMenu
-          x={editorContextMenu.x}
-          y={editorContextMenu.y}
-          onApply={handleApplyMarkdownInsert}
-          onClose={closeEditorContextMenu}
-        />
-      ) : null}
+      {editorContextMenu ? <LearningMarkdownContextMenu x={editorContextMenu.x} y={editorContextMenu.y} onApply={handleApplyMarkdownInsert} onClose={closeEditorContextMenu} /> : null}
 
       <LearningFrontmatterDialog
         categories={categories}
@@ -851,32 +688,25 @@ export function LearningCenterPage() {
         onTitleChange={setFrontmatterTitle}
       />
 
-      <LearningDeleteNoteDialog
-        isDeleting={isDeleting}
-        open={deleteConfirmOpen}
-        selectedNote={selectedNote}
-        onClose={() => setDeleteConfirmOpen(false)}
-        onDelete={handleDelete}
-      />
+      <LearningDeleteNoteDialog isDeleting={isDeleting} open={deleteConfirmOpen} selectedNote={selectedNote} onClose={() => setDeleteConfirmOpen(false)} onDelete={handleDelete} />
 
-      <LearningBrowserAiDialog
-        categories={categories}
-        currentNote={selectedNote}
-        skills={skills}
-        notes={notes}
-        initialRecord={browserAiInitialRecord}
-        onClose={() => setBrowserAiOpen(false)}
-        onSaved={handleBrowserAiSaved}
-        open={browserAiOpen}
-      />
+      <ConfirmDialog
+        open={Boolean(categoryDeleteConfirm)}
+        onClose={() => setCategoryDeleteConfirm(null)}
+        onConfirm={confirmDeleteCategory}
+        ariaLabel={t('learning.notes.deleteCategory')}
+        title={t('learning.notes.deleteCategory')}
+        description={t('learning.page.deleteCategoryConfirm', { value: categoryDeleteConfirm?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        confirmVariant="destructive"
+        busy={isDeletingCategory}
+      >
+        {categoryEditError ? <p className="text-sm text-[color:var(--color-destructive)]">{categoryEditError}</p> : null}
+      </ConfirmDialog>
 
-      <LearningBrowserAiPreferencesDialog
-        categories={categories}
-        notes={notes}
-        skills={skills}
-        onClose={() => setBrowserAiPreferencesOpen(false)}
-        open={browserAiPreferencesOpen}
-      />
+      <LearningBrowserAiDialog categories={categories} currentNote={selectedNote} skills={skills} notes={notes} initialRecord={browserAiInitialRecord} onClose={() => setBrowserAiOpen(false)} onSaved={handleBrowserAiSaved} open={browserAiOpen} />
+
+      <LearningBrowserAiPreferencesDialog categories={categories} notes={notes} skills={skills} onClose={() => setBrowserAiPreferencesOpen(false)} open={browserAiPreferencesOpen} />
     </div>
   )
 }

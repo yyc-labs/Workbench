@@ -1,19 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SkillEditorState } from './skillTypes'
 import type { Skill } from '../../../shared/types'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { SkillEditorPanel } from './SkillEditorPanel'
 import { SkillListSidebar } from './SkillListSidebar'
 import { skillEditorState } from './skillTypes'
 
-type SkillManagementViewProps = { createRequest: number }
+type SkillManagementViewProps = { createRequest: number; onCreateRequestHandled: () => void }
+type SkillDeleteConfirmation = { type: 'skill' | 'category'; id: string; name: string }
 
 function normalizeTags(value: string): string[] {
-  return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ]
 }
 
-export function SkillManagementView({ createRequest }: SkillManagementViewProps) {
+export function SkillManagementView({ createRequest, onCreateRequestHandled }: SkillManagementViewProps) {
   const { t } = useI18n()
   const skills = useAppStore((state) => state.skills)
   const categories = useAppStore((state) => state.skillCategories)
@@ -34,7 +43,10 @@ export function SkillManagementView({ createRequest }: SkillManagementViewProps)
   const [categoryInput, setCategoryInput] = useState('')
   const [categoryEditInput, setCategoryEditInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<SkillDeleteConfirmation | null>(null)
+  const handledCreateRequestRef = useRef(0)
 
   useEffect(() => {
     void Promise.all([loadSkills(), loadSkillCategories()])
@@ -56,11 +68,17 @@ export function SkillManagementView({ createRequest }: SkillManagementViewProps)
   }, [categories, selectedSkill])
 
   useEffect(() => {
-    if (createRequest <= 0) return
+    if (createRequest <= 0) {
+      handledCreateRequestRef.current = 0
+      return
+    }
+    if (handledCreateRequestRef.current === createRequest) return
+    handledCreateRequestRef.current = createRequest
+    onCreateRequestHandled()
     void handleCreateSkill()
     // The request is an incrementing UI event from the page header.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createRequest])
+  }, [createRequest, onCreateRequestHandled])
 
   const filteredSkills = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -77,9 +95,7 @@ export function SkillManagementView({ createRequest }: SkillManagementViewProps)
     setError(null)
     try {
       const baseTitle = t('learning.skills.create')
-      const title = skills.some((skill) => skill.title.toLowerCase() === baseTitle.toLowerCase())
-        ? `${baseTitle} ${skills.length + 1}`
-        : baseTitle
+      const title = skills.some((skill) => skill.title.toLowerCase() === baseTitle.toLowerCase()) ? `${baseTitle} ${skills.length + 1}` : baseTitle
       const created = await createSkill({ title, contentMd: `# ${title}\n\n` })
       setSelectedSkillId(created.id)
     } catch (createError) {
@@ -101,15 +117,30 @@ export function SkillManagementView({ createRequest }: SkillManagementViewProps)
     }
   }
 
-  const handleDelete = async () => {
-    if (!selectedSkill) return
-    if (!window.confirm(t('learning.skills.deleteConfirm', { value: selectedSkill.title }))) return
+  const handleDelete = () => {
+    if (!selectedSkill || deleting) return
+    setError(null)
+    setDeleteConfirm({ type: 'skill', id: selectedSkill.id, name: selectedSkill.title })
+  }
+
+  const confirmDelete = async () => {
+    const pendingDelete = deleteConfirm
+    if (!pendingDelete) return
+    setDeleting(true)
     setError(null)
     try {
-      const deleted = await deleteSkill(selectedSkill.id)
-      if (deleted) setSelectedSkillId(skills.find((skill) => skill.id !== selectedSkill.id)?.id ?? null)
+      if (pendingDelete.type === 'skill') {
+        const deleted = await deleteSkill(pendingDelete.id)
+        if (deleted) setSelectedSkillId(skills.find((skill) => skill.id !== pendingDelete.id)?.id ?? null)
+      } else {
+        await deleteSkillCategory(pendingDelete.id)
+        setSelectedCategoryId('all')
+      }
+      setDeleteConfirm(null)
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : t('learning.skills.deleteFailed'))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -128,16 +159,53 @@ export function SkillManagementView({ createRequest }: SkillManagementViewProps)
 
   const handleRenameCategory = async () => {
     if (!selectedCategory || !categoryEditInput.trim()) return
-    try { await updateSkillCategory({ categoryId: selectedCategory.id, name: categoryEditInput.trim() }) } catch (categoryError) { setError(categoryError instanceof Error ? categoryError.message : t('learning.skills.saveFailed')) }
+    try {
+      await updateSkillCategory({ categoryId: selectedCategory.id, name: categoryEditInput.trim() })
+    } catch (categoryError) {
+      setError(categoryError instanceof Error ? categoryError.message : t('learning.skills.saveFailed'))
+    }
   }
 
-  const handleDeleteCategory = async () => {
-    if (!selectedCategory || !window.confirm(t('learning.skills.deleteConfirm', { value: selectedCategory.name }))) return
-    try { await deleteSkillCategory(selectedCategory.id); setSelectedCategoryId('all') } catch (categoryError) { setError(categoryError instanceof Error ? categoryError.message : t('learning.skills.deleteFailed')) }
+  const handleDeleteCategory = () => {
+    if (!selectedCategory || deleting) return
+    setError(null)
+    setDeleteConfirm({ type: 'category', id: selectedCategory.id, name: selectedCategory.name })
   }
 
-  return <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-    <SkillListSidebar categories={categories} filteredSkills={filteredSkills} selectedCategoryId={selectedCategoryId} selectedSkillId={selectedSkillId} searchQuery={searchQuery} categoryInput={categoryInput} selectedCategory={selectedCategory} categoryEditInput={categoryEditInput} onSearchQueryChange={setSearchQuery} onCategoryChange={setSelectedCategoryId} onSelectSkill={setSelectedSkillId} onCategoryInputChange={setCategoryInput} onCreateCategory={() => void handleCreateCategory()} onCategoryEditInputChange={setCategoryEditInput} onRenameCategory={() => void handleRenameCategory()} onDeleteCategory={() => void handleDeleteCategory()} />
-    <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={() => void handleDelete()} />
-  </div>
+  return (
+    <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <SkillListSidebar
+        categories={categories}
+        filteredSkills={filteredSkills}
+        selectedCategoryId={selectedCategoryId}
+        selectedSkillId={selectedSkillId}
+        searchQuery={searchQuery}
+        categoryInput={categoryInput}
+        selectedCategory={selectedCategory}
+        categoryEditInput={categoryEditInput}
+        onSearchQueryChange={setSearchQuery}
+        onCategoryChange={setSelectedCategoryId}
+        onSelectSkill={setSelectedSkillId}
+        onCategoryInputChange={setCategoryInput}
+        onCreateCategory={() => void handleCreateCategory()}
+        onCategoryEditInputChange={setCategoryEditInput}
+        onRenameCategory={() => void handleRenameCategory()}
+        onDeleteCategory={handleDeleteCategory}
+      />
+      <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={handleDelete} />
+      <ConfirmDialog
+        open={Boolean(deleteConfirm)}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        ariaLabel={deleteConfirm?.type === 'category' ? t('learning.skills.deleteCategory') : t('learning.skills.delete')}
+        title={deleteConfirm?.type === 'category' ? t('learning.skills.deleteCategory') : t('learning.skills.delete')}
+        description={deleteConfirm?.type === 'category' ? t('learning.skills.deleteCategoryConfirm', { value: deleteConfirm?.name ?? '' }) : t('learning.skills.deleteConfirm', { value: deleteConfirm?.name ?? '' })}
+        confirmLabel={t('common.delete')}
+        confirmVariant="destructive"
+        busy={deleting}
+      >
+        {error ? <p className="text-sm text-[color:var(--color-destructive)]">{error}</p> : null}
+      </ConfirmDialog>
+    </div>
+  )
 }
