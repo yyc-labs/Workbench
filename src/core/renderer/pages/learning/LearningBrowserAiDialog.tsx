@@ -8,6 +8,7 @@ import type {
   LearningCategory,
   LearningNote,
   LearningNoteSummary,
+  SkillSummary,
 } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
@@ -20,11 +21,14 @@ import { LearningBrowserAiContextPreview } from './LearningBrowserAiContextPrevi
 import { LearningBrowserAiResultPanel } from './LearningBrowserAiResultPanel'
 import { LearningBrowserAiSourceSelector } from './LearningBrowserAiSourceSelector'
 import { LearningBrowserAiStepTimeline } from './LearningBrowserAiStepTimeline'
+import { SkillPickerDialog } from './SkillPickerDialog'
+import type { TemporarySkill } from './CreateSkillDialog'
 import { readLearningBrowserAiPreferences } from './learningBrowserAiPreferences'
 
 type LearningBrowserAiDialogProps = {
   open: boolean
   notes: LearningNoteSummary[]
+  skills: SkillSummary[]
   categories: LearningCategory[]
   currentNote: LearningNote | null
   initialRecord?: BrowserAiTaskRecord | null
@@ -40,6 +44,7 @@ export function LearningBrowserAiDialog({
   open,
   notes,
   categories,
+  skills,
   currentNote,
   initialRecord,
   onClose,
@@ -54,8 +59,10 @@ export function LearningBrowserAiDialog({
   const cancelTask = useAppStore((state) => state.cancelBrowserAiTask)
   const openLogin = useAppStore((state) => state.openBrowserAiLogin)
   const loadBrowserAi = useAppStore((state) => state.loadBrowserAi)
-  const [skill, setSkill] = useState('')
-  const [includeSkill, setIncludeSkill] = useState(false)
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [defaultSkillIds, setDefaultSkillIds] = useState<string[]>([])
+  const [temporarySkill, setTemporarySkill] = useState<TemporarySkill | null>(null)
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false)
   const [personalContext, setPersonalContext] = useState('')
   const [includePersonalContext, setIncludePersonalContext] = useState(false)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
@@ -73,13 +80,16 @@ export function LearningBrowserAiDialog({
     void loadBrowserAi()
     const preferences = readLearningBrowserAiPreferences()
     const recordSources = initialRecord?.input.sources ?? []
-    const savedSkill = recordSources.find((source) => source.kind === 'skill')
+    const savedSkills = recordSources.filter((source) => source.kind === 'skill')
     const savedPersonal = recordSources.find((source) => source.kind === 'personal-context')
     const savedNoteIds = recordSources
       .filter((source) => source.kind === 'learning-note' && source.referenceId)
       .map((source) => source.referenceId!)
-    setSkill(savedSkill?.content ?? '')
-    setIncludeSkill(Boolean(savedSkill))
+    const savedSkillIds = savedSkills.map((source) => source.referenceId).filter((id): id is string => Boolean(id))
+    setDefaultSkillIds(preferences.defaultSkillIds.filter((id) => skills.some((skill) => skill.id === id && skill.enabled)))
+    setSelectedSkillIds(initialRecord ? savedSkillIds : preferences.defaultSkillIds.filter((id) => skills.some((skill) => skill.id === id && skill.enabled)))
+    const savedTemporarySkill = savedSkills.find((source) => !source.referenceId && source.content)
+    setTemporarySkill(savedTemporarySkill ? { id: `history-${Date.now().toString(36)}`, title: savedTemporarySkill.label, contentMd: savedTemporarySkill.content ?? '', tags: [] } : null)
     setPersonalContext(savedPersonal?.content ?? '')
     setIncludePersonalContext(Boolean(savedPersonal?.content))
     const defaultNoteIds = preferences.defaultNoteIds.filter((id) => notes.some((note) => note.id === id))
@@ -111,7 +121,8 @@ export function LearningBrowserAiDialog({
   const taskStatus = progress && progress.taskId === snapshot?.activeTaskId ? progress.status : snapshot?.taskStatus
   const isRunning = taskStatus === 'starting' || taskStatus === 'connecting' || taskStatus === 'opening-page' || taskStatus === 'sending' || taskStatus === 'waiting-response'
   const hasPotentialSource = Boolean(
-    (includeSkill && skill.trim())
+    selectedSkillIds.length > 0
+    || Boolean(temporarySkill?.contentMd.trim())
     || (includePersonalContext && personalContext.trim())
     || selectedNoteIds.length > 0,
   )
@@ -120,6 +131,12 @@ export function LearningBrowserAiDialog({
   if (!open) return null
 
   const buildSources = async (): Promise<BrowserAiContextSource[]> => {
+    const skillContents = await Promise.all(selectedSkillIds.map(async (skillId) => {
+      const summary = skills.find((skill) => skill.id === skillId)
+      if (!summary || !summary.enabled) return null
+      const skill = await window.electronAPI.getSkill(skillId)
+      return skill ? { kind: 'skill' as const, label: skill.title, referenceId: skill.id, content: skill.contentMd, included: true } : null
+    }))
     const noteContents = await Promise.all(selectedNotes.map(async (note) => ({
       note,
       content: note.id === currentNote?.id && currentNote
@@ -127,7 +144,8 @@ export function LearningBrowserAiDialog({
         : (await window.electronAPI.getLearningNote(note.id))?.contentMd ?? '',
     })))
     return [
-      ...(includeSkill ? [{ kind: 'skill' as const, label: t('learning.browserAi.skillSource'), content: skill, included: true }] : []),
+      ...skillContents.filter((source): source is NonNullable<typeof source> => Boolean(source)),
+      ...(temporarySkill?.contentMd.trim() ? [{ kind: 'skill' as const, label: temporarySkill.title, content: temporarySkill.contentMd, included: true }] : []),
       ...(includePersonalContext ? [{ kind: 'personal-context' as const, label: t('learning.browserAi.personalSource'), content: personalContext, included: true }] : []),
       ...noteContents.map(({ note, content }) => ({ kind: 'learning-note' as const, label: note.title, referenceId: note.id, content, included: true })),
     ]
@@ -182,6 +200,7 @@ export function LearningBrowserAiDialog({
   }
 
   return (
+    <>
     <ModalShell
       open={open}
       onClose={onClose}
@@ -202,11 +221,10 @@ export function LearningBrowserAiDialog({
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="space-y-3 rounded-[18px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
               <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.sources')}</div>
-              <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
-                <Checkbox checked={includeSkill} onChange={(event) => { setIncludeSkill(event.target.checked); setPreview(null) }} />
-                <span>{t('learning.browserAi.includeSkill')}</span>
-              </label>
-              {includeSkill ? <Textarea className="text-xs leading-5" value={skill} onChange={(event) => { setSkill(event.target.value); setPreview(null) }} placeholder={t('learning.browserAi.skillPlaceholder')} /> : null}
+              <div className="rounded-[14px] border p-3" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="text-xs font-medium text-[color:var(--color-foreground)]">{t('learning.skills.selectSkill')}</div><div className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.skills.selectedCount', { value: String(selectedSkillIds.length + (temporarySkill ? 1 : 0)) })}</div></div><Button type="button" variant="outline" size="sm" onClick={() => setSkillPickerOpen(true)}><ExternalLink />{t('learning.skills.pickerAdd')}</Button></div>
+                <div className="mt-2 flex flex-wrap gap-1.5">{selectedSkillIds.map((id) => <span key={id} className="rounded-full bg-[color:var(--color-primary)]/10 px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)]">{skills.find((skill) => skill.id === id)?.title ?? id}{defaultSkillIds.includes(id) ? ` · ${t('learning.skills.sourceDefault')}` : ` · ${t('learning.skills.sourceThisTask')}`}</span>)}{temporarySkill ? <span className="rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)]">{temporarySkill.title} · {t('learning.skills.sourceTemporary')}</span> : null}</div>
+              </div>
               <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
                 <Checkbox checked={includePersonalContext} onChange={(event) => { setIncludePersonalContext(event.target.checked); setPreview(null) }} />
                 <span>{t('learning.browserAi.includePersonal')}</span>
@@ -264,5 +282,17 @@ export function LearningBrowserAiDialog({
         </div>
       </div>
     </ModalShell>
+    <SkillPickerDialog
+      open={skillPickerOpen}
+      skills={skills}
+      defaultSkillIds={defaultSkillIds}
+      selectedSkillIds={selectedSkillIds}
+      temporarySkill={temporarySkill}
+      onSelectedSkillIdsChange={(ids) => { setSelectedSkillIds(ids); setPreview(null) }}
+      onTemporarySkillChange={(skill) => { setTemporarySkill(skill); setPreview(null) }}
+      onClose={() => setSkillPickerOpen(false)}
+      onApply={() => setSkillPickerOpen(false)}
+    />
+    </>
   )
 }

@@ -13,9 +13,10 @@ import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteS
 import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
 import { useSidebarGesture } from '../hooks/useSidebarGesture'
 import { useI18n } from '../i18n'
+import { useAppStore } from '../stores/appStore'
 import { LearningCenterHeader } from './learning/LearningCenterHeader'
 import { LearningBrowserAiDialog } from './learning/LearningBrowserAiDialog'
-import { LearningBrowserAiHistoryDialog } from './learning/LearningBrowserAiHistoryDialog'
+import { LearningBrowserAiHistoryView } from './learning/LearningBrowserAiHistoryView'
 import { LearningBrowserAiPreferencesDialog } from './learning/LearningBrowserAiPreferencesDialog'
 import { LearningDeleteNoteDialog } from './learning/LearningDeleteNoteDialog'
 import { LearningEditorPanel } from './learning/LearningEditorPanel'
@@ -24,6 +25,7 @@ import { LearningMarkdownContextMenu } from './learning/LearningMarkdownContextM
 import { LearningNoteInfoSidebar } from './learning/LearningNoteInfoSidebar'
 import { LearningNotesSidebar } from './learning/LearningNotesSidebar'
 import { LearningSidebarRailButton } from './learning/LearningSidebarRailButton'
+import { SkillManagementView } from './learning/SkillManagementView'
 import {
   createLearningEditorHistoryState,
   pushLearningEditorSnapshot,
@@ -60,6 +62,8 @@ const LEARNING_EDITOR_HISTORY_LIMIT = 200
 export function LearningCenterPage() {
   const navigate = useNavigate()
   const { locale, t } = useI18n()
+  const skills = useAppStore((state) => state.skills)
+  const loadSkills = useAppStore((state) => state.loadSkills)
   const [notes, setNotes] = useState<LearningNoteSummary[]>([])
   const [categories, setCategories] = useState<LearningCategory[]>([])
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
@@ -93,9 +97,10 @@ export function LearningCenterPage() {
   const [frontmatterSubmitting, setFrontmatterSubmitting] = useState(false)
   const [frontmatterError, setFrontmatterError] = useState<string | null>(null)
   const [browserAiOpen, setBrowserAiOpen] = useState(false)
-  const [browserAiHistoryOpen, setBrowserAiHistoryOpen] = useState(false)
   const [browserAiPreferencesOpen, setBrowserAiPreferencesOpen] = useState(false)
   const [browserAiInitialRecord, setBrowserAiInitialRecord] = useState<BrowserAiTaskRecord | null>(null)
+  const [activeView, setActiveView] = useState<'notes' | 'skills' | 'browser-tasks'>('notes')
+  const [skillCreateRequest, setSkillCreateRequest] = useState(0)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
   const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -164,6 +169,7 @@ export function LearningCenterPage() {
         const [nextCategories, nextNotes] = await Promise.all([
           window.electronAPI.listLearningCategories(),
           window.electronAPI.listLearningNotes(),
+          loadSkills(),
         ])
         setCategories(nextCategories)
         setNotes(nextNotes)
@@ -175,7 +181,7 @@ export function LearningCenterPage() {
     }
 
     void load()
-  }, [])
+  }, [loadSkills])
 
   useEffect(() => {
     window.localStorage.setItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, leftSidebarCollapsed ? '1' : '0')
@@ -260,7 +266,7 @@ export function LearningCenterPage() {
 
   const handleBrowserAiReload = (record: BrowserAiTaskRecord) => {
     setBrowserAiInitialRecord(record)
-    setBrowserAiHistoryOpen(false)
+    setActiveView('notes')
     setBrowserAiOpen(true)
   }
 
@@ -716,12 +722,19 @@ export function LearningCenterPage() {
         <LearningCenterHeader
           onBack={() => navigate('/')}
           onCreateNote={openCreateDialog}
+          onCreateSkill={() => { setActiveView('skills'); setSkillCreateRequest((current) => current + 1) }}
+          view={activeView}
+          onViewChange={setActiveView}
           onOpenBrowserAi={() => { setBrowserAiInitialRecord(null); setBrowserAiOpen(true) }}
           onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
-          onOpenBrowserAiHistory={() => setBrowserAiHistoryOpen(true)}
+          onOpenBrowserAiHistory={() => setActiveView('browser-tasks')}
         />
 
-        <div
+        {activeView === 'skills' ? <SkillManagementView createRequest={skillCreateRequest} /> : activeView === 'browser-tasks' ? <LearningBrowserAiHistoryView
+          currentNote={selectedNote}
+          onReload={handleBrowserAiReload}
+          onSaved={handleBrowserAiSaved}
+        /> : <div
           className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200"
           style={{ gridTemplateColumns: layoutGridColumns }}
         >
@@ -808,7 +821,7 @@ export function LearningCenterPage() {
               onOpenEditDialog={openEditDialog}
             />
           ) : null}
-        </div>
+        </div>}
       </div>
 
       {editorContextMenu ? (
@@ -849,6 +862,7 @@ export function LearningCenterPage() {
       <LearningBrowserAiDialog
         categories={categories}
         currentNote={selectedNote}
+        skills={skills}
         notes={notes}
         initialRecord={browserAiInitialRecord}
         onClose={() => setBrowserAiOpen(false)}
@@ -856,17 +870,10 @@ export function LearningCenterPage() {
         open={browserAiOpen}
       />
 
-      <LearningBrowserAiHistoryDialog
-        currentNote={selectedNote}
-        onClose={() => setBrowserAiHistoryOpen(false)}
-        onReload={handleBrowserAiReload}
-        onSaved={handleBrowserAiSaved}
-        open={browserAiHistoryOpen}
-      />
-
       <LearningBrowserAiPreferencesDialog
         categories={categories}
         notes={notes}
+        skills={skills}
         onClose={() => setBrowserAiPreferencesOpen(false)}
         open={browserAiPreferencesOpen}
       />

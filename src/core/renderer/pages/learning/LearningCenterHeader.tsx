@@ -1,16 +1,19 @@
-import { ArrowLeft, BookOpenText, History, Plus } from 'lucide-react'
+import { ArrowLeft, BookOpenText, History, Plus, Sparkles } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
 
 type LearningCenterHeaderProps = {
   onBack: () => void
   onCreateNote: () => void
+  onCreateSkill: () => void
+  view: 'notes' | 'skills' | 'browser-tasks'
+  onViewChange: (view: 'notes' | 'skills' | 'browser-tasks') => void
   onOpenBrowserAi: () => void
   onOpenBrowserAiPreferences: () => void
   onOpenBrowserAiHistory: () => void
 }
 
-export function LearningCenterHeader({ onBack, onCreateNote, onOpenBrowserAi, onOpenBrowserAiPreferences, onOpenBrowserAiHistory }: LearningCenterHeaderProps) {
+export function LearningCenterHeader({ onBack, onCreateNote, onCreateSkill, view, onViewChange, onOpenBrowserAi, onOpenBrowserAiPreferences, onOpenBrowserAiHistory }: LearningCenterHeaderProps) {
   const { t } = useI18n()
 
   return (
@@ -33,9 +36,20 @@ export function LearningCenterHeader({ onBack, onCreateNote, onOpenBrowserAi, on
           {t('learning.header.subtitle')}
         </div>
       </div>
-      <Button size="sm" className="gap-1.5" onClick={onCreateNote}>
+      <div className="hidden items-center gap-1 rounded-full bg-[color:var(--color-accent)] p-1 sm:flex">
+        <Button size="sm" variant={view === 'notes' ? 'default' : 'ghost'} className="h-8 px-3" onClick={() => onViewChange('notes')}>
+          <BookOpenText />{t('learning.skills.viewNotes')}
+        </Button>
+        <Button size="sm" variant={view === 'skills' ? 'default' : 'ghost'} className="h-8 px-3" onClick={() => onViewChange('skills')}>
+          <Sparkles />{t('learning.skills.viewSkills')}
+        </Button>
+        <Button size="sm" variant={view === 'browser-tasks' ? 'default' : 'ghost'} className="h-8 px-3" onClick={() => onViewChange('browser-tasks')}>
+          <History />{t('learning.skills.viewBrowserTasks')}
+        </Button>
+      </div>
+      <Button size="sm" className="gap-1.5" onClick={view === 'skills' ? onCreateSkill : onCreateNote}>
         <Plus className="h-4 w-4" />
-        {t('learning.header.createNote')}
+        {view === 'skills' ? t('learning.skills.create') : t('learning.header.createNote')}
       </Button>
       <Button
         variant="outline"
