@@ -2,9 +2,9 @@
 
 ## 文档状态
 
-- 状态：待评审，尚未开始实现。
+- 状态：已实现，已完成 P0-P4 的第一阶段落地。
 - 目标：将 Skill 从学习笔记中独立出来，提供 Skill 的 CRUD 管理、默认 Skill 配置和发送 AI 时的临时 Skill 选择/新增能力。
-- 本计划只讨论产品交互、数据模型和实现边界，不执行 build，也不在本轮修改功能代码。
+- 本计划同时作为实现边界和验收清单；本轮已完成对应功能代码、文案和定向测试。按仓库规则未执行 build。
 - 相关现状方案：
   - `docs/2026-07-14-learning-browser-ai-dispatch-plan.md`
   - `docs/2026-07-14-learning-browser-ai-ux-improvement-plan.md`
@@ -467,3 +467,10 @@ renderer 侧可以新增：
 - 学习笔记、Skill、当前任务在最终预览中具有清楚的来源标签和稳定顺序。
 - 删除、停用、编辑 Skill 不会破坏历史浏览器任务记录。
 - shared、main、preload、renderer 的契约保持一致，深浅主题、错误态、空态和中英文文案完整。
+
+## 十二、实施记录
+
+- 已新增独立 `skills/items` Markdown 存储、索引、分类和 Skill service，Skill ID 使用 `sk-` 前缀。
+- 已接入 shared、main IPC、preload、renderer store，并在学习中心增加笔记、Skills 和浏览器任务入口。
+- 已接入默认 Skill 配置、Skill picker、保存复用和仅本次使用的临时 Skill；上下文按 Skill、个人上下文、学习笔记、任务顺序组装并按 Skill ID 去重。
+- 已覆盖 Skill service 规范化/错误、上下文去重等定向测试；`npm run typecheck` 和 `npm test` 均通过，未执行 build。
