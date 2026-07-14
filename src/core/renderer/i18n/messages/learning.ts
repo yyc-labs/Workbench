@@ -15,6 +15,29 @@ export const learningMessages = {
         personalSource: 'Personal context',
         personalPlaceholder: 'Only enter information you are comfortable sending to the configured web AI site.',
         learningNotes: 'Learning notes',
+        browserHistorySource: 'Browser task records',
+        historySourceOpen: 'Choose records',
+        selectedHistoryCount: '{value} task records selected',
+        selectHistoryResults: 'Select current results',
+        clearHistoryResults: 'Clear current results',
+        historyPickerKicker: 'Historical context',
+        historyPickerTitle: 'Choose browser AI task records',
+        historyPickerDescription: 'Select saved task records to include as context. The selection is only applied after confirmation.',
+        historyPickerSearchPlaceholder: 'Search title, site, task, answer, or source...',
+        historyPickerTimeFilter: 'Filter records by time',
+        historyTimeAll: 'All time',
+        historyTimeToday: 'Today',
+        historyTimeThisWeek: 'This week',
+        historyTimeThisMonth: 'This month',
+        historyTimeLast7Days: 'Last 7 days',
+        historyTimeLast30Days: 'Last 30 days',
+        historyTimeLast90Days: 'Last 90 days',
+        historyLoading: 'Loading browser AI task records...',
+        historyNoRecords: 'No browser AI task records have been saved.',
+        historyNoMatchingRecords: 'No task records match the current filters.',
+        historyLoadFailed: 'Could not load browser AI task records.',
+        historyPickerSelected: '{value} records will be used as context',
+        historyPickerApply: 'Apply records',
         emptyExcerpt: 'No excerpt',
         noteSearchPlaceholder: 'Search title, excerpt, or tags...',
         noteCategoryFilter: 'Filter notes by category',
@@ -103,6 +126,8 @@ export const learningMessages = {
         defaultSite: 'Default target site',
         noConfiguredSites: 'No configured browser AI sites',
         savePromptByDefault: 'Save complete sending content by default',
+        includeCurrentNoteByDefault: 'Automatically include the current note',
+        includeCurrentNoteByDefaultDescription: 'When enabled, a new task adds the note currently open in the learning center after the explicit default notes.',
         preferencesSaveFailed: 'Could not save browser AI defaults.',
         historyStatus: { running: 'Running', completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled' },
         steps: {
@@ -117,7 +142,7 @@ export const learningMessages = {
           'read-answer': 'Read answer',
           completed: 'Completed',
           failed: 'Failed',
-          cancelled: 'Cancelled'
+          cancelled: 'Cancelled',
         },
         status: {
           idle: 'Ready',
@@ -129,8 +154,8 @@ export const learningMessages = {
           'waiting-response': 'Waiting for the web AI response',
           completed: 'Answer received',
           failed: 'Task failed',
-          cancelled: 'Task cancelled'
-        }
+          cancelled: 'Task cancelled',
+        },
       },
       skills: {
         viewNotes: 'Notes',
@@ -189,7 +214,7 @@ export const learningMessages = {
         createDescription: 'Create a reusable Skill or keep it only in this task.',
         saveToSkills: 'Save to Skills for reuse',
         useOnce: 'Use once only',
-        createAction: 'Create and use'
+        createAction: 'Create and use',
       },
       editor: {
         untitledNote: 'Untitled Note',
@@ -203,7 +228,7 @@ export const learningMessages = {
         previewTitle: 'Preview',
         previewOnlyDescription: 'Render Markdown in the full available width.',
         previewDescription: 'Rendered Markdown output',
-        emptyState: 'Create a learning note first'
+        emptyState: 'Create a learning note first',
       },
       delete: { modalAria: 'Delete learning note', title: 'Delete this learning note?', description: 'This action cannot be undone. Current note:' },
       frontmatter: {
@@ -230,7 +255,7 @@ export const learningMessages = {
         tagsPlaceholder: 'Example: dns, nginx, web',
         tagsHint: 'Separate tags with commas. They will be written into the Markdown frontmatter.',
         createSubmit: 'Create and Start Editing',
-        saveSubmit: 'Save Frontmatter'
+        saveSubmit: 'Save Frontmatter',
       },
       info: {
         title: 'Note Info',
@@ -251,7 +276,7 @@ export const learningMessages = {
         saved: 'Saved',
         unsavedChanges: 'Unsaved changes',
         unchanged: 'No changes',
-        deleteNote: 'Delete Note'
+        deleteNote: 'Delete Note',
       },
       notes: {
         searchPlaceholder: 'Search learning notes...',
@@ -267,7 +292,7 @@ export const learningMessages = {
         emptyExcerpt: 'No excerpt yet',
         statusDraft: 'Draft',
         statusOrganized: 'Organized',
-        emptyNotes: 'No learning notes yet'
+        emptyNotes: 'No learning notes yet',
       },
       sidebarRail: { expandLeft: 'Expand learning note list', collapseLeft: 'Collapse learning note list', expandRight: 'Expand note info sidebar', collapseRight: 'Collapse note info sidebar' },
       page: {
@@ -280,7 +305,7 @@ export const learningMessages = {
         deleteCategoryFailed: 'Failed to delete category.',
         retrySave: 'Retry Save',
         saveChanges: 'Save Changes',
-        saved: 'Saved'
+        saved: 'Saved',
       },
       markdown: {
         menu: {
@@ -292,7 +317,7 @@ export const learningMessages = {
             basic: { label: 'Basic Formatting', description: 'Headings, emphasis, code' },
             structure: { label: 'Structure', description: 'Lists, links, quotes' },
             learning: { label: 'Learning Templates', description: 'Summary, review, knowledge' },
-            table: { label: 'Table', description: 'Pick rows and columns' }
+            table: { label: 'Table', description: 'Pick rows and columns' },
           },
           items: {
             heading: { label: 'Heading', description: 'H1 / H2 / H3' },
@@ -316,9 +341,9 @@ export const learningMessages = {
             summarySection: { label: 'Summary', description: 'Conclusions and next steps' },
             reviewChecklist: { label: 'Review Checklist', description: 'Tasks to revisit' },
             pitfallsSection: { label: 'Pitfalls', description: 'Common confusion and fixes' },
-            referencesSection: { label: 'References', description: 'Docs and links' }
+            referencesSection: { label: 'References', description: 'Docs and links' },
           },
-          table: { selectionSummary: 'Current selection: {rows} rows x {columns} columns', cellAria: '{rows} rows {columns} columns', help: 'The first row becomes the header. Later rows use placeholder text that you can edit right away.' }
+          table: { selectionSummary: 'Current selection: {rows} rows x {columns} columns', cellAria: '{rows} rows {columns} columns', help: 'The first row becomes the header. Later rows use placeholder text that you can edit right away.' },
         },
         templates: {
           placeholders: {
@@ -334,19 +359,19 @@ export const learningMessages = {
             tableCell: 'Content',
             heading1: 'Heading 1',
             heading2: 'Heading 2',
-            heading3: 'Heading 3'
+            heading3: 'Heading 3',
           },
           sections: {
             knowledgePoints: { title: 'Knowledge Points', coreConcept: 'Core concept:', principle: 'Principle:', example: 'Example:' },
             summary: { title: 'Summary', conclusionOne: 'Conclusion one', conclusionTwo: 'Conclusion two', nextAction: 'Next action' },
             reviewChecklist: { title: 'Review Checklist', conceptDefinition: 'Concept definition', keyCommand: 'Key command', commonIssue: 'Common issue' },
             pitfalls: { title: 'Pitfalls', commonConfusion: 'Easy to confuse:', correctUsage: 'Correct usage:' },
-            references: { title: 'References', documentTitle: 'Document title' }
-          }
-        }
+            references: { title: 'References', documentTitle: 'Document title' },
+          },
+        },
       },
-      defaults: { newNoteTitle: 'New Learning Note', introLine: 'What I learned today:' }
-    }
+      defaults: { newNoteTitle: 'New Learning Note', introLine: 'What I learned today:' },
+    },
   },
   'zh-CN': {
     learning: {
@@ -364,6 +389,29 @@ export const learningMessages = {
         personalSource: '个人上下文',
         personalPlaceholder: '只填写你确认可以发送给当前网页 AI 站点的信息。',
         learningNotes: '学习笔记',
+        browserHistorySource: '浏览器任务记录',
+        historySourceOpen: '选择记录',
+        selectedHistoryCount: '已选择 {value} 条任务记录',
+        selectHistoryResults: '全选当前结果',
+        clearHistoryResults: '清空当前结果',
+        historyPickerKicker: '历史上下文',
+        historyPickerTitle: '选择浏览器 AI 任务记录',
+        historyPickerDescription: '选择要作为本次上下文的已保存任务记录，确认应用后才会同步到发送窗口。',
+        historyPickerSearchPlaceholder: '搜索标题、站点、任务、回答或来源...',
+        historyPickerTimeFilter: '按时间筛选记录',
+        historyTimeAll: '全部时间',
+        historyTimeToday: '今天',
+        historyTimeThisWeek: '本周',
+        historyTimeThisMonth: '本月',
+        historyTimeLast7Days: '近 7 天',
+        historyTimeLast30Days: '近 30 天',
+        historyTimeLast90Days: '近 90 天',
+        historyLoading: '正在加载浏览器 AI 任务记录...',
+        historyNoRecords: '还没有保存浏览器 AI 任务记录。',
+        historyNoMatchingRecords: '当前筛选条件下没有匹配的任务记录。',
+        historyLoadFailed: '浏览器 AI 任务记录加载失败。',
+        historyPickerSelected: '将使用 {value} 条记录作为上下文',
+        historyPickerApply: '应用记录',
         emptyExcerpt: '暂无摘要',
         noteSearchPlaceholder: '搜索标题、摘要或标签...',
         noteCategoryFilter: '按分类筛选笔记',
@@ -452,6 +500,8 @@ export const learningMessages = {
         defaultSite: '默认目标站点',
         noConfiguredSites: '还没有配置浏览器 AI 站点',
         savePromptByDefault: '默认保存完整发送内容',
+        includeCurrentNoteByDefault: '自动带入当前笔记',
+        includeCurrentNoteByDefaultDescription: '开启后，新建任务会在明确选择的默认笔记之后追加学习中心当前打开的笔记。',
         preferencesSaveFailed: '浏览器 AI 默认配置保存失败。',
         historyStatus: { running: '执行中', completed: '成功', failed: '失败', cancelled: '已取消' },
         steps: {
@@ -466,9 +516,9 @@ export const learningMessages = {
           'read-answer': '读取回答',
           completed: '已完成',
           failed: '失败',
-          cancelled: '已取消'
+          cancelled: '已取消',
         },
-        status: { idle: '准备就绪', starting: '准备任务', connecting: '正在连接 Edge', 'needs-login': '需要登录', 'opening-page': '正在打开新对话', sending: '正在发送选中上下文', 'waiting-response': '等待网页 AI 回答', completed: '已收到回答', failed: '任务失败', cancelled: '任务已取消' }
+        status: { idle: '准备就绪', starting: '准备任务', connecting: '正在连接 Edge', 'needs-login': '需要登录', 'opening-page': '正在打开新对话', sending: '正在发送选中上下文', 'waiting-response': '等待网页 AI 回答', completed: '已收到回答', failed: '任务失败', cancelled: '任务已取消' },
       },
       skills: {
         viewNotes: '笔记',
@@ -527,7 +577,7 @@ export const learningMessages = {
         createDescription: '创建可复用 Skill，或只将它用于本次任务。',
         saveToSkills: '保存到 Skills 以便复用',
         useOnce: '仅本次使用',
-        createAction: '创建并使用'
+        createAction: '创建并使用',
       },
       editor: {
         untitledNote: '未命名笔记',
@@ -541,7 +591,7 @@ export const learningMessages = {
         previewTitle: '预览',
         previewOnlyDescription: '完整宽度显示 Markdown 渲染结果',
         previewDescription: 'Markdown 渲染结果',
-        emptyState: '先新建一篇学习记录'
+        emptyState: '先新建一篇学习记录',
       },
       delete: { modalAria: '删除学习记录', title: '删除这篇学习记录？', description: '删除后不可恢复。当前笔记：' },
       frontmatter: {
@@ -568,7 +618,7 @@ export const learningMessages = {
         tagsPlaceholder: '例如：dns, nginx, web',
         tagsHint: '使用逗号分隔，会写入 Markdown frontmatter。',
         createSubmit: '创建并开始编辑',
-        saveSubmit: '保存 frontmatter'
+        saveSubmit: '保存 frontmatter',
       },
       info: {
         title: '笔记信息',
@@ -589,7 +639,7 @@ export const learningMessages = {
         saved: '已保存',
         unsavedChanges: '有未保存修改',
         unchanged: '未修改',
-        deleteNote: '删除笔记'
+        deleteNote: '删除笔记',
       },
       notes: {
         searchPlaceholder: '搜索学习记录...',
@@ -605,7 +655,7 @@ export const learningMessages = {
         emptyExcerpt: '暂无摘要',
         statusDraft: '草稿',
         statusOrganized: '已整理',
-        emptyNotes: '还没有学习记录'
+        emptyNotes: '还没有学习记录',
       },
       sidebarRail: { expandLeft: '展开左侧学习目录', collapseLeft: '收起左侧学习目录', expandRight: '展开右侧笔记信息', collapseRight: '收起右侧笔记信息' },
       page: {
@@ -618,7 +668,7 @@ export const learningMessages = {
         deleteCategoryFailed: '删除分类失败',
         retrySave: '重试保存',
         saveChanges: '保存修改',
-        saved: '已保存'
+        saved: '已保存',
       },
       markdown: {
         menu: {
@@ -649,9 +699,9 @@ export const learningMessages = {
             summarySection: { label: '总结', description: '结论归纳' },
             reviewChecklist: { label: '待复习', description: '任务清单' },
             pitfallsSection: { label: '易错点', description: '混淆与正确写法' },
-            referencesSection: { label: '参考资料', description: '文档与链接' }
+            referencesSection: { label: '参考资料', description: '文档与链接' },
           },
-          table: { selectionSummary: '当前选择：{rows} 行 x {columns} 列', cellAria: '{rows} 行 {columns} 列', help: '第一行会作为表头，后续行会生成占位内容，插入后可直接改字。' }
+          table: { selectionSummary: '当前选择：{rows} 行 x {columns} 列', cellAria: '{rows} 行 {columns} 列', help: '第一行会作为表头，后续行会生成占位内容，插入后可直接改字。' },
         },
         templates: {
           placeholders: {
@@ -667,18 +717,18 @@ export const learningMessages = {
             tableCell: '内容',
             heading1: '一级标题',
             heading2: '二级标题',
-            heading3: '三级标题'
+            heading3: '三级标题',
           },
           sections: {
             knowledgePoints: { title: '知识点', coreConcept: '核心概念：', principle: '原理说明：', example: '示例：' },
             summary: { title: '总结', conclusionOne: '结论一', conclusionTwo: '结论二', nextAction: '后续行动' },
             reviewChecklist: { title: '待复习', conceptDefinition: '概念定义', keyCommand: '关键命令', commonIssue: '常见问题' },
             pitfalls: { title: '易错点', commonConfusion: '容易混淆：', correctUsage: '正确写法：' },
-            references: { title: '参考资料', documentTitle: '文档标题' }
-          }
-        }
+            references: { title: '参考资料', documentTitle: '文档标题' },
+          },
+        },
       },
-      defaults: { newNoteTitle: '新学习记录', introLine: '今天学习到：' }
-    }
-  }
+      defaults: { newNoteTitle: '新学习记录', introLine: '今天学习到：' },
+    },
+  },
 } as const

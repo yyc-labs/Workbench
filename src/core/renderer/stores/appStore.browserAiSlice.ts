@@ -1,17 +1,5 @@
 import type { StateCreator } from 'zustand'
-import type {
-  BrowserAiConfig,
-  BrowserAiContextPreview,
-  BrowserAiRunTaskPayload,
-  BrowserAiSaveTaskRecordPayload,
-  BrowserAiSaveResultPayload,
-  BrowserAiSnapshot,
-  BrowserAiTaskRecord,
-  BrowserAiTaskRecordSummary,
-  BrowserAiTaskProgressEvent,
-  BrowserAiTaskResult,
-  LearningNote,
-} from '../../shared/types'
+import type { BrowserAiConfig, BrowserAiContextPreview, BrowserAiRunTaskPayload, BrowserAiSaveTaskRecordPayload, BrowserAiSaveResultPayload, BrowserAiSnapshot, BrowserAiTaskRecord, BrowserAiTaskRecordSummary, BrowserAiTaskProgressEvent, BrowserAiTaskResult, LearningNote } from '../../shared/types'
 import type { AppState } from './appStore.types'
 
 export type BrowserAiActionsSlice = Pick<
@@ -32,17 +20,12 @@ export type BrowserAiActionsSlice = Pick<
   | 'deleteBrowserAiTaskRecord'
 >
 
-function applyProgressSnapshot(
-  snapshot: BrowserAiSnapshot | null,
-  progress: BrowserAiTaskProgressEvent,
-): BrowserAiSnapshot | null {
+function applyProgressSnapshot(snapshot: BrowserAiSnapshot | null, progress: BrowserAiTaskProgressEvent): BrowserAiSnapshot | null {
   if (!snapshot) return snapshot
   return {
     ...snapshot,
     taskStatus: progress.status,
-    activeTaskId: progress.status === 'completed' || progress.status === 'failed' || progress.status === 'cancelled'
-      ? undefined
-      : progress.taskId,
+    activeTaskId: progress.status === 'completed' || progress.status === 'failed' || progress.status === 'cancelled' ? undefined : progress.taskId,
     errorCode: progress.errorCode ?? snapshot.errorCode,
     errorMessage: progress.message ?? snapshot.errorMessage,
   }
@@ -81,8 +64,7 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
     return snapshot
   },
 
-  composeBrowserAiPreview: (payload: BrowserAiRunTaskPayload): Promise<BrowserAiContextPreview> =>
-    window.electronAPI.composeBrowserAiPreview(payload),
+  composeBrowserAiPreview: (payload: BrowserAiRunTaskPayload): Promise<BrowserAiContextPreview> => window.electronAPI.composeBrowserAiPreview(payload),
 
   runBrowserAiTask: async (payload: BrowserAiRunTaskPayload): Promise<BrowserAiTaskResult> => {
     set({ browserAiSteps: [], browserAiProgress: null })
@@ -91,13 +73,13 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
       browserAiSteps: result.steps,
       browserAi: state.browserAi
         ? {
-          ...state.browserAi,
-          taskStatus: result.status,
-          activeTaskId: undefined,
-          lastResult: result,
-          errorCode: result.errorCode,
-          errorMessage: result.errorMessage,
-        }
+            ...state.browserAi,
+            taskStatus: result.status,
+            activeTaskId: undefined,
+            lastResult: result,
+            errorCode: result.errorCode,
+            errorMessage: result.errorMessage,
+          }
         : state.browserAi,
     }))
     return result
@@ -109,8 +91,7 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
     return snapshot
   },
 
-  saveBrowserAiResult: (payload: BrowserAiSaveResultPayload): Promise<LearningNote> =>
-    window.electronAPI.saveBrowserAiResult(payload),
+  saveBrowserAiResult: (payload: BrowserAiSaveResultPayload): Promise<LearningNote> => window.electronAPI.saveBrowserAiResult(payload),
 
   loadBrowserAiTaskRecords: async (): Promise<BrowserAiTaskRecordSummary[]> => {
     const records = await window.electronAPI.listBrowserAiTaskRecords()
@@ -138,6 +119,7 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
           completedAt: record.completedAt,
           status: record.status,
           siteName: record.site.name,
+          taskExcerpt: (record.input.task ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
           sourceLabels: record.sources.filter((source) => source.included).map((source) => source.label),
           answerExcerpt: (record.answer ?? record.errorMessage ?? '').replace(/\s+/g, ' ').trim().slice(0, 180),
           errorCode: record.errorCode,
@@ -160,17 +142,14 @@ export const createBrowserAiActionsSlice: StateCreator<AppState, [], [], Browser
   },
 })
 
-export function applyBrowserAiProgress(
-  set: (updater: (state: AppState) => Partial<AppState>) => void,
-  progress: BrowserAiTaskProgressEvent,
-): void {
+export function applyBrowserAiProgress(set: (updater: (state: AppState) => Partial<AppState>) => void, progress: BrowserAiTaskProgressEvent): void {
   set((state) => ({
     ...(state.browserAiProgress && state.browserAiProgress.taskId !== progress.taskId
       ? {}
       : {
-    browserAiProgress: progress,
-    browserAiSteps: progress.steps ?? state.browserAiSteps,
-    browserAi: applyProgressSnapshot(state.browserAi, progress),
-      }),
+          browserAiProgress: progress,
+          browserAiSteps: progress.steps ?? state.browserAiSteps,
+          browserAi: applyProgressSnapshot(state.browserAi, progress),
+        }),
   }))
 }

@@ -1,4 +1,4 @@
-import { ExternalLink, Send, X } from 'lucide-react'
+import { ExternalLink, History, Send, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { BrowserAiContextPreview, BrowserAiContextSource, BrowserAiTaskRecord, BrowserAiTaskStatus, LearningCategory, LearningNote, LearningNoteSummary, SkillSummary } from '../../../../shared/types'
 import { ModalShell } from '../../../components/ModalShell'
@@ -12,6 +12,8 @@ import { LearningBrowserAiContextPreview } from './LearningBrowserAiContextPrevi
 import { LearningBrowserAiResultPanel } from './LearningBrowserAiResultPanel'
 import { LearningBrowserAiSourceSelector } from './LearningBrowserAiSourceSelector'
 import { LearningBrowserAiStepTimeline } from './LearningBrowserAiStepTimeline'
+import { LearningBrowserAiHistoryPickerDialog } from './LearningBrowserAiHistoryPickerDialog'
+import { browserAiHistoryRecordToContextSource } from './learningBrowserAiHistory'
 import { CreateSkillDialog, type TemporarySkill } from '../skills/CreateSkillDialog'
 import { SkillPickerDialog } from '../skills/SkillPickerDialog'
 import { readLearningBrowserAiPreferences } from './learningBrowserAiPreferences'
@@ -34,6 +36,7 @@ function progressKey(status: BrowserAiTaskStatus | undefined): string {
 export function LearningBrowserAiDialog({ open, notes, categories, skills, currentNote, initialRecord, onClose, onSaved }: LearningBrowserAiDialogProps) {
   const { t } = useI18n()
   const snapshot = useAppStore((state) => state.browserAi)
+  const browserAiTaskRecords = useAppStore((state) => state.browserAiTaskRecords)
   const progress = useAppStore((state) => state.browserAiProgress)
   const storedSteps = useAppStore((state) => state.browserAiSteps)
   const composePreview = useAppStore((state) => state.composeBrowserAiPreview)
@@ -41,6 +44,7 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
   const cancelTask = useAppStore((state) => state.cancelBrowserAiTask)
   const openLogin = useAppStore((state) => state.openBrowserAiLogin)
   const loadBrowserAi = useAppStore((state) => state.loadBrowserAi)
+  const loadBrowserAiTaskRecord = useAppStore((state) => state.loadBrowserAiTaskRecord)
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [defaultSkillIds, setDefaultSkillIds] = useState<string[]>([])
   const [temporarySkill, setTemporarySkill] = useState<TemporarySkill | null>(null)
@@ -48,6 +52,8 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
   const [personalContext, setPersonalContext] = useState('')
   const [includePersonalContext, setIncludePersonalContext] = useState(false)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState<string[]>([])
+  const [historyPickerOpen, setHistoryPickerOpen] = useState(false)
   const [task, setTask] = useState('')
   const [responseFormat, setResponseFormat] = useState('')
   const [savePrompt, setSavePrompt] = useState(false)
@@ -65,6 +71,7 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
     const savedSkills = recordSources.filter((source) => source.kind === 'skill')
     const savedPersonal = recordSources.find((source) => source.kind === 'personal-context')
     const savedNoteIds = recordSources.filter((source) => source.kind === 'learning-note' && source.referenceId).map((source) => source.referenceId!)
+    const savedHistoryIds = recordSources.filter((source) => source.kind === 'browser-history' && source.referenceId).map((source) => source.referenceId!)
     const savedSkillIds = savedSkills.map((source) => source.referenceId).filter((id): id is string => Boolean(id))
     setDefaultSkillIds(preferences.defaultSkillIds.filter((id) => skills.some((skill) => skill.id === id && skill.enabled)))
     setSelectedSkillIds(initialRecord ? savedSkillIds : preferences.defaultSkillIds.filter((id) => skills.some((skill) => skill.id === id && skill.enabled)))
@@ -73,7 +80,8 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
     setPersonalContext(savedPersonal?.content ?? '')
     setIncludePersonalContext(Boolean(savedPersonal?.content))
     const defaultNoteIds = preferences.defaultNoteIds.filter((id) => notes.some((note) => note.id === id))
-    setSelectedNoteIds(initialRecord ? savedNoteIds : defaultNoteIds.length > 0 ? defaultNoteIds : currentNote ? [currentNote.id] : [])
+    setSelectedNoteIds(initialRecord ? savedNoteIds : Array.from(new Set([...defaultNoteIds, ...(preferences.includeCurrentNoteByDefault && currentNote ? [currentNote.id] : [])])))
+    setSelectedHistoryIds(initialRecord ? savedHistoryIds : [])
     setTask(initialRecord?.input.task ?? '')
     setResponseFormat(initialRecord?.input.responseFormat ?? '')
     setSavePrompt(initialRecord?.input.promptSaved ?? preferences.savePromptByDefault)
@@ -81,16 +89,17 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
     setAnswer(null)
     setRecordId(undefined)
     setError(null)
-  }, [currentNote, initialRecord, loadBrowserAi, open])
+  }, [currentNote, initialRecord, loadBrowserAi, loadBrowserAiTaskRecord, notes, skills, open])
 
   const selectedNotes = useMemo(() => notes.filter((note) => selectedNoteIds.includes(note.id)), [notes, selectedNoteIds])
+  const selectedHistoryRecords = useMemo(() => browserAiTaskRecords.filter((record) => selectedHistoryIds.includes(record.id)), [browserAiTaskRecords, selectedHistoryIds])
   const browserAiConfig = snapshot?.config
   const activeSite = browserAiConfig?.sites.find((site) => site.id === browserAiConfig.activeSiteId) ?? browserAiConfig?.sites[0]
   const targetSite = activeSite ? (activeSite.url ? `${activeSite.name} - ${activeSite.url}` : activeSite.name) : (snapshot?.config.siteUrl ?? t('learning.browserAi.notConfigured'))
   const steps = progress?.steps?.length ? progress.steps : storedSteps
   const taskStatus = progress && progress.taskId === snapshot?.activeTaskId ? progress.status : snapshot?.taskStatus
   const isRunning = taskStatus === 'starting' || taskStatus === 'connecting' || taskStatus === 'opening-page' || taskStatus === 'sending' || taskStatus === 'waiting-response'
-  const hasPotentialSource = Boolean(selectedSkillIds.length > 0 || Boolean(temporarySkill?.contentMd.trim()) || (includePersonalContext && personalContext.trim()) || selectedNoteIds.length > 0)
+  const hasPotentialSource = Boolean(selectedSkillIds.length > 0 || Boolean(temporarySkill?.contentMd.trim()) || (includePersonalContext && personalContext.trim()) || selectedNoteIds.length > 0 || selectedHistoryIds.length > 0)
   const canPrepare = Boolean(task.trim() || hasPotentialSource)
 
   if (!open) return null
@@ -110,11 +119,13 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
         content: note.id === currentNote?.id && currentNote ? currentNote.contentMd : ((await window.electronAPI.getLearningNote(note.id))?.contentMd ?? ''),
       })),
     )
+    const historyRecords = await Promise.all(selectedHistoryIds.map((id) => loadBrowserAiTaskRecord(id)))
     return [
       ...skillContents.filter((source): source is NonNullable<typeof source> => Boolean(source)),
       ...(temporarySkill?.contentMd.trim() ? [{ kind: 'skill' as const, label: temporarySkill.title, content: temporarySkill.contentMd, included: true }] : []),
       ...(includePersonalContext ? [{ kind: 'personal-context' as const, label: t('learning.browserAi.personalSource'), content: personalContext, included: true }] : []),
       ...noteContents.map(({ note, content }) => ({ kind: 'learning-note' as const, label: note.title, referenceId: note.id, content, included: true })),
+      ...historyRecords.filter((record): record is BrowserAiTaskRecord => Boolean(record)).map(browserAiHistoryRecordToContextSource),
     ]
   }
 
@@ -242,6 +253,27 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
                     }}
                   />
                 </div>
+                <div className="border-t pt-3" style={{ borderColor: 'var(--color-border)' }}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-medium text-[color:var(--color-foreground)]">{t('learning.browserAi.browserHistorySource')}</div>
+                      <div className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.selectedHistoryCount', { value: String(selectedHistoryIds.length) })}</div>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setHistoryPickerOpen(true)}>
+                      <History />
+                      {t('learning.browserAi.historySourceOpen')}
+                    </Button>
+                  </div>
+                  {selectedHistoryIds.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {selectedHistoryIds.map((id) => (
+                        <span key={id} className="max-w-full truncate rounded-full bg-[color:var(--color-accent)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)]">
+                          {selectedHistoryRecords.find((record) => record.id === id)?.title ?? id}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </section>
               <section className="space-y-3 rounded-[18px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="flex items-center justify-between gap-2">
@@ -344,6 +376,16 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
         }}
         onClose={() => setSkillPickerOpen(false)}
         onApply={() => setSkillPickerOpen(false)}
+      />
+      <LearningBrowserAiHistoryPickerDialog
+        open={historyPickerOpen}
+        selectedRecordIds={selectedHistoryIds}
+        onClose={() => setHistoryPickerOpen(false)}
+        onApply={(ids) => {
+          setSelectedHistoryIds(ids)
+          setPreview(null)
+          setHistoryPickerOpen(false)
+        }}
       />
     </>
   )

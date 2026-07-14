@@ -25,6 +25,7 @@ export function LearningBrowserAiPreferencesDialog({ open, notes, skills, catego
   const saveBrowserAiConfig = useAppStore((state) => state.saveBrowserAiConfig)
   const [selectedNoteIds, setSelectedNoteIds] = useState<string[]>([])
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [includeCurrentNoteByDefault, setIncludeCurrentNoteByDefault] = useState(false)
   const [savePromptByDefault, setSavePromptByDefault] = useState(false)
   const [siteId, setSiteId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -35,6 +36,7 @@ export function LearningBrowserAiPreferencesDialog({ open, notes, skills, catego
     const preferences = readLearningBrowserAiPreferences()
     setSelectedSkillIds(preferences.defaultSkillIds.filter((id) => skills.some((skill) => skill.id === id && skill.enabled)))
     setSelectedNoteIds(preferences.defaultNoteIds.filter((id) => notes.some((note) => note.id === id)))
+    setIncludeCurrentNoteByDefault(preferences.includeCurrentNoteByDefault)
     setSavePromptByDefault(preferences.savePromptByDefault)
     setError(null)
     void loadBrowserAi()
@@ -54,6 +56,7 @@ export function LearningBrowserAiPreferencesDialog({ open, notes, skills, catego
       saveLearningBrowserAiPreferences({
         defaultSkillIds: selectedSkillIds,
         defaultNoteIds: selectedNoteIds,
+        includeCurrentNoteByDefault,
         savePromptByDefault,
       })
       const selectedSite = snapshot?.config.sites.find((site) => site.id === siteId)
@@ -148,6 +151,13 @@ export function LearningBrowserAiPreferencesDialog({ open, notes, skills, catego
             <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.defaultDispatchSettingsDescription')}</p>
           </div>
           <Select ariaLabel={t('learning.browserAi.defaultSite')} value={siteId} options={siteOptions} onChange={setSiteId} emptyText={t('learning.browserAi.noConfiguredSites')} />
+          <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
+            <Checkbox checked={includeCurrentNoteByDefault} onChange={(event) => setIncludeCurrentNoteByDefault(event.target.checked)} />
+            <span>
+              <span className="block">{t('learning.browserAi.includeCurrentNoteByDefault')}</span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.includeCurrentNoteByDefaultDescription')}</span>
+            </span>
+          </label>
           <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
             <Checkbox checked={savePromptByDefault} onChange={(event) => setSavePromptByDefault(event.target.checked)} />
             <span>{t('learning.browserAi.savePromptByDefault')}</span>

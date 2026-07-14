@@ -50,7 +50,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
     const normalizedQuery = query.trim().toLowerCase()
     return records
       .filter((record) => status === 'all' || record.status === status)
-      .filter((record) => !normalizedQuery || [record.title, record.siteName, record.sourceLabels.join(' '), record.answerExcerpt].join(' ').toLowerCase().includes(normalizedQuery))
+      .filter((record) => !normalizedQuery || [record.title, record.siteName, record.taskExcerpt, record.sourceLabels.join(' '), record.answerExcerpt].join(' ').toLowerCase().includes(normalizedQuery))
       .slice()
       .sort((left, right) => (sort === 'created' ? right.createdAt - left.createdAt : right.updatedAt - left.updatedAt))
   }, [query, records, sort, status])

@@ -7,6 +7,7 @@ export type LearningBrowserAiPreferences = BrowserAiPreferences
 const DEFAULT_PREFERENCES: LearningBrowserAiPreferences = {
   defaultSkillIds: [],
   defaultNoteIds: [],
+  includeCurrentNoteByDefault: false,
   savePromptByDefault: false,
 }
 
@@ -19,6 +20,7 @@ export function readLearningBrowserAiPreferences(): LearningBrowserAiPreferences
     return {
       defaultSkillIds: Array.isArray(parsed.defaultSkillIds) ? Array.from(new Set(parsed.defaultSkillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).map((id) => id.trim()))) : [],
       defaultNoteIds: Array.isArray(parsed.defaultNoteIds) ? Array.from(new Set(parsed.defaultNoteIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).map((id) => id.trim()))) : [],
+      includeCurrentNoteByDefault: parsed.includeCurrentNoteByDefault === true,
       savePromptByDefault: parsed.savePromptByDefault === true,
     }
   } catch {
@@ -33,6 +35,7 @@ export function saveLearningBrowserAiPreferences(preferences: LearningBrowserAiP
     JSON.stringify({
       defaultSkillIds: Array.from(new Set(preferences.defaultSkillIds.filter(Boolean))),
       defaultNoteIds: Array.from(new Set(preferences.defaultNoteIds.filter(Boolean))),
+      includeCurrentNoteByDefault: preferences.includeCurrentNoteByDefault,
       savePromptByDefault: preferences.savePromptByDefault,
     }),
   )
