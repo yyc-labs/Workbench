@@ -14,7 +14,7 @@ import type {
 } from './protocol-types'
 import {
   GatewayRouteError,
-  hasNonEmptyObject,
+  hasNonEmptyArray,
   resolveMappedModel,
   UnsupportedGatewayFeatureError,
 } from './protocol-types'
@@ -327,15 +327,6 @@ export async function handleResponsesRoute(
     deps.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
 
     if (provider.protocol === 'openai_responses') {
-      if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
-      }
-      if (Array.isArray(payload.tools) && payload.tools.length > 0 && provider.capabilities?.supportsTools === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support Responses tools.`)
-      }
-      if (hasNonEmptyObject(payload.reasoning) && provider.capabilities?.supportsReasoning === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support Responses reasoning.`)
-      }
       const upstreamRequest = {
         ...payload,
         model: resolveMappedModel(String(payload.model || ''), provider.modelMap),
@@ -368,14 +359,44 @@ export async function handleResponsesRoute(
 
     if (provider.protocol === 'openai_chat') {
       if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
-        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
+        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`, 'responses_streaming')
       }
-      const chatRequest = responsesToChatCompletion(payload, provider)
-      deps.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
+      if (hasNonEmptyArray(payload.tools) && provider.capabilities?.supportsTools === false) {
+        throw new UnsupportedGatewayFeatureError(
+          `Provider "${provider.name}" does not support function tools on the Responses to Chat downgrade route.`,
+          'responses_tools'
+        )
+      }
+      if (hasNonEmptyArray(payload.tools) && provider.capabilities?.responsesToolsViaChatDowngrade === false) {
+        throw new UnsupportedGatewayFeatureError(
+          `Provider "${provider.name}" has disabled Responses tools through the Chat downgrade route.`,
+          'responses_tools'
+        )
+      }
+      const mappedModel = resolveMappedModel(String(payload.model || ''), provider.modelMap)
+      if (!mappedModel) throw new Error('Responses request is missing model.')
+      deps.setGatewayTraceRouteData(trace, provider, mappedModel, payload.stream === true, payload, maxBodyBytes, {
         conversion: 'lossy_conversion',
         lossyWarnings: [
-          'OpenAI Responses to Chat Completions is a downgrade path; Responses tools, reasoning, and rich output items are not preserved.',
+          'OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.',
         ],
+      })
+      const chatRequest = responsesToChatCompletion(payload, provider)
+      if (chatRequest.parallel_tool_calls === true && provider.capabilities?.supportsParallelToolCalls === false) {
+        throw new UnsupportedGatewayFeatureError(
+          `Provider "${provider.name}" does not support parallel tool calls.`,
+          'responses_tools'
+        )
+      }
+      const lossyWarnings = [
+        'OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.',
+        ...(chatRequest.tools?.length
+          ? ['Responses function tools are converted to Chat function tools; built-in tools remain unsupported.']
+          : []),
+      ]
+      deps.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
+        conversion: 'lossy_conversion',
+        lossyWarnings,
       })
       deps.recordGatewayLog({
         ...requestContext,
@@ -404,7 +425,27 @@ export async function handleResponsesRoute(
         stream: false,
         statusCode: 200,
       })
-      const clientPayload = chatCompletionToResponses(chatResponse, chatRequest.model)
+      const validationReport = validateChatCompletionToolCalls(chatResponse, chatRequest.tools)
+      deps.applyToolValidationReport(trace, validationReport)
+      deps.recordToolValidation(provider, requestContext, chatRequest.model, false, validationReport)
+      assertToolValidationPassed(validationReport)
+      const normalizedChatResponse = validationReport.normalizedToolCalls.length > 0
+        ? {
+          ...chatResponse,
+          choices: chatResponse.choices?.map((choice, index) => (
+            index !== 0 || !choice.message
+              ? choice
+              : {
+                ...choice,
+                message: {
+                  ...choice.message,
+                  tool_calls: validationReport.normalizedToolCalls,
+                },
+              }
+          )),
+        }
+        : chatResponse
+      const clientPayload = chatCompletionToResponses(normalizedChatResponse, chatRequest.model)
       trace.clientResponse = buildResponseSnapshot({
         statusCode: 200,
         headers: { 'content-type': 'application/json; charset=utf-8' },

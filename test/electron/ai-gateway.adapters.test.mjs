@@ -9,6 +9,9 @@ import {
   createAnthropicStreamState,
   createAnthropicStreamStop,
   chatCompletionToResponses,
+  chatStreamChunkToResponsesEvents,
+  createResponsesStreamFinish,
+  createResponsesStreamState,
   drainSseEvents,
   encodeSseEvent,
   buildStreamMergedSnapshot,
@@ -204,6 +207,102 @@ test('rejects unsupported Responses reasoning', () => {
   }), /reasoning options are not supported/)
 })
 
+test('converts Responses function tools and a completed tool loop to Chat Completions', () => {
+  const chat = responsesToChatCompletion({
+    model: 'codex-model',
+    input: [
+      {
+        type: 'message',
+        role: 'user',
+        content: 'Look up the weather.',
+      },
+      {
+        type: 'function_call',
+        call_id: 'call_weather',
+        name: 'lookup_weather',
+        arguments: '{"city":"Shanghai"}',
+      },
+      {
+        type: 'function_call_output',
+        call_id: 'call_weather',
+        output: '31 C and sunny',
+      },
+    ],
+    tools: [
+      {
+        type: 'function',
+        name: 'lookup_weather',
+        description: 'Looks up a city weather report.',
+        parameters: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+        },
+      },
+    ],
+    tool_choice: { type: 'function', name: 'lookup_weather' },
+    parallel_tool_calls: false,
+  })
+
+  assert.deepEqual(chat.tools, [
+    {
+      type: 'function',
+      function: {
+        name: 'lookup_weather',
+        description: 'Looks up a city weather report.',
+        parameters: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+        },
+      },
+    },
+  ])
+  assert.deepEqual(chat.tool_choice, {
+    type: 'function',
+    function: { name: 'lookup_weather' },
+  })
+  assert.equal(chat.parallel_tool_calls, false)
+  assert.deepEqual(chat.messages, [
+    { role: 'user', content: 'Look up the weather.' },
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [
+        {
+          id: 'call_weather',
+          type: 'function',
+          function: {
+            name: 'lookup_weather',
+            arguments: '{"city":"Shanghai"}',
+          },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      tool_call_id: 'call_weather',
+      content: '31 C and sunny',
+    },
+  ])
+})
+
+test('rejects unsafe Responses tool downgrade inputs', () => {
+  assert.throws(() => responsesToChatCompletion({
+    model: 'codex-model',
+    input: 'hello',
+    tools: [{ type: 'web_search_preview' }],
+  }), /cannot be converted/)
+  assert.throws(() => responsesToChatCompletion({
+    model: 'codex-model',
+    input: [{
+      type: 'function_call_output',
+      call_id: 'call_missing',
+      output: 'result',
+    }],
+  }), /no earlier function_call/)
+})
+
 test('converts Chat response to Anthropic message response', () => {
   const message = chatCompletionToAnthropicMessage({
     id: 'chatcmpl_1',
@@ -339,6 +438,87 @@ test('converts Chat response to Responses response', () => {
     output_tokens: 3,
     total_tokens: 13,
   })
+})
+
+test('converts Chat function calls to Responses function_call output items', () => {
+  const response = chatCompletionToResponses({
+    model: 'gpt-4.1',
+    choices: [{
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_weather',
+          type: 'function',
+          function: {
+            name: 'lookup_weather',
+            arguments: '{"city":"Shanghai"}',
+          },
+        }],
+      },
+      finish_reason: 'tool_calls',
+    }],
+  }, 'fallback', 'resp_tools')
+
+  assert.equal(response.id, 'resp_tools')
+  assert.equal(response.output_text, '')
+  assert.equal(response.finish_reason, 'tool_calls')
+  assert.deepEqual(response.output, [{
+    id: 'fc_call_weather',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_weather',
+    name: 'lookup_weather',
+    arguments: '{"city":"Shanghai"}',
+  }])
+})
+
+test('converts Chat tool-call stream fragments to Responses SSE events', () => {
+  const state = createResponsesStreamState()
+  const events = [
+    ...chatStreamChunkToResponsesEvents({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: 'call_weather',
+            type: 'function',
+            function: { name: 'lookup_weather', arguments: '{"city":' },
+          }],
+        },
+      }],
+    }, state),
+    ...chatStreamChunkToResponsesEvents({
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            function: { arguments: '"Shanghai"}' },
+          }],
+        },
+      }],
+    }, state),
+    ...createResponsesStreamFinish('resp_stream_tools', 'gpt-4.1', state, undefined, 'tool_calls'),
+  ]
+
+  assert.deepEqual(events.map((event) => event.event), [
+    'response.output_item.added',
+    'response.function_call_arguments.delta',
+    'response.function_call_arguments.delta',
+    'response.function_call_arguments.done',
+    'response.output_item.done',
+    'response.completed',
+  ])
+  const completed = JSON.parse(events.at(-1).data).response
+  assert.equal(completed.finish_reason, 'tool_calls')
+  assert.deepEqual(completed.output, [{
+    id: 'fc_call_weather',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_weather',
+    name: 'lookup_weather',
+    arguments: '{"city":"Shanghai"}',
+  }])
 })
 
 test('encodes and drains SSE events', () => {
@@ -647,4 +827,3 @@ test('limits merged stream text snapshots by UTF-8 bytes', () => {
   assert.equal(merged.clientText.sizeBytes, 7)
   assert.equal(merged.clientText.truncated, true)
 })
-

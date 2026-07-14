@@ -97,6 +97,8 @@ export interface OpenAiResponsesRequest extends JsonObject {
   top_p?: number
   max_output_tokens?: number
   tools?: unknown
+  tool_choice?: unknown
+  parallel_tool_calls?: boolean
   reasoning?: unknown
 }
 
@@ -118,9 +120,12 @@ export class GatewayRouteError extends Error {
 }
 
 export class UnsupportedGatewayFeatureError extends GatewayRouteError {
-  constructor(message: string) {
+  readonly kind?: string
+
+  constructor(message: string, kind?: string) {
     super(message, 'unsupported_feature', 400)
     this.name = 'UnsupportedGatewayFeatureError'
+    this.kind = kind
   }
 }
 

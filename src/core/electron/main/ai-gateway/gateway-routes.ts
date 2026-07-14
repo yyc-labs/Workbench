@@ -8,13 +8,19 @@ export type RoutedPath = {
   profileId?: string
 }
 
-export function routeErrorPayload(kind: RouteKind, message: string, code = 'ai_gateway_error'): JsonObject {
+export function routeErrorPayload(
+  kind: RouteKind,
+  message: string,
+  code = 'ai_gateway_error',
+  details?: JsonObject
+): JsonObject {
   if (kind === 'anthropic') {
     return {
       type: 'error',
       error: {
         type: code,
         message,
+        ...details,
       },
     }
   }
@@ -24,6 +30,7 @@ export function routeErrorPayload(kind: RouteKind, message: string, code = 'ai_g
       message,
       type: code,
       code,
+      ...details,
     },
   }
 }

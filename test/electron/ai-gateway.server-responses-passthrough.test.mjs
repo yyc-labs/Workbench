@@ -92,6 +92,8 @@ test('passes OpenAI Responses providers through natively', async (t) => {
 
   const gatewayPort = await getFreePort()
   const config = createOpenAiResponsesGatewayConfig({ gatewayPort, upstreamPort })
+  config.providers[0].capabilities.supportsTools = false
+  config.providers[0].capabilities.supportsReasoning = false
   const registry = new AiGatewayProviderRegistry(config)
   const gateway = new AiGatewayServer({ getConfig: () => config, registry })
   await gateway.start(config)
@@ -134,6 +136,178 @@ test('passes OpenAI Responses providers through natively', async (t) => {
   assert.equal(detail.meta.providerId, 'openai-responses')
   assert.match(detail.upstreamRequest.url, /\/v1\/responses$/)
   assert.equal(detail.clientResponse.body.parsed.output_text, 'ok')
+})
+
+test('converts Responses function tools to Chat and returns Chat function calls as Responses output', async (t) => {
+  const { createServer } = await import('node:http')
+  const upstreamRequests = []
+  const upstream = createServer(async (req, res) => {
+    upstreamRequests.push({
+      url: req.url,
+      body: JSON.parse(await readRequestBody(req)),
+    })
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({
+      id: 'chatcmpl_tools',
+      object: 'chat.completion',
+      model: 'gpt-upstream',
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_lookup',
+            type: 'function',
+            function: {
+              name: 'lookup',
+              arguments: '{"query":"gateway"}',
+            },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+    }))
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      input: 'Search the gateway docs.',
+      tools: [{
+        type: 'function',
+        name: 'lookup',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      }],
+      tool_choice: { type: 'function', name: 'lookup' },
+    }),
+  })
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(upstreamRequests.length, 1)
+  assert.equal(upstreamRequests[0].url, '/v1/chat/completions')
+  assert.deepEqual(upstreamRequests[0].body.tools, [{
+    type: 'function',
+    function: {
+      name: 'lookup',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+    },
+  }])
+  assert.deepEqual(upstreamRequests[0].body.tool_choice, {
+    type: 'function',
+    function: { name: 'lookup' },
+  })
+  assert.equal(body.finish_reason, 'tool_calls')
+  assert.deepEqual(body.output, [{
+    id: 'fc_call_lookup',
+    type: 'function_call',
+    status: 'completed',
+    call_id: 'call_lookup',
+    name: 'lookup',
+    arguments: '{"query":"gateway"}',
+  }])
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.protocolDiagnostics.conversion, 'lossy_conversion')
+  assert.equal(detail.protocolDiagnostics.toolValidation[0].schemaValid, true)
+  assert.equal(detail.clientResponse.body.parsed.output[0].call_id, 'call_lookup')
+})
+
+test('converts streaming Chat function-call deltas to Responses events and trace payloads', async (t) => {
+  const { createServer } = await import('node:http')
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
+    res.write(`data: ${JSON.stringify({
+      object: 'chat.completion.chunk',
+      model: 'gpt-upstream',
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            id: 'call_lookup',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":' },
+          }],
+        },
+        finish_reason: null,
+      }],
+    })}\n\n`)
+    res.write(`data: ${JSON.stringify({
+      object: 'chat.completion.chunk',
+      model: 'gpt-upstream',
+      choices: [{
+        delta: {
+          tool_calls: [{
+            index: 0,
+            function: { arguments: '"gateway"}' },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+    })}\n\n`)
+    res.write('data: [DONE]\n\n')
+    res.end()
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiChatGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      stream: true,
+      input: 'Search the gateway docs.',
+      tools: [{
+        type: 'function',
+        name: 'lookup',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+      }],
+    }),
+  })
+  const bodyText = await response.text()
+
+  assert.equal(response.status, 200)
+  assert.match(bodyText, /response\.function_call_arguments\.delta/)
+  assert.match(bodyText, /response\.function_call_arguments\.done/)
+  assert.match(bodyText, /"call_id":"call_lookup"/)
+
+  const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.stream.merged.finishReason, 'tool_calls')
+  assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].id, 'call_lookup')
+  assert.equal(detail.stream.merged.clientPayload.parsed.output[0].call_id, 'call_lookup')
+  assert.equal(detail.protocolDiagnostics.toolValidation[0].schemaValid, true)
 })
 
 test('passes native Responses stream bytes through before complete SSE event', async (t) => {

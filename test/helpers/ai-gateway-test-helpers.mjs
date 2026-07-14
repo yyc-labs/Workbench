@@ -13,7 +13,12 @@ export const {
   createAnthropicStreamState,
   createAnthropicStreamStop,
 } = loadTsModule('src/core/electron/main/ai-gateway/adapters/chat-to-anthropic.ts')
-export const { chatCompletionToResponses } = loadTsModule('src/core/electron/main/ai-gateway/adapters/chat-to-responses.ts')
+export const {
+  chatCompletionToResponses,
+  chatStreamChunkToResponsesEvents,
+  createResponsesStreamFinish,
+  createResponsesStreamState,
+} = loadTsModule('src/core/electron/main/ai-gateway/adapters/chat-to-responses.ts')
 export const { drainSseEvents, encodeSseEvent } = loadTsModule('src/core/electron/main/ai-gateway/adapters/sse.ts')
 export const { normalizeAiGatewayConfig } = loadTsModule('src/core/electron/main/ai-gateway/gateway-config.ts')
 export const { AiGatewayProviderRegistry } = loadTsModule('src/core/electron/main/ai-gateway/provider-registry.ts')

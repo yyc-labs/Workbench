@@ -23,6 +23,9 @@ export const EMPTY_PROVIDER_USAGE: ProviderUsage = {
 const DEFAULT_OPENAI_CHAT_CAPABILITIES: AiGatewayProviderCapabilities = {
   supportsStreaming: true,
   supportsTools: true,
+  nativeResponsesTools: false,
+  responsesToolsViaChatDowngrade: true,
+  responsesBuiltInTools: false,
   supportsStrictTools: false,
   supportsParallelToolCalls: true,
   supportsDeveloperMessages: false,

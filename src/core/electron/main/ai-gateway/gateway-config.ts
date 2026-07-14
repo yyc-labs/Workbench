@@ -69,6 +69,9 @@ export function defaultAiGatewayProviderCapabilities(
     return {
       supportsStreaming: true,
       supportsTools: true,
+      nativeResponsesTools: true,
+      responsesToolsViaChatDowngrade: false,
+      responsesBuiltInTools: false,
       supportsStrictTools: true,
       supportsParallelToolCalls: true,
       supportsDeveloperMessages: true,
@@ -84,6 +87,9 @@ export function defaultAiGatewayProviderCapabilities(
     return {
       supportsStreaming: true,
       supportsTools: true,
+      nativeResponsesTools: false,
+      responsesToolsViaChatDowngrade: false,
+      responsesBuiltInTools: false,
       supportsStrictTools: true,
       supportsParallelToolCalls: true,
       supportsDeveloperMessages: false,
@@ -98,6 +104,9 @@ export function defaultAiGatewayProviderCapabilities(
   return {
     supportsStreaming: true,
     supportsTools: true,
+    nativeResponsesTools: false,
+    responsesToolsViaChatDowngrade: true,
+    responsesBuiltInTools: false,
     supportsStrictTools: false,
     supportsParallelToolCalls: true,
     supportsDeveloperMessages: false,
@@ -119,6 +128,9 @@ function normalizeProviderCapabilities(
   return {
     supportsStreaming: normalizeBoolean(raw.supportsStreaming, defaults.supportsStreaming),
     supportsTools: normalizeBoolean(raw.supportsTools, defaults.supportsTools),
+    nativeResponsesTools: normalizeBoolean(raw.nativeResponsesTools, defaults.nativeResponsesTools),
+    responsesToolsViaChatDowngrade: normalizeBoolean(raw.responsesToolsViaChatDowngrade, defaults.responsesToolsViaChatDowngrade),
+    responsesBuiltInTools: normalizeBoolean(raw.responsesBuiltInTools, defaults.responsesBuiltInTools),
     supportsStrictTools: normalizeBoolean(raw.supportsStrictTools, defaults.supportsStrictTools),
     supportsParallelToolCalls: normalizeBoolean(raw.supportsParallelToolCalls, defaults.supportsParallelToolCalls),
     supportsDeveloperMessages: normalizeBoolean(raw.supportsDeveloperMessages, defaults.supportsDeveloperMessages),

@@ -198,7 +198,9 @@ function valueSize(value: unknown): string | undefined {
 
 function gatewayErrorStepId(detail: Extract<AgentLogDetail, { source: 'ai-gateway' }>): string | null {
   if (!detail.error) return null
-  if (detail.error.code === 'tool_validation_failed') return 'protocol-diagnostics'
+  if (detail.error.code === 'tool_validation_failed' || detail.error.code === 'unsupported_feature') {
+    return 'protocol-diagnostics'
+  }
   if (!detail.upstreamResponse || detail.upstreamResponse.statusCode >= 400) return 'provider-response'
   if (!detail.clientResponse || detail.clientResponse.statusCode >= 400) return 'client-response'
   return 'provider-response'
@@ -209,6 +211,7 @@ function protocolDiagnosticsStatus(
 ): AgentLogFlowStepStatus {
   const diagnostics = detail.protocolDiagnostics
   if (!diagnostics) return 'missing'
+  if (diagnostics.unsupportedFeature) return 'error'
   if (diagnostics.toolValidation?.some((entry) => !entry.schemaValid || !entry.forwarded)) return 'error'
   if ((diagnostics.lossyWarnings?.length ?? 0) > 0) return 'warn'
   if (diagnostics.toolValidation?.some((entry) => (entry.diagnosticWarnings?.length ?? 0) > 0)) return 'warn'
@@ -279,6 +282,7 @@ export function buildAgentLogFlowSteps(
         diagnosticStatus: protocolDiagnosticsStatus(detail),
         summary: compact([
           detail.protocolDiagnostics?.conversion,
+          detail.protocolDiagnostics?.unsupportedFeature?.kind,
           (detail.protocolDiagnostics?.lossyWarnings?.length ?? 0) > 0
             ? `${labels.lossyWarnings}: ${detail.protocolDiagnostics?.lossyWarnings?.length}`
             : undefined,

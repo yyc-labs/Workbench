@@ -258,6 +258,12 @@ export type AiGatewayProtocolConversionKind = 'passthrough' | 'lossless_conversi
 export interface AiGatewayProviderCapabilities {
   supportsStreaming?: boolean
   supportsTools?: boolean
+  /** The provider accepts Responses function tools without protocol conversion. */
+  nativeResponsesTools?: boolean
+  /** Responses function tools can be downgraded to Chat function tools. */
+  responsesToolsViaChatDowngrade?: boolean
+  /** The provider supports Responses built-in tools such as web/file/computer use. */
+  responsesBuiltInTools?: boolean
   supportsStrictTools?: boolean
   supportsParallelToolCalls?: boolean
   supportsDeveloperMessages?: boolean
@@ -629,6 +635,10 @@ export interface AiGatewayProtocolDiagnostics {
   providerCapabilities?: AiGatewayProviderCapabilities
   lossyWarnings?: string[]
   toolValidation?: AiGatewayToolValidationEntry[]
+  unsupportedFeature?: {
+    kind: string
+    remediation?: string
+  }
 }
 
 export interface AiGatewayLogDetail {

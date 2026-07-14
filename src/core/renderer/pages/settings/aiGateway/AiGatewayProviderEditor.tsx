@@ -39,6 +39,24 @@ const CAPABILITY_OPTIONS: Array<{
     group: 'common',
   },
   {
+    key: 'nativeResponsesTools',
+    labelKey: 'settings.aiGateway.capabilityNativeResponsesTools',
+    descriptionKey: 'settings.aiGateway.capabilityNativeResponsesToolsHint',
+    group: 'advanced',
+  },
+  {
+    key: 'responsesToolsViaChatDowngrade',
+    labelKey: 'settings.aiGateway.capabilityResponsesToolsViaChat',
+    descriptionKey: 'settings.aiGateway.capabilityResponsesToolsViaChatHint',
+    group: 'advanced',
+  },
+  {
+    key: 'responsesBuiltInTools',
+    labelKey: 'settings.aiGateway.capabilityResponsesBuiltInTools',
+    descriptionKey: 'settings.aiGateway.capabilityResponsesBuiltInToolsHint',
+    group: 'advanced',
+  },
+  {
     key: 'supportsParallelToolCalls',
     labelKey: 'settings.aiGateway.capabilityParallelTools',
     descriptionKey: 'settings.aiGateway.capabilityParallelToolsHint',

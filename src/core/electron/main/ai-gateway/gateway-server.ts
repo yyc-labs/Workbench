@@ -48,7 +48,7 @@ import type {
   JsonObject,
   OpenAiResponsesRequest,
 } from './protocol-types'
-import { GatewayRouteError } from './protocol-types'
+import { GatewayRouteError, UnsupportedGatewayFeatureError } from './protocol-types'
 import {
   chatStreamChunkToAnthropicEvents,
   createAnthropicStreamStart,
@@ -57,9 +57,10 @@ import {
 } from './adapters/chat-to-anthropic'
 import {
   chatStreamChunkToResponsesEvents,
+  createResponsesStreamCreated,
+  createResponsesStreamFinish,
   createResponsesStreamIds,
-  createResponsesStreamStart,
-  createResponsesStreamStop,
+  createResponsesStreamState,
 } from './adapters/chat-to-responses'
 import { decodeSseStream, drainSseEvents, encodeSseEvent } from './adapters/sse'
 import {
@@ -105,6 +106,28 @@ const AI_GATEWAY_DEBUG_ENV = 'IDE_ELECTRON_AI_GATEWAY_DEBUG'
 const AI_GATEWAY_LOG_PREVIEW_CHARS = 1200
 const AI_GATEWAY_MAX_DEBUG_SSE_EVENTS = 6
 const AI_GATEWAY_RECENT_LOG_LIMIT = 200
+
+function remediationForUnsupportedFeature(kind: string | undefined): string | undefined {
+  if (kind === 'responses_reasoning') {
+    return 'Route this request to an openai_responses provider, or remove reasoning before using an openai_chat provider.'
+  }
+  if (kind === 'responses_tools') {
+    return 'Enable function tools and Responses-to-Chat downgrade for this provider, or route the request to an openai_responses provider.'
+  }
+  if (kind === 'responses_builtin_tools') {
+    return 'Built-in Responses tools require an openai_responses provider; only function tools can use the Chat downgrade route.'
+  }
+  if (kind === 'responses_tool_calls') {
+    return 'Include each earlier function_call item before its function_call_output, with one matching call_id per tool result.'
+  }
+  if (kind === 'responses_tool_choice') {
+    return 'Use auto, none, required, or a declared function tool choice when routing Responses through Chat.'
+  }
+  if (kind === 'responses_streaming') {
+    return 'Enable streaming for this provider, or send the Responses request without stream=true.'
+  }
+  return undefined
+}
 
 function isAiGatewayDebugEnabled(): boolean {
   const value = (process.env[AI_GATEWAY_DEBUG_ENV] ?? '').trim().toLowerCase()
@@ -2477,14 +2500,22 @@ export class AiGatewayServer {
   ): Promise<void> {
     const response = await this.fetchChatStream(provider, chatRequest, requestContext, trace, apiTokenOverride)
     const ids = createResponsesStreamIds()
+    const responsesStreamState = createResponsesStreamState()
     let fullText = ''
     let upstreamEventCount = 0
     let finishReason: string | null | undefined
     let usage: JsonObject | undefined
     const previewEvents: unknown[] = []
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
+    const upstreamToolCallAccumulator = createChatToolCallTraceAccumulator()
     const updateStreamTrace = (clientPayload?: JsonObject): void => {
-      const upstreamPayload = buildChatStreamPayload(chatRequest.model, fullText, finishReason, usage)
+      const upstreamPayload = buildChatStreamPayload(
+        chatRequest.model,
+        fullText,
+        finishReason,
+        usage,
+        upstreamToolCallAccumulator.snapshot()
+      )
       const merged = buildStreamMergedSnapshot({
         upstreamText: fullText,
         upstreamPayload,
@@ -2525,9 +2556,8 @@ export class AiGatewayServer {
     })
     trace.statusCode = 200
     writeSseHeaders(res)
-    for (const event of createResponsesStreamStart(ids.responseId, ids.outputItemId, chatRequest.model)) {
-      res.write(encodeSseEvent(event.event, event.data))
-    }
+    const createdEvent = createResponsesStreamCreated(ids.responseId, chatRequest.model)
+    res.write(encodeSseEvent(createdEvent.event, createdEvent.data))
 
     try {
       for await (const event of decodeSseStream(response.body!)) {
@@ -2570,8 +2600,9 @@ export class AiGatewayServer {
         }
         finishReason = extractFinishReason(chunk) ?? finishReason
         usage = extractUsage(chunk) ?? usage
+        upstreamToolCallAccumulator.append(chunk)
         fullText += extractDeltaText(chunk)
-        for (const mapped of chatStreamChunkToResponsesEvents(chunk, ids.outputItemId)) {
+        for (const mapped of chatStreamChunkToResponsesEvents(chunk, responsesStreamState)) {
           res.write(encodeSseEvent(mapped.event, mapped.data))
         }
       }
@@ -2585,9 +2616,39 @@ export class AiGatewayServer {
           upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
           model: chatRequest.model,
           stream: true,
-        }, buildUpstreamLogDetails(provider, chatRequest))
+          }, buildUpstreamLogDetails(provider, chatRequest))
       }
-      const stopEvents = createResponsesStreamStop(ids.responseId, ids.outputItemId, chatRequest.model, fullText, usage)
+      const validationReport = validateChatToolCalls(upstreamToolCallAccumulator.snapshot(), chatRequest.tools)
+      this.applyToolValidationReport(trace, validationReport)
+      this.recordToolValidation(provider, requestContext, chatRequest.model, true, validationReport)
+      if (!validationReport.valid) {
+        const message = toolValidationFailureMessage(validationReport)
+        trace.level = 'warn'
+        trace.error = {
+          code: 'tool_validation_failed',
+          message,
+        }
+        updateStreamTrace()
+        res.write(encodeSseEvent('response.failed', {
+          type: 'response.failed',
+          response: {
+            id: ids.responseId,
+            status: 'failed',
+            error: {
+              code: 'tool_validation_failed',
+              message,
+            },
+          },
+        }))
+        return
+      }
+      const stopEvents = createResponsesStreamFinish(
+        ids.responseId,
+        chatRequest.model,
+        responsesStreamState,
+        usage,
+        finishReason
+      )
       for (const event of stopEvents) {
         res.write(encodeSseEvent(event.event, event.data))
       }
@@ -2687,13 +2748,30 @@ export class AiGatewayServer {
     const statusCode = error instanceof GatewayRouteError ? error.statusCode : 400
     const code = error instanceof GatewayRouteError ? error.code : 'ai_gateway_error'
     const message = error instanceof Error ? error.message : String(error)
+    const unsupportedFeature = error instanceof UnsupportedGatewayFeatureError && error.kind
+      ? {
+        kind: error.kind,
+        remediation: remediationForUnsupportedFeature(error.kind),
+      }
+      : undefined
+    if (unsupportedFeature) {
+      this.updateGatewayTraceProtocolDiagnostics(trace, {
+        unsupportedFeature,
+      })
+    }
+    const errorDetails = unsupportedFeature
+      ? {
+        unsupported_feature: unsupportedFeature.kind,
+        ...(unsupportedFeature.remediation ? { remediation: unsupportedFeature.remediation } : {}),
+      }
+      : undefined
     trace.level = statusCode >= 500 ? 'error' : 'warn'
     trace.statusCode = statusCode
     trace.error = { code, message }
     trace.clientResponse = buildResponseSnapshot({
       statusCode,
       headers: { 'content-type': 'application/json; charset=utf-8' },
-      bodyValue: routeErrorPayload(kind, message, code),
+      bodyValue: routeErrorPayload(kind, message, code, errorDetails),
       contentType: 'application/json; charset=utf-8',
       maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
     })
@@ -2712,8 +2790,9 @@ export class AiGatewayServer {
       requestPath: requestContext.requestPath,
       route: requestContext.route,
       profileId: requestContext.profileId,
+      unsupportedFeature,
     })
     this.finalizeGatewayTrace(trace)
-    jsonResponse(res, statusCode, routeErrorPayload(kind, message, code))
+    jsonResponse(res, statusCode, routeErrorPayload(kind, message, code, errorDetails))
   }
 }

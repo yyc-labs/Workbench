@@ -1,5 +1,22 @@
 # AI Gateway Responses Tools 未来支持计划（2026-07-05）
 
+## 0. 实施状态（2026-07-14）
+
+本计划的安全可转换范围已落地。Gateway 现在会按 provider protocol 走两条明确链路：
+
+- `openai_responses`：`/v1/responses` 请求原样转发到上游并记录 ingress、上游请求/响应和客户端响应。该路径不再因为本地 `supportsReasoning` / `supportsTools` 开关提前拒绝请求；能力开关用于配置提示，实际兼容性由上游响应决定，因此失败也能完整记录。
+- `openai_chat`：支持标准 `type: "function"` 的 Responses tools、`tool_choice`、`parallel_tool_calls`、非流式 Chat `tool_calls` 回写，以及流式 function arguments delta 回写为 Responses SSE 事件。
+- tool loop：同一份 `input` 中的 `function_call` 会转换为 Chat `assistant.tool_calls`，后续匹配的 `function_call_output` 会转换为 Chat `tool` message。缺少前置调用、call id 不匹配或重复输出都会 fail-closed。
+- Agent Logs：记录 protocol conversion、provider capability、tool validation、unsupported feature kind 与 remediation；流式 trace 同时保留 Chat 上游合并 payload 和 Responses 客户端最终 payload。
+- Settings：provider capability 已区分原生 Responses tools、经 Chat 降级的 Responses tools 与 Responses 内置工具。
+
+仍然保持的边界：
+
+- `openai_chat` 降级只转换 function tools；web search、file search、computer use、code interpreter 等 Responses 内置工具只允许原生 Responses 上游处理。
+- `reasoning` 只允许原生 Responses 透传；Chat 降级会返回带 remediation 的 `unsupported_feature`。
+- Chat 降级是无状态的。带 `function_call_output` 的续轮必须在同一个 `input` 中附上对应的先前 `function_call`；只依赖 `previous_response_id` 的服务端历史不能安全转换，仍会被拒绝。
+- Gateway 不执行工具，也不会修复不合法的工具参数。
+
 ## 1. 背景
 
 当前如果通过 AI Gateway 的 `/v1/responses` 路由发送带 `tools` 的请求，可能返回：
