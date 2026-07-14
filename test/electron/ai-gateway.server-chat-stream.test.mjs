@@ -53,6 +53,10 @@ test('records merged stream text for raw Chat streams', async (t) => {
   assert.equal(detail.stream.merged.clientText.rawText, 'Hello')
   assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.content, 'Hello')
   assert.equal(detail.stream.merged.clientPayload.parsed.choices[0].message.content, 'Hello')
+  assert.equal(detail.meta.streamRetryAttempt, 0)
+  assert.equal(detail.meta.maxStreamRetryAttempts, 0)
+  assert.equal(detail.meta.timeoutRetryAttempt, 0)
+  assert.equal(detail.meta.maxTimeoutRetryAttempts, 0)
 })
 
 test('retries upstream chat stream handshake on retryable 5xx responses', async (t) => {
@@ -99,6 +103,10 @@ test('retries upstream chat stream handshake on retryable 5xx responses', async 
   assert.equal(detail.stream.enabled, true)
   assert.equal(detail.stream.upstreamEventCount, 3)
   assert.equal(detail.stream.merged.upstreamText.rawText, 'Hello')
+  assert.equal(detail.meta.streamRetryAttempt, 1)
+  assert.equal(detail.meta.maxStreamRetryAttempts, 1)
+  assert.equal(detail.meta.timeoutRetryAttempt, 0)
+  assert.equal(detail.meta.maxTimeoutRetryAttempts, 0)
 })
 
 test('retries upstream chat stream handshake after a configured timeout delay', async (t) => {
@@ -147,13 +155,10 @@ test('retries upstream chat stream handshake after a configured timeout delay', 
   assert.ok(Date.now() - startedAt >= 1025)
 
   const detail = gateway.getRecentLogDetails()[0]
-  assert.equal(detail.meta.attempt, 2)
-  assert.equal(detail.meta.maxAttempts, 2)
-  assert.equal(detail.meta.retryType, 'timeout')
-  assert.equal(detail.meta.retryAttempt, 2)
-  assert.equal(detail.meta.maxRetryAttempts, 2)
-  assert.equal(detail.summary.attempt, 2)
-  assert.equal(detail.summary.maxAttempts, 2)
+  assert.equal(detail.meta.streamRetryAttempt, 0)
+  assert.equal(detail.meta.maxStreamRetryAttempts, 0)
+  assert.equal(detail.meta.timeoutRetryAttempt, 1)
+  assert.equal(detail.meta.maxTimeoutRetryAttempts, 1)
 })
 
 test('records merged stream text for Chat to Anthropic streams', async (t) => {

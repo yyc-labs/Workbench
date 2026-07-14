@@ -127,9 +127,15 @@ function SummaryView({ detail }: { detail: AgentLogDetail }) {
               <SummaryField label={t('settings.agentLogs.actualStream')} value={detail.stream?.enabled ? t('common.on') : t('common.off')} />
               <SummaryField label={t('settings.agentLogs.eventCount')} value={detail.stream?.upstreamEventCount} />
               <SummaryField
-                label={t('settings.agentLogs.retryAttempt')}
-                value={typeof detail.meta.retryAttempt === 'number' && typeof detail.meta.maxRetryAttempts === 'number'
-                  ? `${detail.meta.retryAttempt} / ${detail.meta.maxRetryAttempts}`
+                label={t('settings.agentLogs.streamRetryAttempt')}
+                value={typeof detail.meta.streamRetryAttempt === 'number' && typeof detail.meta.maxStreamRetryAttempts === 'number'
+                  ? `${detail.meta.streamRetryAttempt} / ${detail.meta.maxStreamRetryAttempts}`
+                  : undefined}
+              />
+              <SummaryField
+                label={t('settings.agentLogs.timeoutRetryAttempt')}
+                value={typeof detail.meta.timeoutRetryAttempt === 'number' && typeof detail.meta.maxTimeoutRetryAttempts === 'number'
+                  ? `${detail.meta.timeoutRetryAttempt} / ${detail.meta.maxTimeoutRetryAttempts}`
                   : undefined}
               />
             </>

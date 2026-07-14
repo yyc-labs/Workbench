@@ -1746,20 +1746,17 @@ export class AiGatewayServer {
     let timeoutRetryAttempts = 0
     const upstreamUrl = toChatCompletionsUrl(provider.baseUrl)
     let lastErrorMessage = ''
-    const setTraceRetryMeta = (retryType: 'stream' | 'timeout', retryAttempt: number): void => {
+    const syncTraceRetryMeta = (): void => {
       if (!trace) return
-      trace.meta.retryType = retryType
-      trace.meta.retryAttempt = retryAttempt
-      trace.meta.maxRetryAttempts = retryType === 'timeout'
-        ? maxTimeoutRetries + 1
-        : maxStreamRetries + 1
+      trace.meta.streamRetryAttempt = streamRetryAttempts
+      trace.meta.maxStreamRetryAttempts = maxStreamRetries
+      trace.meta.timeoutRetryAttempt = timeoutRetryAttempts
+      trace.meta.maxTimeoutRetryAttempts = maxTimeoutRetries
     }
 
+    syncTraceRetryMeta()
+
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      if (trace) {
-        trace.meta.attempt = attempt
-        trace.meta.maxAttempts = maxAttempts
-      }
       const controller = new AbortController()
       const timeoutMs = provider.timeoutMs ?? 60000
       const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1826,7 +1823,7 @@ export class AiGatewayServer {
 
         if (!response.ok && response.status >= 500 && streamRetryAttempts < maxStreamRetries) {
           streamRetryAttempts += 1
-          setTraceRetryMeta('stream', streamRetryAttempts + 1)
+          syncTraceRetryMeta()
           const responseText = await readResponseText(response)
           lastErrorMessage = responseText || `Upstream chat/completions stream failed with status ${response.status}.`
           if (trace) {
@@ -2005,10 +2002,10 @@ export class AiGatewayServer {
         if (canRetry) {
           if (timedOut) {
             timeoutRetryAttempts += 1
-            setTraceRetryMeta('timeout', timeoutRetryAttempts + 1)
+            syncTraceRetryMeta()
           } else {
             streamRetryAttempts += 1
-            setTraceRetryMeta('stream', streamRetryAttempts + 1)
+            syncTraceRetryMeta()
           }
           lastErrorMessage = errorMessage
           this.recordGatewayLog({
@@ -2056,9 +2053,7 @@ export class AiGatewayServer {
           }
           continue
         }
-        setTraceRetryMeta(timedOut ? 'timeout' : 'stream', timedOut
-          ? timeoutRetryAttempts + 1
-          : streamRetryAttempts + 1)
+        syncTraceRetryMeta()
         const finalError = timedOut ? new Error(errorMessage) : error
         this.recordGatewayLog({
           ...requestContext,

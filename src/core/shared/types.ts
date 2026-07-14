@@ -579,8 +579,10 @@ export interface AgentLogSummary {
   durationMs?: number
   stream?: boolean
   eventCount?: number
-  attempt?: number
-  maxAttempts?: number
+  streamRetryAttempt?: number
+  maxStreamRetryAttempts?: number
+  timeoutRetryAttempt?: number
+  maxTimeoutRetryAttempts?: number
   truncated?: boolean
   cwd?: string
   toolName?: string
@@ -642,11 +644,10 @@ export interface AiGatewayLogDetail {
     durationMs?: number
     authSource?: string
     authToken?: string
-    attempt?: number
-    maxAttempts?: number
-    retryType?: 'stream' | 'timeout'
-    retryAttempt?: number
-    maxRetryAttempts?: number
+    streamRetryAttempt?: number
+    maxStreamRetryAttempts?: number
+    timeoutRetryAttempt?: number
+    maxTimeoutRetryAttempts?: number
   }
   ingressRequest?: StructuredHttpRequestSnapshot
   normalizedRequest?: StructuredJsonSnapshot

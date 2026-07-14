@@ -161,8 +161,11 @@ export function AgentLogDetailHeader({
         {detail.source === 'ai-gateway' && detail.stream?.enabled ? (
           <DetailBadge tone="warn">{t('settings.agentLogs.stream')}</DetailBadge>
         ) : null}
-        {detail.source === 'ai-gateway' && typeof detail.meta.retryAttempt === 'number' && typeof detail.meta.maxRetryAttempts === 'number' ? (
-          <DetailBadge>{t('settings.agentLogs.retryAttempt')}: {detail.meta.retryAttempt} / {detail.meta.maxRetryAttempts}</DetailBadge>
+        {detail.source === 'ai-gateway' && typeof detail.meta.streamRetryAttempt === 'number' && typeof detail.meta.maxStreamRetryAttempts === 'number' ? (
+          <DetailBadge>{t('settings.agentLogs.streamRetryAttempt')}: {detail.meta.streamRetryAttempt} / {detail.meta.maxStreamRetryAttempts}</DetailBadge>
+        ) : null}
+        {detail.source === 'ai-gateway' && typeof detail.meta.timeoutRetryAttempt === 'number' && typeof detail.meta.maxTimeoutRetryAttempts === 'number' ? (
+          <DetailBadge>{t('settings.agentLogs.timeoutRetryAttempt')}: {detail.meta.timeoutRetryAttempt} / {detail.meta.maxTimeoutRetryAttempts}</DetailBadge>
         ) : null}
         {detail.summary.truncated ? (
           <DetailBadge tone="warn">{t('settings.agentLogs.truncated')}</DetailBadge>

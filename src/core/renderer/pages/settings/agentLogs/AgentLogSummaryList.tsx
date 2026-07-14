@@ -104,8 +104,11 @@ export function AgentLogSummaryList({
                 {item.model && <MetaBadge value={item.model} />}
                 {typeof item.statusCode === 'number' && <MetaBadge value={item.statusCode} />}
                 {typeof item.durationMs === 'number' && <MetaBadge value={`${item.durationMs}ms`} />}
-                {typeof item.attempt === 'number' && typeof item.maxAttempts === 'number' && (
-                  <MetaBadge value={`${t('settings.agentLogs.retryAttempt')}: ${item.attempt}/${item.maxAttempts}`} />
+                {item.source === 'ai-gateway' && typeof item.streamRetryAttempt === 'number' && typeof item.maxStreamRetryAttempts === 'number' && (
+                  <MetaBadge value={`${t('settings.agentLogs.streamRetryAttempt')}: ${item.streamRetryAttempt}/${item.maxStreamRetryAttempts}`} />
+                )}
+                {item.source === 'ai-gateway' && typeof item.timeoutRetryAttempt === 'number' && typeof item.maxTimeoutRetryAttempts === 'number' && (
+                  <MetaBadge value={`${t('settings.agentLogs.timeoutRetryAttempt')}: ${item.timeoutRetryAttempt}/${item.maxTimeoutRetryAttempts}`} />
                 )}
                 {item.stream && <MetaBadge value={t('settings.agentLogs.requestedStream')} />}
                 {item.truncated && <MetaBadge value={t('settings.agentLogs.truncated')} />}
