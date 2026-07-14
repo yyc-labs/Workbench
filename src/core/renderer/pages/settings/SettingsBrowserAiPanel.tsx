@@ -252,24 +252,59 @@ export function SettingsBrowserAiPanel() {
               ))}
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="min-w-0 space-y-1.5">
                 <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.browserPath')}</label>
-                <Input value={config.edgeExecutablePath ?? ''} onChange={(event) => updateDraft('edgeExecutablePath', event.target.value || undefined)} />
+                <Input
+                  value={config.edgeExecutablePath ?? ''}
+                  placeholder={t('settings.browserAi.browserPathPlaceholder')}
+                  onChange={(event) => updateDraft('edgeExecutablePath', event.target.value || undefined)}
+                />
                 <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.browserPathHint')}</p>
               </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.sites')}</label>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" title={t('settings.browserAi.addSite')} onClick={addSite}>
-                      <Plus />
-                    </Button>
-                    <Button variant="ghost" size="icon" title={t('settings.browserAi.deleteSite')} onClick={deleteSite} disabled={!activeSite || config.sites.length <= 1}>
-                      <Trash2 />
-                    </Button>
-                  </div>
+              {config.mode === 'external-cdp' ? (
+                <div className="min-w-0 space-y-1.5">
+                  <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.cdpPort')}</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={config.cdpPort ?? ''}
+                    placeholder={t('settings.browserAi.cdpPortPlaceholder')}
+                    onChange={(event) => updateDraft('cdpPort', event.target.value ? Number(event.target.value) : undefined)}
+                  />
+                  <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.cdpPortHint')}</p>
                 </div>
+              ) : null}
+              <div className="min-w-0 space-y-1.5">
+                <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.responseTimeout')}</label>
+                <Input
+                  type="number"
+                  min={10}
+                  max={600}
+                  value={Math.round(config.responseTimeoutMs / 1000)}
+                  placeholder={t('settings.browserAi.responseTimeoutPlaceholder')}
+                  onChange={(event) => updateDraft('responseTimeoutMs', Math.max(10, Number(event.target.value || 120)) * 1000)}
+                />
+              </div>
+            </div>
+
+            <div className="border-t pt-6" style={{ borderColor: 'var(--color-border)' }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.browserAi.sites')}</h4>
+                  <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.siteSelectionHint')}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" title={t('settings.browserAi.addSite')} onClick={addSite}>
+                    <Plus />
+                  </Button>
+                  <Button variant="ghost" size="icon" title={t('settings.browserAi.deleteSite')} onClick={deleteSite} disabled={!activeSite || config.sites.length <= 1}>
+                    <Trash2 />
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-4">
                 <Select
                   ariaLabel={t('settings.browserAi.sites')}
                   value={activeSite?.id ?? ''}
@@ -277,13 +312,18 @@ export function SettingsBrowserAiPanel() {
                   onChange={selectSite}
                 />
               </div>
+
               {activeSite ? (
-                <>
-                  <div className="space-y-1.5">
+                <div className="mt-5 grid gap-x-5 gap-y-5 md:grid-cols-2">
+                  <div className="min-w-0 space-y-1.5">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteName')}</label>
-                    <Input value={activeSite.name} onChange={(event) => updateActiveSite({ name: event.target.value })} />
+                    <Input
+                      value={activeSite.name}
+                      placeholder={t('settings.browserAi.siteNamePlaceholder')}
+                      onChange={(event) => updateActiveSite({ name: event.target.value })}
+                    />
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="min-w-0 space-y-1.5">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteType')}</label>
                     <Select
                       ariaLabel={t('settings.browserAi.siteType')}
@@ -296,24 +336,18 @@ export function SettingsBrowserAiPanel() {
                     />
                     <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.siteTypeHint')}</p>
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="min-w-0 space-y-1.5 md:col-span-2">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteUrl')}</label>
-                    <Input type="url" value={activeSite.url} onChange={(event) => updateActiveSite({ url: event.target.value })} />
+                    <Input
+                      type="url"
+                      value={activeSite.url}
+                      placeholder={t('settings.browserAi.siteUrlPlaceholder')}
+                      onChange={(event) => updateActiveSite({ url: event.target.value })}
+                    />
                     <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.siteUrlHint')}</p>
                   </div>
-                </>
-              ) : null}
-              {config.mode === 'external-cdp' ? (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.cdpPort')}</label>
-                  <Input type="number" min={1} max={65535} value={config.cdpPort ?? ''} onChange={(event) => updateDraft('cdpPort', event.target.value ? Number(event.target.value) : undefined)} />
-                  <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.cdpPortHint')}</p>
                 </div>
               ) : null}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.responseTimeout')}</label>
-                <Input type="number" min={10} max={600} value={Math.round(config.responseTimeoutMs / 1000)} onChange={(event) => updateDraft('responseTimeoutMs', Math.max(10, Number(event.target.value || 120)) * 1000)} />
-              </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
