@@ -2,22 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  DEFAULT_BROWSER_AI_CONFIG,
-  buildEdgeLaunchArgs,
-  getDefaultEdgeExecutablePath,
-  getDefaultEdgeExecutablePaths,
-  isSupportedBrowserAiSiteUrl,
-  isSupportedChatGptSiteUrl,
-  normalizeBrowserAiConfig,
-  resolveBrowserAiProfilePath,
-} = loadTsModule('src/core/electron/main/browser-ai/browserAiConfig.ts')
-const {
-  BrowserAiContextError,
-  MAX_BROWSER_AI_CONTEXT_CHARS,
-  MAX_BROWSER_AI_SOURCE_CHARS,
-  composeBrowserAiContext,
-} = loadTsModule('src/core/electron/main/browser-ai/contextComposer.ts')
+const { DEFAULT_BROWSER_AI_CONFIG, buildEdgeLaunchArgs, getDefaultEdgeExecutablePath, getDefaultEdgeExecutablePaths, isSupportedBrowserAiSiteUrl, isSupportedChatGptSiteUrl, normalizeBrowserAiConfig, resolveBrowserAiProfilePath } = loadTsModule('src/core/electron/main/browser-ai/browserAiConfig.ts')
+const { BrowserAiContextError, MAX_BROWSER_AI_CONTEXT_CHARS, MAX_BROWSER_AI_SOURCE_CHARS, composeBrowserAiContext } = loadTsModule('src/core/electron/main/browser-ai/contextComposer.ts')
 const { genericWebAiAdapter } = loadTsModule('src/core/electron/main/browser-ai/site-adapters/genericWebAiAdapter.ts')
 const { createBrowserAiRepository } = loadTsModule('src/core/electron/main/browser-ai/browserAiRepository.ts')
 
@@ -85,7 +71,10 @@ test('browser AI launch args use an isolated profile and never expose a public C
   assert.ok(args.includes('--remote-debugging-address=127.0.0.1'))
   assert.ok(args.includes('--remote-debugging-port=45678'))
   assert.ok(args.includes('--user-data-dir=C:\\app-data\\browser-ai\\edge-profile'))
-  assert.equal(args.some((value) => value.includes('0.0.0.0')), false)
+  assert.equal(
+    args.some((value) => value.includes('0.0.0.0')),
+    false,
+  )
   assert.equal(resolveBrowserAiProfilePath('C:\\app-data'), 'C:\\app-data\\browser-ai\\edge-profile')
 })
 
@@ -94,10 +83,7 @@ test('browser AI Edge detection checks configured path before standard Windows l
     'ProgramFiles(x86)': 'X:\\Program Files (x86)',
     ProgramFiles: 'Y:\\Program Files',
   })
-  assert.deepEqual(paths, [
-    'X:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'Y:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  ])
+  assert.deepEqual(paths, ['X:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', 'Y:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'])
 })
 
 test('browser AI exposes a default browser executable path for settings', () => {
@@ -132,22 +118,37 @@ test('browser AI context preserves selected source order, redacts local paths, a
   assert.match(result.prompt, /<response_format>[\s\S]*Use three bullets\.[\s\S]*<\/response_format>/)
 })
 
+test('browser AI context gives browser history a stable position after learning notes', () => {
+  const result = composeBrowserAiContext({
+    site: 'chatgpt-web',
+    task: 'Continue the previous analysis.',
+    sources: [
+      { kind: 'browser-history', label: 'Previous task', referenceId: 'record-1', content: 'Previous answer.', included: true },
+      { kind: 'learning-note', label: 'Current note', content: 'Current context.', included: true },
+      { kind: 'skill', label: 'Skill', content: 'Be precise.', included: true },
+    ],
+  })
+  assert.deepEqual(result.sourceLabels, ['Skill', 'Current note', 'Previous task', 'Current task'])
+})
+
 test('browser AI context rejects oversized sources and total context without silent truncation', () => {
   assert.throws(
-    () => composeBrowserAiContext({
-      site: 'chatgpt-web',
-      task: 'Task',
-      sources: [{ kind: 'skill', label: 'Large', content: 'x'.repeat(MAX_BROWSER_AI_SOURCE_CHARS + 1), included: true }],
-    }),
+    () =>
+      composeBrowserAiContext({
+        site: 'chatgpt-web',
+        task: 'Task',
+        sources: [{ kind: 'skill', label: 'Large', content: 'x'.repeat(MAX_BROWSER_AI_SOURCE_CHARS + 1), included: true }],
+      }),
     (error) => error instanceof BrowserAiContextError && error.code === 'CONTEXT_TOO_LARGE',
   )
 
   assert.throws(
-    () => composeBrowserAiContext({
-      site: 'chatgpt-web',
-      task: 'x'.repeat(MAX_BROWSER_AI_CONTEXT_CHARS),
-      sources: [],
-    }),
+    () =>
+      composeBrowserAiContext({
+        site: 'chatgpt-web',
+        task: 'x'.repeat(MAX_BROWSER_AI_CONTEXT_CHARS),
+        sources: [],
+      }),
     (error) => error instanceof BrowserAiContextError && error.code === 'CONTEXT_TOO_LARGE',
   )
 })
@@ -160,7 +161,10 @@ test('browser AI context allows source-only tasks and omits an empty task block'
 
   assert.deepEqual(result.sourceLabels, ['Note'])
   assert.doesNotMatch(result.prompt, /<task>/)
-  assert.equal(result.sources.some((source) => source.kind === 'task'), false)
+  assert.equal(
+    result.sources.some((source) => source.kind === 'task'),
+    false,
+  )
 })
 
 test('browser AI context de-duplicates a Skill selected by both defaults and the current task', () => {
@@ -190,7 +194,18 @@ test('browser AI task repository keeps detail files and a time-sorted summary in
   const os = await import('node:os')
   const path = await import('node:path')
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'ide-browser-ai-'))
-  const config = { enabled: true, mode: 'managed-edge', cdpHost: '127.0.0.1', site: 'generic-web', siteUrl: 'https://example.com', sites: [{ id: 'example', name: 'Example', url: 'https://example.com', site: 'generic-web' }], activeSiteId: 'example', keepBrowserRunning: false, headless: false, responseTimeoutMs: 10_000 }
+  const config = {
+    enabled: true,
+    mode: 'managed-edge',
+    cdpHost: '127.0.0.1',
+    site: 'generic-web',
+    siteUrl: 'https://example.com',
+    sites: [{ id: 'example', name: 'Example', url: 'https://example.com', site: 'generic-web' }],
+    activeSiteId: 'example',
+    keepBrowserRunning: false,
+    headless: false,
+    responseTimeoutMs: 10_000,
+  }
   const repository = createBrowserAiRepository({
     loadConfig: () => config,
     saveConfig: async (nextConfig) => nextConfig,
@@ -204,7 +219,10 @@ test('browser AI task repository keeps detail files and a time-sorted summary in
     startedAt: updatedAt - 100,
     completedAt: updatedAt,
     site: { site: 'generic-web', name: 'Example', url: 'https://example.com' },
-    sources: [{ kind: 'learning-note', label: 'Note', included: true, sensitive: false, characterCount: 4 }],
+    sources: [
+      { kind: 'learning-note', label: 'Note', included: true, sensitive: false, characterCount: 4 },
+      { kind: 'browser-history', label: 'Previous task', referenceId: 'previous-record', included: true, sensitive: false, characterCount: 8 },
+    ],
     status: 'completed',
     answer: `Answer ${id}`,
     steps: [],
@@ -213,11 +231,19 @@ test('browser AI task repository keeps detail files and a time-sorted summary in
 
   await repository.saveTaskRecord(createRecord('older', 10))
   await repository.saveTaskRecord(createRecord('newer', 20))
-  assert.deepEqual((await repository.listTaskRecords()).map((record) => record.id), ['newer', 'older'])
+  assert.deepEqual(
+    (await repository.listTaskRecords()).map((record) => record.id),
+    ['newer', 'older'],
+  )
+  assert.equal((await repository.listTaskRecords()).find((record) => record.id === 'newer').taskExcerpt, 'Task newer')
   assert.equal((await repository.getTaskRecord('newer')).answer, 'Answer newer')
+  assert.equal((await repository.getTaskRecord('newer')).sources[1].kind, 'browser-history')
   const renamed = await repository.renameTaskRecord('newer', 'Renamed task')
   assert.equal(renamed.title, 'Renamed task')
   assert.equal(await repository.deleteTaskRecord('older'), true)
-  assert.deepEqual((await repository.listTaskRecords()).map((record) => record.id), ['newer'])
+  assert.deepEqual(
+    (await repository.listTaskRecords()).map((record) => record.id),
+    ['newer'],
+  )
   await fs.rm(root, { recursive: true, force: true })
 })
