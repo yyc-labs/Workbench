@@ -163,6 +163,21 @@ test('browser AI context allows source-only tasks and omits an empty task block'
   assert.equal(result.sources.some((source) => source.kind === 'task'), false)
 })
 
+test('browser AI context de-duplicates a Skill selected by both defaults and the current task', () => {
+  const result = composeBrowserAiContext({
+    site: 'chatgpt-web',
+    task: 'Review this change.',
+    sources: [
+      { kind: 'skill', label: 'Strict review', referenceId: 'sk-review', content: 'Use risk levels.', included: true },
+      { kind: 'skill', label: 'Strict review', referenceId: 'sk-review', content: 'Use risk levels.', included: true },
+    ],
+  })
+
+  assert.deepEqual(result.sourceLabels, ['Strict review', 'Current task'])
+  assert.equal(result.sources.filter((source) => source.kind === 'skill').length, 1)
+  assert.equal(result.sources.find((source) => source.kind === 'skill')?.referenceId, 'sk-review')
+})
+
 test('browser AI context rejects an empty task with no usable source', () => {
   assert.throws(
     () => composeBrowserAiContext({ site: 'chatgpt-web', task: '  ', sources: [] }),

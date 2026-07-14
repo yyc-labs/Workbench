@@ -6,6 +6,7 @@ import { createBrowserAiInvokeApi } from './invokeApi.browserAi'
 import { createCoreInvokeApi } from './invokeApi.core'
 import { createGitInvokeApi } from './invokeApi.git'
 import { createLearningInvokeApi } from './invokeApi.learning'
+import { createSkillInvokeApi } from './invokeApi.skill'
 import { createProjectFileInvokeApi } from './invokeApi.projectFiles'
 import { createRuntimeInvokeApi } from './invokeApi.runtime'
 import { createTranscriptInvokeApi } from './invokeApi.transcript'
@@ -20,6 +21,7 @@ const api = {
   ...createProjectFileInvokeApi(),
   ...createTranscriptInvokeApi(),
   ...createLearningInvokeApi(),
+  ...createSkillInvokeApi(),
   ...createRuntimeInvokeApi(),
   ...createSubscriptionApi(),
 } satisfies ElectronApi

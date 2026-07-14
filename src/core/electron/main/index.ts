@@ -16,6 +16,8 @@ import { createTranscriptService } from './transcript/transcriptService'
 import { createTranscriptShareService } from './transcript/transcriptShareService'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
+import { createSkillRepository } from './skill/skillRepository'
+import { createSkillService } from './skill/skillService'
 import {
   createBrowserAiService,
   createDefaultBrowserAiRepository,
@@ -119,6 +121,7 @@ const learningService = createLearningService({
   repository: learningRepository,
   getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
 })
+const skillService = createSkillService({ repository: createSkillRepository() })
 const browserAiRepository = createDefaultBrowserAiRepository({
   loadConfig: () => loadConfig().browserAi,
   saveConfig: async (config) => (await updateConfig({ browserAi: config })).browserAi!,
@@ -572,6 +575,7 @@ app.whenReady().then(async () => {
     gitService,
     runtimeService,
     learningService,
+    skillService,
     transcriptService,
     transcriptShareService,
   })

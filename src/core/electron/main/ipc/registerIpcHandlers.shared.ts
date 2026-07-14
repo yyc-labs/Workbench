@@ -8,6 +8,7 @@ import type { AiGatewayService } from '../ai-gateway/gateway-service'
 import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
 import type { LearningService } from '../learning/learningService'
+import type { SkillService } from '../skill/skillService'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
@@ -41,6 +42,7 @@ export type RegisterIpcHandlersDependencies = {
   gitService: GitService
   runtimeService: RuntimeService
   learningService: LearningService
+  skillService: SkillService
   transcriptService: TranscriptService
   transcriptShareService: TranscriptShareService
 }

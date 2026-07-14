@@ -52,9 +52,16 @@ function normalizeSource(source: BrowserAiContextSource): BrowserAiContextSource
 }
 
 function orderedSources(sources: BrowserAiContextSource[]): BrowserAiContextSource[] {
+  const skillIds = new Set<string>()
   return sources
     .map(normalizeSource)
     .filter((source) => source.included && source.content)
+    .filter((source) => {
+      if (source.kind !== 'skill' || !source.referenceId) return true
+      if (skillIds.has(source.referenceId)) return false
+      skillIds.add(source.referenceId)
+      return true
+    })
     .sort((left, right) => SOURCE_ORDER.indexOf(left.kind) - SOURCE_ORDER.indexOf(right.kind))
 }
 
@@ -62,6 +69,7 @@ function summaryFor(source: BrowserAiContextSource, content: string) {
   return {
     kind: source.kind,
     label: source.label,
+    referenceId: source.referenceId,
     included: source.included,
     sensitive: source.kind === 'personal-context',
     characterCount: content.length,
