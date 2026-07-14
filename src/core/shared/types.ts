@@ -806,6 +806,63 @@ export interface LearningUpdateCategoryPayload {
   name: string
 }
 
+export interface SkillCategory {
+  id: string
+  name: string
+  parentId?: string
+  sort: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface SkillSummary {
+  id: string
+  title: string
+  categoryId?: string
+  tags: string[]
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+  excerpt: string
+}
+
+export interface Skill extends SkillSummary {
+  contentMd: string
+}
+
+export interface SkillCreatePayload {
+  title?: string
+  categoryId?: string
+  tags?: string[]
+  enabled?: boolean
+  contentMd?: string
+}
+
+export interface SkillUpdatePayload {
+  skillId: string
+  title: string
+  categoryId?: string
+  tags: string[]
+  enabled: boolean
+  contentMd: string
+}
+
+export interface SkillCreateCategoryPayload {
+  name: string
+  parentId?: string
+}
+
+export interface SkillUpdateCategoryPayload {
+  categoryId: string
+  name: string
+}
+
+export interface BrowserAiPreferences {
+  defaultSkillIds: string[]
+  defaultNoteIds: string[]
+  savePromptByDefault: boolean
+}
+
 export type BrowserAiMode = 'managed-edge' | 'external-cdp'
 
 /** The adapter used to interact with the configured web AI site. */
@@ -938,6 +995,7 @@ export interface BrowserAiContextSource {
 export interface BrowserAiContextSourceSummary {
   kind: BrowserAiContextSource['kind']
   label: string
+  referenceId?: string
   included: boolean
   sensitive: boolean
   characterCount: number

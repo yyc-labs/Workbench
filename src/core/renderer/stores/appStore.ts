@@ -8,6 +8,7 @@ import { createProcessActionsSlice } from './appStore.processSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
 import { createBrowserAiActionsSlice } from './appStore.browserAiSlice'
+import { createSkillActionsSlice } from './appStore.skillSlice'
 import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../../shared/aiRuntimeProfiles'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 
@@ -60,6 +61,10 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   browserAiSteps: [],
   browserAiTaskRecords: [],
   browserAiTaskRecord: null,
+  skills: [],
+  skillCategories: [],
+  selectedSkill: null,
+  skillsLoading: false,
 
   ...createInitActionsSlice(...args),
   ...createSettingsActionsSlice(...args),
@@ -68,4 +73,5 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createRuntimeActionsSlice(...args),
   ...createTranscriptActionsSlice(...args),
   ...createBrowserAiActionsSlice(...args),
+  ...createSkillActionsSlice(...args),
 }))

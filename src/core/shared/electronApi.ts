@@ -56,6 +56,13 @@ import type {
   LearningNoteSummary,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
+  Skill,
+  SkillCategory,
+  SkillCreateCategoryPayload,
+  SkillCreatePayload,
+  SkillSummary,
+  SkillUpdateCategoryPayload,
+  SkillUpdatePayload,
   ProcessInfo,
   ProjectFileAutoLoadDecision,
   ProjectFileContentSearchOptions,
@@ -282,6 +289,18 @@ export interface LearningElectronApi {
   deleteLearningNote: (noteId: string) => Promise<boolean>
 }
 
+export interface SkillElectronApi {
+  listSkillCategories: () => Promise<SkillCategory[]>
+  createSkillCategory: (payload: SkillCreateCategoryPayload) => Promise<SkillCategory[]>
+  updateSkillCategory: (payload: SkillUpdateCategoryPayload) => Promise<SkillCategory[]>
+  deleteSkillCategory: (categoryId: string) => Promise<SkillCategory[]>
+  listSkills: () => Promise<SkillSummary[]>
+  getSkill: (skillId: string) => Promise<Skill | null>
+  createSkill: (payload?: SkillCreatePayload) => Promise<Skill>
+  updateSkill: (payload: SkillUpdatePayload) => Promise<Skill>
+  deleteSkill: (skillId: string) => Promise<boolean>
+}
+
 export interface BrowserAiElectronApi {
   getBrowserAiConfig: () => Promise<BrowserAiSnapshot>
   saveBrowserAiConfig: (config: BrowserAiConfig) => Promise<BrowserAiSnapshot>
@@ -346,6 +365,7 @@ export type ElectronApi =
   & ProjectFileElectronApi
   & TranscriptElectronApi
   & LearningElectronApi
+  & SkillElectronApi
   & BrowserAiElectronApi
   & RuntimeElectronApi
   & SubscriptionElectronApi

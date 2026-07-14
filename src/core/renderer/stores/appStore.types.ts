@@ -99,6 +99,13 @@ import type {
   LearningUpdateNotePayload,
   LearningNote,
   ProjectFileAutoLoadDecision,
+  Skill,
+  SkillCategory,
+  SkillCreateCategoryPayload,
+  SkillCreatePayload,
+  SkillSummary,
+  SkillUpdateCategoryPayload,
+  SkillUpdatePayload,
 } from '../../shared/types'
 import type { ElectronApi } from '../../shared/electronApi'
 
@@ -137,6 +144,10 @@ export interface AppState {
   browserAiSteps: BrowserAiTaskStep[]
   browserAiTaskRecords: BrowserAiTaskRecordSummary[]
   browserAiTaskRecord: BrowserAiTaskRecord | null
+  skills: SkillSummary[]
+  skillCategories: SkillCategory[]
+  selectedSkill: Skill | null
+  skillsLoading: boolean
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>
@@ -196,6 +207,15 @@ export interface AppState {
   loadBrowserAiTaskRecord: (recordId: string) => Promise<BrowserAiTaskRecord | null>
   saveBrowserAiTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) => Promise<BrowserAiTaskRecord>
   deleteBrowserAiTaskRecord: (recordId: string) => Promise<boolean>
+  loadSkills: () => Promise<SkillSummary[]>
+  loadSkillCategories: () => Promise<SkillCategory[]>
+  loadSkill: (skillId: string) => Promise<Skill | null>
+  createSkill: (payload: SkillCreatePayload) => Promise<Skill>
+  updateSkill: (payload: SkillUpdatePayload) => Promise<Skill>
+  deleteSkill: (skillId: string) => Promise<boolean>
+  createSkillCategory: (payload: SkillCreateCategoryPayload) => Promise<SkillCategory[]>
+  updateSkillCategory: (payload: SkillUpdateCategoryPayload) => Promise<SkillCategory[]>
+  deleteSkillCategory: (categoryId: string) => Promise<SkillCategory[]>
   togglePin: (projectId: string) => void
   updateLastOpened: (projectId: string) => void
   clearProjectLastOpened: (projectId: string) => Promise<void>
