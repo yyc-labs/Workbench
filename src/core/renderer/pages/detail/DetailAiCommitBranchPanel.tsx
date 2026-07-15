@@ -1,23 +1,22 @@
 import { useMemo } from 'react'
-import { GitBranch } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal } from 'lucide-react'
 import { Combobox, type ComboboxGroup } from '../../components/ui/combobox'
-import {
-  getGitOperationItems,
-  type OperationCardState,
-  type PanelGitOperationKind,
-} from './detail.gitOperations'
+import { getGitOperationItems, type OperationCardState, type PanelGitOperationKind } from './detail.gitOperations'
 import type { IndexedBranchCandidate } from './detail.aiCommitPanel.types'
 import { useI18n } from '../../i18n'
 
 type DetailAiCommitBranchPanelProps = {
   branchAhead: number
   branchBehind: number
+  commitBlockedReason: string | null
+  commitPending: boolean
   currentBranch: string
   localMergeCandidates: IndexedBranchCandidate[]
   remoteMergeCandidates: IndexedBranchCandidate[]
   mergeTarget: string
   mergeSearchValue: string
   onChangeMergeSearchValue: (value: string) => void
+  onRequestCommit: () => void
   onOpenCurrentBranchManager: () => void
   onOpenGitGuide: () => void
   onOpenUpstreamManager: () => void
@@ -66,6 +65,7 @@ function BranchPanelLoadingState() {
         <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
         <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
         <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
+        <div className="git-panel-skeleton h-[62px] rounded-[14px]" />
       </div>
     </div>
   )
@@ -74,12 +74,15 @@ function BranchPanelLoadingState() {
 export function DetailAiCommitBranchPanel({
   branchAhead,
   branchBehind,
+  commitBlockedReason,
+  commitPending,
   currentBranch,
   localMergeCandidates,
   remoteMergeCandidates,
   mergeTarget,
   mergeSearchValue,
   onChangeMergeSearchValue,
+  onRequestCommit,
   onOpenCurrentBranchManager,
   onOpenGitGuide,
   onOpenUpstreamManager,
@@ -94,50 +97,40 @@ export function DetailAiCommitBranchPanel({
   const gitOperationItems = getGitOperationItems()
   const mergeSearchQuery = mergeSearchValue.trim().toLowerCase()
   const mergeGroups = useMemo<ComboboxGroup[]>(
-    () => [
-      {
-        key: 'local',
-        label: t('detail.branchPanelLocalBranches'),
-        options: localMergeCandidates.map((candidate) => ({
-          value: candidate.name,
-          label: candidate.name,
-        })),
-      },
-      {
-        key: 'remote',
-        label: t('detail.branchPanelRemoteBranches'),
-        options: remoteMergeCandidates.map((candidate) => ({
-          value: candidate.name,
-          label: candidate.name,
-        })),
-      },
-    ].filter((group) => group.options.length > 0),
-    [localMergeCandidates, remoteMergeCandidates, t]
+    () =>
+      [
+        {
+          key: 'local',
+          label: t('detail.branchPanelLocalBranches'),
+          options: localMergeCandidates.map((candidate) => ({
+            value: candidate.name,
+            label: candidate.name,
+          })),
+        },
+        {
+          key: 'remote',
+          label: t('detail.branchPanelRemoteBranches'),
+          options: remoteMergeCandidates.map((candidate) => ({
+            value: candidate.name,
+            label: candidate.name,
+          })),
+        },
+      ].filter((group) => group.options.length > 0),
+    [localMergeCandidates, remoteMergeCandidates, t],
   )
-  const filteredLocalCount = useMemo(
-    () => localMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length,
-    [localMergeCandidates, mergeSearchQuery]
-  )
-  const filteredRemoteCount = useMemo(
-    () => remoteMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length,
-    [remoteMergeCandidates, mergeSearchQuery]
-  )
+  const filteredLocalCount = useMemo(() => localMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length, [localMergeCandidates, mergeSearchQuery])
+  const filteredRemoteCount = useMemo(() => remoteMergeCandidates.filter((candidate) => !mergeSearchQuery || candidate.searchText.includes(mergeSearchQuery)).length, [remoteMergeCandidates, mergeSearchQuery])
   const mergeSearchResultCount = filteredLocalCount + filteredRemoteCount
   const mergeTargetLabel = mergeTarget || t('detail.mergeTargetPlaceholder')
   return (
-    <div className="min-h-0 rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
+    <div className="flex min-h-0 flex-col overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
       {showBranchRemoteLoading ? (
         <BranchPanelLoadingState />
       ) : (
         <>
           <div className="mb-3 flex items-center justify-between">
             <div className="inline-flex min-w-0 items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18"
-                onClick={onOpenGitGuide}
-                title={t('detail.branchPanelOpenGuide')}
-              >
+              <button type="button" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18" onClick={onOpenGitGuide} title={t('detail.branchPanelOpenGuide')}>
                 <GitBranch className="h-4.5 w-4.5" />
               </button>
               <div className="min-w-0">
@@ -146,12 +139,8 @@ export function DetailAiCommitBranchPanel({
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <span className="rounded-full bg-[color:var(--color-success-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-success)]">
-                ↑ {branchAhead}
-              </span>
-              <span className="rounded-full bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-warning)]">
-                ↓ {branchBehind}
-              </span>
+              <span className="rounded-full bg-[color:var(--color-success-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-success)]">↑ {branchAhead}</span>
+              <span className="rounded-full bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[10.5px] font-medium text-[color:var(--color-warning)]">↓ {branchBehind}</span>
             </div>
           </div>
 
@@ -163,7 +152,9 @@ export function DetailAiCommitBranchPanel({
               title={t('detail.branchPanelManageCurrent')}
             >
               <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchPanelCurrent')}</p>
-              <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={currentBranch}>{currentBranch}</p>
+              <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={currentBranch}>
+                {currentBranch}
+              </p>
             </button>
             <button
               type="button"
@@ -172,15 +163,15 @@ export function DetailAiCommitBranchPanel({
               title={t('detail.branchPanelManageUpstream')}
             >
               <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchPanelUpstream')}</p>
-              <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={upstreamBranch}>{upstreamBranch}</p>
+              <p className="mt-1 truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={upstreamBranch}>
+                {upstreamBranch}
+              </p>
             </button>
           </div>
 
           <div className="mt-3">
             <label className="block">
-              <p className="mb-1 text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">
-                {t('detail.branchPanelMergeTarget')}
-              </p>
+              <p className="mb-1 text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchPanelMergeTarget')}</p>
               <Combobox
                 ariaLabel={t('detail.branchPanelMergeTarget')}
                 value={mergeTarget}
@@ -200,11 +191,7 @@ export function DetailAiCommitBranchPanel({
                 contentClassName="surface-card rounded-[14px] p-1"
                 optionClassName="rounded-[10px] px-2.5 py-1.5 text-[11.5px]"
                 groupLabelClassName="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
-                renderDisplayValue={() => (
-                  <span className={mergeTarget ? 'font-mono text-[12px] text-[color:var(--color-foreground)]' : 'font-sans text-[12px] text-[color:var(--color-muted-foreground)]'}>
-                    {mergeTargetLabel}
-                  </span>
-                )}
+                renderDisplayValue={() => <span className={mergeTarget ? 'font-mono text-[12px] text-[color:var(--color-foreground)]' : 'font-sans text-[12px] text-[color:var(--color-muted-foreground)]'}>{mergeTargetLabel}</span>}
                 renderOption={(option, state) => (
                   <>
                     <span className="truncate font-mono">{option.label}</span>
@@ -232,11 +219,7 @@ export function DetailAiCommitBranchPanel({
                 <button
                   key={item.key}
                   type="button"
-                  className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${
-                    opState.disabled
-                      ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55'
-                      : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'
-                  }`}
+                  className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${opState.disabled ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55' : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'}`}
                   title={`${item.description} · ${opState.hint}`}
                   disabled={opState.disabled}
                   onClick={() => onRequestGitOperation(item.key)}
@@ -249,6 +232,21 @@ export function DetailAiCommitBranchPanel({
                 </button>
               )
             })}
+            <button
+              type="button"
+              className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${
+                commitBlockedReason || commitPending ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55' : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'
+              }`}
+              title={`${t('detail.commitStagedTitle')} · ${commitBlockedReason || t('detail.commitStagedActionHint')}`}
+              disabled={Boolean(commitBlockedReason) || commitPending}
+              onClick={onRequestCommit}
+            >
+              <div className="flex items-center gap-2 text-[12px] font-semibold text-[color:var(--color-foreground)]">
+                <GitCommitHorizontal className={`h-3.5 w-3.5 ${commitPending ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-primary)]'}`} />
+                {commitPending ? `${t('detail.gitOpCommit')}...` : t('detail.gitOpCommit')}
+              </div>
+              <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]/85">{commitPending ? t('detail.commitStagedCommitting') : commitBlockedReason || t('detail.commitStagedActionHint')}</p>
+            </button>
           </div>
         </>
       )}

@@ -5,6 +5,7 @@ import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
+import { DetailAiCommitCommitModal } from './DetailAiCommitCommitModal'
 import { DetailAiCommitGitGuideModal } from './DetailAiCommitGitGuideModal'
 import { DetailAiCommitHeader } from './DetailAiCommitHeader'
 import { DetailAiCommitMiddlePanel } from './DetailAiCommitMiddlePanel'
@@ -12,27 +13,10 @@ import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationCo
 import { DetailAiCommitWorkingTreePanel } from './DetailAiCommitWorkingTreePanel'
 import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
 import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
-import type {
-  IndexedBranchCandidate,
-  MiddlePanelMode,
-  OperationConfirmState,
-  ProjectLinkItem,
-} from './detail.aiCommitPanel.types'
-import {
-  computeOperationState,
-  getGitOperationItems,
-  PanelGitOperationKind,
-  type OperationCardState,
-} from './detail.gitOperations'
+import type { IndexedBranchCandidate, MiddlePanelMode, OperationConfirmState, ProjectLinkItem } from './detail.aiCommitPanel.types'
+import { computeOperationState, getGitOperationItems, PanelGitOperationKind, type OperationCardState } from './detail.gitOperations'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
-import type {
-  AiCommitStatus,
-  AiFlowNode,
-  DetailGitRepositorySummary,
-  DetailGitSnapshot,
-  GitOperationResult,
-  GitSetFileStageResult,
-} from './detail.types'
+import type { AiCommitStatus, AiFlowNode, DetailGitRepositorySummary, DetailGitSnapshot, GitOperationResult, GitSetFileStageResult } from './detail.types'
 import { useDetailBranchManagerState } from './useDetailBranchManagerState'
 import { useDetailGitDiffState } from './useDetailGitDiffState'
 
@@ -152,10 +136,7 @@ function DetailAiCommitPanel({
   onAiAutoCommitContextMenu,
 }: DetailAiCommitPanelProps) {
   const { t } = useI18n()
-  const firstProjectLinkItem = useMemo(
-    () => projectLinkItems.find((item) => item.kind === 'url' || item.kind === 'ssh'),
-    [projectLinkItems]
-  )
+  const firstProjectLinkItem = useMemo(() => projectLinkItems.find((item) => item.kind === 'url' || item.kind === 'ssh'), [projectLinkItems])
   const gitOperationItems = getGitOperationItems()
   const [middlePanelMode, setMiddlePanelMode] = useState<MiddlePanelMode>('history')
   const [runningOperation, setRunningOperation] = useState<PanelGitOperationKind | null>(null)
@@ -165,7 +146,12 @@ function DetailAiCommitPanel({
   const [operationConfirm, setOperationConfirm] = useState<OperationConfirmState>(null)
   const [operationLogs, setOperationLogs] = useState<GitOperationResult[]>([])
   const [stagingFilePath, setStagingFilePath] = useState<string | null>(null)
+  const [bulkStageAction, setBulkStageAction] = useState<'stage' | 'unstage' | null>(null)
   const [fileActionError, setFileActionError] = useState<string | null>(null)
+  const [commitMessage, setCommitMessage] = useState('')
+  const [commitError, setCommitError] = useState<string | null>(null)
+  const [commitPending, setCommitPending] = useState(false)
+  const [commitModalOpen, setCommitModalOpen] = useState(false)
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
@@ -178,21 +164,23 @@ function DetailAiCommitPanel({
   }, [changedFiles])
   const recentCommits = gitSnapshot?.recentCommits ?? []
   const commitHistoryItems = useMemo(
-    () => buildCommitHistoryDisplayItems(recentCommits, {
-      localHead: branch?.oid,
-      upstreamHead: branch?.upstreamOid,
-      hasUpstream: Boolean(branch?.upstream),
-      upstreamGone: branch?.upstreamGone ?? false,
-      branchAhead: branch?.ahead ?? 0,
-      branchBehind: branch?.behind ?? 0,
-    }),
-    [recentCommits, branch?.oid, branch?.upstreamOid, branch?.upstream, branch?.upstreamGone, branch?.ahead, branch?.behind]
+    () =>
+      buildCommitHistoryDisplayItems(recentCommits, {
+        localHead: branch?.oid,
+        upstreamHead: branch?.upstreamOid,
+        hasUpstream: Boolean(branch?.upstream),
+        upstreamGone: branch?.upstreamGone ?? false,
+        branchAhead: branch?.ahead ?? 0,
+        branchBehind: branch?.behind ?? 0,
+      }),
+    [recentCommits, branch?.oid, branch?.upstreamOid, branch?.upstream, branch?.upstreamGone, branch?.ahead, branch?.behind],
   )
   const currentBranch = branch?.current || t('detail.noBranch')
   const upstreamBranch = branch?.upstream || t('detail.noUpstream')
   const remoteBranches = branch?.remoteBranches ?? []
   const localBranches = branch?.localBranches ?? []
   const conflictedCount = gitSnapshot?.conflictedFileCount ?? changedFiles.filter((file) => file.scope === 'conflicted').length
+  const stagedFileCount = changedFiles.filter((file) => file.staged).length
   const hasWorkingTreeChanges = changedFileCount > 0
   const hasConflicts = conflictedCount > 0
   const gitSnapshotPending = gitRepositoriesLoading || (!gitSnapshot && !gitSnapshotError)
@@ -204,6 +192,17 @@ function DetailAiCommitPanel({
   const hasUpstream = Boolean(branch?.upstream)
   const upstreamGone = branch?.upstreamGone ?? false
   const gitOperationsUnavailable = !gitSnapshot?.isGitRepository || isGitSnapshotChecking || changedFilesSuppressed
+  const commitBlockedReason = gitOperationsUnavailable
+    ? isGitSnapshotChecking
+      ? t('detail.gitSnapshotLoadingHint')
+      : t('detail.gitRepositoryUnavailableHint')
+    : hasConflicts
+      ? t('detail.gitHintHasConflicts')
+      : stagingFilePath || bulkStageAction
+        ? t('detail.commitStagedChangesPending')
+        : stagedFileCount === 0
+          ? t('detail.commitStagedNoChanges')
+          : null
   const aiCommitBlockedReason = changedFilesSuppressed ? t('detail.aiCommitBlockedDescription') : null
   const appendOperationLog = useCallback((result: GitOperationResult) => {
     setOperationLogs((prev) => [result, ...prev].slice(0, 50))
@@ -272,28 +271,34 @@ function DetailAiCommitPanel({
   })
   const preflightItems = useMemo<PreflightItem[]>(() => {
     if (isGitSnapshotChecking) {
-      return [{
-        key: 'loading',
-        label: t('detail.preflightLoading'),
-        title: t('detail.preflightLoading'),
-        tone: 'neutral',
-      }]
+      return [
+        {
+          key: 'loading',
+          label: t('detail.preflightLoading'),
+          title: t('detail.preflightLoading'),
+          tone: 'neutral',
+        },
+      ]
     }
     if (!gitSnapshot?.isGitRepository) {
-      return [{
-        key: 'not-git',
-        label: t('detail.preflightNotGit'),
-        title: t('detail.preflightNotGitTitle'),
-        tone: 'danger',
-      }]
+      return [
+        {
+          key: 'not-git',
+          label: t('detail.preflightNotGit'),
+          title: t('detail.preflightNotGitTitle'),
+          tone: 'danger',
+        },
+      ]
     }
     if (changedFilesSuppressed) {
-      return [{
-        key: 'suppressed',
-        label: t('detail.repositorySelectorChanges', { count: changedFileCount }),
-        title: t('detail.gitSnapshotSuppressed'),
-        tone: 'warning',
-      }]
+      return [
+        {
+          key: 'suppressed',
+          label: t('detail.repositorySelectorChanges', { count: changedFileCount }),
+          title: t('detail.gitSnapshotSuppressed'),
+          tone: 'warning',
+        },
+      ]
     }
 
     const items: PreflightItem[] = []
@@ -339,25 +344,15 @@ function DetailAiCommitPanel({
     }
     if (items.length > 0) return items
 
-    return [{
-      key: 'ready',
-      label: t('detail.preflightReady', { count: changedFileCount }),
-      title: t('detail.preflightReadyTitle'),
-      tone: 'success',
-    }]
-  }, [
-    branch?.detached,
-    branchBehind,
-    changedFileCount,
-    changedFilesSuppressed,
-    conflictedCount,
-    gitSnapshot?.isGitRepository,
-    isGitSnapshotChecking,
-    hasConflicts,
-    hasUpstream,
-    hasWorkingTreeChanges,
-    t,
-  ])
+    return [
+      {
+        key: 'ready',
+        label: t('detail.preflightReady', { count: changedFileCount }),
+        title: t('detail.preflightReadyTitle'),
+        tone: 'success',
+      },
+    ]
+  }, [branch?.detached, branchBehind, changedFileCount, changedFilesSuppressed, conflictedCount, gitSnapshot?.isGitRepository, isGitSnapshotChecking, hasConflicts, hasUpstream, hasWorkingTreeChanges, t])
 
   const localMergeCandidates = useMemo<IndexedBranchCandidate[]>(
     () =>
@@ -367,7 +362,7 @@ function DetailAiCommitPanel({
           name,
           searchText: name.toLowerCase(),
         })),
-    [localBranches, currentBranch]
+    [localBranches, currentBranch],
   )
 
   const remoteMergeCandidates = useMemo<IndexedBranchCandidate[]>(
@@ -378,7 +373,7 @@ function DetailAiCommitPanel({
           name,
           searchText: name.toLowerCase(),
         })),
-    [remoteBranches, currentBranch]
+    [remoteBranches, currentBranch],
   )
 
   useEffect(() => {
@@ -391,6 +386,7 @@ function DetailAiCommitPanel({
     setMergeSearchValue('')
     setOperationConfirm(null)
     setOperationConfirmInput('')
+    setCommitModalOpen(false)
   }, [activePane])
 
   useEffect(() => {
@@ -490,25 +486,10 @@ function DetailAiCommitPanel({
         runningOperation,
       }),
     }
-  }, [
-    hasConflicts,
-    hasWorkingTreeChanges,
-    branchAhead,
-    branchBehind,
-    hasUpstream,
-    upstreamGone,
-    mergeTarget,
-    currentBranch,
-    localBranches,
-    remoteBranches,
-    runningOperation,
-    gitOperationsUnavailable,
-    gitSnapshotLoading,
-    t,
-  ])
+  }, [hasConflicts, hasWorkingTreeChanges, branchAhead, branchBehind, hasUpstream, upstreamGone, mergeTarget, currentBranch, localBranches, remoteBranches, runningOperation, gitOperationsUnavailable, gitSnapshotLoading, t])
 
   const setFileStaged = async (file: GitChangedFile, stage: boolean) => {
-    if (!gitSnapshot || stagingFilePath) return
+    if (!gitSnapshot || stagingFilePath || bulkStageAction) return
     setFileActionError(null)
     setStagingFilePath(file.path)
     try {
@@ -528,25 +509,111 @@ function DetailAiCommitPanel({
     }
   }
 
-  const handleOpenDiffDrawerForFile = useCallback((filePath: string) => {
-    if (!changedFilesMap.has(filePath)) return
+  const setAllFilesStaged = async (stage: boolean) => {
+    if (!gitSnapshot || stagingFilePath || bulkStageAction) return
+    const files = changedFiles.filter((file) => (stage ? (file.unstaged || file.scope === 'untracked') && file.scope !== 'conflicted' : file.staged && file.scope !== 'conflicted'))
+    if (files.length === 0) return
+
     setFileActionError(null)
-    openDiffDrawerForFile(filePath)
-  }, [changedFilesMap, openDiffDrawerForFile])
+    setBulkStageAction(stage ? 'stage' : 'unstage')
+    let failedCount = 0
+    try {
+      for (const file of files) {
+        const result: GitSetFileStageResult = await window.electronAPI.setGitFileStage({
+          repoRoot: gitSnapshot.repoRoot,
+          filePath: file.path,
+          stage,
+        })
+        if (!result.ok) failedCount += 1
+      }
+      if (failedCount > 0) {
+        setFileActionError(t('detail.gitFilesStageFailed', { count: failedCount }))
+      }
+    } catch (error) {
+      setFileActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      try {
+        await onRefreshGitSnapshot()
+      } finally {
+        setBulkStageAction(null)
+      }
+    }
+  }
+
+  const requestCommitStagedChanges = () => {
+    if (commitBlockedReason || commitPending) return
+    setCommitError(null)
+    setCommitModalOpen(true)
+  }
+
+  const commitStagedChanges = async () => {
+    const message = commitMessage.trim()
+    if (!gitSnapshot || commitPending || commitBlockedReason || !message) return
+
+    setCommitError(null)
+    setCommitPending(true)
+    try {
+      const result = await window.electronAPI.runGitOperation({
+        repoRoot: gitSnapshot.repoRoot,
+        operation: 'commit',
+        message,
+      })
+      appendOperationLog(result)
+      if (result.ok) {
+        setCommitMessage('')
+        setCommitModalOpen(false)
+        setMiddlePanelMode('history')
+      } else {
+        setCommitError(result.error || result.output || t('detail.gitCommitFailed'))
+        setMiddlePanelMode('git-log')
+      }
+    } catch (error) {
+      const output = error instanceof Error ? error.message : String(error)
+      setCommitError(output)
+      const failedResult: GitOperationResult = {
+        repoRoot: gitSnapshot.repoRoot,
+        operation: 'commit',
+        ok: false,
+        checkedAt: Date.now(),
+        command: '',
+        output,
+        exitCode: null,
+        error: output,
+      }
+      appendOperationLog(failedResult)
+      setMiddlePanelMode('git-log')
+    } finally {
+      try {
+        await onRefreshGitSnapshot()
+      } finally {
+        setCommitPending(false)
+      }
+    }
+  }
+
+  const handleOpenDiffDrawerForFile = useCallback(
+    (filePath: string) => {
+      if (!changedFilesMap.has(filePath)) return
+      setFileActionError(null)
+      openDiffDrawerForFile(filePath)
+    },
+    [changedFilesMap, openDiffDrawerForFile],
+  )
 
   const requestGitOperation = (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
 
-    const message = operation === 'merge'
-      ? t('detail.operationConfirmMergeMessage', { targetBranch: mergeTarget, currentBranch })
-      : operation === 'switch'
-        ? t('detail.operationConfirmSwitchMessage', { targetBranch: mergeTarget })
-        : operation === 'pull'
-        ? t('detail.operationConfirmPullMessage', { currentBranch })
-        : operation === 'push'
-          ? t('detail.operationConfirmPushMessage', { currentBranch })
-          : t('detail.operationConfirmFetchMessage')
+    const message =
+      operation === 'merge'
+        ? t('detail.operationConfirmMergeMessage', { targetBranch: mergeTarget, currentBranch })
+        : operation === 'switch'
+          ? t('detail.operationConfirmSwitchMessage', { targetBranch: mergeTarget })
+          : operation === 'pull'
+            ? t('detail.operationConfirmPullMessage', { currentBranch })
+            : operation === 'push'
+              ? t('detail.operationConfirmPushMessage', { currentBranch })
+              : t('detail.operationConfirmFetchMessage')
 
     setOperationConfirm({
       operation,
@@ -568,13 +635,7 @@ function DetailAiCommitPanel({
       cancelLabel: t('detail.operationConfirmUndoCancel'),
       riskLevel: 'normal',
     })
-  }, [
-    aiCommitUndoActionAvailable,
-    aiCommitUndoAvailable,
-    aiCommitUndoRunning,
-    onBeginUndoAiCommitAuth,
-    t,
-  ])
+  }, [aiCommitUndoActionAvailable, aiCommitUndoAvailable, aiCommitUndoRunning, onBeginUndoAiCommitAuth, t])
 
   const runGitOperation = async (operation: PanelGitOperationKind) => {
     const state = operationStates[operation]
@@ -610,34 +671,16 @@ function DetailAiCommitPanel({
     }
   }
 
-  const pendingOperationLabel = operationConfirm
-    ? operationConfirm.operation === 'undo-ai-commit'
-      ? t('detail.operationConfirmUndoConfirm')
-      : gitOperationItems.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git'
-    : 'Git'
+  const pendingOperationLabel = operationConfirm ? (operationConfirm.operation === 'undo-ai-commit' ? t('detail.operationConfirmUndoConfirm') : (gitOperationItems.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git')) : 'Git'
   const pendingOperation = operationConfirm?.operation ?? null
-  const pendingOperationMessage = pendingOperation === 'undo-ai-commit'
-    ? aiCommitUndoGraceActive
-      ? t('detail.operationConfirmUndoMessageGrace', { seconds: aiCommitUndoGraceRemainingSeconds })
-      : t('detail.operationConfirmUndoMessage')
-    : operationConfirm?.message ?? ''
+  const pendingOperationMessage = pendingOperation === 'undo-ai-commit' ? (aiCommitUndoGraceActive ? t('detail.operationConfirmUndoMessageGrace', { seconds: aiCommitUndoGraceRemainingSeconds }) : t('detail.operationConfirmUndoMessage')) : (operationConfirm?.message ?? '')
   const confirmExactMatch = operationConfirm?.requireExactMatch ?? ''
   const confirmNeedsTypedMatch = Boolean(confirmExactMatch)
   const confirmTypedMatchPassed = !confirmNeedsTypedMatch || operationConfirmInput.trim() === confirmExactMatch
-  const pendingOperationTitle = pendingOperation === 'undo-ai-commit'
-    ? t('detail.operationConfirmUndoTitle')
-    : operationConfirm?.title
-  const pendingOperationConfirmLabel = pendingOperation === 'undo-ai-commit'
-    ? t('detail.operationConfirmUndoConfirm')
-    : operationConfirm?.confirmLabel
-  const pendingOperationCancelLabel = pendingOperation === 'undo-ai-commit'
-    ? t('detail.operationConfirmUndoCancel')
-    : operationConfirm?.cancelLabel
-  const pendingOperationHelperText = pendingOperation === 'undo-ai-commit'
-    ? aiCommitUndoGraceActive
-      ? t('detail.operationConfirmUndoHelper')
-      : t('detail.operationConfirmUndoHelperGrace')
-    : operationConfirm?.helperText
+  const pendingOperationTitle = pendingOperation === 'undo-ai-commit' ? t('detail.operationConfirmUndoTitle') : operationConfirm?.title
+  const pendingOperationConfirmLabel = pendingOperation === 'undo-ai-commit' ? t('detail.operationConfirmUndoConfirm') : operationConfirm?.confirmLabel
+  const pendingOperationCancelLabel = pendingOperation === 'undo-ai-commit' ? t('detail.operationConfirmUndoCancel') : operationConfirm?.cancelLabel
+  const pendingOperationHelperText = pendingOperation === 'undo-ai-commit' ? (aiCommitUndoGraceActive ? t('detail.operationConfirmUndoHelper') : t('detail.operationConfirmUndoHelperGrace')) : operationConfirm?.helperText
   const gitRepositoryControls = (
     <DetailGitRepositorySelector
       repositories={gitRepositories}
@@ -654,10 +697,7 @@ function DetailAiCommitPanel({
 
   return (
     <>
-      <div
-        className="relative flex h-full min-h-0 min-w-0 flex-col"
-        style={{ contain: 'layout paint', isolation: 'isolate' }}
-      >
+      <div className="relative flex h-full min-h-0 min-w-0 flex-col" style={{ contain: 'layout paint', isolation: 'isolate' }}>
         <div className="flex h-full min-h-0 flex-col gap-4">
           <DetailAiCommitHeader
             activePane={activePane}
@@ -701,62 +741,59 @@ function DetailAiCommitPanel({
             statusText={statusText}
           />
 
-        {gitRepositoriesError && (
-          <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-            {gitRepositoriesError}
-          </div>
-        )}
+          {gitRepositoriesError && <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{gitRepositoriesError}</div>}
 
-        {gitSnapshotError && (
-          <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-            {gitSnapshotError}
-          </div>
-        )}
+          {gitSnapshotError && <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{gitSnapshotError}</div>}
 
-        <section className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(360px,1.1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(320px,0.95fr)_minmax(460px,1.2fr)_340px]">
-          <DetailAiCommitWorkingTreePanel
-            changedFiles={changedFiles}
-            changedFileCount={changedFileCount}
-            changedFilesSuppressed={changedFilesSuppressed}
-            conflictedCount={conflictedCount}
-            fileActionError={fileActionError}
-            gitSnapshotLoading={isGitSnapshotChecking}
-            onOpenDiff={handleOpenDiffDrawerForFile}
-            onRefresh={onRefreshGitSnapshot}
-            onSetFileStaged={setFileStaged}
-            stagingFilePath={stagingFilePath}
-          />
+          <section className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(360px,1.1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(320px,0.95fr)_minmax(460px,1.2fr)_340px]">
+            <DetailAiCommitWorkingTreePanel
+              changedFiles={changedFiles}
+              changedFileCount={changedFileCount}
+              changedFilesSuppressed={changedFilesSuppressed}
+              conflictedCount={conflictedCount}
+              fileActionError={fileActionError}
+              gitSnapshotLoading={isGitSnapshotChecking}
+              bulkStageAction={bulkStageAction}
+              onOpenDiff={handleOpenDiffDrawerForFile}
+              onRefresh={onRefreshGitSnapshot}
+              onSetAllFilesStaged={setAllFilesStaged}
+              onSetFileStaged={setFileStaged}
+              stagingFilePath={stagingFilePath}
+            />
 
-          <DetailAiCommitMiddlePanel
-            activeCommitHash={activeCommitHash}
-            aiRawText={aiRawText}
-            commitHistoryItems={commitHistoryItems}
-            middlePanelMode={middlePanelMode}
-            onSetMiddlePanelMode={setMiddlePanelMode}
-            operationLogs={operationLogs}
-            setActiveCommitHash={setActiveCommitHash}
-            showCommitHistoryLoading={showCommitHistoryLoading}
-          />
+            <DetailAiCommitMiddlePanel
+              activeCommitHash={activeCommitHash}
+              aiRawText={aiRawText}
+              commitHistoryItems={commitHistoryItems}
+              middlePanelMode={middlePanelMode}
+              onSetMiddlePanelMode={setMiddlePanelMode}
+              operationLogs={operationLogs}
+              setActiveCommitHash={setActiveCommitHash}
+              showCommitHistoryLoading={showCommitHistoryLoading}
+            />
 
-          <DetailAiCommitBranchPanel
-            branchAhead={branchAhead}
-            branchBehind={branchBehind}
-            currentBranch={currentBranch}
-            localMergeCandidates={localMergeCandidates}
-            remoteMergeCandidates={remoteMergeCandidates}
-            mergeTarget={mergeTarget}
-            mergeSearchValue={mergeSearchValue}
-            onChangeMergeSearchValue={setMergeSearchValue}
-            onOpenCurrentBranchManager={() => setBranchManagerMode('current')}
-            onOpenGitGuide={() => setGitGuideOpen(true)}
-            onOpenUpstreamManager={() => setBranchManagerMode('upstream')}
-            onRequestGitOperation={requestGitOperation}
-            onSelectMergeTarget={setMergeTarget}
-            operationStates={operationStates}
-            runningOperation={runningOperation}
-            showBranchRemoteLoading={showBranchRemoteLoading}
-            upstreamBranch={upstreamBranch}
-          />
+            <DetailAiCommitBranchPanel
+              branchAhead={branchAhead}
+              branchBehind={branchBehind}
+              commitBlockedReason={commitBlockedReason}
+              commitPending={commitPending}
+              currentBranch={currentBranch}
+              localMergeCandidates={localMergeCandidates}
+              remoteMergeCandidates={remoteMergeCandidates}
+              mergeTarget={mergeTarget}
+              mergeSearchValue={mergeSearchValue}
+              onChangeMergeSearchValue={setMergeSearchValue}
+              onOpenCurrentBranchManager={() => setBranchManagerMode('current')}
+              onOpenGitGuide={() => setGitGuideOpen(true)}
+              onOpenUpstreamManager={() => setBranchManagerMode('upstream')}
+              onRequestCommit={requestCommitStagedChanges}
+              onRequestGitOperation={requestGitOperation}
+              onSelectMergeTarget={setMergeTarget}
+              operationStates={operationStates}
+              runningOperation={runningOperation}
+              showBranchRemoteLoading={showBranchRemoteLoading}
+              upstreamBranch={upstreamBranch}
+            />
           </section>
         </div>
       </div>
@@ -792,6 +829,22 @@ function DetailAiCommitPanel({
         cancelLabel={pendingOperationCancelLabel}
         helperText={pendingOperationHelperText}
       />
+      <DetailAiCommitCommitModal
+        blockedReason={commitBlockedReason}
+        commitError={commitError}
+        commitMessage={commitMessage}
+        committing={commitPending}
+        onChangeCommitMessage={setCommitMessage}
+        onClose={() => {
+          if (commitPending) return
+          setCommitModalOpen(false)
+        }}
+        onCommit={() => {
+          void commitStagedChanges()
+        }}
+        open={commitModalOpen}
+        stagedFileCount={stagedFileCount}
+      />
       <DetailAiCommitBranchManagerModal
         branchManagerDangerText={branchManagerDangerText}
         branchManagerError={branchManagerError}
@@ -825,10 +878,7 @@ function DetailAiCommitPanel({
         upstreamManagerDangerInput={upstreamManagerDangerInput}
         upstreamManagerRemoteName={upstreamManagerRemoteName}
       />
-      <DetailAiCommitGitGuideModal
-        open={gitGuideOpen}
-        onClose={() => setGitGuideOpen(false)}
-      />
+      <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} />
       <DetailGitDiffDrawer
         open={diffDrawerOpen}
         changedFiles={changedFiles}

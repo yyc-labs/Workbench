@@ -1243,11 +1243,12 @@ export interface GitRepositorySnapshot {
   error?: string
 }
 
-export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'
+export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'commit' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'
 
 export interface GitOperationRequest {
   repoRoot: string
   operation: GitOperationKind
+  message?: string
   targetBranch?: string
   remoteName?: string
 }

@@ -1,9 +1,5 @@
 import { FileText, RefreshCw } from 'lucide-react'
-import {
-  formatGitBadgeCount,
-  getChangeMeta,
-  getScopeLabel,
-} from './detail.gitOperations'
+import { formatGitBadgeCount, getChangeMeta, getScopeLabel } from './detail.gitOperations'
 import { useI18n } from '../../i18n'
 import type { DetailGitSnapshot } from './detail.types'
 
@@ -16,23 +12,15 @@ type DetailAiCommitWorkingTreePanelProps = {
   conflictedCount: number
   fileActionError: string | null
   gitSnapshotLoading: boolean
+  bulkStageAction: 'stage' | 'unstage' | null
   onOpenDiff: (filePath: string) => void
   onRefresh: () => void
+  onSetAllFilesStaged: (stage: boolean) => Promise<void> | void
   onSetFileStaged: (file: GitChangedFile, stage: boolean) => Promise<void> | void
   stagingFilePath: string | null
 }
 
-function WorkingTreeStatCard({
-  colorClassName,
-  label,
-  loading,
-  value,
-}: {
-  colorClassName: string
-  label: string
-  loading: boolean
-  value: string
-}) {
+function WorkingTreeStatCard({ colorClassName, label, loading, value }: { colorClassName: string; label: string; loading: boolean; value: string }) {
   return (
     <div className={`rounded-[13px] px-2.5 py-2 ${colorClassName}`}>
       {loading ? (
@@ -52,11 +40,13 @@ function WorkingTreeStatCard({
 
 function WorkingTreeFileItem({
   file,
+  bulkStageAction,
   onOpenDiff,
   onSetFileStaged,
   stagingFilePath,
 }: {
   file: GitChangedFile
+  bulkStageAction: 'stage' | 'unstage' | null
   onOpenDiff: (filePath: string) => void
   onSetFileStaged: (file: GitChangedFile, stage: boolean) => Promise<void> | void
   stagingFilePath: string | null
@@ -68,21 +58,15 @@ function WorkingTreeFileItem({
   const canUnstage = file.staged && file.scope !== 'conflicted'
 
   return (
-    <div
-      className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 px-3 py-2.5"
-    >
+    <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/72 px-3 py-2.5">
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="min-w-0 flex-1 text-left"
-          onClick={() => onOpenDiff(file.path)}
-        >
+        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => onOpenDiff(file.path)}>
           <div className="flex items-start gap-2">
-            <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${meta.className}`}>
-              {meta.label}
-            </span>
+            <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-medium ${meta.className}`}>{meta.label}</span>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={file.path}>{file.path}</p>
+              <p className="truncate font-mono text-[12px] text-[color:var(--color-foreground)]" title={file.path}>
+                {file.path}
+              </p>
               {file.originalPath && (
                 <p className="mt-0.5 truncate font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]" title={file.originalPath}>
                   {t('detail.workingTreeFrom', { path: file.originalPath })}
@@ -98,7 +82,7 @@ function WorkingTreeFileItem({
             onClick={() => {
               void onSetFileStaged(file, true)
             }}
-            disabled={!canStage || Boolean(stagingFilePath)}
+            disabled={!canStage || Boolean(stagingFilePath) || Boolean(bulkStageAction)}
             title={canStage ? t('detail.workingTreeStage') : t('detail.workingTreeStageUnavailable')}
           >
             {isBusy && canStage ? t('detail.workingTreeStaging') : t('detail.workingTreeStage')}
@@ -109,7 +93,7 @@ function WorkingTreeFileItem({
             onClick={() => {
               void onSetFileStaged(file, false)
             }}
-            disabled={!canUnstage || Boolean(stagingFilePath)}
+            disabled={!canUnstage || Boolean(stagingFilePath) || Boolean(bulkStageAction)}
             title={canUnstage ? t('detail.workingTreeUnstage') : t('detail.workingTreeUnstageUnavailable')}
           >
             {isBusy && canUnstage ? t('detail.workingTreeUnstaging') : t('detail.workingTreeUnstage')}
@@ -118,28 +102,22 @@ function WorkingTreeFileItem({
       </div>
       <div className="mt-2 flex items-center justify-between text-[10.5px] text-[color:var(--color-muted-foreground)]">
         <span>{getScopeLabel(file)}</span>
-        <span className="font-mono">{file.indexStatus}{file.worktreeStatus}</span>
+        <span className="font-mono">
+          {file.indexStatus}
+          {file.worktreeStatus}
+        </span>
       </div>
     </div>
   )
 }
 
-export function DetailAiCommitWorkingTreePanel({
-  changedFiles,
-  changedFileCount,
-  changedFilesSuppressed,
-  conflictedCount,
-  fileActionError,
-  gitSnapshotLoading,
-  onOpenDiff,
-  onRefresh,
-  onSetFileStaged,
-  stagingFilePath,
-}: DetailAiCommitWorkingTreePanelProps) {
+export function DetailAiCommitWorkingTreePanel({ changedFiles, changedFileCount, changedFilesSuppressed, conflictedCount, fileActionError, gitSnapshotLoading, bulkStageAction, onOpenDiff, onRefresh, onSetAllFilesStaged, onSetFileStaged, stagingFilePath }: DetailAiCommitWorkingTreePanelProps) {
   const { t } = useI18n()
   const stagedCount = changedFiles.filter((file) => file.staged).length
   const unstagedCount = changedFiles.filter((file) => file.unstaged).length
   const untrackedCount = changedFiles.filter((file) => file.scope === 'untracked').length
+  const canStageAll = changedFiles.some((file) => (file.unstaged || file.scope === 'untracked') && file.scope !== 'conflicted')
+  const canUnstageAll = changedFiles.some((file) => file.staged && file.scope !== 'conflicted')
 
   return (
     <div className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4">
@@ -157,7 +135,7 @@ export function DetailAiCommitWorkingTreePanel({
           type="button"
           className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
           onClick={onRefresh}
-          disabled={gitSnapshotLoading}
+          disabled={gitSnapshotLoading || Boolean(bulkStageAction)}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${gitSnapshotLoading ? 'animate-spin' : ''}`} />
           {t('detail.workingTreeRefresh')}
@@ -165,43 +143,38 @@ export function DetailAiCommitWorkingTreePanel({
       </div>
 
       <div className="mb-3 grid grid-cols-4 gap-2">
-        <WorkingTreeStatCard
-          colorClassName="bg-[color:var(--color-background-sunken)]/60"
-          label={t('detail.workingTreeAll')}
-          loading={gitSnapshotLoading}
-          value={formatGitBadgeCount(changedFileCount)}
-        />
-        <WorkingTreeStatCard
-          colorClassName="bg-[color:var(--color-success-background)]"
-          label={t('detail.workingTreeStaged')}
-          loading={gitSnapshotLoading}
-          value={formatGitBadgeCount(stagedCount)}
-        />
-        <WorkingTreeStatCard
-          colorClassName="bg-[color:var(--color-warning-background)]"
-          label={t('detail.workingTreeUnstaged')}
-          loading={gitSnapshotLoading}
-          value={formatGitBadgeCount(unstagedCount)}
-        />
-        <WorkingTreeStatCard
-          colorClassName="bg-[color:var(--color-background-sunken)]/60"
-          label={t('detail.workingTreeUntracked')}
-          loading={gitSnapshotLoading}
-          value={formatGitBadgeCount(untrackedCount)}
-        />
+        <WorkingTreeStatCard colorClassName="bg-[color:var(--color-background-sunken)]/60" label={t('detail.workingTreeAll')} loading={gitSnapshotLoading} value={formatGitBadgeCount(changedFileCount)} />
+        <WorkingTreeStatCard colorClassName="bg-[color:var(--color-success-background)]" label={t('detail.workingTreeStaged')} loading={gitSnapshotLoading} value={formatGitBadgeCount(stagedCount)} />
+        <WorkingTreeStatCard colorClassName="bg-[color:var(--color-warning-background)]" label={t('detail.workingTreeUnstaged')} loading={gitSnapshotLoading} value={formatGitBadgeCount(unstagedCount)} />
+        <WorkingTreeStatCard colorClassName="bg-[color:var(--color-background-sunken)]/60" label={t('detail.workingTreeUntracked')} loading={gitSnapshotLoading} value={formatGitBadgeCount(untrackedCount)} />
       </div>
 
-      {!gitSnapshotLoading && conflictedCount > 0 && (
-        <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-          {t('detail.workingTreeConflictHint', { count: conflictedCount })}
-        </div>
-      )}
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 py-1.5 text-[11px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => {
+            void onSetAllFilesStaged(true)
+          }}
+          disabled={!canStageAll || Boolean(stagingFilePath) || Boolean(bulkStageAction) || gitSnapshotLoading}
+        >
+          {bulkStageAction === 'stage' ? t('detail.workingTreeStagingAll') : t('detail.workingTreeStageAll')}
+        </button>
+        <button
+          type="button"
+          className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 py-1.5 text-[11px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => {
+            void onSetAllFilesStaged(false)
+          }}
+          disabled={!canUnstageAll || Boolean(stagingFilePath) || Boolean(bulkStageAction) || gitSnapshotLoading}
+        >
+          {bulkStageAction === 'unstage' ? t('detail.workingTreeUnstagingAll') : t('detail.workingTreeUnstageAll')}
+        </button>
+      </div>
 
-      {fileActionError && (
-        <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-          {fileActionError}
-        </div>
-      )}
+      {!gitSnapshotLoading && conflictedCount > 0 && <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{t('detail.workingTreeConflictHint', { count: conflictedCount })}</div>}
+
+      {fileActionError && <div className="mb-3 rounded-[13px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{fileActionError}</div>}
 
       {gitSnapshotLoading ? (
         <div className="git-panel-loading-surface flex min-h-0 flex-1 flex-col gap-2 rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/45 px-3 py-3">
@@ -214,21 +187,13 @@ export function DetailAiCommitWorkingTreePanel({
         <div className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-4 py-5 text-center">
           <div>
             <p className="text-base font-semibold text-[color:var(--color-foreground)]">{t('detail.workingTreeSuppressedTitle')}</p>
-            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
-              {t('detail.workingTreeSuppressedDescription')}
-            </p>
+            <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">{t('detail.workingTreeSuppressedDescription')}</p>
           </div>
         </div>
       ) : changedFiles.length > 0 ? (
         <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
           {changedFiles.map((file) => (
-            <WorkingTreeFileItem
-              key={`${file.path}-${file.indexStatus}-${file.worktreeStatus}`}
-              file={file}
-              onOpenDiff={onOpenDiff}
-              onSetFileStaged={onSetFileStaged}
-              stagingFilePath={stagingFilePath}
-            />
+            <WorkingTreeFileItem key={`${file.path}-${file.indexStatus}-${file.worktreeStatus}`} file={file} bulkStageAction={bulkStageAction} onOpenDiff={onOpenDiff} onSetFileStaged={onSetFileStaged} stagingFilePath={stagingFilePath} />
           ))}
         </div>
       ) : (

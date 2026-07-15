@@ -1,15 +1,6 @@
-import {
-  createGitCommandRunner,
-  DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-  DEFAULT_GIT_OPERATION_TIMEOUT_MS,
-  formatGitCommand,
-  normalizeGitOperationOutput,
-} from './git-command'
+import { createGitCommandRunner, DEFAULT_GIT_OUTPUT_LIMIT_BYTES, DEFAULT_GIT_OPERATION_TIMEOUT_MS, formatGitCommand, normalizeGitOperationOutput } from './git-command'
 import { createGitFileOperations } from './git-file-operations'
-import {
-  isValidGitBranchName,
-  normalizeGitOperationRequest,
-} from './git-operation-request'
+import { isValidGitBranchName, normalizeGitOperationRequest } from './git-operation-request'
 import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
@@ -25,12 +16,7 @@ export function createGitService(deps: GitServiceDependencies) {
   const gitCommandRunner = createGitCommandRunner({ getDefaultWslDistro })
   const { runGitCommand, runGitCommandSequence } = gitCommandRunner
   const { readRecentCommits, readGitRepositorySnapshot } = createGitSnapshotReader(gitCommandRunner)
-  const {
-    getGitConflictFile,
-    getGitFileDiff,
-    resolveGitConflictFile,
-    setGitFileStage,
-  } = createGitFileOperations({
+  const { getGitConflictFile, getGitFileDiff, resolveGitConflictFile, setGitFileStage } = createGitFileOperations({
     runner: gitCommandRunner,
     getLocale: deps.getLocale,
     readGitRepositorySnapshot,
@@ -38,12 +24,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
   async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
     const checkedAt = Date.now()
-    const {
-      operation,
-      remoteName,
-      repoRoot,
-      targetBranch,
-    } = normalizeGitOperationRequest(request)
+    const { message, operation, remoteName, repoRoot, targetBranch } = normalizeGitOperationRequest(request)
 
     if (!repoRoot) {
       return {
@@ -130,9 +111,7 @@ export function createGitService(deps: GitServiceDependencies) {
           skipReason = 'No outgoing commits to push.'
           break
         }
-        args = hasUpstream && !upstreamGone
-          ? ['push']
-          : ['push', '-u', 'origin', currentBranch]
+        args = hasUpstream && !upstreamGone ? ['push'] : ['push', '-u', 'origin', currentBranch]
         break
       }
       case 'merge': {
@@ -208,6 +187,25 @@ export function createGitService(deps: GitServiceDependencies) {
         }
 
         args = ['switch', '--track', targetBranch]
+        break
+      }
+      case 'commit': {
+        if (hasConflicts) {
+          skipReason = 'Resolve conflicts before committing.'
+          skipAsError = true
+          break
+        }
+        if (!message) {
+          skipReason = 'Commit message is required.'
+          skipAsError = true
+          break
+        }
+        if (!snapshot.changedFiles.some((file) => file.staged)) {
+          skipReason = 'There are no staged changes to commit.'
+          skipAsError = true
+          break
+        }
+        args = ['commit', '-m', message]
         break
       }
       case 'create-remote-branch': {

@@ -1,17 +1,6 @@
-import {
-  CloudDownload,
-  CloudUpload,
-  Download,
-  GitMerge,
-  Shuffle,
-} from 'lucide-react'
+import { CloudDownload, CloudUpload, Download, GitMerge, Shuffle } from 'lucide-react'
 import { translateCurrent } from '../../i18n'
-import type {
-  DetailGitSnapshot,
-  GitDiffViewMode,
-  GitOperationKind,
-  GitOperationResult,
-} from './detail.types'
+import type { DetailGitSnapshot, GitDiffViewMode, GitOperationKind, GitOperationResult } from './detail.types'
 
 type GitChangedFile = DetailGitSnapshot['changedFiles'][number]
 
@@ -72,12 +61,7 @@ export function getGitOperationItems() {
   ] as const
 }
 
-export type PanelGitOperationKind =
-  | 'fetch'
-  | 'pull'
-  | 'push'
-  | 'switch'
-  | 'merge'
+export type PanelGitOperationKind = 'fetch' | 'pull' | 'push' | 'switch' | 'merge'
 
 export function formatGitBadgeCount(count: number): string {
   return count > 99 ? '99+' : String(count)
@@ -120,6 +104,8 @@ export function getOperationLabel(operation: GitOperationKind): string {
       return translateCurrent('detail.gitOpSwitch')
     case 'merge':
       return translateCurrent('detail.gitOpMerge')
+    case 'commit':
+      return translateCurrent('detail.gitOpCommit')
     case 'create-remote-branch':
       return translateCurrent('detail.gitOpCreateRemote')
     case 'create-local-branch':
@@ -149,10 +135,7 @@ export function getOperationStatusText(result: GitOperationResult): string {
   return translateCurrent('detail.gitStatusFailed')
 }
 
-export function computeOperationState(
-  operation: GitOperationKind,
-  params: BranchOperationStateParams
-): OperationCardState {
+export function computeOperationState(operation: GitOperationKind, params: BranchOperationStateParams): OperationCardState {
   if (params.runningOperation && params.runningOperation !== operation) {
     return { disabled: true, hint: translateCurrent('detail.gitHintAnotherOperationRunning') }
   }
