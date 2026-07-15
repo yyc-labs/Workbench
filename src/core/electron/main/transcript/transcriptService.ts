@@ -3,6 +3,7 @@ import path from 'path'
 import { buildTranscriptSession } from '../../../shared/transcript/transcript.parser'
 import type {
   TranscriptExternalImportPayload,
+  TranscriptFileReference,
   TranscriptImportedEvent,
   TranscriptImportPayload,
   TranscriptSession,
@@ -22,6 +23,7 @@ export interface TranscriptService {
   importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
   importExternalTranscript: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
   listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
+  listProjectTranscriptFileReferences: (projectId: string, relativePath: string) => Promise<TranscriptFileReference[]>
   listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
   getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
   updateTranscript: (payload: TranscriptUpdatePayload) => Promise<TranscriptSession>
@@ -173,6 +175,24 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
     return session
   }
 
+  const getTranscript = async (projectId: string, transcriptId: string): Promise<TranscriptSession | null> => {
+    const session = await deps.repository.getSession(projectId, transcriptId)
+    if (!session) return null
+
+    const projectPath = deps.getProjectPathById(projectId)
+    if (!projectPath) {
+      return session
+    }
+
+    const rebuilt = rebuildSessionIfNeeded(session, projectPath)
+    if (rebuilt === session) {
+      return session
+    }
+
+    await deps.repository.saveSession(rebuilt)
+    return rebuilt
+  }
+
   return {
     importTranscript: importNormalizedTranscript,
 
@@ -219,27 +239,39 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
       return deps.repository.listSessions(projectId)
     },
 
+    listProjectTranscriptFileReferences: async (projectId, relativePath) => {
+      const normalizedPath = typeof relativePath === 'string' ? relativePath.trim() : ''
+      if (!normalizedPath) return []
+
+      const summaries = await deps.repository.listSessions(projectId)
+      const references: TranscriptFileReference[] = []
+      for (const summary of summaries) {
+        if (summary.referenceCount <= 0) continue
+        const session = await getTranscript(projectId, summary.id)
+        if (!session) continue
+
+        for (const reference of session.references) {
+          if (reference.relativePath.trim() !== normalizedPath) continue
+          references.push({
+            transcriptId: session.id,
+            transcriptTitle: session.title,
+            reference: {
+              id: reference.id,
+              relativePath: reference.relativePath,
+              lineNumber: reference.lineNumber,
+              column: reference.column,
+            },
+          })
+        }
+      }
+      return references
+    },
+
     listAllTranscripts: async () => {
       return deps.repository.listAllSessions()
     },
 
-    getTranscript: async (projectId, transcriptId) => {
-      const session = await deps.repository.getSession(projectId, transcriptId)
-      if (!session) return null
-
-      const projectPath = deps.getProjectPathById(projectId)
-      if (!projectPath) {
-        return session
-      }
-
-      const rebuilt = rebuildSessionIfNeeded(session, projectPath)
-      if (rebuilt === session) {
-        return session
-      }
-
-      await deps.repository.saveSession(rebuilt)
-      return rebuilt
-    },
+    getTranscript,
 
     updateTranscript: async (inputPayload) => {
       const payload = validateUpdatePayload(inputPayload)

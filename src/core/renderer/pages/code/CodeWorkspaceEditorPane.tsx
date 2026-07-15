@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
-import type { TranscriptReference } from '../../../shared/types'
+import type { TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
@@ -28,12 +28,6 @@ type MarkdownStructuredPreviewState = {
 type MarkdownCodePreviewState = {
   codeText: string
   language: string
-}
-
-type CodeTranscriptReferenceItem = {
-  transcriptId: string
-  transcriptTitle: string
-  reference: TranscriptReference
 }
 
 const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({ contentRef, markdown, components }: { contentRef?: Ref<HTMLElement>; markdown: string; components: Components }) {
@@ -99,7 +93,7 @@ type CodeWorkspaceEditorPaneProps = {
   onSetMarkdownPreviewMode: React.Dispatch<React.SetStateAction<MarkdownPreviewMode>>
   onSetPreviewSearchQuery: React.Dispatch<React.SetStateAction<string>>
   onOpenSmartEmptyFile: (relativePath: string) => void
-  onOpenTranscriptReference: (item: CodeTranscriptReferenceItem) => void
+  onOpenTranscriptReference: (item: TranscriptFileReference) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
   previewRootRef: RefObject<Element | null>
   previewScrollRef: Ref<HTMLDivElement>
@@ -111,7 +105,7 @@ type CodeWorkspaceEditorPaneProps = {
   smartEmptyFiles: string[]
   structuredPreview: MarkdownStructuredPreviewState | null
   structuredPreviewComponents: Components
-  transcriptReferences: CodeTranscriptReferenceItem[]
+  transcriptReferences: TranscriptFileReference[]
   viewMode: 'files' | 'search'
 }
 

@@ -3,7 +3,16 @@ import { CircleAlert, RefreshCw } from 'lucide-react'
 import type { AgentHookGatewayStatus, AppConfig } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
+import { Select } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
+
+const feishuReceiveIdTypeOptions = [
+  { value: 'open_id', label: 'open_id' },
+  { value: 'user_id', label: 'user_id' },
+  { value: 'union_id', label: 'union_id' },
+  { value: 'email', label: 'email' },
+  { value: 'chat_id', label: 'chat_id' },
+]
 
 export function SettingsAgentHooksPanel() {
   const { t, tHtml } = useI18n()
@@ -112,12 +121,8 @@ export function SettingsAgentHooksPanel() {
         <p className="section-label mb-3">{t('settings.agentHooks.sectionLabel')}</p>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-              {t('settings.agentHooks.title')}
-            </h2>
-            <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">
-              {t('settings.agentHooks.description')}
-            </p>
+            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.agentHooks.title')}</h2>
+            <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">{t('settings.agentHooks.description')}</p>
           </div>
           <Button onClick={() => void refresh()} loading={loading} className="rounded-full gap-2">
             <RefreshCw className="w-4 h-4" strokeWidth={1.8} />
@@ -138,15 +143,11 @@ export function SettingsAgentHooksPanel() {
           <div>
             <div className="text-xs font-medium uppercase text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.endpoint')}</div>
             <div className="mt-2 truncate text-sm text-[color:var(--color-foreground)]">{status?.url || 'n/a'}</div>
-            <div className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]">
-              {status?.url ? `${status.url}/transcripts/import` : 'n/a'}
-            </div>
+            <div className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]">{status?.url ? `${status.url}/transcripts/import` : 'n/a'}</div>
           </div>
           <div>
             <div className="text-xs font-medium uppercase text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.token')}</div>
-            <div className="mt-2 text-sm text-[color:var(--color-foreground)]">
-              {status?.tokenConfigured ? t('settings.agentHooks.configured') : t('settings.agentHooks.notRequired')}
-            </div>
+            <div className="mt-2 text-sm text-[color:var(--color-foreground)]">{status?.tokenConfigured ? t('settings.agentHooks.configured') : t('settings.agentHooks.notRequired')}</div>
           </div>
           <div>
             <div className="text-xs font-medium uppercase text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.recentEvents')}</div>
@@ -165,16 +166,10 @@ export function SettingsAgentHooksPanel() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.agentHooks.transcriptImportTitle')}</div>
-            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">
-              {t('settings.agentHooks.transcriptImportDescription')}
-            </div>
+            <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.transcriptImportDescription')}</div>
           </div>
           <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={transcriptImportEnabled}
-              onChange={(event) => setTranscriptImportEnabled(event.target.checked)}
-            />
+            <input type="checkbox" checked={transcriptImportEnabled} onChange={(event) => setTranscriptImportEnabled(event.target.checked)} />
             {t('settings.agentHooks.enabled')}
           </label>
         </div>
@@ -182,34 +177,20 @@ export function SettingsAgentHooksPanel() {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.importEndpoint')}</p>
-            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">
-              {status?.transcriptImportUrl || 'n/a'}
-            </div>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">{status?.transcriptImportUrl || 'n/a'}</div>
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.projectsEndpoint')}</p>
-            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">
-              {status?.transcriptProjectsUrl || 'n/a'}
-            </div>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">{status?.transcriptProjectsUrl || 'n/a'}</div>
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.dedicatedToken')}</p>
-            <Input
-              type="password"
-              value={transcriptImportToken}
-              onChange={(event) => setTranscriptImportToken(event.target.value)}
-              className="h-11"
-              placeholder="optional transcript import token"
-            />
+            <Input type="password" value={transcriptImportToken} onChange={(event) => setTranscriptImportToken(event.target.value)} className="h-11" placeholder="optional transcript import token" />
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.defaultViewerBehavior')}</p>
             <label className="quiet-control flex h-11 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
-              <input
-                type="checkbox"
-                checked={transcriptImportOpenViewerByDefault}
-                onChange={(event) => setTranscriptImportOpenViewerByDefault(event.target.checked)}
-              />
+              <input type="checkbox" checked={transcriptImportOpenViewerByDefault} onChange={(event) => setTranscriptImportOpenViewerByDefault(event.target.checked)} />
               {t('settings.agentHooks.openTranscriptViewerByDefault')}
             </label>
           </div>
@@ -218,21 +199,15 @@ export function SettingsAgentHooksPanel() {
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
             <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.routeStatus')}</div>
-            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
-              {status?.transcriptImportEnabled ? t('settings.agentHooks.enabled') : t('settings.agentHooks.stopped')}
-            </div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">{status?.transcriptImportEnabled ? t('settings.agentHooks.enabled') : t('settings.agentHooks.stopped')}</div>
           </div>
           <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
             <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.dedicatedToken')}</div>
-            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
-              {status?.transcriptImportTokenConfigured ? t('settings.agentHooks.configured') : t('settings.agentHooks.notRequired')}
-            </div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">{status?.transcriptImportTokenConfigured ? t('settings.agentHooks.configured') : t('settings.agentHooks.notRequired')}</div>
           </div>
           <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
             <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.discoveryApi')}</div>
-            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">
-              `GET /transcripts/projects`
-            </div>
+            <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">`GET /transcripts/projects`</div>
           </div>
         </div>
 
@@ -244,9 +219,7 @@ export function SettingsAgentHooksPanel() {
         )}
 
         <div className="mt-5 flex items-center justify-between gap-4">
-          <div className="text-xs text-[color:var(--color-muted-foreground)]">
-            {t('settings.agentHooks.authHeaders')}: `Authorization: Bearer ...` or `x-ide-electron-transcript-token`
-          </div>
+          <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.authHeaders')}: `Authorization: Bearer ...` or `x-ide-electron-transcript-token`</div>
           <Button onClick={() => void handleSaveTranscriptImport()} loading={savingTranscriptImport}>
             {savingTranscriptImport ? t('common.saving') : t('settings.agentHooks.saveTranscriptImportConfig')}
           </Button>
@@ -260,11 +233,7 @@ export function SettingsAgentHooksPanel() {
             <div className="mt-1 text-sm text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settings.agentHooks.feishuDescription')} />
           </div>
           <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={feishuEnabled}
-              onChange={(event) => setFeishuEnabled(event.target.checked)}
-            />
+            <input type="checkbox" checked={feishuEnabled} onChange={(event) => setFeishuEnabled(event.target.checked)} />
             {t('settings.agentHooks.enabled')}
           </label>
         </div>
@@ -272,45 +241,19 @@ export function SettingsAgentHooksPanel() {
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.appId')}</p>
-            <Input
-              value={feishuAppId}
-              onChange={(event) => setFeishuAppId(event.target.value)}
-              className="h-11"
-              placeholder="cli_..."
-            />
+            <Input value={feishuAppId} onChange={(event) => setFeishuAppId(event.target.value)} className="h-11" placeholder="cli_..." />
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.appSecret')}</p>
-            <Input
-              type="password"
-              value={feishuAppSecret}
-              onChange={(event) => setFeishuAppSecret(event.target.value)}
-              className="h-11"
-              placeholder="app secret"
-            />
+            <Input type="password" value={feishuAppSecret} onChange={(event) => setFeishuAppSecret(event.target.value)} className="h-11" placeholder="app secret" />
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.receiveId')}</p>
-            <Input
-              value={feishuReceiveId}
-              onChange={(event) => setFeishuReceiveId(event.target.value)}
-              className="h-11"
-              placeholder="open_id / chat_id / email"
-            />
+            <Input value={feishuReceiveId} onChange={(event) => setFeishuReceiveId(event.target.value)} className="h-11" placeholder="open_id / chat_id / email" />
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.receiveIdType')}</p>
-            <select
-              value={feishuReceiveIdType}
-              onChange={(event) => setFeishuReceiveIdType(event.target.value as typeof feishuReceiveIdType)}
-              className="quiet-control h-11 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] focus-visible:outline-none"
-            >
-              <option value="open_id">open_id</option>
-              <option value="user_id">user_id</option>
-              <option value="union_id">union_id</option>
-              <option value="email">email</option>
-              <option value="chat_id">chat_id</option>
-            </select>
+            <Select ariaLabel={t('settings.agentHooks.receiveIdType')} value={feishuReceiveIdType} options={feishuReceiveIdTypeOptions} onChange={(value) => setFeishuReceiveIdType(value as typeof feishuReceiveIdType)} triggerClassName="h-11" />
           </div>
         </div>
 
@@ -322,15 +265,12 @@ export function SettingsAgentHooksPanel() {
         )}
 
         <div className="mt-5 flex items-center justify-between gap-4">
-          <div className="text-xs text-[color:var(--color-muted-foreground)]">
-            {t('settings.agentHooks.currentTriggers')}: `Stop`, `PermissionRequest`
-          </div>
+          <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.currentTriggers')}: `Stop`, `PermissionRequest`</div>
           <Button onClick={() => void handleSaveFeishu()} loading={savingFeishu}>
             {savingFeishu ? t('common.saving') : t('settings.agentHooks.saveFeishuConfig')}
           </Button>
         </div>
       </section>
-
     </div>
   )
 }

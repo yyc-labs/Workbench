@@ -3,6 +3,7 @@ import { IPC } from '../main/ipc'
 import type {
   TranscriptImportedEvent,
   TranscriptExternalImportPayload,
+  TranscriptFileReference,
   TranscriptGatewayImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
@@ -33,6 +34,9 @@ export function createTranscriptInvokeApi() {
 
     listProjectTranscripts: (projectId: string) =>
       ipcRenderer.invoke(IPC.TRANSCRIPT_LIST, projectId) as Promise<TranscriptSessionSummary[]>,
+
+    listProjectTranscriptFileReferences: (projectId: string, relativePath: string) =>
+      ipcRenderer.invoke(IPC.TRANSCRIPT_LIST_FILE_REFERENCES, projectId, relativePath) as Promise<TranscriptFileReference[]>,
 
     listAllTranscripts: () =>
       ipcRenderer.invoke(IPC.TRANSCRIPT_LIST_ALL) as Promise<

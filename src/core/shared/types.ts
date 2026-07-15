@@ -698,6 +698,12 @@ export interface TranscriptReference {
   messageRange: TranscriptMessageRange
 }
 
+export interface TranscriptFileReference {
+  transcriptId: string
+  transcriptTitle: string
+  reference: Pick<TranscriptReference, 'id' | 'relativePath' | 'lineNumber' | 'column'>
+}
+
 export interface TranscriptSession {
   id: string
   projectId: string

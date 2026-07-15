@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import type { ProjectFileReadResult, TranscriptReference } from '../../../shared/types'
+import type { ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
@@ -24,6 +24,7 @@ import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePa
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
+import { useTranscriptFileReferences } from './useTranscriptFileReferences'
 import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
 import { CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, MAX_PROJECT_CODE_SESSION_TABS, normalizeProjectCodeSession } from './useProjectCodeSession'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
@@ -31,9 +32,7 @@ import { useCodeTreePathActions } from './useCodeTreePathActions'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
-const MAX_PRELOADED_TRANSCRIPT_SESSIONS = 4
 const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
-const TRANSCRIPT_SESSION_PRELOAD_DELAY_MS = 320
 const CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:code-left-sidebar-collapsed'
 const SMART_EMPTY_FILE_CANDIDATES = ['README.md', 'readme.md', 'AGENTS.md', 'AGENT.md', 'package.json', 'src/main.tsx', 'src/main.ts', 'src/index.tsx', 'src/index.ts', 'src/App.tsx', 'src/App.ts', 'app/page.tsx', 'pages/index.tsx', 'main.py']
 type CodeWorkspacePanelProps = {
@@ -59,12 +58,6 @@ type CodeWorkspacePanelProps = {
 type CodeViewMode = 'files' | 'search'
 
 type EditorSearchMode = 'find' | 'replace'
-
-type CodeTranscriptReferenceItem = {
-  transcriptId: string
-  transcriptTitle: string
-  reference: TranscriptReference
-}
 
 export function CodeWorkspacePanel({
   projectId,
@@ -109,10 +102,8 @@ export function CodeWorkspacePanel({
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
   const transcriptSummaries = useAppStore((s) => s.transcriptSummariesByProjectId[projectId] ?? [], shallow)
-  const transcriptSessions = useAppStore((s) => s.transcriptSessions)
   const transcriptListStatus = useAppStore((s) => s.transcriptListStatusByProjectId[projectId] ?? 'idle')
   const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
-  const loadTranscriptSession = useAppStore((s) => s.loadTranscriptSession)
   const openTranscript = useAppStore((s) => s.openTranscript)
   const openTranscriptReference = useAppStore((s) => s.openTranscriptReference)
   const [isNarrowViewport, setIsNarrowViewport] = useState(() => window.matchMedia(NARROW_VIEWPORT_QUERY).matches)
@@ -274,26 +265,13 @@ export function CodeWorkspacePanel({
       .sort((a, b) => a.length - b.length || a.localeCompare(b))
     return Array.from(new Set([...candidates, ...fallback])).slice(0, 4)
   }, [allProjectFilePathSet])
-  const transcriptReferencesByPath = useMemo(() => {
-    const map = new Map<string, CodeTranscriptReferenceItem[]>()
-    for (const summary of transcriptSummaries) {
-      const session = transcriptSessions[summary.id]
-      if (!session) continue
-      for (const reference of session.references) {
-        const relativePath = reference.relativePath.trim()
-        if (!relativePath) continue
-        const items = map.get(relativePath) ?? []
-        items.push({
-          transcriptId: session.id,
-          transcriptTitle: session.title,
-          reference,
-        })
-        map.set(relativePath, items)
-      }
-    }
-    return map
-  }, [transcriptSessions, transcriptSummaries])
-  const activeTranscriptReferences = useMemo(() => (activeRelativePath ? (transcriptReferencesByPath.get(activeRelativePath) ?? []) : []), [activeRelativePath, transcriptReferencesByPath])
+  const activeTranscriptReferences = useTranscriptFileReferences({
+    activePane,
+    projectId,
+    relativePath: activeRelativePath,
+    transcriptListStatus,
+    transcriptSummaries,
+  })
   const locateFileInTree = useCallback(
     async (relativePath: string) => {
       if (tree.autoLoadBlocked) return
@@ -387,26 +365,6 @@ export function CodeWorkspacePanel({
       window.clearTimeout(timer)
     }
   }, [activePane, loadProjectTranscripts, projectId, transcriptListStatus])
-
-  useEffect(() => {
-    if (activePane !== 'code') return
-    if (transcriptListStatus !== 'ready') return
-
-    const timer = window.setTimeout(() => {
-      let loadedCount = 0
-      for (const summary of transcriptSummaries) {
-        if (loadedCount >= MAX_PRELOADED_TRANSCRIPT_SESSIONS) break
-        if (summary.referenceCount <= 0) continue
-        if (transcriptSessions[summary.id]) continue
-        loadedCount += 1
-        void loadTranscriptSession(projectId, summary.id)
-      }
-    }, TRANSCRIPT_SESSION_PRELOAD_DELAY_MS)
-
-    return () => {
-      window.clearTimeout(timer)
-    }
-  }, [activePane, loadTranscriptSession, projectId, transcriptListStatus, transcriptSessions, transcriptSummaries])
 
   useEffect(() => {
     const pendingPath = pendingLocateAfterTreeReloadRef.current
@@ -646,7 +604,7 @@ export function CodeWorkspacePanel({
   }, [location.pathname, location.state, navigate, openContentSearchMatch])
 
   const handleOpenTranscriptReference = useCallback(
-    (item: CodeTranscriptReferenceItem) => {
+    (item: TranscriptFileReference) => {
       void openTranscript({
         projectId,
         transcriptId: item.transcriptId,

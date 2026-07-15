@@ -39,6 +39,13 @@ export function registerTranscriptIpcHandlers(
     return deps.transcriptService.listProjectTranscripts(projectId)
   })
 
+  ipcMain.handle(
+    IPC.TRANSCRIPT_LIST_FILE_REFERENCES,
+    async (_event, projectId: string, relativePath: string) => {
+      return deps.transcriptService.listProjectTranscriptFileReferences(projectId, relativePath)
+    }
+  )
+
   ipcMain.handle(IPC.TRANSCRIPT_LIST_ALL, async () => {
     return deps.transcriptService.listAllTranscripts()
   })

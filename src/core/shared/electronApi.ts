@@ -83,6 +83,7 @@ import type {
   TmuxSessionInfo,
   TranscriptCaptureInitialText,
   TranscriptExternalImportPayload,
+  TranscriptFileReference,
   TranscriptGatewayImportPayload,
   TranscriptImportPayload,
   TranscriptImportedEvent,
@@ -268,6 +269,7 @@ export interface TranscriptElectronApi {
   importExternalTranscript: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
   importTranscriptViaGateway: (payload: TranscriptGatewayImportPayload) => Promise<TranscriptGatewayImportResult>
   listProjectTranscripts: (projectId: string) => Promise<TranscriptSessionSummary[]>
+  listProjectTranscriptFileReferences: (projectId: string, relativePath: string) => Promise<TranscriptFileReference[]>
   listAllTranscripts: () => Promise<Array<{ projectId: string; summaries: TranscriptSessionSummary[] }>>
   getTranscript: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
   updateTranscript: (payload: TranscriptUpdatePayload) => Promise<TranscriptSession>

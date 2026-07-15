@@ -96,6 +96,7 @@ export const IPC = {
   TRANSCRIPT_IMPORT_VIA_GATEWAY: 'transcript:import-via-gateway',
   TRANSCRIPT_CAPTURE_INITIAL_TEXT_CONSUME: 'transcript-capture:initial-text-consume',
   TRANSCRIPT_LIST: 'transcript:list',
+  TRANSCRIPT_LIST_FILE_REFERENCES: 'transcript:list-file-references',
   TRANSCRIPT_LIST_ALL: 'transcript:list-all',
   TRANSCRIPT_GET: 'transcript:get',
   TRANSCRIPT_UPDATE: 'transcript:update',
