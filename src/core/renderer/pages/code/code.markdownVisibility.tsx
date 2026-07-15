@@ -8,7 +8,7 @@ function parseVerticalRootMargin(rootMargin: string): number {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function isNearViewport(element: Element, root: Element | null, rootMargin: string): boolean {
+function isElementNearViewport(element: Element, root: Element | null, rootMargin: string): boolean {
   const elementRect = element.getBoundingClientRect()
   const rootRect = root?.getBoundingClientRect()
   const viewportTop = rootRect?.top ?? 0
@@ -48,10 +48,7 @@ export function MarkdownPreviewVisibilityProvider({ children, forceRenderAllBloc
         }
       },
       {
-        // The browser viewport still accounts for clipping by nested scroll
-        // containers, and is more reliable in Electron than using the preview
-        // pane itself as the observer root.
-        root: null,
+        root,
         rootMargin,
         threshold: 0.01,
       },
@@ -62,7 +59,7 @@ export function MarkdownPreviewVisibilityProvider({ children, forceRenderAllBloc
       observer.observe(element)
       // Ref callbacks can run before the scroll container has completed layout.
       // Recheck after the root and all preview blocks have their final geometry.
-      if (isNearViewport(element, root, rootMargin) || isNearViewport(element, null, rootMargin)) {
+      if (isElementNearViewport(element, root, rootMargin) || isElementNearViewport(element, null, rootMargin)) {
         registrationsRef.current.get(element)?.(true)
       }
     }
@@ -81,7 +78,7 @@ export function MarkdownPreviewVisibilityProvider({ children, forceRenderAllBloc
       }
 
       registrationsRef.current.set(element, onVisibilityChange)
-      if (isNearViewport(element, rootRef?.current ?? null, rootMargin) || isNearViewport(element, null, rootMargin)) {
+      if (isElementNearViewport(element, rootRef?.current ?? null, rootMargin) || isElementNearViewport(element, null, rootMargin)) {
         onVisibilityChange(true)
       }
       observerRef.current?.observe(element)
@@ -143,6 +140,9 @@ export function useMarkdownNearViewport<T extends Element>(rootMargin = DEFAULT_
         },
       )
       observer.observe(element)
+      if (isElementNearViewport(element, null, rootMargin)) {
+        setIsNearViewport(true)
+      }
       unregisterRef.current = () => observer.disconnect()
     },
     [context, rootMargin],

@@ -40,6 +40,7 @@ import { preloadProjectPane } from '../../lib/projectPagePreload'
 import { inferLanguageFromRelativePath } from '../code/code.helpers'
 import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { remarkBoxDrawingTables } from '../code/code.markdownBoxTables'
+import { MarkdownPreviewVisibilityProvider } from '../code/code.markdownVisibility'
 
 function TranscriptModeButton({
   active,
@@ -746,13 +747,15 @@ export function TranscriptMainContent({
                   className="code-markdown-preview-scroll-root transcript-markdown-preview-scroll-root min-h-0 overflow-y-auto bg-[color:var(--color-card)]"
                 >
                   <article className="code-markdown-content code-markdown-content--viewport-scroll transcript-markdown-content px-6 py-6">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
-                      components={markdownComponents}
-                      urlTransform={transformMarkdownUrl}
-                    >
-                      {displayMarkdownText}
-                    </ReactMarkdown>
+                    <MarkdownPreviewVisibilityProvider forceRenderAllBlocks>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
+                        components={markdownComponents}
+                        urlTransform={transformMarkdownUrl}
+                      >
+                        {displayMarkdownText}
+                      </ReactMarkdown>
+                    </MarkdownPreviewVisibilityProvider>
                   </article>
                 </div>
               )}

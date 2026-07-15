@@ -17,6 +17,7 @@ import {
 } from '../code/code.markdown'
 import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { remarkBoxDrawingTables } from '../code/code.markdownBoxTables'
+import { MarkdownPreviewVisibilityProvider } from '../code/code.markdownVisibility'
 
 export type TranscriptStructuredPreviewState = {
   kind: MarkdownStructuredBlockClickPayload['kind']
@@ -66,13 +67,15 @@ const StructuredPreviewMarkdown = memo(function StructuredPreviewMarkdown({
       ref={contentRef}
       className="code-markdown-content code-markdown-content--modal transcript-markdown-content px-5 py-8"
     >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
-        components={components}
-        urlTransform={transformMarkdownUrl}
-      >
-        {markdown}
-      </ReactMarkdown>
+      <MarkdownPreviewVisibilityProvider forceRenderAllBlocks>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm, remarkBoxDrawingTables]}
+          components={components}
+          urlTransform={transformMarkdownUrl}
+        >
+          {markdown}
+        </ReactMarkdown>
+      </MarkdownPreviewVisibilityProvider>
     </article>
   )
 })
