@@ -190,14 +190,13 @@ export function LearningEditorPanel({
                   horizontalScrollbar
                   horizontalScrollbarClassName="absolute left-[var(--scrollbar-edge-gap)] right-[var(--scrollbar-edge-gap)] bottom-[var(--scrollbar-edge-gap)] z-10 h-[var(--scrollbar-size)] rounded-full border-t-0 bg-[var(--scrollbar-track)]/92 backdrop-blur-md"
                 >
-                  <article
-                    className={`code-markdown-content code-markdown-content--viewport-scroll ${editorDisplayMode === 'preview' ? 'px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'}`}
-                    style={{ margin: editorDisplayMode === 'preview' ? '0 auto' : 0, maxWidth: editorDisplayMode === 'preview' ? 'min(100%, 1120px)' : 'none', minWidth: 0, width: '100%' }}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkBoxDrawingTables]} components={markdownComponents}>
-                      {editorContent}
-                    </ReactMarkdown>
-                  </article>
+                  <div className={editorDisplayMode === 'preview' ? 'learning-preview-reading-frame' : undefined}>
+                    <article className={`code-markdown-content code-markdown-content--viewport-scroll ${editorDisplayMode === 'preview' ? 'learning-preview-reading-content px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'}`} style={{ margin: 0, minWidth: 0, width: '100%' }}>
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBoxDrawingTables]} components={markdownComponents}>
+                        {editorContent}
+                      </ReactMarkdown>
+                    </article>
+                  </div>
                 </ScrollArea>
               </div>
             ) : null}

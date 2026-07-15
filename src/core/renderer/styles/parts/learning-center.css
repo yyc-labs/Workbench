@@ -4,13 +4,48 @@
   min-width: 0;
 }
 
+.learning-preview-reading-frame {
+  display: flex;
+  justify-content: center;
+  min-width: 100%;
+}
+
+.learning-preview-reading-frame .learning-preview-reading-content {
+  width: min(100%, 1120px);
+  min-width: 0;
+  max-width: 1120px;
+  margin-inline: 0;
+}
+
+.learning-preview-reading-content > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-box-diagram):not(.code-markdown-architecture-diagram):not(.code-markdown-mermaid-wrap) {
+  margin-inline: auto;
+}
+
+.learning-preview-reading-content > pre,
+.learning-preview-reading-content > table,
+.learning-preview-reading-content > .code-markdown-box-flow,
+.learning-preview-reading-content > .code-markdown-vertical-flow,
+.learning-preview-reading-content > .code-markdown-box-diagram,
+.learning-preview-reading-content > .code-markdown-architecture-diagram,
+.learning-preview-reading-content > .code-markdown-mermaid-wrap {
+  margin-inline: auto;
+}
+
 @media (max-width: 1279px) {
-  .learning-notes-grid.learning-right-collapsed {
+  .learning-notes-grid[data-left-collapsed="false"].learning-right-collapsed {
     grid-template-columns: 248px minmax(0, 1fr) !important;
   }
 
-  .learning-notes-grid.learning-right-open {
+  .learning-notes-grid[data-left-collapsed="false"].learning-right-open {
     grid-template-columns: 228px minmax(0, 1fr) 264px !important;
+  }
+
+  .learning-notes-grid[data-left-collapsed="true"].learning-right-open {
+    grid-template-columns: minmax(0, 1fr) 264px !important;
+  }
+
+  .learning-notes-grid[data-left-collapsed="true"].learning-right-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }
 
@@ -19,12 +54,12 @@
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
-  .learning-notes-grid[data-left-collapsed='false'] .learning-editor-stage,
-  .learning-notes-grid[data-left-collapsed='false'] .learning-note-info-sidebar {
+  .learning-notes-grid[data-left-collapsed="false"] .learning-editor-stage,
+  .learning-notes-grid[data-left-collapsed="false"] .learning-note-info-sidebar {
     display: none;
   }
 
-  .learning-notes-grid[data-left-collapsed='true'] .learning-notes-sidebar {
+  .learning-notes-grid[data-left-collapsed="true"] .learning-notes-sidebar {
     display: none;
   }
 
