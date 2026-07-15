@@ -1,5 +1,5 @@
-import { Children, isValidElement, useCallback, useEffect, useRef, useState } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Check, Copy, Maximize2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
@@ -8,21 +8,10 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
 import { MermaidBlock } from './code.markdownMermaid'
-import {
-  createSourceTrackedBlockComponent,
-  createStructuredBlockComponent,
-  getSourceLineDataProps,
-  type MarkdownStructuredBlockClickPayload,
-  type MarkdownStructuredBlockKind,
-  type SourceLineDataProps,
-  shouldIgnoreStructuredBlockActivation,
-} from './code.markdownStructuredBlocks'
-import {
-  isWindowsAbsolutePath,
-  normalizeAbsoluteMarkdownFileUrl,
-  toFileUrlFromAbsolutePath,
-} from './code.markdownUrls'
+import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps, shouldIgnoreStructuredBlockActivation } from './code.markdownStructuredBlocks'
+import { isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
+import { useMarkdownNearViewport } from './code.markdownVisibility'
 
 export type {
   MarkdownStructuredBlockClickPayload,
@@ -144,13 +133,7 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
   }
 
   const lower = trimmed.toLowerCase()
-  if (
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('data:') ||
-    lower.startsWith('blob:') ||
-    lower.startsWith('file:')
-  ) {
+  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('file:')) {
     return trimmed
   }
 
@@ -162,9 +145,7 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
   if (!projectRootPath) return trimmed
 
   const activeDirectory = activeFilePath ? dirnameFromRelativePath(activeFilePath) : ''
-  const relativeToProject = activeDirectory
-    ? joinPosixPaths(activeDirectory, trimmed)
-    : joinPosixPaths(trimmed)
+  const relativeToProject = activeDirectory ? joinPosixPaths(activeDirectory, trimmed) : joinPosixPaths(trimmed)
 
   const absolutePath = joinProjectPath(projectRootPath, relativeToProject)
   const projectAbsoluteFileUrl = toFileUrlFromAbsolutePath(absolutePath)
@@ -309,9 +290,7 @@ function parseSourceLineAttribute(value: string | null): number | null {
 
 export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumber: number): boolean {
   const targetLine = Math.max(1, Math.floor(lineNumber))
-  const candidates = Array.from(
-    container.querySelectorAll<HTMLElement>(MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR)
-  )
+  const candidates = Array.from(container.querySelectorAll<HTMLElement>(MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR))
 
   if (candidates.length <= 0) return false
 
@@ -357,73 +336,19 @@ export function revealMarkdownPreviewSourceLine(container: HTMLElement, lineNumb
   return true
 }
 
-function useNearViewport<T extends Element>(rootMargin: string): [RefObject<T>, boolean] {
-  const ref = useRef<T | null>(null)
-  const [isNearViewport, setIsNearViewport] = useState(false)
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-
-    if (typeof IntersectionObserver === 'undefined') {
-      setIsNearViewport(true)
-      return
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting || entry.intersectionRatio > 0)) {
-        setIsNearViewport(true)
-      }
-    }, {
-      root: null,
-      rootMargin,
-      threshold: 0.01,
-    })
-
-    observer.observe(element)
-    return () => {
-      observer.disconnect()
-    }
-  }, [rootMargin])
-
-  return [ref as RefObject<T>, isNearViewport]
-}
-
 function shouldOpenInSystemBrowser(href: string): boolean {
   const value = href.trim().toLowerCase()
-  return (
-    value.startsWith('http://') ||
-    value.startsWith('https://') ||
-    value.startsWith('file://') ||
-    value.startsWith('mailto:') ||
-    value.startsWith('tel:')
-  )
+  return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('file://') || value.startsWith('mailto:') || value.startsWith('tel:')
 }
 
-function AsyncMarkdownImage({
-  resolvedSrc,
-  alt,
-  props,
-}: {
-  resolvedSrc: string
-  alt: string
-  props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'>
-}) {
-  const [displaySrc, setDisplaySrc] = useState(() => (
-    resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://')
-      ? resolvedSrc
-      : ''
-  ))
+function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; alt: string; props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'> }) {
+  const [imageRef, isNearViewport] = useMarkdownNearViewport<HTMLElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
+  const [displaySrc, setDisplaySrc] = useState(() => (resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://') ? resolvedSrc : ''))
 
   useEffect(() => {
     let cancelled = false
 
-    if (
-      resolvedSrc.startsWith('data:')
-      || resolvedSrc.startsWith('blob:')
-      || resolvedSrc.startsWith('http://')
-      || resolvedSrc.startsWith('https://')
-    ) {
+    if (resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://')) {
       setDisplaySrc(resolvedSrc)
       return () => {
         cancelled = true
@@ -437,8 +362,15 @@ function AsyncMarkdownImage({
       }
     }
 
+    if (!isNearViewport) {
+      return () => {
+        cancelled = true
+      }
+    }
+
     setDisplaySrc('')
-    void window.electronAPI.readLocalImageAsDataUrl(resolvedSrc)
+    void window.electronAPI
+      .readLocalImageAsDataUrl(resolvedSrc)
       .then((dataUrl) => {
         if (cancelled) return
         setDisplaySrc(dataUrl)
@@ -451,13 +383,17 @@ function AsyncMarkdownImage({
     return () => {
       cancelled = true
     }
-  }, [resolvedSrc])
+  }, [isNearViewport, resolvedSrc])
 
   if (!displaySrc) {
-    return <span className="text-xs text-[color:var(--color-muted-foreground)]">[image unavailable]</span>
+    return (
+      <span ref={imageRef} className="code-markdown-image-placeholder text-xs text-[color:var(--color-muted-foreground)]">
+        [image unavailable]
+      </span>
+    )
   }
 
-  return <img {...props} src={displaySrc} alt={alt} loading="lazy" />
+  return <img ref={imageRef} {...props} src={displaySrc} alt={alt} loading="lazy" />
 }
 
 type MarkdownCodeBlockProps = {
@@ -471,24 +407,12 @@ type MarkdownCodeBlockProps = {
   sourceLineProps?: SourceLineDataProps
 }
 
-function StandardMarkdownCodeBlock({
-  codeText,
-  language,
-  themeMode,
-  enableSyntaxHighlight,
-  forceRenderAllBlocks = false,
-  onCodeBlockExpand,
-  sourceLineProps,
-}: MarkdownCodeBlockProps) {
+function StandardMarkdownCodeBlock({ codeText, language, themeMode, enableSyntaxHighlight, onCodeBlockExpand, sourceLineProps }: MarkdownCodeBlockProps) {
   const { t } = useI18n()
   const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [containerRef, isNearViewport] = useNearViewport<HTMLDivElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
-  // forceRenderAllBlocks bypasses the viewport gate so a snapshot/share capture
-  // gets the inline-styled SyntaxHighlighter DOM for every block, not the
-  // class-dependent plain-block fallback that loses its background/padding when cloned.
-  const shouldRenderSyntax = enableSyntaxHighlight
-    && canHighlightMarkdownCodeBlock(codeText)
-    && (isNearViewport || forceRenderAllBlocks)
+  // Regular code blocks render their tokenized DOM immediately. The per-block
+  // size guard keeps pathological generated blocks on the lightweight path.
+  const shouldRenderSyntax = enableSyntaxHighlight && canHighlightMarkdownCodeBlock(codeText)
 
   useEffect(() => {
     if (copyStatus === 'idle') return
@@ -514,28 +438,20 @@ function StandardMarkdownCodeBlock({
   const codeLanguageLabel = formatCodeLanguageLabel(language, t)
 
   return (
-    <div ref={containerRef} className="code-markdown-syntax-wrap" {...sourceLineProps}>
+    <div className="code-markdown-syntax-wrap" {...sourceLineProps}>
       <div className="code-markdown-code-toolbar">
         <span className="code-markdown-code-language" title={codeLanguageLabel}>
           {codeLanguageLabel}
         </span>
         <div className="code-markdown-code-actions">
           {canExpand && (
-            <button
-              type="button"
-              className="code-markdown-code-action-btn"
-              onClick={handleExpand}
-              title={expandLabel}
-              aria-label={expandLabel}
-            >
+            <button type="button" className="code-markdown-code-action-btn" onClick={handleExpand} title={expandLabel} aria-label={expandLabel}>
               <Maximize2 className="h-3.5 w-3.5" />
             </button>
           )}
           <button
             type="button"
-            className={`code-markdown-copy-btn ${
-              copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''
-            }`}
+            className={`code-markdown-copy-btn ${copyStatus === 'success' ? 'is-success' : copyStatus === 'error' ? 'is-error' : ''}`}
             onClick={() => {
               void handleCopy()
             }}
@@ -573,15 +489,7 @@ function StandardMarkdownCodeBlock({
 
 function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
   if (props.language === 'mermaid') {
-    return (
-      <MermaidBlock
-        codeText={props.codeText}
-        onStructuredBlockClick={props.onStructuredBlockClick}
-        themeMode={props.themeMode}
-        sourceLineProps={props.sourceLineProps}
-        shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation}
-      />
-    )
+    return <MermaidBlock codeText={props.codeText} forceRenderAllBlocks={props.forceRenderAllBlocks} onStructuredBlockClick={props.onStructuredBlockClick} themeMode={props.themeMode} sourceLineProps={props.sourceLineProps} shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation} />
   }
 
   return <StandardMarkdownCodeBlock {...props} />
@@ -604,18 +512,7 @@ function isTranscriptReferenceHref(value: string): boolean {
   return value.trim().toLowerCase().startsWith('transcript-ref://')
 }
 
-export function createMarkdownComponents({
-  activeRelativePath,
-  activeInternalHref = null,
-  enableMarkdownSyntaxHighlight,
-  forceRenderAllBlocks = false,
-  lineOffset = 0,
-  onCodeBlockExpand,
-  onInternalLinkClick,
-  onStructuredBlockClick,
-  projectPath,
-  themeMode,
-}: CreateMarkdownComponentsOptions): Components {
+export function createMarkdownComponents({ activeRelativePath, activeInternalHref = null, enableMarkdownSyntaxHighlight, forceRenderAllBlocks = false, lineOffset = 0, onCodeBlockExpand, onInternalLinkClick, onStructuredBlockClick, projectPath, themeMode }: CreateMarkdownComponentsOptions): Components {
   return {
     div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
     h1: createSourceTrackedBlockComponent('h1', lineOffset),
@@ -669,13 +566,7 @@ export function createMarkdownComponents({
       const internal = Boolean(link) && isTranscriptReferenceHref(link)
       const canConsumeInternal = internal && typeof onInternalLinkClick === 'function'
       const external = Boolean(link) && shouldOpenInSystemBrowser(link)
-      const resolvedClassName = [
-        className,
-        internal ? 'code-markdown-transcript-ref rounded-[8px] px-1.5 py-0.5 transition-all duration-150' : '',
-        internal && activeInternalHref === link
-          ? 'is-active bg-[color:var(--color-warning-background)] text-[color:var(--color-foreground)]'
-          : '',
-      ].filter(Boolean).join(' ')
+      const resolvedClassName = [className, internal ? 'code-markdown-transcript-ref rounded-[8px] px-1.5 py-0.5 transition-all duration-150' : '', internal && activeInternalHref === link ? 'is-active bg-[color:var(--color-warning-background)] text-[color:var(--color-foreground)]' : ''].filter(Boolean).join(' ')
 
       if (internal && !canConsumeInternal) {
         return (
@@ -711,7 +602,11 @@ export function createMarkdownComponents({
     },
     code({ className, children, node: _node, ...props }) {
       const mergedClassName = className ? `code-markdown-inline-code ${className}` : 'code-markdown-inline-code'
-      return <code className={mergedClassName} {...props}>{children}</code>
+      return (
+        <code className={mergedClassName} {...props}>
+          {children}
+        </code>
+      )
     },
   }
 }

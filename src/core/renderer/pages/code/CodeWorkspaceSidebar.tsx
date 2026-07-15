@@ -1,4 +1,5 @@
 import type { Dispatch, Ref, SetStateAction } from 'react'
+import { memo } from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ChevronDown, ChevronUp, FileSearch, FolderSearch, LocateFixed, RefreshCw, Search } from 'lucide-react'
 import { useI18n } from '../../i18n'
@@ -63,7 +64,7 @@ type CodeWorkspaceSidebarProps = {
 
 const FILE_SEARCH_DEBOUNCE_MS = 180
 
-export function CodeWorkspaceSidebar({
+export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   activeContentSearchLocation,
   activeContentSearchScopeKey,
   activeContentSearchScopeLabel,
@@ -159,17 +160,9 @@ export function CodeWorkspaceSidebar({
               </div>
               <div className="code-large-project-empty-title">{t('codeWorkspace.largeProjectManualLoadTitle')}</div>
               <div className="code-large-project-empty-copy">{t('codeWorkspace.largeProjectManualLoadHint')}</div>
-              <div className="code-large-project-empty-meta">
-                {t('codeWorkspace.largeProjectManualLoadCount', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}
-              </div>
-              <div className="code-large-project-empty-copy code-large-project-empty-copy--secondary">
-                {t('codeWorkspace.largeProjectManualLoadDetail', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}
-              </div>
-              <button
-                type="button"
-                className="code-large-project-empty-action"
-                onClick={onReloadTree}
-              >
+              <div className="code-large-project-empty-meta">{t('codeWorkspace.largeProjectManualLoadCount', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}</div>
+              <div className="code-large-project-empty-copy code-large-project-empty-copy--secondary">{t('codeWorkspace.largeProjectManualLoadDetail', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}</div>
+              <button type="button" className="code-large-project-empty-action" onClick={onReloadTree}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>{t('codeWorkspace.largeProjectManualLoadAction')}</span>
               </button>
@@ -214,9 +207,7 @@ export function CodeWorkspaceSidebar({
             </span>
             <div className="min-w-0">
               <div className="code-search-title">{t('codeWorkspace.globalSearch')}</div>
-              <div className="code-search-subtitle">
-                {hasContentSearchScope ? t('codeWorkspace.scopeLabel', { value: activeContentSearchScopeLabel }) : t('codeWorkspace.searchAcrossProject')}
-              </div>
+              <div className="code-search-subtitle">{hasContentSearchScope ? t('codeWorkspace.scopeLabel', { value: activeContentSearchScopeLabel }) : t('codeWorkspace.searchAcrossProject')}</div>
             </div>
           </div>
           <button
@@ -246,14 +237,7 @@ export function CodeWorkspaceSidebar({
               {contentSearchScopePresets.map((preset) => {
                 const isActive = contentSearchScopeKey(preset.scopeInput) === activeContentSearchScopeKey
                 return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`code-search-scope-pill ${isActive ? 'is-active' : ''}`}
-                    onClick={() => onApplyContentSearchScopePreset(preset)}
-                    title={preset.title}
-                    aria-pressed={isActive}
-                  >
+                  <button key={preset.id} type="button" className={`code-search-scope-pill ${isActive ? 'is-active' : ''}`} onClick={() => onApplyContentSearchScopePreset(preset)} title={preset.title} aria-pressed={isActive}>
                     <span className="code-search-scope-pill-label">{preset.label}</span>
                     <span className="code-search-scope-pill-hint">{preset.hint}</span>
                   </button>
@@ -261,34 +245,17 @@ export function CodeWorkspaceSidebar({
               })}
             </div>
           </ScrollAreaPrimitive.Viewport>
-          <ScrollAreaPrimitive.Scrollbar
-            className="code-search-scope-scrollbar"
-            orientation="horizontal"
-          >
+          <ScrollAreaPrimitive.Scrollbar className="code-search-scope-scrollbar" orientation="horizontal">
             <ScrollAreaPrimitive.Thumb className="code-search-scope-scrollbar-thumb" />
           </ScrollAreaPrimitive.Scrollbar>
         </ScrollAreaPrimitive.Root>
         <div className="code-search-utility-row">
-          <button
-            type="button"
-            className="code-search-inline-toggle"
-            onClick={() => onSetContentSearchAdvancedOpen((prev) => !prev)}
-            aria-expanded={isContentSearchAdvancedOpen}
-            title={t('codeWorkspace.openAdvancedScope')}
-          >
+          <button type="button" className="code-search-inline-toggle" onClick={() => onSetContentSearchAdvancedOpen((prev) => !prev)} aria-expanded={isContentSearchAdvancedOpen} title={t('codeWorkspace.openAdvancedScope')}>
             {isContentSearchAdvancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             <span>{t('codeWorkspace.advancedScope')}</span>
-            {hasContentSearchScope && (
-              <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>
-            )}
+            {hasContentSearchScope && <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>}
           </button>
-          <button
-            type="button"
-            className="code-search-meta-action code-search-toggle-action"
-            onClick={onToggleContentSearchTree}
-            disabled={!canToggleContentSearchTree}
-            aria-disabled={!canToggleContentSearchTree}
-          >
+          <button type="button" className="code-search-meta-action code-search-toggle-action" onClick={onToggleContentSearchTree} disabled={!canToggleContentSearchTree} aria-disabled={!canToggleContentSearchTree}>
             {contentSearchToggleLabel}
           </button>
         </div>
@@ -307,9 +274,7 @@ export function CodeWorkspaceSidebar({
               spellCheck={false}
               title={contentSearchScopeSummary}
             />
-            <div className="code-search-advanced-help">
-              {t('codeWorkspace.advancedScopeHelp')}
-            </div>
+            <div className="code-search-advanced-help">{t('codeWorkspace.advancedScopeHelp')}</div>
           </div>
         )}
         {contentSearchQuery.trim().length > 0 && !isSearchingContent && !contentSearchError && (
@@ -320,12 +285,8 @@ export function CodeWorkspaceSidebar({
                 <span className="code-search-main-meta-sep">•</span>
                 <span className="code-search-main-stat">{t('codeWorkspace.matchesStat', { count: contentSearchResult.totalMatches })}</span>
                 <span className="code-search-main-meta-sep">•</span>
-                <span className="code-search-main-stat">
-                  {hasContentSearchScope ? t('codeWorkspace.globsStat', { count: contentSearchScopeGlobs.length }) : t('codeWorkspace.allFiles')}
-                </span>
-                {contentSearchResult.limited && (
-                  <span className="code-search-main-limited">{t('codeWorkspace.limited')}</span>
-                )}
+                <span className="code-search-main-stat">{hasContentSearchScope ? t('codeWorkspace.globsStat', { count: contentSearchScopeGlobs.length }) : t('codeWorkspace.allFiles')}</span>
+                {contentSearchResult.limited && <span className="code-search-main-limited">{t('codeWorkspace.limited')}</span>}
               </span>
             </div>
           </div>
@@ -334,9 +295,7 @@ export function CodeWorkspaceSidebar({
 
       {contentSearchQuery.trim().length === 0 ? (
         <div className="code-panel-empty">
-          <div className="text-sm text-[color:var(--color-muted-foreground)]">
-            {t('codeWorkspace.globalSearchEmpty')}
-          </div>
+          <div className="text-sm text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.globalSearchEmpty')}</div>
         </div>
       ) : isSearchingContent ? (
         <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.searchingContent')}</div>
@@ -359,4 +318,4 @@ export function CodeWorkspaceSidebar({
       )}
     </aside>
   )
-}
+})

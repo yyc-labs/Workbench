@@ -3,6 +3,7 @@ import type { ProjectFileReadResult } from '../../../shared/types'
 import { translateCurrent } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import type { SaveStatus } from './code.types'
+import { markMarkdownPreviewPerformance } from './markdownPreviewPerformance'
 
 const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
@@ -41,13 +42,7 @@ function hashTextContent(value: string): number {
   return hash >>> 0
 }
 
-export function useCodeFileState({
-  projectId,
-  projectPath,
-  persistedLastCodeFile,
-  onBeforeOpenFile,
-  onDidOpenFile,
-}: UseCodeFileStateOptions) {
+export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile, onBeforeOpenFile, onDidOpenFile }: UseCodeFileStateOptions) {
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const [activeFile, setActiveFile] = useState<ActiveCodeFile | null>(null)
   const [editorValue, setEditorValueState] = useState('')
@@ -102,59 +97,54 @@ export function useCodeFileState({
     }
   }, [])
 
-  const openFile = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
-    if (activeRelativePath === relativePath && !forceReload) return true
-    if (isDirty && activeRelativePath && activeRelativePath !== relativePath) {
-      const proceed = await requestDiscardUnsavedConfirm(relativePath, forceReload)
-      if (!proceed) return false
-    }
-
-    onBeforeOpenFile?.()
-    const requestSeq = openRequestSeqRef.current + 1
-    openRequestSeqRef.current = requestSeq
-
-    setIsReading(true)
-    setReadError(null)
-    setSaveError(null)
-    setSaveStatus('idle')
-
-    try {
-      const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
-      if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
-      const contentFingerprint = hashTextContent(result.content)
-      setActiveFile(toActiveCodeFile(result))
-      setActiveRelativePath(result.relativePath)
-      setEditorValueState(result.content)
-      setSavedContentFingerprint(contentFingerprint)
-      setSavedContentLength(result.content.length)
-      setHasUnsavedChanges(false)
-      setHasExternalChange(false)
-      onDidOpenFile?.(result)
-      void setProjectLastCodeFile(projectId, result.relativePath)
-      return true
-    } catch (error) {
-      if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
-      setReadError(error instanceof Error ? error.message : String(error))
-      if (forceReload || persistedLastCodeFile === relativePath) {
-        void setProjectLastCodeFile(projectId, undefined)
+  const openFile = useCallback(
+    async (relativePath: string, forceReload = false): Promise<boolean> => {
+      if (activeRelativePath === relativePath && !forceReload) return true
+      if (isDirty && activeRelativePath && activeRelativePath !== relativePath) {
+        const proceed = await requestDiscardUnsavedConfirm(relativePath, forceReload)
+        if (!proceed) return false
       }
-      return false
-    } finally {
-      if (mountedRef.current && openRequestSeqRef.current === requestSeq) {
-        setIsReading(false)
+
+      onBeforeOpenFile?.()
+      const requestSeq = openRequestSeqRef.current + 1
+      openRequestSeqRef.current = requestSeq
+
+      setIsReading(true)
+      setReadError(null)
+      setSaveError(null)
+      setSaveStatus('idle')
+      markMarkdownPreviewPerformance('file.read.start')
+
+      try {
+        const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
+        if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
+        const contentFingerprint = hashTextContent(result.content)
+        setActiveFile(toActiveCodeFile(result))
+        setActiveRelativePath(result.relativePath)
+        setEditorValueState(result.content)
+        setSavedContentFingerprint(contentFingerprint)
+        setSavedContentLength(result.content.length)
+        setHasUnsavedChanges(false)
+        setHasExternalChange(false)
+        onDidOpenFile?.(result)
+        void setProjectLastCodeFile(projectId, result.relativePath)
+        return true
+      } catch (error) {
+        if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
+        setReadError(error instanceof Error ? error.message : String(error))
+        if (forceReload || persistedLastCodeFile === relativePath) {
+          void setProjectLastCodeFile(projectId, undefined)
+        }
+        return false
+      } finally {
+        markMarkdownPreviewPerformance('file.read.end')
+        if (mountedRef.current && openRequestSeqRef.current === requestSeq) {
+          setIsReading(false)
+        }
       }
-    }
-  }, [
-    activeRelativePath,
-    isDirty,
-    onBeforeOpenFile,
-    onDidOpenFile,
-    persistedLastCodeFile,
-    projectId,
-    projectPath,
-    requestDiscardUnsavedConfirm,
-    setProjectLastCodeFile,
-  ])
+    },
+    [activeRelativePath, isDirty, onBeforeOpenFile, onDidOpenFile, persistedLastCodeFile, projectId, projectPath, requestDiscardUnsavedConfirm, setProjectLastCodeFile],
+  )
 
   const handleSave = useCallback(async () => {
     if (!activeRelativePath || !activeFile) return
@@ -164,22 +154,17 @@ export function useCodeFileState({
     setSaveError(null)
 
     try {
-      const result = await window.electronAPI.writeProjectFile(
-        projectPath,
-        activeRelativePath,
-        editorValue,
-        activeFile.mtimeMs
-      )
+      const result = await window.electronAPI.writeProjectFile(projectPath, activeRelativePath, editorValue, activeFile.mtimeMs)
       const contentFingerprint = hashTextContent(editorValue)
-      setActiveFile((prev) => (
+      setActiveFile((prev) =>
         prev
           ? {
-            ...prev,
-            size: result.size,
-            mtimeMs: result.mtimeMs,
-          }
-          : prev
-      ))
+              ...prev,
+              size: result.size,
+              mtimeMs: result.mtimeMs,
+            }
+          : prev,
+      )
       setSavedContentFingerprint(contentFingerprint)
       setSavedContentLength(editorValue.length)
       setHasUnsavedChanges(false)
@@ -197,10 +182,7 @@ export function useCodeFileState({
   useEffect(() => {
     if (!hasUnsavedChanges) return
     const timer = window.setTimeout(() => {
-      const matchesSavedSnapshot = (
-        editorValue.length === savedContentLength
-        && hashTextContent(editorValue) === savedContentFingerprint
-      )
+      const matchesSavedSnapshot = editorValue.length === savedContentLength && hashTextContent(editorValue) === savedContentFingerprint
       if (matchesSavedSnapshot) {
         setHasUnsavedChanges(false)
       }
@@ -256,11 +238,7 @@ export function useCodeFileState({
     }
   }, [activeFile, activeRelativePath, isDirty, openFile, projectPath])
 
-  const saveText = saveStatus === 'saving'
-    ? translateCurrent('common.saving')
-    : saveStatus === 'saved'
-      ? translateCurrent('codeWorkspace.saved')
-      : translateCurrent('codeWorkspace.save')
+  const saveText = saveStatus === 'saving' ? translateCurrent('common.saving') : saveStatus === 'saved' ? translateCurrent('codeWorkspace.saved') : translateCurrent('codeWorkspace.save')
   const saveIndicatorText = !activeRelativePath
     ? translateCurrent('codeWorkspace.noFileSelected')
     : saveStatus === 'saving'
@@ -270,11 +248,7 @@ export function useCodeFileState({
         : isDirty
           ? translateCurrent('codeWorkspace.unsavedChanges')
           : translateCurrent('codeWorkspace.allChangesSaved')
-  const saveIndicatorToneClass = saveStatus === 'error'
-    ? 'text-[color:var(--color-destructive)]'
-    : saveStatus === 'saving' || isDirty
-      ? 'text-[color:var(--color-warning)]'
-      : 'text-[color:var(--color-muted-foreground)]'
+  const saveIndicatorToneClass = saveStatus === 'error' ? 'text-[color:var(--color-destructive)]' : saveStatus === 'saving' || isDirty ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-muted-foreground)]'
 
   return {
     activeFile,

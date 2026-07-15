@@ -31,6 +31,26 @@
   --code-markdown-block-max-inline-size: max(0px, calc(100cqi - 44px));
 }
 
+.code-markdown-content--performance > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 240px;
+}
+
+.code-markdown-content--performance > .code-mdc-meta-card {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
+.code-markdown-visibility-placeholder {
+  min-height: 240px;
+}
+
+.code-markdown-image-placeholder {
+  display: inline-block;
+  min-height: 32px;
+  min-width: 120px;
+}
+
 .code-markdown-content--modal {
   max-width: none;
   font-size: 17px;
@@ -160,15 +180,15 @@
 }
 
 .code-markdown-content .task-list-item::marker {
-  content: '';
+  content: "";
 }
 
-.code-markdown-content .task-list-item > input[type='checkbox'] {
+.code-markdown-content .task-list-item > input[type="checkbox"] {
   margin-right: 0.55em;
   vertical-align: text-bottom;
 }
 
-.code-markdown-content .task-list-item:has(> input[type='checkbox']:checked) {
+.code-markdown-content .task-list-item:has(> input[type="checkbox"]:checked) {
   color: color-mix(in srgb, var(--color-muted-foreground) 84%, var(--color-foreground));
 }
 
@@ -188,7 +208,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-primary) 6%, var(--color-card));
   color: color-mix(in srgb, var(--color-primary) 78%, var(--color-foreground));
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 0.92em;
   line-height: 1.45;
   text-decoration: none;
@@ -234,7 +254,7 @@
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 0.12em 0.34em;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 0.9em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

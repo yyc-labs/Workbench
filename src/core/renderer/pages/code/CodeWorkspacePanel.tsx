@@ -20,22 +20,12 @@ import { useCodeWorkspaceRestoreState } from './useCodeWorkspaceRestoreState'
 import { useCodeWorkspaceScrollSync } from './useCodeWorkspaceScrollSync'
 import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import { useMarkdownPreviewModeState } from './useMarkdownPreviewModeState'
-import {
-  inferLanguageFromRelativePath,
-  pushRecentCodeFilePath,
-  removeCodeFilePathFromDrawerState,
-  toggleFavoriteCodeFilePath,
-} from './code.helpers'
+import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { buildKnownFilePathSet } from './code.tree'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
-import {
-  CODE_FILE_DRAWER_SECTION_LIMIT,
-  MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS,
-  MAX_PROJECT_CODE_SESSION_TABS,
-  normalizeProjectCodeSession,
-} from './useProjectCodeSession'
+import { CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, MAX_PROJECT_CODE_SESSION_TABS, normalizeProjectCodeSession } from './useProjectCodeSession'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
 import { useCodeTreePathActions } from './useCodeTreePathActions'
 
@@ -45,22 +35,7 @@ const MAX_PRELOADED_TRANSCRIPT_SESSIONS = 4
 const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
 const TRANSCRIPT_SESSION_PRELOAD_DELAY_MS = 320
 const CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:code-left-sidebar-collapsed'
-const SMART_EMPTY_FILE_CANDIDATES = [
-  'README.md',
-  'readme.md',
-  'AGENTS.md',
-  'AGENT.md',
-  'package.json',
-  'src/main.tsx',
-  'src/main.ts',
-  'src/index.tsx',
-  'src/index.ts',
-  'src/App.tsx',
-  'src/App.ts',
-  'app/page.tsx',
-  'pages/index.tsx',
-  'main.py',
-]
+const SMART_EMPTY_FILE_CANDIDATES = ['README.md', 'readme.md', 'AGENTS.md', 'AGENT.md', 'package.json', 'src/main.tsx', 'src/main.ts', 'src/index.tsx', 'src/index.ts', 'src/App.tsx', 'src/App.ts', 'app/page.tsx', 'pages/index.tsx', 'main.py']
 type CodeWorkspacePanelProps = {
   projectId: string
   projectPath: string
@@ -117,19 +92,16 @@ export function CodeWorkspacePanel({
     const found = s.projects.find((p) => p.id === projectId)
     return found
       ? {
-        lastCodeFile: found.lastCodeFile,
-        codeSession: found.codeSession,
-        lastMarkdownPreviewMode: found.lastMarkdownPreviewMode,
-        codeFileDrawerState: found.codeFileDrawerState,
-      }
+          lastCodeFile: found.lastCodeFile,
+          codeSession: found.codeSession,
+          lastMarkdownPreviewMode: found.lastMarkdownPreviewMode,
+          codeFileDrawerState: found.codeFileDrawerState,
+        }
       : undefined
   }, shallow)
   const persistedLastCodeFile = projectCodeMeta?.lastCodeFile
   const rawPersistedProjectCodeSession = projectCodeMeta?.codeSession
-  const persistedProjectCodeSession = useMemo(
-    () => normalizeProjectCodeSession(rawPersistedProjectCodeSession),
-    [rawPersistedProjectCodeSession]
-  )
+  const persistedProjectCodeSession = useMemo(() => normalizeProjectCodeSession(rawPersistedProjectCodeSession), [rawPersistedProjectCodeSession])
   const persistedLastMarkdownPreviewMode = projectCodeMeta?.lastMarkdownPreviewMode
   const persistedCodeFileDrawerState = projectCodeMeta?.codeFileDrawerState
   const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
@@ -151,9 +123,7 @@ export function CodeWorkspacePanel({
   })
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
-  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(
-    () => persistedProjectCodeSession?.contentSearchScope ?? ''
-  )
+  const [contentSearchScopeInput, setContentSearchScopeInput] = useState(() => persistedProjectCodeSession?.contentSearchScope ?? '')
   const [activeContentSearchLocation, setActiveContentSearchLocation] = useState<{
     relativePath: string
     lineNumber: number
@@ -180,44 +150,28 @@ export function CodeWorkspacePanel({
   const handleBeforeOpenCodeFile = useCallback(() => {
     captureCurrentModeScrollRef.current()
   }, [])
-  const handleDidOpenCodeFile = useCallback((result: ProjectFileReadResult) => {
-    const nextPath = result.relativePath.trim()
-    if (nextPath) {
-      setOpenTabPaths((prev) => pushOpenTabPath(prev, nextPath))
-      handleOpenedCodeFileRef.current(nextPath)
-    }
+  const handleDidOpenCodeFile = useCallback(
+    (result: ProjectFileReadResult) => {
+      const nextPath = result.relativePath.trim()
+      if (nextPath) {
+        setOpenTabPaths((prev) => pushOpenTabPath(prev, nextPath))
+        handleOpenedCodeFileRef.current(nextPath)
+      }
 
-    resetScrollSyncStateRef.current()
-    markOpenedFileInExplorerRef.current(result.relativePath)
-    setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
-  }, [pushOpenTabPath])
-  const {
-    activeFile,
-    editorValue,
-    setEditorValue,
-    activeRelativePath,
-    isReading,
-    readError,
-    saveStatus,
-    saveError,
-    hasExternalChange,
-    setHasExternalChange,
-    isReloadingFromDisk,
-    discardUnsavedConfirm,
-    resolveDiscardUnsavedConfirm,
-    isDirty,
-    openFile,
-    handleSave,
-    saveText,
-    saveIndicatorText,
-    saveIndicatorToneClass,
-  } = useCodeFileState({
-    projectId,
-    projectPath,
-    persistedLastCodeFile,
-    onBeforeOpenFile: handleBeforeOpenCodeFile,
-    onDidOpenFile: handleDidOpenCodeFile,
-  })
+      resetScrollSyncStateRef.current()
+      markOpenedFileInExplorerRef.current(result.relativePath)
+      setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
+    },
+    [pushOpenTabPath],
+  )
+  const { activeFile, editorValue, setEditorValue, activeRelativePath, isReading, readError, saveStatus, saveError, hasExternalChange, setHasExternalChange, isReloadingFromDisk, discardUnsavedConfirm, resolveDiscardUnsavedConfirm, isDirty, openFile, handleSave, saveText, saveIndicatorText, saveIndicatorToneClass } =
+    useCodeFileState({
+      projectId,
+      projectPath,
+      persistedLastCodeFile,
+      onBeforeOpenFile: handleBeforeOpenCodeFile,
+      onDidOpenFile: handleDidOpenCodeFile,
+    })
   const {
     activeContentSearchScopeKey,
     activeContentSearchScopeLabel,
@@ -268,6 +222,7 @@ export function CodeWorkspacePanel({
     isMdcFile,
     isShowingEditor,
     isShowingPreview,
+    isMarkdownPreviewStale,
     markdownComponents,
     markdownPreviewContent,
     monacoTheme,
@@ -288,29 +243,12 @@ export function CodeWorkspacePanel({
   })
   const activeLanguage = activeFile?.language ?? inferLanguageFromRelativePath(activeRelativePath ?? '')
   const activeFileSize = activeFile?.size ?? 0
-  const {
-    previewSearchVisible,
-    previewSearchQuery,
-    setPreviewSearchQuery,
-    activePreviewSearchMatchIndex,
-    setActivePreviewSearchMatchIndex,
-    previewSearchMatches,
-    previewSearchInputRef,
-    closePreviewSearch,
-    openPreviewSearch,
-    goToNextPreviewSearchMatch,
-    goToPreviousPreviewSearchMatch,
-  } = useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
-  const {
-    codeFileDrawerState,
-    cursorPositionsByPath,
-    isRestoringCodeSessionRef,
-    openTabPaths,
-    setCodeFileDrawerState,
-    setCursorPositionsByPath,
-    setOpenTabPaths,
-    visibleOpenTabs,
-  } = useProjectCodeSessionState({
+  const { previewSearchVisible, previewSearchQuery, setPreviewSearchQuery, activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex, previewSearchMatches, previewSearchInputRef, closePreviewSearch, openPreviewSearch, goToNextPreviewSearchMatch, goToPreviousPreviewSearchMatch } = useMarkdownPreviewSearch(
+    previewScrollRef,
+    shouldHandleFindInPreview,
+    markdownPreviewContent,
+  )
+  const { codeFileDrawerState, cursorPositionsByPath, isRestoringCodeSessionRef, openTabPaths, setCodeFileDrawerState, setCursorPositionsByPath, setOpenTabPaths, visibleOpenTabs } = useProjectCodeSessionState({
     projectId,
     persistedProjectCodeSession,
     persistedCodeFileDrawerState,
@@ -324,23 +262,10 @@ export function CodeWorkspacePanel({
     setProjectCodeFileDrawerState,
     setProjectLastCodeFile,
   })
-  const allProjectFilePathSet = useMemo(() => (
-    buildKnownFilePathSet(
-      tree.knownFilePaths,
-      openTabPaths,
-      activeRelativePath,
-      codeFileDrawerState,
-      persistedProjectCodeSession,
-      persistedLastCodeFile,
-    )
-  ), [
-    activeRelativePath,
-    codeFileDrawerState,
-    openTabPaths,
-    persistedLastCodeFile,
-    persistedProjectCodeSession,
-    tree.knownFilePaths,
-  ])
+  const allProjectFilePathSet = useMemo(
+    () => buildKnownFilePathSet(tree.knownFilePaths, openTabPaths, activeRelativePath, codeFileDrawerState, persistedProjectCodeSession, persistedLastCodeFile),
+    [activeRelativePath, codeFileDrawerState, openTabPaths, persistedLastCodeFile, persistedProjectCodeSession, tree.knownFilePaths],
+  )
   const smartEmptyFiles = useMemo(() => {
     const available = new Set(allProjectFilePathSet)
     const candidates = SMART_EMPTY_FILE_CANDIDATES.filter((path) => available.has(path))
@@ -368,32 +293,31 @@ export function CodeWorkspacePanel({
     }
     return map
   }, [transcriptSessions, transcriptSummaries])
-  const activeTranscriptReferences = useMemo(() => (
-    activeRelativePath ? transcriptReferencesByPath.get(activeRelativePath) ?? [] : []
-  ), [activeRelativePath, transcriptReferencesByPath])
-  const locateFileInTree = useCallback(async (relativePath: string) => {
-    if (tree.autoLoadBlocked) return
-    const normalizedPath = relativePath.trim()
-    if (!normalizedPath) return
-    await ensureTreePathLoaded(normalizedPath)
-    setLocateRequestToken((prev) => prev + 1)
-  }, [ensureTreePathLoaded, tree.autoLoadBlocked])
-  const openFileWithTreeLocate = useCallback(async (relativePath: string, forceReload = false): Promise<boolean> => {
-    const normalizedPath = relativePath.trim()
-    if (!normalizedPath) return false
+  const activeTranscriptReferences = useMemo(() => (activeRelativePath ? (transcriptReferencesByPath.get(activeRelativePath) ?? []) : []), [activeRelativePath, transcriptReferencesByPath])
+  const locateFileInTree = useCallback(
+    async (relativePath: string) => {
+      if (tree.autoLoadBlocked) return
+      const normalizedPath = relativePath.trim()
+      if (!normalizedPath) return
+      await ensureTreePathLoaded(normalizedPath)
+      setLocateRequestToken((prev) => prev + 1)
+    },
+    [ensureTreePathLoaded, tree.autoLoadBlocked],
+  )
+  const openFileWithTreeLocate = useCallback(
+    async (relativePath: string, forceReload = false): Promise<boolean> => {
+      const normalizedPath = relativePath.trim()
+      if (!normalizedPath) return false
 
-    const opened = await openFile(normalizedPath, forceReload)
-    if (!opened) return false
+      const opened = await openFile(normalizedPath, forceReload)
+      if (!opened) return false
 
-    await locateFileInTree(normalizedPath)
-    return true
-  }, [locateFileInTree, openFile])
-  const {
-    captureCurrentModeScroll,
-    handleEditorScrollStateChange,
-    handlePreviewScroll,
-    resetScrollSyncState,
-  } = useCodeWorkspaceScrollSync({
+      await locateFileInTree(normalizedPath)
+      return true
+    },
+    [locateFileInTree, openFile],
+  )
+  const { captureCurrentModeScroll, handleEditorScrollStateChange, handlePreviewScroll, resetScrollSyncState } = useCodeWorkspaceScrollSync({
     activeRelativePath,
     editorRef,
     isMarkdownFile,
@@ -403,11 +327,7 @@ export function CodeWorkspacePanel({
     previewMode: effectiveMarkdownPreviewMode,
     previewScrollRef,
   })
-  const {
-    handleOpenedCodeFile,
-    isRestoringCodeSession,
-    openContentSearchMatch,
-  } = useCodeWorkspaceRestoreState({
+  const { handleOpenedCodeFile, isRestoringCodeSession, openContentSearchMatch } = useCodeWorkspaceRestoreState({
     activeRelativePath,
     allProjectFilePathSet,
     editorRef,
@@ -425,37 +345,20 @@ export function CodeWorkspacePanel({
       if (!preview) return false
       return revealMarkdownPreviewSourceLine(preview, lineNumber)
     },
-    treeStatus: tree.status === 'ready' || tree.autoLoadBlocked || (!isNarrowViewport && isLeftSidebarCollapsed)
-      ? 'ready'
-      : tree.status,
+    treeStatus: tree.status === 'ready' || tree.autoLoadBlocked || (!isNarrowViewport && isLeftSidebarCollapsed) ? 'ready' : tree.status,
   })
   const hasRestorableCodeSession = useMemo(() => {
     const persistedTabs = persistedProjectCodeSession?.tabs ?? []
-    return Boolean(
-      persistedLastCodeFile?.trim()
-      || persistedProjectCodeSession?.activePath?.trim()
-      || persistedTabs.some((path) => path.trim().length > 0)
-    )
+    return Boolean(persistedLastCodeFile?.trim() || persistedProjectCodeSession?.activePath?.trim() || persistedTabs.some((path) => path.trim().length > 0))
   }, [persistedLastCodeFile, persistedProjectCodeSession])
-  const isTreeReadyForRestore = tree.status === 'ready'
-    || tree.autoLoadBlocked
-    || (!isNarrowViewport && isLeftSidebarCollapsed)
-  const isInitialRestoring = !activeRelativePath && (
-    isReading
-    || (tree.status !== 'error' && (!isTreeReadyForRestore || (isRestoringCodeSession && hasRestorableCodeSession)))
-  )
+  const isTreeReadyForRestore = tree.status === 'ready' || tree.autoLoadBlocked || (!isNarrowViewport && isLeftSidebarCollapsed)
+  const isInitialRestoring = !activeRelativePath && (isReading || (tree.status !== 'error' && (!isTreeReadyForRestore || (isRestoringCodeSession && hasRestorableCodeSession))))
   captureCurrentModeScrollRef.current = captureCurrentModeScroll
   markOpenedFileInExplorerRef.current = markFilePathKnown
   handleOpenedCodeFileRef.current = handleOpenedCodeFile
   resetScrollSyncStateRef.current = resetScrollSyncState
-  const quickDrawerFavorites = useMemo(
-    () => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
-    [allProjectFilePathSet, codeFileDrawerState.favorites]
-  )
-  const quickDrawerRecents = useMemo(
-    () => codeFileDrawerState.recents.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT),
-    [allProjectFilePathSet, codeFileDrawerState.recents]
-  )
+  const quickDrawerFavorites = useMemo(() => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT), [allProjectFilePathSet, codeFileDrawerState.favorites])
+  const quickDrawerRecents = useMemo(() => codeFileDrawerState.recents.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT), [allProjectFilePathSet, codeFileDrawerState.recents])
   useEffect(() => {
     const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
     const handleChange = (event: MediaQueryListEvent) => {
@@ -595,29 +498,32 @@ export function CodeWorkspacePanel({
     focusTarget()
   }, [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, refreshRootIfStale, viewMode])
 
-  const openEditorSearchByMode = useCallback((mode: EditorSearchMode = 'find') => {
-    if (!activeRelativePath || !isShowingEditor) {
-      focusSearchInputByMode()
-      return
-    }
-
-    const trigger = () => {
-      const editorHandle = editorRef.current
-      if (!editorHandle) {
+  const openEditorSearchByMode = useCallback(
+    (mode: EditorSearchMode = 'find') => {
+      if (!activeRelativePath || !isShowingEditor) {
         focusSearchInputByMode()
         return
       }
-      editorHandle.openSearch(mode)
-    }
 
-    if (isNarrowViewport && isExplorerOpen) {
-      setIsExplorerOpen(false)
-      window.setTimeout(trigger, 0)
-      return
-    }
+      const trigger = () => {
+        const editorHandle = editorRef.current
+        if (!editorHandle) {
+          focusSearchInputByMode()
+          return
+        }
+        editorHandle.openSearch(mode)
+      }
 
-    trigger()
-  }, [activeRelativePath, focusSearchInputByMode, isExplorerOpen, isNarrowViewport, isShowingEditor])
+      if (isNarrowViewport && isExplorerOpen) {
+        setIsExplorerOpen(false)
+        window.setTimeout(trigger, 0)
+        return
+      }
+
+      trigger()
+    },
+    [activeRelativePath, focusSearchInputByMode, isExplorerOpen, isNarrowViewport, isShowingEditor],
+  )
 
   const toggleCodeViewMode = useCallback(() => {
     setViewMode((prev) => (prev === 'files' ? 'search' : 'files'))
@@ -688,44 +594,32 @@ export function CodeWorkspacePanel({
 
   const showExplorerPanel = isNarrowViewport ? isExplorerOpen : !isLeftSidebarCollapsed
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
-  const showExplorerPanelForMode = viewMode === 'files'
-    ? showExplorerPanel
-    : (isNarrowViewport ? true : !isLeftSidebarCollapsed)
+  const showExplorerPanelForMode = viewMode === 'files' ? showExplorerPanel : isNarrowViewport ? true : !isLeftSidebarCollapsed
   const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
-  const layoutGridStyle = isNarrowViewport
-    ? { gridTemplateColumns: 'minmax(0, 1fr)' }
-    : isLeftSidebarCollapsed
-      ? { gridTemplateColumns: '44px minmax(0, 1fr)' }
-      : undefined
-  const handleToggleTreeDirectory = useCallback((relativePath: string) => {
-    if (hasSearchQuery) return
-    const isExpanded = expandedDirectories.has(relativePath)
-    if (isExpanded) {
+  const layoutGridStyle = isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : isLeftSidebarCollapsed ? { gridTemplateColumns: '44px minmax(0, 1fr)' } : undefined
+  const handleToggleTreeDirectory = useCallback(
+    (relativePath: string) => {
+      if (hasSearchQuery) return
+      const isExpanded = expandedDirectories.has(relativePath)
+      if (isExpanded) {
+        setExpandedDirectories((prev) => {
+          const next = new Set(prev)
+          next.delete(relativePath)
+          return next
+        })
+        return
+      }
       setExpandedDirectories((prev) => {
+        if (prev.has(relativePath)) return prev
         const next = new Set(prev)
-        next.delete(relativePath)
+        next.add(relativePath)
         return next
       })
-      return
-    }
-    setExpandedDirectories((prev) => {
-      if (prev.has(relativePath)) return prev
-      const next = new Set(prev)
-      next.add(relativePath)
-      return next
-    })
-    void loadDirectory(relativePath)
-  }, [expandedDirectories, hasSearchQuery, loadDirectory])
-  const {
-    handleCopyTreeNodeName,
-    handleCopyTreeNodeRelativePath,
-    handleCopyTreeNodeRelativePathWithoutSlashes,
-    handleOpenContentSearchResult,
-    handleOpenSmartEmptyFile,
-    handleOpenTreeNodeFolder,
-    handleSelectTreeFile,
-    openFileFromQuickDrawer,
-  } = useCodeTreePathActions({
+      void loadDirectory(relativePath)
+    },
+    [expandedDirectories, hasSearchQuery, loadDirectory],
+  )
+  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
     isNarrowViewport,
     openContentSearchMatch,
     openFile,
@@ -741,11 +635,7 @@ export function CodeWorkspacePanel({
     if (!revealTarget) return
     if (!revealTarget.relativePath.trim()) return
 
-    void openContentSearchMatch(
-      revealTarget.relativePath,
-      revealTarget.lineNumber,
-      revealTarget.column,
-    )
+    void openContentSearchMatch(revealTarget.relativePath, revealTarget.lineNumber, revealTarget.column)
     setActiveContentSearchLocation({
       relativePath: revealTarget.relativePath,
       lineNumber: revealTarget.lineNumber,
@@ -755,16 +645,23 @@ export function CodeWorkspacePanel({
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, openContentSearchMatch])
 
-  const handleOpenTranscriptReference = useCallback((item: CodeTranscriptReferenceItem) => {
-    void openTranscript({
-      projectId,
-      transcriptId: item.transcriptId,
-      initialMode: 'preview',
-    }).then(() => {
-      openTranscriptReference(item.transcriptId, item.reference.id)
-    })
-    onOpenTranscript?.()
-  }, [onOpenTranscript, openTranscript, openTranscriptReference, projectId])
+  const handleOpenTranscriptReference = useCallback(
+    (item: CodeTranscriptReferenceItem) => {
+      void openTranscript({
+        projectId,
+        transcriptId: item.transcriptId,
+        initialMode: 'preview',
+      }).then(() => {
+        openTranscriptReference(item.transcriptId, item.reference.id)
+      })
+      onOpenTranscript?.()
+    },
+    [onOpenTranscript, openTranscript, openTranscriptReference, projectId],
+  )
+
+  const handleSaveFromEditor = useCallback(() => {
+    void handleSave()
+  }, [handleSave])
 
   const handleToggleContentSearchTree = useCallback(() => {
     const tree = contentSearchTreeRef.current
@@ -780,45 +677,51 @@ export function CodeWorkspacePanel({
     setIsContentSearchAllExpanded(true)
   }, [isContentSearchAllExpanded])
 
-  const handleSelectOpenTab = useCallback((relativePath: string) => {
-    void openFileWithTreeLocate(relativePath)
-  }, [openFileWithTreeLocate])
+  const handleSelectOpenTab = useCallback(
+    (relativePath: string) => {
+      void openFileWithTreeLocate(relativePath)
+    },
+    [openFileWithTreeLocate],
+  )
 
-  const handleCloseOpenTab = useCallback((relativePath: string) => {
-    const normalizedPath = relativePath.trim()
-    if (!normalizedPath) return
+  const handleCloseOpenTab = useCallback(
+    (relativePath: string) => {
+      const normalizedPath = relativePath.trim()
+      if (!normalizedPath) return
 
-    const nextTabs = openTabPaths.filter((item) => item !== normalizedPath)
-    setOpenTabPaths(nextTabs)
-    setCursorPositionsByPath((prev) => {
-      if (!(normalizedPath in prev)) return prev
-      const next = { ...prev }
-      delete next[normalizedPath]
-      return next
-    })
+      const nextTabs = openTabPaths.filter((item) => item !== normalizedPath)
+      setOpenTabPaths(nextTabs)
+      setCursorPositionsByPath((prev) => {
+        if (!(normalizedPath in prev)) return prev
+        const next = { ...prev }
+        delete next[normalizedPath]
+        return next
+      })
 
-    if (activeRelativePath !== normalizedPath) return
-    const nextActivePath = nextTabs[nextTabs.length - 1]
-    if (nextActivePath) {
-      void openFileWithTreeLocate(nextActivePath)
-    }
-  }, [activeRelativePath, openFileWithTreeLocate, openTabPaths])
-  const handleEditorCursorPositionChange = useCallback((position: { lineNumber: number; column: number }) => {
-    if (!activeRelativePath) return
-    setCursorPositionsByPath((prev) => {
-      const current = prev[activeRelativePath]
-      if (current && current.lineNumber === position.lineNumber && current.column === position.column) {
-        return prev
+      if (activeRelativePath !== normalizedPath) return
+      const nextActivePath = nextTabs[nextTabs.length - 1]
+      if (nextActivePath) {
+        void openFileWithTreeLocate(nextActivePath)
       }
+    },
+    [activeRelativePath, openFileWithTreeLocate, openTabPaths],
+  )
+  const handleEditorCursorPositionChange = useCallback(
+    (position: { lineNumber: number; column: number }) => {
+      if (!activeRelativePath) return
+      setCursorPositionsByPath((prev) => {
+        const current = prev[activeRelativePath]
+        if (current && current.lineNumber === position.lineNumber && current.column === position.column) {
+          return prev
+        }
 
-      const nextEntries = [
-        [activeRelativePath, position],
-        ...Object.entries(prev).filter(([pathKey]) => pathKey !== activeRelativePath),
-      ].slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
+        const nextEntries = [[activeRelativePath, position], ...Object.entries(prev).filter(([pathKey]) => pathKey !== activeRelativePath)].slice(0, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS)
 
-      return Object.fromEntries(nextEntries)
-    })
-  }, [activeRelativePath])
+        return Object.fromEntries(nextEntries)
+      })
+    },
+    [activeRelativePath],
+  )
 
   return (
     <div ref={pageRootRef} className="relative flex h-full min-h-0 flex-col">
@@ -886,28 +789,13 @@ export function CodeWorkspacePanel({
         viewMode={viewMode}
       />
 
-      <CodeFileQuickDrawer
-        open={isQuickDrawerOpen}
-        activeRelativePath={activeRelativePath}
-        favorites={quickDrawerFavorites}
-        recents={quickDrawerRecents}
-        onClose={() => setIsQuickDrawerOpen(false)}
-        onOpenFile={openFileFromQuickDrawer}
-        onToggleFavorite={toggleFavoriteForPath}
-        onRemovePath={removePathFromQuickDrawer}
-      />
+      <CodeFileQuickDrawer open={isQuickDrawerOpen} activeRelativePath={activeRelativePath} favorites={quickDrawerFavorites} recents={quickDrawerRecents} onClose={() => setIsQuickDrawerOpen(false)} onOpenFile={openFileFromQuickDrawer} onToggleFavorite={toggleFavoriteForPath} onRemovePath={removePathFromQuickDrawer} />
 
       <div className="min-h-0 flex-1">
         <div className="code-layout-grid h-full" style={layoutGridStyle}>
           {!isNarrowViewport && isLeftSidebarCollapsed ? (
             <div className="relative flex h-full min-h-0 items-center justify-center">
-              <CodeSidebarRailButton
-                side="left"
-                collapsed
-                onClick={handleExpandSidebar}
-                className="z-20"
-                ariaLabel={t('codeWorkspace.expandSidebar')}
-              />
+              <CodeSidebarRailButton side="left" collapsed onClick={handleExpandSidebar} className="z-20" ariaLabel={t('codeWorkspace.expandSidebar')} />
             </div>
           ) : null}
           {showExplorerPanelForMode && (
@@ -959,15 +847,7 @@ export function CodeWorkspacePanel({
                 treeNodesForView={treeNodesForView}
                 viewMode={viewMode}
               />
-              {!isNarrowViewport && (
-                <CodeSidebarRailButton
-                  side="left"
-                  collapsed={false}
-                  onClick={() => setIsLeftSidebarCollapsed(true)}
-                  className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
-                  ariaLabel={t('codeWorkspace.collapseSidebar')}
-                />
-              )}
+              {!isNarrowViewport && <CodeSidebarRailButton side="left" collapsed={false} onClick={() => setIsLeftSidebarCollapsed(true)} className="absolute -right-4 top-1/2 z-20 -translate-y-1/2" ariaLabel={t('codeWorkspace.collapseSidebar')} />}
             </div>
           )}
 
@@ -987,6 +867,7 @@ export function CodeWorkspacePanel({
                 isMdcFile={isMdcFile}
                 isMarkdownFile={isMarkdownFile}
                 isNarrowViewport={isNarrowViewport}
+                isMarkdownPreviewStale={isMarkdownPreviewStale}
                 markdownComponents={markdownComponents}
                 markdownPreviewContent={markdownPreviewContent}
                 monacoTheme={monacoTheme}
@@ -997,9 +878,7 @@ export function CodeWorkspacePanel({
                 onFocusSearch={focusSearchInputByMode}
                 onGoToNextPreviewSearchMatch={goToNextPreviewSearchMatch}
                 onGoToPreviousPreviewSearchMatch={goToPreviousPreviewSearchMatch}
-                onHandleSave={() => {
-                  void handleSave()
-                }}
+                onHandleSave={handleSaveFromEditor}
                 onPreviewScroll={handlePreviewScroll}
                 onSetActivePreviewSearchMatchIndex={setActivePreviewSearchMatchIndex}
                 onSetCursorPosition={handleEditorCursorPositionChange}
@@ -1008,6 +887,7 @@ export function CodeWorkspacePanel({
                 onOpenSmartEmptyFile={handleOpenSmartEmptyFile}
                 onOpenTranscriptReference={handleOpenTranscriptReference}
                 parsedMarkdownDoc={parsedMarkdownDoc}
+                previewRootRef={previewScrollRef}
                 previewScrollRef={previewScrollRef}
                 previewSearchInputRef={previewSearchInputRef}
                 previewSearchMatches={previewSearchMatches}

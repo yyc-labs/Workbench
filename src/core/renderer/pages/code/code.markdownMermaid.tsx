@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n'
 import { sanitizeMermaidSvgMarkup } from './code.markdownMermaid.sanitize'
 import type { MarkdownStructuredBlockClickPayload, SourceLineDataProps } from './code.markdown'
 import { createMermaidRenderConfig } from './code.markdownMermaid.config'
+import { useMarkdownNearViewport } from './code.markdownVisibility'
 
 const MARKDOWN_MERMAID_RENDER_ID_PREFIX = 'code-markdown-mermaid'
 
@@ -18,11 +19,7 @@ async function loadMermaid(): Promise<MermaidModule> {
   return mermaidModulePromise
 }
 
-export async function renderMermaidDiagram(
-  id: string,
-  codeText: string,
-  themeMode: 'light' | 'dark'
-): Promise<string> {
+export async function renderMermaidDiagram(id: string, codeText: string, themeMode: 'light' | 'dark'): Promise<string> {
   const mermaidModule = await loadMermaid()
   const mermaid = mermaidModule.default
 
@@ -34,26 +31,31 @@ export async function renderMermaidDiagram(
 
 type MermaidBlockProps = {
   codeText: string
+  forceRenderAllBlocks?: boolean
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   shouldIgnoreActivation: (target: EventTarget | null, currentTarget: EventTarget | null) => boolean
   sourceLineProps?: SourceLineDataProps
   themeMode: 'light' | 'dark'
 }
 
-export function MermaidBlock({
-  codeText,
-  onStructuredBlockClick,
-  shouldIgnoreActivation,
-  sourceLineProps,
-  themeMode,
-}: MermaidBlockProps) {
+export function MermaidBlock({ codeText, forceRenderAllBlocks = false, onStructuredBlockClick, shouldIgnoreActivation, sourceLineProps, themeMode }: MermaidBlockProps) {
   const { t } = useI18n()
   const diagramId = useId().replace(/:/g, '-')
   const [svgMarkup, setSvgMarkup] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [containerRef, isNearViewport] = useMarkdownNearViewport<HTMLDivElement>()
+  const shouldRender = forceRenderAllBlocks || isNearViewport
 
   useEffect(() => {
     let cancelled = false
+    if (!shouldRender) {
+      setSvgMarkup('')
+      setErrorMessage(null)
+      return () => {
+        cancelled = true
+      }
+    }
+
     setErrorMessage(null)
 
     void renderMermaidDiagram(`${MARKDOWN_MERMAID_RENDER_ID_PREFIX}-${diagramId}`, codeText, themeMode)
@@ -72,7 +74,7 @@ export function MermaidBlock({
     return () => {
       cancelled = true
     }
-  }, [codeText, diagramId, themeMode, t])
+  }, [codeText, diagramId, shouldRender, themeMode, t])
 
   const canOpenStructuredPreview = Boolean(onStructuredBlockClick && sourceLineProps)
   const activateStructuredPreview = useCallback(() => {
@@ -111,12 +113,9 @@ export function MermaidBlock({
       }
 
   return (
-    <div {...interactiveProps} {...sourceLineProps}>
+    <div ref={containerRef} {...interactiveProps} {...sourceLineProps}>
       {svgMarkup ? (
-        <div
-          className="code-markdown-mermaid-diagram"
-          dangerouslySetInnerHTML={{ __html: svgMarkup }}
-        />
+        <div className="code-markdown-mermaid-diagram" dangerouslySetInnerHTML={{ __html: svgMarkup }} />
       ) : (
         <pre className="code-markdown-plain-block">
           <code className="language-mermaid">{codeText}</code>
