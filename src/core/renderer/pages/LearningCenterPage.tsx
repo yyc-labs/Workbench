@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent as 
 import { useNavigate } from 'react-router-dom'
 import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { SidebarGestureOverlay } from '../components/SidebarGestureOverlay'
-import { useSidebarGesture } from '../hooks/useSidebarGesture'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import { LearningBrowserAiDialog } from './learning/browser-ai/LearningBrowserAiDialog'
 import { LearningBrowserAiHistoryView } from './learning/browser-ai/LearningBrowserAiHistoryView'
 import { LearningBrowserAiPreferencesDialog } from './learning/browser-ai/LearningBrowserAiPreferencesDialog'
 import { LearningCenterHeader } from './learning/layout/LearningCenterHeader'
+import { LearningSidebarGestureController } from './learning/layout/LearningSidebarGestureController'
 import { LearningDeleteNoteDialog } from './learning/notes/LearningDeleteNoteDialog'
 import { LearningEditorPanel } from './learning/notes/LearningEditorPanel'
 import { LearningFrontmatterDialog } from './learning/notes/LearningFrontmatterDialog'
@@ -50,6 +49,7 @@ export function LearningCenterPage() {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [categoryInput, setCategoryInput] = useState('')
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
   const [categoryCreateError, setCategoryCreateError] = useState<string | null>(null)
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
   const [categoryEditInput, setCategoryEditInput] = useState('')
@@ -79,11 +79,13 @@ export function LearningCenterPage() {
   })
   const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
+    const stored = window.localStorage.getItem(LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY)
+    return stored === null ? window.innerWidth < 1280 : stored === '1'
   })
   const [editorDisplayMode, setEditorDisplayMode] = useState<LearningEditorDisplayMode>(() => {
     if (typeof window === 'undefined') return 'split'
-    return window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY) === 'preview' ? 'preview' : 'split'
+    const stored = window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY)
+    return stored === 'edit' || stored === 'preview' ? stored : 'split'
   })
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -93,8 +95,6 @@ export function LearningCenterPage() {
   const closeEditorContextMenu = () => {
     setEditorContextMenu(null)
   }
-
-  const sidebarGestureOverlay = useSidebarGesture({ pageRootRef, onBeforeToggle: closeEditorContextMenu, onToggleLeftSidebar: () => setLeftSidebarCollapsed((current) => !current), onToggleRightSidebar: () => setRightSidebarCollapsed((current) => !current) })
 
   const filteredNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -561,16 +561,17 @@ export function LearningCenterPage() {
   const saveButtonLabel = saving ? t('common.saving') : saveState === 'error' ? t('learning.page.retrySave') : hasUnsavedChanges ? t('learning.page.saveChanges') : t('learning.page.saved')
   const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
   const layoutGridColumns = useMemo(() => {
-    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '280px minmax(0,1fr) 340px'
-    if (!leftSidebarCollapsed && rightSidebarCollapsed) return '280px minmax(0,1fr)'
-    if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 340px'
+    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '264px minmax(0,1fr) 288px'
+    if (!leftSidebarCollapsed && rightSidebarCollapsed) return '264px minmax(0,1fr)'
+    if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 288px'
     return 'minmax(0,1fr)'
   }, [leftSidebarCollapsed, rightSidebarCollapsed])
   const bothSidebarsCollapsed = leftSidebarCollapsed && rightSidebarCollapsed
+  const selectedCategoryName = categories.find((category) => category.id === (selectedNote?.categoryId ?? selectedCategoryId))?.name ?? t('common.uncategorized')
 
   return (
     <div ref={pageRootRef} className="flex h-full min-h-0 flex-col px-6 pb-6 pt-5 sm:px-8">
-      <SidebarGestureOverlay overlay={sidebarGestureOverlay} />
+      <LearningSidebarGestureController pageRootRef={pageRootRef} onBeforeToggle={closeEditorContextMenu} onToggleLeftSidebar={() => setLeftSidebarCollapsed((current) => !current)} onToggleRightSidebar={() => setRightSidebarCollapsed((current) => !current)} />
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
         <LearningCenterHeader
           onBack={() => navigate('/')}
@@ -586,7 +587,6 @@ export function LearningCenterPage() {
             setBrowserAiOpen(true)
           }}
           onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
-          onOpenBrowserAiHistory={() => setActiveView('browser-tasks')}
         />
 
         {activeView === 'skills' ? (
@@ -594,7 +594,11 @@ export function LearningCenterPage() {
         ) : activeView === 'browser-tasks' ? (
           <LearningBrowserAiHistoryView currentNote={selectedNote} onReload={handleBrowserAiReload} onSaved={handleBrowserAiSaved} />
         ) : (
-          <div className="relative grid h-full min-h-0 gap-4 transition-[grid-template-columns] duration-200" style={{ gridTemplateColumns: layoutGridColumns }}>
+          <div
+            className={`learning-notes-grid relative grid min-h-0 flex-1 gap-3 transition-[grid-template-columns] duration-200 ${rightSidebarCollapsed ? 'learning-right-collapsed' : 'learning-right-open'}`}
+            data-left-collapsed={leftSidebarCollapsed ? 'true' : 'false'}
+            style={{ gridTemplateColumns: layoutGridColumns }}
+          >
             {leftSidebarCollapsed ? <LearningSidebarRailButton side="left" collapsed onClick={() => setLeftSidebarCollapsed(false)} className="absolute left-0 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2" /> : null}
             {rightSidebarCollapsed ? <LearningSidebarRailButton side="right" collapsed onClick={() => setRightSidebarCollapsed(false)} className="absolute right-0 top-1/2 z-20 translate-x-1/2 -translate-y-1/2" /> : null}
 
@@ -605,6 +609,7 @@ export function LearningCenterPage() {
                 categoryEditError={categoryEditError}
                 categoryEditInput={categoryEditInput}
                 categoryInput={categoryInput}
+                categoryManagerOpen={categoryManagerOpen}
                 filteredNotes={filteredNotes}
                 isCreatingCategory={isCreatingCategory}
                 isDeletingCategory={isDeletingCategory}
@@ -624,6 +629,7 @@ export function LearningCenterPage() {
                 onSearchQueryChange={setSearchQuery}
                 onSelectCategory={setSelectedCategoryId}
                 onSelectNote={setSelectedNoteId}
+                onToggleCategoryManager={() => setCategoryManagerOpen((current) => !current)}
               />
             ) : null}
 
@@ -634,16 +640,28 @@ export function LearningCenterPage() {
               editorTextareaRef={editorTextareaRef}
               editorTitle={editorTitle}
               hasUnsavedChanges={hasUnsavedChanges}
+              loading={loading || Boolean(selectedNoteId && !selectedNote)}
               saveButtonDisabled={saveButtonDisabled}
               saveButtonLabel={saveButtonLabel}
               saveButtonVariant={saveButtonVariant}
+              saveError={saveError}
+              saveState={saveState}
               saving={saving}
               selectedNote={selectedNote}
+              selectedCategoryName={selectedCategoryName}
+              leftSidebarCollapsed={leftSidebarCollapsed}
+              rightSidebarCollapsed={rightSidebarCollapsed}
               onEditorChange={handleEditorChange}
               onEditorContextMenu={handleEditorContextMenu}
               onEditorDisplayModeChange={setEditorDisplayMode}
               onEditorKeyDown={handleEditorKeyDown}
               onEditorSelectionSync={handleEditorSelectionSync}
+              onEditorTitleChange={setEditorTitle}
+              onCreateNote={openCreateDialog}
+              onOpenNotesSidebar={() => setLeftSidebarCollapsed(false)}
+              onToggleLeftSidebar={() => setLeftSidebarCollapsed((current) => !current)}
+              onToggleRightSidebar={() => setRightSidebarCollapsed((current) => !current)}
+              onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
               onSave={handleSave}
             />
 

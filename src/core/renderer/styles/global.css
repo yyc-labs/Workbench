@@ -3,6 +3,7 @@
 @import "./parts/app-shell.css";
 @import "./parts/legacy-pages.css";
 @import "./parts/code-workspace.css";
+@import "./parts/learning-center.css";
 
 .button-interactive {
   transition:

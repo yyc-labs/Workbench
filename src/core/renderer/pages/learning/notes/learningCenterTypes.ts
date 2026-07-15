@@ -2,7 +2,7 @@ export type SaveState = 'idle' | 'saved' | 'error'
 
 export type FrontmatterDialogMode = 'create' | 'edit'
 
-export type LearningEditorDisplayMode = 'split' | 'preview'
+export type LearningEditorDisplayMode = 'edit' | 'split' | 'preview'
 
 export type LearningEditorContextMenuState = {
   x: number

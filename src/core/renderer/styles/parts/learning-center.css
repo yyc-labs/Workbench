@@ -1,0 +1,42 @@
+.learning-notes-grid,
+.learning-skills-grid,
+.learning-browser-history-workspace {
+  min-width: 0;
+}
+
+@media (max-width: 1279px) {
+  .learning-notes-grid.learning-right-collapsed {
+    grid-template-columns: 248px minmax(0, 1fr) !important;
+  }
+
+  .learning-notes-grid.learning-right-open {
+    grid-template-columns: 228px minmax(0, 1fr) 264px !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .learning-notes-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .learning-notes-grid[data-left-collapsed='false'] .learning-editor-stage,
+  .learning-notes-grid[data-left-collapsed='false'] .learning-note-info-sidebar {
+    display: none;
+  }
+
+  .learning-notes-grid[data-left-collapsed='true'] .learning-notes-sidebar {
+    display: none;
+  }
+
+  .learning-notes-grid .learning-note-info-sidebar {
+    display: none;
+  }
+
+  .learning-skills-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .learning-browser-history-workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

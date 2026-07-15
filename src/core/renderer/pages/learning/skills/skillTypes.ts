@@ -30,6 +30,7 @@ export type SkillListSidebarProps = {
   selectedSkillId: string | null
   searchQuery: string
   categoryInput: string
+  categoryManagerOpen: boolean
   selectedCategory: SkillCategory | null
   categoryEditInput: string
   onSearchQueryChange: (value: string) => void
@@ -40,4 +41,5 @@ export type SkillListSidebarProps = {
   onCategoryEditInputChange: (value: string) => void
   onRenameCategory: () => void
   onDeleteCategory: () => void
+  onToggleCategoryManager: () => void
 }

@@ -18,26 +18,33 @@ type SkillEditorPanelProps = {
   onChange: (patch: Partial<SkillEditorState>) => void
   onSave: () => void
   onDelete: () => void
+  onCreate: () => void | Promise<void>
 }
 
-export function SkillEditorPanel({ skill, categories, editor, saving, error, onChange, onSave, onDelete }: SkillEditorPanelProps) {
+export function SkillEditorPanel({ skill, categories, editor, saving, error, onChange, onSave, onDelete, onCreate }: SkillEditorPanelProps) {
   const { t } = useI18n()
   if (!skill)
     return (
-      <Card className="flex h-full min-h-0 items-center justify-center border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 p-8 text-center">
-        <div className="max-w-sm text-sm text-[color:var(--color-muted-foreground)]">{t('learning.skills.noSelection')}</div>
+      <Card className="surface-card flex h-full min-h-0 items-center justify-center rounded-[18px] border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 p-8 text-center shadow-none">
+        <div className="flex max-w-sm flex-col items-center gap-4">
+          <div className="text-sm text-[color:var(--color-muted-foreground)]">{t('learning.skills.noSelection')}</div>
+          <Button type="button" onClick={() => void onCreate()}>
+            <Save />
+            {t('learning.skills.create')}
+          </Button>
+        </div>
       </Card>
     )
   const categoryOptions = [{ value: '', label: t('learning.skills.uncategorized') }, ...categories.map((category) => ({ value: category.id, label: category.name }))]
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
+    <Card className="surface-card flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 shadow-none">
       <div className="flex items-start justify-between gap-3 border-b p-5" style={{ borderColor: 'var(--color-border)' }}>
         <div className="min-w-0">
           <div className="section-label mb-2">{t('learning.skills.title')}</div>
           <h2 className="truncate text-lg font-semibold text-[color:var(--color-foreground)]">{editor.title || t('learning.skills.titlePlaceholder')}</h2>
         </div>
         <div className="flex shrink-0 gap-2">
-          <Button variant="destructive" size="icon" onClick={onDelete} title={t('learning.skills.delete')}>
+          <Button variant="outline" size="icon" onClick={onDelete} title={t('learning.skills.delete')}>
             <Trash2 />
           </Button>
           <Button onClick={onSave} loading={saving} disabled={!editor.title.trim() || !editor.contentMd.trim()}>

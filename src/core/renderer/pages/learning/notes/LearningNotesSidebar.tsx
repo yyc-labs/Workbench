@@ -1,4 +1,4 @@
-import { FolderPlus, Pencil, Search, Trash2, X } from 'lucide-react'
+import { FolderPlus, Pencil, Search, Settings2, Trash2, X } from 'lucide-react'
 import type { LearningCategory, LearningNoteSummary } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
@@ -13,6 +13,7 @@ type LearningNotesSidebarProps = {
   categoryEditError: string | null
   categoryEditInput: string
   categoryInput: string
+  categoryManagerOpen: boolean
   filteredNotes: LearningNoteSummary[]
   isCreatingCategory: boolean
   isDeletingCategory: boolean
@@ -32,6 +33,7 @@ type LearningNotesSidebarProps = {
   onSearchQueryChange: (value: string) => void
   onSelectCategory: (categoryId: string) => void
   onSelectNote: (noteId: string) => void
+  onToggleCategoryManager: () => void
 }
 
 export function LearningNotesSidebar({
@@ -40,6 +42,7 @@ export function LearningNotesSidebar({
   categoryEditError,
   categoryEditInput,
   categoryInput,
+  categoryManagerOpen,
   filteredNotes,
   isCreatingCategory,
   isDeletingCategory,
@@ -59,13 +62,14 @@ export function LearningNotesSidebar({
   onSearchQueryChange,
   onSelectCategory,
   onSelectNote,
+  onToggleCategoryManager,
 }: LearningNotesSidebarProps) {
   const { t, formatDateTime } = useI18n()
 
   return (
-    <div className="relative flex h-full min-h-0">
-      <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
-        <div className="border-b border-[color:var(--color-border)] px-4 py-4">
+    <div className="learning-notes-sidebar relative flex h-full min-h-0">
+      <Card className="surface-card flex h-full min-h-0 w-full flex-col overflow-hidden rounded-[18px] border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 shadow-none">
+        <div className="border-b border-[color:var(--color-border)] px-3 py-3 sm:px-4">
           <div className="relative">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
             <Input value={searchQuery} onChange={(event) => onSearchQueryChange(event.target.value)} placeholder={t('learning.notes.searchPlaceholder')} className="h-10 rounded-full pl-11 pr-10" />
@@ -83,71 +87,86 @@ export function LearningNotesSidebar({
             </button>
           </div>
         </div>
-        <div className="border-b border-[color:var(--color-border)] px-4 py-4">
-          <div className="mb-3 text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.categoriesTitle')}</div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={`rounded-full px-3 py-1.5 text-xs transition-colors ${selectedCategoryId === 'all' ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`} onClick={() => onSelectCategory('all')}>
+        <div className="border-b border-[color:var(--color-border)] px-3 py-3 sm:px-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.categoriesTitle')}</div>
+            <Button type="button" variant={categoryManagerOpen ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8" onClick={onToggleCategoryManager} aria-label={t('learning.notes.manageCategory')} title={t('learning.notes.manageCategory')}>
+              <Settings2 className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              aria-pressed={selectedCategoryId === 'all'}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${selectedCategoryId === 'all' ? 'bg-[color:var(--color-primary)] text-primary-foreground' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
+              onClick={() => onSelectCategory('all')}
+            >
               {t('learning.notes.all')}
             </button>
             {categories.map((category) => (
               <button
                 key={category.id}
                 type="button"
-                className={`rounded-full px-3 py-1.5 text-xs transition-colors ${selectedCategoryId === category.id ? 'bg-[color:var(--color-primary)] text-white' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
+                aria-pressed={selectedCategoryId === category.id}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${selectedCategoryId === category.id ? 'bg-[color:var(--color-primary)] text-primary-foreground' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
                 onClick={() => onSelectCategory(category.id)}
               >
                 {category.name}
               </button>
             ))}
           </div>
-          {selectedManageCategory ? (
-            <div className="mt-3 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/40 p-3">
-              <div className="mb-2 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.notes.manageCategory')}</div>
+          {categoryManagerOpen ? (
+            <div className="mt-3 space-y-3 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-accent)]/35 p-3">
+              {selectedManageCategory ? (
+                <div className="space-y-2">
+                  <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.notes.manageCategory')}</div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={categoryEditInput}
+                      onChange={(event) => onCategoryEditInputChange(event.target.value)}
+                      placeholder={t('learning.notes.categoryNamePlaceholder')}
+                      className="h-9"
+                      disabled={isUpdatingCategory || isDeletingCategory}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          void onRenameCategory()
+                        }
+                      }}
+                    />
+                    <Button type="button" size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => void onRenameCategory()} loading={isUpdatingCategory} disabled={isDeletingCategory} title={t('learning.notes.renameCategory')}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" size="icon" variant="destructive" className="h-9 w-9 shrink-0" onClick={() => void onDeleteCategory()} loading={isDeletingCategory} disabled={isUpdatingCategory} title={t('learning.notes.deleteCategory')}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {categoryEditError ? <div className="text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div> : null}
+                </div>
+              ) : null}
               <div className="flex gap-2">
                 <Input
-                  value={categoryEditInput}
-                  onChange={(event) => onCategoryEditInputChange(event.target.value)}
-                  placeholder={t('learning.notes.categoryNamePlaceholder')}
+                  value={categoryInput}
+                  onChange={(event) => onCategoryInputChange(event.target.value)}
+                  placeholder={t('learning.notes.newCategoryPlaceholder')}
                   className="h-9"
-                  disabled={isUpdatingCategory || isDeletingCategory}
+                  disabled={isCreatingCategory}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
-                      void onRenameCategory()
+                      void onCreateCategory()
                     }
                   }}
                 />
-                <Button type="button" size="icon" variant="outline" className="h-9 w-9 rounded-full" onClick={() => void onRenameCategory()} loading={isUpdatingCategory} disabled={isDeletingCategory} title={t('learning.notes.renameCategory')}>
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button type="button" size="icon" variant="destructive" className="h-9 w-9 rounded-full" onClick={() => void onDeleteCategory()} loading={isDeletingCategory} disabled={isUpdatingCategory} title={t('learning.notes.deleteCategory')}>
-                  <Trash2 className="h-4 w-4" />
+                <Button type="button" size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={() => void onCreateCategory()} loading={isCreatingCategory} title={t('learning.notes.addCategory')}>
+                  <FolderPlus className="h-4 w-4" />
                 </Button>
               </div>
-              {categoryEditError ? <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryEditError}</div> : null}
+              {categoryCreateError ? <div className="text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div> : null}
             </div>
           ) : null}
-          <div className="mt-3 flex gap-2">
-            <Input
-              value={categoryInput}
-              onChange={(event) => onCategoryInputChange(event.target.value)}
-              placeholder={t('learning.notes.newCategoryPlaceholder')}
-              className="h-9"
-              disabled={isCreatingCategory}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  void onCreateCategory()
-                }
-              }}
-            />
-            <Button type="button" size="icon" variant="outline" className="h-9 w-9 rounded-full" onClick={() => void onCreateCategory()} loading={isCreatingCategory} title={t('learning.notes.addCategory')}>
-              <FolderPlus className="h-4 w-4" />
-            </Button>
-          </div>
-          {categoryCreateError ? <div className="mt-2 text-xs text-[color:var(--color-destructive)]">{categoryCreateError}</div> : null}
         </div>
-        <div className="px-4 pb-2 pt-4">
+        <div className="px-4 pb-2 pt-3">
           <div className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.notes.notesTitle')}</div>
         </div>
         <ScrollArea className="min-h-0 flex-1">
@@ -159,7 +178,7 @@ export function LearningNotesSidebar({
                 <button
                   key={note.id}
                   type="button"
-                  className={`flex w-full flex-col gap-1 rounded-[18px] border px-3 py-3 text-left transition-colors ${
+                  className={`flex w-full flex-col gap-1 rounded-[14px] border px-3 py-3 text-left transition-colors ${
                     selectedNoteId === note.id ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8' : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
                   }`}
                   onClick={() => onSelectNote(note.id)}

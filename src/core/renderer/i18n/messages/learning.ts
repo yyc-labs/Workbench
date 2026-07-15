@@ -2,6 +2,7 @@ export const learningMessages = {
   'en-US': {
     learning: {
       header: { subtitle: 'Keep long-term study notes and reusable references in Markdown.', createNote: 'New Note' },
+      toolbar: { viewLabel: 'Learning view', browserAiPreferences: 'Browser AI preferences' },
       browserAi: {
         open: 'Send to Browser AI',
         kicker: 'Browser AI dispatch',
@@ -91,6 +92,7 @@ export const learningMessages = {
         saveRecordAction: 'Save name',
         recordSaved: 'Name saved',
         historyOpen: 'Open browser AI task records',
+        historyNewTask: 'New Task',
         historyTitle: 'Browser AI task records',
         historyDescription: 'Review answers, execution steps, and sources from previous browser AI tasks.',
         historyActions: 'Task actions',
@@ -105,6 +107,7 @@ export const learningMessages = {
         historyCancelled: 'Cancelled',
         historyEmpty: 'No browser AI task records',
         historySelectRecord: 'Select a task record to view its details',
+        historySourceCount: 'sources',
         historyRename: 'Rename',
         historyRenameFailed: 'Could not rename the task record.',
         historyDelete: 'Delete task record',
@@ -218,10 +221,12 @@ export const learningMessages = {
       },
       editor: {
         untitledNote: 'Untitled Note',
+        titleLabel: 'Note title',
         previewModeDescription: 'Preview-only mode for focusing on rendered Markdown output.',
         splitModeDescription: 'Split mode with editing on the left and live preview on the right.',
         split: 'Split',
         previewOnly: 'Preview Only',
+        editMode: 'Edit',
         editTitle: 'Edit',
         editDescription: 'Markdown body editor',
         placeholder: 'Start capturing what you learned today... Right click to insert headings, lists, tables, and other Markdown snippets.',
@@ -229,6 +234,7 @@ export const learningMessages = {
         previewOnlyDescription: 'Render Markdown in the full available width.',
         previewDescription: 'Rendered Markdown output',
         emptyState: 'Create a learning note first',
+        chooseNote: 'Choose an existing note',
       },
       delete: { modalAria: 'Delete learning note', title: 'Delete this learning note?', description: 'This action cannot be undone. Current note:' },
       frontmatter: {
@@ -376,6 +382,7 @@ export const learningMessages = {
   'zh-CN': {
     learning: {
       header: { subtitle: '用 Markdown 长期保存和整理你的学习记录', createNote: '新建笔记' },
+      toolbar: { viewLabel: '学习中心视图', browserAiPreferences: '浏览器 AI 偏好设置' },
       browserAi: {
         open: '发送到浏览器 AI',
         kicker: '浏览器 AI 调度',
@@ -465,6 +472,7 @@ export const learningMessages = {
         saveRecordAction: '保存名称',
         recordSaved: '名称已保存',
         historyOpen: '打开浏览器 AI 任务记录',
+        historyNewTask: '新建任务',
         historyTitle: '浏览器 AI 任务记录',
         historyDescription: '查看历史任务的回答、执行步骤和发送来源。',
         historyActions: '任务操作',
@@ -479,6 +487,7 @@ export const learningMessages = {
         historyCancelled: '已取消',
         historyEmpty: '还没有浏览器 AI 任务记录',
         historySelectRecord: '选择一条任务记录查看详情',
+        historySourceCount: '个来源',
         historyRename: '重命名',
         historyRenameFailed: '任务记录重命名失败。',
         historyDelete: '删除任务记录',
@@ -581,10 +590,12 @@ export const learningMessages = {
       },
       editor: {
         untitledNote: '未命名笔记',
+        titleLabel: '笔记标题',
         previewModeDescription: '纯预览模式，专注查看 Markdown 渲染结果',
         splitModeDescription: '分栏模式，左侧编辑正文，右侧实时预览',
         split: '分栏',
         previewOnly: '纯预览',
+        editMode: '编辑',
         editTitle: '编辑',
         editDescription: 'Markdown 正文编辑区',
         placeholder: '开始记录今天学习到的内容... 右键可快速插入标题、列表、表格等 Markdown 格式',
@@ -592,6 +603,7 @@ export const learningMessages = {
         previewOnlyDescription: '完整宽度显示 Markdown 渲染结果',
         previewDescription: 'Markdown 渲染结果',
         emptyState: '先新建一篇学习记录',
+        chooseNote: '选择已有笔记',
       },
       delete: { modalAria: '删除学习记录', title: '删除这篇学习记录？', description: '删除后不可恢复。当前笔记：' },
       frontmatter: {

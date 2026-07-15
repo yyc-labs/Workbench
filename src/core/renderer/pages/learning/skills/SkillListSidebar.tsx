@@ -1,4 +1,4 @@
-import { FolderPlus, Pencil, Search, Sparkles, Trash2, X } from 'lucide-react'
+import { FolderPlus, Pencil, Search, Settings2, Sparkles, Trash2, X } from 'lucide-react'
 import type { SkillCategory, SkillSummary } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
@@ -15,6 +15,7 @@ export function SkillListSidebar({
   selectedSkillId,
   searchQuery,
   categoryInput,
+  categoryManagerOpen,
   selectedCategory,
   categoryEditInput,
   onSearchQueryChange,
@@ -25,12 +26,13 @@ export function SkillListSidebar({
   onCategoryEditInputChange,
   onRenameCategory,
   onDeleteCategory,
+  onToggleCategoryManager,
 }: SkillListSidebarProps) {
   const { t, formatDateTime } = useI18n()
   const categoryOptions = [{ value: 'all', label: t('learning.skills.allCategories') }, ...categories.map((category: SkillCategory) => ({ value: category.id, label: category.name }))]
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
+    <Card className="surface-card flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 shadow-none">
       <div className="space-y-3 border-b p-4" style={{ borderColor: 'var(--color-border)' }}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
@@ -42,35 +44,43 @@ export function SkillListSidebar({
           ) : null}
         </div>
         <Select ariaLabel={t('learning.skills.categories')} value={selectedCategoryId} options={categoryOptions} onChange={onCategoryChange} emptyText={t('learning.skills.allCategories')} />
-        <div className="flex gap-2">
-          <Input
-            value={categoryInput}
-            onChange={(event) => onCategoryInputChange(event.target.value)}
-            placeholder={t('learning.skills.newCategoryPlaceholder')}
-            className="h-9"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                onCreateCategory()
-              }
-            }}
-          />
-          <Button type="button" size="icon" variant="outline" className="h-9 w-9" onClick={onCreateCategory} title={t('learning.skills.addCategory')}>
-            <FolderPlus />
-          </Button>
-        </div>
-        {selectedCategory ? (
-          <div className="space-y-2 rounded-[14px] border p-2" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.skills.manageCategory')}</div>
+        <Button type="button" variant={categoryManagerOpen ? 'secondary' : 'outline'} className="h-9 w-full justify-start" onClick={onToggleCategoryManager}>
+          <Settings2 />
+          {t('learning.skills.manageCategory')}
+        </Button>
+        {categoryManagerOpen ? (
+          <div className="space-y-3 rounded-[14px] border bg-[color:var(--color-accent)]/35 p-3" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex gap-2">
-              <Input value={categoryEditInput} onChange={(event) => onCategoryEditInputChange(event.target.value)} className="h-8" />
-              <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={onRenameCategory} title={t('learning.skills.manageCategory')}>
-                <Pencil />
-              </Button>
-              <Button type="button" size="icon" variant="destructive" className="h-8 w-8" onClick={onDeleteCategory} title={t('learning.skills.delete')}>
-                <Trash2 />
+              <Input
+                value={categoryInput}
+                onChange={(event) => onCategoryInputChange(event.target.value)}
+                placeholder={t('learning.skills.newCategoryPlaceholder')}
+                className="h-9"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    onCreateCategory()
+                  }
+                }}
+              />
+              <Button type="button" size="icon" variant="outline" className="h-9 w-9 shrink-0" onClick={onCreateCategory} title={t('learning.skills.addCategory')}>
+                <FolderPlus />
               </Button>
             </div>
+            {selectedCategory ? (
+              <div className="space-y-2">
+                <div className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('learning.skills.manageCategory')}</div>
+                <div className="flex gap-2">
+                  <Input value={categoryEditInput} onChange={(event) => onCategoryEditInputChange(event.target.value)} className="h-8" />
+                  <Button type="button" size="icon" variant="outline" className="h-8 w-8 shrink-0" onClick={onRenameCategory} title={t('learning.skills.manageCategory')}>
+                    <Pencil />
+                  </Button>
+                  <Button type="button" size="icon" variant="destructive" className="h-8 w-8 shrink-0" onClick={onDeleteCategory} title={t('learning.skills.delete')}>
+                    <Trash2 />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -86,7 +96,7 @@ export function SkillListSidebar({
                 key={skill.id}
                 type="button"
                 onClick={() => onSelectSkill(skill.id)}
-                className={`flex w-full flex-col gap-1 rounded-[16px] border px-3 py-3 text-left transition-colors ${selectedSkillId === skill.id ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8' : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'}`}
+                className={`flex w-full flex-col gap-1 rounded-[14px] border px-3 py-3 text-left transition-colors ${selectedSkillId === skill.id ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8' : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'}`}
               >
                 <div className="flex items-center gap-2">
                   <span className="line-clamp-1 min-w-0 flex-1 text-sm font-medium text-[color:var(--color-foreground)]">{skill.title}</span>

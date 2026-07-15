@@ -25,6 +25,13 @@ const statusOptions: Array<{
   { value: 'cancelled', labelKey: 'learning.browserAi.historyCancelled' },
 ]
 
+function statusClassName(status: BrowserAiTaskRecordStatus): string {
+  if (status === 'completed') return 'text-[color:var(--color-success)] bg-[color:var(--color-success)]/10'
+  if (status === 'failed') return 'text-[color:var(--color-destructive)] bg-[color:var(--color-destructive)]/10'
+  if (status === 'cancelled') return 'text-[color:var(--color-muted-foreground)] bg-[color:var(--color-accent)]'
+  return 'text-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10'
+}
+
 export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }: LearningBrowserAiHistoryViewProps) {
   const { t, formatDateTime } = useI18n()
   const records = useAppStore((state) => state.browserAiTaskRecords)
@@ -136,8 +143,8 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
 
   return (
     <>
-      <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)_280px]">
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-[18px] border bg-[color:var(--color-card)]/92" style={{ borderColor: 'var(--color-border)' }}>
+      <div className="learning-browser-history-workspace grid min-h-0 flex-1 gap-3 lg:grid-cols-[264px_minmax(0,1fr)_280px]">
+        <section className="surface-card flex min-h-0 flex-col overflow-hidden rounded-[18px] border bg-[color:var(--color-card)]/92 shadow-none" style={{ borderColor: 'var(--color-border)' }}>
           <div className="space-y-3 border-b p-4" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--color-foreground)]">
               <History className="h-4 w-4 text-[color:var(--color-primary)]" />
@@ -179,7 +186,13 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
                     <span className="min-w-0 truncate text-xs font-medium text-[color:var(--color-foreground)]">{record.title}</span>
                     <span className="shrink-0 text-[10px] text-[color:var(--color-muted-foreground)]">{formatDateTime(record.updatedAt)}</span>
                   </div>
-                  <div className="mt-1 truncate text-[11px] text-[color:var(--color-muted-foreground)]">{record.answerExcerpt || t(`learning.browserAi.historyStatus.${record.status}` as never)}</div>
+                  <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[color:var(--color-muted-foreground)]">{record.taskExcerpt || record.answerExcerpt || t(`learning.browserAi.historyStatus.${record.status}` as never)}</div>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                    <span className={`rounded-full px-2 py-0.5 ${statusClassName(record.status)}`}>{t(`learning.browserAi.historyStatus.${record.status}` as never)}</span>
+                    <span className="text-[color:var(--color-muted-foreground)]">
+                      {record.sourceLabels.length} {t('learning.browserAi.historySourceCount')}
+                    </span>
+                  </div>
                 </button>
               ))
             ) : (
@@ -188,14 +201,18 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-[18px] border bg-[color:var(--color-card)]/92" style={{ borderColor: 'var(--color-border)' }}>
+        <section className="surface-card flex min-h-0 flex-col overflow-hidden rounded-[18px] border bg-[color:var(--color-card)]/92 shadow-none" style={{ borderColor: 'var(--color-border)' }}>
           {selectedRecord ? (
             <>
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[color:var(--color-muted-foreground)]">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
+                  <span className={`rounded-full px-2.5 py-1 ${statusClassName(selectedRecord.status)}`}>{t(`learning.browserAi.historyStatus.${selectedRecord.status}` as never)}</span>
                   <span>{selectedRecord.site.name}</span>
                   <span>{formatDateTime(selectedRecord.startedAt)}</span>
-                  <span>{t(`learning.browserAi.historyStatus.${selectedRecord.status}` as never)}</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="section-label text-[10px]">{t('learning.browserAi.task')}</div>
+                  <div className="whitespace-pre-wrap text-sm leading-6 text-[color:var(--color-foreground)]">{selectedRecord.input.task || t('learning.browserAi.optional')}</div>
                 </div>
                 {selectedRecord.answer ? (
                   <pre className="min-h-48 whitespace-pre-wrap rounded-[14px] bg-[color:var(--color-background)] p-5 text-sm leading-6 text-[color:var(--color-foreground)]">{selectedRecord.answer}</pre>
@@ -213,7 +230,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
           )}
         </section>
 
-        <aside className="min-h-0 overflow-y-auto rounded-[18px] border bg-[color:var(--color-card)]/92 p-4" style={{ borderColor: 'var(--color-border)' }}>
+        <aside className="surface-card min-h-0 overflow-y-auto rounded-[18px] border bg-[color:var(--color-card)]/92 p-4 shadow-none" style={{ borderColor: 'var(--color-border)' }}>
           {selectedRecord ? (
             <div className="space-y-3">
               <section className="space-y-2 rounded-[14px] bg-[color:var(--color-accent)]/45 p-3">

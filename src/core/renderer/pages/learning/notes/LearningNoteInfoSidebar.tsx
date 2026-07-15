@@ -29,7 +29,7 @@ export function LearningNoteInfoSidebar({ categories, editorCategoryId, editorSt
   const tags = normalizeTagInput(editorTags)
 
   return (
-    <div className="relative flex h-full min-h-0">
+    <div className="learning-note-info-sidebar relative flex h-full min-h-0">
       <Card className="h-full min-h-0 w-full overflow-hidden border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92">
         <div className="border-b border-[color:var(--color-border)] px-5 py-4">
           <div className="flex items-start justify-between gap-3">

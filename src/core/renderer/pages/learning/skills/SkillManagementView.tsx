@@ -41,6 +41,7 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('all')
   const [categoryInput, setCategoryInput] = useState('')
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
   const [categoryEditInput, setCategoryEditInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -173,7 +174,7 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
   }
 
   return (
-    <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+    <div className="learning-skills-grid grid min-h-0 flex-1 gap-3 lg:grid-cols-[264px_minmax(0,1fr)]">
       <SkillListSidebar
         categories={categories}
         filteredSkills={filteredSkills}
@@ -181,6 +182,7 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
         selectedSkillId={selectedSkillId}
         searchQuery={searchQuery}
         categoryInput={categoryInput}
+        categoryManagerOpen={categoryManagerOpen}
         selectedCategory={selectedCategory}
         categoryEditInput={categoryEditInput}
         onSearchQueryChange={setSearchQuery}
@@ -191,8 +193,9 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
         onCategoryEditInputChange={setCategoryEditInput}
         onRenameCategory={() => void handleRenameCategory()}
         onDeleteCategory={handleDeleteCategory}
+        onToggleCategoryManager={() => setCategoryManagerOpen((current) => !current)}
       />
-      <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={handleDelete} />
+      <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={handleDelete} onCreate={handleCreateSkill} />
       <ConfirmDialog
         open={Boolean(deleteConfirm)}
         onClose={() => setDeleteConfirm(null)}
