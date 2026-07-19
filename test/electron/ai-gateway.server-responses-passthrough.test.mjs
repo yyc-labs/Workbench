@@ -1,19 +1,5 @@
 import test from 'node:test'
-import {
-  assert,
-  AiGatewayProviderRegistry,
-  AiGatewayServer,
-  closeServer,
-  createOpenAiChatGatewayConfig,
-  createOpenAiResponsesGatewayConfig,
-  delay,
-  getFreePort,
-  listen,
-  normalizeAiGatewayConfig,
-  readRequestBody,
-  readStreamUntil,
-  writeChatCompletionStream,
-} from '../helpers/ai-gateway-test-helpers.mjs'
+import { assert, AiGatewayProviderRegistry, AiGatewayServer, closeServer, createOpenAiChatGatewayConfig, createOpenAiResponsesGatewayConfig, delay, getFreePort, listen, normalizeAiGatewayConfig, readRequestBody, readStreamUntil, writeChatCompletionStream } from '../helpers/ai-gateway-test-helpers.mjs'
 
 test('records merged stream text and payload for Responses streams', async (t) => {
   const { createServer } = await import('node:http')
@@ -72,20 +58,22 @@ test('passes OpenAI Responses providers through natively', async (t) => {
       body: JSON.parse(bodyText),
     })
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({
-      id: 'resp_1',
-      object: 'response',
-      status: 'completed',
-      model: 'gpt-responses-upstream',
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'ok' }],
-        },
-      ],
-      output_text: 'ok',
-    }))
+    res.end(
+      JSON.stringify({
+        id: 'resp_1',
+        object: 'response',
+        status: 'completed',
+        model: 'gpt-responses-upstream',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'ok' }],
+          },
+        ],
+        output_text: 'ok',
+      }),
+    )
   })
   const upstreamPort = await listen(upstream)
   t.after(() => closeServer(upstream))
@@ -101,7 +89,10 @@ test('passes OpenAI Responses providers through natively', async (t) => {
 
   const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      authorization: 'Bearer sk-codex-request',
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({
       model: 'gpt-requested',
       input: 'hello',
@@ -126,6 +117,7 @@ test('passes OpenAI Responses providers through natively', async (t) => {
   assert.equal(upstreamRequests.length, 1)
   assert.equal(upstreamRequests[0].method, 'POST')
   assert.equal(upstreamRequests[0].url, '/v1/responses')
+  assert.equal(upstreamRequests[0].headers.authorization, 'Bearer sk-codex-request')
   assert.equal(upstreamRequests[0].body.model, 'gpt-requested')
   assert.deepEqual(upstreamRequests[0].body.reasoning, { effort: 'low' })
   assert.equal(upstreamRequests[0].body.tools[0].name, 'lookup')
@@ -134,8 +126,42 @@ test('passes OpenAI Responses providers through natively', async (t) => {
   assert.equal(detail.summary.route, 'responses')
   assert.equal(detail.protocolDiagnostics.conversion, 'passthrough')
   assert.equal(detail.meta.providerId, 'openai-responses')
+  assert.equal(detail.meta.authSource, 'request-token')
   assert.match(detail.upstreamRequest.url, /\/v1\/responses$/)
   assert.equal(detail.clientResponse.body.parsed.output_text, 'ok')
+})
+
+test('uses the provider key for native Responses when the client omits authorization', async (t) => {
+  const { createServer } = await import('node:http')
+  let upstreamAuthorization = ''
+  const upstream = createServer(async (req, res) => {
+    await readRequestBody(req)
+    upstreamAuthorization = String(req.headers.authorization || '')
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+    res.end(JSON.stringify({ output_text: 'ok' }))
+  })
+  const upstreamPort = await listen(upstream)
+  t.after(() => closeServer(upstream))
+
+  const gatewayPort = await getFreePort()
+  const config = createOpenAiResponsesGatewayConfig({ gatewayPort, upstreamPort })
+  const registry = new AiGatewayProviderRegistry(config)
+  const gateway = new AiGatewayServer({ getConfig: () => config, registry })
+  await gateway.start(config)
+  t.after(() => gateway.stop())
+
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gpt-requested',
+      input: 'hello',
+    }),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(upstreamAuthorization, 'Bearer sk-provider')
+  assert.equal(gateway.getRecentLogDetails()[0].meta.authSource, 'provider.apiKey')
 })
 
 test('converts Responses function tools to Chat and returns Chat function calls as Responses output', async (t) => {
@@ -144,29 +170,36 @@ test('converts Responses function tools to Chat and returns Chat function calls 
   const upstream = createServer(async (req, res) => {
     upstreamRequests.push({
       url: req.url,
+      headers: req.headers,
       body: JSON.parse(await readRequestBody(req)),
     })
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
-    res.end(JSON.stringify({
-      id: 'chatcmpl_tools',
-      object: 'chat.completion',
-      model: 'gpt-upstream',
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            id: 'call_lookup',
-            type: 'function',
-            function: {
-              name: 'lookup',
-              arguments: '{"query":"gateway"}',
+    res.end(
+      JSON.stringify({
+        id: 'chatcmpl_tools',
+        object: 'chat.completion',
+        model: 'gpt-upstream',
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_lookup',
+                  type: 'function',
+                  function: {
+                    name: 'lookup',
+                    arguments: '{"query":"gateway"}',
+                  },
+                },
+              ],
             },
-          }],
-        },
-        finish_reason: 'tool_calls',
-      }],
-    }))
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }),
+    )
   })
   const upstreamPort = await listen(upstream)
   t.after(() => closeServer(upstream))
@@ -180,19 +213,24 @@ test('converts Responses function tools to Chat and returns Chat function calls 
 
   const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      authorization: 'Bearer sk-codex-request',
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({
       model: 'gpt-requested',
       input: 'Search the gateway docs.',
-      tools: [{
-        type: 'function',
-        name: 'lookup',
-        parameters: {
-          type: 'object',
-          properties: { query: { type: 'string' } },
-          required: ['query'],
+      tools: [
+        {
+          type: 'function',
+          name: 'lookup',
+          parameters: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
         },
-      }],
+      ],
       tool_choice: { type: 'function', name: 'lookup' },
     }),
   })
@@ -201,70 +239,90 @@ test('converts Responses function tools to Chat and returns Chat function calls 
   assert.equal(response.status, 200)
   assert.equal(upstreamRequests.length, 1)
   assert.equal(upstreamRequests[0].url, '/v1/chat/completions')
-  assert.deepEqual(upstreamRequests[0].body.tools, [{
-    type: 'function',
-    function: {
-      name: 'lookup',
-      parameters: {
-        type: 'object',
-        properties: { query: { type: 'string' } },
-        required: ['query'],
+  assert.equal(upstreamRequests[0].headers.authorization, 'Bearer sk-codex-request')
+  assert.deepEqual(upstreamRequests[0].body.tools, [
+    {
+      type: 'function',
+      function: {
+        name: 'lookup',
+        parameters: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
       },
     },
-  }])
+  ])
   assert.deepEqual(upstreamRequests[0].body.tool_choice, {
     type: 'function',
     function: { name: 'lookup' },
   })
   assert.equal(body.finish_reason, 'tool_calls')
-  assert.deepEqual(body.output, [{
-    id: 'fc_call_lookup',
-    type: 'function_call',
-    status: 'completed',
-    call_id: 'call_lookup',
-    name: 'lookup',
-    arguments: '{"query":"gateway"}',
-  }])
+  assert.deepEqual(body.output, [
+    {
+      id: 'fc_call_lookup',
+      type: 'function_call',
+      status: 'completed',
+      call_id: 'call_lookup',
+      name: 'lookup',
+      arguments: '{"query":"gateway"}',
+    },
+  ])
 
   const detail = gateway.getRecentLogDetails()[0]
   assert.equal(detail.protocolDiagnostics.conversion, 'lossy_conversion')
+  assert.equal(detail.meta.authSource, 'request-token')
   assert.equal(detail.protocolDiagnostics.toolValidation[0].schemaValid, true)
   assert.equal(detail.clientResponse.body.parsed.output[0].call_id, 'call_lookup')
 })
 
 test('converts streaming Chat function-call deltas to Responses events and trace payloads', async (t) => {
   const { createServer } = await import('node:http')
+  let upstreamAuthorization = ''
   const upstream = createServer(async (req, res) => {
+    upstreamAuthorization = String(req.headers.authorization || '')
     await readRequestBody(req)
     res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' })
-    res.write(`data: ${JSON.stringify({
-      object: 'chat.completion.chunk',
-      model: 'gpt-upstream',
-      choices: [{
-        delta: {
-          tool_calls: [{
-            index: 0,
-            id: 'call_lookup',
-            type: 'function',
-            function: { name: 'lookup', arguments: '{"query":' },
-          }],
-        },
-        finish_reason: null,
-      }],
-    })}\n\n`)
-    res.write(`data: ${JSON.stringify({
-      object: 'chat.completion.chunk',
-      model: 'gpt-upstream',
-      choices: [{
-        delta: {
-          tool_calls: [{
-            index: 0,
-            function: { arguments: '"gateway"}' },
-          }],
-        },
-        finish_reason: 'tool_calls',
-      }],
-    })}\n\n`)
+    res.write(
+      `data: ${JSON.stringify({
+        object: 'chat.completion.chunk',
+        model: 'gpt-upstream',
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_lookup',
+                  type: 'function',
+                  function: { name: 'lookup', arguments: '{"query":' },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      })}\n\n`,
+    )
+    res.write(
+      `data: ${JSON.stringify({
+        object: 'chat.completion.chunk',
+        model: 'gpt-upstream',
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: '"gateway"}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      })}\n\n`,
+    )
     res.write('data: [DONE]\n\n')
     res.end()
   })
@@ -280,20 +338,25 @@ test('converts streaming Chat function-call deltas to Responses events and trace
 
   const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/responses`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      authorization: 'Bearer sk-codex-stream',
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({
       model: 'gpt-requested',
       stream: true,
       input: 'Search the gateway docs.',
-      tools: [{
-        type: 'function',
-        name: 'lookup',
-        parameters: {
-          type: 'object',
-          properties: { query: { type: 'string' } },
-          required: ['query'],
+      tools: [
+        {
+          type: 'function',
+          name: 'lookup',
+          parameters: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+            required: ['query'],
+          },
         },
-      }],
+      ],
     }),
   })
   const bodyText = await response.text()
@@ -302,8 +365,10 @@ test('converts streaming Chat function-call deltas to Responses events and trace
   assert.match(bodyText, /response\.function_call_arguments\.delta/)
   assert.match(bodyText, /response\.function_call_arguments\.done/)
   assert.match(bodyText, /"call_id":"call_lookup"/)
+  assert.equal(upstreamAuthorization, 'Bearer sk-codex-stream')
 
   const detail = gateway.getRecentLogDetails()[0]
+  assert.equal(detail.meta.authSource, 'request-token')
   assert.equal(detail.stream.merged.finishReason, 'tool_calls')
   assert.equal(detail.stream.merged.upstreamPayload.parsed.choices[0].message.tool_calls[0].id, 'call_lookup')
   assert.equal(detail.stream.merged.clientPayload.parsed.output[0].call_id, 'call_lookup')

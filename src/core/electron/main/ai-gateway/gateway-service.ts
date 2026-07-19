@@ -15,31 +15,12 @@ import type {
   CodexSettingsSnapshot,
 } from '../../../shared/types'
 import { getCodexScopeCacheKey } from '../../../shared/codexScope'
-import {
-  AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID,
-  buildCodexGatewayConfig,
-  findAiGatewayProvider,
-  getAiGatewayOpenAiBaseUrl,
-  withCodexScopeModelRoute,
-  withoutCodexScopeModelRoute,
-} from '../../../shared/aiGatewayCodex'
+import { AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID, buildCodexGatewayConfig, findAiGatewayProvider, getAiGatewayOpenAiBaseUrl, withCodexScopeModelRoute, withoutCodexScopeModelRoute } from '../../../shared/aiGatewayCodex'
 import { loadConfig, updateConfig } from '../config'
-import {
-  normalizeClaudeBashrcConfig,
-  readClaudeBashrcConfig,
-  writeClaudeBashrcConfig,
-} from '../claude-bashrc'
-import {
-  normalizeCodexConfig,
-  readCodexSettings,
-  resolveCodexEnvironmentScope,
-  writeCodexSettings,
-} from '../codex-config'
+import { normalizeClaudeBashrcConfig, readClaudeBashrcConfig, writeClaudeBashrcConfig } from '../claude-bashrc'
+import { normalizeCodexConfig, readCodexSettings, resolveCodexEnvironmentScope, writeCodexSettings } from '../codex-config'
 import { applyWindowsUserEnvToCurrentProcess, writeWindowsUserEnv } from '../windows-env'
-import {
-  getAiGatewayAnthropicBaseUrl,
-  normalizeAiGatewayConfig,
-} from './gateway-config'
+import { getAiGatewayAnthropicBaseUrl, normalizeAiGatewayConfig } from './gateway-config'
 import { AiGatewayProviderRegistry } from './provider-registry'
 import { AiGatewayServer } from './gateway-server'
 
@@ -52,11 +33,7 @@ function normalizeConfigFromApp(appConfig: AppConfig): AiGatewayConfig {
   return normalizeAiGatewayConfig(appConfig.aiGateway)
 }
 
-function withBinding(
-  config: AiGatewayConfig,
-  cli: AiGatewayClientCli,
-  binding: AiGatewayConfig['clientBindings'][AiGatewayClientCli]
-): AiGatewayConfig {
+function withBinding(config: AiGatewayConfig, cli: AiGatewayClientCli, binding: AiGatewayConfig['clientBindings'][AiGatewayClientCli]): AiGatewayConfig {
   return normalizeAiGatewayConfig({
     ...config,
     clientBindings: {
@@ -70,16 +47,8 @@ function hasCodexBackup(snapshot: CodexSettingsSnapshot | undefined): snapshot i
   return Boolean(snapshot?.scope && snapshot.config)
 }
 
-function normalizeProviderApiKeys(
-  providerApiKeys: Record<string, string> | undefined,
-  modelProviders: Record<string, CodexModelProviderConfig>
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.keys(modelProviders).map((key) => [
-      key,
-      providerApiKeys?.[key]?.trim() ?? '',
-    ]),
-  )
+function normalizeProviderApiKeys(providerApiKeys: Record<string, string> | undefined, modelProviders: Record<string, CodexModelProviderConfig>): Record<string, string> {
+  return Object.fromEntries(Object.keys(modelProviders).map((key) => [key, providerApiKeys?.[key]?.trim() ?? '']))
 }
 
 export class AiGatewayService {
@@ -224,9 +193,7 @@ export class AiGatewayService {
       ...binding,
       enabled: true,
       providerId: provider.id,
-      baseUrl: cli === 'codex'
-        ? getAiGatewayOpenAiBaseUrl(config)
-        : getAiGatewayAnthropicBaseUrl(config),
+      baseUrl: cli === 'codex' ? getAiGatewayOpenAiBaseUrl(config) : getAiGatewayAnthropicBaseUrl(config),
       backup,
     })
     const appConfig = await updateConfig({ aiGateway: updatedConfig })
@@ -245,9 +212,7 @@ export class AiGatewayService {
     return loadConfig().codexGatewayBindings?.[scopeKey] ?? null
   }
 
-  async saveCodexGatewayBinding(
-    input: CodexGatewayBindingSaveInput
-  ): Promise<CodexGatewayBindingResult> {
+  async saveCodexGatewayBinding(input: CodexGatewayBindingSaveInput): Promise<CodexGatewayBindingResult> {
     const directConfig = normalizeCodexConfig(input.config)
     const directProviderApiKeys = normalizeProviderApiKeys(input.providerApiKeys, directConfig.modelProviders)
     const currentAppConfig = loadConfig()
@@ -272,7 +237,7 @@ export class AiGatewayService {
         config: gatewayCodexConfig,
         providerApiKeys: {
           ...directProviderApiKeys,
-          [AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID]: this.registry.resolveApiKey(provider),
+          [directConfig.modelProvider]: this.registry.resolveApiKey(provider),
         },
       })
       const scopeKey = getCodexScopeCacheKey(snapshot.scope)
@@ -289,12 +254,7 @@ export class AiGatewayService {
         directSnapshot,
         updatedAt: new Date().toISOString(),
       }
-      const nextGatewayConfig = withCodexScopeModelRoute(
-        gatewayConfig,
-        scopeKey,
-        directConfig.model,
-        provider.id
-      )
+      const nextGatewayConfig = withCodexScopeModelRoute(gatewayConfig, scopeKey, directConfig.model, provider.id)
       const appConfig = await updateConfig({
         aiGateway: nextGatewayConfig,
         codexGatewayBindings: {
@@ -375,9 +335,7 @@ export class AiGatewayService {
     const updatedConfig = withBinding(config, cli, {
       ...binding,
       enabled: false,
-      baseUrl: cli === 'codex'
-        ? getAiGatewayOpenAiBaseUrl(config)
-        : getAiGatewayAnthropicBaseUrl(config),
+      baseUrl: cli === 'codex' ? getAiGatewayOpenAiBaseUrl(config) : getAiGatewayAnthropicBaseUrl(config),
       backup,
     })
     const appConfig = await updateConfig({ aiGateway: updatedConfig })

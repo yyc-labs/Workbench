@@ -1,9 +1,5 @@
 import type { AiGatewayProviderConfig } from '../../../shared/types'
-import type {
-  AnthropicMessagesRequest,
-  ChatCompletionRequest,
-  OpenAiResponsesRequest,
-} from './protocol-types'
+import type { AnthropicMessagesRequest, ChatCompletionRequest, OpenAiResponsesRequest } from './protocol-types'
 import { getHeaderValue, type HeaderValue } from './gateway-http'
 
 export type ResolvedUpstreamAuth = {
@@ -12,8 +8,7 @@ export type ResolvedUpstreamAuth = {
 }
 
 export function extractRequestApiToken(headers: Record<string, HeaderValue>): string {
-  const headerToken = getHeaderValue(headers, 'x-api-key')
-    || getHeaderValue(headers, 'api-key')
+  const headerToken = getHeaderValue(headers, 'x-api-key') || getHeaderValue(headers, 'api-key')
   if (headerToken) return headerToken
 
   const authorization = getHeaderValue(headers, 'authorization')
@@ -23,10 +18,7 @@ export function extractRequestApiToken(headers: Record<string, HeaderValue>): st
   return authorization
 }
 
-export function resolveUpstreamAuth(
-  provider: AiGatewayProviderConfig,
-  apiTokenOverride: string
-): ResolvedUpstreamAuth {
+export function resolveUpstreamAuth(provider: AiGatewayProviderConfig, apiTokenOverride: string): ResolvedUpstreamAuth {
   const override = apiTokenOverride.trim()
   if (override) {
     return {
@@ -57,17 +49,12 @@ export function resolveUpstreamAuth(
   }
 }
 
-export function buildAnthropicAuthHeaders(
-  provider: AiGatewayProviderConfig,
-  incomingHeaders: Record<string, HeaderValue>,
-  apiTokenOverride: string
-): { auth: ResolvedUpstreamAuth; headers: Record<string, string> } {
+export function buildAnthropicAuthHeaders(provider: AiGatewayProviderConfig, incomingHeaders: Record<string, HeaderValue>, apiTokenOverride: string): { auth: ResolvedUpstreamAuth; headers: Record<string, string> } {
   const auth = resolveUpstreamAuth(provider, apiTokenOverride)
   if (!auth.token) return { auth, headers: {} }
 
   const incomingAuthorization = getHeaderValue(incomingHeaders, 'authorization')
-  const incomingXApiKey = getHeaderValue(incomingHeaders, 'x-api-key')
-    || getHeaderValue(incomingHeaders, 'api-key')
+  const incomingXApiKey = getHeaderValue(incomingHeaders, 'x-api-key') || getHeaderValue(incomingHeaders, 'api-key')
 
   if (auth.source === 'request-token') {
     if (incomingAuthorization && !incomingXApiKey) {
@@ -123,11 +110,7 @@ export async function readResponseText(response: Response): Promise<string> {
   }
 }
 
-export function buildUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  chatRequest: ChatCompletionRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
+export function buildUpstreamLogDetails(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, extra?: Record<string, unknown>): Record<string, unknown> {
   return {
     providerId: provider.id,
     providerName: provider.name,
@@ -140,11 +123,7 @@ export function buildUpstreamLogDetails(
   }
 }
 
-export function buildAnthropicUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  request: AnthropicMessagesRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
+export function buildAnthropicUpstreamLogDetails(provider: AiGatewayProviderConfig, request: AnthropicMessagesRequest, extra?: Record<string, unknown>): Record<string, unknown> {
   return {
     providerId: provider.id,
     providerName: provider.name,
@@ -157,11 +136,7 @@ export function buildAnthropicUpstreamLogDetails(
   }
 }
 
-export function buildResponsesUpstreamLogDetails(
-  provider: AiGatewayProviderConfig,
-  request: OpenAiResponsesRequest,
-  extra?: Record<string, unknown>
-): Record<string, unknown> {
+export function buildResponsesUpstreamLogDetails(provider: AiGatewayProviderConfig, request: OpenAiResponsesRequest, extra?: Record<string, unknown>): Record<string, unknown> {
   return {
     providerId: provider.id,
     providerName: provider.name,

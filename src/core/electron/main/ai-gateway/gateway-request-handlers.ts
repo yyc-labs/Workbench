@@ -1,51 +1,24 @@
 import type { IncomingMessage, ServerResponse } from 'http'
-import type {
-  AiGatewayLogEntry,
-  AiGatewayProviderConfig,
-} from '../../../shared/types'
+import type { AiGatewayLogEntry, AiGatewayProviderConfig } from '../../../shared/types'
 import { buildResponseSnapshot } from '../agent-logs/log-snapshots'
 import { jsonResponse, parseJsonBody, readRequestBody, type HeaderValue } from './gateway-http'
 import { AiGatewayProviderRegistry } from './provider-registry'
-import type {
-  AnthropicMessagesRequest,
-  ChatCompletionRequest,
-  ChatCompletionResponse,
-  OpenAiResponsesRequest,
-} from './protocol-types'
-import {
-  GatewayRouteError,
-  hasNonEmptyArray,
-  resolveMappedModel,
-  UnsupportedGatewayFeatureError,
-} from './protocol-types'
+import type { AnthropicMessagesRequest, ChatCompletionRequest, ChatCompletionResponse, OpenAiResponsesRequest } from './protocol-types'
+import { GatewayRouteError, hasNonEmptyArray, resolveMappedModel, UnsupportedGatewayFeatureError } from './protocol-types'
 import { anthropicMessagesToChatCompletion } from './adapters/anthropic-to-chat'
 import { responsesToChatCompletion } from './adapters/responses-to-chat'
 import { chatCompletionToAnthropicMessage } from './adapters/chat-to-anthropic'
 import { chatCompletionToResponses } from './adapters/chat-to-responses'
-import {
-  assertToolValidationPassed,
-  validateChatCompletionToolCalls,
-  type ToolValidationReport,
-} from './tool-validation'
+import { assertToolValidationPassed, validateChatCompletionToolCalls, type ToolValidationReport } from './tool-validation'
 import type { GatewayRequestTrace, RequestLogContext } from './gateway-trace'
-import {
-  extractRequestApiToken,
-  toAnthropicMessagesUrl,
-  toChatCompletionsUrl,
-  toResponsesUrl,
-} from './gateway-upstream'
+import { extractRequestApiToken, toAnthropicMessagesUrl, toChatCompletionsUrl, toResponsesUrl } from './gateway-upstream'
 
 type GatewayLogEntryInput = Omit<AiGatewayLogEntry, 'id' | 'timestamp'>
 
 export type GatewayRouteHandlerDependencies = {
   registry: AiGatewayProviderRegistry
   beginGatewayTrace: (req: IncomingMessage, requestContext: RequestLogContext) => GatewayRequestTrace
-  updateGatewayTraceIngressBody: (
-    trace: GatewayRequestTrace,
-    rawBody: string,
-    parsedBody: unknown | undefined,
-    maxBodyBytes: number
-  ) => void
+  updateGatewayTraceIngressBody: (trace: GatewayRequestTrace, rawBody: string, parsedBody: unknown | undefined, maxBodyBytes: number) => void
   setGatewayTraceRouteData: (
     trace: GatewayRequestTrace,
     provider: AiGatewayProviderConfig,
@@ -56,99 +29,24 @@ export type GatewayRouteHandlerDependencies = {
     diagnostics?: {
       conversion?: 'passthrough' | 'lossy_conversion'
       lossyWarnings?: string[]
-    }
+    },
   ) => void
   applyToolValidationReport: (trace: GatewayRequestTrace, report: ToolValidationReport) => void
-  recordToolValidation: (
-    provider: AiGatewayProviderConfig,
-    requestContext: RequestLogContext,
-    model: string,
-    stream: boolean,
-    report: ToolValidationReport
-  ) => void
+  recordToolValidation: (provider: AiGatewayProviderConfig, requestContext: RequestLogContext, model: string, stream: boolean, report: ToolValidationReport) => void
   finalizeGatewayTrace: (trace: GatewayRequestTrace) => void
-  recordGatewayLog: (
-    entry: GatewayLogEntryInput,
-    consoleDetails?: Record<string, unknown>
-  ) => void
-  respondRouteError: (
-    res: ServerResponse,
-    kind: 'anthropic' | 'responses' | 'chat',
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    error: unknown
-  ) => void
-  fetchChatJson: (
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    trace?: GatewayRequestTrace,
-    apiTokenOverride?: string
-  ) => Promise<ChatCompletionResponse>
-  proxyChatStreamAsAnthropic: (
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyAnthropicMessagesStream: (
-    provider: AiGatewayProviderConfig,
-    payload: AnthropicMessagesRequest,
-    incomingHeaders: Record<string, HeaderValue>,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyAnthropicMessagesJson: (
-    provider: AiGatewayProviderConfig,
-    payload: AnthropicMessagesRequest,
-    incomingHeaders: Record<string, HeaderValue>,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyResponsesStream: (
-    provider: AiGatewayProviderConfig,
-    payload: OpenAiResponsesRequest,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyResponsesJson: (
-    provider: AiGatewayProviderConfig,
-    payload: OpenAiResponsesRequest,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyChatStreamAsResponses: (
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
-  proxyChatStreamRaw: (
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ) => Promise<void>
+  recordGatewayLog: (entry: GatewayLogEntryInput, consoleDetails?: Record<string, unknown>) => void
+  respondRouteError: (res: ServerResponse, kind: 'anthropic' | 'responses' | 'chat', requestContext: RequestLogContext, trace: GatewayRequestTrace, error: unknown) => void
+  fetchChatJson: (provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, trace?: GatewayRequestTrace, apiTokenOverride?: string) => Promise<ChatCompletionResponse>
+  proxyChatStreamAsAnthropic: (provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyAnthropicMessagesStream: (provider: AiGatewayProviderConfig, payload: AnthropicMessagesRequest, incomingHeaders: Record<string, HeaderValue>, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyAnthropicMessagesJson: (provider: AiGatewayProviderConfig, payload: AnthropicMessagesRequest, incomingHeaders: Record<string, HeaderValue>, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyResponsesStream: (provider: AiGatewayProviderConfig, payload: OpenAiResponsesRequest, requestContext: RequestLogContext, requestApiToken: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyResponsesJson: (provider: AiGatewayProviderConfig, payload: OpenAiResponsesRequest, requestContext: RequestLogContext, requestApiToken: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyChatStreamAsResponses: (provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
+  proxyChatStreamRaw: (provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse) => Promise<void>
 }
 
-function buildRequestContext(
-  route: RequestLogContext['route'],
-  req: IncomingMessage,
-  requestPath: string,
-  profileId?: string
-): RequestLogContext {
+function buildRequestContext(route: RequestLogContext['route'], req: IncomingMessage, requestPath: string, profileId?: string): RequestLogContext {
   return {
     route,
     requestMethod: req.method || 'POST',
@@ -157,21 +55,14 @@ function buildRequestContext(
   }
 }
 
-export async function handleAnthropicMessagesRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  maxBodyBytes: number,
-  deps: GatewayRouteHandlerDependencies,
-  profileId?: string
-): Promise<void> {
+export async function handleAnthropicMessagesRoute(req: IncomingMessage, res: ServerResponse, maxBodyBytes: number, deps: GatewayRouteHandlerDependencies, profileId?: string): Promise<void> {
   const requestContext = buildRequestContext('anthropic', req, '/v1/messages', profileId)
   const trace = deps.beginGatewayTrace(req, requestContext)
   try {
     const rawBody = await readRequestBody(req, maxBodyBytes)
     deps.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
     const payload = parseJsonBody(rawBody) as AnthropicMessagesRequest
-    const provider = deps.registry.getProviderForProfile(profileId)
-      ?? deps.registry.getProviderForModel(String(payload.model || ''))
+    const provider = deps.registry.getProviderForProfile(profileId) ?? deps.registry.getProviderForModel(String(payload.model || ''))
     const requestApiToken = profileId ? extractRequestApiToken(req.headers) : ''
     deps.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
 
@@ -188,9 +79,7 @@ export async function handleAnthropicMessagesRoute(
       }
       deps.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
         conversion: 'lossy_conversion',
-        lossyWarnings: [
-          'Anthropic Messages to OpenAI Chat is a lossy conversion; provider tool-use prompting and content-block semantics are not equivalent.',
-        ],
+        lossyWarnings: ['Anthropic Messages to OpenAI Chat is a lossy conversion; provider tool-use prompting and content-block semantics are not equivalent.'],
       })
       deps.recordGatewayLog({
         ...requestContext,
@@ -223,22 +112,23 @@ export async function handleAnthropicMessagesRoute(
       deps.applyToolValidationReport(trace, validationReport)
       deps.recordToolValidation(provider, requestContext, chatRequest.model, false, validationReport)
       assertToolValidationPassed(validationReport)
-      const normalizedChatResponse = validationReport.normalizedToolCalls.length > 0
-        ? {
-          ...chatResponse,
-          choices: chatResponse.choices?.map((choice, index) => (
-            index !== 0 || !choice.message
-              ? choice
-              : {
-                ...choice,
-                message: {
-                  ...choice.message,
-                  tool_calls: validationReport.normalizedToolCalls,
-                },
-              }
-          )),
-        }
-        : chatResponse
+      const normalizedChatResponse =
+        validationReport.normalizedToolCalls.length > 0
+          ? {
+              ...chatResponse,
+              choices: chatResponse.choices?.map((choice, index) =>
+                index !== 0 || !choice.message
+                  ? choice
+                  : {
+                      ...choice,
+                      message: {
+                        ...choice.message,
+                        tool_calls: validationReport.normalizedToolCalls,
+                      },
+                    },
+              ),
+            }
+          : chatResponse
       const clientPayload = chatCompletionToAnthropicMessage(normalizedChatResponse, chatRequest.model)
       trace.clientResponse = buildResponseSnapshot({
         statusCode: 200,
@@ -278,45 +168,22 @@ export async function handleAnthropicMessagesRoute(
         stream: upstreamRequest.stream === true,
       })
       if (upstreamRequest.stream) {
-        await deps.proxyAnthropicMessagesStream(
-          provider,
-          upstreamRequest,
-          req.headers,
-          requestContext,
-          requestApiToken,
-          trace,
-          res
-        )
+        await deps.proxyAnthropicMessagesStream(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
         deps.finalizeGatewayTrace(trace)
         return
       }
-      await deps.proxyAnthropicMessagesJson(
-        provider,
-        upstreamRequest,
-        req.headers,
-        requestContext,
-        requestApiToken,
-        trace,
-        res
-      )
+      await deps.proxyAnthropicMessagesJson(provider, upstreamRequest, req.headers, requestContext, requestApiToken, trace, res)
       deps.finalizeGatewayTrace(trace)
       return
     }
 
-    throw new Error(
-      `Provider "${provider.name}" uses ${provider.protocol}; openai_chat or anthropic_messages is required for Anthropic route.`
-    )
+    throw new Error(`Provider "${provider.name}" uses ${provider.protocol}; openai_chat or anthropic_messages is required for Anthropic route.`)
   } catch (error) {
     deps.respondRouteError(res, 'anthropic', requestContext, trace, error)
   }
 }
 
-export async function handleResponsesRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  maxBodyBytes: number,
-  deps: GatewayRouteHandlerDependencies
-): Promise<void> {
+export async function handleResponsesRoute(req: IncomingMessage, res: ServerResponse, maxBodyBytes: number, deps: GatewayRouteHandlerDependencies): Promise<void> {
   const requestContext = buildRequestContext('responses', req, '/v1/responses')
   const trace = deps.beginGatewayTrace(req, requestContext)
   try {
@@ -324,6 +191,7 @@ export async function handleResponsesRoute(
     deps.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
     const payload = parseJsonBody(rawBody) as OpenAiResponsesRequest
     const provider = deps.registry.getProviderForModel(String(payload.model || ''))
+    const requestApiToken = extractRequestApiToken(req.headers)
     deps.updateGatewayTraceIngressBody(trace, rawBody, payload, maxBodyBytes)
 
     if (provider.protocol === 'openai_responses') {
@@ -348,11 +216,11 @@ export async function handleResponsesRoute(
         stream: upstreamRequest.stream === true,
       })
       if (upstreamRequest.stream) {
-        await deps.proxyResponsesStream(provider, upstreamRequest, requestContext, trace, res)
+        await deps.proxyResponsesStream(provider, upstreamRequest, requestContext, requestApiToken, trace, res)
         deps.finalizeGatewayTrace(trace)
         return
       }
-      await deps.proxyResponsesJson(provider, upstreamRequest, requestContext, trace, res)
+      await deps.proxyResponsesJson(provider, upstreamRequest, requestContext, requestApiToken, trace, res)
       deps.finalizeGatewayTrace(trace)
       return
     }
@@ -362,38 +230,22 @@ export async function handleResponsesRoute(
         throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`, 'responses_streaming')
       }
       if (hasNonEmptyArray(payload.tools) && provider.capabilities?.supportsTools === false) {
-        throw new UnsupportedGatewayFeatureError(
-          `Provider "${provider.name}" does not support function tools on the Responses to Chat downgrade route.`,
-          'responses_tools'
-        )
+        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support function tools on the Responses to Chat downgrade route.`, 'responses_tools')
       }
       if (hasNonEmptyArray(payload.tools) && provider.capabilities?.responsesToolsViaChatDowngrade === false) {
-        throw new UnsupportedGatewayFeatureError(
-          `Provider "${provider.name}" has disabled Responses tools through the Chat downgrade route.`,
-          'responses_tools'
-        )
+        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" has disabled Responses tools through the Chat downgrade route.`, 'responses_tools')
       }
       const mappedModel = resolveMappedModel(String(payload.model || ''), provider.modelMap)
       if (!mappedModel) throw new Error('Responses request is missing model.')
       deps.setGatewayTraceRouteData(trace, provider, mappedModel, payload.stream === true, payload, maxBodyBytes, {
         conversion: 'lossy_conversion',
-        lossyWarnings: [
-          'OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.',
-        ],
+        lossyWarnings: ['OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.'],
       })
       const chatRequest = responsesToChatCompletion(payload, provider)
       if (chatRequest.parallel_tool_calls === true && provider.capabilities?.supportsParallelToolCalls === false) {
-        throw new UnsupportedGatewayFeatureError(
-          `Provider "${provider.name}" does not support parallel tool calls.`,
-          'responses_tools'
-        )
+        throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support parallel tool calls.`, 'responses_tools')
       }
-      const lossyWarnings = [
-        'OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.',
-        ...(chatRequest.tools?.length
-          ? ['Responses function tools are converted to Chat function tools; built-in tools remain unsupported.']
-          : []),
-      ]
+      const lossyWarnings = ['OpenAI Responses to Chat Completions is a downgrade path; Responses reasoning and rich output items are not preserved.', ...(chatRequest.tools?.length ? ['Responses function tools are converted to Chat function tools; built-in tools remain unsupported.'] : [])]
       deps.setGatewayTraceRouteData(trace, provider, chatRequest.model, chatRequest.stream === true, chatRequest, maxBodyBytes, {
         conversion: 'lossy_conversion',
         lossyWarnings,
@@ -409,11 +261,11 @@ export async function handleResponsesRoute(
         stream: chatRequest.stream === true,
       })
       if (chatRequest.stream) {
-        await deps.proxyChatStreamAsResponses(provider, chatRequest, requestContext, '', trace, res)
+        await deps.proxyChatStreamAsResponses(provider, chatRequest, requestContext, requestApiToken, trace, res)
         deps.finalizeGatewayTrace(trace)
         return
       }
-      const chatResponse = await deps.fetchChatJson(provider, chatRequest, requestContext, trace)
+      const chatResponse = await deps.fetchChatJson(provider, chatRequest, requestContext, trace, requestApiToken)
       deps.recordGatewayLog({
         ...requestContext,
         level: 'info',
@@ -429,22 +281,23 @@ export async function handleResponsesRoute(
       deps.applyToolValidationReport(trace, validationReport)
       deps.recordToolValidation(provider, requestContext, chatRequest.model, false, validationReport)
       assertToolValidationPassed(validationReport)
-      const normalizedChatResponse = validationReport.normalizedToolCalls.length > 0
-        ? {
-          ...chatResponse,
-          choices: chatResponse.choices?.map((choice, index) => (
-            index !== 0 || !choice.message
-              ? choice
-              : {
-                ...choice,
-                message: {
-                  ...choice.message,
-                  tool_calls: validationReport.normalizedToolCalls,
-                },
-              }
-          )),
-        }
-        : chatResponse
+      const normalizedChatResponse =
+        validationReport.normalizedToolCalls.length > 0
+          ? {
+              ...chatResponse,
+              choices: chatResponse.choices?.map((choice, index) =>
+                index !== 0 || !choice.message
+                  ? choice
+                  : {
+                      ...choice,
+                      message: {
+                        ...choice.message,
+                        tool_calls: validationReport.normalizedToolCalls,
+                      },
+                    },
+              ),
+            }
+          : chatResponse
       const clientPayload = chatCompletionToResponses(normalizedChatResponse, chatRequest.model)
       trace.clientResponse = buildResponseSnapshot({
         statusCode: 200,
@@ -459,20 +312,13 @@ export async function handleResponsesRoute(
       return
     }
 
-    throw new Error(
-      `Provider "${provider.name}" uses ${provider.protocol}; openai_responses or openai_chat is required for Responses route.`
-    )
+    throw new Error(`Provider "${provider.name}" uses ${provider.protocol}; openai_responses or openai_chat is required for Responses route.`)
   } catch (error) {
     deps.respondRouteError(res, 'responses', requestContext, trace, error)
   }
 }
 
-export async function handleChatCompletionsRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  maxBodyBytes: number,
-  deps: GatewayRouteHandlerDependencies
-): Promise<void> {
+export async function handleChatCompletionsRoute(req: IncomingMessage, res: ServerResponse, maxBodyBytes: number, deps: GatewayRouteHandlerDependencies): Promise<void> {
   const requestContext = buildRequestContext('chat', req, '/v1/chat/completions')
   const trace = deps.beginGatewayTrace(req, requestContext)
   try {
@@ -480,6 +326,7 @@ export async function handleChatCompletionsRoute(
     deps.updateGatewayTraceIngressBody(trace, rawBody, undefined, maxBodyBytes)
     const payload = parseJsonBody(rawBody) as ChatCompletionRequest
     const provider = deps.registry.getProviderForModel(String(payload.model || ''), 'openai_chat')
+    const requestApiToken = extractRequestApiToken(req.headers)
     if (payload.stream === true && provider.capabilities?.supportsStreaming === false) {
       throw new UnsupportedGatewayFeatureError(`Provider "${provider.name}" does not support streaming.`)
     }
@@ -508,11 +355,11 @@ export async function handleChatCompletionsRoute(
       stream: chatRequest.stream === true,
     })
     if (chatRequest.stream === true) {
-      await deps.proxyChatStreamRaw(provider, chatRequest, requestContext, '', trace, res)
+      await deps.proxyChatStreamRaw(provider, chatRequest, requestContext, requestApiToken, trace, res)
       deps.finalizeGatewayTrace(trace)
       return
     }
-    const chatResponse = await deps.fetchChatJson(provider, chatRequest, requestContext, trace)
+    const chatResponse = await deps.fetchChatJson(provider, chatRequest, requestContext, trace, requestApiToken)
     deps.recordGatewayLog({
       ...requestContext,
       level: 'info',

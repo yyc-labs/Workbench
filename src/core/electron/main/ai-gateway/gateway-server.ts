@@ -1,33 +1,10 @@
 import { randomUUID } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
-import type {
-  AiGatewayConfig,
-  AiGatewayLogDetail,
-  AiGatewayLogEntry,
-  AiGatewayProviderConfig,
-  AiGatewayProtocolConversionKind,
-  StructuredJsonSnapshot,
-} from '../../../shared/types'
-import {
-  buildRequestSnapshot,
-  buildResponseSnapshot,
-} from '../agent-logs/log-snapshots'
-import {
-  emptyResponse,
-  getContentType,
-  getHeaderValue,
-  getResponseContentType,
-  jsonResponse,
-  writeSseHeaders,
-  type HeaderValue,
-} from './gateway-http'
-import {
-  AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
-  getAiGatewayAnthropicBaseUrl,
-  getAiGatewayListenUrl,
-  getAiGatewayOpenAiBaseUrl,
-  normalizeAiGatewayConfig,
-} from './gateway-config'
+import { net } from 'electron'
+import type { AiGatewayConfig, AiGatewayLogDetail, AiGatewayLogEntry, AiGatewayProviderConfig, AiGatewayProtocolConversionKind, StructuredJsonSnapshot } from '../../../shared/types'
+import { buildRequestSnapshot, buildResponseSnapshot } from '../agent-logs/log-snapshots'
+import { emptyResponse, getContentType, getHeaderValue, getResponseContentType, jsonResponse, writeSseHeaders, type HeaderValue } from './gateway-http'
+import { AI_GATEWAY_DEFAULT_MAX_BODY_BYTES, getAiGatewayAnthropicBaseUrl, getAiGatewayListenUrl, getAiGatewayOpenAiBaseUrl, normalizeAiGatewayConfig } from './gateway-config'
 import { parseRoutedPath, routeErrorPayload, type RouteKind } from './gateway-routes'
 import {
   beginGatewayTrace as beginGatewayTraceHelper,
@@ -40,59 +17,15 @@ import {
   type RequestLogContext,
 } from './gateway-trace'
 import { AiGatewayProviderRegistry } from './provider-registry'
-import type {
-  AnthropicMessagesRequest,
-  ChatCompletionRequest,
-  ChatCompletionResponse,
-  ChatCompletionToolCall,
-  JsonObject,
-  OpenAiResponsesRequest,
-} from './protocol-types'
+import type { AnthropicMessagesRequest, ChatCompletionRequest, ChatCompletionResponse, ChatCompletionToolCall, JsonObject, OpenAiResponsesRequest } from './protocol-types'
 import { GatewayRouteError, UnsupportedGatewayFeatureError } from './protocol-types'
-import {
-  chatStreamChunkToAnthropicEvents,
-  createAnthropicStreamStart,
-  createAnthropicStreamState,
-  createAnthropicStreamStop,
-} from './adapters/chat-to-anthropic'
-import {
-  chatStreamChunkToResponsesEvents,
-  createResponsesStreamCreated,
-  createResponsesStreamFinish,
-  createResponsesStreamIds,
-  createResponsesStreamState,
-} from './adapters/chat-to-responses'
+import { chatStreamChunkToAnthropicEvents, createAnthropicStreamStart, createAnthropicStreamState, createAnthropicStreamStop } from './adapters/chat-to-anthropic'
+import { chatStreamChunkToResponsesEvents, createResponsesStreamCreated, createResponsesStreamFinish, createResponsesStreamIds, createResponsesStreamState } from './adapters/chat-to-responses'
 import { decodeSseStream, drainSseEvents, encodeSseEvent } from './adapters/sse'
-import {
-  buildStreamMergedSnapshot,
-  createLimitedTextAccumulator,
-} from './stream-trace'
-import {
-  assertToolValidationPassed,
-  anthropicToolsToValidationTools,
-  toolValidationFailureMessage,
-  validateAnthropicToolUseBlocks,
-  validateChatToolCalls,
-  type ToolValidationReport,
-} from './tool-validation'
-import {
-  buildAnthropicAuthHeaders,
-  buildAnthropicUpstreamLogDetails,
-  buildResponsesUpstreamLogDetails,
-  buildUpstreamLogDetails,
-  extractRequestApiToken,
-  isAbortError,
-  readResponseText,
-  resolveUpstreamAuth,
-  toAnthropicMessagesUrl,
-  toChatCompletionsUrl,
-  toResponsesUrl,
-} from './gateway-upstream'
-import {
-  handleAnthropicMessagesRoute,
-  handleChatCompletionsRoute,
-  handleResponsesRoute,
-} from './gateway-request-handlers'
+import { buildStreamMergedSnapshot, createLimitedTextAccumulator } from './stream-trace'
+import { assertToolValidationPassed, anthropicToolsToValidationTools, toolValidationFailureMessage, validateAnthropicToolUseBlocks, validateChatToolCalls, type ToolValidationReport } from './tool-validation'
+import { buildAnthropicAuthHeaders, buildAnthropicUpstreamLogDetails, buildResponsesUpstreamLogDetails, buildUpstreamLogDetails, extractRequestApiToken, isAbortError, readResponseText, resolveUpstreamAuth, toAnthropicMessagesUrl, toChatCompletionsUrl, toResponsesUrl } from './gateway-upstream'
+import { handleAnthropicMessagesRoute, handleChatCompletionsRoute, handleResponsesRoute } from './gateway-request-handlers'
 
 export { extractRequestApiToken, toAnthropicMessagesUrl } from './gateway-upstream'
 
@@ -106,6 +39,19 @@ const AI_GATEWAY_DEBUG_ENV = 'IDE_ELECTRON_AI_GATEWAY_DEBUG'
 const AI_GATEWAY_LOG_PREVIEW_CHARS = 1200
 const AI_GATEWAY_MAX_DEBUG_SSE_EVENTS = 6
 const AI_GATEWAY_RECENT_LOG_LIMIT = 200
+
+/**
+ * Keep upstream traffic on Electron's Chromium network stack. This avoids using
+ * Node/Undici's direct TLS implementation, which can be treated differently by
+ * an upstream CDN or WAF. `net` is unavailable in the Node-only test loader, so
+ * those tests deliberately retain the standard Fetch implementation.
+ */
+function fetchUpstream(input: string, init: RequestInit): Promise<Response> {
+  if (typeof net?.fetch === 'function') {
+    return net.fetch(input, init) as Promise<Response>
+  }
+  return globalThis.fetch(input, init)
+}
 
 function remediationForUnsupportedFeature(kind: string | undefined): string | undefined {
   if (kind === 'responses_reasoning') {
@@ -253,13 +199,7 @@ function createChatToolCallTraceAccumulator(): {
   }
 }
 
-function buildChatStreamPayload(
-  model: string,
-  text: string,
-  finishReason: string | null | undefined,
-  usage: JsonObject | undefined,
-  toolCalls: ChatCompletionToolCall[] = []
-): JsonObject | undefined {
+function buildChatStreamPayload(model: string, text: string, finishReason: string | null | undefined, usage: JsonObject | undefined, toolCalls: ChatCompletionToolCall[] = []): JsonObject | undefined {
   const hasVisibleText = text.trim().length > 0
   if (!hasVisibleText && toolCalls.length === 0 && typeof finishReason === 'undefined' && typeof usage === 'undefined') return undefined
   return {
@@ -270,7 +210,7 @@ function buildChatStreamPayload(
         index: 0,
         message: {
           role: 'assistant',
-          content: hasVisibleText ? text : (toolCalls.length > 0 ? null : ''),
+          content: hasVisibleText ? text : toolCalls.length > 0 ? null : '',
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
         finish_reason: finishReason ?? null,
@@ -280,10 +220,7 @@ function buildChatStreamPayload(
   }
 }
 
-function ensureAnthropicTextBlock(
-  blocks: Map<number, AnthropicTraceContentBlock>,
-  index: number
-): AnthropicTraceContentBlock {
+function ensureAnthropicTextBlock(blocks: Map<number, AnthropicTraceContentBlock>, index: number): AnthropicTraceContentBlock {
   const existing = blocks.get(index)
   if (existing?.kind === 'text') return existing
   const created: AnthropicTraceContentBlock = {
@@ -296,10 +233,7 @@ function ensureAnthropicTextBlock(
   return created
 }
 
-function ensureAnthropicToolBlock(
-  blocks: Map<number, AnthropicTraceContentBlock>,
-  index: number
-): AnthropicTraceContentBlock {
+function ensureAnthropicToolBlock(blocks: Map<number, AnthropicTraceContentBlock>, index: number): AnthropicTraceContentBlock {
   const existing = blocks.get(index)
   if (existing?.kind === 'tool_use') return existing
   const created: AnthropicTraceContentBlock = {
@@ -384,13 +318,15 @@ function createAnthropicContentTraceAccumulator(): {
             return block.text?.trim() ? [{ type: 'text', text: block.text }] : []
           }
           const { input, rawInputJson } = resolveAnthropicToolInput(block)
-          return [{
-            type: 'tool_use',
-            id: block.id || `toolu_trace_${block.index}`,
-            name: block.name || 'unknown_tool',
-            input,
-            ...(rawInputJson ? { raw_input_json: rawInputJson } : {}),
-          }]
+          return [
+            {
+              type: 'tool_use',
+              id: block.id || `toolu_trace_${block.index}`,
+              name: block.name || 'unknown_tool',
+              input,
+              ...(rawInputJson ? { raw_input_json: rawInputJson } : {}),
+            },
+          ]
         })
 
       const hasTextBlock = content.some((block) => block.type === 'text')
@@ -423,11 +359,7 @@ function findResponseCompletedPayload(events: Array<{ data: string }>): JsonObje
   return undefined
 }
 
-function readAnthropicStopMetadata(
-  events: Array<{ event?: string; data: string }>,
-  fallbackReason: string | null | undefined,
-  fallbackUsage: JsonObject | undefined
-): { stopReason: string | null | undefined; usage: unknown } {
+function readAnthropicStopMetadata(events: Array<{ event?: string; data: string }>, fallbackReason: string | null | undefined, fallbackUsage: JsonObject | undefined): { stopReason: string | null | undefined; usage: unknown } {
   let stopReason: string | null | undefined = fallbackReason
   let usage: unknown = fallbackUsage
   for (const event of events) {
@@ -444,26 +376,8 @@ function readAnthropicStopMetadata(
   return { stopReason, usage }
 }
 
-function buildAnthropicMessagePayload({
-  id,
-  model,
-  text,
-  contentBlocks,
-  stopReason,
-  usage,
-}: {
-  id: string
-  model: string
-  text: string
-  contentBlocks?: JsonObject[]
-  stopReason: string | null | undefined
-  usage: unknown
-}): JsonObject | undefined {
-  const content = contentBlocks && contentBlocks.length > 0
-    ? contentBlocks
-    : text.trim() || typeof stopReason !== 'undefined' || typeof usage !== 'undefined'
-      ? [{ type: 'text', text }]
-      : []
+function buildAnthropicMessagePayload({ id, model, text, contentBlocks, stopReason, usage }: { id: string; model: string; text: string; contentBlocks?: JsonObject[]; stopReason: string | null | undefined; usage: unknown }): JsonObject | undefined {
+  const content = contentBlocks && contentBlocks.length > 0 ? contentBlocks : text.trim() || typeof stopReason !== 'undefined' || typeof usage !== 'undefined' ? [{ type: 'text', text }] : []
   if (content.length === 0 && typeof stopReason === 'undefined' && typeof usage === 'undefined') return undefined
   return {
     id,
@@ -477,9 +391,7 @@ function buildAnthropicMessagePayload({
   }
 }
 
-function readAnthropicPassthroughEvent(
-  parsed: JsonObject | undefined
-): {
+function readAnthropicPassthroughEvent(parsed: JsonObject | undefined): {
   message?: JsonObject
   textDelta?: string
   stopReason?: string | null
@@ -504,9 +416,7 @@ function readAnthropicPassthroughEvent(
   if (parsed.type === 'message_delta') {
     const delta = isJsonRecord(parsed.delta) ? parsed.delta : undefined
     return {
-      stopReason: typeof delta?.stop_reason === 'string' || delta?.stop_reason === null
-        ? delta.stop_reason
-        : undefined,
+      stopReason: typeof delta?.stop_reason === 'string' || delta?.stop_reason === null ? delta.stop_reason : undefined,
       usage: parsed.usage,
     }
   }
@@ -609,9 +519,7 @@ export class AiGatewayServer {
   }
 
   getActiveEndpoint(): { host: string; port: number; url: string; anthropicBaseUrl: string; openAiBaseUrl: string } {
-    const config = this.server
-      ? { host: this.activeHost, port: this.activePort }
-      : this.getConfig()
+    const config = this.server ? { host: this.activeHost, port: this.activePort } : this.getConfig()
     return {
       host: config.host,
       port: config.port,
@@ -641,43 +549,39 @@ export class AiGatewayServer {
     }
   }
 
-  private recordGatewayLog(
-    entry: Omit<AiGatewayLogEntry, 'id' | 'timestamp'>,
-    consoleDetails?: Record<string, unknown>
-  ): void {
+  private recordGatewayLog(entry: Omit<AiGatewayLogEntry, 'id' | 'timestamp'>, consoleDetails?: Record<string, unknown>): void {
     if (!this.isLogCaptureEnabled()) return
     this.appendRecentLog(entry)
     if (entry.level === 'info' && !isAiGatewayDebugEnabled()) return
-    logAiGateway(entry.level, entry.message, consoleDetails ?? {
-      route: entry.route,
-      requestMethod: entry.requestMethod,
-      requestPath: entry.requestPath,
-      providerId: entry.providerId,
-      providerName: entry.providerName,
-      upstreamUrl: entry.upstreamUrl,
-      profileId: entry.profileId,
-      model: entry.model,
-      stream: entry.stream,
-      statusCode: entry.statusCode,
-      contentType: entry.contentType,
-      errorCode: entry.errorCode,
-      eventCount: entry.eventCount,
-      attempt: entry.attempt,
-      maxAttempts: entry.maxAttempts,
-      bodyPreview: entry.bodyPreview,
-    })
+    logAiGateway(
+      entry.level,
+      entry.message,
+      consoleDetails ?? {
+        route: entry.route,
+        requestMethod: entry.requestMethod,
+        requestPath: entry.requestPath,
+        providerId: entry.providerId,
+        providerName: entry.providerName,
+        upstreamUrl: entry.upstreamUrl,
+        profileId: entry.profileId,
+        model: entry.model,
+        stream: entry.stream,
+        statusCode: entry.statusCode,
+        contentType: entry.contentType,
+        errorCode: entry.errorCode,
+        eventCount: entry.eventCount,
+        attempt: entry.attempt,
+        maxAttempts: entry.maxAttempts,
+        bodyPreview: entry.bodyPreview,
+      },
+    )
   }
 
   private beginGatewayTrace(req: IncomingMessage, requestContext: RequestLogContext): GatewayRequestTrace {
     return beginGatewayTraceHelper(req, requestContext)
   }
 
-  private updateGatewayTraceIngressBody(
-    trace: GatewayRequestTrace,
-    rawBody: string,
-    parsedBody: unknown | undefined,
-    maxBodyBytes: number
-  ): void {
+  private updateGatewayTraceIngressBody(trace: GatewayRequestTrace, rawBody: string, parsedBody: unknown | undefined, maxBodyBytes: number): void {
     updateGatewayTraceIngressBodyHelper(trace, rawBody, parsedBody, maxBodyBytes)
   }
 
@@ -691,23 +595,12 @@ export class AiGatewayServer {
     diagnostics?: {
       conversion?: AiGatewayProtocolConversionKind
       lossyWarnings?: string[]
-    }
+    },
   ): void {
-    setGatewayTraceRouteDataHelper(
-      trace,
-      provider,
-      model,
-      requestedStream,
-      normalizedRequest,
-      maxBodyBytes,
-      diagnostics
-    )
+    setGatewayTraceRouteDataHelper(trace, provider, model, requestedStream, normalizedRequest, maxBodyBytes, diagnostics)
   }
 
-  private updateGatewayTraceProtocolDiagnostics(
-    trace: GatewayRequestTrace,
-    diagnostics: NonNullable<AiGatewayLogDetail['protocolDiagnostics']>
-  ): void {
+  private updateGatewayTraceProtocolDiagnostics(trace: GatewayRequestTrace, diagnostics: NonNullable<AiGatewayLogDetail['protocolDiagnostics']>): void {
     updateGatewayTraceProtocolDiagnosticsHelper(trace, diagnostics)
   }
 
@@ -715,42 +608,33 @@ export class AiGatewayServer {
     applyToolValidationReportHelper(trace, report)
   }
 
-  private recordToolValidation(
-    provider: AiGatewayProviderConfig,
-    requestContext: RequestLogContext,
-    model: string,
-    stream: boolean,
-    report: ToolValidationReport
-  ): void {
+  private recordToolValidation(provider: AiGatewayProviderConfig, requestContext: RequestLogContext, model: string, stream: boolean, report: ToolValidationReport): void {
     if (report.entries.length === 0) return
-    const upstreamUrl = provider.protocol === 'anthropic_messages'
-      ? toAnthropicMessagesUrl(provider.baseUrl)
-      : provider.protocol === 'openai_responses'
-        ? toResponsesUrl(provider.baseUrl)
-        : toChatCompletionsUrl(provider.baseUrl)
-    this.recordGatewayLog({
-      ...requestContext,
-      level: report.valid ? 'info' : 'warn',
-      message: report.valid
-        ? 'Validated upstream tool arguments'
-        : 'Rejected upstream tool arguments after validation',
-      providerId: provider.id,
-      providerName: provider.name,
-      upstreamUrl,
-      model,
-      stream,
-      errorCode: report.valid ? undefined : 'tool_validation_failed',
-      bodyPreview: report.valid ? undefined : toolValidationFailureMessage(report),
-    }, {
-      providerId: provider.id,
-      providerName: provider.name,
-      protocol: provider.protocol,
-      capabilities: provider.capabilities,
-      upstreamUrl,
-      model,
-      stream,
-      toolValidation: report.entries,
-    })
+    const upstreamUrl = provider.protocol === 'anthropic_messages' ? toAnthropicMessagesUrl(provider.baseUrl) : provider.protocol === 'openai_responses' ? toResponsesUrl(provider.baseUrl) : toChatCompletionsUrl(provider.baseUrl)
+    this.recordGatewayLog(
+      {
+        ...requestContext,
+        level: report.valid ? 'info' : 'warn',
+        message: report.valid ? 'Validated upstream tool arguments' : 'Rejected upstream tool arguments after validation',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl,
+        model,
+        stream,
+        errorCode: report.valid ? undefined : 'tool_validation_failed',
+        bodyPreview: report.valid ? undefined : toolValidationFailureMessage(report),
+      },
+      {
+        providerId: provider.id,
+        providerName: provider.name,
+        protocol: provider.protocol,
+        capabilities: provider.capabilities,
+        upstreamUrl,
+        model,
+        stream,
+        toolValidation: report.entries,
+      },
+    )
   }
 
   private finalizeGatewayTrace(trace: GatewayRequestTrace): void {
@@ -783,25 +667,31 @@ export class AiGatewayServer {
 
     const maxBodyBytes = config.maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     if (routedPath.path === '/v1/messages' || routedPath.path === '/messages') {
-      await handleAnthropicMessagesRoute(req, res, maxBodyBytes, {
-        registry: this.registry,
-        beginGatewayTrace: this.beginGatewayTrace.bind(this),
-        updateGatewayTraceIngressBody: this.updateGatewayTraceIngressBody.bind(this),
-        setGatewayTraceRouteData: this.setGatewayTraceRouteData.bind(this),
-        applyToolValidationReport: this.applyToolValidationReport.bind(this),
-        recordToolValidation: this.recordToolValidation.bind(this),
-        finalizeGatewayTrace: this.finalizeGatewayTrace.bind(this),
-        recordGatewayLog: this.recordGatewayLog.bind(this),
-        respondRouteError: this.respondRouteError.bind(this),
-        fetchChatJson: this.fetchChatJson.bind(this),
-        proxyChatStreamAsAnthropic: this.proxyChatStreamAsAnthropic.bind(this),
-        proxyAnthropicMessagesStream: this.proxyAnthropicMessagesStream.bind(this),
-        proxyAnthropicMessagesJson: this.proxyAnthropicMessagesJson.bind(this),
-        proxyResponsesStream: this.proxyResponsesStream.bind(this),
-        proxyResponsesJson: this.proxyResponsesJson.bind(this),
-        proxyChatStreamAsResponses: this.proxyChatStreamAsResponses.bind(this),
-        proxyChatStreamRaw: this.proxyChatStreamRaw.bind(this),
-      }, routedPath.profileId)
+      await handleAnthropicMessagesRoute(
+        req,
+        res,
+        maxBodyBytes,
+        {
+          registry: this.registry,
+          beginGatewayTrace: this.beginGatewayTrace.bind(this),
+          updateGatewayTraceIngressBody: this.updateGatewayTraceIngressBody.bind(this),
+          setGatewayTraceRouteData: this.setGatewayTraceRouteData.bind(this),
+          applyToolValidationReport: this.applyToolValidationReport.bind(this),
+          recordToolValidation: this.recordToolValidation.bind(this),
+          finalizeGatewayTrace: this.finalizeGatewayTrace.bind(this),
+          recordGatewayLog: this.recordGatewayLog.bind(this),
+          respondRouteError: this.respondRouteError.bind(this),
+          fetchChatJson: this.fetchChatJson.bind(this),
+          proxyChatStreamAsAnthropic: this.proxyChatStreamAsAnthropic.bind(this),
+          proxyAnthropicMessagesStream: this.proxyAnthropicMessagesStream.bind(this),
+          proxyAnthropicMessagesJson: this.proxyAnthropicMessagesJson.bind(this),
+          proxyResponsesStream: this.proxyResponsesStream.bind(this),
+          proxyResponsesJson: this.proxyResponsesJson.bind(this),
+          proxyChatStreamAsResponses: this.proxyChatStreamAsResponses.bind(this),
+          proxyChatStreamRaw: this.proxyChatStreamRaw.bind(this),
+        },
+        routedPath.profileId,
+      )
       return
     }
     if (routedPath.path === '/v1/responses' || routedPath.path === '/responses') {
@@ -852,14 +742,7 @@ export class AiGatewayServer {
     emptyResponse(res, 404)
   }
 
-  private async fetchAnthropicMessages(
-    provider: AiGatewayProviderConfig,
-    payload: AnthropicMessagesRequest,
-    incomingHeaders: Record<string, HeaderValue>,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace | undefined,
-    apiTokenOverride = ''
-  ): Promise<Response> {
+  private async fetchAnthropicMessages(provider: AiGatewayProviderConfig, payload: AnthropicMessagesRequest, incomingHeaders: Record<string, HeaderValue>, requestContext: RequestLogContext, trace: GatewayRequestTrace | undefined, apiTokenOverride = ''): Promise<Response> {
     const controller = new AbortController()
     const timeoutMs = provider.timeoutMs ?? 60000
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -889,26 +772,32 @@ export class AiGatewayServer {
     }
 
     try {
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Resolved upstream auth for Anthropic passthrough request',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: payload.stream === true,
-        authSource: authResult.auth.source,
-        authToken: authResult.auth.token ? '[masked]' : '(empty)',
-      }, buildAnthropicUpstreamLogDetails(provider, payload, {
-        authSource: authResult.auth.source,
-        hasAuthToken: Boolean(authResult.auth.token),
-        timeoutMs,
-      }))
-      debugAiGateway('Forwarding request to upstream Anthropic Messages', buildAnthropicUpstreamLogDetails(provider, payload, {
-        timeoutMs,
-      }))
-      const response = await fetch(toAnthropicMessagesUrl(provider.baseUrl), {
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'info',
+          message: 'Resolved upstream auth for Anthropic passthrough request',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: payload.stream === true,
+          authSource: authResult.auth.source,
+          authToken: authResult.auth.token ? '[masked]' : '(empty)',
+        },
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          authSource: authResult.auth.source,
+          hasAuthToken: Boolean(authResult.auth.token),
+          timeoutMs,
+        }),
+      )
+      debugAiGateway(
+        'Forwarding request to upstream Anthropic Messages',
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          timeoutMs,
+        }),
+      )
+      const response = await fetchUpstream(toAnthropicMessagesUrl(provider.baseUrl), {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
@@ -921,43 +810,44 @@ export class AiGatewayServer {
           contentType: getResponseContentType(response),
         })
       }
-      debugAiGateway('Received upstream Anthropic response headers', buildAnthropicUpstreamLogDetails(provider, payload, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-      }))
+      debugAiGateway(
+        'Received upstream Anthropic response headers',
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+        }),
+      )
       return response
     } catch (error) {
       if (isAbortError(error)) {
         throw new Error(`Upstream Anthropic request timed out after ${timeoutMs}ms.`)
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream Anthropic request failed before a response was received',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: payload.stream === true,
-        authSource: authResult.auth.source,
-        authToken: authResult.auth.token ? '[masked]' : '(empty)',
-        bodyPreview: error instanceof Error ? error.message : String(error),
-      }, buildAnthropicUpstreamLogDetails(provider, payload, {
-        error: error instanceof Error ? error.message : String(error),
-        timeoutMs,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Upstream Anthropic request failed before a response was received',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: payload.stream === true,
+          authSource: authResult.auth.source,
+          authToken: authResult.auth.token ? '[masked]' : '(empty)',
+          bodyPreview: error instanceof Error ? error.message : String(error),
+        },
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          error: error instanceof Error ? error.message : String(error),
+          timeoutMs,
+        }),
+      )
       throw error
     } finally {
       clearTimeout(timer)
     }
   }
 
-  private writePassthroughResponse(
-    res: ServerResponse,
-    statusCode: number,
-    contentType: string,
-    bodyText: string
-  ): void {
+  private writePassthroughResponse(res: ServerResponse, statusCode: number, contentType: string, bodyText: string): void {
     const headers: Record<string, string | number> = {}
     if (contentType) headers['content-type'] = contentType
     headers['content-length'] = Buffer.byteLength(bodyText)
@@ -965,15 +855,7 @@ export class AiGatewayServer {
     res.end(bodyText)
   }
 
-  private async proxyAnthropicMessagesJson(
-    provider: AiGatewayProviderConfig,
-    payload: AnthropicMessagesRequest,
-    incomingHeaders: Record<string, HeaderValue>,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
+  private async proxyAnthropicMessagesJson(provider: AiGatewayProviderConfig, payload: AnthropicMessagesRequest, incomingHeaders: Record<string, HeaderValue>, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
     const response = await this.fetchAnthropicMessages(provider, { ...payload, stream: false }, incomingHeaders, requestContext, trace, apiTokenOverride)
     const responseText = await readResponseText(response)
     const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8'
@@ -991,10 +873,7 @@ export class AiGatewayServer {
       maxBodyBytes,
     })
     if (response.ok && parsedResponse) {
-      const validationReport = validateAnthropicToolUseBlocks(
-        parsedResponse.content,
-        anthropicToolsToValidationTools(payload.tools)
-      )
+      const validationReport = validateAnthropicToolUseBlocks(parsedResponse.content, anthropicToolsToValidationTools(payload.tools))
       this.applyToolValidationReport(trace, validationReport)
       this.recordToolValidation(provider, requestContext, String(payload.model || ''), false, validationReport)
       assertToolValidationPassed(validationReport)
@@ -1007,37 +886,30 @@ export class AiGatewayServer {
       maxBodyBytes,
     })
     trace.statusCode = response.status
-    this.recordGatewayLog({
-      ...requestContext,
-      level: response.ok ? 'info' : 'warn',
-      message: response.ok
-        ? 'Returned Anthropic passthrough response'
-        : 'Upstream Anthropic passthrough returned non-OK response',
-      providerId: provider.id,
-      providerName: provider.name,
-      upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-      model: payload.model,
-      stream: false,
-      statusCode: response.status,
-      contentType,
-      bodyPreview: response.ok ? undefined : responseText,
-    }, buildAnthropicUpstreamLogDetails(provider, payload, {
-      status: response.status,
-      contentType,
-      bodyPreview: response.ok ? undefined : responseText,
-    }))
+    this.recordGatewayLog(
+      {
+        ...requestContext,
+        level: response.ok ? 'info' : 'warn',
+        message: response.ok ? 'Returned Anthropic passthrough response' : 'Upstream Anthropic passthrough returned non-OK response',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: false,
+        statusCode: response.status,
+        contentType,
+        bodyPreview: response.ok ? undefined : responseText,
+      },
+      buildAnthropicUpstreamLogDetails(provider, payload, {
+        status: response.status,
+        contentType,
+        bodyPreview: response.ok ? undefined : responseText,
+      }),
+    )
     this.writePassthroughResponse(res, response.status, contentType, responseText)
   }
 
-  private async proxyAnthropicMessagesStream(
-    provider: AiGatewayProviderConfig,
-    payload: AnthropicMessagesRequest,
-    incomingHeaders: Record<string, HeaderValue>,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
+  private async proxyAnthropicMessagesStream(provider: AiGatewayProviderConfig, payload: AnthropicMessagesRequest, incomingHeaders: Record<string, HeaderValue>, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
     const response = await this.fetchAnthropicMessages(provider, { ...payload, stream: true }, incomingHeaders, requestContext, trace, apiTokenOverride)
     const contentType = response.headers.get('content-type') || ''
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
@@ -1059,25 +931,26 @@ export class AiGatewayServer {
         maxBodyBytes,
       })
       trace.statusCode = response.status
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: response.ok
-          ? 'Upstream Anthropic stream returned non-SSE response'
-          : 'Upstream Anthropic stream returned non-OK response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: true,
-        statusCode: response.status,
-        contentType: resolvedContentType,
-        bodyPreview: responseText,
-      }, buildAnthropicUpstreamLogDetails(provider, payload, {
-        status: response.status,
-        contentType: resolvedContentType,
-        bodyPreview: responseText,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: response.ok ? 'Upstream Anthropic stream returned non-SSE response' : 'Upstream Anthropic stream returned non-OK response',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: true,
+          statusCode: response.status,
+          contentType: resolvedContentType,
+          bodyPreview: responseText,
+        },
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          status: response.status,
+          contentType: resolvedContentType,
+          bodyPreview: responseText,
+        }),
+      )
       this.writePassthroughResponse(res, response.status, resolvedContentType, responseText)
       return
     }
@@ -1202,40 +1075,40 @@ export class AiGatewayServer {
         message,
       }
       updateStreamTrace()
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Anthropic passthrough stream failed',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: true,
-        eventCount: upstreamEventCount,
-        bodyPreview: message,
-      }, buildAnthropicUpstreamLogDetails(provider, payload, {
-        error: message,
-        upstreamEventCount,
-      }))
-      res.write(encodeSseEvent('error', {
-        type: 'error',
-        error: {
-          type: 'api_error',
-          message,
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Anthropic passthrough stream failed',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toAnthropicMessagesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: true,
+          eventCount: upstreamEventCount,
+          bodyPreview: message,
         },
-      }))
+        buildAnthropicUpstreamLogDetails(provider, payload, {
+          error: message,
+          upstreamEventCount,
+        }),
+      )
+      res.write(
+        encodeSseEvent('error', {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message,
+          },
+        }),
+      )
     } finally {
       reader.releaseLock()
       res.end()
     }
   }
 
-  private async fetchResponses(
-    provider: AiGatewayProviderConfig,
-    payload: OpenAiResponsesRequest,
-    requestContext: RequestLogContext,
-    trace?: GatewayRequestTrace
-  ): Promise<Response> {
+  private async fetchResponses(provider: AiGatewayProviderConfig, payload: OpenAiResponsesRequest, requestContext: RequestLogContext, trace?: GatewayRequestTrace, requestApiToken = ''): Promise<Response> {
     const controller = new AbortController()
     const timeoutMs = provider.timeoutMs ?? 60000
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1243,7 +1116,7 @@ export class AiGatewayServer {
       'content-type': 'application/json',
       accept: payload.stream ? 'text/event-stream' : 'application/json',
     }
-    const auth = resolveUpstreamAuth(provider, '')
+    const auth = resolveUpstreamAuth(provider, requestApiToken)
     if (auth.token) {
       headers.authorization = `Bearer ${auth.token}`
     }
@@ -1263,26 +1136,32 @@ export class AiGatewayServer {
     }
 
     try {
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Resolved upstream auth for native Responses request',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toResponsesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: payload.stream === true,
-        authSource: auth.source,
-        authToken: auth.token ? '[masked]' : '(empty)',
-      }, buildResponsesUpstreamLogDetails(provider, payload, {
-        authSource: auth.source,
-        hasAuthToken: Boolean(auth.token),
-        timeoutMs,
-      }))
-      debugAiGateway('Forwarding request to upstream Responses', buildResponsesUpstreamLogDetails(provider, payload, {
-        timeoutMs,
-      }))
-      const response = await fetch(toResponsesUrl(provider.baseUrl), {
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'info',
+          message: 'Resolved upstream auth for native Responses request',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toResponsesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: payload.stream === true,
+          authSource: auth.source,
+          authToken: auth.token ? '[masked]' : '(empty)',
+        },
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          authSource: auth.source,
+          hasAuthToken: Boolean(auth.token),
+          timeoutMs,
+        }),
+      )
+      debugAiGateway(
+        'Forwarding request to upstream Responses',
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          timeoutMs,
+        }),
+      )
+      const response = await fetchUpstream(toResponsesUrl(provider.baseUrl), {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
@@ -1295,45 +1174,45 @@ export class AiGatewayServer {
           contentType: getResponseContentType(response),
         })
       }
-      debugAiGateway('Received upstream Responses headers', buildResponsesUpstreamLogDetails(provider, payload, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-      }))
+      debugAiGateway(
+        'Received upstream Responses headers',
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+        }),
+      )
       return response
     } catch (error) {
       if (isAbortError(error)) {
         throw new Error(`Upstream Responses request timed out after ${timeoutMs}ms.`)
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream Responses request failed before a response was received',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toResponsesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: payload.stream === true,
-        authSource: auth.source,
-        authToken: auth.token ? '[masked]' : '(empty)',
-        bodyPreview: error instanceof Error ? error.message : String(error),
-      }, buildResponsesUpstreamLogDetails(provider, payload, {
-        error: error instanceof Error ? error.message : String(error),
-        timeoutMs,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Upstream Responses request failed before a response was received',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toResponsesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: payload.stream === true,
+          authSource: auth.source,
+          authToken: auth.token ? '[masked]' : '(empty)',
+          bodyPreview: error instanceof Error ? error.message : String(error),
+        },
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          error: error instanceof Error ? error.message : String(error),
+          timeoutMs,
+        }),
+      )
       throw error
     } finally {
       clearTimeout(timer)
     }
   }
 
-  private async proxyResponsesJson(
-    provider: AiGatewayProviderConfig,
-    payload: OpenAiResponsesRequest,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
-    const response = await this.fetchResponses(provider, { ...payload, stream: false }, requestContext, trace)
+  private async proxyResponsesJson(provider: AiGatewayProviderConfig, payload: OpenAiResponsesRequest, requestContext: RequestLogContext, requestApiToken: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
+    const response = await this.fetchResponses(provider, { ...payload, stream: false }, requestContext, trace, requestApiToken)
     const responseText = await readResponseText(response)
     const contentType = response.headers.get('content-type') || 'application/json; charset=utf-8'
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
@@ -1352,36 +1231,31 @@ export class AiGatewayServer {
       maxBodyBytes,
     })
     trace.statusCode = response.status
-    this.recordGatewayLog({
-      ...requestContext,
-      level: response.ok ? 'info' : 'warn',
-      message: response.ok
-        ? 'Returned native Responses passthrough response'
-        : 'Upstream native Responses returned non-OK response',
-      providerId: provider.id,
-      providerName: provider.name,
-      upstreamUrl: toResponsesUrl(provider.baseUrl),
-      model: payload.model,
-      stream: false,
-      statusCode: response.status,
-      contentType,
-      bodyPreview: response.ok ? undefined : responseText,
-    }, buildResponsesUpstreamLogDetails(provider, payload, {
-      status: response.status,
-      contentType,
-      bodyPreview: response.ok ? undefined : responseText,
-    }))
+    this.recordGatewayLog(
+      {
+        ...requestContext,
+        level: response.ok ? 'info' : 'warn',
+        message: response.ok ? 'Returned native Responses passthrough response' : 'Upstream native Responses returned non-OK response',
+        providerId: provider.id,
+        providerName: provider.name,
+        upstreamUrl: toResponsesUrl(provider.baseUrl),
+        model: payload.model,
+        stream: false,
+        statusCode: response.status,
+        contentType,
+        bodyPreview: response.ok ? undefined : responseText,
+      },
+      buildResponsesUpstreamLogDetails(provider, payload, {
+        status: response.status,
+        contentType,
+        bodyPreview: response.ok ? undefined : responseText,
+      }),
+    )
     this.writePassthroughResponse(res, response.status, contentType, responseText)
   }
 
-  private async proxyResponsesStream(
-    provider: AiGatewayProviderConfig,
-    payload: OpenAiResponsesRequest,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
-    const response = await this.fetchResponses(provider, { ...payload, stream: true }, requestContext, trace)
+  private async proxyResponsesStream(provider: AiGatewayProviderConfig, payload: OpenAiResponsesRequest, requestContext: RequestLogContext, requestApiToken: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
+    const response = await this.fetchResponses(provider, { ...payload, stream: true }, requestContext, trace, requestApiToken)
     const contentType = response.headers.get('content-type') || ''
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     if (!response.ok || !response.body || !/text\/event-stream/i.test(contentType)) {
@@ -1402,25 +1276,26 @@ export class AiGatewayServer {
         maxBodyBytes,
       })
       trace.statusCode = response.status
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: response.ok
-          ? 'Upstream native Responses stream returned non-SSE response'
-          : 'Upstream native Responses stream returned non-OK response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toResponsesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: true,
-        statusCode: response.status,
-        contentType: resolvedContentType,
-        bodyPreview: responseText,
-      }, buildResponsesUpstreamLogDetails(provider, payload, {
-        status: response.status,
-        contentType: resolvedContentType,
-        bodyPreview: responseText,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: response.ok ? 'Upstream native Responses stream returned non-SSE response' : 'Upstream native Responses stream returned non-OK response',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toResponsesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: true,
+          statusCode: response.status,
+          contentType: resolvedContentType,
+          bodyPreview: responseText,
+        },
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          status: response.status,
+          contentType: resolvedContentType,
+          bodyPreview: responseText,
+        }),
+      )
       this.writePassthroughResponse(res, response.status, resolvedContentType, responseText)
       return
     }
@@ -1537,44 +1412,43 @@ export class AiGatewayServer {
         message,
       }
       updateStreamTrace()
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Native Responses passthrough stream failed',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toResponsesUrl(provider.baseUrl),
-        model: payload.model,
-        stream: true,
-        eventCount: upstreamEventCount,
-        bodyPreview: message,
-      }, buildResponsesUpstreamLogDetails(provider, payload, {
-        error: message,
-        upstreamEventCount,
-      }))
-      res.write(encodeSseEvent('response.failed', {
-        type: 'response.failed',
-        response: {
-          status: 'failed',
-          error: {
-            code: 'ai_gateway_error',
-            message,
-          },
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Native Responses passthrough stream failed',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toResponsesUrl(provider.baseUrl),
+          model: payload.model,
+          stream: true,
+          eventCount: upstreamEventCount,
+          bodyPreview: message,
         },
-      }))
+        buildResponsesUpstreamLogDetails(provider, payload, {
+          error: message,
+          upstreamEventCount,
+        }),
+      )
+      res.write(
+        encodeSseEvent('response.failed', {
+          type: 'response.failed',
+          response: {
+            status: 'failed',
+            error: {
+              code: 'ai_gateway_error',
+              message,
+            },
+          },
+        }),
+      )
     } finally {
       reader.releaseLock()
       res.end()
     }
   }
 
-  private async fetchChat(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    trace?: GatewayRequestTrace,
-    apiTokenOverride = ''
-  ): Promise<Response> {
+  private async fetchChat(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, trace?: GatewayRequestTrace, apiTokenOverride = ''): Promise<Response> {
     const controller = new AbortController()
     const timeoutMs = provider.timeoutMs ?? 60000
     const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -1601,26 +1475,32 @@ export class AiGatewayServer {
     }
 
     try {
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'info',
-        message: 'Resolved upstream auth for request',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: chatRequest.stream === true,
-        authSource: auth.source,
-        authToken: auth.token ? '[masked]' : '(empty)',
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        authSource: auth.source,
-        hasAuthToken: Boolean(auth.token),
-        timeoutMs,
-      }))
-      debugAiGateway('Forwarding request to upstream chat/completions', buildUpstreamLogDetails(provider, chatRequest, {
-        timeoutMs,
-      }))
-      const response = await fetch(toChatCompletionsUrl(provider.baseUrl), {
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'info',
+          message: 'Resolved upstream auth for request',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: chatRequest.stream === true,
+          authSource: auth.source,
+          authToken: auth.token ? '[masked]' : '(empty)',
+        },
+        buildUpstreamLogDetails(provider, chatRequest, {
+          authSource: auth.source,
+          hasAuthToken: Boolean(auth.token),
+          timeoutMs,
+        }),
+      )
+      debugAiGateway(
+        'Forwarding request to upstream chat/completions',
+        buildUpstreamLogDetails(provider, chatRequest, {
+          timeoutMs,
+        }),
+      )
+      const response = await fetchUpstream(toChatCompletionsUrl(provider.baseUrl), {
         method: 'POST',
         headers,
         body: JSON.stringify(chatRequest),
@@ -1633,51 +1513,45 @@ export class AiGatewayServer {
           contentType: getResponseContentType(response),
         })
       }
-      debugAiGateway('Received upstream response headers', buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-      }))
+      debugAiGateway(
+        'Received upstream response headers',
+        buildUpstreamLogDetails(provider, chatRequest, {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+        }),
+      )
       return response
     } catch (error) {
       if (isAbortError(error)) {
         throw new Error(`Upstream request timed out after ${timeoutMs}ms.`)
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream request failed before a response was received',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: chatRequest.stream === true,
-        authSource: auth.source,
-        authToken: auth.token ? '[masked]' : '(empty)',
-        bodyPreview: error instanceof Error ? error.message : String(error),
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        error: error instanceof Error ? error.message : String(error),
-        timeoutMs,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Upstream request failed before a response was received',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: chatRequest.stream === true,
+          authSource: auth.source,
+          authToken: auth.token ? '[masked]' : '(empty)',
+          bodyPreview: error instanceof Error ? error.message : String(error),
+        },
+        buildUpstreamLogDetails(provider, chatRequest, {
+          error: error instanceof Error ? error.message : String(error),
+          timeoutMs,
+        }),
+      )
       throw error
     } finally {
       clearTimeout(timer)
     }
   }
 
-  private async fetchChatJson(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    trace?: GatewayRequestTrace,
-    apiTokenOverride = ''
-  ): Promise<ChatCompletionResponse> {
-    const response = await this.fetchChat(
-      provider,
-      { ...chatRequest, stream: false },
-      requestContext,
-      trace,
-      apiTokenOverride,
-    )
+  private async fetchChatJson(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, trace?: GatewayRequestTrace, apiTokenOverride = ''): Promise<ChatCompletionResponse> {
+    const response = await this.fetchChat(provider, { ...chatRequest, stream: false }, requestContext, trace, apiTokenOverride)
     const responseText = await readResponseText(response)
     if (trace) {
       trace.upstreamResponse = buildResponseSnapshot({
@@ -1689,23 +1563,26 @@ export class AiGatewayServer {
       })
     }
     if (!response.ok) {
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream chat/completions returned non-OK JSON response',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: false,
-        statusCode: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Upstream chat/completions returned non-OK JSON response',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: false,
+          statusCode: response.status,
+          contentType: response.headers.get('content-type') || '',
+          bodyPreview: responseText,
+        },
+        buildUpstreamLogDetails(provider, chatRequest, {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+          bodyPreview: responseText,
+        }),
+      )
       throw new Error(responseText || `Upstream chat/completions failed with status ${response.status}.`)
     }
     try {
@@ -1732,34 +1609,31 @@ export class AiGatewayServer {
           bodyParseError: 'Invalid JSON response body.',
         })
       }
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Upstream chat/completions returned invalid JSON',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: false,
-        statusCode: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        status: response.status,
-        contentType: response.headers.get('content-type') || '',
-        bodyPreview: responseText,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Upstream chat/completions returned invalid JSON',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: false,
+          statusCode: response.status,
+          contentType: response.headers.get('content-type') || '',
+          bodyPreview: responseText,
+        },
+        buildUpstreamLogDetails(provider, chatRequest, {
+          status: response.status,
+          contentType: response.headers.get('content-type') || '',
+          bodyPreview: responseText,
+        }),
+      )
       throw new Error('Upstream chat/completions returned invalid JSON.')
     }
   }
 
-  private async fetchChatStream(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    trace?: GatewayRequestTrace,
-    apiTokenOverride = ''
-  ): Promise<Response> {
+  private async fetchChatStream(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, trace?: GatewayRequestTrace, apiTokenOverride = ''): Promise<Response> {
     const maxStreamRetries = Math.max(0, provider.streamRetryCount ?? 0)
     const streamRetryDelayMs = Math.max(0, provider.streamRetryDelayMs ?? 0)
     const maxTimeoutRetries = Math.max(0, provider.timeoutRetryCount ?? 0)
@@ -1807,36 +1681,42 @@ export class AiGatewayServer {
 
       try {
         if (attempt === 1) {
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'info',
-            message: 'Resolved upstream auth for request',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            authSource: auth.source,
-            authToken: auth.token ? '[masked]' : '(empty)',
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            authSource: auth.source,
-            hasAuthToken: Boolean(auth.token),
-            timeoutMs,
-            streamRetryCount: maxStreamRetries,
-            streamRetryDelayMs,
-            timeoutRetryCount: maxTimeoutRetries,
-            timeoutRetryDelayMs,
-          }))
-          debugAiGateway('Forwarding request to upstream chat/completions', buildUpstreamLogDetails(provider, chatRequest, {
-            timeoutMs,
-            streamRetryCount: maxStreamRetries,
-            streamRetryDelayMs,
-            timeoutRetryCount: maxTimeoutRetries,
-            timeoutRetryDelayMs,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'info',
+              message: 'Resolved upstream auth for request',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              authSource: auth.source,
+              authToken: auth.token ? '[masked]' : '(empty)',
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              authSource: auth.source,
+              hasAuthToken: Boolean(auth.token),
+              timeoutMs,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+              timeoutRetryCount: maxTimeoutRetries,
+              timeoutRetryDelayMs,
+            }),
+          )
+          debugAiGateway(
+            'Forwarding request to upstream chat/completions',
+            buildUpstreamLogDetails(provider, chatRequest, {
+              timeoutMs,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+              timeoutRetryCount: maxTimeoutRetries,
+              timeoutRetryDelayMs,
+            }),
+          )
         }
 
-        const response = await fetch(upstreamUrl, {
+        const response = await fetchUpstream(upstreamUrl, {
           method: 'POST',
           headers,
           body: JSON.stringify({ ...chatRequest, stream: true }),
@@ -1858,36 +1738,42 @@ export class AiGatewayServer {
               maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
             })
           }
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Upstream chat/completions stream returned retryable response',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            statusCode: response.status,
-            contentType,
-            bodyPreview: responseText,
-            attempt,
-            maxAttempts,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-            bodyPreview: responseText,
-            attempt,
-            maxAttempts,
-            streamRetryCount: maxStreamRetries,
-          }))
-          debugAiGateway('Retrying upstream chat/completions stream after retryable failure', buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-            attempt,
-            maxAttempts,
-            streamRetryCount: maxStreamRetries,
-            streamRetryDelayMs,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Upstream chat/completions stream returned retryable response',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              statusCode: response.status,
+              contentType,
+              bodyPreview: responseText,
+              attempt,
+              maxAttempts,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+              bodyPreview: responseText,
+              attempt,
+              maxAttempts,
+              streamRetryCount: maxStreamRetries,
+            }),
+          )
+          debugAiGateway(
+            'Retrying upstream chat/completions stream after retryable failure',
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+              attempt,
+              maxAttempts,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+            }),
+          )
           if (streamRetryDelayMs > 0) {
             await new Promise((resolve) => setTimeout(resolve, streamRetryDelayMs))
           }
@@ -1905,23 +1791,26 @@ export class AiGatewayServer {
               maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
             })
           }
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Upstream chat/completions stream returned non-OK response',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            statusCode: response.status,
-            contentType,
-            bodyPreview: responseText,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-            bodyPreview: responseText,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Upstream chat/completions stream returned non-OK response',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              statusCode: response.status,
+              contentType,
+              bodyPreview: responseText,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+              bodyPreview: responseText,
+            }),
+          )
           throw new Error(responseText || `Upstream chat/completions stream failed with status ${response.status}.`)
         }
 
@@ -1933,21 +1822,24 @@ export class AiGatewayServer {
               contentType: getResponseContentType(response),
             })
           }
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Upstream chat/completions stream returned empty body',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            statusCode: response.status,
-            contentType,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Upstream chat/completions stream returned empty body',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              statusCode: response.status,
+              contentType,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+            }),
+          )
           throw new Error('Upstream chat/completions stream returned an empty body.')
         }
 
@@ -1962,27 +1854,27 @@ export class AiGatewayServer {
               maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
             })
           }
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Upstream chat/completions stream returned non-SSE content-type',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            statusCode: response.status,
-            contentType,
-            bodyPreview: responseText,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-            bodyPreview: responseText,
-          }))
-          throw new Error(
-            responseText
-            || `Upstream chat/completions stream returned content-type "${contentType || 'unknown'}" instead of text/event-stream.`
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Upstream chat/completions stream returned non-SSE content-type',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              statusCode: response.status,
+              contentType,
+              bodyPreview: responseText,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+              bodyPreview: responseText,
+            }),
           )
+          throw new Error(responseText || `Upstream chat/completions stream returned content-type "${contentType || 'unknown'}" instead of text/event-stream.`)
         }
 
         if (trace) {
@@ -1993,35 +1885,34 @@ export class AiGatewayServer {
           })
         }
         if (attempt > 1) {
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'info',
-            message: 'Upstream chat/completions stream recovered after retry',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            statusCode: response.status,
-            contentType,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            status: response.status,
-            contentType,
-            attempt,
-            maxAttempts,
-            streamRetryCount: maxStreamRetries,
-            streamRetryDelayMs,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'info',
+              message: 'Upstream chat/completions stream recovered after retry',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              statusCode: response.status,
+              contentType,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              status: response.status,
+              contentType,
+              attempt,
+              maxAttempts,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+            }),
+          )
         }
         return response
       } catch (error) {
         const timedOut = isAbortError(error)
-        const errorMessage = timedOut
-          ? `Upstream request timed out after ${timeoutMs}ms.`
-          : error instanceof Error ? error.message : String(error)
-        const canRetry = timedOut
-          ? timeoutRetryAttempts < maxTimeoutRetries
-          : streamRetryAttempts < maxStreamRetries
+        const errorMessage = timedOut ? `Upstream request timed out after ${timeoutMs}ms.` : error instanceof Error ? error.message : String(error)
+        const canRetry = timedOut ? timeoutRetryAttempts < maxTimeoutRetries : streamRetryAttempts < maxStreamRetries
         if (canRetry) {
           if (timedOut) {
             timeoutRetryAttempts += 1
@@ -2031,34 +1922,33 @@ export class AiGatewayServer {
             syncTraceRetryMeta()
           }
           lastErrorMessage = errorMessage
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: timedOut
-              ? 'Upstream chat/completions stream timed out and will be retried'
-              : 'Upstream chat/completions stream failed and will be retried',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl,
-            model: chatRequest.model,
-            stream: true,
-            bodyPreview: lastErrorMessage,
-            attempt,
-            maxAttempts,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            error: errorMessage,
-            attempt,
-            maxAttempts,
-            streamRetryCount: maxStreamRetries,
-            streamRetryDelayMs,
-            timeoutRetryCount: maxTimeoutRetries,
-            timeoutRetryDelayMs,
-            timeoutMs,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: timedOut ? 'Upstream chat/completions stream timed out and will be retried' : 'Upstream chat/completions stream failed and will be retried',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl,
+              model: chatRequest.model,
+              stream: true,
+              bodyPreview: lastErrorMessage,
+              attempt,
+              maxAttempts,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              error: errorMessage,
+              attempt,
+              maxAttempts,
+              streamRetryCount: maxStreamRetries,
+              streamRetryDelayMs,
+              timeoutRetryCount: maxTimeoutRetries,
+              timeoutRetryDelayMs,
+              timeoutMs,
+            }),
+          )
           debugAiGateway(
-            timedOut
-              ? 'Retrying upstream chat/completions stream after timeout'
-              : 'Retrying upstream chat/completions stream after failure',
+            timedOut ? 'Retrying upstream chat/completions stream after timeout' : 'Retrying upstream chat/completions stream after failure',
             buildUpstreamLogDetails(provider, chatRequest, {
               error: errorMessage,
               attempt,
@@ -2078,28 +1968,31 @@ export class AiGatewayServer {
         }
         syncTraceRetryMeta()
         const finalError = timedOut ? new Error(errorMessage) : error
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'error',
-          message: 'Upstream chat/completions stream retry exhausted',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl,
-          model: chatRequest.model,
-          stream: true,
-          bodyPreview: errorMessage,
-          attempt,
-          maxAttempts,
-        }, buildUpstreamLogDetails(provider, chatRequest, {
-          error: errorMessage,
-          attempt,
-          maxAttempts,
-          streamRetryCount: maxStreamRetries,
-          streamRetryDelayMs,
-          timeoutRetryCount: maxTimeoutRetries,
-          timeoutRetryDelayMs,
-          timeoutMs,
-        }))
+        this.recordGatewayLog(
+          {
+            ...requestContext,
+            level: 'error',
+            message: 'Upstream chat/completions stream retry exhausted',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl,
+            model: chatRequest.model,
+            stream: true,
+            bodyPreview: errorMessage,
+            attempt,
+            maxAttempts,
+          },
+          buildUpstreamLogDetails(provider, chatRequest, {
+            error: errorMessage,
+            attempt,
+            maxAttempts,
+            streamRetryCount: maxStreamRetries,
+            streamRetryDelayMs,
+            timeoutRetryCount: maxTimeoutRetries,
+            timeoutRetryDelayMs,
+            timeoutMs,
+          }),
+        )
         throw finalError
       } finally {
         clearTimeout(timer)
@@ -2109,14 +2002,7 @@ export class AiGatewayServer {
     throw new Error(lastErrorMessage || 'Upstream chat/completions stream failed.')
   }
 
-  private async proxyChatStreamRaw(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
+  private async proxyChatStreamRaw(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
     const response = await this.fetchChatStream(provider, chatRequest, requestContext, trace, apiTokenOverride)
     this.recordGatewayLog({
       ...requestContext,
@@ -2181,13 +2067,7 @@ export class AiGatewayServer {
     const updateStreamTrace = (): void => {
       const text = textAccumulator.getText()
       const rawPayload = buildRawSsePayload(rawSseAccumulator.snapshot())
-      const finalPayload = buildChatStreamPayload(
-        chatRequest.model,
-        text,
-        finishReason,
-        usage,
-        toolCallAccumulator.snapshot()
-      ) ?? rawPayload
+      const finalPayload = buildChatStreamPayload(chatRequest.model, text, finishReason, usage, toolCallAccumulator.snapshot()) ?? rawPayload
       const merged = buildStreamMergedSnapshot({
         upstreamText: text,
         upstreamPayload: finalPayload,
@@ -2223,21 +2103,24 @@ export class AiGatewayServer {
         message,
       }
       updateStreamTrace()
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Raw Chat Completions stream proxy failed',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        eventCount: upstreamEventCount,
-        bodyPreview: message,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        error: message,
-        upstreamEventCount,
-      }))
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Raw Chat Completions stream proxy failed',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: true,
+          eventCount: upstreamEventCount,
+          bodyPreview: message,
+        },
+        buildUpstreamLogDetails(provider, chatRequest, {
+          error: message,
+          upstreamEventCount,
+        }),
+      )
       throw error
     } finally {
       reader.releaseLock()
@@ -2245,14 +2128,7 @@ export class AiGatewayServer {
     }
   }
 
-  private async proxyChatStreamAsAnthropic(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
+  private async proxyChatStreamAsAnthropic(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
     const response = await this.fetchChatStream(provider, chatRequest, requestContext, trace, apiTokenOverride)
     const messageId = `msg_${randomUUID().replace(/-/g, '')}`
     const streamState = createAnthropicStreamState()
@@ -2265,23 +2141,12 @@ export class AiGatewayServer {
     const clientTextAccumulator = createLimitedTextAccumulator(maxBodyBytes)
     const upstreamToolCallAccumulator = createChatToolCallTraceAccumulator()
     const clientContentAccumulator = createAnthropicContentTraceAccumulator()
-    const updateStreamTrace = (
-      clientStopReason?: string | null,
-      clientUsage?: unknown
-    ): void => {
+    const updateStreamTrace = (clientStopReason?: string | null, clientUsage?: unknown): void => {
       const upstreamText = upstreamTextAccumulator.getText()
       const clientText = clientTextAccumulator.getText()
-      const resolvedClientStopReason = typeof clientStopReason !== 'undefined'
-        ? clientStopReason
-        : finishReason
+      const resolvedClientStopReason = typeof clientStopReason !== 'undefined' ? clientStopReason : finishReason
       const resolvedClientUsage = typeof clientUsage !== 'undefined' ? clientUsage : usage
-      const upstreamPayload = buildChatStreamPayload(
-        chatRequest.model,
-        upstreamText,
-        finishReason,
-        usage,
-        upstreamToolCallAccumulator.snapshot()
-      )
+      const upstreamPayload = buildChatStreamPayload(chatRequest.model, upstreamText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
       const clientPayload = buildAnthropicMessagePayload({
         id: messageId,
         model: chatRequest.model,
@@ -2339,11 +2204,14 @@ export class AiGatewayServer {
         if (event.data === '[DONE]') break
         upstreamEventCount += 1
         if (upstreamEventCount <= AI_GATEWAY_MAX_DEBUG_SSE_EVENTS) {
-          debugAiGateway('Upstream SSE event preview for Anthropic route', buildUpstreamLogDetails(provider, chatRequest, {
-            eventName: event.event || '',
-            eventIndex: upstreamEventCount,
-            dataPreview: event.data,
-          }))
+          debugAiGateway(
+            'Upstream SSE event preview for Anthropic route',
+            buildUpstreamLogDetails(provider, chatRequest, {
+              eventName: event.event || '',
+              eventIndex: upstreamEventCount,
+              dataPreview: event.data,
+            }),
+          )
         }
         if (previewEvents.length < AI_GATEWAY_MAX_DEBUG_SSE_EVENTS) {
           previewEvents.push({
@@ -2355,22 +2223,25 @@ export class AiGatewayServer {
         try {
           chunk = JSON.parse(event.data) as ChatCompletionResponse
         } catch {
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Failed to parse upstream SSE chunk as JSON for Anthropic route',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-            model: chatRequest.model,
-            stream: true,
-            eventCount: upstreamEventCount,
-            bodyPreview: event.data,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            eventName: event.event || '',
-            eventIndex: upstreamEventCount,
-            dataPreview: event.data,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Failed to parse upstream SSE chunk as JSON for Anthropic route',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+              model: chatRequest.model,
+              stream: true,
+              eventCount: upstreamEventCount,
+              bodyPreview: event.data,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              eventName: event.event || '',
+              eventIndex: upstreamEventCount,
+              dataPreview: event.data,
+            }),
+          )
           throw new Error('Upstream chat/completions stream emitted an invalid JSON SSE chunk.')
         }
         finishReason = extractFinishReason(chunk) ?? finishReason
@@ -2383,16 +2254,16 @@ export class AiGatewayServer {
         clientTextAccumulator.append(deltaText)
         if (!hasDeltaToolCalls || deltaText.trim()) {
           const mappedChunk = hasDeltaToolCalls
-            ? {
-              ...chunk,
-              choices: chunk.choices?.map((choice) => ({
-                ...choice,
-                delta: {
-                  ...choice.delta,
-                  tool_calls: undefined,
-                },
-              })),
-            } as ChatCompletionResponse
+            ? ({
+                ...chunk,
+                choices: chunk.choices?.map((choice) => ({
+                  ...choice,
+                  delta: {
+                    ...choice.delta,
+                    tool_calls: undefined,
+                  },
+                })),
+              } as ChatCompletionResponse)
             : chunk
           for (const mapped of chatStreamChunkToAnthropicEvents(mappedChunk, streamState)) {
             clientContentAccumulator.appendEvent(mapped)
@@ -2401,16 +2272,19 @@ export class AiGatewayServer {
         }
       }
       if (upstreamEventCount === 0) {
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'warn',
-          message: 'Upstream chat/completions stream produced no SSE chunks for Anthropic route',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: true,
-        }, buildUpstreamLogDetails(provider, chatRequest))
+        this.recordGatewayLog(
+          {
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream produced no SSE chunks for Anthropic route',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+            model: chatRequest.model,
+            stream: true,
+          },
+          buildUpstreamLogDetails(provider, chatRequest),
+        )
       }
       const toolCalls = upstreamToolCallAccumulator.snapshot()
       const validationReport = validateChatToolCalls(toolCalls, chatRequest.tools)
@@ -2425,25 +2299,30 @@ export class AiGatewayServer {
           message,
         }
         updateStreamTrace()
-        res.write(encodeSseEvent('error', {
-          type: 'error',
-          error: {
-            type: 'tool_validation_failed',
-            message,
-          },
-        }))
+        res.write(
+          encodeSseEvent('error', {
+            type: 'error',
+            error: {
+              type: 'tool_validation_failed',
+              message,
+            },
+          }),
+        )
         return
       }
       if (normalizedToolCalls.length > 0) {
-        for (const mapped of chatStreamChunkToAnthropicEvents({
-          choices: [
-            {
-              delta: {
-                tool_calls: normalizedToolCalls,
+        for (const mapped of chatStreamChunkToAnthropicEvents(
+          {
+            choices: [
+              {
+                delta: {
+                  tool_calls: normalizedToolCalls,
+                },
               },
-            },
-          ],
-        }, streamState)) {
+            ],
+          },
+          streamState,
+        )) {
           clientContentAccumulator.appendEvent(mapped)
           res.write(encodeSseEvent(mapped.event, mapped.data))
         }
@@ -2463,41 +2342,39 @@ export class AiGatewayServer {
         message,
       }
       updateStreamTrace()
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Anthropic stream proxy failed',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        eventCount: upstreamEventCount,
-        bodyPreview: message,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        error: message,
-        upstreamEventCount,
-      }))
-      res.write(encodeSseEvent('error', {
-        type: 'error',
-        error: {
-          type: 'api_error',
-          message,
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Anthropic stream proxy failed',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: true,
+          eventCount: upstreamEventCount,
+          bodyPreview: message,
         },
-      }))
+        buildUpstreamLogDetails(provider, chatRequest, {
+          error: message,
+          upstreamEventCount,
+        }),
+      )
+      res.write(
+        encodeSseEvent('error', {
+          type: 'error',
+          error: {
+            type: 'api_error',
+            message,
+          },
+        }),
+      )
     } finally {
       res.end()
     }
   }
 
-  private async proxyChatStreamAsResponses(
-    provider: AiGatewayProviderConfig,
-    chatRequest: ChatCompletionRequest,
-    requestContext: RequestLogContext,
-    apiTokenOverride: string,
-    trace: GatewayRequestTrace,
-    res: ServerResponse
-  ): Promise<void> {
+  private async proxyChatStreamAsResponses(provider: AiGatewayProviderConfig, chatRequest: ChatCompletionRequest, requestContext: RequestLogContext, apiTokenOverride: string, trace: GatewayRequestTrace, res: ServerResponse): Promise<void> {
     const response = await this.fetchChatStream(provider, chatRequest, requestContext, trace, apiTokenOverride)
     const ids = createResponsesStreamIds()
     const responsesStreamState = createResponsesStreamState()
@@ -2509,13 +2386,7 @@ export class AiGatewayServer {
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     const upstreamToolCallAccumulator = createChatToolCallTraceAccumulator()
     const updateStreamTrace = (clientPayload?: JsonObject): void => {
-      const upstreamPayload = buildChatStreamPayload(
-        chatRequest.model,
-        fullText,
-        finishReason,
-        usage,
-        upstreamToolCallAccumulator.snapshot()
-      )
+      const upstreamPayload = buildChatStreamPayload(chatRequest.model, fullText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
       const merged = buildStreamMergedSnapshot({
         upstreamText: fullText,
         upstreamPayload,
@@ -2564,11 +2435,14 @@ export class AiGatewayServer {
         if (event.data === '[DONE]') break
         upstreamEventCount += 1
         if (upstreamEventCount <= AI_GATEWAY_MAX_DEBUG_SSE_EVENTS) {
-          debugAiGateway('Upstream SSE event preview for Responses route', buildUpstreamLogDetails(provider, chatRequest, {
-            eventName: event.event || '',
-            eventIndex: upstreamEventCount,
-            dataPreview: event.data,
-          }))
+          debugAiGateway(
+            'Upstream SSE event preview for Responses route',
+            buildUpstreamLogDetails(provider, chatRequest, {
+              eventName: event.event || '',
+              eventIndex: upstreamEventCount,
+              dataPreview: event.data,
+            }),
+          )
         }
         if (previewEvents.length < AI_GATEWAY_MAX_DEBUG_SSE_EVENTS) {
           previewEvents.push({
@@ -2580,22 +2454,25 @@ export class AiGatewayServer {
         try {
           chunk = JSON.parse(event.data) as ChatCompletionResponse
         } catch {
-          this.recordGatewayLog({
-            ...requestContext,
-            level: 'warn',
-            message: 'Failed to parse upstream SSE chunk as JSON for Responses route',
-            providerId: provider.id,
-            providerName: provider.name,
-            upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-            model: chatRequest.model,
-            stream: true,
-            eventCount: upstreamEventCount,
-            bodyPreview: event.data,
-          }, buildUpstreamLogDetails(provider, chatRequest, {
-            eventName: event.event || '',
-            eventIndex: upstreamEventCount,
-            dataPreview: event.data,
-          }))
+          this.recordGatewayLog(
+            {
+              ...requestContext,
+              level: 'warn',
+              message: 'Failed to parse upstream SSE chunk as JSON for Responses route',
+              providerId: provider.id,
+              providerName: provider.name,
+              upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+              model: chatRequest.model,
+              stream: true,
+              eventCount: upstreamEventCount,
+              bodyPreview: event.data,
+            },
+            buildUpstreamLogDetails(provider, chatRequest, {
+              eventName: event.event || '',
+              eventIndex: upstreamEventCount,
+              dataPreview: event.data,
+            }),
+          )
           throw new Error('Upstream chat/completions stream emitted an invalid JSON SSE chunk.')
         }
         finishReason = extractFinishReason(chunk) ?? finishReason
@@ -2607,16 +2484,19 @@ export class AiGatewayServer {
         }
       }
       if (upstreamEventCount === 0) {
-        this.recordGatewayLog({
-          ...requestContext,
-          level: 'warn',
-          message: 'Upstream chat/completions stream produced no SSE chunks for Responses route',
-          providerId: provider.id,
-          providerName: provider.name,
-          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-          model: chatRequest.model,
-          stream: true,
-          }, buildUpstreamLogDetails(provider, chatRequest))
+        this.recordGatewayLog(
+          {
+            ...requestContext,
+            level: 'warn',
+            message: 'Upstream chat/completions stream produced no SSE chunks for Responses route',
+            providerId: provider.id,
+            providerName: provider.name,
+            upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+            model: chatRequest.model,
+            stream: true,
+          },
+          buildUpstreamLogDetails(provider, chatRequest),
+        )
       }
       const validationReport = validateChatToolCalls(upstreamToolCallAccumulator.snapshot(), chatRequest.tools)
       this.applyToolValidationReport(trace, validationReport)
@@ -2629,26 +2509,22 @@ export class AiGatewayServer {
           message,
         }
         updateStreamTrace()
-        res.write(encodeSseEvent('response.failed', {
-          type: 'response.failed',
-          response: {
-            id: ids.responseId,
-            status: 'failed',
-            error: {
-              code: 'tool_validation_failed',
-              message,
+        res.write(
+          encodeSseEvent('response.failed', {
+            type: 'response.failed',
+            response: {
+              id: ids.responseId,
+              status: 'failed',
+              error: {
+                code: 'tool_validation_failed',
+                message,
+              },
             },
-          },
-        }))
+          }),
+        )
         return
       }
-      const stopEvents = createResponsesStreamFinish(
-        ids.responseId,
-        chatRequest.model,
-        responsesStreamState,
-        usage,
-        finishReason
-      )
+      const stopEvents = createResponsesStreamFinish(ids.responseId, chatRequest.model, responsesStreamState, usage, finishReason)
       for (const event of stopEvents) {
         res.write(encodeSseEvent(event.event, event.data))
       }
@@ -2661,44 +2537,43 @@ export class AiGatewayServer {
         message,
       }
       updateStreamTrace()
-      this.recordGatewayLog({
-        ...requestContext,
-        level: 'warn',
-        message: 'Responses stream proxy failed',
-        providerId: provider.id,
-        providerName: provider.name,
-        upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
-        model: chatRequest.model,
-        stream: true,
-        eventCount: upstreamEventCount,
-        bodyPreview: message,
-      }, buildUpstreamLogDetails(provider, chatRequest, {
-        error: message,
-        upstreamEventCount,
-      }))
-      res.write(encodeSseEvent('response.failed', {
-        type: 'response.failed',
-        response: {
-          id: ids.responseId,
-          status: 'failed',
-          error: {
-            code: 'ai_gateway_error',
-            message,
-          },
+      this.recordGatewayLog(
+        {
+          ...requestContext,
+          level: 'warn',
+          message: 'Responses stream proxy failed',
+          providerId: provider.id,
+          providerName: provider.name,
+          upstreamUrl: toChatCompletionsUrl(provider.baseUrl),
+          model: chatRequest.model,
+          stream: true,
+          eventCount: upstreamEventCount,
+          bodyPreview: message,
         },
-      }))
+        buildUpstreamLogDetails(provider, chatRequest, {
+          error: message,
+          upstreamEventCount,
+        }),
+      )
+      res.write(
+        encodeSseEvent('response.failed', {
+          type: 'response.failed',
+          response: {
+            id: ids.responseId,
+            status: 'failed',
+            error: {
+              code: 'ai_gateway_error',
+              message,
+            },
+          },
+        }),
+      )
     } finally {
       res.end()
     }
   }
 
-  private respondRouteError(
-    res: ServerResponse,
-    kind: RouteKind,
-    requestContext: RequestLogContext,
-    trace: GatewayRequestTrace,
-    error: unknown
-  ): void {
+  private respondRouteError(res: ServerResponse, kind: RouteKind, requestContext: RequestLogContext, trace: GatewayRequestTrace, error: unknown): void {
     if (res.headersSent) {
       trace.level = 'warn'
       trace.error = {
@@ -2748,12 +2623,13 @@ export class AiGatewayServer {
     const statusCode = error instanceof GatewayRouteError ? error.statusCode : 400
     const code = error instanceof GatewayRouteError ? error.code : 'ai_gateway_error'
     const message = error instanceof Error ? error.message : String(error)
-    const unsupportedFeature = error instanceof UnsupportedGatewayFeatureError && error.kind
-      ? {
-        kind: error.kind,
-        remediation: remediationForUnsupportedFeature(error.kind),
-      }
-      : undefined
+    const unsupportedFeature =
+      error instanceof UnsupportedGatewayFeatureError && error.kind
+        ? {
+            kind: error.kind,
+            remediation: remediationForUnsupportedFeature(error.kind),
+          }
+        : undefined
     if (unsupportedFeature) {
       this.updateGatewayTraceProtocolDiagnostics(trace, {
         unsupportedFeature,
@@ -2761,9 +2637,9 @@ export class AiGatewayServer {
     }
     const errorDetails = unsupportedFeature
       ? {
-        unsupported_feature: unsupportedFeature.kind,
-        ...(unsupportedFeature.remediation ? { remediation: unsupportedFeature.remediation } : {}),
-      }
+          unsupported_feature: unsupportedFeature.kind,
+          ...(unsupportedFeature.remediation ? { remediation: unsupportedFeature.remediation } : {}),
+        }
       : undefined
     trace.level = statusCode >= 500 ? 'error' : 'warn'
     trace.statusCode = statusCode
@@ -2775,23 +2651,26 @@ export class AiGatewayServer {
       contentType: 'application/json; charset=utf-8',
       maxBodyBytes: this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES,
     })
-    this.recordGatewayLog({
-      ...requestContext,
-      level: statusCode >= 500 ? 'error' : 'warn',
-      message: `Route ${kind} request failed`,
-      statusCode,
-      errorCode: code,
-      bodyPreview: message,
-    }, {
-      statusCode,
-      code,
-      message,
-      requestMethod: requestContext.requestMethod,
-      requestPath: requestContext.requestPath,
-      route: requestContext.route,
-      profileId: requestContext.profileId,
-      unsupportedFeature,
-    })
+    this.recordGatewayLog(
+      {
+        ...requestContext,
+        level: statusCode >= 500 ? 'error' : 'warn',
+        message: `Route ${kind} request failed`,
+        statusCode,
+        errorCode: code,
+        bodyPreview: message,
+      },
+      {
+        statusCode,
+        code,
+        message,
+        requestMethod: requestContext.requestMethod,
+        requestPath: requestContext.requestPath,
+        route: requestContext.route,
+        profileId: requestContext.profileId,
+        unsupportedFeature,
+      },
+    )
     this.finalizeGatewayTrace(trace)
     jsonResponse(res, statusCode, routeErrorPayload(kind, message, code, errorDetails))
   }

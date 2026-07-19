@@ -1,18 +1,10 @@
 import { ChevronDown, Plus, Trash2 } from 'lucide-react'
-import type {
-  AiGatewayProviderCapabilities,
-  AiGatewayUpstreamProtocol,
-} from '../../../../shared/types'
+import type { AiGatewayProviderCapabilities, AiGatewayUpstreamProtocol } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { Select, type SelectOption } from '../../../components/ui/select'
 import { useI18n } from '../../../i18n'
-import {
-  EMPTY_PROVIDER_USAGE,
-  isProviderUsageEmpty,
-  type ProviderDraft,
-  type ProviderUsage,
-} from './settingsAiGatewayShared'
+import { EMPTY_PROVIDER_USAGE, isProviderUsageEmpty, type ProviderDraft, type ProviderUsage } from './settingsAiGatewayShared'
 
 const PROTOCOL_OPTIONS: SelectOption[] = [
   { value: 'openai_chat', label: 'openai_chat' },
@@ -191,24 +183,14 @@ export function AiGatewayProviderEditor({
           <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.providerTitle')}</h3>
           <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerDescription')}</p>
         </div>
-        <Button
-          variant="outline"
-          className="h-10 rounded-full px-4 text-sm"
-          onClick={onAddProvider}
-          disabled={inputDisabled}
-        >
+        <Button variant="outline" className="h-10 rounded-full px-4 text-sm" onClick={onAddProvider} disabled={inputDisabled}>
           <Plus className="h-4 w-4" />
           {t('settings.aiGateway.addProvider')}
         </Button>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        {[
-          t('settings.aiGateway.providerBaseUrlHelp'),
-          t('settings.aiGateway.providerProtocolHelp'),
-          t('settings.aiGateway.providerModelMapHelp'),
-          t('settings.aiGateway.providerApiKeyHelp'),
-        ].map((hint) => (
+        {[t('settings.aiGateway.providerBaseUrlHelp'), t('settings.aiGateway.providerProtocolHelp'), t('settings.aiGateway.providerModelMapHelp'), t('settings.aiGateway.providerApiKeyHelp')].map((hint) => (
           <div key={hint} className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
             {hint}
           </div>
@@ -218,21 +200,12 @@ export function AiGatewayProviderEditor({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5 md:col-span-2">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.activeProvider')}</p>
-          <Select
-            ariaLabel={t('settings.aiGateway.activeProvider')}
-            value={selectedProviderDraftId}
-            options={providerOptions}
-            onChange={onSelectedProviderDraftIdChange}
-            disabled={inputDisabled || providerOptions.length === 0}
-            triggerClassName="h-11"
-          />
+          <Select ariaLabel={t('settings.aiGateway.activeProvider')} value={selectedProviderDraftId} options={providerOptions} onChange={onSelectedProviderDraftIdChange} disabled={inputDisabled || providerOptions.length === 0} triggerClassName="h-11" />
         </div>
 
         {activeProvider && (
           <>
-            <div className="md:col-span-2 rounded-[18px] bg-[color:var(--color-background-sunken)]/55 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              {t('settings.aiGateway.providerRoutingHint')}
-            </div>
+            <div className="md:col-span-2 rounded-[18px] bg-[color:var(--color-background-sunken)]/55 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerRoutingHint')}</div>
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerName')}</p>
               <Input value={activeProvider.name} onChange={(event) => onProviderChange('name', event.target.value)} disabled={inputDisabled} />
@@ -243,14 +216,7 @@ export function AiGatewayProviderEditor({
             </div>
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.protocol')}</p>
-              <Select
-                ariaLabel={t('settings.aiGateway.protocol')}
-                value={activeProvider.protocol}
-                options={PROTOCOL_OPTIONS}
-                onChange={(value) => onProviderChange('protocol', value as AiGatewayUpstreamProtocol)}
-                disabled={inputDisabled}
-                triggerClassName="h-11"
-              />
+              <Select ariaLabel={t('settings.aiGateway.protocol')} value={activeProvider.protocol} options={PROTOCOL_OPTIONS} onChange={(value) => onProviderChange('protocol', value as AiGatewayUpstreamProtocol)} disabled={inputDisabled} triggerClassName="h-11" />
             </div>
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.apiKeyEnv')}</p>
@@ -258,21 +224,10 @@ export function AiGatewayProviderEditor({
             </div>
             <div className="space-y-1.5 md:col-span-2">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.apiKey')}</p>
-              <Input
-                type="password"
-                value={activeProvider.apiKey ?? ''}
-                onChange={(event) => onProviderChange('apiKey', event.target.value)}
-                disabled={inputDisabled}
-                placeholder="sk-..."
-              />
+              <Input type="password" value={activeProvider.apiKey ?? ''} onChange={(event) => onProviderChange('apiKey', event.target.value)} disabled={inputDisabled} placeholder="sk-..." />
             </div>
             <div className="md:col-span-2 rounded-[20px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
-              <button
-                type="button"
-                className="flex w-full items-start justify-between gap-4 text-left"
-                onClick={onProviderAdvancedToggle}
-                aria-expanded={providerAdvancedOpen}
-              >
+              <button type="button" className="flex w-full items-start justify-between gap-4 text-left" onClick={onProviderAdvancedToggle} aria-expanded={providerAdvancedOpen}>
                 <div>
                   <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.providerAdvancedTitle')}</h4>
                   <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.providerAdvancedDescription')}</p>
@@ -291,59 +246,26 @@ export function AiGatewayProviderEditor({
                   </div>
                   <div className="space-y-1.5">
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutMs')}</p>
-                    <Input
-                      type="number"
-                      value={activeProvider.timeoutMs ?? ''}
-                      onChange={(event) => onProviderChange('timeoutMs', Number(event.target.value))}
-                      disabled={inputDisabled}
-                    />
+                    <Input type="number" value={activeProvider.timeoutMs ?? ''} onChange={(event) => onProviderChange('timeoutMs', Number(event.target.value))} disabled={inputDisabled} />
                   </div>
                   <div className="space-y-1.5">
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryCount')}</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={30}
-                      value={activeProvider.streamRetryCount ?? ''}
-                      onChange={(event) => onProviderChange('streamRetryCount', Number(event.target.value))}
-                      disabled={inputDisabled}
-                    />
+                    <Input type="number" min={0} max={30} value={activeProvider.streamRetryCount ?? ''} onChange={(event) => onProviderChange('streamRetryCount', Number(event.target.value))} disabled={inputDisabled} />
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryCountHint')}</p>
                   </div>
                   <div className="space-y-1.5">
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryDelayMs')}</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={10000}
-                      value={activeProvider.streamRetryDelayMs ?? ''}
-                      onChange={(event) => onProviderChange('streamRetryDelayMs', Number(event.target.value))}
-                      disabled={inputDisabled}
-                    />
+                    <Input type="number" min={0} max={10000} value={activeProvider.streamRetryDelayMs ?? ''} onChange={(event) => onProviderChange('streamRetryDelayMs', Number(event.target.value))} disabled={inputDisabled} />
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.streamRetryDelayMsHint')}</p>
                   </div>
                   <div className="space-y-1.5">
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryCount')}</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={activeProvider.timeoutRetryCount ?? ''}
-                      onChange={(event) => onProviderChange('timeoutRetryCount', Number(event.target.value))}
-                      disabled={inputDisabled}
-                    />
+                    <Input type="number" min={0} max={10} value={activeProvider.timeoutRetryCount ?? ''} onChange={(event) => onProviderChange('timeoutRetryCount', Number(event.target.value))} disabled={inputDisabled} />
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryCountHint')}</p>
                   </div>
                   <div className="space-y-1.5">
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryDelayMs')}</p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={10000}
-                      value={activeProvider.timeoutRetryDelayMs ?? ''}
-                      onChange={(event) => onProviderChange('timeoutRetryDelayMs', Number(event.target.value))}
-                      disabled={inputDisabled}
-                    />
+                    <Input type="number" min={0} max={10000} value={activeProvider.timeoutRetryDelayMs ?? ''} onChange={(event) => onProviderChange('timeoutRetryDelayMs', Number(event.target.value))} disabled={inputDisabled} />
                     <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.timeoutRetryDelayMsHint')}</p>
                   </div>
                   <div className="space-y-3 rounded-[20px] border px-4 py-4 md:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
@@ -351,40 +273,24 @@ export function AiGatewayProviderEditor({
                       <h4 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.aiGateway.capabilitiesTitle')}</h4>
                       <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesDescription')}</p>
                     </div>
-                    <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                      {t('settings.aiGateway.capabilitiesDefaultsHint')}
-                    </div>
+                    <div className="rounded-[16px] bg-[color:var(--color-card)] px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesDefaultsHint')}</div>
+                    {activeProvider.protocol === 'openai_responses' && (
+                      <div className="rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/55 px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.aiGateway.capabilitiesNativeResponsesPassthroughHint')}</div>
+                    )}
                     <div className="space-y-4">
                       {CAPABILITY_GROUPS.map((group) => (
                         <div key={group.key} className="space-y-2">
                           <div>
-                            <h5 className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">
-                              {t(group.titleKey)}
-                            </h5>
-                            <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                              {t(group.descriptionKey)}
-                            </p>
+                            <h5 className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--color-muted-foreground)]">{t(group.titleKey)}</h5>
+                            <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t(group.descriptionKey)}</p>
                           </div>
                           <div className="grid gap-2 lg:grid-cols-2">
                             {CAPABILITY_OPTIONS.filter((option) => option.group === group.key).map((option) => (
-                              <label
-                                key={option.key}
-                                className="quiet-control flex min-h-[74px] items-start gap-3 rounded-[16px] px-4 py-3 text-[color:var(--color-foreground)]"
-                              >
-                                <input
-                                  className="mt-0.5"
-                                  type="checkbox"
-                                  checked={activeProvider.capabilities?.[option.key] === true}
-                                  onChange={(event) => onProviderCapabilityChange(option.key, event.target.checked)}
-                                  disabled={inputDisabled}
-                                />
+                              <label key={option.key} className="quiet-control flex min-h-[74px] items-start gap-3 rounded-[16px] px-4 py-3 text-[color:var(--color-foreground)]">
+                                <input className="mt-0.5" type="checkbox" checked={activeProvider.capabilities?.[option.key] === true} onChange={(event) => onProviderCapabilityChange(option.key, event.target.checked)} disabled={inputDisabled} />
                                 <span className="min-w-0">
-                                  <span className="block text-sm font-medium">
-                                    {t(option.labelKey)}
-                                  </span>
-                                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                                    {t(option.descriptionKey)}
-                                  </span>
+                                  <span className="block text-sm font-medium">{t(option.labelKey)}</span>
+                                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t(option.descriptionKey)}</span>
                                 </span>
                               </label>
                             ))}
@@ -406,20 +312,10 @@ export function AiGatewayProviderEditor({
                   </div>
                   <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3">
                     <label className="quiet-control flex h-10 items-center gap-2 rounded-full px-4 text-sm text-[color:var(--color-foreground)]">
-                      <input
-                        type="checkbox"
-                        checked={activeProvider.enabled}
-                        onChange={(event) => onProviderChange('enabled', event.target.checked)}
-                        disabled={inputDisabled}
-                      />
+                      <input type="checkbox" checked={activeProvider.enabled} onChange={(event) => onProviderChange('enabled', event.target.checked)} disabled={inputDisabled} />
                       {t('settings.aiGateway.providerEnabled')}
                     </label>
-                    <Button
-                      variant="outline"
-                      className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]"
-                      onClick={onDeleteProvider}
-                      disabled={inputDisabled || providersCount <= 1}
-                    >
+                    <Button variant="outline" className="h-10 rounded-full px-4 text-sm text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]" onClick={onDeleteProvider} disabled={inputDisabled || providersCount <= 1}>
                       <Trash2 className="h-4 w-4" />
                       {t('common.delete')}
                     </Button>

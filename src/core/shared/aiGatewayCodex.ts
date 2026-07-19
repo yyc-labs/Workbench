@@ -1,10 +1,4 @@
-import type {
-  AiGatewayConfig,
-  AiGatewayModelRoute,
-  AiGatewayProviderConfig,
-  CodexConfig,
-  CodexModelProviderConfig,
-} from './types'
+import type { AiGatewayConfig, AiGatewayModelRoute, AiGatewayProviderConfig, CodexConfig, CodexModelProviderConfig } from './types'
 
 export const AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID = 'local-router'
 
@@ -16,9 +10,7 @@ export function getAiGatewayOpenAiBaseUrl(config: Pick<AiGatewayConfig, 'host' |
   return `${getAiGatewayListenUrl(config)}/v1`
 }
 
-export function buildCodexLocalRouterProvider(
-  config: Pick<AiGatewayConfig, 'host' | 'port'>
-): CodexModelProviderConfig {
+export function buildCodexLocalRouterProvider(config: Pick<AiGatewayConfig, 'host' | 'port'>): CodexModelProviderConfig {
   return {
     name: 'Local Router',
     baseUrl: getAiGatewayOpenAiBaseUrl(config),
@@ -28,31 +20,25 @@ export function buildCodexLocalRouterProvider(
   }
 }
 
-export function buildCodexGatewayConfig(
-  directConfig: CodexConfig,
-  gatewayConfig: Pick<AiGatewayConfig, 'host' | 'port'>
-): CodexConfig {
+export function buildCodexGatewayConfig(directConfig: CodexConfig, gatewayConfig: Pick<AiGatewayConfig, 'host' | 'port'>): CodexConfig {
+  const activeProviderId = directConfig.modelProvider
   return {
     ...directConfig,
-    modelProvider: AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID,
     modelProviders: {
       ...directConfig.modelProviders,
-      [AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID]: buildCodexLocalRouterProvider(gatewayConfig),
+      [activeProviderId]: buildCodexLocalRouterProvider(gatewayConfig),
     },
   }
 }
 
 function sanitizeRouteIdPart(value: string): string {
-  return value.trim()
+  return value
+    .trim()
     .replace(/\s+/g, '-')
     .replace(/[^A-Za-z0-9_.:-]/g, '')
 }
 
-export function buildCodexScopeModelRoute(
-  scopeKey: string,
-  model: string,
-  providerId: string
-): AiGatewayModelRoute {
+export function buildCodexScopeModelRoute(scopeKey: string, model: string, providerId: string): AiGatewayModelRoute {
   const normalizedScopeKey = sanitizeRouteIdPart(scopeKey) || 'scope'
   const normalizedModel = model.trim()
   return {
@@ -66,17 +52,10 @@ export function buildCodexScopeModelRoute(
   }
 }
 
-export function withCodexScopeModelRoute(
-  config: AiGatewayConfig,
-  scopeKey: string,
-  model: string,
-  providerId: string
-): AiGatewayConfig {
+export function withCodexScopeModelRoute(config: AiGatewayConfig, scopeKey: string, model: string, providerId: string): AiGatewayConfig {
   const normalizedModel = model.trim()
   const normalizedProviderId = providerId.trim()
-  const preservedRoutes = (config.modelRoutes ?? []).filter((route) => (
-    route.source !== 'codex-scope' || route.scopeKey !== scopeKey
-  ))
+  const preservedRoutes = (config.modelRoutes ?? []).filter((route) => route.source !== 'codex-scope' || route.scopeKey !== scopeKey)
 
   if (!normalizedModel || !normalizedProviderId) {
     return {
@@ -87,29 +66,18 @@ export function withCodexScopeModelRoute(
 
   return {
     ...config,
-    modelRoutes: [
-      ...preservedRoutes,
-      buildCodexScopeModelRoute(scopeKey, normalizedModel, normalizedProviderId),
-    ],
+    modelRoutes: [...preservedRoutes, buildCodexScopeModelRoute(scopeKey, normalizedModel, normalizedProviderId)],
   }
 }
 
-export function withoutCodexScopeModelRoute(
-  config: AiGatewayConfig,
-  scopeKey: string
-): AiGatewayConfig {
+export function withoutCodexScopeModelRoute(config: AiGatewayConfig, scopeKey: string): AiGatewayConfig {
   return {
     ...config,
-    modelRoutes: (config.modelRoutes ?? []).filter((route) => (
-      route.source !== 'codex-scope' || route.scopeKey !== scopeKey
-    )),
+    modelRoutes: (config.modelRoutes ?? []).filter((route) => route.source !== 'codex-scope' || route.scopeKey !== scopeKey),
   }
 }
 
-export function findAiGatewayProvider(
-  config: Pick<AiGatewayConfig, 'providers'> | null | undefined,
-  providerId: string | undefined
-): AiGatewayProviderConfig | undefined {
+export function findAiGatewayProvider(config: Pick<AiGatewayConfig, 'providers'> | null | undefined, providerId: string | undefined): AiGatewayProviderConfig | undefined {
   const normalizedProviderId = providerId?.trim()
   if (!normalizedProviderId) return undefined
   return config?.providers.find((provider) => provider.id === normalizedProviderId)
