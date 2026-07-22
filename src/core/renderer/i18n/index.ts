@@ -12,6 +12,7 @@ const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = 
   agents: 'settings.sections.agents',
   gateway: 'settings.sections.gateway',
   'browser-ai': 'settings.sections.browserAi',
+  'ai-connection': 'settings.sections.aiConnection',
   transcripts: 'settings.sections.transcripts',
   hooks: 'settings.sections.hooks',
   'agent-logs': 'settings.sections.agentLogs',
@@ -49,7 +50,7 @@ function selectPluralBranch(template: string, values?: InterpolationValues): str
   const [singular, plural] = template.split(' | ')
   const count = Number(values?.count)
   if (!Number.isFinite(count)) return plural || singular || template
-  return count === 1 ? singular : (plural || singular)
+  return count === 1 ? singular : plural || singular
 }
 
 export function resolveSystemLocale(): ResolvedLocale {
@@ -64,11 +65,7 @@ export function resolveAppLocale(locale: AppLocale | undefined): ResolvedLocale 
   return locale
 }
 
-export function translate(
-  locale: ResolvedLocale,
-  key: MessageKey | SettingsSectionMessageKey,
-  values?: InterpolationValues
-): string {
+export function translate(locale: ResolvedLocale, key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues): string {
   const raw = readMessage(locale, key)
   const branch = selectPluralBranch(raw, values)
   return interpolate(branch, values)
@@ -83,17 +80,11 @@ export function getCurrentLocale(): ResolvedLocale {
   return resolveAppLocale(useAppStore.getState().config.locale)
 }
 
-export function translateCurrent(
-  key: MessageKey | SettingsSectionMessageKey,
-  values?: InterpolationValues
-): string {
+export function translateCurrent(key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues): string {
   return translate(getCurrentLocale(), key, values)
 }
 
-export function translateCurrentHtml(
-  key: MessageKey | SettingsSectionMessageKey,
-  values?: InterpolationValues
-): { __html: string } {
+export function translateCurrentHtml(key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues): { __html: string } {
   return { __html: `<span class="i18n-rich">${translate(getCurrentLocale(), key, values)}</span>` }
 }
 
@@ -101,8 +92,7 @@ export function useI18n() {
   const locale = useLocale()
 
   return useMemo(() => {
-    const t = (key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues) =>
-      translate(locale, key, values)
+    const t = (key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues) => translate(locale, key, values)
 
     const formatDateTime = (
       value: number | string | Date | undefined,
@@ -111,7 +101,7 @@ export function useI18n() {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-      }
+      },
     ): string => {
       if (value === undefined || value === null) return t('common.unknownTime')
       const date = value instanceof Date ? value : new Date(value)
@@ -119,15 +109,11 @@ export function useI18n() {
       return new Intl.DateTimeFormat(locale, options).format(date)
     }
 
-    const tHtml = (
-      key: MessageKey | SettingsSectionMessageKey,
-      values?: InterpolationValues
-    ): { __html: string } => ({
+    const tHtml = (key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues): { __html: string } => ({
       __html: `<span class="i18n-rich">${translate(locale, key, values)}</span>`,
     })
 
-    const getSettingsSectionLabel = (section: Section): string =>
-      t(settingsSectionKeyBySection[section])
+    const getSettingsSectionLabel = (section: Section): string => t(settingsSectionKeyBySection[section])
 
     return {
       locale,

@@ -2,16 +2,14 @@ import { registerCoreIpcHandlers } from './registerCoreIpcHandlers'
 import { registerAgentLogsIpcHandlers } from './registerAgentLogsIpcHandlers'
 import { registerGitIpcHandlers } from './registerGitIpcHandlers'
 import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
+import { registerAiConnectionIpcHandlers } from './registerAiConnectionIpcHandlers'
 import { registerBrowserAiIpcHandlers } from './registerBrowserAiIpcHandlers'
 import { registerLearningIpcHandlers } from './registerLearningIpcHandlers'
 import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
 import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
 import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
 import { registerTranscriptIpcHandlers } from './registerTranscriptIpcHandlers'
-import type {
-  RegisterIpcHandlersDependencies,
-  RuntimeStateChangedPayload,
-} from './registerIpcHandlers.shared'
+import type { RegisterIpcHandlersDependencies, RuntimeStateChangedPayload } from './registerIpcHandlers.shared'
 
 let ipcHandlersRegistered = false
 
@@ -33,5 +31,6 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerSkillIpcHandlers(deps)
   registerRuntimeIpcHandlers(deps)
   registerAiGatewayIpcHandlers(deps)
+  registerAiConnectionIpcHandlers(deps)
   registerBrowserAiIpcHandlers(deps)
 }

@@ -1,21 +1,18 @@
 import { BookOpenText, FolderPlus, Plus, Settings, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
-import { HomeDragOverlay } from './HomeDragOverlay'
 
 type HomeEmptyStateProps = {
-  isDragOver: boolean
   onAddFolder: () => void
   onOpenLearningCenter: () => void
   onOpenSettings: () => void
 }
 
-function HomeEmptyState({ isDragOver, onAddFolder, onOpenLearningCenter, onOpenSettings }: HomeEmptyStateProps) {
+function HomeEmptyState({ onAddFolder, onOpenLearningCenter, onOpenSettings }: HomeEmptyStateProps) {
   const { t } = useI18n()
 
   return (
     <div className="h-full flex flex-col">
-      {isDragOver && <HomeDragOverlay />}
       <header className="app-chrome min-h-[76px] flex items-center px-8 shrink-0">
         <div className="flex items-center gap-3">
           <div
@@ -29,30 +26,16 @@ function HomeEmptyState({ isDragOver, onAddFolder, onOpenLearningCenter, onOpenS
           <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">{t('common.runtime')}</span>
         </div>
         <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="icon"
-          className="mr-2 h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-          onClick={onOpenLearningCenter}
-          title={t('common.learningCenter')}
-        >
+        <Button variant="ghost" size="icon" className="mr-2 h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenLearningCenter} title={t('common.learningCenter')}>
           <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-          onClick={onOpenSettings}
-        >
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenSettings}>
           <Settings className="w-4 h-4" strokeWidth={1.8} />
         </Button>
       </header>
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="flex flex-col items-center gap-8 max-w-md text-center px-8">
-          <div
-            className="w-24 h-24 rounded-[32px] border flex items-center justify-center surface-card"
-            style={{ borderColor: 'var(--color-border)' }}
-          >
+          <div className="w-24 h-24 rounded-[32px] border flex items-center justify-center surface-card" style={{ borderColor: 'var(--color-border)' }}>
             <FolderPlus className="w-11 h-11 text-[color:var(--color-muted-foreground)]" strokeWidth={1.35} />
           </div>
           <div>
@@ -63,9 +46,7 @@ function HomeEmptyState({ isDragOver, onAddFolder, onOpenLearningCenter, onOpenS
             <Plus className="w-4 h-4" strokeWidth={1.8} />
             {t('common.addProjectFolder')}
           </Button>
-          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-            {t('home.supportedStacks')}
-          </p>
+          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('home.supportedStacks')}</p>
         </div>
       </div>
     </div>

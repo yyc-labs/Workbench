@@ -337,6 +337,7 @@ export function CodeWorkspacePanel({
   resetScrollSyncStateRef.current = resetScrollSyncState
   const quickDrawerFavorites = useMemo(() => codeFileDrawerState.favorites.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT), [allProjectFilePathSet, codeFileDrawerState.favorites])
   const quickDrawerRecents = useMemo(() => codeFileDrawerState.recents.filter((path) => allProjectFilePathSet.has(path)).slice(0, CODE_FILE_DRAWER_SECTION_LIMIT), [allProjectFilePathSet, codeFileDrawerState.recents])
+  const quickDrawerFilePaths = useMemo(() => Array.from(allProjectFilePathSet).sort((left, right) => left.localeCompare(right)), [allProjectFilePathSet])
   useEffect(() => {
     const media = window.matchMedia(NARROW_VIEWPORT_QUERY)
     const handleChange = (event: MediaQueryListEvent) => {
@@ -747,7 +748,17 @@ export function CodeWorkspacePanel({
         viewMode={viewMode}
       />
 
-      <CodeFileQuickDrawer open={isQuickDrawerOpen} activeRelativePath={activeRelativePath} favorites={quickDrawerFavorites} recents={quickDrawerRecents} onClose={() => setIsQuickDrawerOpen(false)} onOpenFile={openFileFromQuickDrawer} onToggleFavorite={toggleFavoriteForPath} onRemovePath={removePathFromQuickDrawer} />
+      <CodeFileQuickDrawer
+        open={isQuickDrawerOpen}
+        activeRelativePath={activeRelativePath}
+        filePaths={quickDrawerFilePaths}
+        favorites={quickDrawerFavorites}
+        recents={quickDrawerRecents}
+        onClose={() => setIsQuickDrawerOpen(false)}
+        onOpenFile={openFileFromQuickDrawer}
+        onToggleFavorite={toggleFavoriteForPath}
+        onRemovePath={removePathFromQuickDrawer}
+      />
 
       <div className="min-h-0 flex-1">
         <div className="code-layout-grid h-full" style={layoutGridStyle}>

@@ -1,5 +1,5 @@
 .code-file-quick-drawer {
-  position: absolute;
+  position: fixed;
   z-index: 30;
   top: 10px;
   right: 10px;
@@ -49,6 +49,31 @@
   display: grid;
   gap: 14px;
   align-content: start;
+}
+
+.code-file-quick-drawer-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-background) 92%, transparent);
+  padding: 0 10px;
+}
+
+.code-file-quick-drawer-search-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-foreground);
+  font-size: 12px;
+  line-height: 32px;
+}
+
+.code-file-quick-drawer-search-input::placeholder {
+  color: var(--color-muted-foreground);
 }
 
 .code-file-quick-drawer-section {

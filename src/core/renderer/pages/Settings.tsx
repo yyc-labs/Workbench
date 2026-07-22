@@ -17,32 +17,16 @@ import { SettingsAgentLogsPanel } from './settings/SettingsAgentLogsPanel'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
 import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
+import { SettingsAiConnectionPanel } from './settings/SettingsAiConnectionPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
-import {
-  DEFAULT_SETTINGS_SECTION,
-  isSettingsSection,
-  isSettingsSectionAlias,
-  type SettingsSectionAlias,
-  type ThemeMode,
-} from './settings/settings.types'
+import { DEFAULT_SETTINGS_SECTION, isSettingsSection, isSettingsSectionAlias, type SettingsSectionAlias, type ThemeMode } from './settings/settings.types'
 import { useI18n } from '../i18n'
-import type {
-  AppCacheLocationConfig,
-  AppCacheLocationInfo,
-  AppLocale,
-  BrowserDataCleanupResult,
-  BrowserDataMaintenanceInfo,
-  CloseWindowBehavior,
-  LaunchOnLoginDisplayMode,
-} from '../../shared/types'
+import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode } from '../../shared/types'
 
 const DEFAULT_CACHE_LOCATION: AppCacheLocationConfig = { mode: 'default' }
 
-type SettingsConfirmDialogState =
-  | { type: 'restart' }
-  | { type: 'install-cache-warning'; nextLocation: AppCacheLocationConfig }
-  | { type: 'cleanup'; rootPath: string | null }
+type SettingsConfirmDialogState = { type: 'restart' } | { type: 'install-cache-warning'; nextLocation: AppCacheLocationConfig } | { type: 'cleanup'; rootPath: string | null }
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -70,29 +54,18 @@ export function SettingsPage() {
   const [theme, setTheme] = useState<ThemeMode>(config.theme)
   const [locale, setLocale] = useState<NonNullable<AppLocale>>(config.locale ?? 'system')
   const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
-  const [launchOnLoginDisplayMode, setLaunchOnLoginDisplayMode] = useState<LaunchOnLoginDisplayMode>(
-    config.launchOnLoginDisplayMode ?? 'tray'
-  )
-  const [closeWindowBehavior, setCloseWindowBehavior] = useState<CloseWindowBehavior>(
-    config.closeWindowBehavior ?? 'quit'
-  )
-  const [cacheLocation, setCacheLocation] = useState<AppCacheLocationConfig>(
-    config.cacheLocation ?? DEFAULT_CACHE_LOCATION
-  )
+  const [launchOnLoginDisplayMode, setLaunchOnLoginDisplayMode] = useState<LaunchOnLoginDisplayMode>(config.launchOnLoginDisplayMode ?? 'tray')
+  const [closeWindowBehavior, setCloseWindowBehavior] = useState<CloseWindowBehavior>(config.closeWindowBehavior ?? 'quit')
+  const [cacheLocation, setCacheLocation] = useState<AppCacheLocationConfig>(config.cacheLocation ?? DEFAULT_CACHE_LOCATION)
   const [cacheLocationInfo, setCacheLocationInfo] = useState<AppCacheLocationInfo | null>(null)
-  const [browserDataMaintenanceInfo, setBrowserDataMaintenanceInfo] =
-    useState<BrowserDataMaintenanceInfo | null>(null)
-  const [browserDataMaintenanceAction, setBrowserDataMaintenanceAction] =
-    useState<'cleanup' | null>(null)
-  const [browserDataMaintenanceResult, setBrowserDataMaintenanceResult] =
-    useState<BrowserDataCleanupResult | null>(null)
+  const [browserDataMaintenanceInfo, setBrowserDataMaintenanceInfo] = useState<BrowserDataMaintenanceInfo | null>(null)
+  const [browserDataMaintenanceAction, setBrowserDataMaintenanceAction] = useState<'cleanup' | null>(null)
+  const [browserDataMaintenanceResult, setBrowserDataMaintenanceResult] = useState<BrowserDataCleanupResult | null>(null)
   const [browserDataMaintenanceError, setBrowserDataMaintenanceError] = useState<string | null>(null)
   const [confirmDialog, setConfirmDialog] = useState<SettingsConfirmDialogState | null>(null)
-  const alias = isSettingsSectionAlias(sectionParam) ? sectionParam as SettingsSectionAlias : null
+  const alias = isSettingsSectionAlias(sectionParam) ? (sectionParam as SettingsSectionAlias) : null
   const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
-  const preferredCodexScopeKey = getCodexScopeCacheKey(
-    resolveCodexScopeDescriptor(capability, config.aiEnvironment)
-  )
+  const preferredCodexScopeKey = getCodexScopeCacheKey(resolveCodexScopeDescriptor(capability, config.aiEnvironment))
   const { t } = useI18n()
 
   useEffect(() => {
@@ -123,7 +96,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     let canceled = false
-    window.electronAPI.getCacheLocationInfo()
+    window.electronAPI
+      .getCacheLocationInfo()
       .then((info) => {
         if (!canceled) {
           setCacheLocationInfo(info)
@@ -141,7 +115,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     let canceled = false
-    window.electronAPI.getBrowserDataMaintenanceInfo()
+    window.electronAPI
+      .getBrowserDataMaintenanceInfo()
       .then((info) => {
         if (!canceled) {
           setBrowserDataMaintenanceInfo(info)
@@ -213,9 +188,7 @@ export function SettingsPage() {
   }
 
   const handleSelectCustomCacheDirectory = async () => {
-    const selectedPath = await window.electronAPI.selectDirectory(
-      cacheLocation.customPath || cacheLocationInfo?.configuredPath || cacheLocationInfo?.defaultPath
-    )
+    const selectedPath = await window.electronAPI.selectDirectory(cacheLocation.customPath || cacheLocationInfo?.configuredPath || cacheLocationInfo?.defaultPath)
     if (!selectedPath) return
     await handleCacheLocationChange({
       mode: 'custom',
@@ -256,12 +229,8 @@ export function SettingsPage() {
   const handleOpenOldBrowserDataDirectory = async (rootPath?: string | null) => {
     try {
       const info = browserDataMaintenanceInfo ?? (await refreshBrowserDataMaintenanceInfo())
-      const targetRoots = (rootPath
-        ? info.oldCacheRoots.filter((item) => item.rootPath === rootPath)
-        : info.oldCacheRoots)
-      const oldPaths = targetRoots
-        .filter((item) => item.rootExists || item.browserDataExists || item.browserDataDetected)
-        .map((item) => item.browserDataExists ? item.browserDataPath : item.rootPath)
+      const targetRoots = rootPath ? info.oldCacheRoots.filter((item) => item.rootPath === rootPath) : info.oldCacheRoots
+      const oldPaths = targetRoots.filter((item) => item.rootExists || item.browserDataExists || item.browserDataDetected).map((item) => (item.browserDataExists ? item.browserDataPath : item.rootPath))
 
       if (oldPaths.length === 0) {
         setBrowserDataMaintenanceError(t('settings.dataCache.noOldBrowserDataDetected'))
@@ -305,23 +274,15 @@ export function SettingsPage() {
   return (
     <div className="h-full flex flex-col">
       <header className="app-chrome flex min-h-[84px] items-center gap-4 px-8 py-4 shrink-0">
-        <button
-          className="button-interactive p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors"
-          onClick={() => navigate('/')}
-        >
+        <button className="button-interactive p-2 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] transition-colors" onClick={() => navigate('/')}>
           <ChevronLeft className="w-5 h-5" strokeWidth={1.8} />
         </button>
-        <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] tracking-[-0.03em]">
-          {t('settings.title')}
-        </h1>
+        <h1 className="text-xl font-semibold text-[color:var(--color-foreground)] tracking-[-0.03em]">{t('settings.title')}</h1>
       </header>
 
       <div className="flex-1 min-h-0 overflow-hidden px-8 pb-10 pt-10">
         <div className="flex h-full min-h-0 min-w-0">
-          <SettingsSidebar
-            active={section}
-            onSelect={(nextSection) => navigate(`/settings/${nextSection}`)}
-          />
+          <SettingsSidebar active={section} onSelect={(nextSection) => navigate(`/settings/${nextSection}`)} />
 
           <main className="flex-1 min-h-0 min-w-0 ml-12 overflow-y-auto px-6 pt-1">
             <div className="pb-6 -mb-6">
@@ -341,12 +302,7 @@ export function SettingsPage() {
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                 />
               )}
-              {section === 'shortcuts' && (
-                <SettingsShortcutsPanel
-                  shortcutPreferences={config.shortcutPreferences}
-                  onSave={setShortcutPreferences}
-                />
-              )}
+              {section === 'shortcuts' && <SettingsShortcutsPanel shortcutPreferences={config.shortcutPreferences} onSave={setShortcutPreferences} />}
               {section === 'data' && (
                 <SettingsDataCachePanel
                   cacheLocation={cacheLocation}
@@ -389,36 +345,14 @@ export function SettingsPage() {
                   initialTab={alias === 'codex' ? 'codex' : 'claude'}
                 />
               )}
-              {section === 'gateway' && (
-                <SettingsAiGatewayPanel
-                  profiles={config.claudeRuntimeProfiles ?? []}
-                  activeProfileId={config.activeClaudeRuntimeProfileId}
-                  onProfilesSave={setClaudeRuntimeProfiles}
-                />
-              )}
+              {section === 'gateway' && <SettingsAiGatewayPanel profiles={config.claudeRuntimeProfiles ?? []} activeProfileId={config.activeClaudeRuntimeProfileId} onProfilesSave={setClaudeRuntimeProfiles} />}
               {section === 'browser-ai' && <SettingsBrowserAiPanel />}
-              {section === 'transcripts' && (
-                <SettingsTranscriptPanel
-                  projects={projects}
-                  removedProjects={config.removedProjects}
-                />
-              )}
+              {section === 'ai-connection' && <SettingsAiConnectionPanel aiCommit={config.aiCommit} aiGateway={config.aiGateway} claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []} />}
+              {section === 'transcripts' && <SettingsTranscriptPanel projects={projects} removedProjects={config.removedProjects} />}
               {section === 'hooks' && <SettingsAgentHooksPanel />}
               {section === 'agent-logs' && <SettingsAgentLogsPanel />}
-              {section === 'logs' && (
-                <SettingsStartupLogsPanel
-                  projects={projects}
-                />
-              )}
-              {section === 'ai' && (
-                <SettingsAiCommitPanel
-                  aiCommit={config.aiCommit || {}}
-                  onSave={setAiCommitConfig}
-                  claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []}
-                  codexSettingsSnapshots={config.codexSettingsSnapshots ?? {}}
-                  preferredCodexScopeKey={preferredCodexScopeKey}
-                />
-              )}
+              {section === 'logs' && <SettingsStartupLogsPanel projects={projects} />}
+              {section === 'ai' && <SettingsAiCommitPanel aiCommit={config.aiCommit || {}} onSave={setAiCommitConfig} claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []} codexSettingsSnapshots={config.codexSettingsSnapshots ?? {}} preferredCodexScopeKey={preferredCodexScopeKey} />}
               {section === 'rules' && <SettingsRulesPanel />}
               {section === 'about' && <SettingsAboutPanel />}
             </div>
@@ -430,72 +364,29 @@ export function SettingsPage() {
         open={Boolean(confirmDialog)}
         onClose={handleCloseConfirmDialog}
         onConfirm={handleConfirmDialogConfirm}
-        ariaLabel={
-          confirmDialog?.type === 'cleanup'
-            ? t('settings.dataCache.browserDataCleanupConfirmTitle')
-            : confirmDialog?.type === 'install-cache-warning'
-              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
-              : t('settings.dataCache.restartConfirmTitle')
-        }
-        title={
-          confirmDialog?.type === 'cleanup'
-            ? t('settings.dataCache.browserDataCleanupConfirmTitle')
-            : confirmDialog?.type === 'install-cache-warning'
-              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
-              : t('settings.dataCache.restartConfirmTitle')
-        }
-        description={
-          confirmDialog?.type === 'cleanup'
-            ? t('settings.dataCache.browserDataCleanupConfirm')
-            : confirmDialog?.type === 'install-cache-warning'
-              ? t('settings.dataCache.cacheLocationInstallConfirm')
-              : t('settings.dataCache.restartConfirm')
-        }
-        confirmLabel={
-          confirmDialog?.type === 'cleanup'
-            ? t('settings.dataCache.cleanupLegacyBrowserCaches')
-            : confirmDialog?.type === 'install-cache-warning'
-              ? t('settings.dataCache.cacheLocationInstallConfirmButton')
-              : t('settings.dataCache.restartApp')
-        }
+        ariaLabel={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirmTitle') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmTitle') : t('settings.dataCache.restartConfirmTitle')}
+        title={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirmTitle') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmTitle') : t('settings.dataCache.restartConfirmTitle')}
+        description={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirm') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirm') : t('settings.dataCache.restartConfirm')}
+        confirmLabel={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.cleanupLegacyBrowserCaches') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmButton') : t('settings.dataCache.restartApp')}
         confirmVariant={confirmDialog?.type === 'cleanup' ? 'destructive' : 'default'}
         busy={browserDataMaintenanceAction === 'cleanup'}
       >
         {confirmDialog?.type === 'install-cache-warning' && (
-          <div
-            className="rounded-[18px] border px-4 py-3"
-            style={{ borderColor: 'var(--color-border)' }}
-          >
-            <p className="text-xs font-medium text-[color:var(--color-foreground)]">
-              {t('settings.dataCache.cacheLocationInstallConfirmAdviceTitle')}
-            </p>
-            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-              {t('settings.dataCache.cacheLocationInstallConfirmAdvice')}
-            </p>
-            <code className="mt-3 block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">
-              {t('settings.dataCache.cacheLocationInstallConfirmExample')}
-            </code>
+          <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+            <p className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmAdviceTitle')}</p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmAdvice')}</p>
+            <code className="mt-3 block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmExample')}</code>
           </div>
         )}
         {confirmDialog?.type === 'cleanup' && (
-          <div
-            className="max-h-40 overflow-y-auto rounded-[18px] border px-4 py-3"
-            style={{ borderColor: 'var(--color-border)' }}
-          >
-            <p className="text-xs font-medium text-[color:var(--color-muted-foreground)]">
-              {t('settings.dataCache.oldCacheDirectorySelector')}
-            </p>
+          <div className="max-h-40 overflow-y-auto rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+            <p className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.oldCacheDirectorySelector')}</p>
             <div className="mt-2 space-y-2">
               {confirmDialog.rootPath ? (
-                <code className="block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">
-                  {confirmDialog.rootPath}
-                </code>
+                <code className="block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">{confirmDialog.rootPath}</code>
               ) : (
                 (browserDataMaintenanceInfo?.oldCacheRoots ?? []).map((item) => (
-                  <code
-                    key={item.rootPath}
-                    className="block break-all font-mono text-[11px] text-[color:var(--color-foreground)]"
-                  >
+                  <code key={item.rootPath} className="block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">
                     {item.rootPath}
                   </code>
                 ))

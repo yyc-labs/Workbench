@@ -17,6 +17,7 @@ export const IPC = {
   AI_COMMIT_CLOSE_UNDO: 'ai-commit:close-undo',
   AI_COMMIT_OUTPUT: 'ai-commit:output',
   AI_COMMIT_STATUS: 'ai-commit:status',
+  AI_CONNECTION_TEST: 'ai-connection:test',
   AGENT_HOOK_EVENT: 'agent-hook:event',
   AGENT_HOOK_GET_STATUS: 'agent-hook:get-status',
   AGENT_HOOK_GET_RECENT_EVENTS: 'agent-hook:get-recent-events',

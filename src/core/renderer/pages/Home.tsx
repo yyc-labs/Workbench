@@ -4,7 +4,6 @@ import { useAppStore } from '../stores/appStore'
 import { detectProjectEnvironment, projectEnvironmentLabel, type ProjectEnvironment } from '../lib/projectEnvironment'
 import { projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { WorkspaceManagerDialog } from '../components/ProjectMetaDialog'
-import { HomeDragOverlay } from './home/HomeDragOverlay'
 import { HomeEmptyState } from './home/HomeEmptyState'
 import { HomeProjectsContent } from './home/HomeProjectsContent'
 import { HomeToolbar } from './home/HomeToolbar'
@@ -43,26 +42,8 @@ export function HomePage() {
   const navigate = useNavigate()
 
   const searchRef = useRef<HTMLInputElement>(null)
-  const [isDragOver, setIsDragOver] = useState(false)
   const [workspaceDialogOpen, setWorkspaceDialogOpen] = useState(false)
   const lastGestureResetAtRef = useRef<number>(0)
-  const isDragOverRef = useRef(false)
-  const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastDragOverAtRef = useRef(0)
-
-  const setDragOverlay = useCallback((next: boolean) => {
-    if (isDragOverRef.current === next) return
-    isDragOverRef.current = next
-    setIsDragOver(next)
-  }, [])
-
-  const stopDragTracking = useCallback(() => {
-    if (dragHeartbeatRef.current) {
-      clearInterval(dragHeartbeatRef.current)
-      dragHeartbeatRef.current = null
-    }
-    setDragOverlay(false)
-  }, [setDragOverlay])
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -103,16 +84,7 @@ export function HomePage() {
     }
 
     setClassifierFilter(defaultFilter)
-  }, [
-    config.startupDefaultFilter,
-    folders,
-    homeDefaultFilterApplied,
-    isAppReady,
-    markHomeDefaultFilterApplied,
-    setClassifierFilter,
-    setStartupDefaultFilter,
-    tags,
-  ])
+  }, [config.startupDefaultFilter, folders, homeDefaultFilterApplied, isAppReady, markHomeDefaultFilterApplied, setClassifierFilter, setStartupDefaultFilter, tags])
 
   useEffect(() => {
     const marker = (location.state as { gestureResetToStartupDefault?: number } | null)?.gestureResetToStartupDefault
@@ -143,86 +115,10 @@ export function HomePage() {
     setClassifierFilter(defaultFilter)
   }, [config.startupDefaultFilter, folders, location.state, setClassifierFilter, setEnvFilter, setSearchQuery, tags])
 
-  useEffect(() => {
-    const onDragOver = (e: DragEvent) => {
-      let hasFiles = isDragOverRef.current
-      if (!hasFiles) {
-        const types = e.dataTransfer?.types
-        hasFiles = Boolean(
-          types &&
-          (types.includes('Files') || (types as unknown as { contains?: (v: string) => boolean }).contains?.('Files'))
-        )
-      }
-      if (!hasFiles) return
-
-      e.preventDefault()
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
-      setDragOverlay(true)
-      lastDragOverAtRef.current = performance.now()
-
-      if (!dragHeartbeatRef.current) {
-        dragHeartbeatRef.current = setInterval(() => {
-          if (performance.now() - lastDragOverAtRef.current > 180) {
-            stopDragTracking()
-          }
-        }, 120)
-      }
-    }
-
-    const onDrop = async (e: DragEvent) => {
-      e.preventDefault()
-      stopDragTracking()
-      const files = e.dataTransfer?.files
-      if (!files || files.length === 0) return
-
-      const api = window.electronAPI
-      const getPathForFile = typeof api.getPathForFile === 'function' ? api.getPathForFile : undefined
-
-      const pathSet = new Set<string>()
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i] as File & { path?: string }
-        const fromWebUtils = getPathForFile ? getPathForFile(file) : ''
-        const resolvedPath = fromWebUtils || file.path || ''
-        if (resolvedPath) {
-          pathSet.add(resolvedPath)
-        }
-      }
-
-      for (const p of pathSet) {
-        try {
-          await addProject(p)
-        } catch (err) {
-          console.error('[HomePage] drop addProject failed:', p, err)
-        }
-      }
-    }
-
-    const onWindowBlur = () => {
-      stopDragTracking()
-    }
-
-    document.addEventListener('dragover', onDragOver)
-    document.addEventListener('drop', onDrop)
-    window.addEventListener('blur', onWindowBlur)
-    return () => {
-      document.removeEventListener('dragover', onDragOver)
-      document.removeEventListener('drop', onDrop)
-      window.removeEventListener('blur', onWindowBlur)
-      stopDragTracking()
-    }
-  }, [addProject, setDragOverlay, stopDragTracking])
-
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects
     const q = searchQuery.toLowerCase().trim()
-    return projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        projectDisplayName(p).toLowerCase().includes(q) ||
-        p.path.toLowerCase().includes(q) ||
-        p.type.toLowerCase().includes(q) ||
-        projectDisplayType(p).toLowerCase().includes(q)
-    )
+    return projects.filter((p) => p.name.toLowerCase().includes(q) || projectDisplayName(p).toLowerCase().includes(q) || p.path.toLowerCase().includes(q) || p.type.toLowerCase().includes(q) || projectDisplayType(p).toLowerCase().includes(q))
   }, [projects, searchQuery])
 
   const envByPath = useMemo(() => {
@@ -280,15 +176,10 @@ export function HomePage() {
       }
     }
 
-    return groupOrder
-      .map((k) => groups[k])
-      .filter((g) => g.projects.length > 0)
+    return groupOrder.map((k) => groups[k]).filter((g) => g.projects.length > 0)
   }, [recentProjects, envByPath, locale])
 
-  const runningCount = useMemo(
-    () => Object.values(sessions).filter((s) => s.status !== 'stopped').length,
-    [sessions]
-  )
+  const runningCount = useMemo(() => Object.values(sessions).filter((s) => s.status !== 'stopped').length, [sessions])
 
   const classifierCounts = useMemo(() => {
     const byFolder: Record<string, number> = {}
@@ -326,7 +217,7 @@ export function HomePage() {
       updateLastOpened(id)
       navigate(`/project/${id}/code`)
     },
-    [updateLastOpened, navigate]
+    [updateLastOpened, navigate],
   )
 
   if (!isAppReady) {
@@ -334,21 +225,19 @@ export function HomePage() {
   }
 
   if (projects.length === 0) {
-      return (
-        <HomeEmptyState
-          isDragOver={isDragOver}
-          onAddFolder={() => {
-            void handleAddFolder()
-          }}
-          onOpenLearningCenter={() => navigate('/learning')}
-          onOpenSettings={() => navigate('/settings')}
-        />
-      )
+    return (
+      <HomeEmptyState
+        onAddFolder={() => {
+          void handleAddFolder()
+        }}
+        onOpenLearningCenter={() => navigate('/learning')}
+        onOpenSettings={() => navigate('/settings')}
+      />
+    )
   }
 
   return (
     <div className="h-full flex flex-col">
-      {isDragOver && <HomeDragOverlay />}
       <HomeToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -383,18 +272,7 @@ export function HomePage() {
         envFilter={envFilter}
       />
 
-      <WorkspaceManagerDialog
-        open={workspaceDialogOpen}
-        folders={folders}
-        tags={tags}
-        onClose={() => setWorkspaceDialogOpen(false)}
-        onCreateFolder={createFolder}
-        onRenameFolder={renameFolder}
-        onRemoveFolder={removeFolder}
-        onCreateTag={createTag}
-        onRenameTag={renameTag}
-        onRemoveTag={removeTag}
-      />
+      <WorkspaceManagerDialog open={workspaceDialogOpen} folders={folders} tags={tags} onClose={() => setWorkspaceDialogOpen(false)} onCreateFolder={createFolder} onRenameFolder={renameFolder} onRemoveFolder={removeFolder} onCreateTag={createTag} onRenameTag={renameTag} onRemoveTag={removeTag} />
     </div>
   )
 }

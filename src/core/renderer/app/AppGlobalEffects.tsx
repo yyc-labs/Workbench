@@ -5,14 +5,12 @@ import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../component
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { useI18n } from '../i18n'
 import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
-import {
-  navigateHomeWithStartupDefaultReset,
-  useMouseGestureNavigator,
-} from '../hooks/useMouseGestureNavigator'
+import { navigateHomeWithStartupDefaultReset, useMouseGestureNavigator } from '../hooks/useMouseGestureNavigator'
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { useAppStore } from '../stores/appStore'
 import { RouteCatalogDialogHost } from './RouteCatalogDialog'
+import { GlobalProjectDropListener } from './GlobalProjectDropListener'
 import { resolveTheme } from './windowTitle'
 
 function ThemeSync() {
@@ -30,8 +28,7 @@ function ThemeSync() {
         document.documentElement.setAttribute('data-theme', nextTheme)
       }
       document.documentElement.style.colorScheme = nextTheme
-      document.documentElement.style.backgroundColor =
-        nextTheme === 'dark' ? '#09090b' : '#f5f7fb'
+      document.documentElement.style.backgroundColor = nextTheme === 'dark' ? '#09090b' : '#f5f7fb'
     }
 
     applyTheme()
@@ -103,7 +100,12 @@ function TranscriptImportListener() {
 }
 
 function RuntimeStateListener() {
-  const projectIds = useAppStore((s) => s.projects.map((p) => p.id).sort().join(','))
+  const projectIds = useAppStore((s) =>
+    s.projects
+      .map((p) => p.id)
+      .sort()
+      .join(','),
+  )
   const refreshRuntimeState = useAppStore((s) => s.refreshRuntimeState)
 
   useEffect(() => {
@@ -133,24 +135,28 @@ function RuntimeStateListener() {
 }
 
 function SessionPoller() {
-  const projectIds = useAppStore((s) => s.projects.map((p) => p.id).sort().join(','))
+  const projectIds = useAppStore((s) =>
+    s.projects
+      .map((p) => p.id)
+      .sort()
+      .join(','),
+  )
   const projects = useAppStore((s) => s.projects)
   const runtimeEntriesKey = useAppStore((s) =>
     Object.values(s.runtimeEntries)
       .map((entry) => `${entry.projectId}:${entry.sessionName}:${entry.mode ?? ''}`)
       .sort()
-      .join('|')
+      .join('|'),
   )
   const processStatusesKey = useAppStore((s) =>
     Object.entries(s.processes)
       .map(([projectId, process]) => `${projectId}:${process.status}`)
       .sort()
-      .join('|')
+      .join('|'),
   )
   const refreshRuntimeState = useAppStore((s) => s.refreshRuntimeState)
   const hasRuntimeEntries = runtimeEntriesKey.length > 0
-  const hasLiveProcesses =
-    processStatusesKey.includes(':running') || processStatusesKey.includes(':stopping')
+  const hasLiveProcesses = processStatusesKey.includes(':running') || processStatusesKey.includes(':stopping')
   const shouldPollSessions = hasRuntimeEntries || hasLiveProcesses
   const shouldRefreshOnFocus = hasRuntimeEntries || hasLiveProcesses
 
@@ -200,34 +206,13 @@ function MouseGestureNavigatorOverlay() {
   const startPoint = pathPoints[0]
   const endPoint = pathPoints[pathPoints.length - 1]
 
-  const strokeColor =
-    hint.status === 'ready'
-      ? hint.action === 'back'
-        ? 'var(--color-warning)'
-        : hint.action === 'home'
-          ? 'var(--color-primary)'
-          : 'var(--color-success)'
-      : hint.status === 'invalid'
-        ? 'var(--color-destructive)'
-        : 'var(--color-muted-foreground)'
+  const strokeColor = hint.status === 'ready' ? (hint.action === 'back' ? 'var(--color-warning)' : hint.action === 'home' ? 'var(--color-primary)' : 'var(--color-success)') : hint.status === 'invalid' ? 'var(--color-destructive)' : 'var(--color-muted-foreground)'
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[10000]">
       <svg className="h-full w-full">
-        {polylinePoints.length > 0 ? (
-          <polyline
-            points={polylinePoints}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ opacity: 0.82 }}
-          />
-        ) : null}
-        {startPoint ? (
-          <circle cx={startPoint.x} cy={startPoint.y} r={4} fill={strokeColor} style={{ opacity: 0.75 }} />
-        ) : null}
+        {polylinePoints.length > 0 ? <polyline points={polylinePoints} fill="none" stroke={strokeColor} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.82 }} /> : null}
+        {startPoint ? <circle cx={startPoint.x} cy={startPoint.y} r={4} fill={strokeColor} style={{ opacity: 0.75 }} /> : null}
         {endPoint ? <circle cx={endPoint.x} cy={endPoint.y} r={5} fill={strokeColor} /> : null}
       </svg>
       <div className="fixed left-1/2 top-4 -translate-x-1/2">
@@ -262,33 +247,17 @@ function GlobalRecentProjectsDrawerHost() {
   useEffect(() => {
     const onOpenRecentDrawer = () => setOpen(true)
     const onToggleRecentDrawer = () => setOpen((prev) => !prev)
-    window.addEventListener(
-      'app:open-recent-project-drawer',
-      onOpenRecentDrawer as EventListener
-    )
-    window.addEventListener(
-      'app:toggle-recent-project-drawer',
-      onToggleRecentDrawer as EventListener
-    )
+    window.addEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+    window.addEventListener('app:toggle-recent-project-drawer', onToggleRecentDrawer as EventListener)
     return () => {
-      window.removeEventListener(
-        'app:open-recent-project-drawer',
-        onOpenRecentDrawer as EventListener
-      )
-      window.removeEventListener(
-        'app:toggle-recent-project-drawer',
-        onToggleRecentDrawer as EventListener
-      )
+      window.removeEventListener('app:open-recent-project-drawer', onOpenRecentDrawer as EventListener)
+      window.removeEventListener('app:toggle-recent-project-drawer', onToggleRecentDrawer as EventListener)
     }
   }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        event.key.toLowerCase() === 'p'
-      ) {
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'p') {
         event.preventDefault()
         if (event.repeat) return
         setOpen((prev) => !prev)
@@ -336,12 +305,7 @@ function GlobalRecentProjectsDrawerHost() {
         onEditProjectMetadata={setMetaDialogProjectId}
       />
 
-      {metaDialogProjectId && (
-        <RecentProjectsMetaDialogHost
-          projectId={metaDialogProjectId}
-          onClose={() => setMetaDialogProjectId(null)}
-        />
-      )}
+      {metaDialogProjectId && <RecentProjectsMetaDialogHost projectId={metaDialogProjectId} onClose={() => setMetaDialogProjectId(null)} />}
     </>
   )
 }
@@ -421,6 +385,7 @@ export function AppGlobalEffects() {
       <AppNavigateListener />
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
+      <GlobalProjectDropListener />
       <GlobalRecentProjectsDrawerHost />
       <RouteCatalogDialogHost />
       <GlobalTitleTooltipBridge />

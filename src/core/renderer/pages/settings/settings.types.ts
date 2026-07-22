@@ -1,19 +1,4 @@
-export const SETTINGS_SECTIONS = [
-  'general',
-  'shortcuts',
-  'data',
-  'runtime',
-  'agents',
-  'gateway',
-  'browser-ai',
-  'transcripts',
-  'hooks',
-  'agent-logs',
-  'logs',
-  'ai',
-  'rules',
-  'about',
-] as const
+export const SETTINGS_SECTIONS = ['general', 'shortcuts', 'data', 'runtime', 'agents', 'gateway', 'browser-ai', 'ai-connection', 'transcripts', 'hooks', 'agent-logs', 'logs', 'ai', 'rules', 'about'] as const
 
 export type Section = (typeof SETTINGS_SECTIONS)[number]
 

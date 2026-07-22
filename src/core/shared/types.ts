@@ -115,6 +115,24 @@ export interface AiCommitProfile {
   model?: string
 }
 
+export type AiConnectionTestProtocol = 'openai_chat' | 'openai_responses' | 'anthropic_messages'
+
+export interface AiConnectionTestRequest {
+  baseUrl: string
+  apiKey?: string
+  apiKeyEnv?: string
+  model: string
+  protocol: AiConnectionTestProtocol
+}
+
+export interface AiConnectionTestResult {
+  ok: boolean
+  statusCode?: number
+  response?: string
+  error?: string
+  durationMs: number
+}
+
 export interface AiEnvironmentConfig {
   mode: AiExecutionMode
   wslDistro?: string

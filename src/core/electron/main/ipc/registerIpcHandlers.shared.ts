@@ -4,6 +4,7 @@ import { loadConfig } from '../config'
 import { toProjectFileServiceErrorMessage } from '../project-file-service'
 import type { AgentLogService } from '../agent-logs/agent-log-service'
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
+import type { AiConnectionService } from '../ai-connection/ai-connection-service'
 import type { AiGatewayService } from '../ai-gateway/gateway-service'
 import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { GitService } from '../git/git-service'
@@ -14,12 +15,7 @@ import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
 import type { BrowserAiService } from '../browser-ai/browserAiService'
-import type {
-  Capability,
-  TranscriptCaptureInitialText,
-  TranscriptImportedEvent,
-  TranscriptGatewayImportPayload,
-} from '../../../shared/types'
+import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent, TranscriptGatewayImportPayload } from '../../../shared/types'
 
 export type RuntimeStateChangedPayload = {
   reason: string
@@ -36,6 +32,7 @@ export type RegisterIpcHandlersDependencies = {
   consumeTranscriptCaptureInitialText: () => Promise<TranscriptCaptureInitialText>
   agentLogService: AgentLogService
   aiCommitService: AiCommitService
+  aiConnectionService: AiConnectionService
   aiGatewayService: AiGatewayService
   browserAiService: BrowserAiService
   agentHookGateway: AgentHookGateway
@@ -79,9 +76,7 @@ export function normalizeGitRequest<T extends GitRequestWithRepoRoot>(request: T
   }
 }
 
-export async function requestTranscriptImportViaGateway(
-  payload: TranscriptGatewayImportPayload
-): Promise<TranscriptGatewayImportResult> {
+export async function requestTranscriptImportViaGateway(payload: TranscriptGatewayImportPayload): Promise<TranscriptGatewayImportResult> {
   const agentHooks = loadConfig().agentHooks || {}
   const transcriptImport = agentHooks.transcriptImport || {}
   const enabled = transcriptImport.enabled ?? true
@@ -89,11 +84,7 @@ export async function requestTranscriptImportViaGateway(
     throw new Error('Transcript import API is disabled.')
   }
 
-  const host = (
-    agentHooks.host && agentHooks.host !== '127.0.0.1'
-      ? agentHooks.host
-      : '127.0.0.1'
-  ) || '127.0.0.1'
+  const host = (agentHooks.host && agentHooks.host !== '127.0.0.1' ? agentHooks.host : '127.0.0.1') || '127.0.0.1'
   const port = Number.isFinite(agentHooks.port) ? Number(agentHooks.port) : 17373
   const body = JSON.stringify({
     projectId: payload.projectId,
@@ -116,9 +107,7 @@ export async function requestTranscriptImportViaGateway(
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'content-length': Buffer.byteLength(body),
-          ...(transcriptImport.token
-            ? { 'x-ide-electron-transcript-token': transcriptImport.token }
-            : {}),
+          ...(transcriptImport.token ? { 'x-ide-electron-transcript-token': transcriptImport.token } : {}),
         },
       },
       (res) => {
@@ -135,22 +124,12 @@ export async function requestTranscriptImportViaGateway(
               resolve(parsed as TranscriptGatewayImportResult)
               return
             }
-            reject(
-              new Error(
-                typeof parsed?.error === 'string'
-                  ? parsed.error
-                  : `Transcript import API request failed with status ${statusCode}.`
-              )
-            )
+            reject(new Error(typeof parsed?.error === 'string' ? parsed.error : `Transcript import API request failed with status ${statusCode}.`))
           } catch {
-            reject(
-              new Error(
-                `Transcript import API request failed with status ${statusCode}.`
-              )
-            )
+            reject(new Error(`Transcript import API request failed with status ${statusCode}.`))
           }
         })
-      }
+      },
     )
 
     req.on('error', (error) => {

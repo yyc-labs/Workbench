@@ -1,20 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  ArrowRight,
-  Bot,
-  Code2,
-  FileText,
-  FolderOpen,
-  GraduationCap,
-  Home,
-  Map,
-  Route as RouteIcon,
-  Search,
-  Settings,
-  type LucideIcon,
-  X,
-} from 'lucide-react'
+import { ArrowRight, Bot, Code2, FileText, FolderOpen, GraduationCap, Home, Map, Route as RouteIcon, Search, Settings, type LucideIcon, X } from 'lucide-react'
 import type { ProjectInfo } from '../../shared/types'
 import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n'
@@ -24,15 +10,7 @@ import { SETTINGS_SECTIONS, DEFAULT_SETTINGS_SECTION, type Section } from '../pa
 import { useAppStore } from '../stores/appStore'
 
 type RouteCatalogGroupId = 'base' | 'project' | 'settings'
-type RouteCatalogIconName =
-  | 'home'
-  | 'learning'
-  | 'project'
-  | 'code'
-  | 'ai'
-  | 'transcript'
-  | 'settings'
-  | 'route'
+type RouteCatalogIconName = 'home' | 'learning' | 'project' | 'code' | 'ai' | 'transcript' | 'settings' | 'route'
 type ProjectPaneRoute = 'code' | 'aicommit' | 'transcript'
 
 type RouteCatalogEntry = {
@@ -76,6 +54,7 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   agents: 'common.routeCatalog.settingsDescriptions.agents',
   gateway: 'common.routeCatalog.settingsDescriptions.gateway',
   'browser-ai': 'common.routeCatalog.settingsDescriptions.browserAi',
+  'ai-connection': 'common.routeCatalog.settingsDescriptions.aiConnection',
   transcripts: 'common.routeCatalog.settingsDescriptions.transcripts',
   hooks: 'common.routeCatalog.settingsDescriptions.hooks',
   'agent-logs': 'common.routeCatalog.settingsDescriptions.agentLogs',
@@ -90,48 +69,36 @@ function getProjectIdFromPath(pathname: string): string | undefined {
   return segments[0] === 'project' && segments[1] ? segments[1] : undefined
 }
 
-function resolveProjectForRoutes(
-  projects: RouteCatalogProject[],
-  currentProjectId: string | undefined
-): RouteCatalogProject | undefined {
-  const currentProject = currentProjectId
-    ? projects.find((project) => project.id === currentProjectId)
-    : undefined
+function resolveProjectForRoutes(projects: RouteCatalogProject[], currentProjectId: string | undefined): RouteCatalogProject | undefined {
+  const currentProject = currentProjectId ? projects.find((project) => project.id === currentProjectId) : undefined
   if (currentProject) return currentProject
 
-  return projects
-    .slice()
-    .sort((a, b) => {
-      const lastOpenedDiff = (b.lastOpened ?? 0) - (a.lastOpened ?? 0)
-      if (lastOpenedDiff !== 0) return lastOpenedDiff
-      return projectDisplayName(a).localeCompare(projectDisplayName(b))
-    })[0]
+  return projects.slice().sort((a, b) => {
+    const lastOpenedDiff = (b.lastOpened ?? 0) - (a.lastOpened ?? 0)
+    if (lastOpenedDiff !== 0) return lastOpenedDiff
+    return projectDisplayName(a).localeCompare(projectDisplayName(b))
+  })[0]
 }
 
 function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase()
 }
 
-function RouteCatalogDialog({
-  open,
-  onClose,
-}: {
-  open: boolean
-  onClose: () => void
-}) {
+function RouteCatalogDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { t, getSettingsSectionLabel } = useI18n()
   const storeProjects = useAppStore((s) => s.projects)
-  const projects = useMemo<RouteCatalogProject[]>(() =>
-    storeProjects.map((project) => ({
-      id: project.id,
-      path: project.path,
-      name: project.name,
-      customName: project.customName,
-      lastOpened: project.lastOpened,
-    })),
-    [storeProjects]
+  const projects = useMemo<RouteCatalogProject[]>(
+    () =>
+      storeProjects.map((project) => ({
+        id: project.id,
+        path: project.path,
+        name: project.name,
+        customName: project.customName,
+        lastOpened: project.lastOpened,
+      })),
+    [storeProjects],
   )
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const [query, setQuery] = useState('')
@@ -149,44 +116,40 @@ function RouteCatalogDialog({
     return () => window.cancelAnimationFrame(frameId)
   }, [open])
 
-  const currentProjectId = useMemo(
-    () => getProjectIdFromPath(location.pathname),
-    [location.pathname]
-  )
-  const routeProject = useMemo(
-    () => resolveProjectForRoutes(projects, currentProjectId),
-    [currentProjectId, projects]
-  )
+  const currentProjectId = useMemo(() => getProjectIdFromPath(location.pathname), [location.pathname])
+  const routeProject = useMemo(() => resolveProjectForRoutes(projects, currentProjectId), [currentProjectId, projects])
 
   const targetProjectLabel = useMemo(() => {
     if (!routeProject) return t('common.routeCatalog.noProjectTarget')
     return `${projectDisplayName(routeProject)} - ${middleTruncatePath(routeProject.path, 34, 24)}`
   }, [routeProject, t])
 
-  const groups = useMemo<RouteCatalogGroup[]>(() => [
-    {
-      id: 'base',
-      label: t('common.routeCatalog.groups.base'),
-      description: t('common.routeCatalog.groups.baseDescription'),
-    },
-    {
-      id: 'project',
-      label: t('common.routeCatalog.groups.project'),
-      description: t('common.routeCatalog.groups.projectDescription'),
-    },
-    {
-      id: 'settings',
-      label: t('common.routeCatalog.groups.settings'),
-      description: t('common.routeCatalog.groups.settingsDescription'),
-    },
-  ], [t])
+  const groups = useMemo<RouteCatalogGroup[]>(
+    () => [
+      {
+        id: 'base',
+        label: t('common.routeCatalog.groups.base'),
+        description: t('common.routeCatalog.groups.baseDescription'),
+      },
+      {
+        id: 'project',
+        label: t('common.routeCatalog.groups.project'),
+        description: t('common.routeCatalog.groups.projectDescription'),
+      },
+      {
+        id: 'settings',
+        label: t('common.routeCatalog.groups.settings'),
+        description: t('common.routeCatalog.groups.settingsDescription'),
+      },
+    ],
+    [t],
+  )
 
   const entries = useMemo<RouteCatalogEntry[]>(() => {
     const projectId = routeProject?.id
     const projectDisabledReason = projectId ? undefined : t('common.routeCatalog.noProjectHint')
     const projectTargetLabel = routeProject ? targetProjectLabel : t('common.routeCatalog.noProjectTarget')
-    const projectPath = (suffix?: string) =>
-      projectId ? `/project/${projectId}${suffix ? `/${suffix}` : ''}` : null
+    const projectPath = (suffix?: string) => (projectId ? `/project/${projectId}${suffix ? `/${suffix}` : ''}` : null)
 
     const baseEntries: RouteCatalogEntry[] = [
       {
@@ -323,15 +286,7 @@ function RouteCatalogDialog({
   const filteredEntries = useMemo(() => {
     if (!normalizedQuery) return entries
 
-    return entries.filter((entry) =>
-      normalizeSearchText([
-        entry.label,
-        entry.pattern,
-        entry.description,
-        entry.targetLabel ?? '',
-        groups.find((group) => group.id === entry.groupId)?.label ?? '',
-      ].join(' ')).includes(normalizedQuery)
-    )
+    return entries.filter((entry) => normalizeSearchText([entry.label, entry.pattern, entry.description, entry.targetLabel ?? '', groups.find((group) => group.id === entry.groupId)?.label ?? ''].join(' ')).includes(normalizedQuery))
   }, [entries, groups, normalizedQuery])
 
   const handleOpenEntry = (entry: RouteCatalogEntry) => {
@@ -348,15 +303,7 @@ function RouteCatalogDialog({
   }
 
   return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      widthClassName="max-w-[980px]"
-      baseZIndex={10020}
-      ariaLabel={t('common.routeCatalog.title')}
-      panelClassName="route-catalog-panel"
-      overlayClassName="route-catalog-overlay"
-    >
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[980px]" baseZIndex={10020} ariaLabel={t('common.routeCatalog.title')} panelClassName="route-catalog-panel" overlayClassName="route-catalog-overlay">
       <div className="route-catalog-header">
         <div className="route-catalog-title-row">
           <div className="route-catalog-title-mark">
@@ -367,12 +314,7 @@ function RouteCatalogDialog({
             <h2 className="route-catalog-title">{t('common.routeCatalog.title')}</h2>
             <p className="route-catalog-subtitle">{t('common.routeCatalog.subtitle')}</p>
           </div>
-          <button
-            type="button"
-            className="route-catalog-close"
-            onClick={onClose}
-            aria-label={t('common.close')}
-          >
+          <button type="button" className="route-catalog-close" onClick={onClose} aria-label={t('common.close')}>
             <X className="h-4 w-4" strokeWidth={1.8} />
           </button>
         </div>
@@ -380,12 +322,7 @@ function RouteCatalogDialog({
         <div className="route-catalog-toolbar">
           <label className="route-catalog-search">
             <Search className="h-4 w-4" strokeWidth={1.8} />
-            <input
-              ref={searchInputRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('common.routeCatalog.searchPlaceholder')}
-            />
+            <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('common.routeCatalog.searchPlaceholder')} />
           </label>
           <div className="route-catalog-count">
             {t('common.routeCatalog.availableCount', {
@@ -429,33 +366,19 @@ function RouteCatalogDialog({
                   const isDisabled = !entry.targetPath
 
                   return (
-                    <button
-                      key={entry.id}
-                      type="button"
-                      className={`route-catalog-item${isCurrent ? ' is-current' : ''}`}
-                      disabled={isDisabled}
-                      onClick={() => handleOpenEntry(entry)}
-                    >
+                    <button key={entry.id} type="button" className={`route-catalog-item${isCurrent ? ' is-current' : ''}`} disabled={isDisabled} onClick={() => handleOpenEntry(entry)}>
                       <span className="route-catalog-item-icon">
                         <Icon className="h-4 w-4" strokeWidth={1.8} />
                       </span>
                       <span className="route-catalog-item-main">
                         <span className="route-catalog-item-heading">
                           <span>{entry.label}</span>
-                          {isCurrent ? (
-                            <span className="route-catalog-current-badge">
-                              {t('common.routeCatalog.currentBadge')}
-                            </span>
-                          ) : null}
+                          {isCurrent ? <span className="route-catalog-current-badge">{t('common.routeCatalog.currentBadge')}</span> : null}
                         </span>
                         <code className="route-catalog-pattern">{entry.pattern}</code>
                         <span className="route-catalog-description">{entry.description}</span>
-                        {entry.targetLabel ? (
-                          <span className="route-catalog-target">{entry.targetLabel}</span>
-                        ) : null}
-                        {entry.disabledReason ? (
-                          <span className="route-catalog-disabled-reason">{entry.disabledReason}</span>
-                        ) : null}
+                        {entry.targetLabel ? <span className="route-catalog-target">{entry.targetLabel}</span> : null}
+                        {entry.disabledReason ? <span className="route-catalog-disabled-reason">{entry.disabledReason}</span> : null}
                       </span>
                       <span className="route-catalog-item-action" aria-label={t('common.routeCatalog.openRoute')}>
                         <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
@@ -468,9 +391,7 @@ function RouteCatalogDialog({
           )
         })}
 
-        {filteredEntries.length === 0 ? (
-          <div className="route-catalog-empty">{t('common.noMatches')}</div>
-        ) : null}
+        {filteredEntries.length === 0 ? <div className="route-catalog-empty">{t('common.noMatches')}</div> : null}
       </div>
     </ModalShell>
   )
@@ -489,11 +410,7 @@ export function RouteCatalogDialogHost() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const isRouteCatalogShortcut =
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === 'h'
+      const isRouteCatalogShortcut = (event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'h'
 
       if (isRouteCatalogShortcut) {
         event.preventDefault()
@@ -514,10 +431,5 @@ export function RouteCatalogDialogHost() {
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [open])
 
-  return (
-    <RouteCatalogDialog
-      open={open}
-      onClose={() => setOpen(false)}
-    />
-  )
+  return <RouteCatalogDialog open={open} onClose={() => setOpen(false)} />
 }

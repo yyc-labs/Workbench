@@ -5,6 +5,8 @@ import type {
   AgentLogSource,
   AgentLogSummary,
   AiCommitRunOverride,
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
@@ -137,14 +139,7 @@ export type OpenSshTerminalResult = {
   mode: 'wsl-expect' | 'native-ssh'
   autoLogin: boolean
   message?: string
-  reason?:
-    | 'invalid-input'
-    | 'windows-host-required'
-    | 'wsl-not-installed'
-    | 'wsl-distro-unavailable'
-    | 'wsl-bash-unavailable'
-    | 'wsl-expect-unavailable'
-    | 'terminal-launch-failed'
+  reason?: 'invalid-input' | 'windows-host-required' | 'wsl-not-installed' | 'wsl-distro-unavailable' | 'wsl-bash-unavailable' | 'wsl-expect-unavailable' | 'terminal-launch-failed'
 }
 
 export interface CoreElectronApi {
@@ -187,20 +182,13 @@ export interface CoreElectronApi {
   trayPanelQuitApp: () => Promise<boolean>
   trayPanelDismiss: () => Promise<boolean>
   trayPanelResizeToContent: (size: TrayPanelSize) => Promise<boolean>
-  runAiCommit: (
-    projectId: string,
-    repoRoot: string,
-    override?: AiCommitRunOverride
-  ) => Promise<boolean>
+  runAiCommit: (projectId: string, repoRoot: string, override?: AiCommitRunOverride) => Promise<boolean>
   cancelAiCommit: (projectId: string) => Promise<boolean>
   getAiCommitState: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
   beginAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
   cancelAiCommitUndoAuth: (projectId: string) => Promise<AiCommitTaskSnapshot | null>
   undoAiCommit: (projectId: string) => Promise<AiCommitUndoResult>
-  closeAiCommitUndo: (
-    projectId: string,
-    reason?: AiCommitUndoCloseReason
-  ) => Promise<AiCommitTaskSnapshot | null>
+  closeAiCommitUndo: (projectId: string, reason?: AiCommitUndoCloseReason) => Promise<AiCommitTaskSnapshot | null>
   getAgentHookStatus: () => Promise<AgentHookGatewayStatus>
   getAgentHookRecentEvents: () => Promise<AgentHookEnvelope[]>
 }
@@ -209,6 +197,10 @@ export interface AgentLogsElectronApi {
   getAgentLogSummaries: () => Promise<AgentLogSummary[]>
   clearAgentLogs: () => Promise<boolean>
   getAgentLogDetail: (source: AgentLogSource, id: string) => Promise<AgentLogDetail | null>
+}
+
+export interface AiConnectionElectronApi {
+  testAiConnection: (input: AiConnectionTestRequest) => Promise<AiConnectionTestResult>
 }
 
 export interface AiGatewayElectronApi {
@@ -238,30 +230,13 @@ export interface GitElectronApi {
 export interface ProjectFileElectronApi {
   getProjectFileAutoLoadDecision: (projectPath: string) => Promise<ProjectFileAutoLoadDecision>
   listProjectFiles: (projectPath: string, options?: ProjectFileTreeOptions) => Promise<ProjectFileTreeResult>
-  listProjectDirectoryFiles: (
-    projectPath: string,
-    directoryRelativePath: string | null
-  ) => Promise<ProjectFileTreeResult>
+  listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) => Promise<ProjectFileTreeResult>
   searchProjectFiles: (projectPath: string, query: string) => Promise<ProjectFileNode[]>
-  searchProjectContent: (
-    projectPath: string,
-    query: string,
-    options?: ProjectFileContentSearchOptions
-  ) => Promise<ProjectFileContentSearchResponse>
+  searchProjectContent: (projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => Promise<ProjectFileContentSearchResponse>
   readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
   statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
-  writeProjectFile: (
-    projectPath: string,
-    relativePath: string,
-    content: string,
-    expectedMtimeMs?: number
-  ) => Promise<ProjectFileWriteResult>
-  writeProjectImageFile: (
-    projectPath: string,
-    targetDirectoryRelativePath: string,
-    extension: string,
-    dataBase64: string
-  ) => Promise<ProjectFileWriteImageResult>
+  writeProjectFile: (projectPath: string, relativePath: string, content: string, expectedMtimeMs?: number) => Promise<ProjectFileWriteResult>
+  writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => Promise<ProjectFileWriteImageResult>
 }
 
 export interface TranscriptElectronApi {
@@ -327,12 +302,7 @@ export interface RuntimeElectronApi {
   killTmuxSession: (sessionName: string) => Promise<boolean>
   listTerminalProcesses: () => Promise<TerminalProcessInventory>
   stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
-  startRuntime: (
-    projectId: string,
-    projectPath: string,
-    profile?: AiRuntimeProfile | null,
-    cli?: 'claude' | 'codex'
-  ) => Promise<boolean>
+  startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => Promise<boolean>
   getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
   listRuntimeSessions: () => Promise<RuntimeSessionInfo[]>
   listRuntimeEntries: () => Promise<RuntimeEntry[]>
@@ -359,15 +329,4 @@ export interface SubscriptionElectronApi {
   onGlobalThemeShortcut: ElectronApiSignalSubscription
 }
 
-export type ElectronApi =
-  & CoreElectronApi
-  & AgentLogsElectronApi
-  & AiGatewayElectronApi
-  & GitElectronApi
-  & ProjectFileElectronApi
-  & TranscriptElectronApi
-  & LearningElectronApi
-  & SkillElectronApi
-  & BrowserAiElectronApi
-  & RuntimeElectronApi
-  & SubscriptionElectronApi
+export type ElectronApi = CoreElectronApi & AgentLogsElectronApi & AiConnectionElectronApi & AiGatewayElectronApi & GitElectronApi & ProjectFileElectronApi & TranscriptElectronApi & LearningElectronApi & SkillElectronApi & BrowserAiElectronApi & RuntimeElectronApi & SubscriptionElectronApi

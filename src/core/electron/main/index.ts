@@ -7,6 +7,7 @@ import { capabilityManager } from './capability-manager'
 import { createGitService } from './git/git-service'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
+import { createAiConnectionService } from './ai-connection/ai-connection-service'
 import { createAgentLogService } from './agent-logs/agent-log-service'
 import { createAiGatewayService } from './ai-gateway/gateway-service'
 import { flushAiCommitRegistry } from './ai-commit-registry'
@@ -18,44 +19,22 @@ import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
 import { createSkillRepository } from './skill/skillRepository'
 import { createSkillService } from './skill/skillService'
-import {
-  createBrowserAiService,
-  createDefaultBrowserAiRepository,
-} from './browser-ai/browserAiService'
+import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
 import { createWindow, applyWindowBackground } from './window/createWindow'
-import {
-  createTranscriptCaptureWindow,
-  TRANSCRIPT_CAPTURE_WINDOW_HEIGHT,
-  TRANSCRIPT_CAPTURE_WINDOW_WIDTH,
-} from './window/createTranscriptCaptureWindow'
-import {
-  captureTranscriptCaptureInitialText,
-  emptyTranscriptCaptureInitialText,
-  readTranscriptCaptureClipboardText,
-} from './window/transcriptCaptureSelection'
+import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
+import { captureTranscriptCaptureInitialText, emptyTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
 import { applyAppCacheLocation } from './cache-location'
-import {
-  registerGlobalShortcuts,
-  unregisterGlobalShortcuts,
-} from './window/globalShortcuts'
+import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
 import { ensureWindowVisible } from './window/windowFocus'
-import {
-  isSilentAutostartLaunch,
-  isWindowsAutostartLaunch,
-  syncWindowsLaunchOnLogin,
-} from './launchOnLogin'
+import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
 import { createAppTray, type AppTrayController } from './tray'
 import { projectIdFromPath } from '../../shared/rules'
-import type {
-  Capability,
-  TranscriptCaptureInitialText,
-  TranscriptImportedEvent,
-} from '../../shared/types'
+import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
 
 let mainWindow: BrowserWindow | null = null
 let transcriptCaptureWindow: BrowserWindow | null = null
@@ -98,6 +77,7 @@ const aiCommitService = createAiCommitService({
   getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
   aiEnvironmentController,
 })
+const aiConnectionService = createAiConnectionService()
 const transcriptRepository = createTranscriptRepository()
 const transcriptService = createTranscriptService({
   repository: transcriptRepository,
@@ -212,9 +192,7 @@ function positionTranscriptCaptureWindow(window: BrowserWindow): void {
   const cursorPoint = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursorPoint)
   const x = Math.round(display.workArea.x + (display.workArea.width - TRANSCRIPT_CAPTURE_WINDOW_WIDTH) / 2)
-  const y = Math.round(
-    display.workArea.y + Math.max(48, (display.workArea.height - TRANSCRIPT_CAPTURE_WINDOW_HEIGHT) / 4)
-  )
+  const y = Math.round(display.workArea.y + Math.max(48, (display.workArea.height - TRANSCRIPT_CAPTURE_WINDOW_HEIGHT) / 4))
   window.webContents.setZoomFactor(1)
   window.setBounds({
     x,
@@ -268,10 +246,7 @@ function showTranscriptCaptureWindow(options: { focus?: boolean } = {}): void {
   })
   transcriptCaptureWindow.once('ready-to-show', () => {
     if (!transcriptCaptureWindow || transcriptCaptureWindow.isDestroyed()) return
-    revealTranscriptCaptureWindow(
-      transcriptCaptureWindow,
-      shouldFocus || shouldFocusTranscriptCaptureWindowOnReady
-    )
+    revealTranscriptCaptureWindow(transcriptCaptureWindow, shouldFocus || shouldFocusTranscriptCaptureWindowOnReady)
   })
   transcriptCaptureWindow.on('blur', () => {
     transcriptCaptureWindow?.close()
@@ -342,19 +317,13 @@ function beginTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialTe
   transcriptCaptureInitialTextPromise = capturePromise
   void capturePromise
     .then((initialText) => {
-      if (
-        transcriptCaptureRequestId !== requestId ||
-        transcriptCaptureInitialTextPromise !== capturePromise
-      ) {
+      if (transcriptCaptureRequestId !== requestId || transcriptCaptureInitialTextPromise !== capturePromise) {
         return
       }
       transcriptCaptureInitialText = initialText
     })
     .finally(() => {
-      if (
-        transcriptCaptureRequestId !== requestId ||
-        transcriptCaptureInitialTextPromise !== capturePromise
-      ) {
+      if (transcriptCaptureRequestId !== requestId || transcriptCaptureInitialTextPromise !== capturePromise) {
         return
       }
       transcriptCaptureInitialTextPromise = null
@@ -369,10 +338,7 @@ async function consumeTranscriptCaptureInitialText(): Promise<TranscriptCaptureI
   const requestId = transcriptCaptureRequestId
   if (pendingCapture) {
     const snapshot = await pendingCapture
-    if (
-      transcriptCaptureRequestId === requestId &&
-      transcriptCaptureInitialTextPromise === pendingCapture
-    ) {
+    if (transcriptCaptureRequestId === requestId && transcriptCaptureInitialTextPromise === pendingCapture) {
       transcriptCaptureInitialTextPromise = null
       isTranscriptCaptureShortcutPending = false
     }
@@ -446,9 +412,7 @@ function buildTrayMenuTemplate() {
   const locale = resolveMainLocale(loadConfig().locale, app.getLocale())
   return [
     {
-      label: isVisible
-        ? translateMain(locale, 'tray.hideMainWindow')
-        : translateMain(locale, 'tray.showMainWindow'),
+      label: isVisible ? translateMain(locale, 'tray.hideMainWindow') : translateMain(locale, 'tray.showMainWindow'),
       click: () => {
         if (isVisible) {
           hideMainWindowToTray()
@@ -569,6 +533,7 @@ app.whenReady().then(async () => {
     consumeTranscriptCaptureInitialText,
     agentLogService,
     aiCommitService,
+    aiConnectionService,
     aiGatewayService,
     browserAiService,
     agentHookGateway,
@@ -588,11 +553,7 @@ app.whenReady().then(async () => {
       trayController.ensure()
     }
   }
-  registerGlobalShortcuts(
-    sendGlobalHomeShortcut,
-    sendGlobalThemeShortcut,
-    sendGlobalTranscriptCaptureShortcut
-  )
+  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut)
   agentHookGateway.start()
   void aiGatewayService.start(false).catch((error) => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)
