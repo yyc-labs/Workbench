@@ -115,6 +115,7 @@ export const IPC = {
   LEARNING_CREATE_NOTE: 'learning:create-note',
   LEARNING_UPDATE_NOTE: 'learning:update-note',
   LEARNING_DELETE_NOTE: 'learning:delete-note',
+  LEARNING_SEARCH_NOTES: 'learning:search-notes',
   SKILL_LIST_CATEGORIES: 'skill:list-categories',
   SKILL_CREATE_CATEGORY: 'skill:create-category',
   SKILL_UPDATE_CATEGORY: 'skill:update-category',

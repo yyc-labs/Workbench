@@ -8,6 +8,7 @@ import { Select } from '../../../components/ui/select'
 import { useI18n } from '../../../i18n'
 import { useAppStore } from '../../../stores/appStore'
 import { LearningBrowserAiStepTimeline } from './LearningBrowserAiStepTimeline'
+import { createLearningNoteFromBrowserAiRecord } from './learningBrowserAiNote'
 
 type LearningBrowserAiHistoryViewProps = {
   currentNote: LearningNote | null
@@ -131,7 +132,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
         mode,
         noteId: mode === 'append-note' ? currentNote?.id : undefined,
         title: mode === 'new-note' ? selectedRecord.title : undefined,
-        answer: selectedRecord.answer,
+        answer: createLearningNoteFromBrowserAiRecord(selectedRecord),
       })
       onSaved(note)
     } catch (saveError) {
@@ -286,7 +287,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
                   {selectedRecord.answer ? (
                     <Button variant="outline" className="h-10 justify-start" loading={savingNote} onClick={() => void handleSaveNote('new-note')}>
                       <FilePlus2 />
-                      {t('learning.browserAi.historySaveNewNote')}
+                      {t('learning.browserAi.historySaveStructuredNote')}
                     </Button>
                   ) : null}
                   {selectedRecord.answer && currentNote ? (

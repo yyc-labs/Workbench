@@ -4,33 +4,27 @@ import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
 const { buildTranscriptSession } = loadTsModule('src/core/shared/transcript/transcript.parser.ts')
-const {
-  parseBoxDiagram,
-  parseBoxTable,
-  parseTranscriptInlineArrowFlow,
-  parseVerticalFlow,
-} = loadTsModule('src/core/renderer/pages/code/code.markdownBoxTables.parsers.ts')
+const { parseBoxDiagram, parseBoxTable, parseTranscriptInlineArrowFlow, parseVerticalFlow } = loadTsModule('src/core/renderer/pages/code/code.markdownBoxTables.parsers.ts')
 
 test('parseBoxTable parses box drawing tables with multiline rows', () => {
-  const table = [
-    '┌──────┬────────┐',
-    '│ Name │ Status │',
-    '├──────┼────────┤',
-    '│ API  │ Ready  │',
-    '│      │ Live   │',
-    '└──────┴────────┘',
-  ].join('\n')
+  const table = ['┌──────┬────────┐', '│ Name │ Status │', '├──────┼────────┤', '│ API  │ Ready  │', '│      │ Live   │', '└──────┴────────┘'].join('\n')
 
   const parsed = parseBoxTable(table, 10)
 
   assert.equal(parsed?.columnCount, 2)
-  assert.deepEqual(parsed?.rows.map((row) => row.cells), [
-    ['Name', 'Status'],
-    ['API', 'Ready\nLive'],
-  ])
+  assert.deepEqual(
+    parsed?.rows.map((row) => row.cells),
+    [
+      ['Name', 'Status'],
+      ['API', 'Ready\nLive'],
+    ],
+  )
   assert.deepEqual(
     parsed?.rows.map((row) => [row.startLine, row.endLine]),
-    [[11, 11], [13, 14]]
+    [
+      [11, 11],
+      [13, 14],
+    ],
   )
 })
 
@@ -52,19 +46,31 @@ test('parseBoxTable splits bordered table body lines without row separators', ()
   const parsed = parseBoxTable(table, 1)
 
   assert.equal(parsed?.columnCount, 3)
-  assert.deepEqual(parsed?.rows.map((row) => row.cells), [
-    ['', '入参 relativePath', '使用组件'],
-    ['1', 'GaLKQioiGjnofR4X3HjwrN_anarci_api_smoke.fasta', 'ANARCIInference'],
-    ['2', 'data/ESM-IF1/5YH2.pdb', 'ESMIF1Inference'],
-    ['3', 'data/ESM-IF1/5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
-    ['4', 'V7f5PkhoqMsttG6kmCxCC9_5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
-    ['5', 'PuzTaNFb4mxWfcgHrKoTpJ_some_proteins_small.fasta', 'ESMFoldInference (用2次)'],
-    ['6', 'data/Freesasa/1ubq.pdb', 'FreeSASAInference'],
-    ['7', '动态变量 trimmed（用户输入的 URL，非字面量）', 'AlphaFold3Inference / Boltz2Inference (ensureFullUrl 函数)'],
-  ])
+  assert.deepEqual(
+    parsed?.rows.map((row) => row.cells),
+    [
+      ['', '入参 relativePath', '使用组件'],
+      ['1', 'GaLKQioiGjnofR4X3HjwrN_anarci_api_smoke.fasta', 'ANARCIInference'],
+      ['2', 'data/ESM-IF1/5YH2.pdb', 'ESMIF1Inference'],
+      ['3', 'data/ESM-IF1/5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
+      ['4', 'V7f5PkhoqMsttG6kmCxCC9_5YH2_mutated_seqs.fasta', 'ESMIF1Inference'],
+      ['5', 'PuzTaNFb4mxWfcgHrKoTpJ_some_proteins_small.fasta', 'ESMFoldInference (用2次)'],
+      ['6', 'data/Freesasa/1ubq.pdb', 'FreeSASAInference'],
+      ['7', '动态变量 trimmed（用户输入的 URL，非字面量）', 'AlphaFold3Inference / Boltz2Inference (ensureFullUrl 函数)'],
+    ],
+  )
   assert.deepEqual(
     parsed?.rows.map((row) => [row.startLine, row.endLine]),
-    [[2, 2], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10]]
+    [
+      [2, 2],
+      [4, 4],
+      [5, 5],
+      [6, 6],
+      [7, 7],
+      [8, 8],
+      [9, 9],
+      [10, 10],
+    ],
   )
 })
 
@@ -80,14 +86,21 @@ test('parseBoxTable parses transcript cli-style segmented tables without outer b
   const parsed = parseBoxTable(table, 1)
 
   assert.equal(parsed?.columnCount, 5)
-  assert.deepEqual(parsed?.rows.map((row) => row.cells), [
-    ['项目', '当前是否可改', '代码来源', '说明', '前端建议'],
-    ['Subtype', '可改', 'nanopct_inf/', '页面下拉输入', '暴露'],
-    ['Surface Modification', '可改', 'nanopct_inf/', '页面下拉输入', '暴露'],
-  ])
+  assert.deepEqual(
+    parsed?.rows.map((row) => row.cells),
+    [
+      ['项目', '当前是否可改', '代码来源', '说明', '前端建议'],
+      ['Subtype', '可改', 'nanopct_inf/', '页面下拉输入', '暴露'],
+      ['Surface Modification', '可改', 'nanopct_inf/', '页面下拉输入', '暴露'],
+    ],
+  )
   assert.deepEqual(
     parsed?.rows.map((row) => [row.startLine, row.endLine]),
-    [[1, 1], [3, 3], [5, 5]]
+    [
+      [1, 1],
+      [3, 3],
+      [5, 5],
+    ],
   )
 })
 
@@ -111,27 +124,30 @@ test('parseBoxTable keeps multiline transcript table rows after reference markdo
       createdAt: 1000,
       title: 'Transcript',
       isProjectFilePath: (relativePath) => relativePath === 'app.py',
-    }
+    },
   )
 
   const parsed = parseBoxTable(session.markdownText, 1)
 
   assert.equal(parsed?.columnCount, 5)
-  assert.deepEqual(parsed?.rows.map((row) => row.cells), [
-    ['项目', '当前是否可改', '代码来源', '说明', '前端建议'],
-    ['Size (TEM)', '可改', '[nanopct_inf/app.py:120](transcript-ref://session-1-ref-1)', '页面滑块输入', '暴露'],
-  ])
+  assert.deepEqual(
+    parsed?.rows.map((row) => row.cells),
+    [
+      ['项目', '当前是否可改', '代码来源', '说明', '前端建议'],
+      ['Size (TEM)', '可改', '[nanopct_inf/app.py:120](transcript-ref://session-1-ref-1)', '页面滑块输入', '暴露'],
+    ],
+  )
   assert.deepEqual(
     parsed?.rows.map((row) => [row.startLine, row.endLine]),
-    [[1, 1], [3, 4]]
+    [
+      [1, 1],
+      [3, 4],
+    ],
   )
 })
 
 test('parseBoxTable preserves header and wrapped project paths for the full transcript cli table sample', () => {
-  const rawText = readFileSync(
-    new URL('../fixtures/transcript.cli-table-sample.txt', import.meta.url),
-    'utf8'
-  )
+  const rawText = readFileSync(new URL('../fixtures/transcript.cli-table-sample.txt', import.meta.url), 'utf8')
 
   const session = buildTranscriptSession(
     {
@@ -144,12 +160,8 @@ test('parseBoxTable preserves header and wrapped project paths for the full tran
       projectPath: '/repo/project',
       createdAt: 1000,
       title: 'Transcript',
-      isProjectFilePath: (relativePath) => (
-        relativePath === 'nanopct_inf/app.py'
-        || relativePath === 'nanopct_inf/model/data_config.json'
-        || relativePath === 'nanopct_inf/inf.py'
-      ),
-    }
+      isProjectFilePath: (relativePath) => relativePath === 'nanopct_inf/app.py' || relativePath === 'nanopct_inf/model/data_config.json' || relativePath === 'nanopct_inf/inf.py',
+    },
   )
 
   const parsed = parseBoxTable(session.markdownText, 1)
@@ -157,96 +169,74 @@ test('parseBoxTable preserves header and wrapped project paths for the full tran
 
   assert.equal(parsed?.columnCount, 5)
   assert.deepEqual(rows[0], ['项目', '当前是否可改', '代码来源', '说明', '前端建议'])
-  assert.deepEqual(rows[1], [
-    'Subtype',
-    '可改',
-    '[nanopct_inf/app.py:102](transcript-ref://session-1-ref-1)',
-    '页面下拉输入',
-    '暴露',
-  ])
-  assert.deepEqual(rows[11], [
-    '分类参数候选项',
-    '不可在页面改',
-    '[nanopct_inf/model/data_config.json:20](transcript-ref://session-1-ref-11)',
-    '下拉选项集合由配置文件固定',
-    '不暴露为高级参数',
-  ])
-  assert.deepEqual(rows[17], [
-    '蛋白名称映射 selected_groups.txt /\nunseen_groups.txt',
-    '不可改',
-    '[nanopct_inf/app.py:31](transcript-ref://session-1-ref-17)',
-    '仅用于结果展示名称',
-    '不暴露',
-  ])
-  assert.deepEqual(rows[25], [
-    '模型结构超参数',
-    '不可改',
-    '[nanopct_inf/inf.py:61](transcript-ref://session-1-ref-25),\n[nanopct_inf/inf.py:451](transcript-ref://session-1-ref-26)',
-    'embedding dim、层数、dropout 等都写死',
-    '不暴露',
-  ])
+  assert.deepEqual(rows[1], ['Subtype', '可改', '[nanopct_inf/app.py:102](transcript-ref://session-1-ref-1)', '页面下拉输入', '暴露'])
+  assert.deepEqual(rows[11], ['分类参数候选项', '不可在页面改', '[nanopct_inf/model/data_config.json:20](transcript-ref://session-1-ref-11)', '下拉选项集合由配置文件固定', '不暴露为高级参数'])
+  assert.deepEqual(rows[17], ['蛋白名称映射 selected_groups.txt /\nunseen_groups.txt', '不可改', '[nanopct_inf/app.py:31](transcript-ref://session-1-ref-17)', '仅用于结果展示名称', '不暴露'])
+  assert.deepEqual(rows[25], ['模型结构超参数', '不可改', '[nanopct_inf/inf.py:61](transcript-ref://session-1-ref-25),\n[nanopct_inf/inf.py:451](transcript-ref://session-1-ref-26)', 'embedding dim、层数、dropout 等都写死', '不暴露'])
 })
 
 test('parseBoxTable tolerates remark paragraph slicing that removes leading indentation from the first line', () => {
-  const source = readFileSync(
-    new URL('../fixtures/transcript.cli-table-sample.txt', import.meta.url),
-    'utf8'
-  )
+  const source = readFileSync(new URL('../fixtures/transcript.cli-table-sample.txt', import.meta.url), 'utf8')
   const slicedParagraph = source.slice(3, source.length - 1)
 
   const parsed = parseBoxTable(slicedParagraph, 1)
 
   assert.equal(parsed?.columnCount, 5)
   assert.deepEqual(parsed?.rows[0]?.cells, ['项目', '当前是否可改', '代码来源', '说明', '前端建议'])
-  assert.deepEqual(parsed?.rows[1]?.cells, [
-    'Subtype',
-    '可改',
-    'nanopct_inf/app.py:102',
-    '页面下拉输入',
-    '暴露',
-  ])
+  assert.deepEqual(parsed?.rows[1]?.cells, ['Subtype', '可改', 'nanopct_inf/app.py:102', '页面下拉输入', '暴露'])
 })
 
 test('parseVerticalFlow parses connector labels and step notes', () => {
-  const flow = [
-    'Collect input // user prompt',
-    '  ↓ validate',
-    'Plan answer',
-    '  ↓',
-    'Write files # apply patch',
-  ].join('\n')
+  const flow = ['Collect input // user prompt', '  ↓ validate', 'Plan answer', '  ↓', 'Write files # apply patch'].join('\n')
 
   const parsed = parseVerticalFlow(flow, 20)
 
-  assert.deepEqual(parsed?.steps.map((step) => ({ title: step.title, note: step.note })), [
-    { title: 'Collect input', note: 'user prompt' },
-    { title: 'Plan answer', note: undefined },
-    { title: 'Write files', note: 'apply patch' },
-  ])
-  assert.deepEqual(parsed?.connectors.map((connector) => ({
-    label: connector.label,
-    direction: connector.direction,
-    lineNumber: connector.lineNumber,
-  })), [
-    { label: 'validate', direction: 'down', lineNumber: 21 },
-    { label: '', direction: 'down', lineNumber: 23 },
-  ])
+  assert.deepEqual(
+    parsed?.steps.map((step) => ({ title: step.title, note: step.note })),
+    [
+      { title: 'Collect input', note: 'user prompt' },
+      { title: 'Plan answer', note: undefined },
+      { title: 'Write files', note: 'apply patch' },
+    ],
+  )
+  assert.deepEqual(
+    parsed?.connectors.map((connector) => ({
+      label: connector.label,
+      direction: connector.direction,
+      lineNumber: connector.lineNumber,
+    })),
+    [
+      { label: 'validate', direction: 'down', lineNumber: 21 },
+      { label: '', direction: 'down', lineNumber: 23 },
+    ],
+  )
 })
 
 test('parseTranscriptInlineArrowFlow parses transcript shorthand arrows', () => {
   const parsed = parseTranscriptInlineArrowFlow('Start -> Inspect -> Patch -> Verify', 4)
 
-  assert.deepEqual(parsed?.steps.map((step) => step.title), ['Start', 'Inspect', 'Patch', 'Verify'])
+  assert.deepEqual(
+    parsed?.steps.map((step) => step.title),
+    ['Start', 'Inspect', 'Patch', 'Verify'],
+  )
   assert.equal(parsed?.connectors.length, 3)
   assert.equal(parsed?.steps[0]?.lineNumber, 4)
 })
 
+test('parseTranscriptInlineArrowFlow preserves inline-code value descriptions as prose', () => {
+  const parsed = parseTranscriptInlineArrowFlow('按字段类型清空（字符串→`""`，数字→`0`，布尔→`false`，数组→`[]`，对象→`{}`）。', 1)
+
+  assert.equal(parsed, null)
+})
+
+test('parseTranscriptInlineArrowFlow preserves emphasized descriptions as prose', () => {
+  const parsed = parseTranscriptInlineArrowFlow('**上传模式**：用户选择本地文件，组件自动执行校验 → 上传到服务器 → 将返回的文件 URL 写入表单值。', 1)
+
+  assert.equal(parsed, null)
+})
+
 test('parseBoxDiagram requires connector-like diagram content and preserves source lines', () => {
-  const diagram = [
-    '┌──────────────┐       ┌──────────────┐',
-    '│   Renderer   │  →    │ Main process │',
-    '└──────────────┘       └──────────────┘',
-  ].join('\n')
+  const diagram = ['┌──────────────┐       ┌──────────────┐', '│   Renderer   │  →    │ Main process │', '└──────────────┘       └──────────────┘'].join('\n')
 
   const parsed = parseBoxDiagram(diagram, 30)
 

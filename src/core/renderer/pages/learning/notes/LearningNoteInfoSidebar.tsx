@@ -1,5 +1,5 @@
-import { FolderPlus, NotebookPen, Pencil, Tags, Trash2 } from 'lucide-react'
-import type { LearningCategory, LearningNote, LearningNoteStatus } from '../../../../shared/types'
+import { CheckCircle2, FolderPlus, Link2, NotebookPen, Pencil, Tags, Trash2 } from 'lucide-react'
+import type { LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
 import { useI18n } from '../../../i18n'
@@ -18,12 +18,34 @@ type LearningNoteInfoSidebarProps = {
   saveState: SaveState
   selectedNote: LearningNote | null
   selectedNoteId: string | null
+  linkedNotes: LearningNoteSummary[]
+  backlinks: LearningNoteSummary[]
   onCollapse: () => void
   onOpenDeleteConfirm: () => void
   onOpenEditDialog: () => void
+  onSelectLinkedNote: (noteId: string) => void
+  onMarkReviewed: () => void
 }
 
-export function LearningNoteInfoSidebar({ categories, editorCategoryId, editorStatus, editorTags, editorTitle, hasUnsavedChanges, saveError, saveState, selectedNote, selectedNoteId, onCollapse, onOpenDeleteConfirm, onOpenEditDialog }: LearningNoteInfoSidebarProps) {
+export function LearningNoteInfoSidebar({
+  categories,
+  editorCategoryId,
+  editorStatus,
+  editorTags,
+  editorTitle,
+  hasUnsavedChanges,
+  saveError,
+  saveState,
+  selectedNote,
+  selectedNoteId,
+  linkedNotes,
+  backlinks,
+  onCollapse,
+  onOpenDeleteConfirm,
+  onOpenEditDialog,
+  onSelectLinkedNote,
+  onMarkReviewed,
+}: LearningNoteInfoSidebarProps) {
   const { t, formatDateTime } = useI18n()
   const selectedCategoryName = categories.find((item) => item.id === editorCategoryId)?.name ?? t('common.uncategorized')
   const tags = normalizeTagInput(editorTags)
@@ -50,6 +72,40 @@ export function LearningNoteInfoSidebar({ categories, editorCategoryId, editorSt
               {t('learning.info.sectionTitle')}
             </div>
             <div className="text-sm font-medium text-[color:var(--color-foreground)]">{editorTitle || selectedNote?.title || t('learning.editor.untitledNote')}</div>
+          </section>
+
+          <Button variant="outline" className="w-full gap-1.5" onClick={onMarkReviewed} disabled={!selectedNote}>
+            <CheckCircle2 className="h-4 w-4" />
+            {t('learning.info.markReviewed')}
+          </Button>
+
+          <section className="space-y-2">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
+              <Link2 className="h-3.5 w-3.5" />
+              {t('learning.info.links')}
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('learning.info.outgoingLinks')}</div>
+              {linkedNotes.length ? (
+                linkedNotes.map((note) => (
+                  <button key={note.id} type="button" className="block text-left text-sm text-[color:var(--color-primary)] hover:underline" onClick={() => onSelectLinkedNote(note.id)}>
+                    {note.title}
+                  </button>
+                ))
+              ) : (
+                <div className="text-sm text-[color:var(--color-muted-foreground)]">{t('learning.info.noLinks')}</div>
+              )}
+              <div className="pt-1 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.info.backlinks')}</div>
+              {backlinks.length ? (
+                backlinks.map((note) => (
+                  <button key={note.id} type="button" className="block text-left text-sm text-[color:var(--color-primary)] hover:underline" onClick={() => onSelectLinkedNote(note.id)}>
+                    {note.title}
+                  </button>
+                ))
+              ) : (
+                <div className="text-sm text-[color:var(--color-muted-foreground)]">{t('learning.info.noBacklinks')}</div>
+              )}
+            </div>
           </section>
 
           <section className="space-y-2">

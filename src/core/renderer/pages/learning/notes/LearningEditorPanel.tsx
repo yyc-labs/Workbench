@@ -12,6 +12,7 @@ import { useI18n } from '../../../i18n'
 import { createMarkdownComponents, shouldDisableMarkdownSyntaxHighlight } from '../../code/code.markdown'
 import { remarkBoxDrawingTables } from '../../code/code.markdownBoxTables'
 import type { LearningEditorDisplayMode, SaveState } from './learningCenterTypes'
+import { useLearningMarkdownScrollSync } from './useLearningMarkdownScrollSync'
 
 type LearningEditorPanelProps = {
   bothSidebarsCollapsed: boolean
@@ -79,6 +80,11 @@ export function LearningEditorPanel({
   const { t } = useI18n()
   const effectiveTheme = useEffectiveTheme()
   const enableMarkdownSyntaxHighlight = useMemo(() => !shouldDisableMarkdownSyntaxHighlight(editorContent), [editorContent])
+  const { handleEditorScroll, previewViewportRef } = useLearningMarkdownScrollSync({
+    editorDisplayMode,
+    editorTextareaRef,
+    noteId: selectedNote?.id,
+  })
 
   const markdownComponents = useMemo(
     () =>
@@ -174,9 +180,11 @@ export function LearningEditorPanel({
                     onKeyDown={onEditorKeyDown}
                     onKeyUp={onEditorSelectionSync}
                     onMouseUp={onEditorSelectionSync}
+                    onScroll={handleEditorScroll}
                     onContextMenu={onEditorContextMenu}
                     className="h-full min-h-[420px] w-full resize-none border-0 bg-transparent px-5 py-5 font-['JetBrains_Mono','SFMono-Regular',monospace] text-sm leading-6 text-[color:var(--color-foreground)] outline-none sm:px-6 sm:py-6"
                     placeholder={t('learning.editor.placeholder')}
+                    wrap="off"
                   />
                 </div>
               </div>
@@ -187,11 +195,12 @@ export function LearningEditorPanel({
                 <ScrollArea
                   className="min-h-0 flex-1 overflow-hidden rounded-[14px] border border-[color:var(--color-border)]/80 bg-[color:var(--color-background)]/35"
                   viewportClassName="h-full w-full code-markdown-preview-scroll-root"
+                  viewportRef={previewViewportRef}
                   horizontalScrollbar
                   horizontalScrollbarClassName="absolute left-[var(--scrollbar-edge-gap)] right-[var(--scrollbar-edge-gap)] bottom-[var(--scrollbar-edge-gap)] z-10 h-[var(--scrollbar-size)] rounded-full border-t-0 bg-[var(--scrollbar-track)]/92 backdrop-blur-md"
                 >
                   <div className={editorDisplayMode === 'preview' ? 'learning-preview-reading-frame' : undefined}>
-                    <article className={`code-markdown-content code-markdown-content--viewport-scroll ${editorDisplayMode === 'preview' ? 'learning-preview-reading-content px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'}`} style={{ margin: 0, minWidth: 0, width: '100%' }}>
+                    <article className={`code-markdown-content code-markdown-content--viewport-scroll learning-markdown-preview-content ${editorDisplayMode === 'preview' ? 'learning-preview-reading-content px-5 py-5 sm:px-6' : 'px-3 py-4 sm:px-4'}`} style={{ margin: 0, minWidth: 0, width: '100%' }}>
                       <ReactMarkdown remarkPlugins={[remarkGfm, remarkBoxDrawingTables]} components={markdownComponents}>
                         {editorContent}
                       </ReactMarkdown>

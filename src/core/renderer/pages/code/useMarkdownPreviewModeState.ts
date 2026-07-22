@@ -27,6 +27,7 @@ type UseMarkdownPreviewModeStateOptions = {
   persistedLastMarkdownPreviewMode: string | undefined
   projectId: string
   projectPath: string
+  onProjectFileLinkClick: (relativePath: string) => void
   setProjectLastMarkdownPreviewMode: (projectId: string, mode: MarkdownPreviewMode) => Promise<void>
   themeMode: 'system' | 'light' | 'dark'
 }
@@ -61,7 +62,7 @@ function normalizeMarkdownPreviewMode(value: string | undefined): MarkdownPrevie
   return 'edit'
 }
 
-export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, isNarrowViewport, persistedLastMarkdownPreviewMode, projectId, projectPath, setProjectLastMarkdownPreviewMode, themeMode }: UseMarkdownPreviewModeStateOptions) {
+export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, isNarrowViewport, persistedLastMarkdownPreviewMode, projectId, projectPath, onProjectFileLinkClick, setProjectLastMarkdownPreviewMode, themeMode }: UseMarkdownPreviewModeStateOptions) {
   const [markdownPreviewMode, setMarkdownPreviewMode] = useState<MarkdownPreviewMode>(() => normalizeMarkdownPreviewMode(persistedLastMarkdownPreviewMode))
   const effectiveTheme = useEffectiveTheme()
   const [structuredPreview, setStructuredPreview] = useState<MarkdownStructuredPreviewState | null>(null)
@@ -150,6 +151,7 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
         onCodeBlockExpand: (payload) => {
           setCodePreview(payload)
         },
+        onProjectFileLinkClick,
         onStructuredBlockClick: (payload) => {
           const markdownBodyLineOffset = parsedMarkdownPreviewDoc?.markdownBodyLineOffset ?? 0
           const bodyStartLine = Math.max(1, payload.startLine - markdownBodyLineOffset)
@@ -164,7 +166,7 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
         projectPath,
         themeMode: effectiveTheme,
       }),
-    [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, markdownPreviewContent, parsedMarkdownPreviewDoc?.markdownBodyLineOffset, projectPath],
+    [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, markdownPreviewContent, onProjectFileLinkClick, parsedMarkdownPreviewDoc?.markdownBodyLineOffset, projectPath],
   )
 
   const structuredPreviewComponents = useMemo<Components>(

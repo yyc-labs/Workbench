@@ -31,13 +31,20 @@
   margin-inline: auto;
 }
 
+/* Keep Markdown rules visually separated from the preceding learning-note content. */
+.learning-markdown-preview-content > hr {
+  inline-size: min(100%, 960px);
+  max-inline-size: 100%;
+  margin: 1.25rem auto 1rem !important;
+}
+
 @media (max-width: 1279px) {
   .learning-notes-grid[data-left-collapsed="false"].learning-right-collapsed {
-    grid-template-columns: 248px minmax(0, 1fr) !important;
+    grid-template-columns: 268px minmax(0, 1fr) !important;
   }
 
   .learning-notes-grid[data-left-collapsed="false"].learning-right-open {
-    grid-template-columns: 228px minmax(0, 1fr) 264px !important;
+    grid-template-columns: 248px minmax(0, 1fr) 264px !important;
   }
 
   .learning-notes-grid[data-left-collapsed="true"].learning-right-open {

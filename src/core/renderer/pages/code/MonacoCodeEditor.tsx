@@ -3,16 +3,12 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { installMonacoFindWidgetHoverGuard } from '../../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
-import {
-  createMonacoModelUri,
-  evictStaleMonacoModels,
-  toMonacoModelCacheKey,
-  touchMonacoModelCacheEntry,
-} from './monacoModelCache'
+import { createMonacoModelUri, evictStaleMonacoModels, toMonacoModelCacheKey, touchMonacoModelCacheEntry } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
 
 export interface MonacoEditorScrollState {
+  firstVisibleLine: number
   scrollTop: number
   scrollHeight: number
   viewportHeight: number
@@ -21,6 +17,7 @@ export interface MonacoEditorScrollState {
 export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
   setScrollTop: (scrollTop: number) => void
+  setScrollTopForLine: (lineNumber: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
   highlightLine: (lineNumber: number) => void
   openSearch: (mode?: 'find' | 'replace') => void
@@ -53,19 +50,7 @@ interface MonacoCodeEditorProps {
 
 const REVEAL_HIGHLIGHT_DURATION_MS = 2200
 
-export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({
-  value,
-  language,
-  theme,
-  filePath,
-  isReadOnly = false,
-  onChange,
-  onPasteImage,
-  onSave,
-  onFocusSearch,
-  onScrollStateChange,
-  onCursorPositionChange,
-}, ref) {
+export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({ value, language, theme, filePath, isReadOnly = false, onChange, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
@@ -134,10 +119,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       return
     }
 
-    revealHighlightDecorationsRef.current = editor.deltaDecorations(
-      revealHighlightDecorationsRef.current,
-      []
-    )
+    revealHighlightDecorationsRef.current = editor.deltaDecorations(revealHighlightDecorationsRef.current, [])
   }
 
   const highlightLineInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number) => {
@@ -146,9 +128,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     if (!monaco || !model) return false
 
     const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
-    revealHighlightDecorationsRef.current = editor.deltaDecorations(
-      revealHighlightDecorationsRef.current,
-      [{
+    revealHighlightDecorationsRef.current = editor.deltaDecorations(revealHighlightDecorationsRef.current, [
+      {
         range: new monaco.Range(safeLine, 1, safeLine, model.getLineMaxColumn(safeLine)),
         options: {
           isWholeLine: true,
@@ -156,8 +137,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           linesDecorationsClassName: 'monaco-code-editor-reveal-line-gutter',
           lineNumberClassName: 'monaco-code-editor-reveal-line-number',
         },
-      }]
-    )
+      },
+    ])
 
     if (revealHighlightClearTimerRef.current != null) {
       window.clearTimeout(revealHighlightClearTimerRef.current)
@@ -208,41 +189,53 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     onCursorPositionChangeRef.current = onCursorPositionChange
   }, [onCursorPositionChange])
 
-  useImperativeHandle(ref, () => ({
-    getScrollState: () => {
-      const editor = editorRef.current
-      if (!editor) return null
-      const layout = editor.getLayoutInfo()
-      return {
-        scrollTop: editor.getScrollTop(),
-        scrollHeight: editor.getScrollHeight(),
-        viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
-      }
-    },
-    setScrollTop: (scrollTop: number) => {
-      const editor = editorRef.current
-      if (!editor) return
-      editor.setScrollTop(Math.max(0, scrollTop))
-    },
-    revealPosition: (lineNumber: number, column = 1) => {
-      pendingRevealRef.current = {
-        lineNumber,
-        column,
-        modelKey: toMonacoModelCacheKey(filePathRef.current),
-      }
-      flushPendingReveal()
-    },
-    highlightLine: (lineNumber: number) => {
-      pendingHighlightLineRef.current = {
-        lineNumber,
-        modelKey: toMonacoModelCacheKey(filePathRef.current),
-      }
-      flushPendingReveal()
-    },
-    openSearch: (mode = 'find') => {
-      openSearchPanel(mode)
-    },
-  }), [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      getScrollState: () => {
+        const editor = editorRef.current
+        if (!editor) return null
+        const layout = editor.getLayoutInfo()
+        return {
+          firstVisibleLine: editor.getVisibleRanges()[0]?.startLineNumber ?? 1,
+          scrollTop: editor.getScrollTop(),
+          scrollHeight: editor.getScrollHeight(),
+          viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
+        }
+      },
+      setScrollTop: (scrollTop: number) => {
+        const editor = editorRef.current
+        if (!editor) return
+        editor.setScrollTop(Math.max(0, scrollTop))
+      },
+      setScrollTopForLine: (lineNumber: number) => {
+        const editor = editorRef.current
+        const model = editor?.getModel()
+        if (!editor || !model) return
+        const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
+        editor.setScrollTop(Math.max(0, editor.getTopForLineNumber(safeLine)))
+      },
+      revealPosition: (lineNumber: number, column = 1) => {
+        pendingRevealRef.current = {
+          lineNumber,
+          column,
+          modelKey: toMonacoModelCacheKey(filePathRef.current),
+        }
+        flushPendingReveal()
+      },
+      highlightLine: (lineNumber: number) => {
+        pendingHighlightLineRef.current = {
+          lineNumber,
+          modelKey: toMonacoModelCacheKey(filePathRef.current),
+        }
+        flushPendingReveal()
+      },
+      openSearch: (mode = 'find') => {
+        openSearchPanel(mode)
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     let disposed = false
@@ -309,9 +302,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           event.preventDefault()
           event.stopPropagation()
           event.stopImmediatePropagation()
-        openSearchPanel('replace')
-        return
-      }
+          openSearchPanel('replace')
+          return
+        }
 
         const isWorkspaceSearchShortcut = event.shiftKey || event.altKey
         if (isWorkspaceSearchShortcut) {
@@ -349,15 +342,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
         const selection = editor.getSelection()
         const fallbackPosition = editor.getPosition()
-        const insertRange = selection
-          ?? (fallbackPosition
-            ? new monaco.Range(
-              fallbackPosition.lineNumber,
-              fallbackPosition.column,
-              fallbackPosition.lineNumber,
-              fallbackPosition.column
-            )
-            : null)
+        const insertRange = selection ?? (fallbackPosition ? new monaco.Range(fallbackPosition.lineNumber, fallbackPosition.column, fallbackPosition.lineNumber, fallbackPosition.column) : null)
         if (!insertRange) return
 
         void pasteImage(imageFile, event)
@@ -367,11 +352,13 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
             const nextPosition = insertRange.getEndPosition()
 
             editor.pushUndoStop()
-            editor.executeEdits('paste-image', [{
-              range: insertRange,
-              text,
-              forceMoveMarkers: true,
-            }])
+            editor.executeEdits('paste-image', [
+              {
+                range: insertRange,
+                text,
+                forceMoveMarkers: true,
+              },
+            ])
             editor.pushUndoStop()
             editor.setPosition({
               lineNumber: nextPosition.lineNumber + 1,
@@ -398,6 +385,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         if (!cb) return
         const layout = editor.getLayoutInfo()
         cb({
+          firstVisibleLine: editor.getVisibleRanges()[0]?.startLineNumber ?? 1,
           scrollTop: editor.getScrollTop(),
           scrollHeight: editor.getScrollHeight(),
           viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
@@ -432,9 +420,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       })
 
       editor.onKeyDown((event) => {
-        const isSearchShortcut = (event.ctrlKey || event.metaKey)
-          && event.shiftKey
-          && event.keyCode === monaco.KeyCode.KeyF
+        const isSearchShortcut = (event.ctrlKey || event.metaKey) && event.shiftKey && event.keyCode === monaco.KeyCode.KeyF
         if (!isSearchShortcut) return
         event.preventDefault()
         event.stopPropagation()
@@ -480,6 +466,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       if (initialCb) {
         const layout = editor.getLayoutInfo()
         initialCb({
+          firstVisibleLine: editor.getVisibleRanges()[0]?.startLineNumber ?? 1,
           scrollTop: editor.getScrollTop(),
           scrollHeight: editor.getScrollHeight(),
           viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
@@ -573,11 +560,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
     if (nextModel.getValue() !== value) {
       syncGuardRef.current = true
-      nextModel.pushEditOperations(
-        [],
-        [{ range: nextModel.getFullModelRange(), text: value }],
-        () => null
-      )
+      nextModel.pushEditOperations([], [{ range: nextModel.getFullModelRange(), text: value }], () => null)
       syncGuardRef.current = false
     }
 

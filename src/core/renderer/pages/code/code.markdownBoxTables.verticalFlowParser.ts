@@ -1,12 +1,4 @@
-import type {
-  LineInfo,
-  ParsedInlineArrowSegment,
-  ParsedVerticalFlow,
-  ParsedVerticalFlowConnector,
-  ParsedVerticalFlowConnectorDirection,
-  ParsedVerticalFlowStep,
-  ParsedVerticalFlowStepDetail,
-} from './code.markdownBoxTables.types'
+import type { LineInfo, ParsedInlineArrowSegment, ParsedVerticalFlow, ParsedVerticalFlowConnector, ParsedVerticalFlowConnectorDirection, ParsedVerticalFlowStep, ParsedVerticalFlowStepDetail } from './code.markdownBoxTables.types'
 import {
   BOTTOM_LEFT_BORDER_CHARS,
   BOTTOM_RIGHT_BORDER_CHARS,
@@ -29,17 +21,7 @@ import {
   VERTICAL_FLOW_DOWN_ARROW_PATTERN,
   VERTICAL_FLOW_UP_ARROW_PATTERN,
 } from './code.markdownBoxTables.constants'
-import {
-  buildDisplayCells,
-  findDisplayColumnForStringIndex,
-  findFirstNonWhitespaceCell,
-  findLastNonWhitespaceCell,
-  findNearestVerticalBorderCell,
-  findRightmostVerticalBorderCell,
-  isTopBorderLine,
-  sliceLineByDisplayColumns,
-  splitLinesWithNumbers,
-} from './code.markdownBoxTables.display'
+import { buildDisplayCells, findDisplayColumnForStringIndex, findFirstNonWhitespaceCell, findLastNonWhitespaceCell, findNearestVerticalBorderCell, findRightmostVerticalBorderCell, isTopBorderLine, sliceLineByDisplayColumns, splitLinesWithNumbers } from './code.markdownBoxTables.display'
 
 function splitVerticalFlowStepText(value: string): { title: string; note?: string } {
   const trimmed = value.trim()
@@ -149,17 +131,13 @@ function isTranscriptInlineBranchScaffoldLine(line: LineInfo): boolean {
   return TRANSCRIPT_INLINE_BRANCH_SCAFFOLD_LINE_PATTERN.test(line.text)
 }
 
-function parseTranscriptInlineBranchDetailLine(
-  line: LineInfo
-): { rawText: string; text: string; lineNumber: number; anchorColumn: number } | null {
+function parseTranscriptInlineBranchDetailLine(line: LineInfo): { rawText: string; text: string; lineNumber: number; anchorColumn: number } | null {
   const match = line.text.match(TRANSCRIPT_INLINE_BRANCH_DETAIL_PATTERN)
   const content = match?.groups?.content?.trim() ?? ''
   if (!content) return null
 
   const branchIndex = line.text.search(/[├└╰╭╮╯]/)
-  const anchorColumn = branchIndex >= 0
-    ? findDisplayColumnForStringIndex(line, branchIndex)
-    : (findFirstNonWhitespaceCell(line)?.startColumn ?? 0)
+  const anchorColumn = branchIndex >= 0 ? findDisplayColumnForStringIndex(line, branchIndex) : (findFirstNonWhitespaceCell(line)?.startColumn ?? 0)
 
   return {
     rawText: line.text.trim(),
@@ -169,10 +147,7 @@ function parseTranscriptInlineBranchDetailLine(
   }
 }
 
-function findTranscriptInlineBranchAnchorStepIndex(
-  steps: ParsedInlineArrowSegment[],
-  anchorColumn: number
-): number {
+function findTranscriptInlineBranchAnchorStepIndex(steps: ParsedInlineArrowSegment[], anchorColumn: number): number {
   for (let index = 0; index < steps.length - 1; index += 1) {
     const current = steps[index]
     const next = steps[index + 1]
@@ -207,9 +182,7 @@ function findTranscriptInlineBranchAnchorStepIndex(
   return bestIndex
 }
 
-function parseVerticalFlowConnector(
-  line: LineInfo
-): ParsedVerticalFlowConnector | null {
+function parseVerticalFlowConnector(line: LineInfo): ParsedVerticalFlowConnector | null {
   const trimmed = line.text.trim()
   if (!trimmed) return null
 
@@ -235,9 +208,7 @@ function isTranscriptTreeRootLine(line: LineInfo): boolean {
   return true
 }
 
-function parseTranscriptTreeBranchLine(
-  line: LineInfo
-): { text: string; lineNumber: number; branchColumn: number } | null {
+function parseTranscriptTreeBranchLine(line: LineInfo): { text: string; lineNumber: number; branchColumn: number } | null {
   const raw = line.text.replace(/\s+$/, '')
   if (!raw.trim()) return null
 
@@ -360,9 +331,7 @@ export function parseTranscriptTreeFlow(source: string, startLine: number): Pars
     .map((entry) => entry.branch?.branchColumn ?? baseColumn)
     .map((column) => column - baseColumn)
     .filter((offset) => offset > 0)
-  const indentUnit = positiveBranchOffsets.length > 0
-    ? Math.min(...positiveBranchOffsets)
-    : 2
+  const indentUnit = positiveBranchOffsets.length > 0 ? Math.min(...positiveBranchOffsets) : 2
   const branches: Array<{ title: string; lineNumber: number; details: ParsedVerticalFlowStepDetail[] }> = []
   const connectors: ParsedVerticalFlowConnector[] = []
 
@@ -383,9 +352,7 @@ export function parseTranscriptTreeFlow(source: string, startLine: number): Pars
     }
 
     const offset = Math.max(0, branch.branchColumn - baseColumn)
-    const level = offset <= 0
-      ? 0
-      : Math.max(1, Math.round(offset / Math.max(1, indentUnit)))
+    const level = offset <= 0 ? 0 : Math.max(1, Math.round(offset / Math.max(1, indentUnit)))
 
     if (level === 0) {
       branches.push({
@@ -426,13 +393,15 @@ export function parseTranscriptTreeFlow(source: string, startLine: number): Pars
     })
   }
 
-  steps.push(...branches.map((branch) => ({
-    rawText: [branch.title, ...branch.details.map((detail) => detail.rawText)].join('\n'),
-    title: branch.title,
-    lineNumber: branch.lineNumber,
-    endLineNumber: branch.details[branch.details.length - 1]?.lineNumber ?? branch.lineNumber,
-    details: branch.details.length > 0 ? branch.details : undefined,
-  })))
+  steps.push(
+    ...branches.map((branch) => ({
+      rawText: [branch.title, ...branch.details.map((detail) => detail.rawText)].join('\n'),
+      title: branch.title,
+      lineNumber: branch.lineNumber,
+      endLineNumber: branch.details[branch.details.length - 1]?.lineNumber ?? branch.lineNumber,
+      details: branch.details.length > 0 ? branch.details : undefined,
+    })),
+  )
 
   for (let index = 0; index < steps.length - 1; index += 1) {
     const sourceStep = steps[index]
@@ -527,10 +496,7 @@ function parseTranscriptConnectorLabelLine(line: LineInfo): string {
   return withoutPrefix
 }
 
-function parseTranscriptPlainStep(
-  lines: LineInfo[],
-  startIndex: number
-): { step: ParsedVerticalFlowStep; nextLineIndex: number; sawBranchDetail: boolean } | null {
+function parseTranscriptPlainStep(lines: LineInfo[], startIndex: number): { step: ParsedVerticalFlowStep; nextLineIndex: number; sawBranchDetail: boolean } | null {
   const titleLine = lines[startIndex]
   if (!titleLine) return null
 
@@ -579,10 +545,7 @@ function parseTranscriptPlainStep(
   }
 }
 
-function parseTranscriptTitledBoxStep(
-  lines: LineInfo[],
-  startIndex: number
-): { step: ParsedVerticalFlowStep; nextLineIndex: number; sawBranchDetail: boolean } | null {
+function parseTranscriptTitledBoxStep(lines: LineInfo[], startIndex: number): { step: ParsedVerticalFlowStep; nextLineIndex: number; sawBranchDetail: boolean } | null {
   const topLine = lines[startIndex]
   if (!topLine) return null
 
@@ -605,21 +568,13 @@ function parseTranscriptTitledBoxStep(
 
     const first = findFirstNonWhitespaceCell(current)
     const last = findLastNonWhitespaceCell(current)
-    if (
-      first &&
-      last &&
-      BOTTOM_LEFT_BORDER_CHARS.has(first.value) &&
-      BOTTOM_RIGHT_BORDER_CHARS.has(last.value) &&
-      Math.abs(first.startColumn - topLeft.startColumn) <= BOX_FLOW_BORDER_COLUMN_TOLERANCE &&
-      Math.abs(last.startColumn - topRight.startColumn) <= BOX_FLOW_BORDER_COLUMN_TOLERANCE
-    ) {
+    if (first && last && BOTTOM_LEFT_BORDER_CHARS.has(first.value) && BOTTOM_RIGHT_BORDER_CHARS.has(last.value) && Math.abs(first.startColumn - topLeft.startColumn) <= BOX_FLOW_BORDER_COLUMN_TOLERANCE && Math.abs(last.startColumn - topRight.startColumn) <= BOX_FLOW_BORDER_COLUMN_TOLERANCE) {
       bottomLineIndex = lineIndex
       break
     }
 
     const leftBorderCell = findNearestVerticalBorderCell(current, topLeft.startColumn)
-    const rightBorderCell = findNearestVerticalBorderCell(current, expectedRightColumn, 4)
-      ?? findRightmostVerticalBorderCell(current)
+    const rightBorderCell = findNearestVerticalBorderCell(current, expectedRightColumn, 4) ?? findRightmostVerticalBorderCell(current)
     if (!leftBorderCell || !rightBorderCell || rightBorderCell.startColumn <= leftBorderCell.startColumn) {
       return null
     }
@@ -633,8 +588,7 @@ function parseTranscriptTitledBoxStep(
     const current = lines[lineIndex]
     if (!current) continue
     const leftBorderCell = findNearestVerticalBorderCell(current, topLeft.startColumn)
-    const rightBorderCell = findNearestVerticalBorderCell(current, expectedRightColumn, 4)
-      ?? findRightmostVerticalBorderCell(current)
+    const rightBorderCell = findNearestVerticalBorderCell(current, expectedRightColumn, 4) ?? findRightmostVerticalBorderCell(current)
     if (!leftBorderCell || !rightBorderCell || rightBorderCell.startColumn <= leftBorderCell.startColumn) {
       return null
     }
@@ -661,10 +615,7 @@ function parseTranscriptTitledBoxStep(
   }
 }
 
-function parseTranscriptConnectorGroup(
-  lines: LineInfo[],
-  startIndex: number
-): { connector: ParsedVerticalFlowConnector; nextLineIndex: number } | null {
+function parseTranscriptConnectorGroup(lines: LineInfo[], startIndex: number): { connector: ParsedVerticalFlowConnector; nextLineIndex: number } | null {
   const group: LineInfo[] = []
   let nextLineIndex = startIndex
   let directionalConnectorLine: LineInfo | null = null
@@ -769,6 +720,10 @@ export function parseTranscriptStructuredFlow(source: string, startLine: number)
 }
 
 export function parseTranscriptInlineArrowFlow(source: string, startLine: number): ParsedVerticalFlow | null {
+  // Inline Markdown commonly annotates prose (for example, `string → ""` or **Upload mode**).
+  // Preserve those descriptions as Markdown instead of turning them into a flow diagram.
+  if (/(?:`|\*\*|__)/.test(source)) return null
+
   const lines = splitLinesWithNumbers(source, startLine)
   if (lines.length <= 0) return null
 
@@ -865,10 +820,7 @@ export function parseTranscriptInlineArrowBranchFlow(source: string, startLine: 
     const parsedBranch = parseTranscriptInlineBranchDetailLine(line)
     if (!parsedBranch) return null
 
-    const anchorStepIndex = findTranscriptInlineBranchAnchorStepIndex(
-      mainSteps,
-      pendingAnchorColumn ?? parsedBranch.anchorColumn
-    )
+    const anchorStepIndex = findTranscriptInlineBranchAnchorStepIndex(mainSteps, pendingAnchorColumn ?? parsedBranch.anchorColumn)
     const details = detailsByStep.get(anchorStepIndex) ?? []
     details.push({
       rawText: parsedBranch.rawText,

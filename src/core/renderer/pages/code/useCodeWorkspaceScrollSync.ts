@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { MonacoCodeEditorHandle, MonacoEditorScrollState } from './MonacoCodeEditor'
+import { getMarkdownPreviewSourceLineAtScrollTop, scrollMarkdownPreviewToSourceLine } from './code.markdownShared'
 import type { MarkdownPreviewMode, MarkdownScrollModeKey } from './code.workspace.types'
 
 type UseCodeWorkspaceScrollSyncOptions = {
@@ -22,16 +23,7 @@ function pickFirstFiniteScrollTop(...values: Array<number | undefined>): number 
   return 0
 }
 
-export function useCodeWorkspaceScrollSync({
-  activeRelativePath,
-  editorRef,
-  isMarkdownFile,
-  isShowingEditor,
-  isShowingPreview,
-  markdownPreviewContent,
-  previewMode,
-  previewScrollRef,
-}: UseCodeWorkspaceScrollSyncOptions) {
+export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMarkdownFile, isShowingEditor, isShowingPreview, markdownPreviewContent, previewMode, previewScrollRef }: UseCodeWorkspaceScrollSyncOptions) {
   const editorScrollStateRef = useRef<MonacoEditorScrollState | null>(null)
   const previewScrollStateRef = useRef<{ scrollTop: number; scrollHeight: number; viewportHeight: number } | null>(null)
   const markdownScrollMemoryRef = useRef<Record<string, Partial<Record<MarkdownScrollModeKey, number>>>>({})
@@ -39,6 +31,8 @@ export function useCodeWorkspaceScrollSync({
   const scrollSyncReleaseTimerRef = useRef<number | null>(null)
   const pendingModeSwitchRef = useRef<{ from: MarkdownPreviewMode; to: MarkdownPreviewMode } | null>(null)
   const pendingEditorRestoreTopRef = useRef<number | null>(null)
+  const lastEditorSourceLineRef = useRef<number | null>(null)
+  const lastPreviewSourceLineRef = useRef<number | null>(null)
   const previousPreviewModeRef = useRef<MarkdownPreviewMode>(previewMode)
   const splitSyncReadyRef = useRef(false)
 
@@ -62,36 +56,46 @@ export function useCodeWorkspaceScrollSync({
     }
   }, [])
 
-  const mapScrollTopByRatio = useCallback(
-    (
-      source: { scrollTop: number; scrollHeight: number; viewportHeight: number } | null,
-      target: { scrollHeight: number; viewportHeight: number } | null
-    ): number | null => {
-      if (!source || !target) return null
-      const sourceMax = Math.max(0, source.scrollHeight - source.viewportHeight)
-      const targetMax = Math.max(0, target.scrollHeight - target.viewportHeight)
-      if (sourceMax <= 0 || targetMax <= 0) return 0
-      const ratio = Math.min(1, Math.max(0, source.scrollTop / sourceMax))
-      return ratio * targetMax
+  const mapScrollTopByRatio = useCallback((source: { scrollTop: number; scrollHeight: number; viewportHeight: number } | null, target: { scrollHeight: number; viewportHeight: number } | null): number | null => {
+    if (!source || !target) return null
+    const sourceMax = Math.max(0, source.scrollHeight - source.viewportHeight)
+    const targetMax = Math.max(0, target.scrollHeight - target.viewportHeight)
+    if (sourceMax <= 0 || targetMax <= 0) return 0
+    const ratio = Math.min(1, Math.max(0, source.scrollTop / sourceMax))
+    return ratio * targetMax
+  }, [])
+
+  const applyPreviewScrollTop = useCallback(
+    (scrollTop: number) => {
+      const preview = previewScrollRef.current
+      if (!preview) return
+      preview.scrollTop = Math.max(0, scrollTop)
     },
-    []
+    [previewScrollRef],
   )
 
-  const applyPreviewScrollTop = useCallback((scrollTop: number) => {
-    const preview = previewScrollRef.current
-    if (!preview) return
-    preview.scrollTop = Math.max(0, scrollTop)
-  }, [previewScrollRef])
+  const applyEditorScrollTop = useCallback(
+    (scrollTop: number) => {
+      editorRef.current?.setScrollTop(Math.max(0, scrollTop))
+    },
+    [editorRef],
+  )
 
-  const applyEditorScrollTop = useCallback((scrollTop: number) => {
-    editorRef.current?.setScrollTop(Math.max(0, scrollTop))
-  }, [editorRef])
+  const applyEditorScrollTopForLine = useCallback(
+    (lineNumber: number) => {
+      editorRef.current?.setScrollTopForLine(lineNumber)
+    },
+    [editorRef],
+  )
 
-  const restoreEditorScrollTop = useCallback((scrollTop: number) => {
-    const normalized = Math.max(0, scrollTop)
-    pendingEditorRestoreTopRef.current = normalized
-    editorRef.current?.setScrollTop(normalized)
-  }, [editorRef])
+  const restoreEditorScrollTop = useCallback(
+    (scrollTop: number) => {
+      const normalized = Math.max(0, scrollTop)
+      pendingEditorRestoreTopRef.current = normalized
+      editorRef.current?.setScrollTop(normalized)
+    },
+    [editorRef],
+  )
 
   const captureCurrentModeScroll = useCallback(() => {
     if (!isMarkdownFile || !activeRelativePath) return
@@ -99,6 +103,7 @@ export function useCodeWorkspaceScrollSync({
     if (previewMode === 'edit') {
       const state = editorRef.current?.getScrollState() ?? editorScrollStateRef.current
       if (state) {
+        lastEditorSourceLineRef.current = state.firstVisibleLine
         const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
         markdownScrollMemoryRef.current[activeRelativePath] = {
           ...current,
@@ -111,6 +116,7 @@ export function useCodeWorkspaceScrollSync({
     if (previewMode === 'preview') {
       const preview = previewScrollRef.current
       if (preview) {
+        lastPreviewSourceLineRef.current = getMarkdownPreviewSourceLineAtScrollTop(preview)
         const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
         markdownScrollMemoryRef.current[activeRelativePath] = {
           ...current,
@@ -122,6 +128,8 @@ export function useCodeWorkspaceScrollSync({
 
     const editorState = editorRef.current?.getScrollState() ?? editorScrollStateRef.current
     const preview = previewScrollRef.current
+    lastEditorSourceLineRef.current = editorState?.firstVisibleLine ?? lastEditorSourceLineRef.current
+    lastPreviewSourceLineRef.current = preview ? getMarkdownPreviewSourceLineAtScrollTop(preview) : lastPreviewSourceLineRef.current
     const current = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
     markdownScrollMemoryRef.current[activeRelativePath] = {
       ...current,
@@ -160,40 +168,55 @@ export function useCodeWorkspaceScrollSync({
 
     const timer = window.setTimeout(() => {
       const stored = markdownScrollMemoryRef.current[activeRelativePath] ?? {}
-      const switchFrom = pendingModeSwitchRef.current?.to === previewMode
-        ? pendingModeSwitchRef.current.from
-        : null
+      const switchFrom = pendingModeSwitchRef.current?.to === previewMode ? pendingModeSwitchRef.current.from : null
 
       if (previewMode === 'edit') {
-        const nextTop = switchFrom === 'preview'
-          ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
-          : switchFrom === 'split'
-            ? pickFirstFiniteScrollTop(stored.splitEditor, stored.splitPreview, stored.edit, stored.preview)
-            : pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.preview, stored.splitPreview)
+        const sourceLine = switchFrom === 'preview' || switchFrom === 'split' ? lastPreviewSourceLineRef.current : null
+        if (sourceLine != null) {
+          applyEditorScrollTopForLine(sourceLine)
+          pendingModeSwitchRef.current = null
+          return
+        }
+        const nextTop =
+          switchFrom === 'preview'
+            ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
+            : switchFrom === 'split'
+              ? pickFirstFiniteScrollTop(stored.splitEditor, stored.splitPreview, stored.edit, stored.preview)
+              : pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.preview, stored.splitPreview)
         restoreEditorScrollTop(nextTop)
         pendingModeSwitchRef.current = null
         return
       }
 
       if (previewMode === 'preview') {
-        const nextTop = switchFrom === 'edit'
-          ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview)
-          : switchFrom === 'split'
-            ? pickFirstFiniteScrollTop(stored.splitPreview, stored.splitEditor, stored.preview, stored.edit)
-            : pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
+        const sourceLine = switchFrom === 'edit' || switchFrom === 'split' ? lastEditorSourceLineRef.current : null
+        if (sourceLine != null && previewScrollRef.current) {
+          scrollMarkdownPreviewToSourceLine(previewScrollRef.current, sourceLine)
+          pendingModeSwitchRef.current = null
+          return
+        }
+        const nextTop =
+          switchFrom === 'edit'
+            ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview)
+            : switchFrom === 'split'
+              ? pickFirstFiniteScrollTop(stored.splitPreview, stored.splitEditor, stored.preview, stored.edit)
+              : pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
         applyPreviewScrollTop(nextTop)
         pendingModeSwitchRef.current = null
         return
       }
 
-      const nextEditorTop = switchFrom === 'preview'
-        ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit)
-        : pickFirstFiniteScrollTop(stored.splitEditor, stored.edit, stored.preview, stored.splitPreview)
-      const nextPreviewTop = switchFrom === 'edit'
-        ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview)
-        : pickFirstFiniteScrollTop(stored.splitPreview, stored.preview, stored.splitEditor, stored.edit)
+      const nextEditorTop = switchFrom === 'preview' ? pickFirstFiniteScrollTop(stored.preview, stored.splitPreview, stored.splitEditor, stored.edit) : pickFirstFiniteScrollTop(stored.splitEditor, stored.edit, stored.preview, stored.splitPreview)
+      const nextPreviewTop = switchFrom === 'edit' ? pickFirstFiniteScrollTop(stored.edit, stored.splitEditor, stored.splitPreview, stored.preview) : pickFirstFiniteScrollTop(stored.splitPreview, stored.preview, stored.splitEditor, stored.edit)
       restoreEditorScrollTop(nextEditorTop)
-      applyPreviewScrollTop(nextPreviewTop)
+      if (switchFrom === 'edit' && lastEditorSourceLineRef.current != null && previewScrollRef.current) {
+        scrollMarkdownPreviewToSourceLine(previewScrollRef.current, lastEditorSourceLineRef.current)
+      } else if (switchFrom === 'preview' && lastPreviewSourceLineRef.current != null) {
+        applyEditorScrollTopForLine(lastPreviewSourceLineRef.current)
+        applyPreviewScrollTop(nextPreviewTop)
+      } else {
+        applyPreviewScrollTop(nextPreviewTop)
+      }
       splitSyncReadyRef.current = true
       pendingModeSwitchRef.current = null
     }, 0)
@@ -201,50 +224,42 @@ export function useCodeWorkspaceScrollSync({
     return () => {
       window.clearTimeout(timer)
     }
-  }, [
-    activeRelativePath,
-    applyPreviewScrollTop,
-    isMarkdownFile,
-    previewMode,
-    restoreEditorScrollTop,
-  ])
+  }, [activeRelativePath, applyPreviewScrollTop, applyEditorScrollTopForLine, isMarkdownFile, previewMode, restoreEditorScrollTop])
 
-  const handleEditorScrollStateChange = useCallback((state: MonacoEditorScrollState) => {
-    editorScrollStateRef.current = state
-    if (isMarkdownFile && isShowingEditor && pendingEditorRestoreTopRef.current != null) {
-      const maxTop = Math.max(0, state.scrollHeight - state.viewportHeight)
-      const pendingTop = Math.min(Math.max(0, pendingEditorRestoreTopRef.current), maxTop)
-      if (Math.abs(state.scrollTop - pendingTop) > 1) {
-        editorRef.current?.setScrollTop(pendingTop)
+  const handleEditorScrollStateChange = useCallback(
+    (state: MonacoEditorScrollState) => {
+      editorScrollStateRef.current = state
+      lastEditorSourceLineRef.current = state.firstVisibleLine
+      if (isMarkdownFile && isShowingEditor && pendingEditorRestoreTopRef.current != null) {
+        const maxTop = Math.max(0, state.scrollHeight - state.viewportHeight)
+        const pendingTop = Math.min(Math.max(0, pendingEditorRestoreTopRef.current), maxTop)
+        if (Math.abs(state.scrollTop - pendingTop) > 1) {
+          editorRef.current?.setScrollTop(pendingTop)
+          return
+        }
+        pendingEditorRestoreTopRef.current = null
+      }
+
+      if (!isMarkdownFile || !activeRelativePath || !isShowingEditor) return
+      const modeKey: MarkdownScrollModeKey = previewMode === 'split' ? 'splitEditor' : 'edit'
+      storeScrollTop(activeRelativePath, modeKey, state.scrollTop)
+
+      if (previewMode !== 'split' || !isShowingPreview || !splitSyncReadyRef.current) return
+      if (activeScrollSyncSourceRef.current === 'preview') return
+
+      setActiveSyncSource('editor')
+      const mapped = previewScrollRef.current && scrollMarkdownPreviewToSourceLine(previewScrollRef.current, state.firstVisibleLine)
+      if (mapped) {
+        storeScrollTop(activeRelativePath, 'splitPreview', previewScrollRef.current?.scrollTop ?? 0)
         return
       }
-      pendingEditorRestoreTopRef.current = null
-    }
-
-    if (!isMarkdownFile || !activeRelativePath || !isShowingEditor) return
-    const modeKey: MarkdownScrollModeKey = previewMode === 'split' ? 'splitEditor' : 'edit'
-    storeScrollTop(activeRelativePath, modeKey, state.scrollTop)
-
-    if (previewMode !== 'split' || !isShowingPreview || !splitSyncReadyRef.current) return
-    if (activeScrollSyncSourceRef.current === 'preview') return
-
-    const targetTop = mapScrollTopByRatio(state, previewScrollStateRef.current)
-    if (targetTop == null) return
-    setActiveSyncSource('editor')
-    applyPreviewScrollTop(targetTop)
-    storeScrollTop(activeRelativePath, 'splitPreview', targetTop)
-  }, [
-    activeRelativePath,
-    applyPreviewScrollTop,
-    editorRef,
-    isMarkdownFile,
-    isShowingEditor,
-    isShowingPreview,
-    mapScrollTopByRatio,
-    previewMode,
-    setActiveSyncSource,
-    storeScrollTop,
-  ])
+      const targetTop = mapScrollTopByRatio(state, previewScrollStateRef.current)
+      if (targetTop == null) return
+      applyPreviewScrollTop(targetTop)
+      storeScrollTop(activeRelativePath, 'splitPreview', targetTop)
+    },
+    [activeRelativePath, applyPreviewScrollTop, editorRef, isMarkdownFile, isShowingEditor, isShowingPreview, mapScrollTopByRatio, previewMode, setActiveSyncSource, storeScrollTop],
+  )
 
   const handlePreviewScroll = useCallback(() => {
     const preview = previewScrollRef.current
@@ -256,6 +271,7 @@ export function useCodeWorkspaceScrollSync({
       viewportHeight: preview.clientHeight,
     }
     previewScrollStateRef.current = nextState
+    lastPreviewSourceLineRef.current = getMarkdownPreviewSourceLineAtScrollTop(preview)
 
     const modeKey: MarkdownScrollModeKey = previewMode === 'split' ? 'splitPreview' : 'preview'
     storeScrollTop(activeRelativePath, modeKey, nextState.scrollTop)
@@ -263,23 +279,17 @@ export function useCodeWorkspaceScrollSync({
     if (previewMode !== 'split' || !isShowingEditor || !splitSyncReadyRef.current) return
     if (activeScrollSyncSourceRef.current === 'editor') return
 
+    setActiveSyncSource('preview')
+    const sourceLine = getMarkdownPreviewSourceLineAtScrollTop(preview)
+    if (sourceLine != null) {
+      applyEditorScrollTopForLine(sourceLine)
+      return
+    }
     const targetTop = mapScrollTopByRatio(nextState, editorScrollStateRef.current)
     if (targetTop == null) return
-    setActiveSyncSource('preview')
     applyEditorScrollTop(targetTop)
     storeScrollTop(activeRelativePath, 'splitEditor', targetTop)
-  }, [
-    activeRelativePath,
-    applyEditorScrollTop,
-    isMarkdownFile,
-    isShowingEditor,
-    isShowingPreview,
-    mapScrollTopByRatio,
-    previewMode,
-    previewScrollRef,
-    setActiveSyncSource,
-    storeScrollTop,
-  ])
+  }, [activeRelativePath, applyEditorScrollTop, applyEditorScrollTopForLine, isMarkdownFile, isShowingEditor, isShowingPreview, mapScrollTopByRatio, previewMode, previewScrollRef, setActiveSyncSource, storeScrollTop])
 
   useEffect(() => {
     if (!isShowingPreview) return

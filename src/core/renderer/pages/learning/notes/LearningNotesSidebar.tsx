@@ -1,5 +1,5 @@
 import { FolderPlus, Pencil, Search, Settings2, Trash2, X } from 'lucide-react'
-import type { LearningCategory, LearningNoteSummary } from '../../../../shared/types'
+import type { LearningCategory, LearningNoteSummary, LearningSearchResult } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
 import { Input } from '../../../components/ui/input'
@@ -14,11 +14,13 @@ type LearningNotesSidebarProps = {
   categoryEditInput: string
   categoryInput: string
   categoryManagerOpen: boolean
-  filteredNotes: LearningNoteSummary[]
+  filteredNotes: Array<LearningNoteSummary | LearningSearchResult>
   isCreatingCategory: boolean
   isDeletingCategory: boolean
   isUpdatingCategory: boolean
   loading: boolean
+  searching: boolean
+  searchError: string | null
   searchQuery: string
   selectedCategoryId: string
   selectedManageCategory: LearningCategory | null
@@ -32,7 +34,7 @@ type LearningNotesSidebarProps = {
   onRenameCategory: () => void | Promise<void>
   onSearchQueryChange: (value: string) => void
   onSelectCategory: (categoryId: string) => void
-  onSelectNote: (noteId: string) => void
+  onSelectNote: (noteId: string, matchOffset?: number) => void
   onToggleCategoryManager: () => void
 }
 
@@ -48,6 +50,8 @@ export function LearningNotesSidebar({
   isDeletingCategory,
   isUpdatingCategory,
   loading,
+  searching,
+  searchError,
   searchQuery,
   selectedCategoryId,
   selectedManageCategory,
@@ -102,6 +106,30 @@ export function LearningNotesSidebar({
               onClick={() => onSelectCategory('all')}
             >
               {t('learning.notes.all')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={selectedCategoryId === 'inbox'}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${selectedCategoryId === 'inbox' ? 'bg-[color:var(--color-primary)] text-primary-foreground' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
+              onClick={() => onSelectCategory('inbox')}
+            >
+              {t('learning.notes.inbox')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={selectedCategoryId === 'drafts'}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${selectedCategoryId === 'drafts' ? 'bg-[color:var(--color-primary)] text-primary-foreground' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
+              onClick={() => onSelectCategory('drafts')}
+            >
+              {t('learning.notes.drafts')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={selectedCategoryId === 'review'}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${selectedCategoryId === 'review' ? 'bg-[color:var(--color-primary)] text-primary-foreground' : 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'}`}
+              onClick={() => onSelectCategory('review')}
+            >
+              {t('learning.notes.review')}
             </button>
             {categories.map((category) => (
               <button
@@ -171,7 +199,7 @@ export function LearningNotesSidebar({
         </div>
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-2 p-3">
-            {loading ? (
+            {loading || searching ? (
               <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">{t('common.loading')}</div>
             ) : filteredNotes.length > 0 ? (
               filteredNotes.map((note) => (
@@ -181,16 +209,18 @@ export function LearningNotesSidebar({
                   className={`flex w-full flex-col gap-1 rounded-[14px] border px-3 py-3 text-left transition-colors ${
                     selectedNoteId === note.id ? 'border-[color:var(--color-primary)]/50 bg-[color:var(--color-primary)]/8' : 'border-transparent bg-[color:var(--color-accent)]/55 hover:border-[color:var(--color-border)]'
                   }`}
-                  onClick={() => onSelectNote(note.id)}
+                  onClick={() => onSelectNote(note.id, 'matchOffset' in note ? note.matchOffset : undefined)}
                 >
                   <div className="line-clamp-1 text-sm font-medium text-[color:var(--color-foreground)]">{note.title}</div>
-                  <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{note.excerpt || t('learning.notes.emptyExcerpt')}</div>
+                  <div className="line-clamp-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{'matchExcerpt' in note ? note.matchExcerpt : note.excerpt || t('learning.notes.emptyExcerpt')}</div>
                   <div className="flex items-center justify-between gap-2 text-[11px] text-[color:var(--color-muted-foreground)]">
                     <span>{formatDateTime(note.updatedAt)}</span>
                     <span>{note.status === 'organized' ? t('learning.notes.statusOrganized') : t('learning.notes.statusDraft')}</span>
                   </div>
                 </button>
               ))
+            ) : searchError ? (
+              <div className="px-3 py-4 text-xs text-[color:var(--color-destructive)]">{searchError}</div>
             ) : (
               <div className="px-3 py-4 text-xs text-[color:var(--color-muted-foreground)]">{t('learning.notes.emptyNotes')}</div>
             )}

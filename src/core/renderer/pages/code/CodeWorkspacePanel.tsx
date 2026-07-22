@@ -163,6 +163,12 @@ export function CodeWorkspacePanel({
       onBeforeOpenFile: handleBeforeOpenCodeFile,
       onDidOpenFile: handleDidOpenCodeFile,
     })
+  const handleMarkdownProjectFileLinkClick = useCallback(
+    (relativePath: string) => {
+      void openFile(relativePath)
+    },
+    [openFile],
+  )
   const {
     activeContentSearchScopeKey,
     activeContentSearchScopeLabel,
@@ -229,6 +235,7 @@ export function CodeWorkspacePanel({
     persistedLastMarkdownPreviewMode,
     projectId,
     projectPath,
+    onProjectFileLinkClick: handleMarkdownProjectFileLinkClick,
     setProjectLastMarkdownPreviewMode,
     themeMode,
   })

@@ -1,16 +1,9 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
-import type {
-  LearningCreateCategoryPayload,
-  LearningCreateNotePayload,
-  LearningUpdateCategoryPayload,
-  LearningUpdateNotePayload,
-} from '../../../shared/types'
+import type { LearningCreateCategoryPayload, LearningCreateNotePayload, LearningUpdateCategoryPayload, LearningUpdateNotePayload } from '../../../shared/types'
 import type { RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
-export function registerLearningIpcHandlers(
-  deps: RegisterIpcHandlersDependencies
-): void {
+export function registerLearningIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
   ipcMain.handle(IPC.LEARNING_LIST_CATEGORIES, async () => {
     return deps.learningService.listCategories()
   })
@@ -29,6 +22,10 @@ export function registerLearningIpcHandlers(
 
   ipcMain.handle(IPC.LEARNING_LIST_NOTES, async () => {
     return deps.learningService.listNotes()
+  })
+
+  ipcMain.handle(IPC.LEARNING_SEARCH_NOTES, async (_event, query: string) => {
+    return deps.learningService.searchNotes(query)
   })
 
   ipcMain.handle(IPC.LEARNING_GET_NOTE, async (_event, noteId: string) => {

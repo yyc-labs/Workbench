@@ -760,6 +760,14 @@ export interface LearningNote extends LearningNoteSummary {
   contentMd: string
 }
 
+export type LearningSearchMatchKind = 'title' | 'tag' | 'content'
+
+export interface LearningSearchResult extends LearningNoteSummary {
+  matchKind: LearningSearchMatchKind
+  matchExcerpt: string
+  matchOffset?: number
+}
+
 export interface LearningCreateNotePayload {
   title?: string
   categoryId?: string

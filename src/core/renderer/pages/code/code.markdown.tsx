@@ -503,6 +503,7 @@ type CreateMarkdownComponentsOptions = {
   lineOffset?: number
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onInternalLinkClick?: (href: string) => void
+  onProjectFileLinkClick?: (relativePath: string) => void
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   projectPath: string
   themeMode: 'light' | 'dark'
@@ -512,7 +513,40 @@ function isTranscriptReferenceHref(value: string): boolean {
   return value.trim().toLowerCase().startsWith('transcript-ref://')
 }
 
-export function createMarkdownComponents({ activeRelativePath, activeInternalHref = null, enableMarkdownSyntaxHighlight, forceRenderAllBlocks = false, lineOffset = 0, onCodeBlockExpand, onInternalLinkClick, onStructuredBlockClick, projectPath, themeMode }: CreateMarkdownComponentsOptions): Components {
+function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: string | null): string | null {
+  const path = href.trim().split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? ''
+  if (!path || path.startsWith('/') || path.startsWith('//') || isWindowsAbsolutePath(path) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)) {
+    return null
+  }
+
+  const segments = activeRelativePath ? normalizePathSegments(dirnameFromRelativePath(activeRelativePath)) : []
+  for (const segment of path.split('/')) {
+    const normalized = segment.trim()
+    if (!normalized || normalized === '.') continue
+    if (normalized === '..') {
+      if (segments.length === 0) return null
+      segments.pop()
+      continue
+    }
+    segments.push(normalized)
+  }
+
+  return segments.join('/') || null
+}
+
+export function createMarkdownComponents({
+  activeRelativePath,
+  activeInternalHref = null,
+  enableMarkdownSyntaxHighlight,
+  forceRenderAllBlocks = false,
+  lineOffset = 0,
+  onCodeBlockExpand,
+  onInternalLinkClick,
+  onProjectFileLinkClick,
+  onStructuredBlockClick,
+  projectPath,
+  themeMode,
+}: CreateMarkdownComponentsOptions): Components {
   return {
     div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
     h1: createSourceTrackedBlockComponent('h1', lineOffset),
@@ -565,6 +599,7 @@ export function createMarkdownComponents({ activeRelativePath, activeInternalHre
       const link = typeof href === 'string' ? href.trim() : ''
       const internal = Boolean(link) && isTranscriptReferenceHref(link)
       const canConsumeInternal = internal && typeof onInternalLinkClick === 'function'
+      const projectFilePath = onProjectFileLinkClick ? resolveProjectRelativeMarkdownLink(link, activeRelativePath) : null
       const external = Boolean(link) && shouldOpenInSystemBrowser(link)
       const resolvedClassName = [className, internal ? 'code-markdown-transcript-ref rounded-[8px] px-1.5 py-0.5 transition-all duration-150' : '', internal && activeInternalHref === link ? 'is-active bg-[color:var(--color-warning-background)] text-[color:var(--color-foreground)]' : ''].filter(Boolean).join(' ')
 
@@ -589,6 +624,11 @@ export function createMarkdownComponents({ activeRelativePath, activeInternalHre
             if (canConsumeInternal) {
               event.preventDefault()
               onInternalLinkClick(link)
+              return
+            }
+            if (projectFilePath) {
+              event.preventDefault()
+              onProjectFileLinkClick?.(projectFilePath)
               return
             }
             if (!external) return

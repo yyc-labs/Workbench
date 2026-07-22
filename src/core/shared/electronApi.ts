@@ -56,6 +56,7 @@ import type {
   LearningCreateNotePayload,
   LearningNote,
   LearningNoteSummary,
+  LearningSearchResult,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
   Skill,
@@ -260,6 +261,7 @@ export interface LearningElectronApi {
   updateLearningCategory: (payload: LearningUpdateCategoryPayload) => Promise<LearningCategory[]>
   deleteLearningCategory: (categoryId: string) => Promise<LearningCategory[]>
   listLearningNotes: () => Promise<LearningNoteSummary[]>
+  searchLearningNotes: (query: string) => Promise<LearningSearchResult[]>
   getLearningNote: (noteId: string) => Promise<LearningNote | null>
   createLearningNote: (payload?: LearningCreateNotePayload) => Promise<LearningNote>
   updateLearningNote: (payload: LearningUpdateNotePayload) => Promise<LearningNote>

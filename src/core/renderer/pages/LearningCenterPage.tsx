@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type SyntheticEvent as ReactSyntheticEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary } from '../../shared/types'
+import type { BrowserAiTaskRecord, LearningCategory, LearningNote, LearningNoteStatus, LearningNoteSummary, LearningSearchResult } from '../../shared/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
@@ -22,11 +22,27 @@ import { continueMarkdownList, indentMarkdownLines, outdentMarkdownLines } from 
 import { applyLearningMarkdownInsert, type LearningMarkdownInsertRequest } from './learning/notes/learningMarkdownTemplates'
 import { type FrontmatterDialogMode, type LearningEditorContextMenuState, type LearningEditorDisplayMode, type SaveState } from './learning/notes/learningCenterTypes'
 import { defaultNoteContent, emptySelectionState, findCategoryByName, normalizeTagInput } from './learning/notes/learningCenterUtils'
+import { resolveLearningNoteLinks } from './learning/notes/learningNoteLinks'
 
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
 const LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY = 'app:learning-editor-display-mode'
 const LEARNING_EDITOR_HISTORY_LIMIT = 200
+const LEARNING_DRAFT_STORAGE_PREFIX = 'app:learning-draft:'
+
+type LearningDraft = Pick<LearningNote, 'title' | 'categoryId' | 'tags' | 'status' | 'contentMd'> & { savedAt: number }
+
+function readLearningDraft(noteId: string): LearningDraft | null {
+  try {
+    const value = window.localStorage.getItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${noteId}`)
+    if (!value) return null
+    const draft = JSON.parse(value) as Partial<LearningDraft>
+    if (typeof draft.title !== 'string' || typeof draft.contentMd !== 'string' || !Array.isArray(draft.tags) || typeof draft.savedAt !== 'number') return null
+    return { title: draft.title, categoryId: typeof draft.categoryId === 'string' ? draft.categoryId : undefined, tags: draft.tags.filter((tag): tag is string => typeof tag === 'string'), status: draft.status === 'organized' ? 'organized' : 'draft', contentMd: draft.contentMd, savedAt: draft.savedAt }
+  } catch {
+    return null
+  }
+}
 
 export function LearningCenterPage() {
   const navigate = useNavigate()
@@ -38,12 +54,18 @@ export function LearningCenterPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all')
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
   const [selectedNote, setSelectedNote] = useState<LearningNote | null>(emptySelectionState)
+  const [linkedNotes, setLinkedNotes] = useState<LearningNoteSummary[]>([])
+  const [backlinks, setBacklinks] = useState<LearningNoteSummary[]>([])
   const [editorTitle, setEditorTitle] = useState('')
   const [editorTags, setEditorTags] = useState('')
   const [editorCategoryId, setEditorCategoryId] = useState<string>('')
   const [editorStatus, setEditorStatus] = useState<LearningNoteStatus>('draft')
   const [editorContent, setEditorContent] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<LearningSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [pendingDraft, setPendingDraft] = useState<{ note: LearningNote; draft: LearningDraft } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -91,20 +113,25 @@ export function LearningCenterPage() {
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const editorHistoryRef = useRef<LearningEditorSnapshot[]>([])
   const editorHistoryIndexRef = useRef(-1)
+  const saveVersionRef = useRef(0)
+  const editorRevisionRef = useRef(0)
+  const selectedMatchOffsetRef = useRef<number | undefined>()
 
   const closeEditorContextMenu = () => {
     setEditorContextMenu(null)
   }
 
   const filteredNotes = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    return notes.filter((note) => {
+    const searchMatches = searchQuery.trim() ? searchResults : notes
+    return searchMatches.filter((note) => {
+      if (selectedCategoryId === 'inbox') return !note.categoryId || note.status === 'draft'
+      if (selectedCategoryId === 'drafts') return note.status === 'draft'
+      if (selectedCategoryId === 'review') return note.status === 'draft' || note.updatedAt < Date.now() - 7 * 24 * 60 * 60 * 1000
+      if (selectedCategoryId === 'recent') return true
       if (selectedCategoryId !== 'all' && note.categoryId !== selectedCategoryId) return false
-      if (!q) return true
-      const haystack = [note.title, note.excerpt, note.tags.join(' ')].join(' ').toLowerCase()
-      return haystack.includes(q)
+      return true
     })
-  }, [notes, searchQuery, selectedCategoryId])
+  }, [notes, searchQuery, searchResults, selectedCategoryId])
 
   const selectedManageCategory = useMemo(() => categories.find((item) => item.id === selectedCategoryId) ?? null, [categories, selectedCategoryId])
 
@@ -129,6 +156,36 @@ export function LearningCenterPage() {
 
     void load()
   }, [loadSkills])
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchResults([])
+      setSearchError(null)
+      setSearching(false)
+      return
+    }
+    let active = true
+    const timeout = window.setTimeout(() => {
+      setSearching(true)
+      setSearchError(null)
+      void window.electronAPI
+        .searchLearningNotes(query)
+        .then((results) => {
+          if (active) setSearchResults(results)
+        })
+        .catch(() => {
+          if (active) setSearchError(t('learning.notes.searchFailed'))
+        })
+        .finally(() => {
+          if (active) setSearching(false)
+        })
+    }, 200)
+    return () => {
+      active = false
+      window.clearTimeout(timeout)
+    }
+  }, [searchQuery, t])
 
   useEffect(() => {
     window.localStorage.setItem(LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, leftSidebarCollapsed ? '1' : '0')
@@ -171,6 +228,12 @@ export function LearningCenterPage() {
       const nextHistoryState = createLearningEditorHistoryState(note.contentMd)
       editorHistoryRef.current = nextHistoryState.history
       editorHistoryIndexRef.current = nextHistoryState.index
+      const draft = readLearningDraft(note.id)
+      if (draft && draft.savedAt > note.updatedAt) setPendingDraft({ note, draft })
+      const matchOffset = selectedMatchOffsetRef.current
+      if (matchOffset !== undefined) {
+        window.setTimeout(() => editorTextareaRef.current?.setSelectionRange(matchOffset, matchOffset + searchQuery.trim().length), 0)
+      }
     }
 
     void loadNote()
@@ -178,6 +241,23 @@ export function LearningCenterPage() {
       active = false
     }
   }, [selectedNoteId])
+
+  useEffect(() => {
+    if (!selectedNote) {
+      setLinkedNotes([])
+      setBacklinks([])
+      return
+    }
+    let active = true
+    setLinkedNotes(resolveLearningNoteLinks(editorContent, notes).filter((note) => note.id !== selectedNote.id))
+    void Promise.all(notes.filter((note) => note.id !== selectedNote.id).map(async (summary) => ({ summary, note: await window.electronAPI.getLearningNote(summary.id) }))).then((candidates) => {
+      if (!active) return
+      setBacklinks(candidates.filter(({ note }) => note && resolveLearningNoteLinks(note.contentMd, [selectedNote]).length > 0).map(({ summary }) => summary))
+    })
+    return () => {
+      active = false
+    }
+  }, [editorContent, notes, selectedNote])
 
   useEffect(() => {
     setCategoryEditInput(selectedManageCategory?.name ?? '')
@@ -203,6 +283,10 @@ export function LearningCenterPage() {
     setEditorContent(updated.contentMd)
     setNotes((current) => [updated, ...current.filter((item) => item.id !== updated.id)])
   }
+
+  useEffect(() => {
+    editorRevisionRef.current += 1
+  }, [editorCategoryId, editorContent, editorStatus, editorTags, editorTitle])
 
   const handleBrowserAiSaved = (saved: LearningNote) => {
     syncUpdatedNote(saved)
@@ -298,12 +382,20 @@ export function LearningCenterPage() {
 
   const handleSave = async () => {
     if (!selectedNoteId) return
+    const version = ++saveVersionRef.current
+    const revision = editorRevisionRef.current
+    const payload = { noteId: selectedNoteId, title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent }
     setSaving(true)
     setSaveError(null)
     try {
-      const updated = await window.electronAPI.updateLearningNote({ noteId: selectedNoteId, title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent })
-      syncUpdatedNote(updated)
-      setSaveState('saved')
+      const updated = await window.electronAPI.updateLearningNote(payload)
+      if (version === saveVersionRef.current && revision === editorRevisionRef.current) {
+        syncUpdatedNote(updated)
+        window.localStorage.removeItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${updated.id}`)
+        setSaveState('saved')
+      } else {
+        setNotes((current) => [updated, ...current.filter((item) => item.id !== updated.id)])
+      }
     } catch (error) {
       setSaveState('error')
       setSaveError(error instanceof Error ? error.message : t('learning.page.saveFailed'))
@@ -311,6 +403,21 @@ export function LearningCenterPage() {
       setSaving(false)
     }
   }
+
+  const handleMarkReviewed = async () => {
+    if (!selectedNoteId) return
+    const updated = await window.electronAPI.updateLearningNote({ noteId: selectedNoteId, title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent })
+    syncUpdatedNote(updated)
+    setSaveState('saved')
+  }
+
+  useEffect(() => {
+    if (!selectedNote || !hasUnsavedChanges) return
+    const draft: LearningDraft = { title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent, savedAt: Date.now() }
+    window.localStorage.setItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${selectedNote.id}`, JSON.stringify(draft))
+    const timeout = window.setTimeout(() => void handleSave(), 1000)
+    return () => window.clearTimeout(timeout)
+  }, [editorCategoryId, editorContent, editorStatus, editorTags, editorTitle, hasUnsavedChanges, selectedNote])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -417,6 +524,7 @@ export function LearningCenterPage() {
     try {
       const ok = await window.electronAPI.deleteLearningNote(selectedNoteId)
       if (!ok) return
+      window.localStorage.removeItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${selectedNoteId}`)
       const nextNotes = notes.filter((item) => item.id !== selectedNoteId)
       setNotes(nextNotes)
       setSelectedNoteId(nextNotes[0]?.id ?? null)
@@ -561,8 +669,8 @@ export function LearningCenterPage() {
   const saveButtonLabel = saving ? t('common.saving') : saveState === 'error' ? t('learning.page.retrySave') : hasUnsavedChanges ? t('learning.page.saveChanges') : t('learning.page.saved')
   const saveButtonDisabled = saving || (!hasUnsavedChanges && saveState !== 'error')
   const layoutGridColumns = useMemo(() => {
-    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '264px minmax(0,1fr) 288px'
-    if (!leftSidebarCollapsed && rightSidebarCollapsed) return '264px minmax(0,1fr)'
+    if (!leftSidebarCollapsed && !rightSidebarCollapsed) return '284px minmax(0,1fr) 288px'
+    if (!leftSidebarCollapsed && rightSidebarCollapsed) return '284px minmax(0,1fr)'
     if (leftSidebarCollapsed && !rightSidebarCollapsed) return 'minmax(0,1fr) 288px'
     return 'minmax(0,1fr)'
   }, [leftSidebarCollapsed, rightSidebarCollapsed])
@@ -615,6 +723,8 @@ export function LearningCenterPage() {
                 isDeletingCategory={isDeletingCategory}
                 isUpdatingCategory={isUpdatingCategory}
                 loading={loading}
+                searching={searching}
+                searchError={searchError}
                 searchQuery={searchQuery}
                 selectedCategoryId={selectedCategoryId}
                 selectedManageCategory={selectedManageCategory}
@@ -628,7 +738,10 @@ export function LearningCenterPage() {
                 onRenameCategory={handleRenameCategory}
                 onSearchQueryChange={setSearchQuery}
                 onSelectCategory={setSelectedCategoryId}
-                onSelectNote={setSelectedNoteId}
+                onSelectNote={(noteId, matchOffset) => {
+                  selectedMatchOffsetRef.current = matchOffset
+                  setSelectedNoteId(noteId)
+                }}
                 onToggleCategoryManager={() => setCategoryManagerOpen((current) => !current)}
               />
             ) : null}
@@ -677,9 +790,16 @@ export function LearningCenterPage() {
                 saveState={saveState}
                 selectedNote={selectedNote}
                 selectedNoteId={selectedNoteId}
+                linkedNotes={linkedNotes}
+                backlinks={backlinks}
                 onCollapse={() => setRightSidebarCollapsed(true)}
                 onOpenDeleteConfirm={() => setDeleteConfirmOpen(true)}
                 onOpenEditDialog={openEditDialog}
+                onMarkReviewed={() => void handleMarkReviewed()}
+                onSelectLinkedNote={(noteId) => {
+                  selectedMatchOffsetRef.current = undefined
+                  setSelectedNoteId(noteId)
+                }}
               />
             ) : null}
           </div>
@@ -707,6 +827,30 @@ export function LearningCenterPage() {
       />
 
       <LearningDeleteNoteDialog isDeleting={isDeleting} open={deleteConfirmOpen} selectedNote={selectedNote} onClose={() => setDeleteConfirmOpen(false)} onDelete={handleDelete} />
+
+      <ConfirmDialog
+        open={Boolean(pendingDraft)}
+        onClose={() => {
+          if (pendingDraft) {
+            window.localStorage.removeItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${pendingDraft.note.id}`)
+            setPendingDraft(null)
+          }
+        }}
+        onConfirm={() => {
+          if (!pendingDraft) return
+          const { draft } = pendingDraft
+          setEditorTitle(draft.title)
+          setEditorTags(draft.tags.join(', '))
+          setEditorCategoryId(draft.categoryId ?? '')
+          setEditorStatus(draft.status)
+          setEditorContent(draft.contentMd)
+          setPendingDraft(null)
+        }}
+        ariaLabel={t('learning.page.restoreDraftTitle')}
+        title={t('learning.page.restoreDraftTitle')}
+        description={t('learning.page.restoreDraftDescription')}
+        confirmLabel={t('learning.page.restoreDraft')}
+      />
 
       <ConfirmDialog
         open={Boolean(categoryDeleteConfirm)}

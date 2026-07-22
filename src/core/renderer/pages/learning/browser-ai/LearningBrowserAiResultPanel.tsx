@@ -3,8 +3,11 @@ import { useState } from 'react'
 import type { LearningNote } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
+import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n'
 import { useAppStore } from '../../../stores/appStore'
+import { ModalShell } from '../../../components/ModalShell'
+import { createLearningNoteFromBrowserAiRecord } from './learningBrowserAiNote'
 
 type LearningBrowserAiResultPanelProps = {
   answer: string
@@ -26,6 +29,8 @@ export function LearningBrowserAiResultPanel({ answer, currentNote, recordId, on
   const [recordTitle, setRecordTitle] = useState('')
   const [savingRecord, setSavingRecord] = useState(false)
   const [recordSaved, setRecordSaved] = useState(false)
+  const [savePreviewOpen, setSavePreviewOpen] = useState(false)
+  const [draftContent, setDraftContent] = useState('')
 
   const copyAnswer = async () => {
     await navigator.clipboard.writeText(answer)
@@ -42,7 +47,7 @@ export function LearningBrowserAiResultPanel({ answer, currentNote, recordId, on
         mode,
         noteId: mode === 'append-note' ? currentNote?.id : undefined,
         title: mode === 'new-note' ? title : undefined,
-        answer,
+        answer: draftContent,
       })
       onSaved(note)
     } catch (saveError) {
@@ -50,6 +55,14 @@ export function LearningBrowserAiResultPanel({ answer, currentNote, recordId, on
     } finally {
       setSaving(false)
     }
+  }
+
+  const openSavePreview = async () => {
+    if (mode === 'append-note' && !currentNote) return
+    const record = recordId ? await window.electronAPI.getBrowserAiTaskRecord(recordId) : null
+    setDraftContent(record ? createLearningNoteFromBrowserAiRecord(record) : answer)
+    if (!title && record) setTitle(record.title)
+    setSavePreviewOpen(true)
   }
 
   const saveRecord = async () => {
@@ -123,12 +136,37 @@ export function LearningBrowserAiResultPanel({ answer, currentNote, recordId, on
           </Button>
         </div>
         {mode === 'new-note' ? <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('learning.browserAi.newNoteTitle')} /> : <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.appendPreview', { value: currentNote?.title ?? '' })}</p>}
-        <Button onClick={() => void save()} loading={saving} disabled={mode === 'append-note' && !currentNote}>
+        <Button onClick={() => void openSavePreview()} loading={saving} disabled={mode === 'append-note' && !currentNote}>
           <FilePlus2 />
           {t('learning.browserAi.confirmSave')}
         </Button>
         {error ? <p className="text-xs text-[color:var(--color-destructive)]">{error}</p> : null}
       </div>
+      <ModalShell
+        open={savePreviewOpen}
+        onClose={() => {
+          if (!saving) setSavePreviewOpen(false)
+        }}
+        widthClassName="max-w-3xl"
+        ariaLabel={t('learning.browserAi.notePreviewTitle')}
+      >
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('learning.browserAi.notePreviewTitle')}</h3>
+            <p className="mt-1 text-sm text-[color:var(--color-muted-foreground)]">{t('learning.browserAi.notePreviewDescription')}</p>
+          </div>
+          {mode === 'new-note' ? <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={t('learning.browserAi.newNoteTitle')} /> : null}
+          <Textarea value={draftContent} onChange={(event) => setDraftContent(event.target.value)} className="min-h-[320px] font-['JetBrains_Mono','SFMono-Regular',monospace]" />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setSavePreviewOpen(false)} disabled={saving}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void save()} loading={saving} disabled={!draftContent.trim()}>
+              {t('learning.browserAi.confirmSave')}
+            </Button>
+          </div>
+        </div>
+      </ModalShell>
     </section>
   )
 }
