@@ -235,6 +235,24 @@ test('parseTranscriptInlineArrowFlow preserves emphasized descriptions as prose'
   assert.equal(parsed, null)
 })
 
+test('parseTranscriptInlineArrowFlow preserves enumerated protocol mappings as prose', () => {
+  const parsed = parseTranscriptInlineArrowFlow('Chat → Chat passthrough、Chat → Anthropic、Chat → Responses；Responses → Responses passthrough、Responses → Chat downgrade', 1)
+
+  assert.equal(parsed, null)
+})
+
+test('parseTranscriptInlineArrowFlow preserves Gateway descriptions as prose', () => {
+  const parsed = parseTranscriptInlineArrowFlow('Gateway → adapter → upstream', 1)
+
+  assert.equal(parsed, null)
+})
+
+test('parseTranscriptInlineArrowFlow preserves cross-layer contract descriptions as prose', () => {
+  const parsed = parseTranscriptInlineArrowFlow('renderer action → preload 契约 → IPC handler 装配；shared → IPC → preload 的同一契约', 1)
+
+  assert.equal(parsed, null)
+})
+
 test('parseBoxDiagram requires connector-like diagram content and preserves source lines', () => {
   const diagram = ['┌──────────────┐       ┌──────────────┐', '│   Renderer   │  →    │ Main process │', '└──────────────┘       └──────────────┘'].join('\n')
 

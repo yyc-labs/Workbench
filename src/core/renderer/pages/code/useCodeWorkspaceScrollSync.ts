@@ -31,6 +31,7 @@ export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMa
   const scrollSyncReleaseTimerRef = useRef<number | null>(null)
   const pendingModeSwitchRef = useRef<{ from: MarkdownPreviewMode; to: MarkdownPreviewMode } | null>(null)
   const pendingEditorRestoreTopRef = useRef<number | null>(null)
+  const pendingEditorRestoreReleaseTimerRef = useRef<number | null>(null)
   const lastEditorSourceLineRef = useRef<number | null>(null)
   const lastPreviewSourceLineRef = useRef<number | null>(null)
   const previousPreviewModeRef = useRef<MarkdownPreviewMode>(previewMode)
@@ -44,7 +45,7 @@ export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMa
     scrollSyncReleaseTimerRef.current = window.setTimeout(() => {
       activeScrollSyncSourceRef.current = null
       scrollSyncReleaseTimerRef.current = null
-    }, 120)
+    }, 64)
   }, [])
 
   const storeScrollTop = useCallback((path: string, key: MarkdownScrollModeKey, scrollTop: number) => {
@@ -92,7 +93,14 @@ export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMa
     (scrollTop: number) => {
       const normalized = Math.max(0, scrollTop)
       pendingEditorRestoreTopRef.current = normalized
+      if (pendingEditorRestoreReleaseTimerRef.current != null) {
+        window.clearTimeout(pendingEditorRestoreReleaseTimerRef.current)
+      }
       editorRef.current?.setScrollTop(normalized)
+      pendingEditorRestoreReleaseTimerRef.current = window.setTimeout(() => {
+        pendingEditorRestoreTopRef.current = null
+        pendingEditorRestoreReleaseTimerRef.current = null
+      }, 80)
     },
     [editorRef],
   )
@@ -140,11 +148,15 @@ export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMa
 
   const resetScrollSyncState = useCallback(() => {
     splitSyncReadyRef.current = false
+    activeScrollSyncSourceRef.current = null
+    pendingEditorRestoreTopRef.current = null
   }, [])
 
   useLayoutEffect(() => {
     const previous = previousPreviewModeRef.current
     if (previous === previewMode) return
+    activeScrollSyncSourceRef.current = null
+    pendingEditorRestoreTopRef.current = null
     pendingModeSwitchRef.current = { from: previous, to: previewMode }
     previousPreviewModeRef.current = previewMode
   }, [previewMode])
@@ -154,6 +166,10 @@ export function useCodeWorkspaceScrollSync({ activeRelativePath, editorRef, isMa
       if (scrollSyncReleaseTimerRef.current != null) {
         window.clearTimeout(scrollSyncReleaseTimerRef.current)
         scrollSyncReleaseTimerRef.current = null
+      }
+      if (pendingEditorRestoreReleaseTimerRef.current != null) {
+        window.clearTimeout(pendingEditorRestoreReleaseTimerRef.current)
+        pendingEditorRestoreReleaseTimerRef.current = null
       }
     }
   }, [])

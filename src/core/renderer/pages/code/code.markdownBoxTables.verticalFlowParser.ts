@@ -720,9 +720,9 @@ export function parseTranscriptStructuredFlow(source: string, startLine: number)
 }
 
 export function parseTranscriptInlineArrowFlow(source: string, startLine: number): ParsedVerticalFlow | null {
-  // Inline Markdown commonly annotates prose (for example, `string → ""` or **Upload mode**).
+  // Inline Markdown, enumeration punctuation, and architecture descriptions commonly annotate prose (for example, `string → ""`, **Upload mode**, A → B、C → D, Gateway → adapter → upstream, or renderer → preload → IPC).
   // Preserve those descriptions as Markdown instead of turning them into a flow diagram.
-  if (/(?:`|\*\*|__)/.test(source)) return null
+  if (/(?:`|\*\*|__|、|\b(?:gateway|renderer|preload|ipc|shared)\b)/i.test(source)) return null
 
   const lines = splitLinesWithNumbers(source, startLine)
   if (lines.length <= 0) return null
