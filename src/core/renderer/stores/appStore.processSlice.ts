@@ -1,12 +1,7 @@
 import type { StateCreator } from 'zustand'
+import { resolveProcessUseWsl } from '../lib/processEnvironmentResolution'
+import { collectUrlsFromText, loadPersistedProcessUrls, persistProcessUrls, trimTerminalBuffer } from './appStore.helpers'
 import type { AppState } from './appStore.types'
-import { detectProjectEnvironment } from '../lib/projectEnvironment'
-import {
-  collectUrlsFromText,
-  loadPersistedProcessUrls,
-  persistProcessUrls,
-  trimTerminalBuffer,
-} from './appStore.helpers'
 
 function normalizePathForJoin(value: string): string {
   return value.replace(/\\/g, '/').replace(/\/+$/, '')
@@ -25,19 +20,7 @@ function resolveRunWorkingDirectory(projectPath: string, runWorkingDirectory?: s
   return `${normalizedProjectPath}/${normalizedRelativePath}`
 }
 
-export type ProcessActionsSlice = Pick<
-  AppState,
-  | 'startProject'
-  | 'stopProject'
-  | 'sendInput'
-  | 'appendOutput'
-  | 'clearOutput'
-  | 'updateProcessStatus'
-  | 'handleProcessExit'
-  | 'clearProcessUrl'
-  | 'syncManagedProcesses'
-  | 'rehydrateProcessUrlsFromStorage'
->
+export type ProcessActionsSlice = Pick<AppState, 'startProject' | 'stopProject' | 'sendInput' | 'appendOutput' | 'clearOutput' | 'updateProcessStatus' | 'handleProcessExit' | 'clearProcessUrl' | 'syncManagedProcesses' | 'rehydrateProcessUrlsFromStorage'>
 
 export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessActionsSlice> = (set, get) => ({
   startProject: async (projectId, commandOverride, processId, useWsl, cwdOverride, runStartupModeOverride) => {
@@ -49,9 +32,7 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
     const isPrimaryProjectRun = pid === projectId
     const runStartupMode = runStartupModeOverride ?? project.runStartupMode ?? 'silent'
     const cwd = resolveRunWorkingDirectory(project.path, cwdOverride ?? project.runWorkingDirectory)
-    const projectEnv = detectProjectEnvironment(cwd)
-    const resolvedUseWsl =
-      useWsl ?? (projectEnv === 'ubuntu' ? true : projectEnv === 'windows' ? false : undefined)
+    const resolvedUseWsl = resolveProcessUseWsl(cwd, useWsl)
 
     if (isPrimaryProjectRun && runStartupMode === 'terminal') {
       const opened = await window.electronAPI.openPathTerminal(cwd, command)
@@ -220,9 +201,7 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
       for (const item of inventory.managedProcesses) {
         if (item.processId.includes('::toolbox')) continue
-        const resolvedProjectId = projectIdSet.has(item.processId)
-          ? item.processId
-          : (projectIdSet.has(item.projectId) ? item.projectId : null)
+        const resolvedProjectId = projectIdSet.has(item.processId) ? item.processId : projectIdSet.has(item.projectId) ? item.projectId : null
         if (!resolvedProjectId) continue
         if (item.backend === 'tmux') continue
         runningByProject[resolvedProjectId] = {

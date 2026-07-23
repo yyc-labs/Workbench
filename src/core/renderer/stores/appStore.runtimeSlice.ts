@@ -2,12 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { translateCurrent } from '../i18n'
-import {
-  getAiRuntimeProfileCli,
-  resolveAiRuntimeProfile,
-  resolveProjectAiRuntimeProfileId,
-  slugAiRuntimeProfileName,
-} from '../../shared/aiRuntimeProfiles'
+import { getAiRuntimeProfileCli, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId, slugAiRuntimeProfileName } from '../../shared/aiRuntimeProfiles'
 
 function waitForDelay(delayMs: number): Promise<void> {
   if (delayMs <= 0) return Promise.resolve()
@@ -16,10 +11,7 @@ function waitForDelay(delayMs: number): Promise<void> {
   })
 }
 
-function sessionsEqual(
-  prev: AppState['sessions'],
-  next: AppState['sessions'],
-): boolean {
+function sessionsEqual(prev: AppState['sessions'], next: AppState['sessions']): boolean {
   const prevKeys = Object.keys(prev)
   const nextKeys = Object.keys(next)
   if (prevKeys.length !== nextKeys.length) return false
@@ -28,12 +20,7 @@ function sessionsEqual(
     const prevSession = prev[key]
     const nextSession = next[key]
     if (!prevSession || !nextSession) return false
-    if (
-      prevSession.projectId !== nextSession.projectId
-      || prevSession.sessionName !== nextSession.sessionName
-      || prevSession.status !== nextSession.status
-      || prevSession.createdAt !== nextSession.createdAt
-    ) {
+    if (prevSession.projectId !== nextSession.projectId || prevSession.sessionName !== nextSession.sessionName || prevSession.status !== nextSession.status || prevSession.createdAt !== nextSession.createdAt) {
       return false
     }
   }
@@ -41,10 +28,7 @@ function sessionsEqual(
   return true
 }
 
-function runtimeEntriesEqual(
-  prev: AppState['runtimeEntries'],
-  next: AppState['runtimeEntries'],
-): boolean {
+function runtimeEntriesEqual(prev: AppState['runtimeEntries'], next: AppState['runtimeEntries']): boolean {
   const prevKeys = Object.keys(prev)
   const nextKeys = Object.keys(next)
   if (prevKeys.length !== nextKeys.length) return false
@@ -54,15 +38,15 @@ function runtimeEntriesEqual(
     const nextEntry = next[key]
     if (!prevEntry || !nextEntry) return false
     if (
-      prevEntry.projectId !== nextEntry.projectId
-      || prevEntry.sessionName !== nextEntry.sessionName
-      || prevEntry.createdAt !== nextEntry.createdAt
-      || prevEntry.lastOpened !== nextEntry.lastOpened
-      || (prevEntry.pid ?? null) !== (nextEntry.pid ?? null)
-      || (prevEntry.pidStartedAt ?? null) !== (nextEntry.pidStartedAt ?? null)
-      || (prevEntry.mode ?? null) !== (nextEntry.mode ?? null)
-      || (prevEntry.profileId ?? null) !== (nextEntry.profileId ?? null)
-      || (prevEntry.profileName ?? null) !== (nextEntry.profileName ?? null)
+      prevEntry.projectId !== nextEntry.projectId ||
+      prevEntry.sessionName !== nextEntry.sessionName ||
+      prevEntry.createdAt !== nextEntry.createdAt ||
+      prevEntry.lastOpened !== nextEntry.lastOpened ||
+      (prevEntry.pid ?? null) !== (nextEntry.pid ?? null) ||
+      (prevEntry.pidStartedAt ?? null) !== (nextEntry.pidStartedAt ?? null) ||
+      (prevEntry.mode ?? null) !== (nextEntry.mode ?? null) ||
+      (prevEntry.profileId ?? null) !== (nextEntry.profileId ?? null) ||
+      (prevEntry.profileName ?? null) !== (nextEntry.profileName ?? null)
     ) {
       return false
     }
@@ -90,25 +74,16 @@ function pickLatestSessionName(names: string[], createdAtByName: Map<string, num
   return latestName
 }
 
-function inferRuntimeSessionName(
-  project: AppState['projects'][number],
-  sessionNames: string[],
-  createdAtByName: Map<string, number>,
-  profileSlug?: string,
-): string | null {
+function inferRuntimeSessionName(project: AppState['projects'][number], sessionNames: string[], createdAtByName: Map<string, number>, profileSlug?: string): string | null {
   const baseName = project.name?.trim()
   if (!baseName) return null
 
   const escaped = escapeRegExp(baseName)
   const normalizedCli = project.cli === 'codex' ? 'codex' : 'claude'
   const md5Suffix = '[a-f0-9]{6}'
-  const cliPattern = normalizedCli === 'claude'
-    ? new RegExp(`^${escaped}-claude-${md5Suffix}$`)
-    : new RegExp(`^${escaped}-(?:codex-)?${md5Suffix}$`)
+  const cliPattern = normalizedCli === 'claude' ? new RegExp(`^${escaped}-claude-${md5Suffix}$`) : new RegExp(`^${escaped}-(?:codex-)?${md5Suffix}$`)
   const genericPattern = new RegExp(`^${escaped}-(?:claude-|codex-)?${md5Suffix}$`)
-  const profilePattern = profileSlug
-    ? new RegExp(`^${escaped}-${escapeRegExp(profileSlug)}-${md5Suffix}$`)
-    : null
+  const profilePattern = profileSlug ? new RegExp(`^${escaped}-${escapeRegExp(profileSlug)}-${md5Suffix}$`) : null
 
   if (profilePattern) {
     const profileMatches = sessionNames.filter((name) => profilePattern.test(name))
@@ -125,43 +100,26 @@ function inferRuntimeSessionName(
   return pickLatestSessionName(genericMatches, createdAtByName)
 }
 
-function pickBestSessionName(
-  candidates: string[],
-  rawSessionNameSet: Set<string>,
-): string {
+function pickBestSessionName(candidates: string[], rawSessionNameSet: Set<string>): string {
   for (const name of candidates) {
     if (name && rawSessionNameSet.has(name)) return name
   }
   return candidates.find(Boolean) || ''
 }
 
-export type RuntimeActionsSlice = Pick<
-  AppState,
-  | 'loadTmuxSessions'
-  | 'refreshSessions'
-  | 'refreshRuntimeState'
-  | 'loadRuntimeEntries'
-  | 'startRuntime'
-  | 'stopRuntime'
-  | 'openTerminal'
->
+export type RuntimeActionsSlice = Pick<AppState, 'loadTmuxSessions' | 'refreshSessions' | 'refreshRuntimeState' | 'loadRuntimeEntries' | 'startRuntime' | 'stopRuntime' | 'openTerminal'>
 
 let runtimeRefreshInFlight: Promise<void> | null = null
 let pendingRuntimeRefreshMode: 'sessions' | 'all' | null = null
 
-function mergeRuntimeRefreshMode(
-  current: 'sessions' | 'all',
-  next: 'sessions' | 'all',
-): 'sessions' | 'all' {
+function mergeRuntimeRefreshMode(current: 'sessions' | 'all', next: 'sessions' | 'all'): 'sessions' | 'all' {
   return current === 'all' || next === 'all' ? 'all' : 'sessions'
 }
 
 export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeActionsSlice> = (set, get) => {
   const refreshRuntimeStateInternal = async (mode: 'sessions' | 'all' = 'sessions') => {
     if (runtimeRefreshInFlight) {
-      pendingRuntimeRefreshMode = pendingRuntimeRefreshMode
-        ? mergeRuntimeRefreshMode(pendingRuntimeRefreshMode, mode)
-        : mode
+      pendingRuntimeRefreshMode = pendingRuntimeRefreshMode ? mergeRuntimeRefreshMode(pendingRuntimeRefreshMode, mode) : mode
       await runtimeRefreshInFlight
       return
     }
@@ -201,12 +159,7 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
             for (let i = 0; i < sessions.length; i++) {
               const prev = state.tmuxSessions[i]
               const next = sessions[i]
-              if (
-                prev?.sessionName !== next.sessionName
-                || prev?.projectId !== next.projectId
-                || prev?.createdAt !== next.createdAt
-                || prev?.status !== next.status
-              ) {
+              if (prev?.sessionName !== next.sessionName || prev?.projectId !== next.projectId || prev?.createdAt !== next.createdAt || prev?.status !== next.status) {
                 unchanged = false
                 break
               }
@@ -231,30 +184,16 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
 
         for (const project of projects) {
           const entry = runtimeEntries[project.id]
-          const profile = resolveAiRuntimeProfile(
-            get().config.aiRuntimeProfiles,
-            resolveProjectAiRuntimeProfileId(project, get().config.activeAiRuntimeProfileId),
-            project.cli,
-          )
-          const inferredSessionName = inferRuntimeSessionName(
-            project,
-            rawSessionNames,
-            createdAtByName,
-            slugAiRuntimeProfileName(profile.name || profile.id),
-          )
-          const sessionName = pickBestSessionName(
-            [entry?.sessionName || '', inferredSessionName || ''],
-            rawSessionNameSet
-          )
+          const profile = resolveAiRuntimeProfile(get().config.aiRuntimeProfiles, resolveProjectAiRuntimeProfileId(project, get().config.activeAiRuntimeProfileId), project.cli)
+          const inferredSessionName = inferRuntimeSessionName(project, rawSessionNames, createdAtByName, slugAiRuntimeProfileName(profile.name || profile.id))
+          const sessionName = pickBestSessionName([entry?.sessionName || '', inferredSessionName || ''], rawSessionNameSet)
 
           const runtimeSession = rawSessions.find((s) => s.sessionName === sessionName)
 
           result[project.id] = {
             projectId: project.id,
             sessionName,
-            status: runtimeSession
-              ? (runtimeSession.status === 'attached' ? 'attached' : 'detached')
-              : 'stopped',
+            status: runtimeSession ? (runtimeSession.status === 'attached' ? 'attached' : 'detached') : 'stopped',
             createdAt: runtimeSession?.createdAt ?? 0,
           }
         }
@@ -282,7 +221,7 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
       }
     },
 
-    startRuntime: async (projectId) => {
+    startRuntime: async (projectId, profileIdOverride) => {
       const state = get()
       const project = state.projects.find((p) => p.id === projectId)
       if (!project) return
@@ -290,25 +229,20 @@ export const createRuntimeActionsSlice: StateCreator<AppState, [], [], RuntimeAc
       if (cooldownRemainingMs > 0) {
         await waitForDelay(cooldownRemainingMs)
       }
-      const profileId = resolveProjectAiRuntimeProfileId(project, state.config.activeAiRuntimeProfileId)
+      const profileId = profileIdOverride?.trim() || resolveProjectAiRuntimeProfileId(project, state.config.activeAiRuntimeProfileId)
       const profile = resolveAiRuntimeProfile(state.config.aiRuntimeProfiles, profileId, project.cli)
       const diagnostics = await window.electronAPI.getRuntimeDiagnostics(profile)
       if (diagnostics.issues.length > 0) {
         const message = diagnostics.issues.map((issue) => `- ${issue}`).join('\n')
         throw new Error(translateCurrent('settingsRuntime.preflightFailed', { message }))
       }
-      const ok = await runtimeManager.startRuntime(
-        projectId,
-        project.path,
-        profile,
-        getAiRuntimeProfileCli(profile, project.cli),
-      )
+      const ok = await runtimeManager.startRuntime(projectId, project.path, profile, getAiRuntimeProfileCli(profile, project.cli))
       if (!ok) {
         throw new Error(
           translateCurrent('settingsRuntime.startFailed', {
             diagnostics: translateCurrent('settingsRuntime.diagnostics'),
             settings: translateCurrent('common.settings'),
-          })
+          }),
         )
       }
       await refreshRuntimeStateInternal('all')

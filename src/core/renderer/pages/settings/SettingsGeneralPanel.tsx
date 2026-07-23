@@ -1,11 +1,7 @@
-import { ThemeSegmentedControl } from './ThemeSegmentedControl'
-import type {
-  AppLocale,
-  CloseWindowBehavior,
-  LaunchOnLoginDisplayMode,
-} from '../../../shared/types'
+import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginDisplayMode } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import type { ThemeMode } from './settings.types'
+import { ThemeSegmentedControl } from './ThemeSegmentedControl'
 
 type GeneralPanelProps = {
   theme: ThemeMode
@@ -15,6 +11,7 @@ type GeneralPanelProps = {
   closeWindowBehavior: CloseWindowBehavior
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
+  configRecovery?: ConfigRecoveryInfo
   onThemeChange: (next: ThemeMode) => void
   onLocaleChange: (next: NonNullable<AppLocale>) => void
   onLaunchOnLoginChange: (enabled: boolean) => void | Promise<void>
@@ -22,20 +19,7 @@ type GeneralPanelProps = {
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
 }
 
-function SettingsGeneralPanel({
-  theme,
-  locale,
-  launchOnLogin,
-  launchOnLoginDisplayMode,
-  closeWindowBehavior,
-  supportsLaunchOnLogin,
-  supportsCloseWindowBehavior,
-  onThemeChange,
-  onLocaleChange,
-  onLaunchOnLoginChange,
-  onLaunchOnLoginDisplayModeChange,
-  onCloseWindowBehaviorChange,
-}: GeneralPanelProps) {
+function SettingsGeneralPanel({ theme, locale, launchOnLogin, launchOnLoginDisplayMode, closeWindowBehavior, supportsLaunchOnLogin, supportsCloseWindowBehavior, configRecovery, onThemeChange, onLocaleChange, onLaunchOnLoginChange, onLaunchOnLoginDisplayModeChange, onCloseWindowBehaviorChange }: GeneralPanelProps) {
   const { t } = useI18n()
 
   return (
@@ -43,18 +27,21 @@ function SettingsGeneralPanel({
       <div>
         <p className="section-label mb-3">{t('settings.general.appearance')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.interface')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settings.general.description')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.general.description')}</p>
+        {configRecovery?.recovered && (
+          <div className="surface-card mb-6 rounded-2xl border border-[color:var(--color-warning)]/40 p-4">
+            <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settings.general.configRecoveryTitle')}</p>
+            <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.configRecoveryDescription')}</p>
+            {configRecovery.backupPath && <p className="mt-2 break-all text-xs text-[color:var(--color-muted-foreground)]">{t('settings.general.configRecoveryBackup', { value: configRecovery.backupPath })}</p>}
+          </div>
+        )}
         <ThemeSegmentedControl value={theme} onChange={onThemeChange} />
       </div>
 
       <div>
         <p className="section-label mb-3">{t('settings.general.language')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.language')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settings.general.languageDescription')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.general.languageDescription')}</p>
         <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
           {[
             { value: 'system', label: t('settings.general.followSystem') },
@@ -65,9 +52,7 @@ function SettingsGeneralPanel({
               key={opt.value}
               onClick={() => onLocaleChange(opt.value as NonNullable<AppLocale>)}
               className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                locale === opt.value
-                  ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                locale === opt.value ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
               }`}
             >
               {opt.label}
@@ -80,26 +65,16 @@ function SettingsGeneralPanel({
         <div>
           <p className="section-label mb-3">{t('settings.general.startup')}</p>
           <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.launchOnLogin')}</h2>
-          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-            {t('settings.general.launchOnLoginDescription')}
-          </p>
+          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.general.launchOnLoginDescription')}</p>
           <label className="inline-flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={launchOnLogin}
-              onChange={(e) => void onLaunchOnLoginChange(e.target.checked)}
-            />
+            <input type="checkbox" checked={launchOnLogin} onChange={(e) => void onLaunchOnLoginChange(e.target.checked)} />
             <span>
               <span className="block">{t('settings.general.launchOnLoginLabel')}</span>
-              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                {t('settings.general.launchOnLoginHint')}
-              </span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.launchOnLoginHint')}</span>
             </span>
           </label>
           <div className="mt-5">
-            <p className="mb-2 text-xs font-medium text-[color:var(--color-foreground)]">
-              {t('settings.general.launchOnLoginDisplayMode')}
-            </p>
+            <p className="mb-2 text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.general.launchOnLoginDisplayMode')}</p>
             <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
               {[
                 { value: 'tray', label: t('settings.general.launchOnLoginDisplayTray') },
@@ -111,18 +86,14 @@ function SettingsGeneralPanel({
                     void onLaunchOnLoginDisplayModeChange(opt.value as LaunchOnLoginDisplayMode)
                   }}
                   className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    launchOnLoginDisplayMode === opt.value
-                      ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    launchOnLoginDisplayMode === opt.value ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                   }`}
                 >
                   {opt.label}
                 </button>
               ))}
             </div>
-            <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-              {t('settings.general.launchOnLoginDisplayHint')}
-            </p>
+            <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.launchOnLoginDisplayHint')}</p>
           </div>
         </div>
       )}
@@ -131,9 +102,7 @@ function SettingsGeneralPanel({
         <div>
           <p className="section-label mb-3">{t('settings.general.window')}</p>
           <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.closeBehavior')}</h2>
-          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-            {t('settings.general.closeBehaviorDescription')}
-          </p>
+          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.general.closeBehaviorDescription')}</p>
           <div className="quiet-control inline-flex rounded-full p-1 gap-0.5">
             {[
               { value: 'quit', label: t('settings.general.closeBehaviorQuit') },
@@ -143,18 +112,14 @@ function SettingsGeneralPanel({
                 key={opt.value}
                 onClick={() => void onCloseWindowBehaviorChange(opt.value as CloseWindowBehavior)}
                 className={`button-interactive flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  closeWindowBehavior === opt.value
-                    ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm'
-                    : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  closeWindowBehavior === opt.value ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                 }`}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-          <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-            {t('settings.general.closeBehaviorHint')}
-          </p>
+          <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.closeBehaviorHint')}</p>
         </div>
       )}
     </div>

@@ -1,28 +1,28 @@
+import { ChevronLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
-import { useAppStore } from '../stores/appStore'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
+import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode } from '../../shared/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { SettingsSidebar } from './settings/SettingsSidebar'
-import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
-import { SettingsShortcutsPanel } from './settings/SettingsShortcutsPanel'
-import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
-import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
-import { SettingsAgentsPanel } from './settings/SettingsAgentsPanel'
-import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
-import { SettingsTranscriptPanel } from './settings/SettingsTranscriptPanel'
+import { useI18n } from '../i18n'
+import { useAppStore } from '../stores/appStore'
+import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
 import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsAgentLogsPanel } from './settings/SettingsAgentLogsPanel'
-import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
+import { SettingsAgentsPanel } from './settings/SettingsAgentsPanel'
 import { SettingsAiCommitPanel } from './settings/SettingsAiCommitPanel'
-import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
 import { SettingsAiConnectionPanel } from './settings/SettingsAiConnectionPanel'
+import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
+import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
+import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
+import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
-import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
+import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
+import { SettingsShortcutsPanel } from './settings/SettingsShortcutsPanel'
+import { SettingsSidebar } from './settings/SettingsSidebar'
+import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
+import { SettingsTranscriptPanel } from './settings/SettingsTranscriptPanel'
 import { DEFAULT_SETTINGS_SECTION, isSettingsSection, isSettingsSectionAlias, type SettingsSectionAlias, type ThemeMode } from './settings/settings.types'
-import { useI18n } from '../i18n'
-import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode } from '../../shared/types'
 
 const DEFAULT_CACHE_LOCATION: AppCacheLocationConfig = { mode: 'default' }
 
@@ -285,7 +285,7 @@ export function SettingsPage() {
           <SettingsSidebar active={section} onSelect={(nextSection) => navigate(`/settings/${nextSection}`)} />
 
           <main className="flex-1 min-h-0 min-w-0 ml-12 overflow-y-auto px-6 pt-1">
-            <div className="pb-6 -mb-6">
+            <div className="h-full min-h-0 pb-6 -mb-6">
               {section === 'general' && (
                 <SettingsGeneralPanel
                   theme={theme}
@@ -295,6 +295,7 @@ export function SettingsPage() {
                   closeWindowBehavior={closeWindowBehavior}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
+                  configRecovery={config.configRecovery}
                   onThemeChange={handleThemeChange}
                   onLocaleChange={handleLocaleChange}
                   onLaunchOnLoginChange={handleLaunchOnLoginChange}

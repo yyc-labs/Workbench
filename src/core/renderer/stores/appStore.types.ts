@@ -153,9 +153,7 @@ export interface AppState {
   setTheme: (theme: AppConfig['theme']) => Promise<void>
   setLocale: (locale: NonNullable<AppConfig['locale']>) => Promise<void>
   setLaunchOnLogin: (enabled: boolean) => Promise<void>
-  setLaunchOnLoginDisplayMode: (
-    mode: NonNullable<AppConfig['launchOnLoginDisplayMode']>
-  ) => Promise<void>
+  setLaunchOnLoginDisplayMode: (mode: NonNullable<AppConfig['launchOnLoginDisplayMode']>) => Promise<void>
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
@@ -174,14 +172,7 @@ export interface AppState {
   initApp: () => Promise<void>
   addProject: (dirPath: string) => Promise<void>
   removeProject: (projectId: string) => Promise<void>
-  startProject: (
-    projectId: string,
-    commandOverride?: string,
-    processId?: string,
-    useWsl?: boolean,
-    cwdOverride?: string,
-    runStartupModeOverride?: 'silent' | 'terminal'
-  ) => Promise<boolean>
+  startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean, cwdOverride?: string, runStartupModeOverride?: 'silent' | 'terminal') => Promise<boolean>
   stopProject: (projectId: string) => Promise<void>
   loadRuntimeEntries: () => Promise<void>
   appendOutput: (projectId: string, data: string) => void
@@ -230,10 +221,7 @@ export interface AppState {
   loadProjectTranscripts: (projectId: string) => Promise<void>
   loadTranscriptSession: (projectId: string, transcriptId: string) => Promise<TranscriptSession | null>
   openTranscript: (request: TranscriptViewerRequest) => Promise<void>
-  upsertTranscriptSession: (
-    session: TranscriptSession,
-    options?: { activate?: boolean; initialMode?: TranscriptViewerMode }
-  ) => void
+  upsertTranscriptSession: (session: TranscriptSession, options?: { activate?: boolean; initialMode?: TranscriptViewerMode }) => void
   openTranscriptReference: (sessionId: string, referenceId: string) => void
   closeTranscriptReference: (sessionId: string) => void
   setTranscriptMode: (sessionId: string, mode: TranscriptViewerMode) => void
@@ -262,7 +250,7 @@ export interface AppState {
   removeTag: (tagId: string) => Promise<void>
   reorderTags: (activeTagId: string, overTagId: string) => Promise<void>
   setProjectTags: (projectId: string, tagIds: string[]) => Promise<void>
-  startRuntime: (projectId: string) => Promise<void>
+  startRuntime: (projectId: string, profileId?: string) => Promise<void>
   stopRuntime: (projectId: string) => Promise<void>
   openTerminal: (projectId: string, statusHint?: string) => Promise<boolean>
 }
