@@ -1,4 +1,58 @@
-export type ProjectType = 'next.js' | 'vite' | 'android' | 'nuxt' | 'node' | 'django' | 'flask' | 'fastapi' | 'python' | 'unknown'
+export type { ConfigRecoveryInfo, ConfigRecoveryReason } from './configSchema'
+
+import type { AiGatewayConfig, AiGatewayLogLevel, AiGatewayLogRoute, AiGatewayProtocolConversionKind, AiGatewayProviderCapabilities, AiGatewayStatus } from './types/gateway'
+import type { ProjectType } from './types/project'
+import type { RuntimeSessionInfo, TmuxSessionInfo } from './types/runtime'
+import type { TranscriptSession, TranscriptSourceType, TranscriptViewerMode } from './types/transcript'
+
+export type {
+  AiGatewayClientBinding,
+  AiGatewayClientBindingBackup,
+  AiGatewayClientCli,
+  AiGatewayConfig,
+  AiGatewayLogLevel,
+  AiGatewayLogRoute,
+  AiGatewayModelRoute,
+  AiGatewayProtocolConversionKind,
+  AiGatewayProviderCapabilities,
+  AiGatewayProviderConfig,
+  AiGatewayStatus,
+  AiGatewayUpstreamProtocol,
+} from './types/gateway'
+export type {
+  LearningCategory,
+  LearningCreateCategoryPayload,
+  LearningCreateNotePayload,
+  LearningNote,
+  LearningNoteStatus,
+  LearningNoteSummary,
+  LearningSearchMatchKind,
+  LearningSearchResult,
+  LearningUpdateCategoryPayload,
+  LearningUpdateNotePayload,
+} from './types/learning'
+export type { ProjectType } from './types/project'
+export type {
+  Capability,
+  RecoveredSession,
+  RuntimeDiagnostics,
+  RuntimeEntry,
+  RuntimeRegistry,
+  RuntimeSessionInfo,
+  RuntimeStatus,
+  SessionRuntime,
+  TmuxSessionInfo,
+} from './types/runtime'
+export type {
+  TranscriptCaptureInitialText,
+  TranscriptCaptureInitialTextSource,
+  TranscriptFileReference,
+  TranscriptMessageRange,
+  TranscriptReference,
+  TranscriptSession,
+  TranscriptSourceType,
+  TranscriptViewerMode,
+} from './types/transcript'
 
 export type PackageManager = 'npm' | 'yarn' | 'pnpm'
 
@@ -235,103 +289,6 @@ export interface CodexSettingsInput {
 export interface CodexSettingsSaveResult {
   snapshot: CodexSettingsSnapshot
   appConfig: AppConfig
-}
-
-export type AiGatewayUpstreamProtocol = 'openai_chat' | 'openai_responses' | 'anthropic_messages'
-
-export type AiGatewayClientCli = 'claude' | 'codex'
-export type AiGatewayLogLevel = 'info' | 'warn' | 'error'
-export type AiGatewayLogRoute = 'anthropic' | 'responses' | 'chat' | 'health' | 'unknown'
-export type AiGatewayProtocolConversionKind = 'passthrough' | 'lossless_conversion' | 'lossy_conversion'
-
-export interface AiGatewayProviderCapabilities {
-  supportsStreaming?: boolean
-  supportsTools?: boolean
-  /** The provider accepts Responses function tools without protocol conversion. */
-  nativeResponsesTools?: boolean
-  /** Responses function tools can be downgraded to Chat function tools. */
-  responsesToolsViaChatDowngrade?: boolean
-  /** The provider supports Responses built-in tools such as web/file/computer use. */
-  responsesBuiltInTools?: boolean
-  supportsStrictTools?: boolean
-  supportsParallelToolCalls?: boolean
-  supportsDeveloperMessages?: boolean
-  supportsReasoning?: boolean
-  supportsResponsesInputItems?: boolean
-  supportsAnthropicContentBlocks?: boolean
-  supportsImages?: boolean
-  supportsDocuments?: boolean
-}
-
-export interface AiGatewayProviderConfig {
-  id: string
-  name: string
-  baseUrl: string
-  apiKeyEnv?: string
-  apiKey?: string
-  protocol: AiGatewayUpstreamProtocol
-  modelMap?: Record<string, string>
-  capabilities?: AiGatewayProviderCapabilities
-  enabled: boolean
-  timeoutMs?: number
-  streamRetryCount?: number
-  streamRetryDelayMs?: number
-  timeoutRetryCount?: number
-  timeoutRetryDelayMs?: number
-}
-
-export interface AiGatewayModelRoute {
-  id: string
-  model: string
-  providerId: string
-  upstreamModel?: string
-  enabled: boolean
-  source?: 'manual' | 'claude-profile' | 'codex-scope'
-  profileId?: string
-  scopeKey?: string
-  cli?: 'codex'
-}
-
-export interface AiGatewayClientBindingBackup {
-  createdAt: string
-  claudeConfig?: ClaudeBashrcConfig
-  codexSnapshot?: CodexSettingsSnapshot
-}
-
-export interface AiGatewayClientBinding {
-  cli: AiGatewayClientCli
-  enabled: boolean
-  baseUrl: string
-  providerId: string
-  backupPath?: string
-  backup?: AiGatewayClientBindingBackup
-}
-
-export interface AiGatewayConfig {
-  enabled: boolean
-  host: string
-  port: number
-  activeProviderId: string
-  providers: AiGatewayProviderConfig[]
-  clientBindings: Record<AiGatewayClientCli, AiGatewayClientBinding>
-  modelRoutes?: AiGatewayModelRoute[]
-  maxBodyBytes?: number
-}
-
-export interface AiGatewayStatus {
-  enabled: boolean
-  running: boolean
-  host: string
-  port: number
-  url: string
-  anthropicBaseUrl: string
-  openAiBaseUrl: string
-  activeProviderId: string
-  activeProvider?: AiGatewayProviderConfig
-  providerCount: number
-  clientBindings: Record<AiGatewayClientCli, AiGatewayClientBinding>
-  modelRoutes?: AiGatewayModelRoute[]
-  error?: string
 }
 
 export interface AiGatewayLogEntry {
@@ -685,115 +642,6 @@ export interface AgentHookLogDetail {
 }
 
 export type AgentLogDetail = AiGatewayLogDetail | AgentHookLogDetail
-
-export type TranscriptSourceType = 'process-output' | 'tmux-capture' | 'agent-hook' | 'manual-markdown' | 'imported-file'
-
-export type TranscriptCaptureInitialTextSource = 'selection' | 'clipboard' | 'empty'
-
-export interface TranscriptCaptureInitialText {
-  text: string
-  source: TranscriptCaptureInitialTextSource
-}
-
-export type TranscriptViewerMode = 'preview' | 'editor' | 'split'
-
-export interface TranscriptMessageRange {
-  startOffset: number
-  endOffset: number
-  startLine: number
-  endLine: number
-}
-
-export interface TranscriptReference {
-  id: string
-  sessionId: string
-  relativePath: string
-  lineNumber?: number
-  column?: number
-  label: string
-  rawText: string
-  href: string
-  messageRange: TranscriptMessageRange
-}
-
-export interface TranscriptFileReference {
-  transcriptId: string
-  transcriptTitle: string
-  reference: Pick<TranscriptReference, 'id' | 'relativePath' | 'lineNumber' | 'column'>
-}
-
-export interface TranscriptSession {
-  id: string
-  projectId: string
-  sourceType: TranscriptSourceType
-  title: string
-  rawText: string
-  markdownText: string
-  references: TranscriptReference[]
-  createdAt: number
-  updatedAt: number
-}
-
-export type LearningNoteStatus = 'draft' | 'organized'
-
-export interface LearningCategory {
-  id: string
-  name: string
-  parentId?: string
-  sort: number
-  createdAt: number
-  updatedAt: number
-}
-
-export interface LearningNoteSummary {
-  id: string
-  title: string
-  categoryId?: string
-  tags: string[]
-  status: LearningNoteStatus
-  createdAt: number
-  updatedAt: number
-  excerpt: string
-}
-
-export interface LearningNote extends LearningNoteSummary {
-  contentMd: string
-}
-
-export type LearningSearchMatchKind = 'title' | 'tag' | 'content'
-
-export interface LearningSearchResult extends LearningNoteSummary {
-  matchKind: LearningSearchMatchKind
-  matchExcerpt: string
-  matchOffset?: number
-}
-
-export interface LearningCreateNotePayload {
-  title?: string
-  categoryId?: string
-  tags?: string[]
-  status?: LearningNoteStatus
-  contentMd?: string
-}
-
-export interface LearningUpdateNotePayload {
-  noteId: string
-  title: string
-  categoryId?: string
-  tags: string[]
-  status: LearningNoteStatus
-  contentMd: string
-}
-
-export interface LearningCreateCategoryPayload {
-  name: string
-  parentId?: string
-}
-
-export interface LearningUpdateCategoryPayload {
-  categoryId: string
-  name: string
-}
 
 export interface SkillCategory {
   id: string
@@ -1522,6 +1370,10 @@ export interface TerminalStopAllResult {
 }
 
 export interface AppConfig {
+  /** Schema version used by the main-process config migration chain. */
+  configVersion?: number
+  /** Set only when startup recovered from a malformed config document. */
+  configRecovery?: import('./configSchema').ConfigRecoveryInfo
   projects: SavedProject[]
   theme: 'system' | 'light' | 'dark'
   locale?: AppLocale
@@ -1630,89 +1482,6 @@ export interface DetectionRule {
 export interface PtySize {
   cols: number
   rows: number
-}
-
-export interface Capability {
-  hostPlatform: 'windows' | 'linux' | 'macos'
-  backend: BackendMode
-  hasPty: boolean
-  /** Host-only WSL installation signal; does not mean a distro has been started or probed. */
-  hasWslInstalled?: boolean
-  hasWsl: boolean
-  hasTmux: boolean
-  wslDistro?: string
-  wslShell: string
-  /** Full WSL environment captured at boot via bash -ilc env. */
-  wslEnv?: Record<string, string>
-}
-
-export interface TmuxSessionInfo {
-  sessionName: string
-  projectId: string
-  createdAt: number
-  status: 'attached' | 'detached' | 'dead'
-}
-
-export interface RecoveredSession {
-  sessionName: string
-  projectId: string
-  cwd: string
-  status: 'detached'
-  createdAt: number
-}
-
-/** Runtime session status — mirrors tmux reality, NOT user-facing labels.
- *  UI layer maps: attached→Active, detached→Background, stopped→Offline. */
-export type RuntimeStatus = 'attached' | 'detached' | 'stopped'
-
-export interface SessionRuntime {
-  projectId: string
-  sessionName: string
-  status: RuntimeStatus
-  createdAt: number
-}
-
-export interface RuntimeEntry {
-  projectId: string
-  sessionName: string
-  createdAt: number
-  lastOpened: number
-  mode?: AiExecutionMode
-  profileId?: string
-  profileName?: string
-  /** Dedicated host process pid for providers like Windows Native. */
-  pid?: number | null
-  /** Host process start timestamp used to guard against pid reuse. */
-  pidStartedAt?: number | null
-}
-
-export interface RuntimeRegistry {
-  entries: Record<string, RuntimeEntry>
-}
-
-export interface RuntimeSessionInfo {
-  sessionName: string
-  projectId: string
-  createdAt: number
-  status: 'attached' | 'detached' | 'dead'
-  mode: AiExecutionMode
-}
-
-export interface RuntimeDiagnostics {
-  checkedAt: number
-  mode: AiExecutionMode
-  providerLabel: string
-  runtimeEntrypoint?: string
-  supported: boolean
-  hasWsl: boolean
-  hasTmux: boolean
-  distro?: string
-  launcherScript?: string
-  launcherScriptExists?: boolean
-  launcherScriptExecutable?: boolean
-  shell?: AiShell
-  availableModes?: AiExecutionMode[]
-  issues: string[]
 }
 
 export type ProjectFileNodeKind = 'file' | 'directory'
