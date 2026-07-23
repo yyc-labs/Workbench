@@ -1,31 +1,46 @@
 import { randomUUID } from 'crypto'
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { net } from 'electron'
-import type { AiGatewayConfig, AiGatewayLogDetail, AiGatewayLogEntry, AiGatewayProviderConfig, AiGatewayProtocolConversionKind, StructuredJsonSnapshot } from '../../../shared/types'
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
+import type { AiGatewayConfig, AiGatewayLogDetail, AiGatewayLogEntry, AiGatewayProtocolConversionKind, AiGatewayProviderConfig } from '../../../shared/types'
 import { buildRequestSnapshot, buildResponseSnapshot } from '../agent-logs/log-snapshots'
-import { emptyResponse, getContentType, getHeaderValue, getResponseContentType, jsonResponse, writeSseHeaders, type HeaderValue } from './gateway-http'
+import { chatStreamChunkToAnthropicEvents, chatStreamChunkToResponsesEvents, createAnthropicStreamStart, createAnthropicStreamState, createAnthropicStreamStop, createResponsesStreamCreated, createResponsesStreamFinish, createResponsesStreamIds, createResponsesStreamState } from './gateway-chat-stream-conversion'
 import { AI_GATEWAY_DEFAULT_MAX_BODY_BYTES, getAiGatewayAnthropicBaseUrl, getAiGatewayListenUrl, getAiGatewayOpenAiBaseUrl, normalizeAiGatewayConfig } from './gateway-config'
-import { parseRoutedPath, routeErrorPayload, type RouteKind } from './gateway-routes'
+import { emptyResponse, getContentType, getHeaderValue, getResponseContentType, type HeaderValue, jsonResponse, writeSseHeaders } from './gateway-http'
+import { handleAnthropicMessagesRoute, handleChatCompletionsRoute, handleResponsesRoute } from './gateway-request-handlers'
+import { parseRoutedPath, type RouteKind, routeErrorPayload } from './gateway-routes'
 import {
+  buildAnthropicMessagePayload as streamBuildAnthropicMessagePayload,
+  buildChatStreamPayload as streamBuildChatStreamPayload,
+  buildRawSsePayload as streamBuildRawSsePayload,
+  createAnthropicContentTraceAccumulator as streamCreateAnthropicContentTraceAccumulator,
+  createChatToolCallTraceAccumulator as streamCreateChatToolCallTraceAccumulator,
+  extractDeltaText as streamExtractDeltaText,
+  extractFinishReason as streamExtractFinishReason,
+  extractUsage as streamExtractUsage,
+  findResponseCompletedPayload as streamFindResponseCompletedPayload,
+  isJsonRecord as streamIsJsonRecord,
+  parseJsonRecord as streamParseJsonRecord,
+  readAnthropicPassthroughEvent as streamReadAnthropicPassthroughEvent,
+  readAnthropicStopMetadata as streamReadAnthropicStopMetadata,
+} from './gateway-stream-accumulators'
+import { updateGatewayStreamTrace } from './gateway-stream-observability'
+import { decodeSseStream, drainSseEvents, encodeSseEvent } from './gateway-stream-proxy'
+import {
+  applyToolValidationReport as applyToolValidationReportHelper,
   beginGatewayTrace as beginGatewayTraceHelper,
   buildGatewayTraceDetail,
-  updateGatewayTraceIngressBody as updateGatewayTraceIngressBodyHelper,
-  updateGatewayTraceProtocolDiagnostics as updateGatewayTraceProtocolDiagnosticsHelper,
-  applyToolValidationReport as applyToolValidationReportHelper,
-  setGatewayTraceRouteData as setGatewayTraceRouteDataHelper,
   type GatewayRequestTrace,
   type RequestLogContext,
+  setGatewayTraceRouteData as setGatewayTraceRouteDataHelper,
+  updateGatewayTraceIngressBody as updateGatewayTraceIngressBodyHelper,
+  updateGatewayTraceProtocolDiagnostics as updateGatewayTraceProtocolDiagnosticsHelper,
 } from './gateway-trace'
-import { AiGatewayProviderRegistry } from './provider-registry'
-import type { AnthropicMessagesRequest, ChatCompletionRequest, ChatCompletionResponse, ChatCompletionToolCall, JsonObject, OpenAiResponsesRequest } from './protocol-types'
-import { GatewayRouteError, UnsupportedGatewayFeatureError } from './protocol-types'
-import { chatStreamChunkToAnthropicEvents, createAnthropicStreamStart, createAnthropicStreamState, createAnthropicStreamStop } from './adapters/chat-to-anthropic'
-import { chatStreamChunkToResponsesEvents, createResponsesStreamCreated, createResponsesStreamFinish, createResponsesStreamIds, createResponsesStreamState } from './adapters/chat-to-responses'
-import { decodeSseStream, drainSseEvents, encodeSseEvent } from './adapters/sse'
-import { buildStreamMergedSnapshot, createLimitedTextAccumulator } from './stream-trace'
-import { assertToolValidationPassed, anthropicToolsToValidationTools, toolValidationFailureMessage, validateAnthropicToolUseBlocks, validateChatToolCalls, type ToolValidationReport } from './tool-validation'
 import { buildAnthropicAuthHeaders, buildAnthropicUpstreamLogDetails, buildResponsesUpstreamLogDetails, buildUpstreamLogDetails, extractRequestApiToken, isAbortError, readResponseText, resolveUpstreamAuth, toAnthropicMessagesUrl, toChatCompletionsUrl, toResponsesUrl } from './gateway-upstream'
-import { handleAnthropicMessagesRoute, handleChatCompletionsRoute, handleResponsesRoute } from './gateway-request-handlers'
+import type { AnthropicMessagesRequest, ChatCompletionRequest, ChatCompletionResponse, JsonObject, OpenAiResponsesRequest } from './protocol-types'
+import { GatewayRouteError, UnsupportedGatewayFeatureError } from './protocol-types'
+import type { AiGatewayProviderRegistry } from './provider-registry'
+import { createLimitedTextAccumulator } from './stream-trace'
+import { anthropicToolsToValidationTools, assertToolValidationPassed, type ToolValidationReport, toolValidationFailureMessage, validateAnthropicToolUseBlocks, validateChatToolCalls } from './tool-validation'
 
 export { extractRequestApiToken, toAnthropicMessagesUrl } from './gateway-upstream'
 
@@ -102,325 +117,6 @@ function logAiGateway(level: 'info' | 'warn' | 'error', message: string, details
 function debugAiGateway(message: string, details?: Record<string, unknown>): void {
   if (!isAiGatewayDebugEnabled()) return
   logAiGateway('info', message, details)
-}
-
-function extractFinishReason(chunk: ChatCompletionResponse): string | null | undefined {
-  return chunk.choices?.[0]?.finish_reason
-}
-
-function extractUsage(chunk: ChatCompletionResponse): JsonObject | undefined {
-  return chunk.usage
-}
-
-function extractDeltaText(chunk: ChatCompletionResponse): string {
-  const content = chunk.choices?.[0]?.delta?.content
-  return typeof content === 'string' ? content : ''
-}
-
-type ChatToolCallTrace = {
-  index: number
-  id?: string
-  type?: string
-  functionName?: string
-  argumentFragments: string[]
-}
-
-type AnthropicTraceContentBlock = {
-  index: number
-  kind: 'text' | 'tool_use'
-  text?: string
-  id?: string
-  name?: string
-  initialInput?: unknown
-  inputFragments: string[]
-}
-
-function isJsonRecord(value: unknown): value is JsonObject {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
-function parseJsonRecord(value: string): JsonObject | undefined {
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isJsonRecord(parsed) ? parsed : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function getFiniteIndex(value: unknown): number | undefined {
-  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : undefined
-}
-
-function createChatToolCallTraceAccumulator(): {
-  append(chunk: ChatCompletionResponse): void
-  snapshot(): ChatCompletionToolCall[]
-} {
-  const calls = new Map<number, ChatToolCallTrace>()
-
-  return {
-    append(chunk: ChatCompletionResponse): void {
-      const deltaToolCalls = chunk.choices?.[0]?.delta?.tool_calls
-      if (!Array.isArray(deltaToolCalls)) return
-
-      deltaToolCalls.forEach((toolCall, fallbackIndex) => {
-        const index = getFiniteIndex(toolCall.index) ?? fallbackIndex
-        const current = calls.get(index) ?? {
-          index,
-          argumentFragments: [],
-        }
-        const id = toolCall.id?.trim()
-        if (id) current.id = id
-        const type = toolCall.type?.trim()
-        if (type) current.type = type
-        const functionName = toolCall.function?.name?.trim()
-        if (functionName) current.functionName = functionName
-        const argumentsDelta = toolCall.function?.arguments
-        if (typeof argumentsDelta === 'string' && argumentsDelta) {
-          current.argumentFragments.push(argumentsDelta)
-        }
-        calls.set(index, current)
-      })
-    },
-    snapshot(): ChatCompletionToolCall[] {
-      return Array.from(calls.values())
-        .sort((a, b) => a.index - b.index)
-        .filter((call) => Boolean(call.id || call.functionName || call.argumentFragments.length > 0))
-        .map((call) => ({
-          ...(call.id ? { id: call.id } : {}),
-          index: call.index,
-          type: call.type || 'function',
-          function: {
-            ...(call.functionName ? { name: call.functionName } : {}),
-            arguments: call.argumentFragments.join(''),
-          },
-        }))
-    },
-  }
-}
-
-function buildChatStreamPayload(model: string, text: string, finishReason: string | null | undefined, usage: JsonObject | undefined, toolCalls: ChatCompletionToolCall[] = []): JsonObject | undefined {
-  const hasVisibleText = text.trim().length > 0
-  if (!hasVisibleText && toolCalls.length === 0 && typeof finishReason === 'undefined' && typeof usage === 'undefined') return undefined
-  return {
-    object: 'chat.completion',
-    model,
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: hasVisibleText ? text : toolCalls.length > 0 ? null : '',
-          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-        },
-        finish_reason: finishReason ?? null,
-      },
-    ],
-    usage,
-  }
-}
-
-function ensureAnthropicTextBlock(blocks: Map<number, AnthropicTraceContentBlock>, index: number): AnthropicTraceContentBlock {
-  const existing = blocks.get(index)
-  if (existing?.kind === 'text') return existing
-  const created: AnthropicTraceContentBlock = {
-    index,
-    kind: 'text',
-    text: '',
-    inputFragments: [],
-  }
-  blocks.set(index, created)
-  return created
-}
-
-function ensureAnthropicToolBlock(blocks: Map<number, AnthropicTraceContentBlock>, index: number): AnthropicTraceContentBlock {
-  const existing = blocks.get(index)
-  if (existing?.kind === 'tool_use') return existing
-  const created: AnthropicTraceContentBlock = {
-    index,
-    kind: 'tool_use',
-    inputFragments: [],
-  }
-  blocks.set(index, created)
-  return created
-}
-
-function resolveAnthropicToolInput(block: AnthropicTraceContentBlock): { input: unknown; rawInputJson?: string } {
-  const rawInputJson = block.inputFragments.join('')
-  if (rawInputJson.trim()) {
-    try {
-      return { input: JSON.parse(rawInputJson) as unknown }
-    } catch {
-      return {
-        input: typeof block.initialInput === 'undefined' ? {} : block.initialInput,
-        rawInputJson,
-      }
-    }
-  }
-  return {
-    input: typeof block.initialInput === 'undefined' ? {} : block.initialInput,
-  }
-}
-
-function createAnthropicContentTraceAccumulator(): {
-  appendEvent(event: { data: string }): void
-  appendParsed(parsed: JsonObject | undefined): void
-  snapshot(fallbackText?: string): JsonObject[]
-} {
-  const blocks = new Map<number, AnthropicTraceContentBlock>()
-  const appendParsed = (parsed: JsonObject | undefined): void => {
-    if (!parsed) return
-    const index = getFiniteIndex(parsed.index)
-
-    if (parsed.type === 'content_block_start' && typeof index === 'number') {
-      const contentBlock = isJsonRecord(parsed.content_block) ? parsed.content_block : undefined
-      if (contentBlock?.type === 'text') {
-        const block = ensureAnthropicTextBlock(blocks, index)
-        if (typeof contentBlock.text === 'string') {
-          block.text = `${block.text || ''}${contentBlock.text}`
-        }
-        return
-      }
-      if (contentBlock?.type === 'tool_use') {
-        const block = ensureAnthropicToolBlock(blocks, index)
-        const id = typeof contentBlock.id === 'string' ? contentBlock.id.trim() : ''
-        const name = typeof contentBlock.name === 'string' ? contentBlock.name.trim() : ''
-        if (id) block.id = id
-        if (name) block.name = name
-        if (typeof contentBlock.input !== 'undefined') block.initialInput = contentBlock.input
-      }
-      return
-    }
-
-    if (parsed.type !== 'content_block_delta' || typeof index !== 'number') return
-    const delta = isJsonRecord(parsed.delta) ? parsed.delta : undefined
-    if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-      const block = ensureAnthropicTextBlock(blocks, index)
-      block.text = `${block.text || ''}${delta.text}`
-      return
-    }
-    if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
-      const block = ensureAnthropicToolBlock(blocks, index)
-      block.inputFragments.push(delta.partial_json)
-    }
-  }
-
-  return {
-    appendEvent(event: { data: string }): void {
-      appendParsed(parseJsonRecord(event.data))
-    },
-    appendParsed,
-    snapshot(fallbackText = ''): JsonObject[] {
-      const content = Array.from(blocks.values())
-        .sort((a, b) => a.index - b.index)
-        .flatMap((block): JsonObject[] => {
-          if (block.kind === 'text') {
-            return block.text?.trim() ? [{ type: 'text', text: block.text }] : []
-          }
-          const { input, rawInputJson } = resolveAnthropicToolInput(block)
-          return [
-            {
-              type: 'tool_use',
-              id: block.id || `toolu_trace_${block.index}`,
-              name: block.name || 'unknown_tool',
-              input,
-              ...(rawInputJson ? { raw_input_json: rawInputJson } : {}),
-            },
-          ]
-        })
-
-      const hasTextBlock = content.some((block) => block.type === 'text')
-      if (!hasTextBlock && fallbackText.trim()) {
-        content.unshift({ type: 'text', text: fallbackText })
-      }
-      return content
-    },
-  }
-}
-
-function buildRawSsePayload(snapshot: StructuredJsonSnapshot | undefined): JsonObject | undefined {
-  if (!snapshot?.rawText) return undefined
-  return {
-    format: 'server-sent-events',
-    note: 'Raw SSE captured because this stream route did not produce a final JSON payload.',
-    rawText: snapshot.rawText,
-    sizeBytes: snapshot.sizeBytes,
-    truncated: snapshot.truncated,
-  }
-}
-
-function findResponseCompletedPayload(events: Array<{ data: string }>): JsonObject | undefined {
-  for (const event of events) {
-    const parsed = parseJsonRecord(event.data)
-    if (parsed?.type === 'response.completed' && isJsonRecord(parsed.response)) {
-      return parsed.response
-    }
-  }
-  return undefined
-}
-
-function readAnthropicStopMetadata(events: Array<{ event?: string; data: string }>, fallbackReason: string | null | undefined, fallbackUsage: JsonObject | undefined): { stopReason: string | null | undefined; usage: unknown } {
-  let stopReason: string | null | undefined = fallbackReason
-  let usage: unknown = fallbackUsage
-  for (const event of events) {
-    if (event.event !== 'message_delta') continue
-    const parsed = parseJsonRecord(event.data)
-    const delta = isJsonRecord(parsed?.delta) ? parsed.delta : undefined
-    if (typeof delta?.stop_reason === 'string' || delta?.stop_reason === null) {
-      stopReason = delta.stop_reason
-    }
-    if (typeof parsed?.usage !== 'undefined') {
-      usage = parsed.usage
-    }
-  }
-  return { stopReason, usage }
-}
-
-function buildAnthropicMessagePayload({ id, model, text, contentBlocks, stopReason, usage }: { id: string; model: string; text: string; contentBlocks?: JsonObject[]; stopReason: string | null | undefined; usage: unknown }): JsonObject | undefined {
-  const content = contentBlocks && contentBlocks.length > 0 ? contentBlocks : text.trim() || typeof stopReason !== 'undefined' || typeof usage !== 'undefined' ? [{ type: 'text', text }] : []
-  if (content.length === 0 && typeof stopReason === 'undefined' && typeof usage === 'undefined') return undefined
-  return {
-    id,
-    type: 'message',
-    role: 'assistant',
-    model,
-    content,
-    stop_reason: stopReason ?? null,
-    stop_sequence: null,
-    usage,
-  }
-}
-
-function readAnthropicPassthroughEvent(parsed: JsonObject | undefined): {
-  message?: JsonObject
-  textDelta?: string
-  stopReason?: string | null
-  usage?: unknown
-} {
-  if (!parsed) return {}
-  if (parsed.type === 'message_start' && isJsonRecord(parsed.message)) {
-    return { message: parsed.message }
-  }
-  if (parsed.type === 'content_block_start') {
-    const contentBlock = isJsonRecord(parsed.content_block) ? parsed.content_block : undefined
-    if (contentBlock?.type === 'text' && typeof contentBlock.text === 'string' && contentBlock.text) {
-      return { textDelta: contentBlock.text }
-    }
-  }
-  if (parsed.type === 'content_block_delta') {
-    const delta = isJsonRecord(parsed.delta) ? parsed.delta : undefined
-    if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-      return { textDelta: delta.text }
-    }
-  }
-  if (parsed.type === 'message_delta') {
-    const delta = isJsonRecord(parsed.delta) ? parsed.delta : undefined
-    return {
-      stopReason: typeof delta?.stop_reason === 'string' || delta?.stop_reason === null ? delta.stop_reason : undefined,
-      usage: parsed.usage,
-    }
-  }
-  return {}
 }
 
 export class AiGatewayServer {
@@ -862,7 +558,7 @@ export class AiGatewayServer {
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     let parsedResponse: JsonObject | undefined
     if (response.ok) {
-      parsedResponse = parseJsonRecord(responseText)
+      parsedResponse = streamParseJsonRecord(responseText)
     }
     trace.upstreamResponse = buildResponseSnapshot({
       statusCode: response.status,
@@ -987,13 +683,13 @@ export class AiGatewayServer {
     let upstreamEventCount = 0
     const previewEvents: unknown[] = []
     const textAccumulator = createLimitedTextAccumulator(maxBodyBytes)
-    const contentAccumulator = createAnthropicContentTraceAccumulator()
+    const contentAccumulator = streamCreateAnthropicContentTraceAccumulator()
     let upstreamMessage: JsonObject | undefined
     let stopReason: string | null | undefined
     let usage: unknown
     const updateStreamTrace = (): void => {
       const text = textAccumulator.getText()
-      const payloadSnapshot = buildAnthropicMessagePayload({
+      const payloadSnapshot = streamBuildAnthropicMessagePayload({
         id: typeof upstreamMessage?.id === 'string' ? upstreamMessage.id : 'msg_stream',
         model: typeof upstreamMessage?.model === 'string' ? upstreamMessage.model : payload.model,
         text,
@@ -1001,7 +697,11 @@ export class AiGatewayServer {
         stopReason,
         usage,
       })
-      const merged = buildStreamMergedSnapshot({
+      updateGatewayStreamTrace(trace, {
+        requested: payload.stream === true,
+        enabled: true,
+        upstreamEventCount,
+        previewEvents,
         upstreamText: text,
         upstreamPayload: payloadSnapshot,
         clientText: text,
@@ -1010,12 +710,6 @@ export class AiGatewayServer {
         usage,
         maxBodyBytes,
       })
-      trace.stream = {
-        ...(trace.stream ?? { requested: payload.stream === true, enabled: true }),
-        upstreamEventCount,
-        previewEvents,
-        merged,
-      }
     }
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
@@ -1028,9 +722,9 @@ export class AiGatewayServer {
           data: event.data,
         })
       }
-      const parsed = parseJsonRecord(event.data)
+      const parsed = streamParseJsonRecord(event.data)
       contentAccumulator.appendParsed(parsed)
-      const streamEvent = readAnthropicPassthroughEvent(parsed)
+      const streamEvent = streamReadAnthropicPassthroughEvent(parsed)
       if (streamEvent.message) {
         upstreamMessage = streamEvent.message
         if (typeof usage === 'undefined') {
@@ -1338,9 +1032,13 @@ export class AiGatewayServer {
     let usage: unknown
     const updateStreamTrace = (): void => {
       const text = textAccumulator.getText()
-      const rawPayload = buildRawSsePayload(rawSseAccumulator.snapshot())
+      const rawPayload = streamBuildRawSsePayload(rawSseAccumulator.snapshot())
       const payloadSnapshot = completedPayload ?? rawPayload
-      const merged = buildStreamMergedSnapshot({
+      updateGatewayStreamTrace(trace, {
+        requested: payload.stream === true,
+        enabled: true,
+        upstreamEventCount,
+        previewEvents,
         upstreamText: text,
         upstreamPayload: payloadSnapshot,
         clientText: text,
@@ -1349,12 +1047,6 @@ export class AiGatewayServer {
         usage,
         maxBodyBytes,
       })
-      trace.stream = {
-        ...(trace.stream ?? { requested: payload.stream === true, enabled: true }),
-        upstreamEventCount,
-        previewEvents,
-        merged,
-      }
     }
 
     const reader = response.body.getReader()
@@ -1368,16 +1060,16 @@ export class AiGatewayServer {
           data: event.data,
         })
       }
-      const parsed = parseJsonRecord(event.data)
+      const parsed = streamParseJsonRecord(event.data)
       if (parsed?.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
         textAccumulator.append(parsed.delta)
       }
-      if (parsed?.type === 'response.completed' && isJsonRecord(parsed.response)) {
+      if (parsed?.type === 'response.completed' && streamIsJsonRecord(parsed.response)) {
         completedPayload = parsed.response
         if (typeof parsed.response.output_text === 'string' && !textAccumulator.getText()) {
           textAccumulator.append(parsed.response.output_text)
         }
-        if (isJsonRecord(parsed.response.usage)) {
+        if (streamIsJsonRecord(parsed.response.usage)) {
           usage = parsed.response.usage
         }
         finishReason = 'completed'
@@ -2031,7 +1723,7 @@ export class AiGatewayServer {
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     const decoder = new TextDecoder()
     const textAccumulator = createLimitedTextAccumulator(maxBodyBytes)
-    const toolCallAccumulator = createChatToolCallTraceAccumulator()
+    const toolCallAccumulator = streamCreateChatToolCallTraceAccumulator()
     const rawSseAccumulator = createLimitedTextAccumulator(maxBodyBytes, 'text/event-stream; charset=utf-8')
     let sseBuffer = ''
     let upstreamEventCount = 0
@@ -2047,12 +1739,12 @@ export class AiGatewayServer {
           data: event.data,
         })
       }
-      const parsed = parseJsonRecord(event.data) as ChatCompletionResponse | undefined
+      const parsed = streamParseJsonRecord(event.data) as ChatCompletionResponse | undefined
       if (!parsed) return
-      finishReason = extractFinishReason(parsed) ?? finishReason
-      usage = extractUsage(parsed) ?? usage
+      finishReason = streamExtractFinishReason(parsed) ?? finishReason
+      usage = streamExtractUsage(parsed) ?? usage
       toolCallAccumulator.append(parsed)
-      textAccumulator.append(extractDeltaText(parsed))
+      textAccumulator.append(streamExtractDeltaText(parsed))
     }
     const drainRawSseText = (value: string): void => {
       if (!value) return
@@ -2066,9 +1758,13 @@ export class AiGatewayServer {
     }
     const updateStreamTrace = (): void => {
       const text = textAccumulator.getText()
-      const rawPayload = buildRawSsePayload(rawSseAccumulator.snapshot())
-      const finalPayload = buildChatStreamPayload(chatRequest.model, text, finishReason, usage, toolCallAccumulator.snapshot()) ?? rawPayload
-      const merged = buildStreamMergedSnapshot({
+      const rawPayload = streamBuildRawSsePayload(rawSseAccumulator.snapshot())
+      const finalPayload = streamBuildChatStreamPayload(chatRequest.model, text, finishReason, usage, toolCallAccumulator.snapshot()) ?? rawPayload
+      updateGatewayStreamTrace(trace, {
+        requested: chatRequest.stream === true,
+        enabled: true,
+        upstreamEventCount,
+        previewEvents,
         upstreamText: text,
         upstreamPayload: finalPayload,
         clientText: text,
@@ -2077,12 +1773,6 @@ export class AiGatewayServer {
         usage,
         maxBodyBytes,
       })
-      trace.stream = {
-        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
-        upstreamEventCount,
-        previewEvents,
-        merged,
-      }
     }
     try {
       while (true) {
@@ -2139,15 +1829,15 @@ export class AiGatewayServer {
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
     const upstreamTextAccumulator = createLimitedTextAccumulator(maxBodyBytes)
     const clientTextAccumulator = createLimitedTextAccumulator(maxBodyBytes)
-    const upstreamToolCallAccumulator = createChatToolCallTraceAccumulator()
-    const clientContentAccumulator = createAnthropicContentTraceAccumulator()
+    const upstreamToolCallAccumulator = streamCreateChatToolCallTraceAccumulator()
+    const clientContentAccumulator = streamCreateAnthropicContentTraceAccumulator()
     const updateStreamTrace = (clientStopReason?: string | null, clientUsage?: unknown): void => {
       const upstreamText = upstreamTextAccumulator.getText()
       const clientText = clientTextAccumulator.getText()
       const resolvedClientStopReason = typeof clientStopReason !== 'undefined' ? clientStopReason : finishReason
       const resolvedClientUsage = typeof clientUsage !== 'undefined' ? clientUsage : usage
-      const upstreamPayload = buildChatStreamPayload(chatRequest.model, upstreamText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
-      const clientPayload = buildAnthropicMessagePayload({
+      const upstreamPayload = streamBuildChatStreamPayload(chatRequest.model, upstreamText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
+      const clientPayload = streamBuildAnthropicMessagePayload({
         id: messageId,
         model: chatRequest.model,
         text: clientText,
@@ -2155,7 +1845,11 @@ export class AiGatewayServer {
         stopReason: resolvedClientStopReason,
         usage: resolvedClientUsage,
       })
-      const merged = buildStreamMergedSnapshot({
+      updateGatewayStreamTrace(trace, {
+        requested: chatRequest.stream === true,
+        enabled: true,
+        upstreamEventCount,
+        previewEvents,
         upstreamText,
         upstreamPayload,
         clientText,
@@ -2164,12 +1858,6 @@ export class AiGatewayServer {
         usage: typeof usage !== 'undefined' ? usage : clientUsage,
         maxBodyBytes,
       })
-      trace.stream = {
-        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
-        upstreamEventCount,
-        previewEvents,
-        merged,
-      }
     }
 
     this.recordGatewayLog({
@@ -2244,10 +1932,10 @@ export class AiGatewayServer {
           )
           throw new Error('Upstream chat/completions stream emitted an invalid JSON SSE chunk.')
         }
-        finishReason = extractFinishReason(chunk) ?? finishReason
-        usage = extractUsage(chunk) ?? usage
+        finishReason = streamExtractFinishReason(chunk) ?? finishReason
+        usage = streamExtractUsage(chunk) ?? usage
         upstreamToolCallAccumulator.append(chunk)
-        const deltaText = extractDeltaText(chunk)
+        const deltaText = streamExtractDeltaText(chunk)
         const deltaToolCalls = chunk.choices?.[0]?.delta?.tool_calls
         const hasDeltaToolCalls = Array.isArray(deltaToolCalls) && deltaToolCalls.length > 0
         upstreamTextAccumulator.append(deltaText)
@@ -2332,7 +2020,7 @@ export class AiGatewayServer {
         clientContentAccumulator.appendEvent(event)
         res.write(encodeSseEvent(event.event, event.data))
       }
-      const stopMetadata = readAnthropicStopMetadata(stopEvents, finishReason, usage)
+      const stopMetadata = streamReadAnthropicStopMetadata(stopEvents, finishReason, usage)
       updateStreamTrace(stopMetadata.stopReason, stopMetadata.usage)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -2384,10 +2072,14 @@ export class AiGatewayServer {
     let usage: JsonObject | undefined
     const previewEvents: unknown[] = []
     const maxBodyBytes = this.getConfig().maxBodyBytes ?? AI_GATEWAY_DEFAULT_MAX_BODY_BYTES
-    const upstreamToolCallAccumulator = createChatToolCallTraceAccumulator()
+    const upstreamToolCallAccumulator = streamCreateChatToolCallTraceAccumulator()
     const updateStreamTrace = (clientPayload?: JsonObject): void => {
-      const upstreamPayload = buildChatStreamPayload(chatRequest.model, fullText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
-      const merged = buildStreamMergedSnapshot({
+      const upstreamPayload = streamBuildChatStreamPayload(chatRequest.model, fullText, finishReason, usage, upstreamToolCallAccumulator.snapshot())
+      updateGatewayStreamTrace(trace, {
+        requested: chatRequest.stream === true,
+        enabled: true,
+        upstreamEventCount,
+        previewEvents,
         upstreamText: fullText,
         upstreamPayload,
         clientText: fullText,
@@ -2396,12 +2088,6 @@ export class AiGatewayServer {
         usage,
         maxBodyBytes,
       })
-      trace.stream = {
-        ...(trace.stream ?? { requested: chatRequest.stream === true, enabled: true }),
-        upstreamEventCount,
-        previewEvents,
-        merged,
-      }
     }
 
     this.recordGatewayLog({
@@ -2475,10 +2161,10 @@ export class AiGatewayServer {
           )
           throw new Error('Upstream chat/completions stream emitted an invalid JSON SSE chunk.')
         }
-        finishReason = extractFinishReason(chunk) ?? finishReason
-        usage = extractUsage(chunk) ?? usage
+        finishReason = streamExtractFinishReason(chunk) ?? finishReason
+        usage = streamExtractUsage(chunk) ?? usage
         upstreamToolCallAccumulator.append(chunk)
-        fullText += extractDeltaText(chunk)
+        fullText += streamExtractDeltaText(chunk)
         for (const mapped of chatStreamChunkToResponsesEvents(chunk, responsesStreamState)) {
           res.write(encodeSseEvent(mapped.event, mapped.data))
         }
@@ -2528,7 +2214,7 @@ export class AiGatewayServer {
       for (const event of stopEvents) {
         res.write(encodeSseEvent(event.event, event.data))
       }
-      updateStreamTrace(findResponseCompletedPayload(stopEvents))
+      updateStreamTrace(streamFindResponseCompletedPayload(stopEvents))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       trace.level = 'warn'
