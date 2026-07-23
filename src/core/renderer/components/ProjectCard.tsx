@@ -1,11 +1,5 @@
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type {
-  AiCommitTaskSnapshot,
-  CliTool,
-  ProjectFolder,
-  ProjectInfo,
-  ProjectTag,
-} from '../../shared/types'
+import type { AiCommitTaskSnapshot, CliTool, ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
 import { ProjectLinksTrigger } from './ProjectLinksTrigger'
@@ -22,13 +16,7 @@ import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
-import {
-  defaultAiRuntimeProfiles,
-  getAiRuntimeProfileCli,
-  getAiRuntimeProfileLabel,
-  resolveAiRuntimeProfile,
-  resolveProjectAiRuntimeProfileId,
-} from '../../shared/aiRuntimeProfiles'
+import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -69,22 +57,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project.cli)
   const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project.cli)
   const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project.cli)
-  const selectedAiRuntimeProfileValue = hasProjectAiRuntimeOverride
-    ? currentRuntimeProfile.id
-    : DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE
-  const aiRuntimeProfileOptions = useMemo<SelectOption[]>(
-    () => [
-      {
-        value: DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE,
-        label: `${t('common.default')} · ${defaultRuntimeProfileLabel}`,
-      },
-      ...aiRuntimeProfiles.map((profile) => ({
-        value: profile.id,
-        label: profile.name,
-      })),
-    ],
-    [aiRuntimeProfiles, defaultRuntimeProfileLabel, t]
-  )
+  const selectedAiRuntimeProfileValue = hasProjectAiRuntimeOverride ? currentRuntimeProfile.id : DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE
 
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
@@ -94,28 +67,16 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const runtimeLabel = isRuntimeAttached ? t('common.active') : isRuntimeDetached ? t('common.background') : t('common.offline')
-  const accentColor = isRuntimeAttached
-    ? 'var(--color-success)'
-    : isRuntimeDetached
-      ? 'var(--color-warning)'
-      : 'var(--color-primary)'
-  const runtimeColorClass = isRuntimeAttached
-    ? 'text-[color:var(--color-success)]'
-    : isRuntimeDetached
-      ? 'text-[color:var(--color-warning)]'
-      : 'text-[color:var(--color-muted-foreground)]'
-  const runtimeDotClass = isRuntimeAttached
-    ? 'bg-[color:var(--color-success)]'
-    : isRuntimeDetached
-      ? 'bg-[color:var(--color-warning)]'
-      : 'bg-[color:var(--color-muted-foreground)]/45'
+  const accentColor = isRuntimeAttached ? 'var(--color-success)' : isRuntimeDetached ? 'var(--color-warning)' : 'var(--color-primary)'
+  const runtimeColorClass = isRuntimeAttached ? 'text-[color:var(--color-success)]' : isRuntimeDetached ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-muted-foreground)]'
+  const runtimeDotClass = isRuntimeAttached ? 'bg-[color:var(--color-success)]' : isRuntimeDetached ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-muted-foreground)]/45'
 
-  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
-    void setProjectAiRuntimeProfile(
-      project.id,
-      profileId === DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE ? '' : profileId
-    )
-  }, [project.id, setProjectAiRuntimeProfile])
+  const handleSelectAiRuntimeProfile = useCallback(
+    (profileId: string) => {
+      void setProjectAiRuntimeProfile(project.id, profileId === DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE ? '' : profileId)
+    },
+    [project.id, setProjectAiRuntimeProfile],
+  )
 
   const handleSwitchCli = useCallback(() => {
     const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
@@ -126,6 +87,62 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
   }, [aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, project.id, setProjectAiRuntimeProfile, setProjectCli])
+
+  const resolveSelectedRuntimeProfileId = useCallback((profileId: string) => (profileId === DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE ? defaultRuntimeProfile.id : profileId), [defaultRuntimeProfile.id])
+
+  const handleUseAiRuntimeProfileOnce = useCallback(
+    async (profileId: string) => {
+      await startRuntime(project.id, resolveSelectedRuntimeProfileId(profileId))
+    },
+    [project.id, resolveSelectedRuntimeProfileId, startRuntime],
+  )
+
+  const handleSwitchAndUseAiRuntimeProfile = useCallback(
+    async (profileId: string) => {
+      const projectProfileId = profileId === DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE ? '' : profileId
+      await setProjectAiRuntimeProfile(project.id, projectProfileId)
+      await startRuntime(project.id, resolveSelectedRuntimeProfileId(profileId))
+    },
+    [project.id, resolveSelectedRuntimeProfileId, setProjectAiRuntimeProfile, startRuntime],
+  )
+
+  const aiRuntimeProfileOptions = useMemo<SelectOption[]>(
+    () => [
+      {
+        value: DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE,
+        label: `${t('common.default')} · ${defaultRuntimeProfileLabel}`,
+        actions: [
+          {
+            label: t('common.useAiProfileOnce'),
+            ariaLabel: t('common.useAiProfileOnce'),
+            onClick: () => handleUseAiRuntimeProfileOnce(DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE),
+          },
+          {
+            label: t('common.useAndSwitchAiProfile'),
+            ariaLabel: t('common.useAndSwitchAiProfile'),
+            onClick: () => handleSwitchAndUseAiRuntimeProfile(DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE),
+          },
+        ],
+      },
+      ...aiRuntimeProfiles.map((profile) => ({
+        value: profile.id,
+        label: profile.name,
+        actions: [
+          {
+            label: t('common.useAiProfileOnce'),
+            ariaLabel: t('common.useAiProfileOnce'),
+            onClick: () => handleUseAiRuntimeProfileOnce(profile.id),
+          },
+          {
+            label: t('common.useAndSwitchAiProfile'),
+            ariaLabel: t('common.useAndSwitchAiProfile'),
+            onClick: () => handleSwitchAndUseAiRuntimeProfile(profile.id),
+          },
+        ],
+      })),
+    ],
+    [aiRuntimeProfiles, defaultRuntimeProfileLabel, handleSwitchAndUseAiRuntimeProfile, handleUseAiRuntimeProfileOnce, t],
+  )
 
   const togglePin = useAppStore((s) => s.togglePin)
   const removeProject = useAppStore((s) => s.removeProject)
@@ -151,33 +168,33 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           copyValue: projectDocLinkCopyValue(link),
           credentialActions: [
             ...(link.account?.trim() || link.sshUsername?.trim()
-              ? [{
-                key: 'account',
-                label: t('documentation.copyAccount'),
-                icon: 'account' as const,
-                onCopy: async () => await handleCopyDocLinkAccount(link.id),
-              }]
+              ? [
+                  {
+                    key: 'account',
+                    label: t('documentation.copyAccount'),
+                    icon: 'account' as const,
+                    onCopy: async () => await handleCopyDocLinkAccount(link.id),
+                  },
+                ]
               : []),
             ...(link.hasSecret
-              ? [{
-                key: 'password',
-                label: t('documentation.copyPassword'),
-                icon: 'password' as const,
-                onCopy: async () => await handleCopyDocLinkSecret(link.id),
-              }]
+              ? [
+                  {
+                    key: 'password',
+                    label: t('documentation.copyPassword'),
+                    icon: 'password' as const,
+                    onCopy: async () => await handleCopyDocLinkSecret(link.id),
+                  },
+                ]
               : []),
           ],
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, isDevReady, t]
+    [devUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, isDevReady, t],
   )
   const hasProjectDocLinks = docLinks.length > 0
-  const hoverDocLabel = defaultDocLink
-    ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}`
-    : docLinks.length > 0
-      ? t('project.docsCount', { count: docLinks.length })
-      : null
+  const hoverDocLabel = defaultDocLink ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}` : docLinks.length > 0 ? t('project.docsCount', { count: docLinks.length }) : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [menuAllowRemove, setMenuAllowRemove] = useState(false)
@@ -254,10 +271,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
   }, [aiCommitStatus, project.id, project.path])
 
-  const {
-    pendingOpenDevUrl,
-    startAndOpenDevUrl,
-  } = useProjectDevUrlLauncher({
+  const { pendingOpenDevUrl, startAndOpenDevUrl } = useProjectDevUrlLauncher({
     projectId: project.id,
     processStatus: devStatus,
     processUrls: devUrls,
@@ -333,10 +347,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         setMenuPos({ x: e.clientX, y: e.clientY })
       }}
     >
-      <div
-        className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-        style={{ background: accentColor }}
-      />
+      <div className="pointer-events-none absolute inset-y-3 left-0 w-1 rounded-r-full opacity-0 transition-opacity duration-300 group-hover:opacity-100" style={{ background: accentColor }} />
       <div
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
         style={{
@@ -355,9 +366,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       <div className="relative z-10 flex-1 min-w-0">
         <div className="flex min-w-0 items-center gap-2.5">
           <h3 className="text-[15px] font-medium text-[color:var(--color-foreground)] truncate">{projectDisplayName(project)}</h3>
-          {project.pinned && (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-warning)]" title={t('common.pinned')} />
-          )}
+          {project.pinned && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[color:var(--color-warning)]" title={t('common.pinned')} />}
           <span className={`inline-flex items-center gap-1 text-[10px] font-medium shrink-0 ${runtimeColorClass}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${runtimeDotClass}`} />
             {runtimeLabel}
@@ -375,28 +384,19 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
               const tag = tags.find((item) => item.id === tagId)
               if (!tag) return null
               return (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[10px] text-[color:var(--color-muted-foreground)]"
-                  style={{ borderColor: 'var(--color-border)' }}
-                >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ background: tag.color || 'var(--color-primary)' }}
-                  />
+                <span key={tag.id} className="inline-flex items-center gap-1 rounded-full border px-2 py-[2px] text-[10px] text-[color:var(--color-muted-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: tag.color || 'var(--color-primary)' }} />
                   {tag.name}
                 </span>
               )
             })}
-            {project.tagIds.length > 3 && (
-              <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
-                +{project.tagIds.length - 3}
-              </span>
-            )}
+            {project.tagIds.length > 3 && <span className="text-[10px] text-[color:var(--color-muted-foreground)]">+{project.tagIds.length - 3}</span>}
           </div>
         )}
         <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
-          <p className="min-w-0 flex-1 truncate" title={project.path}>{middleTruncatePath(project.path)}</p>
+          <p className="min-w-0 flex-1 truncate" title={project.path}>
+            {middleTruncatePath(project.path)}
+          </p>
           <span className="shrink-0 text-[color:var(--color-muted-foreground)]/45">/</span>
           <span className="shrink-0 capitalize">{projectDisplayType(project) || t('project.unknownType')}</span>
           {project.packageManager && (
@@ -451,6 +451,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
+          onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
+          onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={handleAiAutoCommit}
@@ -466,44 +468,21 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         />
       )}
 
-      <ProjectMetaDialog
-        open={metaDialogOpen}
-        project={project}
-        folders={folders}
-        tags={tags}
-        onClose={() => setMetaDialogOpen(false)}
-        onAssignFolder={assignProjectFolder}
-        onSetProjectTags={setProjectTags}
-        onSetProjectCustomName={setProjectCustomName}
-        onSetProjectCustomType={setProjectCustomType}
-      />
+      <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
 
-      {docLinksDialogOpen && (
-        <ProjectDocLinksDialog
-          open={docLinksDialogOpen}
-          project={project}
-          onClose={() => setDocLinksDialogOpen(false)}
-        />
-      )}
+      {docLinksDialogOpen && <ProjectDocLinksDialog open={docLinksDialogOpen} project={project} onClose={() => setDocLinksDialogOpen(false)} />}
 
-      <RunCommandConfigPopover
-        project={project}
-        open={runConfigOpen}
-        onClose={() => setRunConfigOpen(false)}
-      />
+      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
 
       <div className="relative z-10 flex items-center gap-1.5 shrink-0">
-        <div
-          className="hidden min-w-0 shrink-0 md:block"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
+        <div className="hidden min-w-0 shrink-0 md:block" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
           <Select
-            ariaLabel={t('settingsRuntime.activeRuntimeProfile')}
+            ariaLabel={t('common.useAiProfile')}
             value={selectedAiRuntimeProfileValue}
             options={aiRuntimeProfileOptions}
             onChange={handleSelectAiRuntimeProfile}
-            minDropdownWidth={168}
+            minDropdownWidth={300}
+            matchTriggerWidth={false}
             triggerClassName="h-8 w-auto min-w-[76px] max-w-[220px] px-2 text-[11px]"
             renderValue={(option) => (
               <span className="inline-flex min-w-0 max-w-full items-center gap-1">
@@ -513,61 +492,35 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             )}
           />
         </div>
-        {hasProjectDocLinks && (
-          <ProjectLinksTrigger
-            items={linkMenuItems}
-            tagOptions={docLinkTagOptions}
-            onOpenDefault={handleOpenFirstLink}
-            onOpenManager={() => setDocLinksDialogOpen(true)}
-            size="icon"
-            title={t('common.leftClickOpenFirstLink')}
-          />
-        )}
+        {hasProjectDocLinks && <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" title={t('common.leftClickOpenFirstLink')} />}
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button
             className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
-              isDevReady
-                ? 'text-primary hover:text-primary'
-                : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+              isDevReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
             }`}
             onClick={(e) => {
               e.stopPropagation()
               void startAndOpenDevUrl()
             }}
-            title={isDevReady
-              ? t('project.openDevUrl')
-              : pendingOpenDevUrl
-                ? t('project.waitingForDevUrl')
-                : t('project.startAndOpenDevUrlShort')}
-            aria-label={isDevReady
-              ? t('project.openDevUrl')
-              : pendingOpenDevUrl
-                ? t('project.waitingForDevUrl')
-                : t('project.startAndOpenDevUrlShort')}
+            title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
+            aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
             disabled={pendingOpenDevUrl}
           >
-            {pendingOpenDevUrl ? (
-              <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-            ) : (
-              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
-            )}
+            {pendingOpenDevUrl ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />}
           </button>
         )}
         {isDevRunning || isDevStopping ? (
           <button
             className={`h-8 px-3 text-xs rounded-full border flex items-center gap-1 font-medium transition-colors shrink-0 ${
-              isDevStopping
-                ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                : isDevReady
-                  ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                  : 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+              isDevStopping ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' : isDevReady ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]' : 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
             }`}
             style={{
-              borderColor: isDevStopping || !isDevReady
-                ? 'color-mix(in srgb, var(--color-warning) 34%, transparent)'
-                : 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
+              borderColor: isDevStopping || !isDevReady ? 'color-mix(in srgb, var(--color-warning) 34%, transparent)' : 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
             }}
-            onClick={(e) => { e.stopPropagation(); if (!isDevStopping) stopProject(project.id) }}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!isDevStopping) stopProject(project.id)
+            }}
             disabled={isDevStopping}
           >
             {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : isDevReady ? <Square className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
@@ -576,7 +529,10 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         ) : (
           <button
             className="h-8 px-3.5 text-xs rounded-full bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
-            onClick={(e) => { e.stopPropagation(); startProject(project.id) }}
+            onClick={(e) => {
+              e.stopPropagation()
+              startProject(project.id)
+            }}
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()

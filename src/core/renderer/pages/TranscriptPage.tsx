@@ -3,33 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import {
-  AlertTriangle,
-  ArrowDownToLine,
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  Code2,
-  Columns2,
-  Eye,
-  FileText,
-  RefreshCw,
-  Share2,
-  Trash2,
-  X,
-} from 'lucide-react'
-import type {
-  AiCommitStatus,
-  AiCommitTaskSnapshot,
-  TranscriptReference,
-  TranscriptShareBindingMode,
-  TranscriptShareEntry,
-  TranscriptShareHost,
-  TranscriptViewerMode,
-} from '../../shared/types'
+import { AlertTriangle, ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Code2, Columns2, Eye, FileText, RefreshCw, Share2, Trash2, X } from 'lucide-react'
+import type { AiCommitStatus, AiCommitTaskSnapshot, TranscriptReference, TranscriptShareBindingMode, TranscriptShareEntry, TranscriptShareHost, TranscriptViewerMode } from '../../shared/types'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ModalShell } from '../components/ModalShell'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
@@ -45,44 +20,19 @@ import { preloadProjectPane } from '../lib/projectPagePreload'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useAppStore } from '../stores/appStore'
 import { inferLanguageFromRelativePath } from './code/code.helpers'
-import {
-  createMarkdownComponents,
-  formatCodeLanguageLabel,
-  type MarkdownStructuredBlockClickPayload,
-  shouldDisableMarkdownSyntaxHighlight,
-} from './code/code.markdown'
+import { createMarkdownComponents, formatCodeLanguageLabel, type MarkdownStructuredBlockClickPayload, shouldDisableMarkdownSyntaxHighlight } from './code/code.markdown'
 import { transformMarkdownUrl } from './code/code.markdownUrls'
 import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
-import {
-  defaultAiRuntimeProfiles,
-  getAiRuntimeProfileCli,
-  getAiRuntimeProfileLabel,
-  resolveAiRuntimeProfile,
-  resolveProjectAiRuntimeProfileId,
-} from '../../shared/aiRuntimeProfiles'
+import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { ManualTranscriptImportModal } from './transcript/ManualTranscriptImportModal'
 import { TranscriptShareModal } from './transcript/TranscriptShareModal'
 import { buildTranscriptShareSnapshot } from './transcript/transcriptShareSnapshot'
-import {
-  TranscriptPreviewModals,
-  type TranscriptCodePreviewState,
-  type TranscriptStructuredPreviewState,
-} from './transcript/TranscriptPreviewModals'
+import { TranscriptPreviewModals, type TranscriptCodePreviewState, type TranscriptStructuredPreviewState } from './transcript/TranscriptPreviewModals'
 import { TranscriptReferenceDrawer } from './transcript/TranscriptReferenceDrawer'
-import {
-  normalizeTranscriptDisplayMarkdown,
-  readTranscriptListSidebarCollapsed,
-  shouldSkipProjectPageContextMenu,
-  sliceMarkdownLines,
-  TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY,
-} from './transcript/transcriptPage.utils'
-import {
-  TranscriptListSidebar,
-  TranscriptMainContent,
-  TranscriptPageHeader,
-} from './transcript/TranscriptPageSections'
+import { normalizeTranscriptDisplayMarkdown, readTranscriptListSidebarCollapsed, shouldSkipProjectPageContextMenu, sliceMarkdownLines, TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY } from './transcript/transcriptPage.utils'
+import { TranscriptListSidebar, TranscriptMainContent, TranscriptPageHeader } from './transcript/TranscriptPageSections'
 import { useTranscriptPageChromeState } from './transcript/useTranscriptPageChromeState'
 import type { CodeWorkspaceNavigationState } from './code/code.navigation'
 
@@ -136,19 +86,14 @@ export function TranscriptPage() {
   }, shallow)
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
-  const processStatus = useAppStore((s) => (projectId ? s.processes[projectId]?.status ?? 'stopped' : 'stopped'))
-  const processUrls = useAppStore((s) => (projectId ? s.processUrls[projectId] ?? [] : []))
+  const processStatus = useAppStore((s) => (projectId ? (s.processes[projectId]?.status ?? 'stopped') : 'stopped'))
+  const processUrls = useAppStore((s) => (projectId ? (s.processUrls[projectId] ?? []) : []))
   const runtimeSession = useAppStore((s) => (projectId ? s.sessions[projectId] : undefined))
   const runtimeEntry = useAppStore((s) => (projectId ? s.runtimeEntries[projectId] : undefined))
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
   const aiRuntimeProfilesConfig = useAppStore((s) => s.config.aiRuntimeProfiles ?? [])
   const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
-  const {
-    summaries,
-    activeTranscriptId,
-    listStatus,
-    terminalOutput,
-  } = useAppStore((s) => {
+  const { summaries, activeTranscriptId, listStatus, terminalOutput } = useAppStore((s) => {
     if (!projectId) {
       return {
         summaries: [],
@@ -231,12 +176,7 @@ export function TranscriptPage() {
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
-  const {
-    projectHeaderCollapsed,
-    setProjectHeaderCollapsed,
-    effectiveTheme,
-    isNarrowViewport,
-  } = useTranscriptPageChromeState()
+  const { projectHeaderCollapsed, setProjectHeaderCollapsed, effectiveTheme, isNarrowViewport } = useTranscriptPageChromeState()
   const [isTranscriptListCollapsed, setIsTranscriptListCollapsed] = useState(readTranscriptListSidebarCollapsed)
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
   const [codePreview, setCodePreview] = useState<TranscriptCodePreviewState | null>(null)
@@ -260,15 +200,9 @@ export function TranscriptPage() {
   const codePreviewCapture = useScrollableContentCapture()
 
   const resolvedActiveTranscriptId = activeTranscriptId ?? summaries[0]?.id
-  const session = useAppStore((s) => (
-    resolvedActiveTranscriptId ? s.transcriptSessions[resolvedActiveTranscriptId] : undefined
-  ))
-  const storedMode = useAppStore((s) => (
-    resolvedActiveTranscriptId ? s.transcriptModeBySessionId[resolvedActiveTranscriptId] : undefined
-  ))
-  const activeReferenceId = useAppStore((s) => (
-    resolvedActiveTranscriptId ? s.activeTranscriptReferenceIdBySessionId[resolvedActiveTranscriptId] : undefined
-  ))
+  const session = useAppStore((s) => (resolvedActiveTranscriptId ? s.transcriptSessions[resolvedActiveTranscriptId] : undefined))
+  const storedMode = useAppStore((s) => (resolvedActiveTranscriptId ? s.transcriptModeBySessionId[resolvedActiveTranscriptId] : undefined))
+  const activeReferenceId = useAppStore((s) => (resolvedActiveTranscriptId ? s.activeTranscriptReferenceIdBySessionId[resolvedActiveTranscriptId] : undefined))
 
   useEffect(() => {
     if (!projectId) return
@@ -277,10 +211,7 @@ export function TranscriptPage() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(
-        TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY,
-        isTranscriptListCollapsed ? '1' : '0'
-      )
+      window.localStorage.setItem(TRANSCRIPT_LIST_SIDEBAR_COLLAPSED_STORAGE_KEY, isTranscriptListCollapsed ? '1' : '0')
     } catch {
       // localStorage can be unavailable in restricted WebViews.
     }
@@ -290,12 +221,13 @@ export function TranscriptPage() {
     if (!projectId) return
     const api = window.electronAPI
 
-    const cleanup = typeof api.onAiCommitStatus === 'function'
-      ? api.onAiCommitStatus(({ projectId: pid, status }) => {
-        if (pid !== projectId) return
-        setAiCommitStatus(status)
-      })
-      : undefined
+    const cleanup =
+      typeof api.onAiCommitStatus === 'function'
+        ? api.onAiCommitStatus(({ projectId: pid, status }) => {
+            if (pid !== projectId) return
+            setAiCommitStatus(status)
+          })
+        : undefined
 
     void (async () => {
       if (typeof api.getAiCommitState !== 'function') return
@@ -336,41 +268,48 @@ export function TranscriptPage() {
   const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
   const defaultRuntimeProfileCli = getAiRuntimeProfileCli(defaultRuntimeProfile)
   const hasProjectAiRuntimeOverride = Boolean(project?.aiRuntimeProfileId?.trim() || project?.cli)
-  const currentRuntimeProfileId = project
-    ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
-    : activeAiRuntimeProfileId
+  const currentRuntimeProfileId = project ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId) : activeAiRuntimeProfileId
   const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project?.cli)
   const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project?.cli)
   const currentCli = getAiRuntimeProfileCli(currentRuntimeProfile, project?.cli)
-  const {
-    isDevReady,
-    pendingOpenDevUrl,
-    startAndOpenDevUrl,
-  } = useProjectDevUrlLauncher({
+
+  const handleSelectAiRuntimeProfile = useCallback(
+    (profileId: string) => {
+      if (!project) return
+      void setProjectAiRuntimeProfile(project.id, profileId)
+    },
+    [project, setProjectAiRuntimeProfile],
+  )
+
+  const handleUseAiRuntimeProfileOnce = useCallback(
+    async (profileId: string) => {
+      if (!project) return
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project, startRuntime],
+  )
+
+  const handleSwitchAndUseAiRuntimeProfile = useCallback(
+    async (profileId: string) => {
+      if (!project) return
+      await setProjectAiRuntimeProfile(project.id, profileId)
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project, setProjectAiRuntimeProfile, startRuntime],
+  )
+  const { isDevReady, pendingOpenDevUrl, startAndOpenDevUrl } = useProjectDevUrlLauncher({
     projectId: projectId ?? '',
     processStatus,
     processUrls,
     runStartupMode: project?.runStartupMode,
     startProject,
   })
-  const projectLinkItems = useMemo(
-    () => [
-      ...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
-      ...docMenuItems,
-    ],
-    [docMenuItems, isDevReady, processUrls]
-  )
+  const projectLinkItems = useMemo(() => [...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, processUrls])
   const firstProjectLinkItem = projectLinkItems[0]
   const projectDocsCountLabel = t('project.docsCount', { count: docLinks.length })
 
-  const enableMarkdownSyntaxHighlight = useMemo(
-    () => !shouldDisableMarkdownSyntaxHighlight(session?.markdownText ?? ''),
-    [session?.markdownText]
-  )
-  const displayMarkdownText = useMemo(
-    () => normalizeTranscriptDisplayMarkdown(session?.markdownText ?? ''),
-    [session?.markdownText]
-  )
+  const enableMarkdownSyntaxHighlight = useMemo(() => !shouldDisableMarkdownSyntaxHighlight(session?.markdownText ?? ''), [session?.markdownText])
+  const displayMarkdownText = useMemo(() => normalizeTranscriptDisplayMarkdown(session?.markdownText ?? ''), [session?.markdownText])
   const isDirty = session ? editorValue !== session.rawText : false
   const saveButtonDisabled = !session || effectiveMode === 'preview' || !isDirty || isSavingTranscript
   const saveStatusText = saveError
@@ -381,38 +320,34 @@ export function TranscriptPage() {
         ? t('transcript.unsavedChanges')
         : saveSuccessAt
           ? t('transcript.savedAt', {
-            value: formatDateTime(saveSuccessAt, {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: false,
-            }),
-          })
+              value: formatDateTime(saveSuccessAt, {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              }),
+            })
           : t('transcript.allChangesSaved')
-  const saveStatusToneClass = saveError
-    ? 'text-[color:var(--color-destructive)]'
-    : isDirty
-      ? 'text-[color:var(--color-foreground)]'
-      : 'text-[color:var(--color-muted-foreground)]'
+  const saveStatusToneClass = saveError ? 'text-[color:var(--color-destructive)]' : isDirty ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'
   const structuredPreviewMarkdown = structuredPreview?.markdown ?? ''
-  const structuredPreviewEnableSyntaxHighlight = useMemo(
-    () => !shouldDisableMarkdownSyntaxHighlight(structuredPreviewMarkdown),
-    [structuredPreviewMarkdown]
-  )
+  const structuredPreviewEnableSyntaxHighlight = useMemo(() => !shouldDisableMarkdownSyntaxHighlight(structuredPreviewMarkdown), [structuredPreviewMarkdown])
 
-  const handleInternalLinkClick = useCallback((href: string) => {
-    if (!session) return
-    const previewScroller = previewScrollRef.current
-    if (previewScroller) {
-      previewScrollPositionRef.current = {
-        top: previewScroller.scrollTop,
-        left: previewScroller.scrollLeft,
+  const handleInternalLinkClick = useCallback(
+    (href: string) => {
+      if (!session) return
+      const previewScroller = previewScrollRef.current
+      if (previewScroller) {
+        previewScrollPositionRef.current = {
+          top: previewScroller.scrollTop,
+          left: previewScroller.scrollLeft,
+        }
       }
-    }
-    const reference = session.references.find((item) => item.href === href)
-    if (!reference) return
-    openTranscriptReference(session.id, reference.id)
-  }, [openTranscriptReference, session])
+      const reference = session.references.find((item) => item.href === href)
+      if (!reference) return
+      openTranscriptReference(session.id, reference.id)
+    },
+    [openTranscriptReference, session],
+  )
 
   const openProjectLinksManager = useCallback(() => {
     setLinkSettingsOpen(true)
@@ -448,11 +383,6 @@ export function TranscriptPage() {
     }
   }, [isStoppingRuntime, project, stopRuntime])
 
-  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
-    if (!project) return
-    void setProjectAiRuntimeProfile(project.id, profileId)
-  }, [project, setProjectAiRuntimeProfile])
-
   const handleSwitchCli = useCallback(() => {
     if (!project) return
     const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
@@ -483,29 +413,34 @@ export function TranscriptPage() {
     setCodePreview(null)
   }, [])
 
-  const structuredPreviewCaptureLabel = structuredPreviewCapture.status === 'running'
-    ? t('transcript.copyStructuredPreviewImageRunning')
-    : structuredPreviewCapture.status === 'success'
-      ? t('transcript.copyStructuredPreviewImageCopied')
-      : structuredPreviewCapture.status === 'error'
-        ? t('transcript.copyStructuredPreviewImageFailed')
-        : t('transcript.copyStructuredPreviewImage')
-  const codePreviewCaptureLabel = codePreviewCapture.status === 'running'
-    ? t('transcript.copyStructuredPreviewImageRunning')
-    : codePreviewCapture.status === 'success'
-      ? t('transcript.copyStructuredPreviewImageCopied')
-      : codePreviewCapture.status === 'error'
-        ? t('transcript.copyStructuredPreviewImageFailed')
-        : t('transcript.copyStructuredPreviewImage')
+  const structuredPreviewCaptureLabel =
+    structuredPreviewCapture.status === 'running'
+      ? t('transcript.copyStructuredPreviewImageRunning')
+      : structuredPreviewCapture.status === 'success'
+        ? t('transcript.copyStructuredPreviewImageCopied')
+        : structuredPreviewCapture.status === 'error'
+          ? t('transcript.copyStructuredPreviewImageFailed')
+          : t('transcript.copyStructuredPreviewImage')
+  const codePreviewCaptureLabel =
+    codePreviewCapture.status === 'running'
+      ? t('transcript.copyStructuredPreviewImageRunning')
+      : codePreviewCapture.status === 'success'
+        ? t('transcript.copyStructuredPreviewImageCopied')
+        : codePreviewCapture.status === 'error'
+          ? t('transcript.copyStructuredPreviewImageFailed')
+          : t('transcript.copyStructuredPreviewImage')
 
-  const handleStructuredBlockClick = useCallback((payload: MarkdownStructuredBlockClickPayload) => {
-    const markdown = sliceMarkdownLines(displayMarkdownText, payload.startLine, payload.endLine)
-    if (!markdown) return
-    setStructuredPreview({
-      ...payload,
-      markdown,
-    })
-  }, [displayMarkdownText])
+  const handleStructuredBlockClick = useCallback(
+    (payload: MarkdownStructuredBlockClickPayload) => {
+      const markdown = sliceMarkdownLines(displayMarkdownText, payload.startLine, payload.endLine)
+      if (!markdown) return
+      setStructuredPreview({
+        ...payload,
+        markdown,
+      })
+    },
+    [displayMarkdownText],
+  )
 
   const markdownComponents = useMemo(() => {
     if (!project) return {}
@@ -522,15 +457,7 @@ export function TranscriptPage() {
       projectPath: project.path,
       themeMode: effectiveTheme,
     })
-  }, [
-    activeReference?.href,
-    effectiveTheme,
-    enableMarkdownSyntaxHighlight,
-    forceRenderAllForShare,
-    handleInternalLinkClick,
-    handleStructuredBlockClick,
-    project,
-  ])
+  }, [activeReference?.href, effectiveTheme, enableMarkdownSyntaxHighlight, forceRenderAllForShare, handleInternalLinkClick, handleStructuredBlockClick, project])
 
   const structuredPreviewComponents = useMemo(() => {
     if (!project) return {}
@@ -546,13 +473,7 @@ export function TranscriptPage() {
       projectPath: project.path,
       themeMode: effectiveTheme,
     })
-  }, [
-    effectiveTheme,
-    handleInternalLinkClick,
-    project,
-    structuredPreview?.startLine,
-    structuredPreviewEnableSyntaxHighlight,
-  ])
+  }, [effectiveTheme, handleInternalLinkClick, project, structuredPreview?.startLine, structuredPreviewEnableSyntaxHighlight])
 
   const handleImportCurrentOutput = useCallback(async () => {
     if (!projectId || isImporting) return
@@ -566,7 +487,7 @@ export function TranscriptPage() {
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
-        })}`
+        })}`,
       )
       if (!imported) return
       await openTranscript({ projectId, transcriptId: imported.id, initialMode: 'preview' })
@@ -575,15 +496,7 @@ export function TranscriptPage() {
     }
   }, [importCurrentProcessOutputTranscript, isImporting, openTranscript, projectId])
 
-  const handleManualImport = useCallback(async ({
-    projectId: targetProjectId,
-    rawText,
-    title,
-  }: {
-    projectId: string
-    rawText: string
-    title?: string
-  }) => {
+  const handleManualImport = useCallback(async ({ projectId: targetProjectId, rawText, title }: { projectId: string; rawText: string; title?: string }) => {
     setIsImportingManual(true)
     try {
       await window.electronAPI.importTranscriptViaGateway({
@@ -602,33 +515,39 @@ export function TranscriptPage() {
     }
   }, [])
 
-  const handleSelectTranscript = useCallback((transcriptId: string) => {
-    if (!projectId) return
-    void openTranscript({ projectId, transcriptId })
-  }, [openTranscript, projectId])
+  const handleSelectTranscript = useCallback(
+    (transcriptId: string) => {
+      if (!projectId) return
+      void openTranscript({ projectId, transcriptId })
+    },
+    [openTranscript, projectId],
+  )
 
-  const handleSaveTranscript = useCallback(async (nextRawText = editorValue) => {
-    const hasChanges = session ? nextRawText !== session.rawText : false
-    if (!session || !hasChanges || isSavingTranscript) return
-    setIsSavingTranscript(true)
-    setSaveError(null)
-    try {
-      const updated = await window.electronAPI.updateTranscript({
-        projectId: session.projectId,
-        transcriptId: session.id,
-        rawText: nextRawText,
-        title: session.title,
-      })
-      useAppStore.getState().upsertTranscriptSession(updated, { activate: true })
-      setEditorValue(updated.rawText)
-      setSaveSuccessAt(Date.now())
-    } catch (error) {
-      console.error('[TranscriptPage.handleSaveTranscript] failed:', error)
-      setSaveError(error instanceof Error ? error.message : t('transcript.saveFailed'))
-    } finally {
-      setIsSavingTranscript(false)
-    }
-  }, [editorValue, isSavingTranscript, session, t])
+  const handleSaveTranscript = useCallback(
+    async (nextRawText = editorValue) => {
+      const hasChanges = session ? nextRawText !== session.rawText : false
+      if (!session || !hasChanges || isSavingTranscript) return
+      setIsSavingTranscript(true)
+      setSaveError(null)
+      try {
+        const updated = await window.electronAPI.updateTranscript({
+          projectId: session.projectId,
+          transcriptId: session.id,
+          rawText: nextRawText,
+          title: session.title,
+        })
+        useAppStore.getState().upsertTranscriptSession(updated, { activate: true })
+        setEditorValue(updated.rawText)
+        setSaveSuccessAt(Date.now())
+      } catch (error) {
+        console.error('[TranscriptPage.handleSaveTranscript] failed:', error)
+        setSaveError(error instanceof Error ? error.message : t('transcript.saveFailed'))
+      } finally {
+        setIsSavingTranscript(false)
+      }
+    },
+    [editorValue, isSavingTranscript, session, t],
+  )
 
   const refreshShareEntries = useCallback(async () => {
     if (!session) return
@@ -691,18 +610,21 @@ export function TranscriptPage() {
     }
   }, [isGeneratingShare, session, t])
 
-  const handleRevokeShare = useCallback(async (token: string) => {
-    try {
-      const result = await window.electronAPI.stopTranscriptShare(token)
-      setShareBindingMode(result.bindingMode)
-      setShareHosts(filterPreferredShareHosts(result.hosts))
-      setSharePort(result.port)
-      const activeId = session?.id
-      setShareEntries(result.entries.filter((entry) => !activeId || entry.transcriptId === activeId))
-    } catch (error) {
-      console.error('[TranscriptPage.handleRevokeShare] failed:', error)
-    }
-  }, [session?.id])
+  const handleRevokeShare = useCallback(
+    async (token: string) => {
+      try {
+        const result = await window.electronAPI.stopTranscriptShare(token)
+        setShareBindingMode(result.bindingMode)
+        setShareHosts(filterPreferredShareHosts(result.hosts))
+        setSharePort(result.port)
+        const activeId = session?.id
+        setShareEntries(result.entries.filter((entry) => !activeId || entry.transcriptId === activeId))
+      } catch (error) {
+        console.error('[TranscriptPage.handleRevokeShare] failed:', error)
+      }
+    },
+    [session?.id],
+  )
 
   const handleRevokeAllShares = useCallback(async () => {
     const tokens = shareEntries.map((entry) => entry.token)
@@ -728,46 +650,38 @@ export function TranscriptPage() {
     }
   }, [deleteConfirmTarget, deletingTranscriptId, projectId, removeTranscriptSession])
 
-  const handleOpenReferenceInCodeWorkspace = useCallback(async ({
-    relativePath,
-    lineNumber,
-    column,
-  }: {
-    relativePath: string
-    lineNumber: number
-    column: number
-  }) => {
-    if (!projectId || !project) return
+  const handleOpenReferenceInCodeWorkspace = useCallback(
+    async ({ relativePath, lineNumber, column }: { relativePath: string; lineNumber: number; column: number }) => {
+      if (!projectId || !project) return
 
-    const currentSession = project.codeSession
-    const nextTabs = Array.from(new Set([
-      ...(currentSession?.tabs ?? []),
-      relativePath,
-    ].map((item) => item.trim()).filter(Boolean))).slice(-5)
+      const currentSession = project.codeSession
+      const nextTabs = Array.from(new Set([...(currentSession?.tabs ?? []), relativePath].map((item) => item.trim()).filter(Boolean))).slice(-5)
 
-    await setProjectLastCodeFile(projectId, relativePath)
-    await setProjectCodeSession(projectId, {
-      ...currentSession,
-      tabs: nextTabs,
-      activePath: relativePath,
-      cursorPositions: {
-        ...(currentSession?.cursorPositions ?? {}),
-        [relativePath]: {
-          lineNumber: Math.max(1, Math.floor(lineNumber)),
-          column: Math.max(1, Math.floor(column)),
+      await setProjectLastCodeFile(projectId, relativePath)
+      await setProjectCodeSession(projectId, {
+        ...currentSession,
+        tabs: nextTabs,
+        activePath: relativePath,
+        cursorPositions: {
+          ...(currentSession?.cursorPositions ?? {}),
+          [relativePath]: {
+            lineNumber: Math.max(1, Math.floor(lineNumber)),
+            column: Math.max(1, Math.floor(column)),
+          },
         },
-      },
-    })
-    navigate(`/project/${projectId}/code`, {
-      state: {
-        revealTarget: {
-          relativePath,
-          lineNumber: Math.max(1, Math.floor(lineNumber)),
-          column: Math.max(1, Math.floor(column)),
-        },
-      } satisfies CodeWorkspaceNavigationState,
-    })
-  }, [navigate, project, projectId, setProjectCodeSession, setProjectLastCodeFile])
+      })
+      navigate(`/project/${projectId}/code`, {
+        state: {
+          revealTarget: {
+            relativePath,
+            lineNumber: Math.max(1, Math.floor(lineNumber)),
+            column: Math.max(1, Math.floor(column)),
+          },
+        } satisfies CodeWorkspaceNavigationState,
+      })
+    },
+    [navigate, project, projectId, setProjectCodeSession, setProjectLastCodeFile],
+  )
 
   useEffect(() => {
     setEditorValue(session?.rawText ?? '')
@@ -794,10 +708,7 @@ export function TranscriptPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('transcript.projectNotFound')}</h2>
-        <button
-          className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary"
-          onClick={() => navigate('/')}
-        >
+        <button className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary" onClick={() => navigate('/')}>
           <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
           {t('transcript.backToHome')}
         </button>
@@ -806,15 +717,11 @@ export function TranscriptPage() {
   }
 
   const hasTerminalOutput = terminalOutput.trim().length > 0
-  const contentTopPaddingClass = projectHeaderCollapsed
-    ? 'pt-5'
-    : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
+  const contentTopPaddingClass = projectHeaderCollapsed ? 'pt-5' : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
   const transcriptCountLabel = t('transcript.savedSessions', { count: summaries.length })
   const showTranscriptListSidebar = isNarrowViewport || !isTranscriptListCollapsed
-  const transcriptLayoutGridStyle = !isNarrowViewport && isTranscriptListCollapsed
-    ? { gridTemplateColumns: '44px minmax(0,1fr)' }
-    : undefined
+  const transcriptLayoutGridStyle = !isNarrowViewport && isTranscriptListCollapsed ? { gridTemplateColumns: '44px minmax(0,1fr)' } : undefined
   const renderProjectLinksButton = () => {
     return (
       <ProjectLinksTrigger
@@ -877,10 +784,7 @@ export function TranscriptPage() {
             }}
           />
 
-          <div
-            className="grid min-h-0 flex-1 gap-4 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]"
-            style={transcriptLayoutGridStyle}
-          >
+          <div className="grid min-h-0 flex-1 gap-4 min-[1080px]:grid-cols-[280px_minmax(0,1fr)]" style={transcriptLayoutGridStyle}>
             {!isNarrowViewport && isTranscriptListCollapsed && (
               <div className="relative flex h-full min-h-0 items-center justify-center">
                 <Button
@@ -981,6 +885,8 @@ export function TranscriptPage() {
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
+          onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
+          onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={() => {
@@ -998,17 +904,7 @@ export function TranscriptPage() {
       )}
 
       {metaDialogOpen && (
-        <ProjectMetaDialog
-          open={metaDialogOpen}
-          project={project}
-          folders={folders}
-          tags={tags}
-          onClose={() => setMetaDialogOpen(false)}
-          onAssignFolder={assignProjectFolder}
-          onSetProjectTags={setProjectTags}
-          onSetProjectCustomName={setProjectCustomName}
-          onSetProjectCustomType={setProjectCustomType}
-        />
+        <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
       )}
 
       <TranscriptReferenceDrawer
@@ -1139,9 +1035,7 @@ export function TranscriptPage() {
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="section-label mb-1">{t('transcript.listTitle')}</p>
-            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-              {t('transcript.deleteThisTranscript')}
-            </p>
+            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('transcript.deleteThisTranscript')}</p>
           </div>
           <button
             type="button"
@@ -1159,14 +1053,10 @@ export function TranscriptPage() {
             <AlertTriangle className="h-3.5 w-3.5" />
             {t('transcript.deleteThisTranscriptHint')}
           </p>
-          <p className="mt-2 break-words text-[12px] text-[color:var(--color-foreground)]">
-            {deleteConfirmTarget?.title}
-          </p>
+          <p className="mt-2 break-words text-[12px] text-[color:var(--color-foreground)]">{deleteConfirmTarget?.title}</p>
         </div>
 
-        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          {t('transcript.deleteThisTranscriptIrreversible')}
-        </p>
+        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">{t('transcript.deleteThisTranscriptIrreversible')}</p>
 
         <div className="mt-4 flex items-center justify-end gap-2">
           <button

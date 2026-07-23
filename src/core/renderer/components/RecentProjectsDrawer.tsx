@@ -8,13 +8,7 @@ import { CardContextMenu } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
-import {
-  defaultAiRuntimeProfiles,
-  getAiRuntimeProfileCli,
-  getAiRuntimeProfileLabel,
-  resolveAiRuntimeProfile,
-  resolveProjectAiRuntimeProfileId,
-} from '../../shared/aiRuntimeProfiles'
+import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 
 type RecentProjectDrawerCardProps = {
   project: RecentProjectListItem
@@ -63,13 +57,7 @@ function getProjectById(projects: ProjectInfo[], projectId?: string | null): Pro
   return projects.find((project) => project.id === projectId)
 }
 
-const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
-  project,
-  isContextActive,
-  onSelectProject,
-  onRemoveProject,
-  onOpenContextMenu,
-}: RecentProjectDrawerCardProps) {
+const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project, isContextActive, onSelectProject, onRemoveProject, onOpenContextMenu }: RecentProjectDrawerCardProps) {
   const { t, formatDateTime } = useI18n()
 
   return (
@@ -81,12 +69,7 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
         onOpenContextMenu(project.id, event.clientX, event.clientY)
       }}
     >
-      <button
-        type="button"
-        className="recent-project-drawer-open"
-        onClick={() => onSelectProject(project.id)}
-        title={project.path}
-      >
+      <button type="button" className="recent-project-drawer-open" onClick={() => onSelectProject(project.id)} title={project.path}>
         <span className="recent-project-drawer-name">{projectDisplayName(project)}</span>
         <span className="recent-project-drawer-meta">
           <span>{middleTruncatePath(project.path, 24, 18)}</span>
@@ -94,25 +77,14 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({
           <span>{project.lastOpened ? formatDateTime(project.lastOpened) : t('common.notOpened')}</span>
         </span>
       </button>
-      <button
-        type="button"
-        className="recent-project-drawer-remove"
-        title={t('common.removeFromRecent')}
-        onClick={() => onRemoveProject(project.id)}
-      >
+      <button type="button" className="recent-project-drawer-remove" title={t('common.removeFromRecent')} onClick={() => onRemoveProject(project.id)}>
         <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
   )
 })
 
-const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
-  contextMenu,
-  project,
-  onClose,
-  onRequestCloseDrawer,
-  onEditMetadata,
-}: RecentProjectsContextMenuProps) {
+const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ contextMenu, project, onClose, onRequestCloseDrawer, onEditMetadata }: RecentProjectsContextMenuProps) {
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const startRuntime = useAppStore((s) => s.startRuntime)
@@ -148,9 +120,27 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const aiCommitStatus: AiCommitStatus = 'idle'
 
-  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
-    void setProjectAiRuntimeProfile(project.id, profileId)
-  }, [project.id, setProjectAiRuntimeProfile])
+  const handleSelectAiRuntimeProfile = useCallback(
+    (profileId: string) => {
+      void setProjectAiRuntimeProfile(project.id, profileId)
+    },
+    [project.id, setProjectAiRuntimeProfile],
+  )
+
+  const handleUseAiRuntimeProfileOnce = useCallback(
+    async (profileId: string) => {
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project.id, startRuntime],
+  )
+
+  const handleSwitchAndUseAiRuntimeProfile = useCallback(
+    async (profileId: string) => {
+      await setProjectAiRuntimeProfile(project.id, profileId)
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project.id, setProjectAiRuntimeProfile, startRuntime],
+  )
 
   const handleSwitchCli = useCallback(() => {
     const currentIndex = aiRuntimeProfiles.findIndex((profile) => profile.id === currentRuntimeProfile.id)
@@ -192,10 +182,13 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
     }
   }, [isStoppingRuntime, project.id, stopRuntime])
 
-  const handleActionAndCloseDrawer = useCallback(async (action: () => void | Promise<unknown>) => {
-    await action()
-    onRequestCloseDrawer()
-  }, [onRequestCloseDrawer])
+  const handleActionAndCloseDrawer = useCallback(
+    async (action: () => void | Promise<unknown>) => {
+      await action()
+      onRequestCloseDrawer()
+    },
+    [onRequestCloseDrawer],
+  )
 
   return (
     <CardContextMenu
@@ -222,6 +215,8 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
       onOpenTerminal={() => handleActionAndCloseDrawer(handleOpenTerminal)}
       onSwitchCli={() => handleActionAndCloseDrawer(handleSwitchCli)}
       onSelectAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleSelectAiRuntimeProfile(profileId))}
+      onUseAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleUseAiRuntimeProfileOnce(profileId))}
+      onSwitchAndUseAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleSwitchAndUseAiRuntimeProfile(profileId))}
       onStartProject={() => handleActionAndCloseDrawer(() => startProject(project.id))}
       onStopProject={() => handleActionAndCloseDrawer(() => stopProject(project.id))}
       aiCommitStatus={aiCommitStatus}
@@ -237,10 +232,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({
   )
 })
 
-export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDialogHost({
-  projectId,
-  onClose,
-}: RecentProjectsMetaDialogHostProps) {
+export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDialogHost({ projectId, onClose }: RecentProjectsMetaDialogHostProps) {
   const project = useAppStore((s) => getProjectById(s.projects, projectId))
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
@@ -251,29 +243,10 @@ export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDial
 
   if (!project) return null
 
-  return (
-    <ProjectMetaDialog
-      open
-      project={project}
-      folders={folders}
-      tags={tags}
-      onClose={onClose}
-      onAssignFolder={assignProjectFolder}
-      onSetProjectTags={setProjectTags}
-      onSetProjectCustomName={setProjectCustomName}
-      onSetProjectCustomType={setProjectCustomType}
-    />
-  )
+  return <ProjectMetaDialog open project={project} folders={folders} tags={tags} onClose={onClose} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
 })
 
-export function RecentProjectsDrawer({
-  open,
-  currentProjectId,
-  onClose,
-  onSelectProject,
-  onRemoveProject,
-  onEditProjectMetadata,
-}: RecentProjectsDrawerProps) {
+export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelectProject, onRemoveProject, onEditProjectMetadata }: RecentProjectsDrawerProps) {
   const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
@@ -344,32 +317,16 @@ export function RecentProjectsDrawer({
 
   return (
     <>
-      <button
-        type="button"
-        data-allow-recent-gesture="true"
-        className={`fixed inset-0 z-[89] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${
-          visible ? 'opacity-100' : 'opacity-0'
-        }`}
-        aria-label={t('common.closeRecentProjectsBackdrop')}
-        onClick={onClose}
-      />
+      <button type="button" data-allow-recent-gesture="true" className={`fixed inset-0 z-[89] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`} aria-label={t('common.closeRecentProjectsBackdrop')} onClick={onClose} />
 
-      <aside
-        className={`recent-project-drawer ${visible ? 'is-open' : ''}`}
-        data-allow-recent-gesture="true"
-        data-recent-project-drawer-open={open ? 'true' : 'false'}
-      >
+      <aside className={`recent-project-drawer ${visible ? 'is-open' : ''}`} data-allow-recent-gesture="true" data-recent-project-drawer-open={open ? 'true' : 'false'}>
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="recent-project-drawer-header">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('common.recentProjects')}</p>
               <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('common.recentProjectsHint')}</p>
             </div>
-            <div
-              className="recent-project-drawer-current"
-              title={currentProject?.path}
-              aria-label={currentProject ? `${t('common.currentProject')}: ${projectDisplayName(currentProject)}` : undefined}
-            >
+            <div className="recent-project-drawer-current" title={currentProject?.path} aria-label={currentProject ? `${t('common.currentProject')}: ${projectDisplayName(currentProject)}` : undefined}>
               {currentProject ? projectDisplayName(currentProject) : null}
             </div>
             <button
@@ -391,14 +348,7 @@ export function RecentProjectsDrawer({
             ) : (
               <div className="recent-project-drawer-list">
                 {recentProjects.map((project) => (
-                  <RecentProjectDrawerCard
-                    key={project.id}
-                    project={project}
-                    isContextActive={contextMenuProjectId === project.id}
-                    onSelectProject={onSelectProject}
-                    onRemoveProject={onRemoveProject}
-                    onOpenContextMenu={handleOpenContextMenu}
-                  />
+                  <RecentProjectDrawerCard key={project.id} project={project} isContextActive={contextMenuProjectId === project.id} onSelectProject={onSelectProject} onRemoveProject={onRemoveProject} onOpenContextMenu={handleOpenContextMenu} />
                 ))}
               </div>
             )}
@@ -406,15 +356,7 @@ export function RecentProjectsDrawer({
         </div>
       </aside>
 
-      {contextMenu && contextMenuProject && (
-        <RecentProjectsContextMenu
-          contextMenu={contextMenu}
-          project={contextMenuProject}
-          onClose={handleCloseContextMenu}
-          onRequestCloseDrawer={onClose}
-          onEditMetadata={onEditProjectMetadata}
-        />
-      )}
+      {contextMenu && contextMenuProject && <RecentProjectsContextMenu contextMenu={contextMenu} project={contextMenuProject} onClose={handleCloseContextMenu} onRequestCloseDrawer={onClose} onEditMetadata={onEditProjectMetadata} />}
     </>
   )
 }

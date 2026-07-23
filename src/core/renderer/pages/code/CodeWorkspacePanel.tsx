@@ -9,26 +9,26 @@ import { useSidebarGesture } from '../../hooks/useSidebarGesture'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
+import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { CodeSidebarRailButton } from './CodeSidebarRailButton'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
-import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
-import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
-import { useCodeFileState } from './useCodeFileState'
-import { useCodeWorkspaceRestoreState } from './useCodeWorkspaceRestoreState'
-import { useCodeWorkspaceScrollSync } from './useCodeWorkspaceScrollSync'
-import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
-import { useMarkdownPreviewModeState } from './useMarkdownPreviewModeState'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
+import type { CodeWorkspaceNavigationState } from './code.navigation'
 import { buildKnownFilePathSet } from './code.tree'
+import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
+import { useCodeFileState } from './useCodeFileState'
+import { useCodeTreePathActions } from './useCodeTreePathActions'
+import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
+import { useCodeWorkspaceRestoreState } from './useCodeWorkspaceRestoreState'
+import { useCodeWorkspaceScrollSync } from './useCodeWorkspaceScrollSync'
+import { useMarkdownPreviewModeState } from './useMarkdownPreviewModeState'
+import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
+import { appendProjectCodeTab, CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, normalizeProjectCodeSession } from './useProjectCodeSession'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { useTranscriptFileReferences } from './useTranscriptFileReferences'
-import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
-import { CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, MAX_PROJECT_CODE_SESSION_TABS, normalizeProjectCodeSession } from './useProjectCodeSession'
-import type { CodeWorkspaceNavigationState } from './code.navigation'
-import { useCodeTreePathActions } from './useCodeTreePathActions'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
@@ -132,29 +132,20 @@ export function CodeWorkspacePanel({
   const handleOpenedCodeFileRef = useRef<(relativePath: string) => void>(() => {})
   const resetScrollSyncStateRef = useRef<() => void>(() => {})
   const pendingLocateAfterTreeReloadRef = useRef<string | null>(null)
-  const pushOpenTabPath = useCallback((tabs: string[], relativePath: string): string[] => {
-    const normalizedPath = relativePath.trim()
-    if (!normalizedPath) return tabs
-    if (tabs.includes(normalizedPath)) return tabs
-    return [...tabs, normalizedPath].slice(-MAX_PROJECT_CODE_SESSION_TABS)
-  }, [])
   const handleBeforeOpenCodeFile = useCallback(() => {
     captureCurrentModeScrollRef.current()
   }, [])
-  const handleDidOpenCodeFile = useCallback(
-    (result: ProjectFileReadResult) => {
-      const nextPath = result.relativePath.trim()
-      if (nextPath) {
-        setOpenTabPaths((prev) => pushOpenTabPath(prev, nextPath))
-        handleOpenedCodeFileRef.current(nextPath)
-      }
+  const handleDidOpenCodeFile = useCallback((result: ProjectFileReadResult) => {
+    const nextPath = result.relativePath.trim()
+    if (nextPath) {
+      setOpenTabPaths((prev) => appendProjectCodeTab(prev, nextPath))
+      handleOpenedCodeFileRef.current(nextPath)
+    }
 
-      resetScrollSyncStateRef.current()
-      markOpenedFileInExplorerRef.current(result.relativePath)
-      setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
-    },
-    [pushOpenTabPath],
-  )
+    resetScrollSyncStateRef.current()
+    markOpenedFileInExplorerRef.current(result.relativePath)
+    setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
+  }, [])
   const { activeFile, editorValue, setEditorValue, activeRelativePath, isReading, readError, saveStatus, saveError, hasExternalChange, setHasExternalChange, isReloadingFromDisk, discardUnsavedConfirm, resolveDiscardUnsavedConfirm, isDirty, openFile, handleSave, saveText, saveIndicatorText, saveIndicatorToneClass } =
     useCodeFileState({
       projectId,

@@ -8,6 +8,13 @@ export const CODE_FILE_DRAWER_SECTION_LIMIT = 40
 
 export type EditorCursorPosition = { lineNumber: number; column: number }
 
+/** Add an opened file to the document-session tab list without duplicating or exceeding its cap. */
+export function appendProjectCodeTab(tabs: string[], relativePath: string, limit = MAX_PROJECT_CODE_SESSION_TABS): string[] {
+  const normalizedPath = relativePath.trim()
+  if (!normalizedPath || tabs.includes(normalizedPath)) return tabs
+  return [...tabs, normalizedPath].slice(-Math.max(1, limit))
+}
+
 function fallbackActiveTabPath(tabs: string[]): string | undefined {
   return tabs.length > 0 ? tabs[tabs.length - 1] : undefined
 }
@@ -17,9 +24,7 @@ function normalizeContentSearchScope(value: unknown): string {
   return value.trim()
 }
 
-function normalizeProjectCodeCursorPosition(
-  value: unknown
-): EditorCursorPosition | null {
+function normalizeProjectCodeCursorPosition(value: unknown): EditorCursorPosition | null {
   if (!value || typeof value !== 'object') return null
   const lineNumber = Math.max(1, Math.floor(Number((value as { lineNumber?: unknown }).lineNumber)))
   const column = Math.max(1, Math.floor(Number((value as { column?: unknown }).column)))
@@ -29,9 +34,7 @@ function normalizeProjectCodeCursorPosition(
 
 export function normalizeProjectCodeSession(value: ProjectCodeSession | undefined): ProjectCodeSession | undefined {
   if (!value) return undefined
-  const tabs = Array.isArray(value.tabs)
-    ? Array.from(new Set(value.tabs.map((item) => item.trim()).filter(Boolean))).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-    : []
+  const tabs = Array.isArray(value.tabs) ? Array.from(new Set(value.tabs.map((item) => item.trim()).filter(Boolean))).slice(0, MAX_PROJECT_CODE_SESSION_TABS) : []
 
   const activePath = typeof value.activePath === 'string' ? value.activePath.trim() : ''
   const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : fallbackActiveTabPath(tabs)
@@ -48,9 +51,7 @@ export function normalizeProjectCodeSession(value: ProjectCodeSession | undefine
     }
   }
 
-  const cursorPositions = cursorEntries.length > 0
-    ? Object.fromEntries(cursorEntries)
-    : undefined
+  const cursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
 
   const contentSearchScope = normalizeContentSearchScope(value.contentSearchScope)
 
@@ -91,10 +92,7 @@ export function isSameProjectCodeTabList(left: string[], right: string[]): boole
   return isSameStringArray(left, right)
 }
 
-export function isSameCursorPositionMap(
-  left: Record<string, EditorCursorPosition>,
-  right: Record<string, EditorCursorPosition>
-): boolean {
+export function isSameCursorPositionMap(left: Record<string, EditorCursorPosition>, right: Record<string, EditorCursorPosition>): boolean {
   const leftEntries = Object.entries(left)
   const rightEntries = Object.entries(right)
   if (leftEntries.length !== rightEntries.length) return false
@@ -108,10 +106,7 @@ export function isSameCursorPositionMap(
   return true
 }
 
-export function sanitizeCursorPositionsForTabs(
-  cursorPositions: Record<string, EditorCursorPosition> | undefined,
-  tabSet: Set<string>
-): Record<string, EditorCursorPosition> {
+export function sanitizeCursorPositionsForTabs(cursorPositions: Record<string, EditorCursorPosition> | undefined, tabSet: Set<string>): Record<string, EditorCursorPosition> {
   if (!cursorPositions) return {}
   if (tabSet.size <= 0) return {}
 
@@ -124,20 +119,14 @@ export function sanitizeCursorPositionsForTabs(
   return result
 }
 
-export function sanitizeCodeFileDrawerStateByPaths(
-  state: CodeFileDrawerState,
-  knownFilePaths: Set<string>
-): CodeFileDrawerState {
+export function sanitizeCodeFileDrawerStateByPaths(state: CodeFileDrawerState, knownFilePaths: Set<string>): CodeFileDrawerState {
   return {
     favorites: sanitizePathsForKnownFiles(state.favorites, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
     recents: sanitizePathsForKnownFiles(state.recents, knownFilePaths, CODE_FILE_DRAWER_SECTION_LIMIT),
   }
 }
 
-export function sanitizeProjectCodeSessionByPaths(
-  session: ProjectCodeSession | undefined,
-  knownFilePaths: Set<string>
-): ProjectCodeSession | undefined {
+export function sanitizeProjectCodeSessionByPaths(session: ProjectCodeSession | undefined, knownFilePaths: Set<string>): ProjectCodeSession | undefined {
   const normalized = normalizeProjectCodeSession(session)
   if (!normalized) return undefined
 

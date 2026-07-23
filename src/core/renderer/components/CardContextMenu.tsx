@@ -1,19 +1,6 @@
 import { useEffect, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  Check,
-  ChevronRight,
-  Play,
-  Square,
-  Terminal,
-  RefreshCw,
-  FolderOpen,
-  Code2,
-  Zap,
-  Bot,
-  Pin,
-  Trash2,
-} from 'lucide-react'
+import { Check, ChevronRight, Play, Square, Terminal, RefreshCw, FolderOpen, Code2, Zap, Bot, Pin, Trash2 } from 'lucide-react'
 import type { AiRuntimeProfile, CliTool } from '../../shared/types'
 import { getAiRuntimeProfileCli, getAiRuntimeProfileLabel } from '../../shared/aiRuntimeProfiles'
 import { useI18n } from '../i18n'
@@ -42,6 +29,8 @@ interface CardContextMenuProps {
   onOpenTerminal: () => void | Promise<unknown>
   onSwitchCli: () => void | Promise<unknown>
   onSelectAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
+  onUseAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
+  onSwitchAndUseAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
   onStartProject: () => void | Promise<unknown>
   onStopProject: () => void | Promise<unknown>
   onAiAutoCommit?: () => void | Promise<unknown>
@@ -74,7 +63,7 @@ interface AiProfileSubmenuLayout {
   maxHeight: number
 }
 
-const AI_PROFILE_SUBMENU_WIDTH = 232
+const AI_PROFILE_SUBMENU_WIDTH = 360
 const AI_PROFILE_SUBMENU_MAX_HEIGHT = 280
 const AI_PROFILE_SUBMENU_MIN_HEIGHT = 96
 const AI_PROFILE_SUBMENU_GAP = 8
@@ -128,21 +117,7 @@ function getToneBorderColor(tone: MenuTone = 'default') {
   }
 }
 
-function getClampedMenuPosition({
-  x,
-  y,
-  menuWidth,
-  menuHeight,
-  viewportPadding,
-  pointerGap,
-}: {
-  x: number
-  y: number
-  menuWidth: number
-  menuHeight: number
-  viewportPadding: number
-  pointerGap: number
-}) {
+function getClampedMenuPosition({ x, y, menuWidth, menuHeight, viewportPadding, pointerGap }: { x: number; y: number; menuWidth: number; menuHeight: number; viewportPadding: number; pointerGap: number }) {
   const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
   const menuLeft = Math.min(Math.max(viewportPadding, x), maxLeft)
   const spaceBelow = window.innerHeight - y - viewportPadding - pointerGap
@@ -155,21 +130,10 @@ function getClampedMenuPosition({
   return { menuLeft, menuTop, opensUpward }
 }
 
-function getClampedAiProfileSubmenuPosition({
-  triggerRect,
-  viewportPadding,
-  gap,
-}: {
-  triggerRect: DOMRect
-  viewportPadding: number
-  gap: number
-}): AiProfileSubmenuLayout {
+function getClampedAiProfileSubmenuPosition({ triggerRect, viewportPadding, gap }: { triggerRect: DOMRect; viewportPadding: number; gap: number }): AiProfileSubmenuLayout {
   const viewportWidth = window.innerWidth
   const viewportHeight = window.innerHeight
-  const width = Math.min(
-    AI_PROFILE_SUBMENU_WIDTH,
-    Math.max(180, viewportWidth - viewportPadding * 2)
-  )
+  const width = Math.min(AI_PROFILE_SUBMENU_WIDTH, Math.max(180, viewportWidth - viewportPadding * 2))
   const usableHeight = Math.max(64, viewportHeight - viewportPadding * 2)
   const minHeight = Math.min(AI_PROFILE_SUBMENU_MIN_HEIGHT, usableHeight)
   const sideMaxHeight = Math.min(AI_PROFILE_SUBMENU_MAX_HEIGHT, usableHeight)
@@ -181,11 +145,7 @@ function getClampedAiProfileSubmenuPosition({
   if (canOpenRight || canOpenLeft) {
     return {
       left: canOpenRight ? rightLeft : leftLeft,
-      top: clamp(
-        triggerRect.top,
-        viewportPadding,
-        Math.max(viewportPadding, viewportHeight - viewportPadding - sideMaxHeight)
-      ),
+      top: clamp(triggerRect.top, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - sideMaxHeight)),
       width,
       maxHeight: sideMaxHeight,
     }
@@ -195,25 +155,12 @@ function getClampedAiProfileSubmenuPosition({
   const availableAbove = triggerRect.top - gap - viewportPadding
   const opensBelow = availableBelow >= minHeight || availableBelow >= availableAbove
   const availableHeight = opensBelow ? availableBelow : availableAbove
-  const maxHeight = Math.min(
-    AI_PROFILE_SUBMENU_MAX_HEIGHT,
-    Math.max(minHeight, availableHeight)
-  )
-  const preferredTop = opensBelow
-    ? triggerRect.bottom + gap
-    : triggerRect.top - gap - maxHeight
+  const maxHeight = Math.min(AI_PROFILE_SUBMENU_MAX_HEIGHT, Math.max(minHeight, availableHeight))
+  const preferredTop = opensBelow ? triggerRect.bottom + gap : triggerRect.top - gap - maxHeight
 
   return {
-    left: clamp(
-      triggerRect.left,
-      viewportPadding,
-      Math.max(viewportPadding, viewportWidth - viewportPadding - width)
-    ),
-    top: clamp(
-      preferredTop,
-      viewportPadding,
-      Math.max(viewportPadding, viewportHeight - viewportPadding - maxHeight)
-    ),
+    left: clamp(triggerRect.left, viewportPadding, Math.max(viewportPadding, viewportWidth - viewportPadding - width)),
+    top: clamp(preferredTop, viewportPadding, Math.max(viewportPadding, viewportHeight - viewportPadding - maxHeight)),
     width,
     maxHeight,
   }
@@ -243,6 +190,8 @@ export function CardContextMenu({
   onOpenTerminal,
   onSwitchCli,
   onSelectAiRuntimeProfile,
+  onUseAiRuntimeProfile,
+  onSwitchAndUseAiRuntimeProfile,
   onStartProject,
   onStopProject,
   onAiAutoCommit,
@@ -273,7 +222,7 @@ export function CardContextMenu({
         setActionError(message || 'Action failed')
       }
     },
-    [onClose]
+    [onClose],
   )
 
   useEffect(() => {
@@ -287,13 +236,7 @@ export function CardContextMenu({
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target
-      if (
-        target instanceof Node
-        && (
-          menuRef.current?.contains(target)
-          || profileSubmenuRef.current?.contains(target)
-        )
-      ) {
+      if (target instanceof Node && (menuRef.current?.contains(target) || profileSubmenuRef.current?.contains(target))) {
         return
       }
       onClose()
@@ -311,10 +254,43 @@ export function CardContextMenu({
   const runtimeStatusLabel = isRuntimeActive ? `${cliLabel} ${t('common.runtime')} · ${t('common.active')}` : `${t('common.runtime')} · ${t('common.offline')}`
   const devStatusLabel = isDevStopping ? `${t('common.dev')} ${t('common.stopping')}` : isDevRunning ? `${t('common.dev')} ${t('common.running')}` : `${t('common.dev')} ${t('common.offline')}`
   const runtimeActionLabel = usesTmuxRuntime ? t('common.runtimeTerminal') : t('common.runtimeLaunch')
-  const runtimeActionCaption = isRuntimeActive
-    ? (isOpeningTerminal ? t('common.opening') : (usesTmuxRuntime ? t('common.openSession') : t('common.openTerminalLaunch')))
-    : t('common.connectAiRuntime')
+  const runtimeActionCaption = isRuntimeActive ? (isOpeningTerminal ? t('common.opening') : usesTmuxRuntime ? t('common.openSession') : t('common.openTerminalLaunch')) : t('common.connectAiRuntime')
   const canChooseAiRuntimeProfile = Boolean(onSelectAiRuntimeProfile && aiRuntimeProfiles.length > 0)
+  const canUseAiRuntimeProfile = Boolean(onUseAiRuntimeProfile && onSwitchAndUseAiRuntimeProfile)
+  const renderProfileActions = (profileId: string) => {
+    if (!canUseAiRuntimeProfile) return null
+
+    return (
+      <span className="ml-2 flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          className="rounded-full px-2 py-1 text-[10px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-card)] hover:text-[color:var(--color-foreground)]"
+          aria-label={t('common.useAiProfileOnce')}
+          title={t('common.useAiProfileOnce')}
+          onClick={() => {
+            void handleClick(async () => {
+              await onUseAiRuntimeProfile?.(profileId)
+            })
+          }}
+        >
+          {t('common.useAiProfileOnce')}
+        </button>
+        <button
+          type="button"
+          className="rounded-full bg-[color:var(--color-accent)] px-2 py-1 text-[10px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-primary)]/15"
+          aria-label={t('common.useAndSwitchAiProfile')}
+          title={t('common.useAndSwitchAiProfile')}
+          onClick={() => {
+            void handleClick(async () => {
+              await onSwitchAndUseAiRuntimeProfile?.(profileId)
+            })
+          }}
+        >
+          {t('common.useAndSwitchAiProfile')}
+        </button>
+      </span>
+    )
+  }
   const updateProfileSubmenuLayout = useCallback(() => {
     const trigger = profileMenuTriggerRef.current
     if (!trigger) {
@@ -322,11 +298,13 @@ export function CardContextMenu({
       return
     }
 
-    setProfileSubmenuLayout(getClampedAiProfileSubmenuPosition({
-      triggerRect: trigger.getBoundingClientRect(),
-      viewportPadding: 10,
-      gap: AI_PROFILE_SUBMENU_GAP,
-    }))
+    setProfileSubmenuLayout(
+      getClampedAiProfileSubmenuPosition({
+        triggerRect: trigger.getBoundingClientRect(),
+        viewportPadding: 10,
+        gap: AI_PROFILE_SUBMENU_GAP,
+      }),
+    )
   }, [])
 
   useLayoutEffect(() => {
@@ -373,19 +351,9 @@ export function CardContextMenu({
   const primaryActionItems: MenuAction[] = [
     {
       key: 'runtime',
-      label: isStartingRuntime
-        ? `${t('common.run')} ${cliLabel}`
-        : isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
-      caption: isStartingRuntime
-        ? t('common.starting')
-        : runtimeActionCaption,
-      icon: isStartingRuntime
-        ? <RefreshCw className="h-4 w-4 animate-spin" />
-        : isRuntimeActive
-          ? isOpeningTerminal
-            ? <RefreshCw className="h-4 w-4 animate-spin" />
-            : <Terminal className="h-4 w-4" />
-          : <Zap className="h-4 w-4" />,
+      label: isStartingRuntime ? `${t('common.run')} ${cliLabel}` : isRuntimeActive ? runtimeActionLabel : `${t('common.run')} ${cliLabel}`,
+      caption: isStartingRuntime ? t('common.starting') : runtimeActionCaption,
+      icon: isStartingRuntime ? <RefreshCw className="h-4 w-4 animate-spin" /> : isRuntimeActive ? isOpeningTerminal ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" /> : <Zap className="h-4 w-4" />,
       action: isRuntimeActive ? onOpenTerminal : onStartRuntime,
       disabled: isStartingRuntime || (isRuntimeActive && isOpeningTerminal),
       tone: 'primary',
@@ -394,11 +362,7 @@ export function CardContextMenu({
       key: 'dev',
       label: isDevStopping ? t('common.stopping') : isDevRunning ? t('common.stopProject') : t('common.startProject'),
       caption: isDevStopping ? t('common.waitForExit') : isDevRunning ? t('common.terminateDevProcess') : t('common.runDevService'),
-      icon: isDevStopping
-        ? <RefreshCw className="h-4 w-4 animate-spin" />
-        : isDevRunning
-          ? <Square className="h-4 w-4" />
-          : <Play className="h-4 w-4" />,
+      icon: isDevStopping ? <RefreshCw className="h-4 w-4 animate-spin" /> : isDevRunning ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />,
       action: isDevRunning || isDevStopping ? onStopProject : onStartProject,
       disabled: isDevStopping,
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
@@ -407,9 +371,7 @@ export function CardContextMenu({
       key: 'ai-commit',
       label: aiCommitStatus === 'running' ? `AI ${t('common.stopping')}` : t('common.aiAutoCommit'),
       caption: t('common.defaultParams'),
-      icon: aiCommitStatus === 'running'
-        ? <RefreshCw className="h-4 w-4 animate-spin" />
-        : <Bot className="h-4 w-4" />,
+      icon: aiCommitStatus === 'running' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />,
       show: Boolean(onAiAutoCommit),
       action: onAiAutoCommit ?? (() => undefined),
       disabled: aiCommitStatus === 'running',
@@ -448,7 +410,7 @@ export function CardContextMenu({
   const utilityActionItems: MenuAction[] = [
     {
       key: 'ai-profile',
-      label: t('common.switchAiProfile'),
+      label: t('common.switchAndUseAiProfile'),
       icon: <Bot className="h-3.5 w-3.5" />,
       action: onSwitchCli,
       tone: 'primary',
@@ -476,9 +438,7 @@ export function CardContextMenu({
     {
       key: 'stop-runtime',
       label: isStoppingRuntime ? t('common.stopping') : t('common.stopRuntime'),
-      icon: isStoppingRuntime
-        ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-        : <Square className="h-3.5 w-3.5" />,
+      icon: isStoppingRuntime ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />,
       show: isRuntimeActive,
       action: onStopRuntime,
       disabled: isStoppingRuntime,
@@ -509,18 +469,15 @@ export function CardContextMenu({
   })
 
   const dangerActionsBlock = dangerActions.length > 0 && (
-    <div
-      className={`grid gap-1.5 border-[color:var(--color-border)] ${
-        opensUpward ? 'border-b pb-2' : 'border-t pt-2'
-      }`}
-      style={{ gridTemplateColumns: `repeat(${dangerActions.length}, minmax(0, 1fr))` }}
-    >
+    <div className={`grid gap-1.5 border-[color:var(--color-border)] ${opensUpward ? 'border-b pb-2' : 'border-t pt-2'}`} style={{ gridTemplateColumns: `repeat(${dangerActions.length}, minmax(0, 1fr))` }}>
       {dangerActions.map((item) => (
         <button
           key={item.label}
           disabled={item.disabled}
           className={`group flex min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)] ${item.disabled ? 'cursor-not-allowed opacity-60' : ''}`}
-          onClick={() => { void handleClick(item.action) }}
+          onClick={() => {
+            void handleClick(item.action)
+          }}
         >
           <span className="shrink-0">{item.icon}</span>
           <span className="truncate">{item.label}</span>
@@ -529,96 +486,85 @@ export function CardContextMenu({
     </div>
   )
 
-  const profileSubmenu = profileMenuOpen && canChooseAiRuntimeProfile ? (
-    <div
-      ref={profileSubmenuRef}
-      role="menu"
-      className="fixed z-[10020] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
-      style={{
-        top: profileSubmenuLayout?.top ?? 0,
-        left: profileSubmenuLayout?.left ?? 0,
-        width: profileSubmenuLayout?.width ?? AI_PROFILE_SUBMENU_WIDTH,
-        maxHeight: profileSubmenuMaxHeight,
-        visibility: profileSubmenuLayout ? 'visible' : 'hidden',
-        WebkitBackdropFilter: 'saturate(160%) blur(18px)',
-      }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-        {t('common.switchAiProfile')}
-      </div>
-      <div className="overflow-auto" style={{ maxHeight: profileSubmenuListMaxHeight }}>
-        <button
-          type="button"
-          role="menuitemradio"
-          aria-checked={isUsingDefaultAiRuntimeProfile}
-          className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${
-            isUsingDefaultAiRuntimeProfile
-              ? 'bg-primary/10 text-primary'
-              : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-          }`}
-          onClick={() => {
-            void handleClick(async () => {
-              await onSelectAiRuntimeProfile?.('')
-            })
-          }}
-        >
-          <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">
-            {(defaultRuntimeProfileCli ?? currentCli) === 'codex'
-              ? <Terminal className="h-3.5 w-3.5" />
-              : <Bot className="h-3.5 w-3.5" />}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">
-              {t('common.default')} · {defaultRuntimeProfileLabel ?? currentRuntimeProfileLabel ?? currentCli}
-            </span>
-            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
-              {t('settingsRuntime.activeRuntimeProfile')}
-            </span>
-          </span>
-          {isUsingDefaultAiRuntimeProfile ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
-        </button>
-        {aiRuntimeProfiles.map((profile) => {
-          const selected = !isUsingDefaultAiRuntimeProfile && profile.id === currentRuntimeProfileId
-          const profileCli = getAiRuntimeProfileCli(profile, currentCli)
-
-          return (
+  const profileSubmenu =
+    profileMenuOpen && canChooseAiRuntimeProfile ? (
+      <div
+        ref={profileSubmenuRef}
+        role="menu"
+        className="fixed z-[10020] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
+        style={{
+          top: profileSubmenuLayout?.top ?? 0,
+          left: profileSubmenuLayout?.left ?? 0,
+          width: profileSubmenuLayout?.width ?? AI_PROFILE_SUBMENU_WIDTH,
+          maxHeight: profileSubmenuMaxHeight,
+          visibility: profileSubmenuLayout ? 'visible' : 'hidden',
+          WebkitBackdropFilter: 'saturate(160%) blur(18px)',
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        <div className="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('common.useAiProfile')}</div>
+        <div className="overflow-auto" style={{ maxHeight: profileSubmenuListMaxHeight }}>
+          <div
+            role="menuitemradio"
+            aria-checked={isUsingDefaultAiRuntimeProfile}
+            className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${isUsingDefaultAiRuntimeProfile ? 'bg-primary/10 text-primary' : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'}`}
+          >
             <button
-              key={profile.id}
               type="button"
-              role="menuitemradio"
-              aria-checked={selected}
-              className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${
-                selected
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-              }`}
+              className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
               onClick={() => {
                 void handleClick(async () => {
-                  await onSelectAiRuntimeProfile?.(profile.id)
+                  await onSelectAiRuntimeProfile?.('')
                 })
               }}
             >
-              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">
-                {profileCli === 'codex' ? <Terminal className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-              </span>
+              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">{(defaultRuntimeProfileCli ?? currentCli) === 'codex' ? <Terminal className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">
-                  {getAiRuntimeProfileLabel(profile, currentCli)}
+                  {t('common.default')} · {defaultRuntimeProfileLabel ?? currentRuntimeProfileLabel ?? currentCli}
                 </span>
-                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
-                  {profile.kind === 'custom' ? profile.command || profileCli : profileCli}
-                </span>
+                <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.activeRuntimeProfile')}</span>
               </span>
-              {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+              {isUsingDefaultAiRuntimeProfile ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
             </button>
-          )
-        })}
+            {renderProfileActions('')}
+          </div>
+          {aiRuntimeProfiles.map((profile) => {
+            const selected = !isUsingDefaultAiRuntimeProfile && profile.id === currentRuntimeProfileId
+            const profileCli = getAiRuntimeProfileCli(profile, currentCli)
+
+            return (
+              <div
+                key={profile.id}
+                role="menuitemradio"
+                aria-checked={selected}
+                className={`group flex w-full min-w-0 items-center gap-2 rounded-[13px] px-2.5 py-2 text-left text-xs transition-colors ${selected ? 'bg-primary/10 text-primary' : 'text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'}`}
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+                  onClick={() => {
+                    void handleClick(async () => {
+                      await onSelectAiRuntimeProfile?.(profile.id)
+                    })
+                  }}
+                >
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[color:var(--color-accent)]">{profileCli === 'codex' ? <Terminal className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{getAiRuntimeProfileLabel(profile, currentCli)}</span>
+                    <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">{profile.kind === 'custom' ? profile.command || profileCli : profileCli}</span>
+                  </span>
+                  {selected ? <Check className="h-3.5 w-3.5 shrink-0" /> : null}
+                </button>
+                {renderProfileActions(profile.id)}
+              </div>
+            )
+          })}
+        </div>
       </div>
-    </div>
-  ) : null
+    ) : null
 
   return createPortal(
     <>
@@ -629,8 +575,7 @@ export function CardContextMenu({
           top: menuTop,
           left: menuLeft,
           width: menuWidth,
-          background:
-            'linear-gradient(180deg, color-mix(in srgb, var(--color-popover) 96%, var(--color-primary) 4%) 0%, var(--color-popover) 100%)',
+          background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-popover) 96%, var(--color-primary) 4%) 0%, var(--color-popover) 100%)',
           border: '1px solid var(--color-border)',
           backdropFilter: 'saturate(132%) blur(10px)',
           WebkitBackdropFilter: 'saturate(132%) blur(10px)',
@@ -640,156 +585,123 @@ export function CardContextMenu({
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}
       >
-      {actionError && (
+        {actionError && (
+          <div
+            className="mb-2 rounded-[16px] border px-3 py-2 text-xs whitespace-pre-line"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--color-destructive) 35%, transparent)',
+              background: 'color-mix(in srgb, var(--color-destructive-background) 88%, transparent)',
+              color: 'var(--color-destructive)',
+            }}
+          >
+            {actionError}
+          </div>
+        )}
+
+        {opensUpward && dangerActionsBlock}
+
         <div
-          className="mb-2 rounded-[16px] border px-3 py-2 text-xs whitespace-pre-line"
+          className={`relative overflow-hidden rounded-[18px] border px-3 py-2.5 ${opensUpward && dangerActions.length > 0 ? 'mt-2' : ''}`}
           style={{
-            borderColor: 'color-mix(in srgb, var(--color-destructive) 35%, transparent)',
-            background: 'color-mix(in srgb, var(--color-destructive-background) 88%, transparent)',
-            color: 'var(--color-destructive)',
+            borderColor: 'color-mix(in srgb, var(--color-border) 84%, transparent)',
+            // background:
+            //   'linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-card) 92%, transparent))',
           }}
         >
-          {actionError}
-        </div>
-      )}
-
-      {opensUpward && dangerActionsBlock}
-
-      <div
-        className={`relative overflow-hidden rounded-[18px] border px-3 py-2.5 ${opensUpward && dangerActions.length > 0 ? 'mt-2' : ''}`}
-        style={{
-          borderColor: 'color-mix(in srgb, var(--color-border) 84%, transparent)',
-          // background:
-          //   'linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-card) 92%, transparent))',
-        }}
-      >
-        <div
-          className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full blur-2xl"
-          style={{ background: 'color-mix(in srgb, var(--color-primary) 20%, transparent)' }}
-        />
-        <div className="relative flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">
-              {t('common.projectActions')}
-            </div>
-            <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[color:var(--color-foreground)]">
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                  isRuntimeActive ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-muted-foreground)]/55'
-                }`}
-              />
-              <span className="truncate">{runtimeStatusLabel}</span>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-primary">
-              {cliLabel}
-            </span>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] ${
-                isDevRunning || isDevStopping
-                  ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                  : 'bg-[color:var(--color-secondary)] text-[color:var(--color-muted-foreground)]'
-              }`}
-            >
-              {devStatusLabel}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="mt-2 grid gap-1.5"
-        style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryActions.length)}, minmax(0, 1fr))` }}
-      >
-        {primaryActions.map((item) => (
-          <button
-            key={item.label}
-            disabled={item.disabled}
-            className={`group min-w-0 rounded-[17px] border px-3 py-2.5 text-left transition-colors ${getPrimaryActionClass(
-              item.tone
-            )} ${item.disabled ? 'cursor-not-allowed opacity-60 hover:bg-transparent' : ''}`}
-            style={{ borderColor: getToneBorderColor(item.tone) }}
-            onClick={() => { void handleClick(item.action) }}
-          >
-            <span className="flex min-w-0 items-center gap-2.5">
-              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[color:var(--color-card)]/80">
-                {item.icon}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold tracking-[-0.01em]">{item.label}</span>
-                <span className="mt-0.5 block truncate text-[10px] font-normal opacity-70">{item.caption}</span>
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div
-        className="mt-2 grid grid-cols-3 gap-1.5 rounded-[18px] border p-1.5"
-        style={{
-          borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
-          background: 'color-mix(in srgb, var(--color-background-sunken) 34%, transparent)',
-        }}
-      >
-        {openActions.map((item) => (
-          <button
-            key={item.label}
-            className="group min-w-0 rounded-[13px] px-2 py-2 text-left transition-colors hover:bg-[color:var(--color-accent)]/75"
-            onClick={() => { void handleClick(item.action) }}
-          >
-            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md bg-[color:var(--color-accent)] ${getIconToneClass(item.tone)}`}>
-              {item.icon}
-            </span>
-            <span className="mt-1 block truncate text-[11px] font-medium text-[color:var(--color-foreground)]">
-              {item.label}
-            </span>
-            <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
-              {item.caption}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {utilityActions.length > 0 && (
-        <div
-          className="mt-2 grid gap-1.5"
-          style={{ gridTemplateColumns: `repeat(${utilityActions.length}, minmax(0, 1fr))` }}
-        >
-          {utilityActions.map((item) => {
-            const isAiProfileAction = item.key === 'ai-profile'
-
-            return (
-              <div key={item.key} className="relative min-w-0">
-                <button
-                  ref={isAiProfileAction ? profileMenuTriggerRef : undefined}
-                  className="group flex w-full min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]/70 hover:text-[color:var(--color-foreground)]"
-                  aria-haspopup={isAiProfileAction && canChooseAiRuntimeProfile ? 'menu' : undefined}
-                  aria-expanded={isAiProfileAction && canChooseAiRuntimeProfile ? profileMenuOpen : undefined}
-                  onClick={() => {
-                    if (isAiProfileAction && canChooseAiRuntimeProfile) {
-                      setProfileMenuOpen((current) => !current)
-                      return
-                    }
-                    void handleClick(item.action)
-                  }}
-                >
-                  <span className={`shrink-0 ${getIconToneClass(item.tone)}`}>{item.icon}</span>
-                  <span className="truncate">{item.label}</span>
-                  {isAiProfileAction && canChooseAiRuntimeProfile ? (
-                    <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${profileMenuOpen ? 'rotate-90' : ''}`} />
-                  ) : null}
-                </button>
+          <div className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full blur-2xl" style={{ background: 'color-mix(in srgb, var(--color-primary) 20%, transparent)' }} />
+          <div className="relative flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--color-muted-foreground)]">{t('common.projectActions')}</div>
+              <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs font-medium text-[color:var(--color-foreground)]">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isRuntimeActive ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-muted-foreground)]/55'}`} />
+                <span className="truncate">{runtimeStatusLabel}</span>
               </div>
-            )
-          })}
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] font-medium text-primary">{cliLabel}</span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] ${isDevRunning || isDevStopping ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-secondary)] text-[color:var(--color-muted-foreground)]'}`}>{devStatusLabel}</span>
+            </div>
+          </div>
         </div>
-      )}
 
-      {!opensUpward && dangerActionsBlock && <div className="mt-2">{dangerActionsBlock}</div>}
+        <div className="mt-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryActions.length)}, minmax(0, 1fr))` }}>
+          {primaryActions.map((item) => (
+            <button
+              key={item.label}
+              disabled={item.disabled}
+              className={`group min-w-0 rounded-[17px] border px-3 py-2.5 text-left transition-colors ${getPrimaryActionClass(item.tone)} ${item.disabled ? 'cursor-not-allowed opacity-60 hover:bg-transparent' : ''}`}
+              style={{ borderColor: getToneBorderColor(item.tone) }}
+              onClick={() => {
+                void handleClick(item.action)
+              }}
+            >
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[color:var(--color-card)]/80">{item.icon}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold tracking-[-0.01em]">{item.label}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-normal opacity-70">{item.caption}</span>
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div
+          className="mt-2 grid grid-cols-3 gap-1.5 rounded-[18px] border p-1.5"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
+            background: 'color-mix(in srgb, var(--color-background-sunken) 34%, transparent)',
+          }}
+        >
+          {openActions.map((item) => (
+            <button
+              key={item.label}
+              className="group min-w-0 rounded-[13px] px-2 py-2 text-left transition-colors hover:bg-[color:var(--color-accent)]/75"
+              onClick={() => {
+                void handleClick(item.action)
+              }}
+            >
+              <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md bg-[color:var(--color-accent)] ${getIconToneClass(item.tone)}`}>{item.icon}</span>
+              <span className="mt-1 block truncate text-[11px] font-medium text-[color:var(--color-foreground)]">{item.label}</span>
+              <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">{item.caption}</span>
+            </button>
+          ))}
+        </div>
+
+        {utilityActions.length > 0 && (
+          <div className="mt-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${utilityActions.length}, minmax(0, 1fr))` }}>
+            {utilityActions.map((item) => {
+              const isAiProfileAction = item.key === 'ai-profile'
+
+              return (
+                <div key={item.key} className="relative min-w-0">
+                  <button
+                    ref={isAiProfileAction ? profileMenuTriggerRef : undefined}
+                    className="group flex w-full min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-[12px] font-medium text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]/70 hover:text-[color:var(--color-foreground)]"
+                    aria-haspopup={isAiProfileAction && canChooseAiRuntimeProfile ? 'menu' : undefined}
+                    aria-expanded={isAiProfileAction && canChooseAiRuntimeProfile ? profileMenuOpen : undefined}
+                    onClick={() => {
+                      if (isAiProfileAction && canChooseAiRuntimeProfile) {
+                        setProfileMenuOpen((current) => !current)
+                        return
+                      }
+                      void handleClick(item.action)
+                    }}
+                  >
+                    <span className={`shrink-0 ${getIconToneClass(item.tone)}`}>{item.icon}</span>
+                    <span className="truncate">{item.label}</span>
+                    {isAiProfileAction && canChooseAiRuntimeProfile ? <ChevronRight className={`h-3.5 w-3.5 shrink-0 transition-transform ${profileMenuOpen ? 'rotate-90' : ''}`} /> : null}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {!opensUpward && dangerActionsBlock && <div className="mt-2">{dangerActionsBlock}</div>}
       </div>
       {profileSubmenu}
     </>,
-    document.body
+    document.body,
   )
 }

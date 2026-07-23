@@ -1,15 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import {
-  ArrowUpRight,
-  ChevronDown,
-  ChevronLeft,
-  ChevronUp,
-  Play,
-  RefreshCw,
-  Square,
-} from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, Play, RefreshCw, Square } from 'lucide-react'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
@@ -23,40 +15,16 @@ import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
-import {
-  loadCodeWorkspacePanelModule,
-  loadDetailAiCommitPaneHostModule,
-  preloadProjectPane,
-} from '../lib/projectPagePreload'
+import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preloadProjectPane } from '../lib/projectPagePreload'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
-import {
-  defaultAiRuntimeProfiles,
-  getAiRuntimeProfileCli,
-  getAiRuntimeProfileLabel,
-  resolveAiRuntimeProfile,
-  resolveProjectAiRuntimeProfileId,
-} from '../../shared/aiRuntimeProfiles'
+import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 
-const CodeWorkspacePanel = lazy(() =>
-  loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel }))
-)
-const DetailAiCommitPaneHost = lazy(() =>
-  loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost }))
-)
+const CodeWorkspacePanel = lazy(() => loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel })))
+const DetailAiCommitPaneHost = lazy(() => loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost })))
 
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
-const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = [
-  'button',
-  'a',
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable="true"]',
-  '.monaco-editor',
-  '.xterm',
-  '[role="dialog"]',
-].join(', ')
+const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = ['button', 'a', 'input', 'textarea', 'select', '[contenteditable="true"]', '.monaco-editor', '.xterm', '[role="dialog"]'].join(', ')
 
 function shouldSkipProjectPageContextMenu(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
@@ -73,11 +41,7 @@ function readProjectHeaderCollapsed(): boolean {
 function DetailPaneFallback() {
   const { t } = useI18n()
 
-  return (
-    <div className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/50 text-xs text-[color:var(--color-muted-foreground)]">
-      {t('common.loading')}
-    </div>
-  )
+  return <div className="flex h-full min-h-0 items-center justify-center rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/50 text-xs text-[color:var(--color-muted-foreground)]">{t('common.loading')}</div>
 }
 
 export function DetailPage() {
@@ -145,9 +109,7 @@ export function DetailPage() {
   const projectPath = project?.path
   const environment = projectPath ? detectProjectEnvironment(projectPath) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment, locale) : t('common.unknown')
-  const contentTopPaddingClass = projectHeaderCollapsed
-    ? 'pt-5'
-    : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
+  const contentTopPaddingClass = projectHeaderCollapsed ? 'pt-5' : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const isRunning = processStatus === 'running'
   const isStopping = processStatus === 'stopping'
   const isActive = isRunning || isStopping
@@ -157,9 +119,7 @@ export function DetailPage() {
   const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
   const defaultRuntimeProfileCli: CliTool = getAiRuntimeProfileCli(defaultRuntimeProfile)
   const hasProjectAiRuntimeOverride = Boolean(project?.aiRuntimeProfileId?.trim() || project?.cli)
-  const currentRuntimeProfileId = project
-    ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId)
-    : activeAiRuntimeProfileId
+  const currentRuntimeProfileId = project ? resolveProjectAiRuntimeProfileId(project, activeAiRuntimeProfileId) : activeAiRuntimeProfileId
   const currentRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, currentRuntimeProfileId, project?.cli)
   const currentRuntimeProfileLabel = getAiRuntimeProfileLabel(currentRuntimeProfile, project?.cli)
   const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project?.cli)
@@ -168,11 +128,7 @@ export function DetailPage() {
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
-  const {
-    firstDevUrl,
-    pendingOpenDevUrl,
-    startAndOpenDevUrl,
-  } = useProjectDevUrlLauncher({
+  const { firstDevUrl, pendingOpenDevUrl, startAndOpenDevUrl } = useProjectDevUrlLauncher({
     projectId: projectId ?? '',
     processStatus,
     processUrls,
@@ -217,19 +173,16 @@ export function DetailPage() {
   const openProjectLinksManager = useCallback(() => {
     setLinkSettingsOpen(true)
   }, [setLinkSettingsOpen])
-  const collapsedProjectLinkItems = useMemo(
-    () => [
-      ...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
-      ...docMenuItems,
-    ],
-    [docMenuItems, isDevReady, processUrls]
-  )
+  const collapsedProjectLinkItems = useMemo(() => [...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, processUrls])
   const hasProjectDocLinks = docMenuItems.length > 0
 
-  const handleSelectAiRuntimeProfile = useCallback((profileId: string) => {
-    if (!project) return
-    void setProjectAiRuntimeProfile(project.id, profileId)
-  }, [project, setProjectAiRuntimeProfile])
+  const handleSelectAiRuntimeProfile = useCallback(
+    (profileId: string) => {
+      if (!project) return
+      void setProjectAiRuntimeProfile(project.id, profileId)
+    },
+    [project, setProjectAiRuntimeProfile],
+  )
 
   const handleSwitchCli = useCallback(() => {
     if (!project) return
@@ -241,6 +194,23 @@ export function DetailPage() {
     }
     void setProjectCli(project.id, currentCli === 'codex' ? 'claude' : 'codex')
   }, [project, aiRuntimeProfiles, currentCli, currentRuntimeProfile.id, setProjectAiRuntimeProfile, setProjectCli])
+
+  const handleUseAiRuntimeProfileOnce = useCallback(
+    async (profileId: string) => {
+      if (!project) return
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project, startRuntime],
+  )
+
+  const handleSwitchAndUseAiRuntimeProfile = useCallback(
+    async (profileId: string) => {
+      if (!project) return
+      await setProjectAiRuntimeProfile(project.id, profileId)
+      await startRuntime(project.id, profileId || defaultRuntimeProfile.id)
+    },
+    [defaultRuntimeProfile.id, project, setProjectAiRuntimeProfile, startRuntime],
+  )
 
   const handleOpenTerminal = useCallback(async () => {
     if (!projectId || isOpeningTerminal) return
@@ -306,12 +276,13 @@ export function DetailPage() {
     if (!projectId) return
     const api = window.electronAPI
 
-    const cleanup = typeof api.onAiCommitStatus === 'function'
-      ? api.onAiCommitStatus(({ projectId: pid, status }) => {
-        if (pid !== projectId) return
-        setAiCommitStatus(status)
-      })
-      : undefined
+    const cleanup =
+      typeof api.onAiCommitStatus === 'function'
+        ? api.onAiCommitStatus(({ projectId: pid, status }) => {
+            if (pid !== projectId) return
+            setAiCommitStatus(status)
+          })
+        : undefined
 
     void (async () => {
       if (typeof api.getAiCommitState !== 'function') return
@@ -353,12 +324,8 @@ export function DetailPage() {
     code: activePane === 'code',
     aicommit: activePane === 'aicommit',
   }))
-  const hasMountedCodePane = paneMountState.projectKey === projectRenderKey
-    ? paneMountState.code
-    : activePane === 'code'
-  const hasMountedAiCommitPane = paneMountState.projectKey === projectRenderKey
-    ? paneMountState.aicommit
-    : activePane === 'aicommit'
+  const hasMountedCodePane = paneMountState.projectKey === projectRenderKey ? paneMountState.code : activePane === 'code'
+  const hasMountedAiCommitPane = paneMountState.projectKey === projectRenderKey ? paneMountState.aicommit : activePane === 'aicommit'
 
   useEffect(() => {
     setPaneMountState((prev) => {
@@ -390,10 +357,7 @@ export function DetailPage() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
         <h2 className="text-lg font-semibold text-[color:var(--color-foreground)]">{t('detail.projectNotFound')}</h2>
-        <button
-          className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary"
-          onClick={() => navigate('/')}
-        >
+        <button className="inline-flex items-center gap-1.5 text-sm text-primary transition-colors hover:text-primary" onClick={() => navigate('/')}>
           <ChevronLeft className="h-4 w-4" strokeWidth={1.8} />
           {t('detail.backToHome')}
         </button>
@@ -413,10 +377,7 @@ export function DetailPage() {
       {!projectHeaderCollapsed && (
         <header className="app-chrome pointer-events-auto absolute inset-x-0 top-0 z-[85] flex min-h-[84px] items-center justify-between px-8 py-4">
           <div className="flex min-w-0 items-center gap-4">
-            <button
-              className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => navigate('/')}
-            >
+            <button className="rounded-full p-2 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={() => navigate('/')}>
               <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
             </button>
 
@@ -429,10 +390,7 @@ export function DetailPage() {
                 {t('detail.environment')}: {environmentLabel}
               </p>
               {runtimeStartError && (
-                <p
-                  className="mt-1 max-w-[460px] truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2 py-1 text-[11px] text-[color:var(--color-destructive)]"
-                  title={runtimeStartError}
-                >
+                <p className="mt-1 max-w-[460px] truncate rounded-full border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-2 py-1 text-[11px] text-[color:var(--color-destructive)]" title={runtimeStartError}>
                   {runtimeStartError}
                 </p>
               )}
@@ -440,21 +398,18 @@ export function DetailPage() {
 
             {isActive ? (
               <div
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${isRunning
-                  ? isDevReady
-                    ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                    : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  : isStopping
-                    ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                    : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  }`}
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                  isRunning
+                    ? isDevReady
+                      ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                      : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                    : isStopping
+                      ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                      : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                }`}
               >
-                {isStopping ? (
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                ) : (
-                  <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />
-                )}
-                {isRunning ? (isDevReady ? t('common.running') : t('common.starting')) : isStopping ? t('common.stopping') : (usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady'))}
+                {isStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />}
+                {isRunning ? (isDevReady ? t('common.running') : t('common.starting')) : isStopping ? t('common.stopping') : usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady')}
               </div>
             ) : (
               <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
@@ -475,54 +430,34 @@ export function DetailPage() {
               <UrlPopover urls={processUrls}>
                 <button
                   className={`quiet-control inline-flex items-center gap-1.5 rounded-full border-0 py-1.5 text-xs transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
-                    isDevReady
-                      ? 'text-primary hover:text-primary'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                  } ${
-                    firstDevUrl || pendingOpenDevUrl ? 'px-3' : 'px-2.5'
-                  }`}
-                  onClick={() => { void startAndOpenDevUrl() }}
+                    isDevReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                  } ${firstDevUrl || pendingOpenDevUrl ? 'px-3' : 'px-2.5'}`}
+                  onClick={() => {
+                    void startAndOpenDevUrl()
+                  }}
                   disabled={pendingOpenDevUrl}
                   title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                   aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                 >
                   {pendingOpenDevUrl ? <RefreshCw className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
-                  {(firstDevUrl || pendingOpenDevUrl) && (
-                    <span className="max-w-[180px] truncate">
-                      {firstDevUrl ?? t('project.waitingForDevUrl')}
-                    </span>
-                  )}
+                  {(firstDevUrl || pendingOpenDevUrl) && <span className="max-w-[180px] truncate">{firstDevUrl ?? t('project.waitingForDevUrl')}</span>}
                 </button>
               </UrlPopover>
             )}
 
-            <ProjectLinksTrigger
-              items={docMenuItems}
-              tagOptions={docLinkTagOptionsFromHook}
-              onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined}
-              onOpenManager={openProjectLinksManager}
-              size="icon"
-              title={defaultDocLink ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')}
-            />
+            <ProjectLinksTrigger items={docMenuItems} tagOptions={docLinkTagOptionsFromHook} onOpenDefault={defaultDocLink ? () => handleOpenDocLink(defaultDocLink) : undefined} onOpenManager={openProjectLinksManager} size="icon" title={defaultDocLink ? t('common.leftClickOpenFirstLink') : t('detail.docsSettings')} />
 
             <button
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${isActive
-                ? isStopping
-                  ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                  : isDevReady
-                    ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
-                    : 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
-                }`}
-              style={
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
                 isActive
                   ? isStopping
-                    ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' }
+                    ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
                     : isDevReady
-                      ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' }
-                      : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }
-                  : undefined
-              }
+                      ? 'border text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                      : 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                  : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
+              }`}
+              style={isActive ? (isStopping ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' } : isDevReady ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' } : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }) : undefined}
               onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -545,7 +480,6 @@ export function DetailPage() {
                 </>
               )}
             </button>
-
           </div>
 
           <button
@@ -597,6 +531,8 @@ export function DetailPage() {
           onOpenTerminal={handleOpenTerminal}
           onSwitchCli={handleSwitchCli}
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
+          onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
+          onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
           onStartProject={() => startProject(project.id)}
           onStopProject={() => stopProject(project.id)}
           onAiAutoCommit={() => {
@@ -614,32 +550,14 @@ export function DetailPage() {
       )}
 
       {metaDialogOpen && (
-        <ProjectMetaDialog
-          open={metaDialogOpen}
-          project={project}
-          folders={folders}
-          tags={tags}
-          onClose={() => setMetaDialogOpen(false)}
-          onAssignFolder={assignProjectFolder}
-          onSetProjectTags={setProjectTags}
-          onSetProjectCustomName={setProjectCustomName}
-          onSetProjectCustomType={setProjectCustomType}
-        />
+        <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
       )}
 
-      <RunCommandConfigPopover
-        project={project}
-        open={runConfigOpen}
-        onClose={() => setRunConfigOpen(false)}
-      />
+      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
 
       <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
         <div className="relative h-full min-h-0 w-full">
-          <div
-            ref={codePaneRef}
-            className={`absolute inset-0 overflow-hidden ${activePane === 'code' ? '' : 'pointer-events-none invisible opacity-0'}`}
-            aria-hidden={activePane !== 'code'}
-          >
+          <div ref={codePaneRef} className={`absolute inset-0 overflow-hidden ${activePane === 'code' ? '' : 'pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'code'}>
             <div className="mx-auto h-full min-h-0 w-full min-w-0 max-w-[1360px]">
               <Suspense fallback={<DetailPaneFallback />}>
                 {hasMountedCodePane && (
@@ -674,11 +592,7 @@ export function DetailPage() {
             </div>
           </div>
 
-          <div
-            ref={aiCommitPaneRef}
-            className={`absolute inset-0 ${activePane === 'aicommit' ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden pointer-events-none invisible opacity-0'}`}
-            aria-hidden={activePane !== 'aicommit'}
-          >
+          <div ref={aiCommitPaneRef} className={`absolute inset-0 ${activePane === 'aicommit' ? 'overflow-x-auto overflow-y-hidden' : 'overflow-hidden pointer-events-none invisible opacity-0'}`} aria-hidden={activePane !== 'aicommit'}>
             <div className="mx-auto h-full min-h-0 w-full min-w-[1060px] max-w-[1640px] overflow-hidden">
               <Suspense fallback={<DetailPaneFallback />}>
                 {hasMountedAiCommitPane && (
