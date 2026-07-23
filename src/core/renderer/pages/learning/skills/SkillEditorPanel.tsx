@@ -13,6 +13,7 @@ type SkillEditorPanelProps = {
   skill: Skill | null
   categories: SkillCategory[]
   editor: SkillEditorState
+  hasUnsavedChanges: boolean
   saving: boolean
   error: string | null
   onChange: (patch: Partial<SkillEditorState>) => void
@@ -21,7 +22,7 @@ type SkillEditorPanelProps = {
   onCreate: () => void | Promise<void>
 }
 
-export function SkillEditorPanel({ skill, categories, editor, saving, error, onChange, onSave, onDelete, onCreate }: SkillEditorPanelProps) {
+export function SkillEditorPanel({ skill, categories, editor, hasUnsavedChanges, saving, error, onChange, onSave, onDelete, onCreate }: SkillEditorPanelProps) {
   const { t } = useI18n()
   if (!skill)
     return (
@@ -47,9 +48,15 @@ export function SkillEditorPanel({ skill, categories, editor, saving, error, onC
           <Button variant="outline" size="icon" onClick={onDelete} title={t('learning.skills.delete')}>
             <Trash2 />
           </Button>
-          <Button onClick={onSave} loading={saving} disabled={!editor.title.trim() || !editor.contentMd.trim()}>
+          <Button
+            onClick={onSave}
+            loading={saving}
+            variant={hasUnsavedChanges ? 'default' : 'outline'}
+            className={hasUnsavedChanges && !saving ? 'shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]' : undefined}
+            disabled={saving || !hasUnsavedChanges || !editor.title.trim() || !editor.contentMd.trim()}
+          >
             <Save />
-            {t('learning.skills.save')}
+            {saving ? t('common.saving') : hasUnsavedChanges ? t('learning.skills.saveChanges') : t('learning.skills.saved')}
           </Button>
         </div>
       </div>

@@ -90,6 +90,12 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
     })
   }, [searchQuery, selectedCategoryId, skills])
 
+  const hasUnsavedChanges = useMemo(() => {
+    if (!selectedSkill) return false
+    const savedEditor = skillEditorState(selectedSkill)
+    return editor.title !== savedEditor.title || editor.contentMd !== savedEditor.contentMd || editor.tags !== savedEditor.tags || editor.categoryId !== savedEditor.categoryId || editor.enabled !== savedEditor.enabled
+  }, [editor, selectedSkill])
+
   const selectedCategory = categories.find((category) => category.id === selectedCategoryId && selectedCategoryId !== 'all') ?? null
 
   const handleCreateSkill = async () => {
@@ -117,6 +123,18 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
       setSaving(false)
     }
   }
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      if (!selectedSkillId || !hasUnsavedChanges || saving) return
+      void handleSave()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [editor, hasUnsavedChanges, saving, selectedSkillId])
 
   const handleDelete = () => {
     if (!selectedSkill || deleting) return
@@ -195,7 +213,7 @@ export function SkillManagementView({ createRequest, onCreateRequestHandled }: S
         onDeleteCategory={handleDeleteCategory}
         onToggleCategoryManager={() => setCategoryManagerOpen((current) => !current)}
       />
-      <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={handleDelete} onCreate={handleCreateSkill} />
+      <SkillEditorPanel skill={selectedSkill} categories={categories} editor={editor} hasUnsavedChanges={hasUnsavedChanges} saving={saving} error={error} onChange={(patch) => setEditor((current) => ({ ...current, ...patch }))} onSave={() => void handleSave()} onDelete={handleDelete} onCreate={handleCreateSkill} />
       <ConfirmDialog
         open={Boolean(deleteConfirm)}
         onClose={() => setDeleteConfirm(null)}
