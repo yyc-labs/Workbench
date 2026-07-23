@@ -1,19 +1,21 @@
 import { app } from 'electron'
-import { readFileSync, existsSync, mkdirSync } from 'fs'
-import { writeFile } from 'fs/promises'
-import { join, dirname, resolve } from 'path'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
+import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles, isCliTool } from '../../shared/aiRuntimeProfiles'
+import { getCodexScopeCacheKey } from '../../shared/codexScope'
+import { type ConfigRecoveryInfo, CURRENT_CONFIG_SCHEMA_VERSION } from '../../shared/configSchema'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 import type {
-  AppCacheLocationConfig,
+  AgentLogsConfig,
   AiCommitConfig,
   AiCommitProfile,
   AiRuntimeProfile,
+  AppCacheLocationConfig,
   AppConfig,
-  AgentLogsConfig,
-  ClaudeRuntimeProfile,
   ClaudeBashrcConfig,
+  ClaudeRuntimeProfile,
   ClaudeRuntimeProfileGatewayBinding,
   CloseWindowBehavior,
-  LaunchOnLoginDisplayMode,
   CodexConfig,
   CodexEnvironmentScope,
   CodexGatewayBinding,
@@ -21,20 +23,16 @@ import type {
   CodexModelProviderConfig,
   CodexSettingsSnapshot,
   CodexSettingsSnapshotMap,
+  LaunchOnLoginDisplayMode,
   ShortcutPreferencesConfig,
 } from '../../shared/types'
-import { getCodexScopeCacheKey } from '../../shared/codexScope'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
-import {
-  defaultAiRuntimeProfileIdForCli,
-  defaultAiRuntimeProfiles,
-  isCliTool,
-} from '../../shared/aiRuntimeProfiles'
-import { capabilityManager } from './capability-manager'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
-import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
 import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/gateway-config'
 import { DEFAULT_BROWSER_AI_CONFIG, normalizeBrowserAiConfig } from './browser-ai/browserAiConfig'
+import { capabilityManager } from './capability-manager'
+import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
+import { migrateConfigDocument } from './config/config-migrations'
+import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persistence'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -108,6 +106,7 @@ function defaultAiCommitConfig(): AiCommitConfig {
 }
 
 const DEFAULT_CONFIG: AppConfig = {
+  configVersion: CURRENT_CONFIG_SCHEMA_VERSION,
   projects: [],
   theme: 'system',
   locale: 'system',
@@ -123,11 +122,13 @@ const DEFAULT_CONFIG: AppConfig = {
   aiEnvironment: undefined,
   aiRuntimeProfiles: defaultAiRuntimeProfiles(),
   activeAiRuntimeProfileId: defaultAiRuntimeProfileIdForCli('claude'),
-  claudeRuntimeProfiles: [{
-    id: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
-    name: DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME,
-    config: defaultClaudeBashrcConfig(),
-  }],
+  claudeRuntimeProfiles: [
+    {
+      id: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
+      name: DEFAULT_CLAUDE_RUNTIME_PROFILE_NAME,
+      config: defaultClaudeBashrcConfig(),
+    },
+  ],
   activeClaudeRuntimeProfileId: DEFAULT_CLAUDE_RUNTIME_PROFILE_ID,
   runtimeLauncherScript: undefined,
   runtimeKeepAliveOnQuit: false,
@@ -142,20 +143,14 @@ const DEFAULT_CONFIG: AppConfig = {
   shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
 }
 
+let configRecovery: ConfigRecoveryInfo | undefined
+
 function normalizeAiRuntimeProfileKind(value: unknown): AiRuntimeProfile['kind'] {
   return value === 'custom' ? 'custom' : 'native'
 }
 
 function normalizeAiRuntimeProfileMode(value: unknown): AiRuntimeProfile['mode'] {
-  if (
-    value === 'windows-wsl'
-    || value === 'windows-native'
-    || value === 'linux-native'
-    || value === 'macos-native'
-    || value === 'custom-script'
-    || value === 'disabled'
-    || value === 'inherit'
-  ) {
+  if (value === 'windows-wsl' || value === 'windows-native' || value === 'linux-native' || value === 'macos-native' || value === 'custom-script' || value === 'disabled' || value === 'inherit') {
     return value
   }
   return 'inherit'
@@ -176,47 +171,36 @@ function normalizeAiRuntimeProfileEnv(value: unknown): Record<string, string> {
 
 function normalizeAiRuntimeProfileArgs(value: unknown): string[] {
   if (!Array.isArray(value)) return []
-  return value
-    .map((item) => (typeof item === 'string' ? item.trim() : String(item ?? '').trim()))
-    .filter(Boolean)
+  return value.map((item) => (typeof item === 'string' ? item.trim() : String(item ?? '').trim())).filter(Boolean)
 }
 
-function normalizeAiRuntimeProfiles(
-  profiles: AppConfig['aiRuntimeProfiles'] | unknown,
-  activeProfileId: unknown,
-): { profiles: AiRuntimeProfile[]; activeProfileId: string } {
+function normalizeAiRuntimeProfiles(profiles: AppConfig['aiRuntimeProfiles'] | unknown, activeProfileId: unknown): { profiles: AiRuntimeProfile[]; activeProfileId: string } {
   const defaults = defaultAiRuntimeProfiles()
   const normalizedInput = Array.isArray(profiles)
     ? profiles
-      .map((item, index): AiRuntimeProfile | null => {
-        if (!item || typeof item !== 'object') return null
-        const raw = item as Partial<AiRuntimeProfile>
-        const id = typeof raw.id === 'string' ? raw.id.trim() : ''
-        if (!id) return null
-        const kind = normalizeAiRuntimeProfileKind(raw.kind)
-        const cli = isCliTool(raw.cli) ? raw.cli : undefined
-        const fallback = defaults[index] ?? defaults[0]!
-        const command = typeof raw.command === 'string' ? raw.command.trim() : ''
-        const mode = normalizeAiRuntimeProfileMode(raw.mode)
-        return {
-          id,
-          name: typeof raw.name === 'string' && raw.name.trim()
-            ? raw.name.trim()
-            : fallback.name,
-          kind,
-          mode: kind === 'native' && mode === 'custom-script' ? 'inherit' : mode,
-          cli,
-          command: command || cli || (kind === 'native' ? fallback.command : ''),
-          args: kind === 'custom' ? normalizeAiRuntimeProfileArgs(raw.args) : [],
-          env: kind === 'custom' ? normalizeAiRuntimeProfileEnv(raw.env) : {},
-          passProjectPath: kind === 'custom'
-            ? typeof raw.passProjectPath === 'boolean'
-              ? raw.passProjectPath
-              : true
-            : false,
-        }
-      })
-      .filter((item): item is AiRuntimeProfile => Boolean(item))
+        .map((item, index): AiRuntimeProfile | null => {
+          if (!item || typeof item !== 'object') return null
+          const raw = item as Partial<AiRuntimeProfile>
+          const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+          if (!id) return null
+          const kind = normalizeAiRuntimeProfileKind(raw.kind)
+          const cli = isCliTool(raw.cli) ? raw.cli : undefined
+          const fallback = defaults[index] ?? defaults[0]!
+          const command = typeof raw.command === 'string' ? raw.command.trim() : ''
+          const mode = normalizeAiRuntimeProfileMode(raw.mode)
+          return {
+            id,
+            name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : fallback.name,
+            kind,
+            mode: kind === 'native' && mode === 'custom-script' ? 'inherit' : mode,
+            cli,
+            command: command || cli || (kind === 'native' ? fallback.command : ''),
+            args: kind === 'custom' ? normalizeAiRuntimeProfileArgs(raw.args) : [],
+            env: kind === 'custom' ? normalizeAiRuntimeProfileEnv(raw.env) : {},
+            passProjectPath: kind === 'custom' ? (typeof raw.passProjectPath === 'boolean' ? raw.passProjectPath : true) : false,
+          }
+        })
+        .filter((item): item is AiRuntimeProfile => Boolean(item))
     : []
 
   const merged: AiRuntimeProfile[] = []
@@ -232,9 +216,7 @@ function normalizeAiRuntimeProfiles(
   }
 
   const requestedActiveProfileId = typeof activeProfileId === 'string' ? activeProfileId.trim() : ''
-  const active = merged.some((profile) => profile.id === requestedActiveProfileId)
-    ? requestedActiveProfileId
-    : defaultAiRuntimeProfileIdForCli('claude')
+  const active = merged.some((profile) => profile.id === requestedActiveProfileId) ? requestedActiveProfileId : defaultAiRuntimeProfileIdForCli('claude')
 
   return {
     profiles: merged,
@@ -259,29 +241,26 @@ function normalizeLaunchOnLoginDisplayMode(value: unknown): LaunchOnLoginDisplay
   return value === 'window' ? 'window' : 'tray'
 }
 
-function normalizeAiCommitProfiles(
-  profiles: unknown,
-  legacyConfig: Partial<AiCommitConfig>
-): AiCommitProfile[] {
+function normalizeAiCommitProfiles(profiles: unknown, legacyConfig: Partial<AiCommitConfig>): AiCommitProfile[] {
   const normalizedProfiles = Array.isArray(profiles)
     ? profiles
-      .map((item, index): AiCommitProfile | null => {
-        if (!item || typeof item !== 'object') return null
-        const raw = item as Partial<AiCommitProfile>
-        const id = typeof raw.id === 'string' ? raw.id.trim() : `profile-${index + 1}`
-        const name = typeof raw.name === 'string' ? raw.name.trim() : `Profile ${index + 1}`
-        if (!id) return null
-        return {
-          id,
-          name: name || `Profile ${index + 1}`,
-          source: normalizeAiCommitProfileSource(raw.source),
-          sourceKey: typeof raw.sourceKey === 'string' ? raw.sourceKey.trim() : undefined,
-          apiBaseUrl: typeof raw.apiBaseUrl === 'string' ? raw.apiBaseUrl.trim() : '',
-          apiKey: typeof raw.apiKey === 'string' ? raw.apiKey.trim() : '',
-          model: typeof raw.model === 'string' ? raw.model.trim() : '',
-        }
-      })
-      .filter((item): item is AiCommitProfile => Boolean(item))
+        .map((item, index): AiCommitProfile | null => {
+          if (!item || typeof item !== 'object') return null
+          const raw = item as Partial<AiCommitProfile>
+          const id = typeof raw.id === 'string' ? raw.id.trim() : `profile-${index + 1}`
+          const name = typeof raw.name === 'string' ? raw.name.trim() : `Profile ${index + 1}`
+          if (!id) return null
+          return {
+            id,
+            name: name || `Profile ${index + 1}`,
+            source: normalizeAiCommitProfileSource(raw.source),
+            sourceKey: typeof raw.sourceKey === 'string' ? raw.sourceKey.trim() : undefined,
+            apiBaseUrl: typeof raw.apiBaseUrl === 'string' ? raw.apiBaseUrl.trim() : '',
+            apiKey: typeof raw.apiKey === 'string' ? raw.apiKey.trim() : '',
+            model: typeof raw.model === 'string' ? raw.model.trim() : '',
+          }
+        })
+        .filter((item): item is AiCommitProfile => Boolean(item))
     : []
 
   const dedupedProfiles: AiCommitProfile[] = []
@@ -294,31 +273,31 @@ function normalizeAiCommitProfiles(
 
   if (dedupedProfiles.length > 0) return dedupedProfiles
 
-  return [{
-    ...defaultAiCommitProfile(),
-    apiBaseUrl: typeof legacyConfig.apiBaseUrl === 'string'
-      ? legacyConfig.apiBaseUrl.trim()
-      : defaultAiCommitProfile().apiBaseUrl,
-    apiKey: typeof legacyConfig.apiKey === 'string' ? legacyConfig.apiKey.trim() : '',
-    model: typeof legacyConfig.model === 'string'
-      ? legacyConfig.model.trim()
-      : defaultAiCommitProfile().model,
-  }]
+  return [
+    {
+      ...defaultAiCommitProfile(),
+      apiBaseUrl: typeof legacyConfig.apiBaseUrl === 'string' ? legacyConfig.apiBaseUrl.trim() : defaultAiCommitProfile().apiBaseUrl,
+      apiKey: typeof legacyConfig.apiKey === 'string' ? legacyConfig.apiKey.trim() : '',
+      model: typeof legacyConfig.model === 'string' ? legacyConfig.model.trim() : defaultAiCommitProfile().model,
+    },
+  ]
 }
 
 function normalizeAiCommitConfig(input: AppConfig['aiCommit'] | unknown): AiCommitConfig {
   const defaults = defaultAiCommitConfig()
-  const raw = input && typeof input === 'object' ? input as Partial<AiCommitConfig> : {}
+  const raw = input && typeof input === 'object' ? (input as Partial<AiCommitConfig>) : {}
   const profiles = normalizeAiCommitProfiles(raw.profiles, raw)
   const requestedActiveProfileId = typeof raw.activeProfileId === 'string' ? raw.activeProfileId.trim() : ''
   const activeProfile = profiles.find((profile) => profile.id === requestedActiveProfileId) ?? profiles[0]!
   const loadedAgentProfileKeys = Array.isArray(raw.loadedAgentProfileKeys)
-    ? Array.from(new Set(
-      raw.loadedAgentProfileKeys
-        .filter((item): item is string => typeof item === 'string')
-        .map((item) => item.trim())
-        .filter(Boolean)
-    ))
+    ? Array.from(
+        new Set(
+          raw.loadedAgentProfileKeys
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      )
     : defaults.loadedAgentProfileKeys
 
   return {
@@ -329,34 +308,21 @@ function normalizeAiCommitConfig(input: AppConfig['aiCommit'] | unknown): AiComm
     apiBaseUrl: activeProfile.apiBaseUrl || defaults.apiBaseUrl,
     apiKey: activeProfile.apiKey || '',
     model: activeProfile.model || defaults.model,
-    wslPwshPath: typeof raw.wslPwshPath === 'string' && raw.wslPwshPath.trim()
-      ? raw.wslPwshPath.trim()
-      : defaults.wslPwshPath,
+    wslPwshPath: typeof raw.wslPwshPath === 'string' && raw.wslPwshPath.trim() ? raw.wslPwshPath.trim() : defaults.wslPwshPath,
     split: typeof raw.split === 'boolean' ? raw.split : defaults.split,
-    splitMaxBatches: Number.isFinite(raw.splitMaxBatches)
-      ? Math.max(1, Math.min(12, Math.trunc(raw.splitMaxBatches as number)))
-      : defaults.splitMaxBatches,
-    maxBullets: Number.isFinite(raw.maxBullets)
-      ? Math.max(1, Math.min(20, Math.trunc(raw.maxBullets as number)))
-      : defaults.maxBullets,
+    splitMaxBatches: Number.isFinite(raw.splitMaxBatches) ? Math.max(1, Math.min(12, Math.trunc(raw.splitMaxBatches as number))) : defaults.splitMaxBatches,
+    maxBullets: Number.isFinite(raw.maxBullets) ? Math.max(1, Math.min(20, Math.trunc(raw.maxBullets as number))) : defaults.maxBullets,
   }
 }
 
-function normalizeCodexProviderApiKeys(
-  input: AppConfig['codexProviderApiKeys'] | unknown,
-  legacySnapshotInput?: unknown,
-): Record<string, Record<string, string>> {
+function normalizeCodexProviderApiKeys(input: AppConfig['codexProviderApiKeys'] | unknown, legacySnapshotInput?: unknown): Record<string, Record<string, string>> {
   if (!input || typeof input !== 'object') return {}
 
   const entries = Object.entries(input as Record<string, unknown>)
   const looksScoped = entries.some(([, value]) => value && typeof value === 'object')
 
   if (!looksScoped) {
-    const legacyProviderApiKeys = Object.fromEntries(
-      entries
-        .map(([key, value]) => [key.trim(), typeof value === 'string' ? value.trim() : ''] as const)
-        .filter(([key]) => Boolean(key)),
-    )
+    const legacyProviderApiKeys = Object.fromEntries(entries.map(([key, value]) => [key.trim(), typeof value === 'string' ? value.trim() : ''] as const).filter(([key]) => Boolean(key)))
 
     const legacySnapshot = normalizeSingleCodexSettingsSnapshot(legacySnapshotInput)
     if (legacySnapshot && Object.keys(legacyProviderApiKeys).length > 0) {
@@ -365,9 +331,7 @@ function normalizeCodexProviderApiKeys(
       }
     }
 
-    return Object.keys(legacyProviderApiKeys).length > 0
-      ? { legacy: legacyProviderApiKeys }
-      : {}
+    return Object.keys(legacyProviderApiKeys).length > 0 ? { legacy: legacyProviderApiKeys } : {}
   }
 
   return Object.fromEntries(
@@ -377,10 +341,7 @@ function normalizeCodexProviderApiKeys(
         if (!normalizedScopeKey || !value || typeof value !== 'object') return null
         const scopedProviderApiKeys = Object.fromEntries(
           Object.entries(value as Record<string, unknown>)
-            .map(([providerKey, providerValue]) => [
-              providerKey.trim(),
-              typeof providerValue === 'string' ? providerValue.trim() : '',
-            ] as const)
+            .map(([providerKey, providerValue]) => [providerKey.trim(), typeof providerValue === 'string' ? providerValue.trim() : ''] as const)
             .filter(([providerKey]) => Boolean(providerKey)),
         )
         return [normalizedScopeKey, scopedProviderApiKeys] as const
@@ -389,27 +350,15 @@ function normalizeCodexProviderApiKeys(
   )
 }
 
-function normalizeCodexEnvironmentScope(
-  input: unknown
-): CodexEnvironmentScope | undefined {
+function normalizeCodexEnvironmentScope(input: unknown): CodexEnvironmentScope | undefined {
   if (!input || typeof input !== 'object') return undefined
   const raw = input as Partial<CodexEnvironmentScope>
   const target = raw.target === 'wsl' ? 'wsl' : raw.target === 'native' ? 'native' : null
-  const hostPlatform = raw.hostPlatform === 'windows'
-    ? 'windows'
-    : raw.hostPlatform === 'linux'
-      ? 'linux'
-      : raw.hostPlatform === 'macos'
-        ? 'macos'
-        : null
+  const hostPlatform = raw.hostPlatform === 'windows' ? 'windows' : raw.hostPlatform === 'linux' ? 'linux' : raw.hostPlatform === 'macos' ? 'macos' : null
   const runtimeMode = typeof raw.runtimeMode === 'string' ? raw.runtimeMode.trim() : ''
   const homePath = typeof raw.homePath === 'string' ? raw.homePath.trim() : ''
   const configPath = typeof raw.configPath === 'string' ? raw.configPath.trim() : ''
-  const envStorage = raw.envStorage === 'bashrc'
-    ? 'bashrc'
-    : raw.envStorage === 'windows-user-env'
-      ? 'windows-user-env'
-      : null
+  const envStorage = raw.envStorage === 'bashrc' ? 'bashrc' : raw.envStorage === 'windows-user-env' ? 'windows-user-env' : null
   const envStoragePath = typeof raw.envStoragePath === 'string' ? raw.envStoragePath.trim() : ''
 
   if (!target || !hostPlatform || !runtimeMode || !homePath || !configPath || !envStorage || !envStoragePath) {
@@ -431,10 +380,7 @@ function normalizeCodexProviderKey(value: string): string {
   return value.trim().replace(/\s+/g, '-')
 }
 
-function normalizeCodexModelProviderConfig(
-  providerKey: string,
-  value: unknown
-): CodexModelProviderConfig | null {
+function normalizeCodexModelProviderConfig(providerKey: string, value: unknown): CodexModelProviderConfig | null {
   if (!value || typeof value !== 'object') return null
 
   const raw = value as Partial<CodexModelProviderConfig>
@@ -453,15 +399,11 @@ function normalizeCodexModelProviderConfig(
   }
 }
 
-function normalizeCodexConfigSnapshot(
-  input: unknown
-): CodexConfig | undefined {
+function normalizeCodexConfigSnapshot(input: unknown): CodexConfig | undefined {
   if (!input || typeof input !== 'object') return undefined
 
   const raw = input as Partial<CodexConfig>
-  const rawProviders = raw.modelProviders && typeof raw.modelProviders === 'object'
-    ? raw.modelProviders as Record<string, unknown>
-    : {}
+  const rawProviders = raw.modelProviders && typeof raw.modelProviders === 'object' ? (raw.modelProviders as Record<string, unknown>) : {}
 
   const modelProviders = Object.fromEntries(
     Object.entries(rawProviders)
@@ -491,9 +433,7 @@ function normalizeCodexConfigSnapshot(
   }
 }
 
-function normalizeSingleCodexSettingsSnapshot(
-  input: unknown
-): CodexSettingsSnapshot | undefined {
+function normalizeSingleCodexSettingsSnapshot(input: unknown): CodexSettingsSnapshot | undefined {
   if (!input || typeof input !== 'object') return undefined
 
   const raw = input as Partial<CodexSettingsSnapshot>
@@ -502,15 +442,8 @@ function normalizeSingleCodexSettingsSnapshot(
 
   const config = normalizeCodexConfigSnapshot(raw.config)
   if (!config) return undefined
-  const rawProviderApiKeys = raw.providerApiKeys && typeof raw.providerApiKeys === 'object'
-    ? raw.providerApiKeys as Record<string, unknown>
-    : {}
-  const normalizedProviderApiKeys = Object.fromEntries(
-    Object.keys(config.modelProviders).map((key) => [
-      key,
-      typeof rawProviderApiKeys[key] === 'string' ? String(rawProviderApiKeys[key]).trim() : '',
-    ]),
-  )
+  const rawProviderApiKeys = raw.providerApiKeys && typeof raw.providerApiKeys === 'object' ? (raw.providerApiKeys as Record<string, unknown>) : {}
+  const normalizedProviderApiKeys = Object.fromEntries(Object.keys(config.modelProviders).map((key) => [key, typeof rawProviderApiKeys[key] === 'string' ? String(rawProviderApiKeys[key]).trim() : '']))
 
   return {
     scope,
@@ -520,10 +453,7 @@ function normalizeSingleCodexSettingsSnapshot(
   }
 }
 
-function normalizeCodexSettingsSnapshots(
-  input: AppConfig['codexSettingsSnapshots'] | unknown,
-  legacySnapshotInput?: unknown,
-): CodexSettingsSnapshotMap {
+function normalizeCodexSettingsSnapshots(input: AppConfig['codexSettingsSnapshots'] | unknown, legacySnapshotInput?: unknown): CodexSettingsSnapshotMap {
   const normalizedMap: CodexSettingsSnapshotMap = {}
   let hasScopedSnapshots = false
 
@@ -546,10 +476,7 @@ function normalizeCodexSettingsSnapshots(
   return normalizedMap
 }
 
-function normalizeSingleCodexGatewayBinding(
-  scopeKey: string,
-  input: unknown
-): CodexGatewayBinding | undefined {
+function normalizeSingleCodexGatewayBinding(scopeKey: string, input: unknown): CodexGatewayBinding | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const normalizedScopeKey = scopeKey.trim()
   if (!normalizedScopeKey) return undefined
@@ -561,41 +488,33 @@ function normalizeSingleCodexGatewayBinding(
 
   return {
     enabled: Boolean(raw.enabled),
-    scopeKey: typeof raw.scopeKey === 'string' && raw.scopeKey.trim()
-      ? raw.scopeKey.trim()
-      : normalizedScopeKey,
+    scopeKey: typeof raw.scopeKey === 'string' && raw.scopeKey.trim() ? raw.scopeKey.trim() : normalizedScopeKey,
     providerId,
     directSnapshot,
     updatedAt: updatedAt || undefined,
   }
 }
 
-function normalizeCodexGatewayBindings(
-  input: AppConfig['codexGatewayBindings'] | unknown,
-): CodexGatewayBindingMap {
+function normalizeCodexGatewayBindings(input: AppConfig['codexGatewayBindings'] | unknown): CodexGatewayBindingMap {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
 
   return Object.fromEntries(
     Object.entries(input as Record<string, unknown>)
       .map(([scopeKey, value]) => {
         const normalized = normalizeSingleCodexGatewayBinding(scopeKey, value)
-        return normalized ? [normalized.scopeKey, normalized] as const : null
+        return normalized ? ([normalized.scopeKey, normalized] as const) : null
       })
       .filter((entry): entry is readonly [string, CodexGatewayBinding] => Boolean(entry)),
   )
 }
 
-function normalizeClaudeRuntimeProfileGateway(
-  input: unknown
-): ClaudeRuntimeProfileGatewayBinding | undefined {
+function normalizeClaudeRuntimeProfileGateway(input: unknown): ClaudeRuntimeProfileGatewayBinding | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
   const raw = input as Partial<ClaudeRuntimeProfileGatewayBinding>
   const providerId = typeof raw.providerId === 'string' ? raw.providerId.trim() : ''
   const modelAlias = typeof raw.modelAlias === 'string' ? raw.modelAlias.trim() : ''
   const upstreamModel = typeof raw.upstreamModel === 'string' ? raw.upstreamModel.trim() : ''
-  const directConfig = raw.directConfig && typeof raw.directConfig === 'object'
-    ? normalizeClaudeBashrcConfig(raw.directConfig as unknown as Record<string, unknown>)
-    : undefined
+  const directConfig = raw.directConfig && typeof raw.directConfig === 'object' ? normalizeClaudeBashrcConfig(raw.directConfig as unknown as Record<string, unknown>) : undefined
 
   if (!providerId && !modelAlias && !directConfig) return undefined
 
@@ -609,9 +528,7 @@ function normalizeClaudeRuntimeProfileGateway(
   return binding
 }
 
-function stripLegacyClaudeGatewayDirectConfig(
-  gateway: ClaudeRuntimeProfileGatewayBinding | undefined
-): ClaudeRuntimeProfileGatewayBinding | undefined {
+function stripLegacyClaudeGatewayDirectConfig(gateway: ClaudeRuntimeProfileGatewayBinding | undefined): ClaudeRuntimeProfileGatewayBinding | undefined {
   if (!gateway) return undefined
   if (!gateway.enabled && !gateway.providerId && !gateway.modelAlias && !gateway.upstreamModel) return undefined
 
@@ -624,33 +541,28 @@ function stripLegacyClaudeGatewayDirectConfig(
   return binding
 }
 
-function normalizeClaudeRuntimeProfiles(
-  profiles: AppConfig['claudeRuntimeProfiles'] | unknown,
-  activeProfileId: unknown
-): { profiles: ClaudeRuntimeProfile[]; activeProfileId: string } {
+function normalizeClaudeRuntimeProfiles(profiles: AppConfig['claudeRuntimeProfiles'] | unknown, activeProfileId: unknown): { profiles: ClaudeRuntimeProfile[]; activeProfileId: string } {
   const normalizedProfiles = Array.isArray(profiles)
     ? profiles
-      .map((item, index): (ClaudeRuntimeProfile & { sortOrder: number }) | null => {
-        if (!item || typeof item !== 'object') return null
-        const raw = item as Partial<ClaudeRuntimeProfile>
-        const id = typeof raw.id === 'string' ? raw.id.trim() : ''
-        const name = typeof raw.name === 'string' ? raw.name.trim() : ''
-        const config = raw.config && typeof raw.config === 'object'
-          ? normalizeClaudeBashrcConfig(raw.config as unknown as Record<string, unknown>)
-          : defaultClaudeBashrcConfig()
-        const gateway = normalizeClaudeRuntimeProfileGateway(raw.gateway)
-        if (!id || !name) return null
-        const profile: ClaudeRuntimeProfile & { sortOrder: number } = {
-          id,
-          name,
-          config: gateway?.directConfig ?? config,
-          sortOrder: index,
-        }
-        const nextGateway = stripLegacyClaudeGatewayDirectConfig(gateway)
-        if (nextGateway) profile.gateway = nextGateway
-        return profile
-      })
-      .filter((item): item is ClaudeRuntimeProfile & { sortOrder: number } => Boolean(item))
+        .map((item, index): (ClaudeRuntimeProfile & { sortOrder: number }) | null => {
+          if (!item || typeof item !== 'object') return null
+          const raw = item as Partial<ClaudeRuntimeProfile>
+          const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+          const name = typeof raw.name === 'string' ? raw.name.trim() : ''
+          const config = raw.config && typeof raw.config === 'object' ? normalizeClaudeBashrcConfig(raw.config as unknown as Record<string, unknown>) : defaultClaudeBashrcConfig()
+          const gateway = normalizeClaudeRuntimeProfileGateway(raw.gateway)
+          if (!id || !name) return null
+          const profile: ClaudeRuntimeProfile & { sortOrder: number } = {
+            id,
+            name,
+            config: gateway?.directConfig ?? config,
+            sortOrder: index,
+          }
+          const nextGateway = stripLegacyClaudeGatewayDirectConfig(gateway)
+          if (nextGateway) profile.gateway = nextGateway
+          return profile
+        })
+        .filter((item): item is ClaudeRuntimeProfile & { sortOrder: number } => Boolean(item))
     : []
 
   const dedupedProfiles: ClaudeRuntimeProfile[] = []
@@ -675,9 +587,7 @@ function normalizeClaudeRuntimeProfiles(
   }
 
   const normalizedActiveProfileId = typeof activeProfileId === 'string' ? activeProfileId.trim() : ''
-  const active = dedupedProfiles.some((profile) => profile.id === normalizedActiveProfileId)
-    ? normalizedActiveProfileId
-    : dedupedProfiles[0]!.id
+  const active = dedupedProfiles.some((profile) => profile.id === normalizedActiveProfileId) ? normalizedActiveProfileId : dedupedProfiles[0]!.id
 
   return { profiles: dedupedProfiles, activeProfileId: active }
 }
@@ -685,9 +595,7 @@ function normalizeClaudeRuntimeProfiles(
 let cachedConfig: AppConfig | undefined
 let saveQueue: Promise<void> = Promise.resolve()
 
-function normalizeDocLinkTags(
-  input: AppConfig['docLinkTags'] | unknown
-): NonNullable<AppConfig['docLinkTags']> {
+function normalizeDocLinkTags(input: AppConfig['docLinkTags'] | unknown): NonNullable<AppConfig['docLinkTags']> {
   if (!Array.isArray(input)) return []
 
   const deduped: NonNullable<AppConfig['docLinkTags']> = []
@@ -711,11 +619,13 @@ function normalizeDocLinkTags(
     .map((item, index) => ({ ...item, sortOrder: index }))
 }
 
-function normalizeCodeSession(value: unknown): {
-  tabs: string[]
-  activePath?: string
-  cursorPositions?: Record<string, { lineNumber: number; column: number }>
-} | undefined {
+function normalizeCodeSession(value: unknown):
+  | {
+      tabs: string[]
+      activePath?: string
+      cursorPositions?: Record<string, { lineNumber: number; column: number }>
+    }
+  | undefined {
   if (!value || typeof value !== 'object') return undefined
 
   const raw = value as {
@@ -724,10 +634,14 @@ function normalizeCodeSession(value: unknown): {
     cursorPositions?: unknown
   }
   const tabs = Array.isArray(raw.tabs)
-    ? Array.from(new Set(raw.tabs
-      .filter((item): item is string => typeof item === 'string')
-      .map((item) => item.trim())
-      .filter(Boolean))).slice(0, MAX_CODE_SESSION_TABS)
+    ? Array.from(
+        new Set(
+          raw.tabs
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ).slice(0, MAX_CODE_SESSION_TABS)
     : []
 
   const activePath = typeof raw.activePath === 'string' ? raw.activePath.trim() : ''
@@ -746,9 +660,7 @@ function normalizeCodeSession(value: unknown): {
     }
   }
 
-  const cursorPositions = cursorEntries.length > 0
-    ? Object.fromEntries(cursorEntries)
-    : undefined
+  const cursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
 
   const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
 
@@ -761,16 +673,10 @@ function normalizeCodeSession(value: unknown): {
   }
 }
 
-function normalizeAgentHookConfig(
-  value: AppConfig['agentHooks'] | unknown
-): NonNullable<AppConfig['agentHooks']> {
-  const raw = value && typeof value === 'object'
-    ? value as NonNullable<AppConfig['agentHooks']>
-    : {}
+function normalizeAgentHookConfig(value: AppConfig['agentHooks'] | unknown): NonNullable<AppConfig['agentHooks']> {
+  const raw = value && typeof value === 'object' ? (value as NonNullable<AppConfig['agentHooks']>) : {}
   const rawFeishu = raw.feishu && typeof raw.feishu === 'object' ? raw.feishu : {}
-  const rawTranscriptImport = raw.transcriptImport && typeof raw.transcriptImport === 'object'
-    ? raw.transcriptImport
-    : {}
+  const rawTranscriptImport = raw.transcriptImport && typeof raw.transcriptImport === 'object' ? raw.transcriptImport : {}
 
   return {
     ...DEFAULT_AGENT_HOOK_CONFIG,
@@ -786,32 +692,18 @@ function normalizeAgentHookConfig(
   }
 }
 
-function normalizeAgentLogsConfig(
-  value: AppConfig['agentLogs'] | unknown
-): NonNullable<AppConfig['agentLogs']> {
-  const raw = value && typeof value === 'object'
-    ? value as Partial<AgentLogsConfig>
-    : {}
+function normalizeAgentLogsConfig(value: AppConfig['agentLogs'] | unknown): NonNullable<AppConfig['agentLogs']> {
+  const raw = value && typeof value === 'object' ? (value as Partial<AgentLogsConfig>) : {}
 
   return {
-    enabled: typeof raw.enabled === 'boolean'
-      ? raw.enabled
-      : DEFAULT_AGENT_LOGS_CONFIG.enabled,
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_AGENT_LOGS_CONFIG.enabled,
   }
 }
 
-function normalizeCacheLocationConfig(
-  value: AppConfig['cacheLocation'] | unknown
-): AppCacheLocationConfig {
-  const raw = value && typeof value === 'object'
-    ? value as Partial<AppCacheLocationConfig>
-    : {}
-  const mode = raw.mode === 'install' || raw.mode === 'custom'
-    ? raw.mode
-    : 'default'
-  const customPath = typeof raw.customPath === 'string' && raw.customPath.trim()
-    ? resolve(raw.customPath.trim())
-    : undefined
+function normalizeCacheLocationConfig(value: AppConfig['cacheLocation'] | unknown): AppCacheLocationConfig {
+  const raw = value && typeof value === 'object' ? (value as Partial<AppCacheLocationConfig>) : {}
+  const mode = raw.mode === 'install' || raw.mode === 'custom' ? raw.mode : 'default'
+  const customPath = typeof raw.customPath === 'string' && raw.customPath.trim() ? resolve(raw.customPath.trim()) : undefined
 
   if (mode === 'custom') {
     return {
@@ -823,17 +715,11 @@ function normalizeCacheLocationConfig(
   return { mode }
 }
 
-function normalizeShortcutPreferences(
-  value: AppConfig['shortcutPreferences'] | unknown
-): ShortcutPreferencesConfig {
-  const raw = value && typeof value === 'object'
-    ? value as Partial<ShortcutPreferencesConfig>
-    : {}
+function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | unknown): ShortcutPreferencesConfig {
+  const raw = value && typeof value === 'object' ? (value as Partial<ShortcutPreferencesConfig>) : {}
 
   return {
-    quickTranscriptCaptureOpenViewer: typeof raw.quickTranscriptCaptureOpenViewer === 'boolean'
-      ? raw.quickTranscriptCaptureOpenViewer
-      : DEFAULT_SHORTCUT_PREFERENCES.quickTranscriptCaptureOpenViewer,
+    quickTranscriptCaptureOpenViewer: typeof raw.quickTranscriptCaptureOpenViewer === 'boolean' ? raw.quickTranscriptCaptureOpenViewer : DEFAULT_SHORTCUT_PREFERENCES.quickTranscriptCaptureOpenViewer,
   }
 }
 
@@ -853,77 +739,82 @@ export function loadConfig(): AppConfig {
   if (cachedConfig) return cachedConfig
 
   const configPath = getConfigPath()
+  let rawConfigText: string | undefined
   try {
-    const raw = readFileSync(configPath, 'utf-8')
-    const parsed = JSON.parse(raw) as AppConfig & { startupDefaultTagId?: string }
+    rawConfigText = readFileSync(configPath, 'utf-8')
+    const migrated = migrateConfigDocument(JSON.parse(rawConfigText))
+    const parsed = migrated.document as unknown as AppConfig & { startupDefaultTagId?: string }
     const legacyStartupDefaultTagId = parsed.startupDefaultTagId
     const normalizedProjects = Array.isArray(parsed.projects)
       ? parsed.projects.map((project) => {
-        const favorites = Array.isArray(project.codeFileDrawerState?.favorites)
-          ? project.codeFileDrawerState.favorites.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-          : []
-        const recents = Array.isArray(project.codeFileDrawerState?.recents)
-          ? project.codeFileDrawerState.recents.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-          : []
-        const hasDrawerState = favorites.length > 0 || recents.length > 0
-        const codeSession = normalizeCodeSession(project.codeSession)
-        return {
-          ...project,
-          cli: isCliTool(project.cli) ? project.cli : undefined,
-          aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim()
-            ? project.aiRuntimeProfileId.trim()
-            : undefined,
-          codeFileDrawerState: hasDrawerState
-            ? {
-              favorites: Array.from(new Set(favorites)),
-              recents: Array.from(new Set(recents)).slice(0, 40),
-            }
-            : undefined,
-          codeSession,
-        }
-      })
+          const favorites = Array.isArray(project.codeFileDrawerState?.favorites)
+            ? project.codeFileDrawerState.favorites
+                .filter((item): item is string => typeof item === 'string')
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : []
+          const recents = Array.isArray(project.codeFileDrawerState?.recents)
+            ? project.codeFileDrawerState.recents
+                .filter((item): item is string => typeof item === 'string')
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : []
+          const hasDrawerState = favorites.length > 0 || recents.length > 0
+          const codeSession = normalizeCodeSession(project.codeSession)
+          return {
+            ...project,
+            cli: isCliTool(project.cli) ? project.cli : undefined,
+            aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim() ? project.aiRuntimeProfileId.trim() : undefined,
+            codeFileDrawerState: hasDrawerState
+              ? {
+                  favorites: Array.from(new Set(favorites)),
+                  recents: Array.from(new Set(recents)).slice(0, 40),
+                }
+              : undefined,
+            codeSession,
+          }
+        })
       : []
     const normalizedRemovedProjects = Array.isArray(parsed.removedProjects)
       ? parsed.removedProjects.map((project) => {
-        const favorites = Array.isArray(project.codeFileDrawerState?.favorites)
-          ? project.codeFileDrawerState.favorites.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-          : []
-        const recents = Array.isArray(project.codeFileDrawerState?.recents)
-          ? project.codeFileDrawerState.recents.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
-          : []
-        const hasDrawerState = favorites.length > 0 || recents.length > 0
-        const codeSession = normalizeCodeSession(project.codeSession)
-        return {
-          ...project,
-          cli: isCliTool(project.cli) ? project.cli : undefined,
-          aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim()
-            ? project.aiRuntimeProfileId.trim()
-            : undefined,
-          removedAt: Number.isFinite(project.removedAt) ? Math.trunc(project.removedAt) : Date.now(),
-          codeFileDrawerState: hasDrawerState
-            ? {
-              favorites: Array.from(new Set(favorites)),
-              recents: Array.from(new Set(recents)).slice(0, 40),
-            }
-            : undefined,
-          codeSession,
-        }
-      })
+          const favorites = Array.isArray(project.codeFileDrawerState?.favorites)
+            ? project.codeFileDrawerState.favorites
+                .filter((item): item is string => typeof item === 'string')
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : []
+          const recents = Array.isArray(project.codeFileDrawerState?.recents)
+            ? project.codeFileDrawerState.recents
+                .filter((item): item is string => typeof item === 'string')
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : []
+          const hasDrawerState = favorites.length > 0 || recents.length > 0
+          const codeSession = normalizeCodeSession(project.codeSession)
+          return {
+            ...project,
+            cli: isCliTool(project.cli) ? project.cli : undefined,
+            aiRuntimeProfileId: typeof project.aiRuntimeProfileId === 'string' && project.aiRuntimeProfileId.trim() ? project.aiRuntimeProfileId.trim() : undefined,
+            removedAt: Number.isFinite(project.removedAt) ? Math.trunc(project.removedAt) : Date.now(),
+            codeFileDrawerState: hasDrawerState
+              ? {
+                  favorites: Array.from(new Set(favorites)),
+                  recents: Array.from(new Set(recents)).slice(0, 40),
+                }
+              : undefined,
+            codeSession,
+          }
+        })
       : []
     cachedConfig = {
       ...DEFAULT_CONFIG,
       ...parsed,
+      configVersion: CURRENT_CONFIG_SCHEMA_VERSION,
       projects: normalizedProjects,
       removedProjects: normalizedRemovedProjects,
       docLinkTags: normalizeDocLinkTags(parsed.docLinkTags),
-      codexProviderApiKeys: normalizeCodexProviderApiKeys(
-        parsed.codexProviderApiKeys,
-        (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
-      ),
-      codexSettingsSnapshots: normalizeCodexSettingsSnapshots(
-        parsed.codexSettingsSnapshots,
-        (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot,
-      ),
+      codexProviderApiKeys: normalizeCodexProviderApiKeys(parsed.codexProviderApiKeys, (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot),
+      codexSettingsSnapshots: normalizeCodexSettingsSnapshots(parsed.codexSettingsSnapshots, (parsed as { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot),
       codexGatewayBindings: normalizeCodexGatewayBindings(parsed.codexGatewayBindings),
       aiCommit: normalizeAiCommitConfig(parsed.aiCommit),
       agentHooks: normalizeAgentHookConfig(parsed.agentHooks),
@@ -936,42 +827,40 @@ export function loadConfig(): AppConfig {
         ...DEFAULT_CONFIG,
         ...parsed,
       }),
+      configRecovery,
     }
-    cachedConfig.launchOnLogin = normalizeBooleanFlag(
-      parsed.launchOnLogin,
-      DEFAULT_CONFIG.launchOnLogin ?? false
-    )
-    cachedConfig.launchOnLoginDisplayMode = normalizeLaunchOnLoginDisplayMode(
-      parsed.launchOnLoginDisplayMode
-    )
+    cachedConfig.launchOnLogin = normalizeBooleanFlag(parsed.launchOnLogin, DEFAULT_CONFIG.launchOnLogin ?? false)
+    cachedConfig.launchOnLoginDisplayMode = normalizeLaunchOnLoginDisplayMode(parsed.launchOnLoginDisplayMode)
     cachedConfig.closeWindowBehavior = normalizeCloseWindowBehavior(parsed.closeWindowBehavior)
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
     {
-      const runtimeProfiles = normalizeAiRuntimeProfiles(
-        parsed.aiRuntimeProfiles,
-        parsed.activeAiRuntimeProfileId
-      )
+      const runtimeProfiles = normalizeAiRuntimeProfiles(parsed.aiRuntimeProfiles, parsed.activeAiRuntimeProfileId)
       cachedConfig.aiRuntimeProfiles = runtimeProfiles.profiles
       cachedConfig.activeAiRuntimeProfileId = runtimeProfiles.activeProfileId
     }
     {
-      const runtimeProfiles = normalizeClaudeRuntimeProfiles(
-        parsed.claudeRuntimeProfiles,
-        parsed.activeClaudeRuntimeProfileId
-      )
+      const runtimeProfiles = normalizeClaudeRuntimeProfiles(parsed.claudeRuntimeProfiles, parsed.activeClaudeRuntimeProfileId)
       cachedConfig.claudeRuntimeProfiles = runtimeProfiles.profiles
       cachedConfig.activeClaudeRuntimeProfileId = runtimeProfiles.activeProfileId
     }
     if (!cachedConfig.startupDefaultFilter && legacyStartupDefaultTagId) {
       cachedConfig.startupDefaultFilter = { type: 'tag', tagId: legacyStartupDefaultTagId }
     }
-  } catch {
-    const runtimeProfiles = normalizeAiRuntimeProfiles(
-      DEFAULT_CONFIG.aiRuntimeProfiles,
-      DEFAULT_CONFIG.activeAiRuntimeProfileId
-    )
+  } catch (error) {
+    const backupPath = rawConfigText ? backupCorruptConfigSync(configPath, rawConfigText) : undefined
+    configRecovery = existsSync(configPath)
+      ? {
+          recovered: true,
+          reason: rawConfigText ? 'invalid-json' : 'read-failed',
+          backupPath,
+          occurredAt: Date.now(),
+          message: error instanceof Error ? error.message : String(error),
+        }
+      : undefined
+    const runtimeProfiles = normalizeAiRuntimeProfiles(DEFAULT_CONFIG.aiRuntimeProfiles, DEFAULT_CONFIG.activeAiRuntimeProfileId)
     cachedConfig = {
       ...DEFAULT_CONFIG,
+      configVersion: CURRENT_CONFIG_SCHEMA_VERSION,
       docLinkTags: normalizeDocLinkTags(DEFAULT_CONFIG.docLinkTags),
       codexProviderApiKeys: normalizeCodexProviderApiKeys(DEFAULT_CONFIG.codexProviderApiKeys),
       codexSettingsSnapshots: normalizeCodexSettingsSnapshots(DEFAULT_CONFIG.codexSettingsSnapshots),
@@ -986,6 +875,7 @@ export function loadConfig(): AppConfig {
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
+      configRecovery,
     }
   }
   return cachedConfig!
@@ -998,10 +888,23 @@ export function saveConfig(config: AppConfig): Promise<void> {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
-  const serialized = JSON.stringify(config, null, 2)
+  const { configRecovery: _configRecovery, ...persistedConfig } = config
+  const serialized = JSON.stringify(
+    {
+      ...persistedConfig,
+      configVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+    },
+    null,
+    2,
+  )
   saveQueue = saveQueue
     .catch(() => undefined)
-    .then(() => writeFile(configPath, serialized, 'utf-8'))
+    .then(() => atomicWriteJson(configPath, serialized))
+    .then(() => {
+      if (cachedConfig === config) {
+        cachedConfig = { ...config, configRecovery: undefined }
+      }
+    })
   return saveQueue
 }
 
@@ -1010,67 +913,30 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   const updated: AppConfig = {
     ...current,
     ...partial,
-    codexProviderApiKeys: Object.prototype.hasOwnProperty.call(partial, 'codexProviderApiKeys')
-      ? normalizeCodexProviderApiKeys(partial.codexProviderApiKeys)
-      : current.codexProviderApiKeys,
-    codexSettingsSnapshots: Object.prototype.hasOwnProperty.call(partial, 'codexSettingsSnapshots')
-      ? normalizeCodexSettingsSnapshots(partial.codexSettingsSnapshots)
-      : current.codexSettingsSnapshots,
-    codexGatewayBindings: Object.prototype.hasOwnProperty.call(partial, 'codexGatewayBindings')
-      ? normalizeCodexGatewayBindings(partial.codexGatewayBindings)
-      : current.codexGatewayBindings,
-    aiCommit: Object.prototype.hasOwnProperty.call(partial, 'aiCommit')
-      ? normalizeAiCommitConfig(partial.aiCommit)
-      : normalizeAiCommitConfig(current.aiCommit),
-    agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks')
-      ? normalizeAgentHookConfig(partial.agentHooks)
-      : current.agentHooks,
-    agentLogs: Object.prototype.hasOwnProperty.call(partial, 'agentLogs')
-      ? normalizeAgentLogsConfig(partial.agentLogs)
-      : normalizeAgentLogsConfig(current.agentLogs),
-    aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway')
-      ? normalizeAiGatewayConfig(partial.aiGateway)
-      : normalizeAiGatewayConfig(current.aiGateway),
-    browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi')
-      ? normalizeBrowserAiConfig(partial.browserAi)
-      : normalizeBrowserAiConfig(current.browserAi),
-    shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences')
-      ? normalizeShortcutPreferences(partial.shortcutPreferences)
-      : normalizeShortcutPreferences(current.shortcutPreferences),
-    cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')
-      ? normalizeCacheLocationConfig(partial.cacheLocation)
-      : normalizeCacheLocationConfig(current.cacheLocation),
+    codexProviderApiKeys: Object.prototype.hasOwnProperty.call(partial, 'codexProviderApiKeys') ? normalizeCodexProviderApiKeys(partial.codexProviderApiKeys) : current.codexProviderApiKeys,
+    codexSettingsSnapshots: Object.prototype.hasOwnProperty.call(partial, 'codexSettingsSnapshots') ? normalizeCodexSettingsSnapshots(partial.codexSettingsSnapshots) : current.codexSettingsSnapshots,
+    codexGatewayBindings: Object.prototype.hasOwnProperty.call(partial, 'codexGatewayBindings') ? normalizeCodexGatewayBindings(partial.codexGatewayBindings) : current.codexGatewayBindings,
+    aiCommit: Object.prototype.hasOwnProperty.call(partial, 'aiCommit') ? normalizeAiCommitConfig(partial.aiCommit) : normalizeAiCommitConfig(current.aiCommit),
+    agentHooks: Object.prototype.hasOwnProperty.call(partial, 'agentHooks') ? normalizeAgentHookConfig(partial.agentHooks) : current.agentHooks,
+    agentLogs: Object.prototype.hasOwnProperty.call(partial, 'agentLogs') ? normalizeAgentLogsConfig(partial.agentLogs) : normalizeAgentLogsConfig(current.agentLogs),
+    aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway') ? normalizeAiGatewayConfig(partial.aiGateway) : normalizeAiGatewayConfig(current.aiGateway),
+    browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi') ? normalizeBrowserAiConfig(partial.browserAi) : normalizeBrowserAiConfig(current.browserAi),
+    shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
+    cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
   }
-  updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
-    ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false)
-    : current.launchOnLogin ?? false
-  updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(
-    partial,
-    'launchOnLoginDisplayMode'
-  )
-    ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode)
-    : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)
-  updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior')
-    ? normalizeCloseWindowBehavior(partial.closeWindowBehavior)
-    : normalizeCloseWindowBehavior(current.closeWindowBehavior)
+  updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false) : (current.launchOnLogin ?? false)
+  updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode') ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode) : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)
+  updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior') ? normalizeCloseWindowBehavior(partial.closeWindowBehavior) : normalizeCloseWindowBehavior(current.closeWindowBehavior)
   delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
   const runtimeProfiles = normalizeClaudeRuntimeProfiles(
-    Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles')
-      ? partial.claudeRuntimeProfiles
-      : current.claudeRuntimeProfiles,
-    Object.prototype.hasOwnProperty.call(partial, 'activeClaudeRuntimeProfileId')
-      ? partial.activeClaudeRuntimeProfileId
-      : current.activeClaudeRuntimeProfileId
+    Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles') ? partial.claudeRuntimeProfiles : current.claudeRuntimeProfiles,
+    Object.prototype.hasOwnProperty.call(partial, 'activeClaudeRuntimeProfileId') ? partial.activeClaudeRuntimeProfileId : current.activeClaudeRuntimeProfileId,
   )
   updated.claudeRuntimeProfiles = runtimeProfiles.profiles
   updated.activeClaudeRuntimeProfileId = runtimeProfiles.activeProfileId
   const aiRuntimeProfiles = normalizeAiRuntimeProfiles(
-    Object.prototype.hasOwnProperty.call(partial, 'aiRuntimeProfiles')
-      ? partial.aiRuntimeProfiles
-      : current.aiRuntimeProfiles,
-    Object.prototype.hasOwnProperty.call(partial, 'activeAiRuntimeProfileId')
-      ? partial.activeAiRuntimeProfileId
-      : current.activeAiRuntimeProfileId
+    Object.prototype.hasOwnProperty.call(partial, 'aiRuntimeProfiles') ? partial.aiRuntimeProfiles : current.aiRuntimeProfiles,
+    Object.prototype.hasOwnProperty.call(partial, 'activeAiRuntimeProfileId') ? partial.activeAiRuntimeProfileId : current.activeAiRuntimeProfileId,
   )
   updated.aiRuntimeProfiles = aiRuntimeProfiles.profiles
   updated.activeAiRuntimeProfileId = aiRuntimeProfiles.activeProfileId

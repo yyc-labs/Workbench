@@ -1,48 +1,27 @@
 import { app, BrowserWindow, nativeTheme, screen } from 'electron'
-import path from 'path'
-import { ProcessManager } from './runner'
+import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
+import { flushAiCommitRegistry } from './ai-commit-registry'
+import { registerAppLifecycle, runAppCleanupSteps, runAppStartupSteps } from './app-lifecycle'
+import { createAppServices } from './app-services'
+import { applyAppCacheLocation } from './cache-location'
+import { capabilityManager } from './capability-manager'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
-import { capabilityManager } from './capability-manager'
-import { createGitService } from './git/git-service'
-import { createRuntimeService } from './runtime/runtime-service'
-import { createAiCommitService } from './ai-commit/ai-commit-service'
-import { createAiConnectionService } from './ai-connection/ai-connection-service'
-import { createAgentLogService } from './agent-logs/agent-log-service'
-import { createAiGatewayService } from './ai-gateway/gateway-service'
-import { flushAiCommitRegistry } from './ai-commit-registry'
-import { AiEnvironmentController } from './ai-environment/environment-controller'
-import { createTranscriptRepository } from './transcript/transcriptRepository'
-import { createTranscriptService } from './transcript/transcriptService'
-import { createTranscriptShareService } from './transcript/transcriptShareService'
-import { createLearningRepository } from './learning/learningRepository'
-import { createLearningService } from './learning/learningService'
-import { createSkillRepository } from './skill/skillRepository'
-import { createSkillService } from './skill/skillService'
-import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
-import { AgentHookGateway } from './hooks/agent-hook-gateway'
-import { FeishuNotifier } from './hooks/feishu-notifier'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
-import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
-import { createWindow, applyWindowBackground } from './window/createWindow'
-import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
-import { captureTranscriptCaptureInitialText, emptyTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
-import { applyAppCacheLocation } from './cache-location'
-import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
-import { ensureWindowVisible } from './window/windowFocus'
 import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
-import { createAppTray, type AppTrayController } from './tray'
-import { projectIdFromPath } from '../../shared/rules'
-import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
+import { ProcessManager } from './runner'
+import { TranscriptCaptureController } from './transcript-capture-controller'
+import { type AppTrayController, createAppTray } from './tray'
+import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
+import { applyWindowBackground, createWindow } from './window/createWindow'
+import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
+import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
+import { ensureWindowVisible } from './window/windowFocus'
 
 let mainWindow: BrowserWindow | null = null
 let transcriptCaptureWindow: BrowserWindow | null = null
-let transcriptCaptureInitialText: TranscriptCaptureInitialText = emptyTranscriptCaptureInitialText
-let transcriptCaptureInitialTextPromise: Promise<TranscriptCaptureInitialText> | null = null
-let transcriptCaptureRequestId = 0
-let isTranscriptCaptureShortcutPending = false
-let shouldFocusTranscriptCaptureWindowOnReady = false
+const transcriptCaptureController = new TranscriptCaptureController()
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 let trayController: AppTrayController | null = null
@@ -54,93 +33,22 @@ if (!gotSingleInstanceLock) {
   app.quit()
 }
 
-const aiEnvironmentController = new AiEnvironmentController(
-  () => bootCapability,
-  (capability) => {
+const services = createAppServices({
+  getCapability: () => bootCapability,
+  setCapability: (capability) => {
     bootCapability = capability
-    processManager?.updateCapability(capability)
   },
-  () => loadConfig(),
-)
-const gitService = createGitService({
-  getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
-  getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
-})
-const runtimeService = createRuntimeService({
-  getCapability: () => bootCapability,
   getProcessManager: () => processManager,
-  aiEnvironmentController,
-  emitRuntimeStateChanged,
-})
-const aiCommitService = createAiCommitService({
   getMainWindow: () => mainWindow,
-  getDefaultWslDistro: () => bootCapability?.wslDistro || 'Ubuntu',
-  aiEnvironmentController,
-})
-const aiConnectionService = createAiConnectionService()
-const transcriptRepository = createTranscriptRepository()
-const transcriptService = createTranscriptService({
-  repository: transcriptRepository,
-  getProjectIdByPath: (projectPath) => {
-    const normalizedTarget = path.resolve(projectPath)
-    const project = loadConfig().projects.find((item) => path.resolve(item.path) === normalizedTarget)
-    return project ? projectIdFromPath(project.path) : null
-  },
-  getProjectPathById: (projectId) => {
-    const project = loadConfig().projects.find((item) => projectIdFromPath(item.path) === projectId)
-    return project?.path ?? null
-  },
-})
-const feishuNotifier = new FeishuNotifier({
-  getConfig: () => loadConfig().agentHooks,
-  getLocale: () => loadConfig().locale,
-})
-const transcriptShareService = createTranscriptShareService()
-const learningRepository = createLearningRepository()
-const learningService = createLearningService({
-  repository: learningRepository,
-  getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
-})
-const skillService = createSkillService({ repository: createSkillRepository() })
-const browserAiRepository = createDefaultBrowserAiRepository({
-  loadConfig: () => loadConfig().browserAi,
-  saveConfig: async (config) => (await updateConfig({ browserAi: config })).browserAi!,
-  getRecordsRootPath: () => path.join(app.getPath('userData'), 'browser-ai'),
-})
-const browserAiService = createBrowserAiService({
-  repository: browserAiRepository,
+  loadConfig,
+  updateConfig,
   getUserDataPath: () => app.getPath('userData'),
-  learningService,
-  emitProgress: (event) => {
-    mainWindow?.webContents.send(IPC.BROWSER_AI_PROGRESS, event)
-  },
+  getLocale: () => resolveMainLocale(loadConfig().locale, app.getLocale()),
+  resolveLocale: (locale) => resolveMainLocale(locale, app.getLocale()),
+  emitRuntimeStateChanged,
+  emitTranscriptImported,
 })
-const aiGatewayService = createAiGatewayService({
-  getCapability: () => bootCapability,
-  isLogCaptureEnabled: () => loadConfig().agentLogs?.enabled !== false,
-})
-
-const agentHookGateway = new AgentHookGateway({
-  getConfig: () => loadConfig().agentHooks,
-  isLogCaptureEnabled: () => loadConfig().agentLogs?.enabled !== false,
-  onEvent: (event) => {
-    mainWindow?.webContents.send(IPC.AGENT_HOOK_EVENT, event)
-    void feishuNotifier.notifyIfNeeded(event).catch(() => undefined)
-  },
-  listProjects: () => listTranscriptImportProjects(),
-  onTranscriptImport: async (payload) => {
-    const imported = await transcriptService.importExternalTranscript(payload)
-    emitTranscriptImported(imported)
-    return imported
-  },
-})
-
-const agentLogService = createAgentLogService({
-  getAiGatewayLogs: () => aiGatewayService.getRecentLogDetails(),
-  getAgentHookLogs: () => agentHookGateway.getRecentLogDetails(),
-  clearAiGatewayLogs: () => aiGatewayService.clearRecentLogs(),
-  clearAgentHookLogs: () => agentHookGateway.clearRecentLogs(),
-})
+const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, aiGatewayService, agentHookGateway, agentLogService } = services
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -207,7 +115,7 @@ function revealTranscriptCaptureWindow(window: BrowserWindow, focus: boolean): v
   if (focus) {
     window.show()
     window.focus()
-    shouldFocusTranscriptCaptureWindowOnReady = false
+    transcriptCaptureController.consumeFocusRequest()
     return
   }
   window.showInactive()
@@ -215,23 +123,15 @@ function revealTranscriptCaptureWindow(window: BrowserWindow, focus: boolean): v
 
 function requestTranscriptCaptureWindowFocus(): void {
   if (!transcriptCaptureWindow || transcriptCaptureWindow.isDestroyed()) return
-  shouldFocusTranscriptCaptureWindowOnReady = true
+  transcriptCaptureController.requestFocus()
   if (!transcriptCaptureWindow.isVisible()) return
   revealTranscriptCaptureWindow(transcriptCaptureWindow, true)
-}
-
-function resetTranscriptCaptureRequest(): void {
-  transcriptCaptureRequestId += 1
-  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
-  transcriptCaptureInitialTextPromise = null
-  isTranscriptCaptureShortcutPending = false
-  shouldFocusTranscriptCaptureWindowOnReady = false
 }
 
 function showTranscriptCaptureWindow(options: { focus?: boolean } = {}): void {
   const shouldFocus = options.focus !== false
   if (shouldFocus) {
-    shouldFocusTranscriptCaptureWindowOnReady = true
+    transcriptCaptureController.requestFocus()
   }
 
   if (transcriptCaptureWindow && !transcriptCaptureWindow.isDestroyed()) {
@@ -246,14 +146,14 @@ function showTranscriptCaptureWindow(options: { focus?: boolean } = {}): void {
   })
   transcriptCaptureWindow.once('ready-to-show', () => {
     if (!transcriptCaptureWindow || transcriptCaptureWindow.isDestroyed()) return
-    revealTranscriptCaptureWindow(transcriptCaptureWindow, shouldFocus || shouldFocusTranscriptCaptureWindowOnReady)
+    revealTranscriptCaptureWindow(transcriptCaptureWindow, shouldFocus || transcriptCaptureController.consumeFocusRequest())
   })
   transcriptCaptureWindow.on('blur', () => {
     transcriptCaptureWindow?.close()
   })
   transcriptCaptureWindow.on('closed', () => {
     transcriptCaptureWindow = null
-    resetTranscriptCaptureRequest()
+    transcriptCaptureController.reset()
   })
 }
 
@@ -301,60 +201,18 @@ function sendGlobalThemeShortcut(): void {
 }
 
 function beginTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
-  const requestId = ++transcriptCaptureRequestId
-  isTranscriptCaptureShortcutPending = true
-  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
-
-  const capturePromise = (async () => {
-    try {
-      return await captureTranscriptCaptureInitialText()
-    } catch (error) {
-      console.warn('[transcript-capture] Failed to capture selected text.', error)
-      return readTranscriptCaptureClipboardText()
-    }
-  })()
-
-  transcriptCaptureInitialTextPromise = capturePromise
-  void capturePromise
-    .then((initialText) => {
-      if (transcriptCaptureRequestId !== requestId || transcriptCaptureInitialTextPromise !== capturePromise) {
-        return
-      }
-      transcriptCaptureInitialText = initialText
-    })
-    .finally(() => {
-      if (transcriptCaptureRequestId !== requestId || transcriptCaptureInitialTextPromise !== capturePromise) {
-        return
-      }
-      transcriptCaptureInitialTextPromise = null
-      isTranscriptCaptureShortcutPending = false
-    })
-
-  return capturePromise
+  return transcriptCaptureController.begin({
+    capture: captureTranscriptCaptureInitialText,
+    fallback: () => readTranscriptCaptureClipboardText(),
+  })
 }
 
-async function consumeTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
-  const pendingCapture = transcriptCaptureInitialTextPromise
-  const requestId = transcriptCaptureRequestId
-  if (pendingCapture) {
-    const snapshot = await pendingCapture
-    if (transcriptCaptureRequestId === requestId && transcriptCaptureInitialTextPromise === pendingCapture) {
-      transcriptCaptureInitialTextPromise = null
-      isTranscriptCaptureShortcutPending = false
-    }
-    if (transcriptCaptureRequestId === requestId) {
-      transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
-    }
-    return snapshot
-  }
-
-  const snapshot = transcriptCaptureInitialText
-  transcriptCaptureInitialText = emptyTranscriptCaptureInitialText
-  return snapshot
+function consumeTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
+  return transcriptCaptureController.consume()
 }
 
 function sendGlobalTranscriptCaptureShortcut(): void {
-  if (isTranscriptCaptureShortcutPending) {
+  if (transcriptCaptureController.isShortcutPending()) {
     showTranscriptCaptureWindow({ focus: false })
     return
   }
@@ -448,43 +306,54 @@ function buildTrayMenuTemplate() {
   ]
 }
 
-app.on('second-instance', (_event, argv) => {
-  if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
-  showMainWindowFromTray()
-})
-
 // ── before-quit ───────────────────────────────────────────
 
 let isQuitting = false
 
-app.on('before-quit', async (e) => {
+const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
   if (isQuitting) return
   e.preventDefault()
   isQuitting = true
   trayController?.destroy()
 
   const { runtimeKeepAliveOnQuit = false } = loadConfig()
-  if (!runtimeKeepAliveOnQuit) {
-    await runtimeService.cleanupOnBeforeQuit()
-  }
-
-  aiCommitService.cleanupOnBeforeQuit()
-  processManager?.stopAll()
-  await agentHookGateway.stop()
-  await aiGatewayService.shutdown()
-  await transcriptShareService.shutdown()
-  await browserAiService.cleanupOnBeforeQuit()
+  await runAppCleanupSteps([
+    ...(!runtimeKeepAliveOnQuit ? [{ name: 'runtime', run: () => runtimeService.cleanupOnBeforeQuit() }] : []),
+    { name: 'ai-commit', run: () => aiCommitService.cleanupOnBeforeQuit() },
+    { name: 'process-manager', run: () => processManager?.stopAll() },
+    { name: 'agent-hooks', run: () => agentHookGateway.stop() },
+    { name: 'ai-gateway', run: () => aiGatewayService.shutdown() },
+    { name: 'transcript-share', run: () => transcriptShareService.shutdown() },
+    { name: 'browser-ai', run: () => browserAiService.cleanupOnBeforeQuit() },
+  ])
 
   setTimeout(() => {
     flushAiCommitRegistry()
     app.quit()
   }, 1500)
-})
+}
 
-app.on('will-quit', () => {
-  flushAiCommitRegistry()
-  trayController?.destroy()
-  unregisterGlobalShortcuts()
+registerAppLifecycle(app, {
+  onSecondInstance: (_event, argv) => {
+    if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
+    showMainWindowFromTray()
+  },
+  onBeforeQuit: handleBeforeQuit,
+  onWillQuit: () => {
+    flushAiCommitRegistry()
+    trayController?.destroy()
+    unregisterGlobalShortcuts()
+  },
+  onActivate: () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow()
+    }
+  },
+  onWindowAllClosed: () => {
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  },
 })
 
 // ── startup ──────────────────────────────────────────────
@@ -510,64 +379,100 @@ app.whenReady().then(async () => {
     }
   })
 
-  // P0 1: One-time capability probe
-  await capabilityManager.init()
-  bootCapability = capabilityManager.get()
-
-  // Create ProcessManager with capability injected
-  processManager = new ProcessManager(bootCapability)
-  if (shouldUseTrayLifecycle) {
-    trayController = createAppTray({
-      getTooltip: () => 'IDE Electron',
-      buildMenu: buildTrayMenuTemplate,
-      onOpenMainWindow: openMainWindowFromTray,
-    })
+  try {
+    await runAppStartupSteps(
+      [
+        {
+          name: 'capability',
+          run: async () => {
+            await capabilityManager.init()
+            bootCapability = capabilityManager.get()
+          },
+        },
+        {
+          name: 'process-manager',
+          run: () => {
+            if (!bootCapability) throw new Error('Capability is not initialized')
+            processManager = new ProcessManager(bootCapability)
+          },
+          rollback: async () => {
+            await processManager?.stopAll()
+            processManager = null
+          },
+        },
+        {
+          name: 'tray',
+          run: () => {
+            if (!shouldUseTrayLifecycle) return
+            trayController = createAppTray({
+              getTooltip: () => 'IDE Electron',
+              buildMenu: buildTrayMenuTemplate,
+              onOpenMainWindow: openMainWindowFromTray,
+            })
+          },
+          rollback: () => {
+            trayController?.destroy()
+            trayController = null
+          },
+        },
+        {
+          name: 'ipc',
+          run: () => {
+            registerIpcHandlers({
+              getMainWindow: () => mainWindow,
+              getProcessManager: () => processManager,
+              getCapability: () => bootCapability,
+              emitRuntimeStateChanged,
+              emitTranscriptImported,
+              consumeTranscriptCaptureInitialText,
+              agentLogService,
+              aiCommitService,
+              aiConnectionService,
+              aiGatewayService,
+              browserAiService,
+              agentHookGateway,
+              gitService,
+              runtimeService,
+              learningService,
+              skillService,
+              transcriptService,
+              transcriptShareService,
+            })
+          },
+        },
+        {
+          name: 'main-window',
+          run: createMainWindow,
+          rollback: () => {
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy()
+            mainWindow = null
+          },
+        },
+        {
+          name: 'tray-visibility',
+          run: () => {
+            if (!shouldUseTrayLifecycle || !trayController) return
+            if (shouldStartHiddenToTray && !trayController.ensure()) {
+              showMainWindowFromTray()
+            } else {
+              trayController.ensure()
+            }
+          },
+        },
+      ],
+      (name, error) => {
+        console.error(`[startup] Failed at ${name}`, error)
+      },
+    )
+  } catch {
+    app.quit()
+    return
   }
 
-  registerIpcHandlers({
-    getMainWindow: () => mainWindow,
-    getProcessManager: () => processManager,
-    getCapability: () => bootCapability,
-    emitRuntimeStateChanged,
-    emitTranscriptImported,
-    consumeTranscriptCaptureInitialText,
-    agentLogService,
-    aiCommitService,
-    aiConnectionService,
-    aiGatewayService,
-    browserAiService,
-    agentHookGateway,
-    gitService,
-    runtimeService,
-    learningService,
-    skillService,
-    transcriptService,
-    transcriptShareService,
-  })
   syncWindowsLaunchOnLogin(bootConfig)
-  createMainWindow()
-  if (shouldUseTrayLifecycle && trayController) {
-    if (shouldStartHiddenToTray && !trayController.ensure()) {
-      showMainWindowFromTray()
-    } else {
-      trayController.ensure()
-    }
-  }
   registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut)
   agentHookGateway.start()
   void aiGatewayService.start(false).catch((error) => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)
   })
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow()
-    }
-  })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
 })
