@@ -1,8 +1,22 @@
 # 当前项目优化评估与建议（2026-07-23）
 
-> 状态：建议稿，尚未实施。
+> 状态：已完成文档设计项（2026-07-23）。
 >
-> 范围：对 `src/core`、`test/`、`package.json`、CI 配置和已有优化计划的只读评估。本文不重复已经完成的 IPC 契约收敛、Learning Center 第二阶段、基础 typecheck/test 门禁等工作；工作区中已有的未提交 Learning / Code 改动不在本文的评估结论范围内。
+> 范围：本文的评估结论与实施记录。已完成配置可靠性、Gateway 流式状态机与边界模块、主进程 service graph/lifecycle、按 domain 的 shared 类型迁移、Windows/WSL 环境解析回归、变更文件静态检查、Code 文档会话边界和最小 IPC/UI smoke harness。本文不重复已经完成的 IPC 契约收敛、Learning Center 第二阶段等工作。
+
+> 说明：shared 类型采用“兼容出口 + 渐进迁移”策略，Gateway、Learning、Runtime、Project、Transcript 的核心契约已迁入 domain 文件，其余历史模型继续通过兼容出口提供；Code 工作区沿 explorer/document/Markdown 边界补充纯 session helper，避免无收益的大 diff。
+
+## 实施记录
+
+- 配置：加入 `configVersion`、纯迁移 helper、损坏 JSON 的诊断副本、同目录 `.bak` 备份和临时文件替换；`AppConfig.configRecovery` 会随 `getConfig()` 返回，General 设置页会提示恢复状态。
+- Gateway：新增 `gateway-stream-accumulators.ts`，承接文本、tool call、Anthropic content block、Responses completed payload 和 SSE fallback 的累积/组装；Gateway 入口的实际流式路径已切换到该模块，并新增协议状态 fixture。
+- Gateway：补充 stream proxy、Chat conversion、observability 边界，移除入口内旧 helper，并覆盖 malformed SSE、stop metadata、payload 和有界 trace 快照。
+- 主进程：新增 service graph factory、生命周期事件注册 helper；退出时按顺序执行且单个 service 失败不会跳过后续清理；transcript capture 的异步快照、取消和焦点状态已收口到 `TranscriptCaptureController`。
+- 契约：Gateway、Learning、Runtime、Project、Transcript 核心类型已物理迁移至 `shared/types/`，旧的 `shared/types.ts` import 路径保持不变。
+- Code：文档会话 tab 去重/上限逻辑下沉为纯 helper，并补充 session fixture。
+- 交互回归：新增 fake Electron IPC smoke harness，验证 preload invoke 到 main handler 的真实契约连通性。
+- 质量门禁：新增 `check:style` 和 `script/check-style.mjs`，只检查当前分支/工作区变更文件；CI checkout 改为保留完整 Git 历史，以便 PR 比较基线。
+- 回归覆盖：新增配置持久化、Gateway 流式累积/边界、生命周期、transcript capture、Windows/WSL process environment、Code session 和 IPC smoke fixture。
 
 ## 结论
 
@@ -31,15 +45,15 @@
 - `src/core/electron/main/ipc/registerIpcHandlers.ts` 已仅做 domain handler 装配，符合当前架构规则。
 - `src/core/shared/electronApi.ts` 已是 preload/renderer 共享的 API 契约；这是新增 IPC 能力时应继续坚持的基础。
 - `test/` 中已有 AI Gateway、配置、运行环境、文件操作、Markdown 解析等 Node 测试；GitHub Actions 在 Windows 上执行 `npm ci` 和 `npm run verify`。
-- `src/core/electron/main/ai-gateway/gateway-server.ts` 约 2677 行。现有 `gateway-http`、`gateway-routes`、`gateway-upstream`、`gateway-trace` 和 request handler 的首轮拆分已完成，但流式累积、协议转换与部分日志细节仍集中在该文件。
-- `src/core/electron/main/config.ts` 约 1080 行，同时承担默认值、兼容迁移、归一化、读取、缓存与保存职责；`src/core/shared/types.ts` 约 1800 行，包含多个不相邻 domain 的模型。
-- `src/core/electron/main/index.ts` 约 573 行，除服务装配外还承担窗口、托盘、快捷键、二次启动、关闭清理和 transcript capture 生命周期。
+- `src/core/electron/main/ai-gateway/gateway-server.ts` 仍约 2677 行，但流式累积、payload 组装和部分协议读取已移入 `gateway-stream-accumulators.ts`，并由实际路径使用。
+- `src/core/electron/main/config.ts` 仍承担默认值和归一化，但持久化/迁移已下沉到 `main/config/`；保存已改为临时文件替换并保留 `.bak`。
+- `src/core/electron/main/index.ts` 仍承担 Electron 窗口装配，但退出清理和 transcript capture 状态已分别抽到可测试 helper/controller。
 - Code 区域仍是 renderer 的高触达热点：`CodeWorkspacePanel.tsx`、Markdown parser / renderer、explorer state hook 均体量较大。这里已有纯逻辑测试，是继续小步收口的良好基础。
-- 当前 Biome 配置以 formatter 为主；仓库要求改代码后格式化，但 `package.json` 和 CI 没有显式的 `biome check` 入口。
+- `package.json` 已提供 `check:style`；脚本只检查当前分支/工作区变更文件，避免把历史格式基线一次性变成阻断。
 
 行数只用来寻找热点，不是拆分依据。下面每项均以职责、数据边界和可验证性作为是否实施的判断标准。
 
-## P0：先保护配置数据与升级路径
+## P0：保护配置数据与升级路径（已实施）
 
 ### 现状与风险
 
@@ -62,7 +76,7 @@
 - 人为提供损坏 JSON 后，原始文件不会被自动删除或覆盖；产品能明确说明恢复状态。
 - 任意历史 fixture 升级后都满足 `AppConfig` 的不变量，新增迁移必须同时添加 fixture。
 
-## P0：完成 AI Gateway 的“流式路径”二次收口
+## P0：完成 AI Gateway 的“流式路径”二次收口（已完成）
 
 ### 现状与风险
 
@@ -96,7 +110,7 @@ Gateway 已经有良好的第一轮模块边界，但最大入口仍同时处理
 - 现有 Gateway adapter / passthrough 测试全部保留并通过；新增矩阵覆盖流式终止与工具调用边界。
 - 新增 provider 或 conversion 时，主要改动位于一个协议模块和对应测试，而非入口服务。
 
-## P1：把主进程入口收敛为真正的装配层
+## P1：把主进程入口收敛为真正的装配层（已完成）
 
 ### 现状
 
@@ -119,7 +133,7 @@ Gateway 已经有良好的第一轮模块边界，但最大入口仍同时处理
 - transcript capture 的“重复快捷键、窗口提前关闭、异步剪贴板返回”保持现有行为，并有 controller 级测试。
 - 不改变 Windows 托盘、macOS 生命周期或 WSL/Runtime 选择语义。
 
-## P1：收口 shared 类型与 Code 工作区的高频改动面
+## P1：收口 shared 类型与 Code 工作区的高频改动面（已完成首批迁移）
 
 ### shared 类型：按 domain 拆文件，维持单一导入入口
 
@@ -138,7 +152,7 @@ Code 区已有 parser 测试和多个页面私有 hook，说明方向正确。�
 
 当新增 Code 功能跨越这些界线时，先定义输入/输出类型和测试，再修改 `CodeWorkspacePanel`。不建议仅为降低行数而继续搬 JSX，也不建议把编辑器临时状态塞入全局 store。
 
-## P2：把现有工程约束变成可自动验证的信号
+## P2：把现有工程约束变成可自动验证的信号（已完成）
 
 ### 轻量静态检查
 
@@ -146,15 +160,15 @@ Code 区已有 parser 测试和多个页面私有 hook，说明方向正确。�
 
 建议采用两阶段落地：先在 CI 以非阻断报告或只检查改动文件运行，解决已有基线问题后再转为阻断门禁。不要在这一项中引入新的 lint 依赖、不要把 build 纳入默认验证。
 
-### 最小交互级回归测试
+### 最小交互级回归测试（已完成）
 
-当前 Node 测试对纯逻辑和主进程服务的覆盖不错，但很难证明“renderer action → preload 契约 → IPC handler 装配”的整体连通性。可先不引入完整 E2E 框架，而建立可替换依赖的 smoke harness，覆盖以下高风险链路：
+当前 Node 测试对纯逻辑和主进程服务的覆盖不错，但很难证明“renderer action → preload 契约 → IPC handler 装配”的整体连通性。本轮已建立可替换依赖的 smoke harness，覆盖以下高风险链路：
 
 1. 进程启动时 `useWsl` 从 renderer store 到 main runner 未被丢失；
 2. Learning / Browser AI 的保存能力遵循 shared → IPC → preload 的同一契约；
 3. Gateway 的启动、停止和日志读取不会绕过 shared API。
 
-若这些 harness 稳定后仍有 UI 回归，再评估复用已有 `playwright-core` 或引入 Electron 专用 smoke 方案。实施前应先明确测试是否需要真实 WSL、真实浏览器或真实密钥；默认使用 fake service，避免 CI 环境依赖。
+当前 harness 使用 fake service 和 fake Electron IPC，不依赖真实 WSL、真实浏览器或真实密钥；若后续仍有真实 UI 回归，再评估复用已有 `playwright-core` 或引入 Electron 专用 smoke 方案。
 
 ## 推荐实施顺序与停损点
 
@@ -171,11 +185,18 @@ Code 区已有 parser 测试和多个页面私有 hook，说明方向正确。�
 - **把 Runtime/WSL 路径抽象成“自动猜测”**：现有 `useWsl` 显式传递和 Windows/WSL 规则是正确约束，后续任何收口都必须保留这一参数与进程 key 语义。
 - **默认加入 build / 打包门禁**：项目已明确 build 成本高；优先强化 typecheck、test 和静态检查即可。
 
+## 本轮完成后的渐进策略
+
+- `gateway-server.ts` 保留请求编排和 provider 选择职责；协议累积、SSE transport、Chat conversion 与 trace observability 已有独立边界。
+- `shared/types.ts` 继续作为稳定兼容出口；五个高触达 domain 的核心类型已完成物理迁移，新增模型继续按实际功能触达迁移。
+- Code 工作区不做按行数的 JSX 搬迁；新增交互继续沿 explorer、document、Markdown 和 session 边界落点。
+- smoke harness 使用 fake service，不依赖真实 WSL、浏览器或密钥；若后续出现真实 UI 回归，再按需增加 Electron 专用 E2E。
+
 ## 交付检查清单
 
-- [ ] 本次改动是否对应一个可观察的风险或用户价值，而非纯行数目标？
-- [ ] 是否保持 `renderer → preload → main → service` 与 `shared` 单向依赖？
-- [ ] 是否保留 `useWsl`、Runtime profile 和进程 key 的既有契约？
-- [ ] 是否为配置迁移、协议转换或纯转换函数补了 fixture/单元测试？
-- [ ] 是否只格式化本次实际修改的代码文件，并检查未覆盖工作区的无关改动？
-- [ ] 验证是否至少覆盖相关 `typecheck` / `test`，且未默认执行 build？
+- [x] 本次改动是否对应一个可观察的风险或用户价值，而非纯行数目标？
+- [x] 是否保持 `renderer → preload → main → service` 与 `shared` 单向依赖？
+- [x] 是否保留 `useWsl`、Runtime profile 和进程 key 的既有契约？
+- [x] 是否为配置迁移、协议转换或纯转换函数补了 fixture/单元测试？
+- [x] 是否只格式化本次实际修改的代码文件，并检查未覆盖工作区的无关改动？
+- [x] 验证是否至少覆盖相关 `typecheck` / `test`，且未默认执行 build？
