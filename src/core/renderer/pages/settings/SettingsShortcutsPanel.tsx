@@ -24,48 +24,28 @@ type ShortcutGuideCard = {
 
 function ShortcutTriggerBadge({ trigger }: { trigger: string }) {
   return (
-    <span
-      className="inline-flex rounded-full border px-2.5 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]"
-      style={{ borderColor: 'var(--color-border)' }}
-    >
+    <span className="inline-flex rounded-full border px-2.5 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
       {trigger}
     </span>
   )
 }
 
-function ShortcutGuideCardView({
-  card,
-  t,
-}: {
-  card: ShortcutGuideCard
-  t: (key: string) => string
-}) {
+function ShortcutGuideCardView({ card, t }: { card: ShortcutGuideCard; t: (key: string) => string }) {
   return (
     <section className="quiet-control rounded-[22px] p-5">
       <div>
-        <h3 className="text-sm font-semibold text-[color:var(--color-foreground)]">
-          {t(card.titleKey)}
-        </h3>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-          {t(card.descriptionKey)}
-        </p>
+        <h3 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t(card.titleKey)}</h3>
+        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t(card.descriptionKey)}</p>
       </div>
 
       <div className="mt-4 space-y-3">
         {card.items.map((item) => (
-          <div
-            key={item.id}
-            className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 shadow-sm"
-          >
+          <div key={item.id} className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 shadow-sm">
             <div className="flex flex-wrap items-center gap-2">
               <ShortcutTriggerBadge trigger={item.trigger} />
-              <span className="text-sm font-medium text-[color:var(--color-foreground)]">
-                {t(item.titleKey)}
-              </span>
+              <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t(item.titleKey)}</span>
             </div>
-            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-              {t(item.descriptionKey)}
-            </p>
+            <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t(item.descriptionKey)}</p>
           </div>
         ))}
       </div>
@@ -73,10 +53,7 @@ function ShortcutGuideCardView({
   )
 }
 
-function SettingsShortcutsPanel({
-  shortcutPreferences,
-  onSave,
-}: SettingsShortcutsPanelProps) {
+function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcutsPanelProps) {
   const { t } = useI18n()
   const [openViewer, setOpenViewer] = useState(Boolean(shortcutPreferences?.quickTranscriptCaptureOpenViewer))
   const [saving, setSaving] = useState(false)
@@ -105,6 +82,12 @@ function SettingsShortcutsPanel({
           trigger: 'Ctrl/Cmd+Shift+K',
           titleKey: 'settings.shortcuts.items.globalCapture.title',
           descriptionKey: 'settings.shortcuts.items.globalCapture.description',
+        },
+        {
+          id: 'global-browser-screenshot',
+          trigger: 'Ctrl/Cmd+Shift+S',
+          titleKey: 'settings.shortcuts.items.globalBrowserScreenshot.title',
+          descriptionKey: 'settings.shortcuts.items.globalBrowserScreenshot.description',
         },
         {
           id: 'global-recent',
@@ -348,12 +331,8 @@ function SettingsShortcutsPanel({
     <div className="space-y-8">
       <div>
         <p className="section-label mb-3">{t('settings.shortcuts.kicker')}</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-          {t('settings.shortcuts.title')}
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-          {t('settings.shortcuts.description')}
-        </p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.shortcuts.title')}</h2>
+        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.description')}</p>
       </div>
 
       <section className="quiet-control rounded-[22px] p-5">
@@ -363,9 +342,7 @@ function SettingsShortcutsPanel({
               <Keyboard className="h-4 w-4" strokeWidth={1.8} />
               {t('settings.shortcuts.quickCaptureTitle')}
             </div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              {t('settings.shortcuts.quickCaptureDescription')}
-            </p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.quickCaptureDescription')}</p>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
               <span>{t('settings.shortcuts.quickCaptureShortcut')}</span>
               <kbd className="rounded-full border px-2.5 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
@@ -375,28 +352,15 @@ function SettingsShortcutsPanel({
           </div>
 
           <label className="flex max-w-sm items-start gap-3 rounded-[18px] bg-[color:var(--color-card)] px-4 py-3 text-sm text-[color:var(--color-foreground)] shadow-sm">
-            <input
-              type="checkbox"
-              checked={openViewer}
-              disabled={saving}
-              onChange={(event) => void handleOpenViewerChange(event.target.checked)}
-            />
+            <input type="checkbox" checked={openViewer} disabled={saving} onChange={(event) => void handleOpenViewerChange(event.target.checked)} />
             <span>
               <span className="block font-medium">{t('settings.shortcuts.openViewerLabel')}</span>
-              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                {openViewer
-                  ? t('settings.shortcuts.openViewerHint')
-                  : t('settings.shortcuts.disabledHint')}
-              </span>
+              <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{openViewer ? t('settings.shortcuts.openViewerHint') : t('settings.shortcuts.disabledHint')}</span>
             </span>
           </label>
         </div>
 
-        {saveError && (
-          <p className="mt-4 text-sm text-rose-600">
-            {saveError}
-          </p>
-        )}
+        {saveError && <p className="mt-4 text-sm text-rose-600">{saveError}</p>}
       </section>
 
       <section className="space-y-4">
@@ -405,9 +369,7 @@ function SettingsShortcutsPanel({
             <Keyboard className="h-4 w-4" strokeWidth={1.8} />
             {t('settings.shortcuts.keyboardGuideTitle')}
           </div>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-            {t('settings.shortcuts.keyboardGuideDescription')}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.keyboardGuideDescription')}</p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
@@ -423,9 +385,7 @@ function SettingsShortcutsPanel({
             <MousePointer2 className="h-4 w-4" strokeWidth={1.8} />
             {t('settings.shortcuts.gestureGuideTitle')}
           </div>
-          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-            {t('settings.shortcuts.gestureGuideDescription')}
-          </p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.gestureGuideDescription')}</p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">

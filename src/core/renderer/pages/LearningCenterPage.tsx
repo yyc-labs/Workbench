@@ -5,6 +5,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import { LearningBrowserAiDialog } from './learning/browser-ai/LearningBrowserAiDialog'
+import { BrowserScreenshotDialog } from './learning/browser-screenshot/BrowserScreenshotDialog'
 import { LearningBrowserAiHistoryView } from './learning/browser-ai/LearningBrowserAiHistoryView'
 import { LearningBrowserAiPreferencesDialog } from './learning/browser-ai/LearningBrowserAiPreferencesDialog'
 import { LearningCenterHeader } from './learning/layout/LearningCenterHeader'
@@ -27,6 +28,7 @@ import { resolveLearningNoteLinks } from './learning/notes/learningNoteLinks'
 const LEARNING_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-left-sidebar-collapsed'
 const LEARNING_RIGHT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:learning-right-sidebar-collapsed'
 const LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY = 'app:learning-editor-display-mode'
+const LEARNING_AUTO_SAVE_STORAGE_KEY = 'app:learning-auto-save-enabled'
 const LEARNING_EDITOR_HISTORY_LIMIT = 200
 const LEARNING_DRAFT_STORAGE_PREFIX = 'app:learning-draft:'
 
@@ -92,6 +94,8 @@ export function LearningCenterPage() {
   const [browserAiOpen, setBrowserAiOpen] = useState(false)
   const [browserAiPreferencesOpen, setBrowserAiPreferencesOpen] = useState(false)
   const [browserAiInitialRecord, setBrowserAiInitialRecord] = useState<BrowserAiTaskRecord | null>(null)
+  const [browserScreenshotOpen, setBrowserScreenshotOpen] = useState(false)
+
   const [activeView, setActiveView] = useState<'notes' | 'skills' | 'browser-tasks'>('notes')
   const [skillCreateRequest, setSkillCreateRequest] = useState(0)
   const [editorContextMenu, setEditorContextMenu] = useState<LearningEditorContextMenuState | null>(null)
@@ -108,6 +112,10 @@ export function LearningCenterPage() {
     if (typeof window === 'undefined') return 'split'
     const stored = window.localStorage.getItem(LEARNING_EDITOR_DISPLAY_MODE_STORAGE_KEY)
     return stored === 'edit' || stored === 'preview' ? stored : 'split'
+  })
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(LEARNING_AUTO_SAVE_STORAGE_KEY) === '1'
   })
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -305,6 +313,14 @@ export function LearningCenterPage() {
     setSkillCreateRequest(0)
   }, [])
 
+  const handleAutoSaveToggle = () => {
+    setAutoSaveEnabled((current) => {
+      const next = !current
+      window.localStorage.setItem(LEARNING_AUTO_SAVE_STORAGE_KEY, next ? '1' : '0')
+      return next
+    })
+  }
+
   const resetFrontmatterDialog = () => {
     setFrontmatterDialogOpen(false)
     setFrontmatterSubmitting(false)
@@ -415,9 +431,10 @@ export function LearningCenterPage() {
     if (!selectedNote || !hasUnsavedChanges) return
     const draft: LearningDraft = { title: editorTitle, categoryId: editorCategoryId || undefined, tags: normalizeTagInput(editorTags), status: editorStatus, contentMd: editorContent, savedAt: Date.now() }
     window.localStorage.setItem(`${LEARNING_DRAFT_STORAGE_PREFIX}${selectedNote.id}`, JSON.stringify(draft))
+    if (!autoSaveEnabled) return
     const timeout = window.setTimeout(() => void handleSave(), 1000)
     return () => window.clearTimeout(timeout)
-  }, [editorCategoryId, editorContent, editorStatus, editorTags, editorTitle, hasUnsavedChanges, selectedNote])
+  }, [autoSaveEnabled, editorCategoryId, editorContent, editorStatus, editorTags, editorTitle, hasUnsavedChanges, selectedNote])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -695,6 +712,7 @@ export function LearningCenterPage() {
             setBrowserAiOpen(true)
           }}
           onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
+          onOpenBrowserScreenshot={() => setBrowserScreenshotOpen(true)}
         />
 
         {activeView === 'skills' ? (
@@ -760,6 +778,7 @@ export function LearningCenterPage() {
               saveError={saveError}
               saveState={saveState}
               saving={saving}
+              autoSaveEnabled={autoSaveEnabled}
               selectedNote={selectedNote}
               selectedCategoryName={selectedCategoryName}
               leftSidebarCollapsed={leftSidebarCollapsed}
@@ -775,6 +794,7 @@ export function LearningCenterPage() {
               onToggleLeftSidebar={() => setLeftSidebarCollapsed((current) => !current)}
               onToggleRightSidebar={() => setRightSidebarCollapsed((current) => !current)}
               onOpenBrowserAiPreferences={() => setBrowserAiPreferencesOpen(true)}
+              onAutoSaveToggle={handleAutoSaveToggle}
               onSave={handleSave}
             />
 
@@ -869,6 +889,7 @@ export function LearningCenterPage() {
       <LearningBrowserAiDialog categories={categories} currentNote={selectedNote} skills={skills} notes={notes} initialRecord={browserAiInitialRecord} onClose={() => setBrowserAiOpen(false)} onSaved={handleBrowserAiSaved} open={browserAiOpen} />
 
       <LearningBrowserAiPreferencesDialog categories={categories} notes={notes} skills={skills} onClose={() => setBrowserAiPreferencesOpen(false)} open={browserAiPreferencesOpen} />
+      <BrowserScreenshotDialog open={browserScreenshotOpen} onClose={() => setBrowserScreenshotOpen(false)} />
     </div>
   )
 }

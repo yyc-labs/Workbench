@@ -15,7 +15,9 @@ import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
 import type { BrowserAiService } from '../browser-ai/browserAiService'
+import type { BrowserScreenshotService } from '../screenshot/screenshotService'
 import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent, TranscriptGatewayImportPayload } from '../../../shared/types'
+import type { BrowserScreenshotViewerPayload } from '../../../shared/types'
 
 export type RuntimeStateChangedPayload = {
   reason: string
@@ -35,6 +37,11 @@ export type RegisterIpcHandlersDependencies = {
   aiConnectionService: AiConnectionService
   aiGatewayService: AiGatewayService
   browserAiService: BrowserAiService
+  browserScreenshotService: BrowserScreenshotService
+  openBrowserScreenshotViewer: (payload: BrowserScreenshotViewerPayload) => Promise<boolean>
+  getBrowserScreenshotViewerData: () => BrowserScreenshotViewerPayload | null
+  toggleBrowserScreenshotWindow: () => Promise<boolean>
+  markBrowserScreenshotViewerReady: (senderId: number) => Promise<boolean>
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService

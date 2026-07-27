@@ -837,6 +837,64 @@ export interface BrowserAiConnectionTestResult {
   errorCode?: BrowserAiErrorCode
 }
 
+export type BrowserScreenshotStage = 'analyzing' | 'preparing' | 'capturing' | 'composing' | 'saving' | 'completed' | 'failed' | 'cancelled'
+
+export type BrowserScreenshotErrorCode = 'BROWSER_NOT_CONNECTED' | 'TARGET_NOT_FOUND' | 'PAGE_NOT_SUPPORTED' | 'CAPTURE_TIMEOUT' | 'IMAGE_TOO_LARGE' | 'CAPTURE_CANCELLED' | 'COMPOSE_FAILED' | 'RESTORE_WARNING' | 'TASK_ALREADY_RUNNING' | 'UNKNOWN'
+
+export type BrowserScreenshotFixedElementPolicy = 'keep' | 'hide' | 'keep-once'
+
+export interface BrowserScreenshotTarget {
+  id: string
+  title: string
+  url: string
+  isClosed: boolean
+  isActiveCandidate: boolean
+}
+
+export type BrowserScreenshotTargetsChanged = BrowserScreenshotTarget[]
+
+export interface BrowserScreenshotViewerPayload {
+  pngBase64: string
+  title: string
+  width?: number
+  height?: number
+}
+
+export interface BrowserScreenshotRequest {
+  targetId?: string
+  url?: string
+  fixedElementPolicy?: BrowserScreenshotFixedElementPolicy
+  forceSegmented?: boolean
+  maxHeight?: number
+  maxDurationMs?: number
+}
+
+export interface BrowserScreenshotProgress {
+  taskId: string
+  stage: BrowserScreenshotStage
+  message?: string
+  currentSegment?: number
+  totalSegments?: number
+  percent?: number
+  warning?: string
+  errorCode?: BrowserScreenshotErrorCode
+}
+
+export interface BrowserScreenshotResult {
+  taskId: string
+  status: 'completed' | 'failed' | 'cancelled'
+  pngBase64?: string
+  title?: string
+  url?: string
+  width?: number
+  height?: number
+  startedAt: number
+  completedAt: number
+  warnings: string[]
+  errorCode?: BrowserScreenshotErrorCode
+  errorMessage?: string
+}
+
 export interface BrowserAiTaskProgressEvent {
   taskId: string
   status: BrowserAiTaskStatus

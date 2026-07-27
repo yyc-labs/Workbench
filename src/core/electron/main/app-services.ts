@@ -1,5 +1,8 @@
 import path from 'node:path'
+import { app, dialog, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { projectIdFromPath } from '../../shared/rules'
 import type { AppConfig, Capability, TranscriptImportedEvent } from '../../shared/types'
 import { createAgentLogService } from './agent-logs/agent-log-service'
@@ -8,6 +11,7 @@ import { createAiConnectionService } from './ai-connection/ai-connection-service
 import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createAiGatewayService } from './ai-gateway/gateway-service'
 import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
+import { createBrowserScreenshotService } from './screenshot/screenshotService'
 import { createGitService } from './git/git-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
@@ -35,6 +39,7 @@ export type AppServicesOptions = {
   setCapability: (capability: Capability) => void
   getProcessManager: () => ProcessManager | null
   getMainWindow: () => BrowserWindow | null
+  getBrowserScreenshotWindow: () => BrowserWindow | null
   loadConfig: () => AppConfig
   updateConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>
   getUserDataPath: () => string
@@ -112,6 +117,40 @@ export function createAppServices(options: AppServicesOptions) {
       options.getMainWindow()?.webContents.send(IPC.BROWSER_AI_PROGRESS, event)
     },
   })
+  const browserScreenshotService = createBrowserScreenshotService({
+    browserAiService,
+    emitProgress: (event) => options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event),
+    emitTargetsChanged: (targets) => {
+      options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_TARGETS_CHANGED, targets)
+      options.getBrowserScreenshotWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_TARGETS_CHANGED, targets)
+    },
+    saveFile: async (pngBase64, suggestedName) => {
+      const saveOptions = {
+        defaultPath: suggestedName,
+        filters: [{ name: 'PNG image', extensions: ['png'] }],
+      }
+      const window = options.getMainWindow()
+      const result = window ? await dialog.showSaveDialog(window, saveOptions) : await dialog.showSaveDialog(saveOptions)
+      if (result.canceled || !result.filePath) return false
+      await writeFile(result.filePath, Buffer.from(pngBase64, 'base64'))
+      return true
+    },
+    openFile: async (pngBase64, suggestedName) => {
+      const directory = join(app.getPath('temp'), 'ide-electron-browser-screenshots')
+      await mkdir(directory, { recursive: true })
+      const filePath = join(directory, `${Date.now()}-${suggestedName.replace(/[\\/:*?"<>|]+/g, '_')}`)
+      await writeFile(filePath, Buffer.from(pngBase64, 'base64'))
+      const error = await shell.openPath(filePath)
+      if (error) throw new Error(error)
+      setTimeout(
+        () => {
+          void import('node:fs/promises').then(({ unlink }) => unlink(filePath).catch(() => undefined))
+        },
+        24 * 60 * 60 * 1_000,
+      )
+      return true
+    },
+  })
   const aiGatewayService = createAiGatewayService({
     getCapability: options.getCapability,
     isLogCaptureEnabled: () => options.loadConfig().agentLogs?.enabled !== false,
@@ -149,6 +188,7 @@ export function createAppServices(options: AppServicesOptions) {
     learningService,
     skillService,
     browserAiService,
+    browserScreenshotService,
     aiGatewayService,
     agentHookGateway,
     agentLogService,

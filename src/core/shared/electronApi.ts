@@ -30,6 +30,10 @@ import type {
   BrowserAiTaskRecord,
   BrowserAiTaskRecordSummary,
   BrowserAiTaskResult,
+  BrowserScreenshotProgress,
+  BrowserScreenshotRequest,
+  BrowserScreenshotResult,
+  BrowserScreenshotTarget,
   Capability,
   ClaudeBashrcConfig,
   CodexEnvironmentScope,
@@ -297,6 +301,19 @@ export interface BrowserAiElectronApi {
   deleteBrowserAiTaskRecord: (recordId: string) => Promise<boolean>
 }
 
+export interface BrowserScreenshotElectronApi {
+  listBrowserScreenshotTargets: () => Promise<BrowserScreenshotTarget[]>
+  startBrowserScreenshot: (request: BrowserScreenshotRequest) => Promise<BrowserScreenshotResult>
+  cancelBrowserScreenshot: (taskId: string) => Promise<boolean>
+  saveBrowserScreenshot: (pngBase64: string, suggestedName?: string) => Promise<boolean>
+  openBrowserScreenshotInDefaultApp: (pngBase64: string, suggestedName?: string) => Promise<boolean>
+  openBrowserScreenshotViewer: (payload: import('./types').BrowserScreenshotViewerPayload) => Promise<boolean>
+  getBrowserScreenshotViewerData: () => Promise<import('./types').BrowserScreenshotViewerPayload | null>
+  toggleBrowserScreenshotWindow: () => Promise<boolean>
+  markBrowserScreenshotViewerReady: () => Promise<boolean>
+  onBrowserScreenshotTargetsChanged: ElectronApiSubscription<import('./types').BrowserScreenshotTargetsChanged>
+}
+
 export interface RuntimeElectronApi {
   resizeTerminal: (id: string, cols: number, rows: number) => Promise<boolean>
   getCapability: () => Promise<Capability>
@@ -323,6 +340,8 @@ export interface SubscriptionElectronApi {
   onAgentHookEvent: ElectronApiSubscription<AgentHookEnvelope>
   onTranscriptImported: ElectronApiSubscription<TranscriptImportedEvent>
   onBrowserAiProgress: ElectronApiSubscription<import('./types').BrowserAiTaskProgressEvent>
+  onBrowserScreenshotProgress: ElectronApiSubscription<BrowserScreenshotProgress>
+  onBrowserScreenshotViewerData: ElectronApiSubscription<import('./types').BrowserScreenshotViewerPayload>
   onWindowState: ElectronApiSubscription<WindowStateEvent>
   onAppNavigate: ElectronApiSubscription<AppNavigateEvent>
   onCodeFocusSearch: ElectronApiSignalSubscription
@@ -331,4 +350,16 @@ export interface SubscriptionElectronApi {
   onGlobalThemeShortcut: ElectronApiSignalSubscription
 }
 
-export type ElectronApi = CoreElectronApi & AgentLogsElectronApi & AiConnectionElectronApi & AiGatewayElectronApi & GitElectronApi & ProjectFileElectronApi & TranscriptElectronApi & LearningElectronApi & SkillElectronApi & BrowserAiElectronApi & RuntimeElectronApi & SubscriptionElectronApi
+export type ElectronApi = CoreElectronApi &
+  AgentLogsElectronApi &
+  AiConnectionElectronApi &
+  AiGatewayElectronApi &
+  GitElectronApi &
+  ProjectFileElectronApi &
+  TranscriptElectronApi &
+  LearningElectronApi &
+  SkillElectronApi &
+  BrowserAiElectronApi &
+  BrowserScreenshotElectronApi &
+  RuntimeElectronApi &
+  SubscriptionElectronApi

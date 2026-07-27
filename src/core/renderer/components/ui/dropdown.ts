@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from 'react'
 
-export type DropdownAlign = "start" | "end"
+export type DropdownAlign = 'start' | 'end'
 
 export interface DropdownLayout {
   top: number
@@ -30,21 +30,11 @@ function clamp(value: number, min: number, max: number): number {
   return value
 }
 
-function isWithinLayer(
-  target: EventTarget | null,
-  triggerRef: React.RefObject<HTMLElement | null>,
-  contentRef: React.RefObject<HTMLElement | null>
-): boolean {
-  return target instanceof Node && Boolean(
-    triggerRef.current?.contains(target)
-    || contentRef.current?.contains(target)
-  )
+function isWithinLayer(target: EventTarget | null, triggerRef: React.RefObject<HTMLElement | null>, contentRef: React.RefObject<HTMLElement | null>): boolean {
+  return target instanceof Node && Boolean(triggerRef.current?.contains(target) || contentRef.current?.contains(target))
 }
 
-export function resolveDropdownFallbackRect(
-  triggerRef: React.RefObject<HTMLElement | null>,
-  gap = 8
-): DropdownLayout {
+export function resolveDropdownFallbackRect(triggerRef: React.RefObject<HTMLElement | null>, gap = 8): DropdownLayout {
   const rect = triggerRef.current?.getBoundingClientRect()
   return {
     top: rect ? rect.bottom + gap : 0,
@@ -54,23 +44,13 @@ export function resolveDropdownFallbackRect(
   }
 }
 
-export const dropdownSurfaceClassName = "fixed z-[10010] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]"
+export const dropdownSurfaceClassName = 'app-no-drag fixed z-[10010] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/96 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[22px]'
 
 export const dropdownSurfaceStyle = {
-  WebkitBackdropFilter: "saturate(170%) blur(22px)",
+  WebkitBackdropFilter: 'saturate(170%) blur(22px)',
 } satisfies React.CSSProperties
 
-export function useDropdownLayer({
-  open,
-  onClose,
-  triggerRef,
-  contentRef,
-  preferredMaxHeight = 240,
-  minWidth = 0,
-  gap = 8,
-  align = "start",
-  matchTriggerWidth = true,
-}: UseDropdownLayerOptions) {
+export function useDropdownLayer({ open, onClose, triggerRef, contentRef, preferredMaxHeight = 240, minWidth = 0, gap = 8, align = 'start', matchTriggerWidth = true }: UseDropdownLayerOptions) {
   const [layout, setLayout] = React.useState<DropdownLayout | null>(null)
 
   const updateLayout = React.useCallback(() => {
@@ -81,38 +61,22 @@ export function useDropdownLayer({
     const contentRect = contentRef.current?.getBoundingClientRect()
     const contentHeight = contentRect?.height ?? preferredMaxHeight
     const contentWidth = contentRect?.width ?? triggerRect.width
-    const width = Math.max(
-      minWidth,
-      matchTriggerWidth ? triggerRect.width : Math.max(triggerRect.width, contentWidth)
-    )
+    const width = Math.max(minWidth, matchTriggerWidth ? triggerRect.width : Math.max(triggerRect.width, contentWidth))
 
     const availableBelow = window.innerHeight - triggerRect.bottom - gap - VIEWPORT_PADDING
     const availableAbove = triggerRect.top - gap - VIEWPORT_PADDING
     const shouldOpenUpward = availableBelow < Math.min(140, contentHeight) && availableAbove > availableBelow
     const availableHeight = shouldOpenUpward ? availableAbove : availableBelow
-    const maxHeight = Math.max(
-      MIN_DROPDOWN_HEIGHT,
-      Math.min(preferredMaxHeight, Math.max(availableHeight, MIN_DROPDOWN_HEIGHT))
-    )
+    const maxHeight = Math.max(MIN_DROPDOWN_HEIGHT, Math.min(preferredMaxHeight, Math.max(availableHeight, MIN_DROPDOWN_HEIGHT)))
     const renderedHeight = Math.min(contentHeight, maxHeight)
-    const unclampedLeft = align === "end" ? triggerRect.right - width : triggerRect.left
+    const unclampedLeft = align === 'end' ? triggerRect.right - width : triggerRect.left
     const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - width)
     const left = clamp(unclampedLeft, VIEWPORT_PADDING, maxLeft)
     const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - VIEWPORT_PADDING - renderedHeight)
-    const top = clamp(
-      shouldOpenUpward ? triggerRect.top - gap - renderedHeight : triggerRect.bottom + gap,
-      VIEWPORT_PADDING,
-      maxTop
-    )
+    const top = clamp(shouldOpenUpward ? triggerRect.top - gap - renderedHeight : triggerRect.bottom + gap, VIEWPORT_PADDING, maxTop)
 
     setLayout((previous) => {
-      if (
-        previous
-        && previous.top === top
-        && previous.left === left
-        && previous.width === width
-        && previous.maxHeight === maxHeight
-      ) {
+      if (previous && previous.top === top && previous.left === left && previous.width === width && previous.maxHeight === maxHeight) {
         return previous
       }
 
@@ -144,7 +108,7 @@ export function useDropdownLayer({
     }
 
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose()
+      if (event.key === 'Escape') onClose()
     }
 
     const handleFocusIn = (event: FocusEvent) => {
@@ -155,17 +119,17 @@ export function useDropdownLayer({
       updateLayout()
     }
 
-    window.addEventListener("mousedown", handlePointerDown)
-    window.addEventListener("keydown", handleEscape)
-    window.addEventListener("focusin", handleFocusIn)
-    window.addEventListener("resize", handleLayout)
-    window.addEventListener("scroll", handleLayout, true)
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleEscape)
+    window.addEventListener('focusin', handleFocusIn)
+    window.addEventListener('resize', handleLayout)
+    window.addEventListener('scroll', handleLayout, true)
     return () => {
-      window.removeEventListener("mousedown", handlePointerDown)
-      window.removeEventListener("keydown", handleEscape)
-      window.removeEventListener("focusin", handleFocusIn)
-      window.removeEventListener("resize", handleLayout)
-      window.removeEventListener("scroll", handleLayout, true)
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleEscape)
+      window.removeEventListener('focusin', handleFocusIn)
+      window.removeEventListener('resize', handleLayout)
+      window.removeEventListener('scroll', handleLayout, true)
     }
   }, [contentRef, onClose, open, triggerRef, updateLayout])
 
@@ -173,7 +137,7 @@ export function useDropdownLayer({
     if (!open) return
     if (!triggerRef.current) return
     if (!contentRef.current) return
-    if (typeof ResizeObserver === "undefined") return
+    if (typeof ResizeObserver === 'undefined') return
 
     const observer = new ResizeObserver(() => {
       updateLayout()

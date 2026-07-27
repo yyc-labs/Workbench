@@ -1,5 +1,5 @@
-import { app, BrowserWindow, nativeTheme, screen } from 'electron'
-import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
+import { app, BrowserWindow, nativeTheme, screen, type Rectangle } from 'electron'
+import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
 import { flushAiCommitRegistry } from './ai-commit-registry'
 import { registerAppLifecycle, runAppCleanupSteps, runAppStartupSteps } from './app-lifecycle'
 import { createAppServices } from './app-services'
@@ -14,6 +14,8 @@ import { ProcessManager } from './runner'
 import { TranscriptCaptureController } from './transcript-capture-controller'
 import { type AppTrayController, createAppTray } from './tray'
 import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
+import { createBrowserScreenshotWindow, BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_WINDOW_HEIGHT, BROWSER_SCREENSHOT_WINDOW_WIDTH } from './window/createBrowserScreenshotWindow'
+import { createBrowserScreenshotViewerWindow } from './window/createBrowserScreenshotViewerWindow'
 import { applyWindowBackground, createWindow } from './window/createWindow'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
 import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
@@ -21,6 +23,14 @@ import { ensureWindowVisible } from './window/windowFocus'
 
 let mainWindow: BrowserWindow | null = null
 let transcriptCaptureWindow: BrowserWindow | null = null
+let browserScreenshotWindow: BrowserWindow | null = null
+let browserScreenshotWindowPromise: Promise<void> | null = null
+let browserScreenshotViewerWindow: BrowserWindow | null = null
+let latestBrowserScreenshotViewerPayload: BrowserScreenshotViewerPayload | null = null
+let browserScreenshotWindowCollapsed = false
+let browserScreenshotWindowExpandedBounds: Rectangle | null = null
+let browserScreenshotWindowAdjusting = false
+let browserScreenshotDockTimer: ReturnType<typeof setTimeout> | null = null
 const transcriptCaptureController = new TranscriptCaptureController()
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
@@ -40,6 +50,7 @@ const services = createAppServices({
   },
   getProcessManager: () => processManager,
   getMainWindow: () => mainWindow,
+  getBrowserScreenshotWindow: () => browserScreenshotWindow,
   loadConfig,
   updateConfig,
   getUserDataPath: () => app.getPath('userData'),
@@ -48,7 +59,7 @@ const services = createAppServices({
   emitRuntimeStateChanged,
   emitTranscriptImported,
 })
-const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, aiGatewayService, agentHookGateway, agentLogService } = services
+const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -100,7 +111,7 @@ function positionTranscriptCaptureWindow(window: BrowserWindow): void {
   const cursorPoint = screen.getCursorScreenPoint()
   const display = screen.getDisplayNearestPoint(cursorPoint)
   const x = Math.round(display.workArea.x + (display.workArea.width - TRANSCRIPT_CAPTURE_WINDOW_WIDTH) / 2)
-  const y = Math.round(display.workArea.y + Math.max(48, (display.workArea.height - TRANSCRIPT_CAPTURE_WINDOW_HEIGHT) / 4))
+  const y = Math.round(display.workArea.y + (display.workArea.height - TRANSCRIPT_CAPTURE_WINDOW_HEIGHT) / 2)
   window.webContents.setZoomFactor(1)
   window.setBounds({
     x,
@@ -198,6 +209,166 @@ function sendGlobalThemeShortcut(): void {
   }
 
   mainWindow?.webContents.send(IPC.GLOBAL_THEME_SHORTCUT)
+}
+
+function sendGlobalBrowserScreenshotShortcut(): void {
+  void showBrowserScreenshotWindow()
+}
+
+function positionBrowserScreenshotWindow(window: BrowserWindow): void {
+  const cursorPoint = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursorPoint)
+  const x = Math.round(display.workArea.x + (display.workArea.width - BROWSER_SCREENSHOT_WINDOW_WIDTH) / 2)
+  const y = Math.round(display.workArea.y + (display.workArea.height - BROWSER_SCREENSHOT_WINDOW_HEIGHT) / 2)
+  window.setBounds({ x, y, width: BROWSER_SCREENSHOT_WINDOW_WIDTH, height: BROWSER_SCREENSHOT_WINDOW_HEIGHT })
+}
+
+function expandBrowserScreenshotWindow(): boolean {
+  if (!browserScreenshotWindow || browserScreenshotWindow.isDestroyed()) return false
+  if (!browserScreenshotWindowCollapsed) {
+    browserScreenshotWindow.show()
+    browserScreenshotWindow.focus()
+    return true
+  }
+
+  const bounds = browserScreenshotWindowExpandedBounds
+  browserScreenshotWindowAdjusting = true
+  browserScreenshotWindow.setMinimumSize(BROWSER_SCREENSHOT_WINDOW_WIDTH, BROWSER_SCREENSHOT_WINDOW_HEIGHT)
+  browserScreenshotWindow.setMaximumSize(BROWSER_SCREENSHOT_WINDOW_WIDTH, BROWSER_SCREENSHOT_WINDOW_HEIGHT)
+  if (bounds) {
+    const display = screen.getDisplayMatching(bounds)
+    const workArea = display.workArea
+    const x = bounds.x <= workArea.x + 12 ? workArea.x + 24 : workArea.x + workArea.width - bounds.width - 24
+    browserScreenshotWindow.setBounds({ ...bounds, x })
+  }
+  browserScreenshotWindowCollapsed = false
+  browserScreenshotWindowAdjusting = false
+  browserScreenshotWindow.show()
+  browserScreenshotWindow.focus()
+  return true
+}
+
+function collapseBrowserScreenshotWindow(window: BrowserWindow): void {
+  if (browserScreenshotWindowAdjusting || browserScreenshotWindowCollapsed || window.isDestroyed()) return
+  const bounds = window.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const workArea = display.workArea
+  const nearLeft = bounds.x <= workArea.x + 12
+  const nearRight = bounds.x + bounds.width >= workArea.x + workArea.width - 12
+  if (!nearLeft && !nearRight) return
+
+  browserScreenshotWindowExpandedBounds = bounds
+  const x = nearLeft ? workArea.x : workArea.x + workArea.width - BROWSER_SCREENSHOT_DOCK_SIZE
+  const y = Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - BROWSER_SCREENSHOT_DOCK_SIZE)
+  browserScreenshotWindowAdjusting = true
+  window.setMinimumSize(BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_DOCK_SIZE)
+  window.setMaximumSize(BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_DOCK_SIZE)
+  window.setBounds({ x, y, width: BROWSER_SCREENSHOT_DOCK_SIZE, height: BROWSER_SCREENSHOT_DOCK_SIZE })
+  browserScreenshotWindowCollapsed = true
+  browserScreenshotWindowAdjusting = false
+}
+
+function snapCollapsedBrowserScreenshotWindow(window: BrowserWindow): void {
+  if (browserScreenshotWindowAdjusting || !browserScreenshotWindowCollapsed || window.isDestroyed()) return
+  const bounds = window.getBounds()
+  const workArea = screen.getDisplayMatching(bounds).workArea
+  const attachRight = bounds.x + bounds.width / 2 >= workArea.x + workArea.width / 2
+  const x = attachRight ? workArea.x + workArea.width - BROWSER_SCREENSHOT_DOCK_SIZE : workArea.x
+  const y = Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - BROWSER_SCREENSHOT_DOCK_SIZE)
+  browserScreenshotWindowAdjusting = true
+  window.setBounds({ x, y, width: BROWSER_SCREENSHOT_DOCK_SIZE, height: BROWSER_SCREENSHOT_DOCK_SIZE })
+  browserScreenshotWindowAdjusting = false
+}
+
+function scheduleBrowserScreenshotDockCheck(window: BrowserWindow): void {
+  if (browserScreenshotDockTimer !== null) clearTimeout(browserScreenshotDockTimer)
+  browserScreenshotDockTimer = setTimeout(() => {
+    browserScreenshotDockTimer = null
+    if (browserScreenshotWindowCollapsed) snapCollapsedBrowserScreenshotWindow(window)
+    else collapseBrowserScreenshotWindow(window)
+  }, 260)
+}
+
+function toggleBrowserScreenshotWindow(): Promise<boolean> {
+  return Promise.resolve(expandBrowserScreenshotWindow())
+}
+
+function markBrowserScreenshotViewerReady(senderId: number): Promise<boolean> {
+  if (!browserScreenshotViewerWindow || browserScreenshotViewerWindow.isDestroyed() || browserScreenshotViewerWindow.webContents.id !== senderId) return Promise.resolve(false)
+  browserScreenshotViewerWindow.show()
+  browserScreenshotViewerWindow.focus()
+  return Promise.resolve(true)
+}
+
+async function showBrowserScreenshotWindow(): Promise<void> {
+  if (browserScreenshotWindow && !browserScreenshotWindow.isDestroyed()) {
+    if (browserScreenshotWindowCollapsed) {
+      expandBrowserScreenshotWindow()
+      return
+    }
+    positionBrowserScreenshotWindow(browserScreenshotWindow)
+    browserScreenshotWindow.show()
+    browserScreenshotWindow.focus()
+    return
+  }
+
+  if (browserScreenshotWindowPromise) return browserScreenshotWindowPromise
+
+  browserScreenshotWindowPromise = (async () => {
+    try {
+      await browserAiService.ensureBrowserConnection()
+    } catch (error) {
+      console.warn('[browser-screenshot] Failed to prepare the browser connection.', error)
+    }
+
+    const config = loadConfig()
+    browserScreenshotWindow = createBrowserScreenshotWindow({ theme: config.theme, shouldUseDarkColors: nativeTheme.shouldUseDarkColors })
+    browserScreenshotWindow.on('move', () => {
+      if (browserScreenshotWindow) scheduleBrowserScreenshotDockCheck(browserScreenshotWindow)
+    })
+    browserScreenshotWindow.once('ready-to-show', () => {
+      if (!browserScreenshotWindow || browserScreenshotWindow.isDestroyed()) return
+      positionBrowserScreenshotWindow(browserScreenshotWindow)
+      browserScreenshotWindow.show()
+      browserScreenshotWindow.focus()
+    })
+    browserScreenshotWindow.on('closed', () => {
+      if (browserScreenshotDockTimer !== null) clearTimeout(browserScreenshotDockTimer)
+      browserScreenshotDockTimer = null
+      browserScreenshotWindow = null
+      browserScreenshotWindowCollapsed = false
+      browserScreenshotWindowExpandedBounds = null
+    })
+  })().finally(() => {
+    browserScreenshotWindowPromise = null
+  })
+
+  return browserScreenshotWindowPromise
+}
+
+function openBrowserScreenshotViewer(payload: BrowserScreenshotViewerPayload): Promise<boolean> {
+  latestBrowserScreenshotViewerPayload = payload
+  if (browserScreenshotWindow && !browserScreenshotWindow.isDestroyed()) browserScreenshotWindow.hide()
+  if (browserScreenshotViewerWindow && !browserScreenshotViewerWindow.isDestroyed()) {
+    browserScreenshotViewerWindow.hide()
+    browserScreenshotViewerWindow.webContents.send(IPC.BROWSER_SCREENSHOT_VIEWER_DATA, payload)
+    return Promise.resolve(true)
+  }
+
+  const config = loadConfig()
+  const viewerWindow = createBrowserScreenshotViewerWindow({ theme: config.theme, shouldUseDarkColors: nativeTheme.shouldUseDarkColors })
+  browserScreenshotViewerWindow = viewerWindow
+  viewerWindow.webContents.once('did-finish-load', () => {
+    if (!viewerWindow.isDestroyed()) viewerWindow.webContents.send(IPC.BROWSER_SCREENSHOT_VIEWER_DATA, payload)
+  })
+  viewerWindow.on('closed', () => {
+    if (browserScreenshotViewerWindow === viewerWindow) browserScreenshotViewerWindow = null
+    if (browserScreenshotWindow && !browserScreenshotWindow.isDestroyed()) {
+      browserScreenshotWindow.show()
+      browserScreenshotWindow.focus()
+    }
+  })
+  return Promise.resolve(true)
 }
 
 function beginTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
@@ -325,6 +496,7 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
     { name: 'ai-gateway', run: () => aiGatewayService.shutdown() },
     { name: 'transcript-share', run: () => transcriptShareService.shutdown() },
     { name: 'browser-ai', run: () => browserAiService.cleanupOnBeforeQuit() },
+    { name: 'browser-screenshot', run: () => browserScreenshotService.cleanupOnBeforeQuit() },
   ])
 
   setTimeout(() => {
@@ -430,6 +602,11 @@ app.whenReady().then(async () => {
               aiConnectionService,
               aiGatewayService,
               browserAiService,
+              browserScreenshotService,
+              openBrowserScreenshotViewer,
+              getBrowserScreenshotViewerData: () => latestBrowserScreenshotViewerPayload,
+              toggleBrowserScreenshotWindow,
+              markBrowserScreenshotViewerReady,
               agentHookGateway,
               gitService,
               runtimeService,
@@ -470,7 +647,7 @@ app.whenReady().then(async () => {
   }
 
   syncWindowsLaunchOnLogin(bootConfig)
-  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut)
+  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut, sendGlobalBrowserScreenshotShortcut)
   agentHookGateway.start()
   void aiGatewayService.start(false).catch((error) => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)

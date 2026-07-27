@@ -1,12 +1,9 @@
 import { mkdir } from 'fs/promises'
 import { createServer } from 'net'
 import { spawn, type ChildProcess } from 'child_process'
-import {
-  buildEdgeLaunchArgs,
-  resolveBrowserAiProfilePath,
-  resolveEdgeExecutablePath,
-} from './browserAiConfig'
+import { buildEdgeLaunchArgs, resolveBrowserAiProfilePath, resolveEdgeExecutablePath } from './browserAiConfig'
 import type { BrowserAiConfig } from '../../../shared/types'
+import { probeCdp } from './cdpConnection'
 
 export async function findFreeLoopbackPort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -65,6 +62,13 @@ export function createEdgeLauncher(): EdgeLauncher {
         return { port, profilePath }
       }
 
+      if (port && profilePath && (await probeCdp('127.0.0.1', port))) {
+        return { port, profilePath }
+      }
+
+      port = undefined
+      profilePath = undefined
+
       const executablePath = resolveEdgeExecutablePath(config)
       if (!executablePath) {
         throw new Error('Microsoft Edge executable was not found.')
@@ -85,7 +89,6 @@ export function createEdgeLauncher(): EdgeLauncher {
       nextChild.once('exit', () => {
         if (child === nextChild) {
           child = null
-          port = undefined
         }
       })
       return { port: nextPort, profilePath: nextProfilePath }
@@ -108,4 +111,3 @@ export function createEdgeLauncher(): EdgeLauncher {
     getProfilePath: () => profilePath,
   }
 }
-

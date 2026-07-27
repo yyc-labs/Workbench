@@ -52,6 +52,7 @@ export interface BrowserAiService {
   saveTaskRecord: (payload: BrowserAiSaveTaskRecordPayload) => Promise<BrowserAiTaskRecord>
   deleteTaskRecord: (recordId: string) => Promise<boolean>
   cleanupOnBeforeQuit: () => Promise<void>
+  ensureBrowserConnection: () => Promise<{ browser: Browser; context: BrowserContext }>
 }
 
 const siteAdapters: Record<BrowserAiSite, BrowserAiSiteAdapter> = {
@@ -121,6 +122,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
   let profilePath = ''
   let taskSteps: BrowserAiTaskStep[] = []
   let currentStepId: BrowserAiTaskStep['id'] | undefined
+  let ensureConnectionPromise: Promise<void> | null = null
 
   const getConfig = () => deps.repository.getConfig()
 
@@ -257,6 +259,8 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
       return
     }
 
+    if (ensureConnectionPromise) return ensureConnectionPromise
+
     const config = getConfig()
     if (!config.enabled) {
       throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'Browser AI is disabled.')
@@ -265,43 +269,49 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     connectionErrorCode = undefined
     connectionErrorMessage = undefined
 
-    try {
-      if (config.mode === 'managed-edge') {
-        const launched = await launcher.start(config, deps.getUserDataPath())
-        cdpPort = launched.port
-        profilePath = launched.profilePath
-      } else {
-        if (!config.cdpPort) {
-          throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'An external CDP port is required.')
+    ensureConnectionPromise = (async () => {
+      try {
+        if (config.mode === 'managed-edge') {
+          const launched = await launcher.start(config, deps.getUserDataPath())
+          cdpPort = launched.port
+          profilePath = launched.profilePath
+        } else {
+          if (!config.cdpPort) {
+            throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'An external CDP port is required.')
+          }
+          cdpPort = config.cdpPort
+          profilePath = ''
         }
-        cdpPort = config.cdpPort
-        profilePath = ''
-      }
 
-      const connected = await connectOverCdp(config.cdpHost, cdpPort, { attempts: 40, timeoutMs: 1_000 })
-      browser = connected.browser
-      context = connected.context
-      const connectedBrowser = connected.browser
-      connectedBrowser.once('disconnected', () => {
-        if (browser !== connectedBrowser) return
-        browser = null
-        context = null
-        cdpPort = undefined
-        connection = 'disconnected'
-        if (activeTaskId) {
-          connectionErrorCode = 'BROWSER_DISCONNECTED'
-          connectionErrorMessage = errorMessage('BROWSER_DISCONNECTED')
-        }
-      })
-      connection = 'connected'
-    } catch (error) {
-      const classified = classifyBrowserAiError(error)
-      connection = 'error'
-      connectionErrorCode = classified.code
-      connectionErrorMessage = classified.message
-      if (config.mode === 'managed-edge') await launcher.stop()
-      throw classified
-    }
+        const connected = await connectOverCdp(config.cdpHost, cdpPort, { attempts: 40, timeoutMs: 1_000 })
+        browser = connected.browser
+        context = connected.context
+        const connectedBrowser = connected.browser
+        connectedBrowser.once('disconnected', () => {
+          if (browser !== connectedBrowser) return
+          browser = null
+          context = null
+          cdpPort = undefined
+          connection = 'disconnected'
+          if (activeTaskId) {
+            connectionErrorCode = 'BROWSER_DISCONNECTED'
+            connectionErrorMessage = errorMessage('BROWSER_DISCONNECTED')
+          }
+        })
+        connection = 'connected'
+      } catch (error) {
+        const classified = classifyBrowserAiError(error)
+        connection = 'error'
+        connectionErrorCode = classified.code
+        connectionErrorMessage = classified.message
+        if (config.mode === 'managed-edge') await launcher.stop()
+        throw classified
+      } finally {
+        ensureConnectionPromise = null
+      }
+    })()
+
+    return ensureConnectionPromise
   }
 
   const navigateAndDetectLogin = async (page: Page, adapter: BrowserAiSiteAdapter): Promise<'logged-in' | 'needs-login'> => {
@@ -359,6 +369,14 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
 
   return {
     getSnapshot,
+
+    ensureBrowserConnection: async () => {
+      await ensureConnected()
+      if (!browser || !context) {
+        throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'The browser connection is not available.')
+      }
+      return { browser, context }
+    },
 
     saveConfig: async (nextConfig) => {
       const currentConfig = getConfig()

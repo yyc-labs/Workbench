@@ -1,10 +1,6 @@
 import { ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
-import type {
-  AgentHookEnvelope,
-  BrowserAiTaskProgressEvent,
-  TranscriptImportedEvent,
-} from '../../shared/types'
+import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, TranscriptImportedEvent } from '../../shared/types'
 
 type AiCommitOutputData = { projectId: string; data: string }
 type AiCommitStatusData = { projectId: string; status: 'running' | 'success' | 'error' }
@@ -48,46 +44,40 @@ const subscribeAiCommitStatus = createFanoutSubscription<AiCommitStatusData>(IPC
 
 export function createSubscriptionApi() {
   return {
-    onProcessOutput: (cb: (data: { projectId: string; data: string }) => void) =>
-      subscribeIpcEvent(IPC.PROCESS_OUTPUT, cb),
+    onProcessOutput: (cb: (data: { projectId: string; data: string }) => void) => subscribeIpcEvent(IPC.PROCESS_OUTPUT, cb),
 
-    onProcessStatus: (cb: (data: { projectId: string; status: string }) => void) =>
-      subscribeIpcEvent(IPC.PROCESS_STATUS, cb),
+    onProcessStatus: (cb: (data: { projectId: string; status: string }) => void) => subscribeIpcEvent(IPC.PROCESS_STATUS, cb),
 
-    onProcessExit: (cb: (data: { projectId: string; code: number | null }) => void) =>
-      subscribeIpcEvent(IPC.PROCESS_EXIT, cb),
+    onProcessExit: (cb: (data: { projectId: string; code: number | null }) => void) => subscribeIpcEvent(IPC.PROCESS_EXIT, cb),
 
-    onRuntimeStateChanged: (
-      cb: (data: { reason: string; projectId?: string; sessionName?: string }) => void
-    ) => subscribeIpcEvent(IPC.RUNTIME_STATE_CHANGED, cb),
+    onRuntimeStateChanged: (cb: (data: { reason: string; projectId?: string; sessionName?: string }) => void) => subscribeIpcEvent(IPC.RUNTIME_STATE_CHANGED, cb),
 
     onAiCommitOutput: (cb: (data: AiCommitOutputData) => void) => subscribeAiCommitOutput(cb),
 
     onAiCommitStatus: (cb: (data: AiCommitStatusData) => void) => subscribeAiCommitStatus(cb),
 
-    onAgentHookEvent: (cb: (data: AgentHookEnvelope) => void) =>
-      subscribeIpcEvent(IPC.AGENT_HOOK_EVENT, cb),
+    onAgentHookEvent: (cb: (data: AgentHookEnvelope) => void) => subscribeIpcEvent(IPC.AGENT_HOOK_EVENT, cb),
 
-    onTranscriptImported: (cb: (data: TranscriptImportedEvent) => void) =>
-      subscribeIpcEvent(IPC.TRANSCRIPT_IMPORTED, cb),
+    onTranscriptImported: (cb: (data: TranscriptImportedEvent) => void) => subscribeIpcEvent(IPC.TRANSCRIPT_IMPORTED, cb),
 
-    onBrowserAiProgress: (cb: (data: BrowserAiTaskProgressEvent) => void) =>
-      subscribeIpcEvent(IPC.BROWSER_AI_PROGRESS, cb),
+    onBrowserAiProgress: (cb: (data: BrowserAiTaskProgressEvent) => void) => subscribeIpcEvent(IPC.BROWSER_AI_PROGRESS, cb),
 
-    onWindowState: (cb: (data: { isMaximized: boolean }) => void) =>
-      subscribeIpcEvent(IPC.WINDOW_STATE, cb),
+    onBrowserScreenshotProgress: (cb: (data: BrowserScreenshotProgress) => void) => subscribeIpcEvent(IPC.BROWSER_SCREENSHOT_PROGRESS, cb),
 
-    onAppNavigate: (cb: (data: { path: string }) => void) =>
-      subscribeIpcEvent(IPC.APP_NAVIGATE, cb),
+    onBrowserScreenshotTargetsChanged: (cb: (data: BrowserScreenshotTargetsChanged) => void) => subscribeIpcEvent(IPC.BROWSER_SCREENSHOT_TARGETS_CHANGED, cb),
+
+    onBrowserScreenshotViewerData: (cb: (data: BrowserScreenshotViewerPayload) => void) => subscribeIpcEvent(IPC.BROWSER_SCREENSHOT_VIEWER_DATA, cb),
+
+    onWindowState: (cb: (data: { isMaximized: boolean }) => void) => subscribeIpcEvent(IPC.WINDOW_STATE, cb),
+
+    onAppNavigate: (cb: (data: { path: string }) => void) => subscribeIpcEvent(IPC.APP_NAVIGATE, cb),
 
     onCodeFocusSearch: (cb: () => void) => subscribeIpcSignal(IPC.CODE_FOCUS_SEARCH, cb),
 
     onCodeToggleViewMode: (cb: () => void) => subscribeIpcSignal(IPC.CODE_TOGGLE_VIEW_MODE, cb),
 
-    onGlobalHomeShortcut: (cb: () => void) =>
-      subscribeIpcSignal(IPC.GLOBAL_HOME_SHORTCUT, cb),
+    onGlobalHomeShortcut: (cb: () => void) => subscribeIpcSignal(IPC.GLOBAL_HOME_SHORTCUT, cb),
 
-    onGlobalThemeShortcut: (cb: () => void) =>
-      subscribeIpcSignal(IPC.GLOBAL_THEME_SHORTCUT, cb),
+    onGlobalThemeShortcut: (cb: () => void) => subscribeIpcSignal(IPC.GLOBAL_THEME_SHORTCUT, cb),
   }
 }

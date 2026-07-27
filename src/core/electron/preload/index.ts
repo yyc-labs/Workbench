@@ -4,6 +4,7 @@ import { createAgentLogsInvokeApi } from './invokeApi.agentLogs'
 import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
 import { createAiConnectionInvokeApi } from './invokeApi.aiConnection'
 import { createBrowserAiInvokeApi } from './invokeApi.browserAi'
+import { createBrowserScreenshotInvokeApi } from './invokeApi.browserScreenshot'
 import { createCoreInvokeApi } from './invokeApi.core'
 import { createGitInvokeApi } from './invokeApi.git'
 import { createLearningInvokeApi } from './invokeApi.learning'
@@ -19,6 +20,7 @@ const api = {
   ...createAiGatewayInvokeApi(),
   ...createAiConnectionInvokeApi(),
   ...createBrowserAiInvokeApi(),
+  ...createBrowserScreenshotInvokeApi(),
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
   ...createTranscriptInvokeApi(),

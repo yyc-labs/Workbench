@@ -1,7 +1,7 @@
 import { useMemo, type ChangeEvent, type KeyboardEvent, type MouseEvent, type RefObject, type SyntheticEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, PanelLeft, PanelRight, Save, Settings2 } from 'lucide-react'
+import { FileText, PanelLeft, PanelRight, RefreshCw, Save, Settings2 } from 'lucide-react'
 import type { LearningNote } from '../../../../shared/types'
 import { Button, type ButtonProps } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
@@ -31,6 +31,7 @@ type LearningEditorPanelProps = {
   saveError: string | null
   saveState: SaveState
   saving: boolean
+  autoSaveEnabled: boolean
   selectedNote: LearningNote | null
   onEditorChange: (event: ChangeEvent<HTMLTextAreaElement>) => void
   onEditorContextMenu: (event: MouseEvent<HTMLTextAreaElement>) => void
@@ -43,6 +44,7 @@ type LearningEditorPanelProps = {
   onToggleLeftSidebar: () => void
   onToggleRightSidebar: () => void
   onOpenBrowserAiPreferences: () => void
+  onAutoSaveToggle: () => void
   onSave: () => void | Promise<void>
 }
 
@@ -63,6 +65,7 @@ export function LearningEditorPanel({
   saveError,
   saveState,
   saving,
+  autoSaveEnabled,
   selectedNote,
   onEditorChange,
   onEditorContextMenu,
@@ -75,6 +78,7 @@ export function LearningEditorPanel({
   onToggleLeftSidebar,
   onToggleRightSidebar,
   onOpenBrowserAiPreferences,
+  onAutoSaveToggle,
   onSave,
 }: LearningEditorPanelProps) {
   const { t } = useI18n()
@@ -150,6 +154,19 @@ export function LearningEditorPanel({
               </Button>
               <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={onOpenBrowserAiPreferences} aria-label={t('learning.toolbar.browserAiPreferences')} title={t('learning.toolbar.browserAiPreferences')}>
                 <Settings2 className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant={autoSaveEnabled ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 gap-1.5 px-2.5"
+                onClick={onAutoSaveToggle}
+                aria-pressed={autoSaveEnabled}
+                aria-label={t(autoSaveEnabled ? 'learning.editor.autoSaveOn' : 'learning.editor.autoSaveOff')}
+                title={t(autoSaveEnabled ? 'learning.editor.autoSaveOn' : 'learning.editor.autoSaveOff')}
+              >
+                <RefreshCw className={autoSaveEnabled ? 'h-4 w-4 text-[color:var(--color-primary)]' : 'h-4 w-4'} />
+                <span className="hidden sm:inline">{t('learning.editor.autoSave')}</span>
               </Button>
               <div className="quiet-control inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)]/80 bg-[color:var(--color-accent)]/55 p-1">
                 <Button type="button" variant="ghost" size="sm" className={editorDisplayMode === 'edit' ? 'bg-[color:var(--color-card)] text-[color:var(--color-foreground)] shadow-sm' : 'text-[color:var(--color-muted-foreground)]'} onClick={() => onEditorDisplayModeChange('edit')}>

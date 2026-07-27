@@ -1,4 +1,5 @@
-import { Save, Trash2 } from 'lucide-react'
+import { Check, Copy, Save, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import type { Skill, SkillCategory } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
@@ -7,6 +8,7 @@ import { Input } from '../../../components/ui/input'
 import { Select } from '../../../components/ui/select'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n'
+import { copyTextToClipboard } from '../../code/code.clipboard'
 import type { SkillEditorState } from './skillTypes'
 
 type SkillEditorPanelProps = {
@@ -24,6 +26,16 @@ type SkillEditorPanelProps = {
 
 export function SkillEditorPanel({ skill, categories, editor, hasUnsavedChanges, saving, error, onChange, onSave, onDelete, onCreate }: SkillEditorPanelProps) {
   const { t } = useI18n()
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    if (!editor.contentMd.trim()) return
+    const didCopy = await copyTextToClipboard(editor.contentMd)
+    if (!didCopy) return
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1_200)
+  }
+
   if (!skill)
     return (
       <Card className="surface-card flex h-full min-h-0 items-center justify-center rounded-[18px] border-[color:var(--color-border)]/80 bg-[color:var(--color-card)]/92 p-8 text-center shadow-none">
@@ -80,7 +92,22 @@ export function SkillEditorPanel({ skill, categories, editor, hasUnsavedChanges,
           {t('learning.skills.enabled')}
         </label>
         <label className="block space-y-1.5">
-          <span className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.skills.contentLabel')}</span>
+          <span className="flex items-center justify-between gap-2 text-xs font-medium text-[color:var(--color-muted-foreground)]">
+            <span>{t('learning.skills.contentLabel')}</span>
+            <Button
+              type="button"
+              variant={copied ? 'default' : 'outline'}
+              size="sm"
+              className={`h-8 gap-1.5 px-3 transition-all duration-300 ${copied ? 'learning-skill-copy-success shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]' : ''}`}
+              onClick={() => void handleCopy()}
+              disabled={!editor.contentMd.trim()}
+              title={copied ? t('learning.skills.contentCopied') : t('learning.skills.copyContent')}
+              aria-label={copied ? t('learning.skills.contentCopied') : t('learning.skills.copyContent')}
+            >
+              {copied ? <Check className="animate-pulse" /> : <Copy />}
+              {copied ? t('learning.skills.contentCopied') : t('learning.skills.copyContent')}
+            </Button>
+          </span>
           <Textarea className="min-h-[min(52vh,520px)] font-mono text-xs leading-6" value={editor.contentMd} onChange={(event) => onChange({ contentMd: event.target.value })} placeholder={t('learning.skills.contentPlaceholder')} />
         </label>
         {error ? <p className="text-sm text-[color:var(--color-destructive)]">{error}</p> : null}

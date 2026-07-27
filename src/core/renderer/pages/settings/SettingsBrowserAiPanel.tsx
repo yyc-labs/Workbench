@@ -37,6 +37,11 @@ export function SettingsBrowserAiPanel() {
   }, [loadBrowserAi])
 
   useEffect(() => {
+    const refreshTimer = window.setInterval(() => void loadBrowserAi(), 2000)
+    return () => window.clearInterval(refreshTimer)
+  }, [loadBrowserAi])
+
+  useEffect(() => {
     if (snapshot && !draft) setDraft(snapshot.config)
   }, [draft, snapshot])
 
@@ -49,14 +54,14 @@ export function SettingsBrowserAiPanel() {
   }, [snapshot, t])
 
   const updateDraft = <K extends keyof BrowserAiConfig>(key: K, value: BrowserAiConfig[K]) => {
-    setDraft((current) => current ? { ...current, [key]: value } : current)
+    setDraft((current) => (current ? { ...current, [key]: value } : current))
     setHint(null)
   }
 
   const updateActiveSite = (patch: Partial<NonNullable<typeof activeSite>>) => {
     setDraft((current) => {
       if (!current || !activeSite) return current
-      const sites = current.sites.map((site) => site.id === current.activeSiteId ? { ...site, ...patch } : site)
+      const sites = current.sites.map((site) => (site.id === current.activeSiteId ? { ...site, ...patch } : site))
       const nextActiveSite = sites.find((site) => site.id === current.activeSiteId) ?? sites[0]
       return {
         ...current,
@@ -169,11 +174,7 @@ export function SettingsBrowserAiPanel() {
     setHint(null)
     try {
       const result = await testBrowserAiConnection()
-      setHint(result.status === 'connected'
-        ? t('settings.browserAi.testPassed')
-        : result.status === 'needs-login'
-          ? t('settings.browserAi.testNeedsLogin')
-          : t('settings.browserAi.testFailed'))
+      setHint(result.status === 'connected' ? t('settings.browserAi.testPassed') : result.status === 'needs-login' ? t('settings.browserAi.testNeedsLogin') : t('settings.browserAi.testFailed'))
     } finally {
       setBusy(null)
     }
@@ -195,15 +196,19 @@ export function SettingsBrowserAiPanel() {
         <p className="section-label mb-3">{t('settings.browserAi.kicker')}</p>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-              {t('settings.browserAi.title')}
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              {t('settings.browserAi.description')}
-            </p>
+            <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.browserAi.title')}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.description')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setBusy('load'); void loadBrowserAi().finally(() => setBusy(null)) }} loading={busy === 'load'}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setBusy('load')
+                void loadBrowserAi().finally(() => setBusy(null))
+              }}
+              loading={busy === 'load'}
+            >
               <RefreshCw />
               {t('settings.browserAi.refresh')}
             </Button>
@@ -222,9 +227,7 @@ export function SettingsBrowserAiPanel() {
               <Globe2 className="mt-0.5 h-5 w-5 text-[color:var(--color-primary)]" strokeWidth={1.8} />
               <div>
                 <h3 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settings.browserAi.mode')}</h3>
-                <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                  {config.mode === 'managed-edge' ? t('settings.browserAi.managedEdgeHint') : t('settings.browserAi.externalCdpHint')}
-                </p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{config.mode === 'managed-edge' ? t('settings.browserAi.managedEdgeHint') : t('settings.browserAi.externalCdpHint')}</p>
               </div>
             </div>
 
@@ -255,37 +258,19 @@ export function SettingsBrowserAiPanel() {
             <div className="grid gap-5 md:grid-cols-2">
               <div className="min-w-0 space-y-1.5">
                 <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.browserPath')}</label>
-                <Input
-                  value={config.edgeExecutablePath ?? ''}
-                  placeholder={t('settings.browserAi.browserPathPlaceholder')}
-                  onChange={(event) => updateDraft('edgeExecutablePath', event.target.value || undefined)}
-                />
+                <Input value={config.edgeExecutablePath ?? ''} placeholder={t('settings.browserAi.browserPathPlaceholder')} onChange={(event) => updateDraft('edgeExecutablePath', event.target.value || undefined)} />
                 <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.browserPathHint')}</p>
               </div>
               {config.mode === 'external-cdp' ? (
                 <div className="min-w-0 space-y-1.5">
                   <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.cdpPort')}</label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={config.cdpPort ?? ''}
-                    placeholder={t('settings.browserAi.cdpPortPlaceholder')}
-                    onChange={(event) => updateDraft('cdpPort', event.target.value ? Number(event.target.value) : undefined)}
-                  />
+                  <Input type="number" min={1} max={65535} value={config.cdpPort ?? ''} placeholder={t('settings.browserAi.cdpPortPlaceholder')} onChange={(event) => updateDraft('cdpPort', event.target.value ? Number(event.target.value) : undefined)} />
                   <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.cdpPortHint')}</p>
                 </div>
               ) : null}
               <div className="min-w-0 space-y-1.5">
                 <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.responseTimeout')}</label>
-                <Input
-                  type="number"
-                  min={10}
-                  max={600}
-                  value={Math.round(config.responseTimeoutMs / 1000)}
-                  placeholder={t('settings.browserAi.responseTimeoutPlaceholder')}
-                  onChange={(event) => updateDraft('responseTimeoutMs', Math.max(10, Number(event.target.value || 120)) * 1000)}
-                />
+                <Input type="number" min={10} max={600} value={Math.round(config.responseTimeoutMs / 1000)} placeholder={t('settings.browserAi.responseTimeoutPlaceholder')} onChange={(event) => updateDraft('responseTimeoutMs', Math.max(10, Number(event.target.value || 120)) * 1000)} />
               </div>
             </div>
 
@@ -305,23 +290,14 @@ export function SettingsBrowserAiPanel() {
                 </div>
               </div>
               <div className="mt-4">
-                <Select
-                  ariaLabel={t('settings.browserAi.sites')}
-                  value={activeSite?.id ?? ''}
-                  options={config.sites.map((site) => ({ value: site.id, label: site.name }))}
-                  onChange={selectSite}
-                />
+                <Select ariaLabel={t('settings.browserAi.sites')} value={activeSite?.id ?? ''} options={config.sites.map((site) => ({ value: site.id, label: site.name }))} onChange={selectSite} />
               </div>
 
               {activeSite ? (
                 <div className="mt-5 grid gap-x-5 gap-y-5 md:grid-cols-2">
                   <div className="min-w-0 space-y-1.5">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteName')}</label>
-                    <Input
-                      value={activeSite.name}
-                      placeholder={t('settings.browserAi.siteNamePlaceholder')}
-                      onChange={(event) => updateActiveSite({ name: event.target.value })}
-                    />
+                    <Input value={activeSite.name} placeholder={t('settings.browserAi.siteNamePlaceholder')} onChange={(event) => updateActiveSite({ name: event.target.value })} />
                   </div>
                   <div className="min-w-0 space-y-1.5">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteType')}</label>
@@ -338,12 +314,7 @@ export function SettingsBrowserAiPanel() {
                   </div>
                   <div className="min-w-0 space-y-1.5 md:col-span-2">
                     <label className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.browserAi.siteUrl')}</label>
-                    <Input
-                      type="url"
-                      value={activeSite.url}
-                      placeholder={t('settings.browserAi.siteUrlPlaceholder')}
-                      onChange={(event) => updateActiveSite({ url: event.target.value })}
-                    />
+                    <Input type="url" value={activeSite.url} placeholder={t('settings.browserAi.siteUrlPlaceholder')} onChange={(event) => updateActiveSite({ url: event.target.value })} />
                     <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.siteUrlHint')}</p>
                   </div>
                 </div>
@@ -353,26 +324,54 @@ export function SettingsBrowserAiPanel() {
             <div className="grid gap-4 md:grid-cols-2">
               <label className="flex items-start gap-3 text-sm text-[color:var(--color-foreground)]">
                 <Checkbox checked={config.keepBrowserRunning} onChange={(event) => updateDraft('keepBrowserRunning', event.target.checked)} disabled={config.mode === 'external-cdp'} />
-                <span><span className="block font-medium">{t('settings.browserAi.keepRunning')}</span><span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.keepRunningHint')}</span></span>
+                <span>
+                  <span className="block font-medium">{t('settings.browserAi.keepRunning')}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.keepRunningHint')}</span>
+                </span>
               </label>
               <label className="flex items-start gap-3 text-sm text-[color:var(--color-foreground)]">
-                <Checkbox checked={config.headless} onChange={(event) => updateDraft('headless', event.target.checked)} />
-                <span><span className="block font-medium">{t('settings.browserAi.headless')}</span><span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.headlessHint')}</span></span>
+                <Checkbox checked={!config.headless} onChange={(event) => updateDraft('headless', !event.target.checked)} />
+                <span>
+                  <span className="block font-medium">{t('settings.browserAi.headed')}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.headedHint')}</span>
+                </span>
               </label>
             </div>
           </section>
 
           <section className="surface-card space-y-5 rounded-[24px] border p-6" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div><div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.connection')}</div><div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">{currentStatus}</div></div>
-              <div className="md:col-span-2"><div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.profile')}</div><div className="mt-1 break-all font-mono text-xs text-[color:var(--color-foreground)]">{profileLabel}</div></div>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.connection')}</div>
+                <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">{currentStatus}</div>
+              </div>
+              <div>
+                <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.browserRuntime')}</div>
+                <div className="mt-1 text-sm font-medium text-[color:var(--color-foreground)]">{snapshot?.browserRunning ? t('settings.browserAi.browserRunning') : t('settings.browserAi.browserStopped')}</div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.profile')}</div>
+                <div className="mt-1 break-all font-mono text-xs text-[color:var(--color-foreground)]">{profileLabel}</div>
+              </div>
             </div>
             {snapshot?.errorMessage ? <p className="text-sm text-[color:var(--color-destructive)]">{snapshot.errorMessage}</p> : null}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => void save()} loading={busy === 'save'}><Save />{t('settings.browserAi.save')}</Button>
-              <Button variant="outline" onClick={() => void handleStart()} loading={busy === 'start'}><Play />{t('settings.browserAi.start')}</Button>
-              <Button variant="outline" onClick={() => void handleLogin()} loading={busy === 'login'}><LogIn />{t('settings.browserAi.openLogin')}</Button>
-              <Button variant="outline" onClick={() => void handleStop()} loading={busy === 'stop'} disabled={!snapshot?.browserRunning}><Square />{t('settings.browserAi.stop')}</Button>
+              <Button onClick={() => void save()} loading={busy === 'save'}>
+                <Save />
+                {t('settings.browserAi.save')}
+              </Button>
+              <Button variant="outline" onClick={() => void handleStart()} loading={busy === 'start'}>
+                <Play />
+                {t('settings.browserAi.start')}
+              </Button>
+              <Button variant="outline" onClick={() => void handleLogin()} loading={busy === 'login'}>
+                <LogIn />
+                {t('settings.browserAi.openLogin')}
+              </Button>
+              <Button variant="outline" onClick={() => void handleStop()} loading={busy === 'stop'} disabled={!snapshot?.browserRunning}>
+                <Square />
+                {t('settings.browserAi.stop')}
+              </Button>
             </div>
             {hint ? <p className="text-sm text-[color:var(--color-muted-foreground)]">{hint}</p> : null}
           </section>
@@ -380,11 +379,7 @@ export function SettingsBrowserAiPanel() {
       ) : (
         <div className="text-sm text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.notConfigured')}</div>
       )}
-      <SettingsBrowserAiDeleteSiteModal
-        site={siteToDelete}
-        onClose={() => setSiteToDelete(null)}
-        onConfirm={confirmDeleteSite}
-      />
+      <SettingsBrowserAiDeleteSiteModal site={siteToDelete} onClose={() => setSiteToDelete(null)} onConfirm={confirmDeleteSite} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { ArrowLeft, BookOpenText, History, Plus, Settings2, Sparkles } from 'lucide-react'
+import { ArrowLeft, BookOpenText, Camera, History, Plus, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Select } from '../../../components/ui/select'
 import { useI18n } from '../../../i18n'
@@ -11,9 +11,10 @@ type LearningCenterHeaderProps = {
   onViewChange: (view: 'notes' | 'skills' | 'browser-tasks') => void
   onOpenBrowserAi: () => void
   onOpenBrowserAiPreferences: () => void
+  onOpenBrowserScreenshot: () => void
 }
 
-export function LearningCenterHeader({ onBack, onCreateNote, onCreateSkill, view, onViewChange, onOpenBrowserAi, onOpenBrowserAiPreferences }: LearningCenterHeaderProps) {
+export function LearningCenterHeader({ onBack, onCreateNote, onCreateSkill, view, onViewChange, onOpenBrowserAi, onOpenBrowserAiPreferences, onOpenBrowserScreenshot }: LearningCenterHeaderProps) {
   const { t } = useI18n()
 
   return (
@@ -68,6 +69,9 @@ export function LearningCenterHeader({ onBack, onCreateNote, onCreateSkill, view
         </Button>
         <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" title={t('learning.toolbar.browserAiPreferences')} aria-label={t('learning.toolbar.browserAiPreferences')} onClick={onOpenBrowserAiPreferences}>
           <Settings2 className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" title={t('learning.toolbar.browserScreenshot')} aria-label={t('learning.toolbar.browserScreenshot')} onClick={onOpenBrowserScreenshot}>
+          <Camera className="h-4 w-4" />
         </Button>
       </div>
     </header>

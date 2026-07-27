@@ -22,6 +22,10 @@ async function loadRootComponent(): Promise<ComponentType> {
       return (await import('./TrayPanelApp')).TrayPanelApp
     case '#transcript-capture':
       return (await import('./TranscriptCaptureApp')).TranscriptCaptureApp
+    case '#browser-screenshot':
+      return (await import('./BrowserScreenshotCaptureApp')).BrowserScreenshotCaptureApp
+    case '#browser-screenshot-viewer':
+      return (await import('./BrowserScreenshotViewerApp')).BrowserScreenshotViewerApp
     default:
       return (await import('./App')).App
   }
@@ -33,7 +37,7 @@ void (async () => {
     createRoot(rootElement).render(
       <StrictMode>
         <RootComponent />
-      </StrictMode>
+      </StrictMode>,
     )
   } catch (error) {
     rootElement.textContent = `App mount failed: ${error instanceof Error ? error.message : String(error)}`
