@@ -55,6 +55,12 @@ export function scrollMarkdownPreviewToSourceLine(container: HTMLElement, lineNu
   const target = findMarkdownPreviewSourceElement(container, targetLine)
   if (!target) return false
 
+  const firstSourceElement = container.querySelector<HTMLElement>(MARKDOWN_PREVIEW_SOURCE_LINE_SELECTOR)
+  if (target.element === firstSourceElement && targetLine <= target.startLine) {
+    container.scrollTop = 0
+    return true
+  }
+
   const lineSpan = Math.max(1, target.endLine - target.startLine)
   const lineProgress = Math.min(1, Math.max(0, (targetLine - target.startLine) / lineSpan))
   const targetTop = elementScrollTopWithinContainer(container, target.element) + target.element.getBoundingClientRect().height * lineProgress

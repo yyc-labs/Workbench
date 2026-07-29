@@ -112,17 +112,44 @@ export function createAppServices(options: AppServicesOptions) {
       getRecordsRootPath: () => path.join(options.getUserDataPath(), 'browser-ai'),
     }),
     getUserDataPath: options.getUserDataPath,
+    launchConfig: (config) => ({ ...config, headless: config.learningHeadless }),
     learningService,
     emitProgress: (event) => {
       options.getMainWindow()?.webContents.send(IPC.BROWSER_AI_PROGRESS, event)
     },
   })
+  const browserScreenshotAiService = createBrowserAiService({
+    repository: createDefaultBrowserAiRepository({
+      loadConfig: () => options.loadConfig().browserAi,
+      saveConfig: async (config) => config,
+      getRecordsRootPath: () => path.join(options.getUserDataPath(), 'browser-ai'),
+    }),
+    getUserDataPath: options.getUserDataPath,
+    profileName: 'screenshot-edge-profile',
+    launchConfig: (config) => config,
+    learningService,
+    emitProgress: () => undefined,
+  })
   const browserScreenshotService = createBrowserScreenshotService({
-    browserAiService,
-    emitProgress: (event) => options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event),
+    browserAiService: browserScreenshotAiService,
+    emitProgress: (event) => {
+      options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event)
+      options.getBrowserScreenshotWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event)
+    },
     emitTargetsChanged: (targets) => {
       options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_TARGETS_CHANGED, targets)
       options.getBrowserScreenshotWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_TARGETS_CHANGED, targets)
+    },
+    setCaptureWindowVisible: (visible) => {
+      const window = options.getBrowserScreenshotWindow()
+      if (!window || window.isDestroyed()) return
+      if (visible) {
+        // Keep the captured browser page in the foreground. Some pages defer
+        // scroll-driven painting while their window is blurred or occluded.
+        window.showInactive()
+      } else {
+        window.hide()
+      }
     },
     saveFile: async (pngBase64, suggestedName) => {
       const saveOptions = {
@@ -188,6 +215,7 @@ export function createAppServices(options: AppServicesOptions) {
     learningService,
     skillService,
     browserAiService,
+    browserScreenshotAiService,
     browserScreenshotService,
     aiGatewayService,
     agentHookGateway,

@@ -352,17 +352,26 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                 <section className="code-mdc-meta-card">
                   <h3 className="code-mdc-meta-title">{t('codeWorkspace.agentRuleMetadata')}</h3>
                   <div className="code-mdc-meta-grid">
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataType')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
-
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataAlwaysApply')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
-
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
-
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataGlobs')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.globs.length > 0 ? parsedMarkdownDoc.ruleMetadata.globs.join(', ') : t('codeWorkspace.metadataNotAvailable')}</span>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataType')}</span>
+                      <span className="code-mdc-meta-value">
+                        <span className="code-mdc-meta-badge">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
+                      </span>
+                    </div>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataAlwaysApply')}</span>
+                      <span className="code-mdc-meta-value">
+                        <span className="code-mdc-meta-badge code-mdc-meta-badge--boolean">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
+                      </span>
+                    </div>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
+                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
+                    </div>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataGlobs')}</span>
+                      <span className="code-mdc-meta-value code-mdc-meta-value--mono">{parsedMarkdownDoc.ruleMetadata.globs.length > 0 ? parsedMarkdownDoc.ruleMetadata.globs.join(', ') : t('codeWorkspace.metadataNotAvailable')}</span>
+                    </div>
                   </div>
                 </section>
               )}
@@ -370,11 +379,27 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                 <section className="code-mdc-meta-card">
                   <h3 className="code-mdc-meta-title">{t('codeWorkspace.documentMetadata')}</h3>
                   <div className="code-mdc-meta-grid">
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataTitle')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.title?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
-
-                    <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
-                    <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataTitle')}</span>
+                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.title?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
+                    </div>
+                    <div className="code-mdc-meta-row">
+                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
+                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
+                    </div>
+                  </div>
+                </section>
+              )}
+              {parsedMarkdownDoc && parsedMarkdownDoc.customMetadata.length > 0 && (
+                <section className="code-mdc-meta-card">
+                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.customMetadata')}</h3>
+                  <div className="code-mdc-meta-grid">
+                    {parsedMarkdownDoc.customMetadata.map((item) => (
+                      <div className="code-mdc-meta-row" key={item.key}>
+                        <span className="code-mdc-meta-key">{item.key}</span>
+                        <span className="code-mdc-meta-value code-mdc-meta-value--mono">{item.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </section>
               )}

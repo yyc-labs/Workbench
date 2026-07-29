@@ -12,12 +12,18 @@ export interface MarkdownFrontmatterMeta {
   description?: string
 }
 
+export interface MarkdownCustomFrontmatterMeta {
+  key: string
+  value: string
+}
+
 export interface ParsedMarkdownDocument {
   hasFrontmatter: boolean
   markdownBodyLineOffset: number
   markdownBody: string
   ruleMetadata: CursorRuleFrontmatterMeta | null
   markdownMetadata: MarkdownFrontmatterMeta | null
+  customMetadata: MarkdownCustomFrontmatterMeta[]
 }
 
 type FrontmatterKv = Record<string, string>
@@ -27,7 +33,7 @@ function stripWrappingQuotes(value: string): string {
   if (trimmed.length < 2) return trimmed
   const first = trimmed[0]
   const last = trimmed[trimmed.length - 1]
-  if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+  if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
     return trimmed.slice(1, -1)
   }
   return trimmed
@@ -100,6 +106,13 @@ function parseFrontmatter(rawFrontmatter: string): { kv: FrontmatterKv; globs: s
   return { kv, globs }
 }
 
+function parseCustomMetadata(kv: FrontmatterKv): MarkdownCustomFrontmatterMeta[] {
+  const knownKeys = new Set(['description', 'globs', 'alwaysapply', 'title'])
+  return Object.entries(kv)
+    .filter(([key]) => !knownKeys.has(key))
+    .map(([key, value]) => ({ key, value }))
+}
+
 function resolveRuleType(meta: Omit<CursorRuleFrontmatterMeta, 'ruleType'>): CursorRuleType {
   if (meta.alwaysApply === true) return 'Always'
   if (meta.globs.length > 0) return 'Auto Attached'
@@ -140,6 +153,7 @@ export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
       markdownBody: source,
       ruleMetadata: null,
       markdownMetadata: null,
+      customMetadata: [],
     }
   }
 
@@ -151,5 +165,6 @@ export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
     markdownBody: normalized.slice(frontmatterMatch[0].length),
     ruleMetadata: parseRuleMetadata(kv, globs),
     markdownMetadata: parseMarkdownMetadata(kv),
+    customMetadata: parseCustomMetadata(kv),
   }
 }

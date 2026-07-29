@@ -1,7 +1,7 @@
 import { deflateSync, inflateSync } from 'node:zlib'
 
 type PngBitmap = { width: number; height: number; pixels: Buffer }
-export type PngSlice = { buffer: Buffer; sourceTop: number; sourceBottom: number; destinationTop: number }
+export type PngSlice = { buffer: Buffer; sourceLeft?: number; sourceRight?: number; sourceTop: number; sourceBottom: number; destinationTop: number }
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
@@ -24,8 +24,8 @@ function chunk(type: string, data: Buffer): Buffer {
   return Buffer.concat([length, body, checksum])
 }
 
-function unfilterScanlines(data: Buffer, width: number, height: number): Buffer {
-  const rowSize = width * 4
+function unfilterScanlines(data: Buffer, width: number, height: number, bytesPerPixel: number): Buffer {
+  const rowSize = width * bytesPerPixel
   const output = Buffer.alloc(rowSize * height)
   let offset = 0
   for (let row = 0; row < height; row += 1) {
@@ -34,9 +34,9 @@ function unfilterScanlines(data: Buffer, width: number, height: number): Buffer 
     const previous = row > 0 ? output.subarray((row - 1) * rowSize, row * rowSize) : null
     for (let column = 0; column < rowSize; column += 1) {
       const raw = data[offset++]
-      const left = column >= 4 ? current[column - 4] : 0
+      const left = column >= bytesPerPixel ? current[column - bytesPerPixel] : 0
       const above = previous ? previous[column] : 0
-      const upperLeft = previous && column >= 4 ? previous[column - 4] : 0
+      const upperLeft = previous && column >= bytesPerPixel ? previous[column - bytesPerPixel] : 0
       let value = raw
       if (filter === 1) value = (raw + left) & 0xff
       else if (filter === 2) value = (raw + above) & 0xff
@@ -77,10 +77,20 @@ function decodePng(buffer: Buffer): PngBitmap {
     } else if (type === 'IDAT') compressed.push(data)
     else if (type === 'IEND') break
   }
-  if (!width || !height || bitDepth !== 8 || colorType !== 6 || interlace !== 0) {
-    throw new Error('Only non-interlaced 8-bit RGBA PNG images are supported.')
+  if (!width || !height || bitDepth !== 8 || ![2, 6].includes(colorType) || interlace !== 0) {
+    throw new Error('Only non-interlaced 8-bit RGB/RGBA PNG images are supported.')
   }
-  return { width, height, pixels: unfilterScanlines(inflateSync(Buffer.concat(compressed)), width, height) }
+  const bytesPerPixel = colorType === 6 ? 4 : 3
+  const decoded = unfilterScanlines(inflateSync(Buffer.concat(compressed)), width, height, bytesPerPixel)
+  if (colorType === 6) return { width, height, pixels: decoded }
+  const pixels = Buffer.alloc(width * height * 4)
+  for (let index = 0, source = 0; index < pixels.length; index += 4, source += 3) {
+    pixels[index] = decoded[source]
+    pixels[index + 1] = decoded[source + 1]
+    pixels[index + 2] = decoded[source + 2]
+    pixels[index + 3] = 255
+  }
+  return { width, height, pixels }
 }
 
 function encodePng(width: number, height: number, pixels: Buffer): Buffer {
@@ -107,10 +117,13 @@ export function composePngSlices(slices: PngSlice[], width: number, height: numb
     const sourceBottom = Math.max(sourceTop, Math.min(bitmap.height, Math.ceil(slice.sourceBottom)))
     const copyHeight = Math.min(sourceBottom - sourceTop, height - Math.max(0, slice.destinationTop))
     if (copyHeight <= 0) continue
-    const sourceWidth = Math.min(width, bitmap.width)
+    const sourceLeft = Math.max(0, Math.min(bitmap.width, Math.floor(slice.sourceLeft ?? 0)))
+    const sourceRight = Math.max(sourceLeft, Math.min(bitmap.width, Math.ceil(slice.sourceRight ?? bitmap.width)))
+    const sourceWidth = Math.min(width, sourceRight - sourceLeft)
+    if (sourceWidth <= 0) continue
     const destinationTop = Math.max(0, slice.destinationTop)
     for (let row = 0; row < copyHeight; row += 1) {
-      bitmap.pixels.copy(output, (destinationTop + row) * width * 4, (sourceTop + row) * bitmap.width * 4, (sourceTop + row) * bitmap.width * 4 + sourceWidth * 4)
+      bitmap.pixels.copy(output, (destinationTop + row) * width * 4, (sourceTop + row) * bitmap.width * 4 + sourceLeft * 4, (sourceTop + row) * bitmap.width * 4 + (sourceLeft + sourceWidth) * 4)
     }
   }
   return encodePng(width, height, output)

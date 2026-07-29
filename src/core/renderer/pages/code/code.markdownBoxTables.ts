@@ -1,32 +1,16 @@
 import type { MarkdownNode, MarkdownParentNode, MarkdownParagraphNode } from './code.markdownBoxTables.types'
-import {
-  createApproximateLinePosition,
-  createApproximateRangePosition,
-  createCustomMarkdownNode,
-  createInlineMarkdownSpan,
-  isParentNode,
-  isParagraphNode,
-  parseInlineMarkdownChildren,
-} from './code.markdownBoxTables.ast'
-import {
-  parseArchitectureDiagram,
-  parseBoxDiagram,
-  parseBoxFlow,
-  parseBoxTable,
-  parseTranscriptInlineArrowBranchFlow,
-  parseTranscriptInlineArrowFlow,
-  parseTranscriptLeadingArrowFlow,
-  parseTranscriptStructuredFlow,
-  parseTranscriptTreeFlow,
-  parseVerticalFlow,
-} from './code.markdownBoxTables.parsers'
+import { createApproximateLinePosition, createApproximateRangePosition, createCustomMarkdownNode, createInlineMarkdownSpan, isParentNode, isParagraphNode, parseInlineMarkdownChildren } from './code.markdownBoxTables.ast'
+import { parseArchitectureDiagram, parseBoxDiagram, parseBoxFlow, parseBoxTable, parseTranscriptInlineArrowBranchFlow, parseTranscriptInlineArrowFlow, parseTranscriptLeadingArrowFlow, parseTranscriptStructuredFlow, parseTranscriptTreeFlow, parseVerticalFlow } from './code.markdownBoxTables.parsers'
 
 const MARKDOWN_FENCE_START_LINE_PATTERN = /^[ \t]{0,3}(?:`{3,}|~{3,})/
 
-function transformParagraphToTable(
-  node: MarkdownParagraphNode,
-  source: string
-): MarkdownNode | null {
+function isPlainTextTreeStructure(source: string): boolean {
+  const lines = source.split(/\r?\n/)
+  const branchLineCount = lines.filter((line) => /[├└]──/.test(line)).length
+  return branchLineCount >= 2 && lines.some((line) => line.includes('│'))
+}
+
+function transformParagraphToTable(node: MarkdownParagraphNode, source: string): MarkdownNode | null {
   const startOffset = node.position?.start.offset
   const endOffset = node.position?.end.offset
   const startLine = node.position?.start.line
@@ -66,10 +50,7 @@ function transformParagraphToTable(
   }
 }
 
-function transformCodeBlockToTable(
-  node: MarkdownNode,
-  source: string
-): MarkdownNode | null {
+function transformCodeBlockToTable(node: MarkdownNode, source: string): MarkdownNode | null {
   if (node.type !== 'code') return null
   if (typeof node.value !== 'string' || !node.value) return null
 
@@ -117,10 +98,7 @@ function transformCodeBlockToTable(
   }
 }
 
-function transformParagraphToBoxFlow(
-  node: MarkdownParagraphNode,
-  source: string
-): MarkdownNode | null {
+function transformParagraphToBoxFlow(node: MarkdownParagraphNode, source: string): MarkdownNode | null {
   const startOffset = node.position?.start.offset
   const endOffset = node.position?.end.offset
   const startLine = node.position?.start.line
@@ -137,57 +115,19 @@ function transformParagraphToBoxFlow(
   const trackChildren: MarkdownNode[] = []
 
   parsedFlow.boxes.forEach((box, index) => {
-    const titleNode = box.title
-      ? createCustomMarkdownNode(
-        'boxFlowTitle',
-        'div',
-        'code-markdown-box-flow-node-title',
-        parseInlineMarkdownChildren(box.title),
-        createApproximateLinePosition(box.titleLineNumber ?? box.rows[0]?.lineNumber ?? startLine, box.title)
-      )
-      : null
+    const titleNode = box.title ? createCustomMarkdownNode('boxFlowTitle', 'div', 'code-markdown-box-flow-node-title', parseInlineMarkdownChildren(box.title), createApproximateLinePosition(box.titleLineNumber ?? box.rows[0]?.lineNumber ?? startLine, box.title)) : null
 
     const lineNodes = box.rows.map((row) => {
-      const lineChildren = [
-        createInlineMarkdownSpan(
-          'boxFlowLineText',
-          'code-markdown-box-flow-line-text',
-          row.text,
-          row.lineNumber
-        ),
-      ]
+      const lineChildren = [createInlineMarkdownSpan('boxFlowLineText', 'code-markdown-box-flow-line-text', row.text, row.lineNumber)]
 
       if (row.note) {
-        lineChildren.push(
-          createInlineMarkdownSpan(
-            'boxFlowLineNote',
-            'code-markdown-box-flow-line-note',
-            row.note,
-            row.lineNumber
-          )
-        )
+        lineChildren.push(createInlineMarkdownSpan('boxFlowLineNote', 'code-markdown-box-flow-line-note', row.note, row.lineNumber))
       }
 
-      return createCustomMarkdownNode(
-        'boxFlowLine',
-        'div',
-        'code-markdown-box-flow-line',
-        lineChildren,
-        createApproximateLinePosition(row.lineNumber, row.text + (row.note ? ` ${row.note}` : ''))
-      )
+      return createCustomMarkdownNode('boxFlowLine', 'div', 'code-markdown-box-flow-line', lineChildren, createApproximateLinePosition(row.lineNumber, row.text + (row.note ? ` ${row.note}` : '')))
     })
 
-    const cardNode = createCustomMarkdownNode(
-      'boxFlowCard',
-      'div',
-      'code-markdown-box-flow-node-card',
-      lineNodes,
-      createApproximateRangePosition(
-        box.rows[0]?.lineNumber ?? startLine,
-        box.rows[box.rows.length - 1]?.lineNumber ?? startLine,
-        Math.max(1, box.endColumn - box.startColumn + 1)
-      )
-    )
+    const cardNode = createCustomMarkdownNode('boxFlowCard', 'div', 'code-markdown-box-flow-node-card', lineNodes, createApproximateRangePosition(box.rows[0]?.lineNumber ?? startLine, box.rows[box.rows.length - 1]?.lineNumber ?? startLine, Math.max(1, box.endColumn - box.startColumn + 1)))
 
     trackChildren.push(
       createCustomMarkdownNode(
@@ -195,101 +135,53 @@ function transformParagraphToBoxFlow(
         'div',
         'code-markdown-box-flow-node',
         titleNode ? [titleNode, cardNode] : [cardNode],
-        createApproximateRangePosition(
-          box.titleLineNumber ?? box.rows[0]?.lineNumber ?? startLine,
-          box.rows[box.rows.length - 1]?.lineNumber ?? startLine,
-          Math.max(1, box.endColumn - box.startColumn + 1)
-        )
-      )
+        createApproximateRangePosition(box.titleLineNumber ?? box.rows[0]?.lineNumber ?? startLine, box.rows[box.rows.length - 1]?.lineNumber ?? startLine, Math.max(1, box.endColumn - box.startColumn + 1)),
+      ),
     )
 
     const connector = parsedFlow.connectors[index]
     if (!connector) return
 
-    const arrowGlyph = connector.direction === 'left'
-      ? '←'
-      : connector.direction === 'none'
-        ? '•'
-        : '→'
+    const arrowGlyph = connector.direction === 'left' ? '←' : connector.direction === 'none' ? '•' : '→'
     const connectorLabel = connector.label || ''
-    const connectorChildren: MarkdownNode[] = [
-      createInlineMarkdownSpan(
-        'boxFlowConnectorArrow',
-        'code-markdown-box-flow-connector-arrow',
-        arrowGlyph,
-        connector.lineNumber,
-        { 'aria-hidden': 'true' }
-      ),
-    ]
+    const connectorChildren: MarkdownNode[] = [createInlineMarkdownSpan('boxFlowConnectorArrow', 'code-markdown-box-flow-connector-arrow', arrowGlyph, connector.lineNumber, { 'aria-hidden': 'true' })]
 
     if (connectorLabel) {
-      connectorChildren.push(
-        createInlineMarkdownSpan(
-          'boxFlowConnectorLabel',
-          'code-markdown-box-flow-connector-label',
-          connectorLabel,
-          connector.lineNumber
-        )
-      )
+      connectorChildren.push(createInlineMarkdownSpan('boxFlowConnectorLabel', 'code-markdown-box-flow-connector-label', connectorLabel, connector.lineNumber))
     }
 
     trackChildren.push(
       createCustomMarkdownNode(
         'boxFlowConnector',
         'div',
-        `code-markdown-box-flow-connector ${
-          connector.direction === 'left'
-            ? 'is-left'
-            : connector.direction === 'none'
-              ? 'is-none'
-              : 'is-right'
-        }`,
+        `code-markdown-box-flow-connector ${connector.direction === 'left' ? 'is-left' : connector.direction === 'none' ? 'is-none' : 'is-right'}`,
         connectorChildren,
-        createApproximateLinePosition(
-          connector.lineNumber,
-          connector.rawText || connectorLabel || arrowGlyph
-        ),
-        connector.rawText ? { title: connector.rawText } : undefined
-      )
+        createApproximateLinePosition(connector.lineNumber, connector.rawText || connectorLabel || arrowGlyph),
+        connector.rawText ? { title: connector.rawText } : undefined,
+      ),
     )
   })
 
-  const trackNode = createCustomMarkdownNode(
-    'boxFlowTrack',
-    'div',
-    'code-markdown-box-flow-track',
-    trackChildren,
-    node.position
-  )
+  const trackNode = createCustomMarkdownNode('boxFlowTrack', 'div', 'code-markdown-box-flow-track', trackChildren, node.position)
 
-  return createCustomMarkdownNode(
-    'boxFlow',
-    'div',
-    'code-markdown-box-flow',
-    [trackNode],
-    node.position,
-    {
-      'data-box-flow': JSON.stringify({
-        boxes: parsedFlow.boxes.map((box) => ({
-          title: box.title,
-          rows: box.rows.map((row) => ({
-            text: row.text,
-            note: row.note ?? '',
-          })),
+  return createCustomMarkdownNode('boxFlow', 'div', 'code-markdown-box-flow', [trackNode], node.position, {
+    'data-box-flow': JSON.stringify({
+      boxes: parsedFlow.boxes.map((box) => ({
+        title: box.title,
+        rows: box.rows.map((row) => ({
+          text: row.text,
+          note: row.note ?? '',
         })),
-        connectors: parsedFlow.connectors.map((connector) => ({
-          label: connector.label,
-          direction: connector.direction,
-        })),
-      }),
-    }
-  )
+      })),
+      connectors: parsedFlow.connectors.map((connector) => ({
+        label: connector.label,
+        direction: connector.direction,
+      })),
+    }),
+  })
 }
 
-function transformParagraphToVerticalFlow(
-  node: MarkdownParagraphNode,
-  source: string
-): MarkdownNode | null {
+function transformParagraphToVerticalFlow(node: MarkdownParagraphNode, source: string): MarkdownNode | null {
   const startOffset = node.position?.start.offset
   const endOffset = node.position?.end.offset
   const startLine = node.position?.start.line
@@ -300,36 +192,24 @@ function transformParagraphToVerticalFlow(
   if (endOffset <= startOffset) return null
 
   const rawParagraph = source.slice(startOffset, endOffset)
-  const parsedFlow = parseVerticalFlow(rawParagraph, startLine)
-    ?? parseTranscriptTreeFlow(rawParagraph, startLine)
-    ?? parseTranscriptStructuredFlow(rawParagraph, startLine)
-    ?? parseTranscriptInlineArrowBranchFlow(rawParagraph, startLine)
-    ?? parseTranscriptInlineArrowFlow(rawParagraph, startLine)
-    ?? parseTranscriptLeadingArrowFlow(rawParagraph, startLine)
+  if (isPlainTextTreeStructure(rawParagraph)) return null
+
+  const parsedFlow =
+    parseVerticalFlow(rawParagraph, startLine) ??
+    parseTranscriptTreeFlow(rawParagraph, startLine) ??
+    parseTranscriptStructuredFlow(rawParagraph, startLine) ??
+    parseTranscriptInlineArrowBranchFlow(rawParagraph, startLine) ??
+    parseTranscriptInlineArrowFlow(rawParagraph, startLine) ??
+    parseTranscriptLeadingArrowFlow(rawParagraph, startLine)
   if (!parsedFlow) return null
 
   const stackChildren: MarkdownNode[] = []
 
   parsedFlow.steps.forEach((step, index) => {
-    const stepChildren: MarkdownNode[] = [
-      createCustomMarkdownNode(
-        'verticalFlowStepTitle',
-        'div',
-        'code-markdown-vertical-flow-step-title',
-        parseInlineMarkdownChildren(step.title),
-        createApproximateLinePosition(step.lineNumber, step.title)
-      ),
-    ]
+    const stepChildren: MarkdownNode[] = [createCustomMarkdownNode('verticalFlowStepTitle', 'div', 'code-markdown-vertical-flow-step-title', parseInlineMarkdownChildren(step.title), createApproximateLinePosition(step.lineNumber, step.title))]
 
     if (step.note) {
-      stepChildren.push(
-        createInlineMarkdownSpan(
-          'verticalFlowStepNote',
-          'code-markdown-vertical-flow-step-note',
-          step.note,
-          step.lineNumber
-        )
-      )
+      stepChildren.push(createInlineMarkdownSpan('verticalFlowStepNote', 'code-markdown-vertical-flow-step-note', step.note, step.lineNumber))
     }
 
     if (step.details?.length) {
@@ -338,129 +218,58 @@ function transformParagraphToVerticalFlow(
           'verticalFlowStepDetails',
           'div',
           'code-markdown-vertical-flow-step-details',
-          step.details.map((detail) => (
-            createCustomMarkdownNode(
-              'verticalFlowStepDetail',
-              'div',
-              'code-markdown-vertical-flow-step-detail',
-              parseInlineMarkdownChildren(detail.text),
-              createApproximateLinePosition(detail.lineNumber, detail.rawText)
-            )
-          )),
-          createApproximateRangePosition(
-            step.details[0]?.lineNumber ?? step.lineNumber,
-            step.details[step.details.length - 1]?.lineNumber ?? step.lineNumber,
-            Math.max(...step.details.map((detail) => Math.max(1, detail.rawText.length)))
-          )
-        )
+          step.details.map((detail) => createCustomMarkdownNode('verticalFlowStepDetail', 'div', 'code-markdown-vertical-flow-step-detail', parseInlineMarkdownChildren(detail.text), createApproximateLinePosition(detail.lineNumber, detail.rawText))),
+          createApproximateRangePosition(step.details[0]?.lineNumber ?? step.lineNumber, step.details[step.details.length - 1]?.lineNumber ?? step.lineNumber, Math.max(...step.details.map((detail) => Math.max(1, detail.rawText.length)))),
+        ),
       )
     }
 
     stackChildren.push(
-      createCustomMarkdownNode(
-        'verticalFlowStep',
-        'div',
-        'code-markdown-vertical-flow-step',
-        stepChildren,
-        createApproximateRangePosition(
-          step.lineNumber,
-          step.endLineNumber ?? step.lineNumber,
-          Math.max(
-            1,
-            step.title.length,
-            step.note?.length ?? 0,
-            ...(step.details?.map((detail) => detail.rawText.length) ?? [])
-          )
-        )
-      )
+      createCustomMarkdownNode('verticalFlowStep', 'div', 'code-markdown-vertical-flow-step', stepChildren, createApproximateRangePosition(step.lineNumber, step.endLineNumber ?? step.lineNumber, Math.max(1, step.title.length, step.note?.length ?? 0, ...(step.details?.map((detail) => detail.rawText.length) ?? [])))),
     )
 
     const connector = parsedFlow.connectors[index]
     if (!connector) return
 
-    const arrowGlyph = connector.direction === 'up'
-      ? '↑'
-      : connector.direction === 'none'
-        ? '•'
-        : '↓'
-    const connectorChildren: MarkdownNode[] = [
-      createInlineMarkdownSpan(
-        'verticalFlowConnectorArrow',
-        'code-markdown-vertical-flow-connector-arrow',
-        arrowGlyph,
-        connector.lineNumber,
-        { 'aria-hidden': 'true' }
-      ),
-    ]
+    const arrowGlyph = connector.direction === 'up' ? '↑' : connector.direction === 'none' ? '•' : '↓'
+    const connectorChildren: MarkdownNode[] = [createInlineMarkdownSpan('verticalFlowConnectorArrow', 'code-markdown-vertical-flow-connector-arrow', arrowGlyph, connector.lineNumber, { 'aria-hidden': 'true' })]
 
     if (connector.label) {
-      connectorChildren.push(
-        createInlineMarkdownSpan(
-          'verticalFlowConnectorLabel',
-          'code-markdown-vertical-flow-connector-label',
-          connector.label,
-          connector.lineNumber
-        )
-      )
+      connectorChildren.push(createInlineMarkdownSpan('verticalFlowConnectorLabel', 'code-markdown-vertical-flow-connector-label', connector.label, connector.lineNumber))
     }
 
     stackChildren.push(
       createCustomMarkdownNode(
         'verticalFlowConnector',
         'div',
-        `code-markdown-vertical-flow-connector ${
-          connector.direction === 'up'
-            ? 'is-up'
-            : connector.direction === 'none'
-              ? 'is-none'
-              : 'is-down'
-        }`,
+        `code-markdown-vertical-flow-connector ${connector.direction === 'up' ? 'is-up' : connector.direction === 'none' ? 'is-none' : 'is-down'}`,
         connectorChildren,
-        createApproximateLinePosition(
-          connector.lineNumber,
-          connector.rawText || connector.label || arrowGlyph
-        ),
-        connector.rawText ? { title: connector.rawText } : undefined
-      )
+        createApproximateLinePosition(connector.lineNumber, connector.rawText || connector.label || arrowGlyph),
+        connector.rawText ? { title: connector.rawText } : undefined,
+      ),
     )
   })
 
-  const stackNode = createCustomMarkdownNode(
-    'verticalFlowStack',
-    'div',
-    'code-markdown-vertical-flow-stack',
-    stackChildren,
-    node.position
-  )
+  const stackNode = createCustomMarkdownNode('verticalFlowStack', 'div', 'code-markdown-vertical-flow-stack', stackChildren, node.position)
 
-  return createCustomMarkdownNode(
-    'verticalFlow',
-    'div',
-    'code-markdown-vertical-flow',
-    [stackNode],
-    node.position,
-    {
-      'data-vertical-flow': JSON.stringify({
-        steps: parsedFlow.steps.map((step) => ({
-          title: step.title,
-          note: step.note ?? '',
-          details: (step.details ?? []).map((detail) => ({
-            text: detail.text,
-          })),
+  return createCustomMarkdownNode('verticalFlow', 'div', 'code-markdown-vertical-flow', [stackNode], node.position, {
+    'data-vertical-flow': JSON.stringify({
+      steps: parsedFlow.steps.map((step) => ({
+        title: step.title,
+        note: step.note ?? '',
+        details: (step.details ?? []).map((detail) => ({
+          text: detail.text,
         })),
-        connectors: parsedFlow.connectors.map((connector) => ({
-          label: connector.label,
-          direction: connector.direction,
-        })),
-      }),
-    }
-  )
+      })),
+      connectors: parsedFlow.connectors.map((connector) => ({
+        label: connector.label,
+        direction: connector.direction,
+      })),
+    }),
+  })
 }
 
-function transformParagraphToBoxDiagram(
-  node: MarkdownParagraphNode,
-  source: string
-): MarkdownNode | null {
+function transformParagraphToBoxDiagram(node: MarkdownParagraphNode, source: string): MarkdownNode | null {
   const startOffset = node.position?.start.offset
   const endOffset = node.position?.end.offset
   const startLine = node.position?.start.line
@@ -474,22 +283,12 @@ function transformParagraphToBoxDiagram(
   const parsedDiagram = parseBoxDiagram(rawParagraph, startLine)
   if (!parsedDiagram) return null
 
-  return createCustomMarkdownNode(
-    'boxDiagram',
-    'div',
-    'code-markdown-box-diagram',
-    [],
-    node.position,
-    {
-      'data-diagram-lines': JSON.stringify(parsedDiagram.lines.map((line) => line.text)),
-    }
-  )
+  return createCustomMarkdownNode('boxDiagram', 'div', 'code-markdown-box-diagram', [], node.position, {
+    'data-diagram-lines': JSON.stringify(parsedDiagram.lines.map((line) => line.text)),
+  })
 }
 
-function transformParagraphToArchitectureDiagram(
-  node: MarkdownParagraphNode,
-  source: string
-): MarkdownNode | null {
+function transformParagraphToArchitectureDiagram(node: MarkdownParagraphNode, source: string): MarkdownNode | null {
   const startOffset = node.position?.start.offset
   const endOffset = node.position?.end.offset
   const startLine = node.position?.start.line
@@ -503,16 +302,9 @@ function transformParagraphToArchitectureDiagram(
   const parsedDiagram = parseArchitectureDiagram(rawParagraph, startLine)
   if (!parsedDiagram) return null
 
-  return createCustomMarkdownNode(
-    'architectureDiagram',
-    'div',
-    'code-markdown-architecture-diagram',
-    [],
-    node.position,
-    {
-      'data-architecture-diagram': JSON.stringify(parsedDiagram),
-    }
-  )
+  return createCustomMarkdownNode('architectureDiagram', 'div', 'code-markdown-architecture-diagram', [], node.position, {
+    'data-architecture-diagram': JSON.stringify(parsedDiagram),
+  })
 }
 
 function transformTree(node: MarkdownParentNode, source: string): void {

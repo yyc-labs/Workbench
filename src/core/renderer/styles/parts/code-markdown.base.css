@@ -162,6 +162,11 @@
   word-break: break-word;
 }
 
+/* Keep root-level text diagrams readable without turning them into a parsed block. */
+.code-markdown-content > p {
+  white-space: pre-wrap;
+}
+
 .code-markdown-content li > ul,
 .code-markdown-content li > ol {
   margin-top: 0.35em;

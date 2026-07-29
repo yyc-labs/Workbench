@@ -6,6 +6,9 @@ import { Button } from './components/ui/button'
 import { useI18n } from './i18n'
 import { useAppStore } from './stores/appStore'
 
+const MIN_ZOOM = 0.1
+const MAX_ZOOM = 20
+
 export function BrowserScreenshotViewerApp() {
   const { t, locale } = useI18n()
   const theme = useAppStore((state) => state.config.theme)
@@ -15,12 +18,12 @@ export function BrowserScreenshotViewerApp() {
   const [openingDefaultApp, setOpeningDefaultApp] = useState(false)
   const [feedback, setFeedback] = useState<'copied' | 'saved' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [zoom, setZoom] = useState(1)
-  const [offset, setOffset] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const feedbackTimerRef = useRef<number | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const canvasRef = useRef<HTMLElement | null>(null)
+  const zoomRef = useRef(1)
+  const offsetRef = useRef({ x: 0, y: 0 })
   const draggingRef = useRef<{ pointerId: number; x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -59,8 +62,9 @@ export function BrowserScreenshotViewerApp() {
   }, [locale, theme])
 
   useEffect(() => {
-    setZoom(1)
-    setOffset({ x: 0, y: 0 })
+    zoomRef.current = 1
+    offsetRef.current = { x: 0, y: 0 }
+    if (imageRef.current) imageRef.current.style.transform = 'translate3d(0px, 0px, 0) scale(1)'
   }, [payload])
 
   useEffect(() => {
@@ -73,34 +77,42 @@ export function BrowserScreenshotViewerApp() {
   }, [payload])
 
   const handleWheel = (event: WheelEvent<HTMLElement>) => {
-    event.preventDefault()
     const canvas = canvasRef.current
     if (!canvas) return
     const bounds = canvas.getBoundingClientRect()
     const cursor = { x: event.clientX - (bounds.left + bounds.width / 2), y: event.clientY - (bounds.top + bounds.height / 2) }
-    const nextZoom = Math.min(8, Math.max(0.1, zoom * Math.pow(1.0015, -event.deltaY)))
-    const scale = nextZoom / zoom
-    setOffset((current) => ({ x: cursor.x - (cursor.x - current.x) * scale, y: cursor.y - (cursor.y - current.y) * scale }))
-    setZoom(nextZoom)
+    const currentZoom = zoomRef.current
+    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, currentZoom * Math.pow(1.0015, -event.deltaY)))
+    const scale = nextZoom / currentZoom
+    const nextOffset = {
+      x: cursor.x - (cursor.x - offsetRef.current.x) * scale,
+      y: cursor.y - (cursor.y - offsetRef.current.y) * scale,
+    }
+    zoomRef.current = nextZoom
+    offsetRef.current = nextOffset
+    if (imageRef.current) imageRef.current.style.transform = `translate3d(${nextOffset.x}px, ${nextOffset.y}px, 0) scale(${nextZoom})`
   }
 
-  const handlePointerDown = (event: PointerEvent<HTMLImageElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
+    event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     draggingRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY }
     setIsDragging(true)
   }
 
-  const handlePointerMove = (event: PointerEvent<HTMLImageElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLElement>) => {
     const dragging = draggingRef.current
     if (!dragging || dragging.pointerId !== event.pointerId) return
     const deltaX = event.clientX - dragging.x
     const deltaY = event.clientY - dragging.y
     draggingRef.current = { ...dragging, x: event.clientX, y: event.clientY }
-    setOffset((current) => ({ x: current.x + deltaX, y: current.y + deltaY }))
+    const nextOffset = { x: offsetRef.current.x + deltaX, y: offsetRef.current.y + deltaY }
+    offsetRef.current = nextOffset
+    if (imageRef.current) imageRef.current.style.transform = `translate3d(${nextOffset.x}px, ${nextOffset.y}px, 0) scale(${zoomRef.current})`
   }
 
-  const handlePointerUp = (event: PointerEvent<HTMLImageElement>) => {
+  const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
     if (draggingRef.current?.pointerId !== event.pointerId) return
     draggingRef.current = null
     setIsDragging(false)
@@ -174,7 +186,17 @@ export function BrowserScreenshotViewerApp() {
           </Button>
         </div>
       </header>
-      <main ref={canvasRef} onWheel={handleWheel} className="min-h-0 flex-1 overflow-hidden bg-[color:var(--color-background-sunken)] p-4">
+      <main
+        ref={canvasRef}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onDragStart={(event) => event.preventDefault()}
+        className="min-h-0 flex-1 overflow-hidden bg-[color:var(--color-background-sunken)] p-4"
+        style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
+      >
         {payload ? (
           <div className="flex h-full w-full items-center justify-center">
             <img
@@ -182,14 +204,11 @@ export function BrowserScreenshotViewerApp() {
               alt={payload.title}
               ref={imageRef}
               draggable={false}
-              onPointerDown={handlePointerDown}
-              onPointerMove={handlePointerMove}
-              onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
+              onDragStart={(event) => event.preventDefault()}
               onLoad={() => void window.electronAPI.markBrowserScreenshotViewerReady()}
               onError={() => void window.electronAPI.markBrowserScreenshotViewerReady()}
-              className="max-h-full max-w-full select-none object-contain shadow-sm"
-              style={{ cursor: isDragging ? 'grabbing' : 'grab', transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})` }}
+              className="pointer-events-none max-h-full max-w-full select-none object-contain shadow-sm"
+              style={{ transform: 'translate3d(0px, 0px, 0) scale(1)', WebkitUserDrag: 'none' }}
             />
           </div>
         ) : (

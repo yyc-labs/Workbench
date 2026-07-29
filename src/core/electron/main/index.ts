@@ -59,7 +59,7 @@ const services = createAppServices({
   emitRuntimeStateChanged,
   emitTranscriptImported,
 })
-const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
+const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -496,6 +496,7 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
     { name: 'ai-gateway', run: () => aiGatewayService.shutdown() },
     { name: 'transcript-share', run: () => transcriptShareService.shutdown() },
     { name: 'browser-ai', run: () => browserAiService.cleanupOnBeforeQuit() },
+    { name: 'browser-screenshot-ai', run: () => browserScreenshotAiService.cleanupOnBeforeQuit() },
     { name: 'browser-screenshot', run: () => browserScreenshotService.cleanupOnBeforeQuit() },
   ])
 

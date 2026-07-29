@@ -1,6 +1,6 @@
 import { Camera, Check, Clipboard, Download, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { BrowserScreenshotFixedElementPolicy, BrowserScreenshotProgress, BrowserScreenshotResult, BrowserScreenshotTarget } from '../../../../shared/types'
+import type { BrowserScreenshotCaptureMode, BrowserScreenshotFixedElementPolicy, BrowserScreenshotProgress, BrowserScreenshotResult, BrowserScreenshotTarget } from '../../../../shared/types'
 import { Button } from '../../../components/ui/button'
 import { ModalShell } from '../../../components/ModalShell'
 import { Select } from '../../../components/ui/select'
@@ -13,6 +13,7 @@ export function BrowserScreenshotDialog({ open, onClose }: Props) {
   const [targets, setTargets] = useState<BrowserScreenshotTarget[]>([])
   const [targetId, setTargetId] = useState('')
   const [policy, setPolicy] = useState<BrowserScreenshotFixedElementPolicy>('keep')
+  const [captureMode, setCaptureMode] = useState<BrowserScreenshotCaptureMode>('standard')
   const [progress, setProgress] = useState<BrowserScreenshotProgress | null>(null)
   const [result, setResult] = useState<BrowserScreenshotResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -67,7 +68,7 @@ export function BrowserScreenshotDialog({ open, onClose }: Props) {
     setResult(null)
     setActionFeedback(null)
     try {
-      const nextResult = await window.electronAPI.startBrowserScreenshot({ targetId, fixedElementPolicy: policy })
+      const nextResult = await window.electronAPI.startBrowserScreenshot({ targetId, captureMode, fixedElementPolicy: policy })
       setResult(nextResult)
       if (nextResult.status !== 'completed') setError(nextResult.errorMessage ?? t('learning.browserScreenshot.failed'))
     } catch (startError) {
@@ -134,6 +135,15 @@ export function BrowserScreenshotDialog({ open, onClose }: Props) {
                 { value: 'hide', label: t('learning.browserScreenshot.hideFixed') },
               ]}
               onChange={(value) => setPolicy(value as BrowserScreenshotFixedElementPolicy)}
+            />
+            <Select
+              ariaLabel={t('learning.browserScreenshot.captureMode')}
+              value={captureMode}
+              options={[
+                { value: 'standard', label: t('learning.browserScreenshot.standardMode') },
+                { value: 'precise', label: t('learning.browserScreenshot.preciseMode') },
+              ]}
+              onChange={(value) => setCaptureMode(value as BrowserScreenshotCaptureMode)}
             />
           </div>
           {progress ? (

@@ -121,28 +121,39 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
 }
 
 .code-mdc-meta-card {
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-card) 96%, transparent);
-  padding: 12px 13px;
+  padding: 7px 12px 9px;
 }
 
-.code-mdc-meta-title {
-  margin: 0 0 10px;
-  font-size: 12px;
-  font-weight: 700;
+.code-markdown-content .code-mdc-meta-title {
+  margin: 5px 0;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--color-foreground);
   letter-spacing: 0.01em;
 }
 
 .code-mdc-meta-grid {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  column-gap: 10px;
-  row-gap: 6px;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   font-size: 12px;
+}
+
+.code-mdc-meta-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  padding: 5px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 58%, transparent);
+}
+
+.code-mdc-meta-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
 }
 
 .code-mdc-meta-key {
@@ -152,4 +163,29 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
 .code-mdc-meta-value {
   color: var(--color-foreground);
   word-break: break-word;
+}
+
+.code-mdc-meta-value--mono {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+}
+
+.code-mdc-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  padding: 1px 8px;
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.code-mdc-meta-badge--boolean {
+  border-color: var(--color-border);
+  background: color-mix(in srgb, var(--color-muted) 42%, transparent);
+  color: var(--color-muted-foreground);
+  font-weight: 500;
 }

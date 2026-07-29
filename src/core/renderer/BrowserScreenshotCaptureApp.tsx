@@ -1,6 +1,6 @@
 import { Camera, Check, Clipboard, Download, Eye, RefreshCw, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { BrowserScreenshotFixedElementPolicy, BrowserScreenshotProgress, BrowserScreenshotResult, BrowserScreenshotTarget } from '../shared/types'
+import type { BrowserScreenshotCaptureMode, BrowserScreenshotFixedElementPolicy, BrowserScreenshotProgress, BrowserScreenshotResult, BrowserScreenshotTarget } from '../shared/types'
 import { resolveTheme } from './app/windowTitle'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
@@ -15,6 +15,7 @@ export function BrowserScreenshotCaptureApp() {
   const [targetId, setTargetId] = useState('')
   const [url, setUrl] = useState('')
   const [policy, setPolicy] = useState<BrowserScreenshotFixedElementPolicy>('keep')
+  const [captureMode, setCaptureMode] = useState<BrowserScreenshotCaptureMode>('standard')
   const [progress, setProgress] = useState<BrowserScreenshotProgress | null>(null)
   const [result, setResult] = useState<BrowserScreenshotResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +122,7 @@ export function BrowserScreenshotCaptureApp() {
     setResult(null)
     setFeedback(null)
     try {
-      const nextResult = await window.electronAPI.startBrowserScreenshot({ targetId: targetId || undefined, url: url.trim() || undefined, fixedElementPolicy: policy })
+      const nextResult = await window.electronAPI.startBrowserScreenshot({ targetId: targetId || undefined, url: url.trim() || undefined, captureMode, fixedElementPolicy: policy })
       setResult(nextResult)
       if (nextResult.status === 'completed') {
         const opened = await window.electronAPI.openBrowserScreenshotViewer({ pngBase64: nextResult.pngBase64 ?? '', title: nextResult.title ?? 'browser-page', width: nextResult.width, height: nextResult.height })
@@ -218,6 +219,16 @@ export function BrowserScreenshotCaptureApp() {
                 { value: 'hide', label: t('learning.browserScreenshot.hideFixed') },
               ]}
               onChange={(value) => setPolicy(value as BrowserScreenshotFixedElementPolicy)}
+              triggerClassName="app-no-drag h-9"
+            />
+            <Select
+              ariaLabel={t('learning.browserScreenshot.captureMode')}
+              value={captureMode}
+              options={[
+                { value: 'standard', label: t('learning.browserScreenshot.standardMode') },
+                { value: 'precise', label: t('learning.browserScreenshot.preciseMode') },
+              ]}
+              onChange={(value) => setCaptureMode(value as BrowserScreenshotCaptureMode)}
               triggerClassName="app-no-drag h-9"
             />
           </div>

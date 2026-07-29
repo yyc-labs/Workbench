@@ -28,7 +28,7 @@ export async function findFreeLoopbackPort(): Promise<number> {
 }
 
 export type EdgeLauncher = {
-  start: (config: BrowserAiConfig, userDataPath: string) => Promise<{ port: number; profilePath: string }>
+  start: (config: BrowserAiConfig, userDataPath: string, profileName?: string) => Promise<{ port: number; profilePath: string }>
   stop: () => Promise<void>
   isRunning: () => boolean
   getPort: () => number | undefined
@@ -57,7 +57,7 @@ export function createEdgeLauncher(): EdgeLauncher {
   let profilePath: string | undefined
 
   return {
-    start: async (config, userDataPath) => {
+    start: async (config, userDataPath, profileName) => {
       if (child && child.exitCode === null && child.signalCode === null && port && profilePath) {
         return { port, profilePath }
       }
@@ -75,7 +75,7 @@ export function createEdgeLauncher(): EdgeLauncher {
       }
 
       const nextPort = await findFreeLoopbackPort()
-      const nextProfilePath = resolveBrowserAiProfilePath(userDataPath)
+      const nextProfilePath = resolveBrowserAiProfilePath(userDataPath, profileName)
       await mkdir(nextProfilePath, { recursive: true })
       const args = buildEdgeLaunchArgs(config, nextPort, nextProfilePath)
       const nextChild = spawn(executablePath, args, {

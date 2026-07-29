@@ -336,6 +336,13 @@ export function SettingsBrowserAiPanel() {
                   <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.headedHint')}</span>
                 </span>
               </label>
+              <label className="flex items-start gap-3 text-sm text-[color:var(--color-foreground)]">
+                <Checkbox checked={config.learningHeadless} onChange={(event) => updateDraft('learningHeadless', event.target.checked)} />
+                <span>
+                  <span className="block font-medium">{t('settings.browserAi.learningHeadless')}</span>
+                  <span className="mt-1 block text-xs text-[color:var(--color-muted-foreground)]">{t('settings.browserAi.learningHeadlessHint')}</span>
+                </span>
+              </label>
             </div>
           </section>
 

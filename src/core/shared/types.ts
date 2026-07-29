@@ -760,6 +760,7 @@ export interface BrowserAiConfig {
   activeSiteId: string
   keepBrowserRunning: boolean
   headless: boolean
+  learningHeadless: boolean
   responseTimeoutMs: number
 }
 
@@ -843,6 +844,8 @@ export type BrowserScreenshotErrorCode = 'BROWSER_NOT_CONNECTED' | 'TARGET_NOT_F
 
 export type BrowserScreenshotFixedElementPolicy = 'keep' | 'hide' | 'keep-once'
 
+export type BrowserScreenshotCaptureMode = 'standard' | 'precise'
+
 export interface BrowserScreenshotTarget {
   id: string
   title: string
@@ -863,6 +866,7 @@ export interface BrowserScreenshotViewerPayload {
 export interface BrowserScreenshotRequest {
   targetId?: string
   url?: string
+  captureMode?: BrowserScreenshotCaptureMode
   fixedElementPolicy?: BrowserScreenshotFixedElementPolicy
   forceSegmented?: boolean
   maxHeight?: number

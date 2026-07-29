@@ -34,6 +34,8 @@ type BrowserAiServiceDependencies = {
   getUserDataPath: () => string
   learningService: LearningService
   emitProgress: (event: BrowserAiTaskProgressEvent) => void
+  profileName?: string
+  launchConfig?: (config: BrowserAiConfig) => BrowserAiConfig
 }
 
 export interface BrowserAiService {
@@ -96,7 +98,7 @@ function errorMessage(errorCode: BrowserAiErrorCode): string {
 }
 
 function isSameConnectionConfig(left: BrowserAiConfig, right: BrowserAiConfig): boolean {
-  return left.mode === right.mode && left.edgeExecutablePath === right.edgeExecutablePath && left.cdpPort === right.cdpPort && left.site === right.site && left.siteUrl === right.siteUrl && left.headless === right.headless
+  return left.mode === right.mode && left.edgeExecutablePath === right.edgeExecutablePath && left.cdpPort === right.cdpPort && left.site === right.site && left.siteUrl === right.siteUrl && left.learningHeadless === right.learningHeadless
 }
 
 function defaultTaskRecordTitle(config: BrowserAiConfig, startedAt: number): string {
@@ -272,7 +274,7 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     ensureConnectionPromise = (async () => {
       try {
         if (config.mode === 'managed-edge') {
-          const launched = await launcher.start(config, deps.getUserDataPath())
+          const launched = await launcher.start(deps.launchConfig?.(config) ?? config, deps.getUserDataPath(), deps.profileName)
           cdpPort = launched.port
           profilePath = launched.profilePath
         } else {
