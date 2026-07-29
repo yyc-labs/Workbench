@@ -42,6 +42,14 @@ const mainMessages = {
         introLine: 'What I learned today:',
       },
     },
+    browserScreenshot: {
+      triggerLabel: 'Screenshot',
+      fixedPolicy: 'Floating elements',
+      keepFixed: 'Keep page elements',
+      hideFixed: 'Hide fixed and sticky elements',
+      fullPage: 'Full page',
+      selectArea: 'Select area',
+    },
   },
   'zh-CN': {
     tray: {
@@ -80,6 +88,14 @@ const mainMessages = {
         introLine: '今天学习到：',
       },
     },
+    browserScreenshot: {
+      triggerLabel: '截图',
+      fixedPolicy: '悬浮元素',
+      keepFixed: '保留页面元素',
+      hideFixed: '隐藏 fixed 和 sticky 元素',
+      fullPage: '整页截图',
+      selectArea: '精准选择',
+    },
   },
 } as const
 
@@ -98,10 +114,7 @@ function readMainMessage(locale: MainLocale, key: string): string {
   return typeof current === 'string' ? current : key
 }
 
-function interpolateMainMessage(
-  template: string,
-  values?: Record<string, number | string>
-): string {
+function interpolateMainMessage(template: string, values?: Record<string, number | string>): string {
   if (!values) return template
   return template.replace(/\{(\w+)\}/g, (_, name: string) => {
     const value = values[name]
@@ -109,10 +122,7 @@ function interpolateMainMessage(
   })
 }
 
-export function resolveMainLocale(
-  locale: AppLocale | undefined,
-  systemLocale: string | undefined
-): MainLocale {
+export function resolveMainLocale(locale: AppLocale | undefined, systemLocale: string | undefined): MainLocale {
   if (locale === 'zh-CN' || locale === 'en-US') return locale
   const normalizedSystemLocale = (systemLocale || '').toLowerCase()
   if (normalizedSystemLocale.startsWith('zh')) return 'zh-CN'
@@ -120,11 +130,7 @@ export function resolveMainLocale(
   return FALLBACK_MAIN_LOCALE
 }
 
-export function translateMain(
-  locale: MainLocale,
-  key: string,
-  values?: Record<string, number | string>
-): string {
+export function translateMain(locale: MainLocale, key: string, values?: Record<string, number | string>): string {
   return interpolateMainMessage(readMainMessage(locale, key), values)
 }
 

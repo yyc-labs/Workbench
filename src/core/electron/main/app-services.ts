@@ -4,7 +4,7 @@ import type { BrowserWindow } from 'electron'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { projectIdFromPath } from '../../shared/rules'
-import type { AppConfig, Capability, TranscriptImportedEvent } from '../../shared/types'
+import type { AppConfig, BrowserScreenshotViewerPayload, Capability, TranscriptImportedEvent } from '../../shared/types'
 import { createAgentLogService } from './agent-logs/agent-log-service'
 import { createAiCommitService } from './ai-commit/ai-commit-service'
 import { createAiConnectionService } from './ai-connection/ai-connection-service'
@@ -18,7 +18,7 @@ import { FeishuNotifier } from './hooks/feishu-notifier'
 import { IPC } from './ipc'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
-import type { MainLocale } from './mainI18n'
+import { translateMain, type MainLocale } from './mainI18n'
 import type { ProcessManager } from './runner'
 import { createRuntimeService } from './runtime/runtime-service'
 import { createSkillRepository } from './skill/skillRepository'
@@ -40,6 +40,8 @@ export type AppServicesOptions = {
   getProcessManager: () => ProcessManager | null
   getMainWindow: () => BrowserWindow | null
   getBrowserScreenshotWindow: () => BrowserWindow | null
+  openBrowserScreenshotViewer: (payload: BrowserScreenshotViewerPayload) => Promise<boolean>
+  openBrowserScreenshotWindow: () => Promise<boolean>
   loadConfig: () => AppConfig
   updateConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>
   getUserDataPath: () => string
@@ -132,6 +134,16 @@ export function createAppServices(options: AppServicesOptions) {
   })
   const browserScreenshotService = createBrowserScreenshotService({
     browserAiService: browserScreenshotAiService,
+    openViewer: options.openBrowserScreenshotViewer,
+    openCaptureWindow: options.openBrowserScreenshotWindow,
+    getCaptureControlLabels: () => ({
+      triggerLabel: translateMain(options.getLocale(), 'browserScreenshot.triggerLabel'),
+      fixedPolicy: translateMain(options.getLocale(), 'browserScreenshot.fixedPolicy'),
+      keepFixed: translateMain(options.getLocale(), 'browserScreenshot.keepFixed'),
+      hideFixed: translateMain(options.getLocale(), 'browserScreenshot.hideFixed'),
+      fullPage: translateMain(options.getLocale(), 'browserScreenshot.fullPage'),
+      selectArea: translateMain(options.getLocale(), 'browserScreenshot.selectArea'),
+    }),
     emitProgress: (event) => {
       options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event)
       options.getBrowserScreenshotWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event)

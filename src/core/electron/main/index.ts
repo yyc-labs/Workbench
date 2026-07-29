@@ -51,6 +51,11 @@ const services = createAppServices({
   getProcessManager: () => processManager,
   getMainWindow: () => mainWindow,
   getBrowserScreenshotWindow: () => browserScreenshotWindow,
+  openBrowserScreenshotViewer,
+  openBrowserScreenshotWindow: async () => {
+    await showBrowserScreenshotWindow()
+    return true
+  },
   loadConfig,
   updateConfig,
   getUserDataPath: () => app.getPath('userData'),
@@ -212,7 +217,18 @@ function sendGlobalThemeShortcut(): void {
 }
 
 function sendGlobalBrowserScreenshotShortcut(): void {
-  void showBrowserScreenshotWindow()
+  void (async () => {
+    try {
+      const { context } = await browserScreenshotAiService.ensureBrowserConnection()
+      const page = context.pages().at(-1)
+      if (page && !page.isClosed()) await page.bringToFront().catch(() => undefined)
+      await browserScreenshotService.listTargets()
+      if (browserScreenshotWindow && !browserScreenshotWindow.isDestroyed()) browserScreenshotWindow.hide()
+    } catch (error) {
+      console.warn('[browser-screenshot] Failed to open the browser.', error)
+      await showBrowserScreenshotWindow()
+    }
+  })()
 }
 
 function positionBrowserScreenshotWindow(window: BrowserWindow): void {
