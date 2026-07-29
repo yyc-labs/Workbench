@@ -131,6 +131,7 @@
 
 .code-markdown-content ol {
   list-style-type: decimal;
+  padding-left: 1.75em;
 }
 
 .code-markdown-content li {

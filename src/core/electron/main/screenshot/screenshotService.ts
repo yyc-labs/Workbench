@@ -1,5 +1,17 @@
 import type { BrowserContext, Frame, Page } from 'playwright-core'
-import type { BrowserScreenshotCaptureMode, BrowserScreenshotErrorCode, BrowserScreenshotFixedElementPolicy, BrowserScreenshotProgress, BrowserScreenshotRequest, BrowserScreenshotResult, BrowserScreenshotTarget, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload } from '../../../shared/types'
+import type {
+  BrowserScreenshotCaptureMode,
+  BrowserScreenshotErrorCode,
+  BrowserScreenshotFixedElementPolicy,
+  BrowserScreenshotMarkedElement,
+  BrowserScreenshotMarkedElementPolicy,
+  BrowserScreenshotProgress,
+  BrowserScreenshotRequest,
+  BrowserScreenshotResult,
+  BrowserScreenshotTarget,
+  BrowserScreenshotTargetsChanged,
+  BrowserScreenshotViewerPayload,
+} from '../../../shared/types'
 import type { BrowserAiService } from '../browser-ai/browserAiService'
 import { composePngSlices, type PngSlice } from './pngComposer'
 
@@ -25,6 +37,13 @@ type CaptureControlLabels = {
   fixedPolicy: string
   keepFixed: string
   hideFixed: string
+  chooseContainer: string
+  chooseElements: string
+  markElement: string
+  lastAppearance: string
+  alwaysHide: string
+  confirmElements: string
+  cancelSelection: string
   fullPage: string
   selectArea: string
 }
@@ -447,10 +466,10 @@ async function preparePage(page: Page, policy: BrowserScreenshotFixedElementPoli
   return state
 }
 
-async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visible: boolean) => void): Promise<PreciseContainerTarget | null> {
+async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, setCaptureWindowVisible?: (visible: boolean) => void): Promise<PreciseContainerTarget | null> {
   setCaptureWindowVisible?.(false)
   const pickerPromise = page.evaluate(
-    () =>
+    ({ chooseContainer }) =>
       new Promise<PreciseContainerTarget | null>((resolve) => {
         const marker = '__ide_browser_screenshot_picker__'
         let highlighted: HTMLElement | null = null
@@ -458,7 +477,7 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
         highlightBox.id = marker
         highlightBox.style.cssText = 'position:fixed;display:none;pointer-events:none;z-index:2147483647;border:4px solid #ff3b30;background:rgba(255,59,48,.12);box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 0 9999px rgba(255,59,48,.04);box-sizing:border-box;'
         const highlightLabel = document.createElement('span')
-        highlightLabel.textContent = '选择滚动容器'
+        highlightLabel.textContent = chooseContainer
         highlightLabel.style.cssText = 'position:absolute;left:-4px;top:-30px;padding:4px 8px;border-radius:6px;background:#ff3b30;color:#fff;font:600 13px/1.2 system-ui,sans-serif;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.25);'
         highlightBox.appendChild(highlightLabel)
         document.documentElement.appendChild(highlightBox)
@@ -476,7 +495,6 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
           highlightBox.style.height = `${bounds.height}px`
         }
         const isScrollable = (element: HTMLElement): boolean => {
-          if (element.hasAttribute('data-ide-screenshot-frame-path')) return true
           const style = getComputedStyle(element)
           const canScrollVertically = element.scrollHeight > element.clientHeight + 4
           const canScrollHorizontally = element.scrollWidth > element.clientWidth + 4
@@ -496,13 +514,16 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
           }
           return parts.join(' > ')
         }
-        const findContainer = (target: EventTarget | null): HTMLElement => {
+        const findContainers = (target: EventTarget | null): HTMLElement[] => {
+          const containers: HTMLElement[] = []
           let current = target instanceof Element ? target : null
           while (current && current !== document.body) {
-            if (current instanceof HTMLElement && isScrollable(current)) return current
+            if (current instanceof HTMLElement && isScrollable(current)) containers.push(current)
             current = current.parentElement
           }
-          return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+          const documentContainer = document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+          if (!containers.includes(documentContainer)) containers.push(documentContainer)
+          return containers
         }
         const clear = () => {
           if (highlighted) highlighted.style.outline = originalOutline.get(highlighted) ?? ''
@@ -518,13 +539,21 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
           window.clearTimeout(timeout)
         }
         const onMove = (event: MouseEvent) => {
-          const next = findContainer(event.target)
+          if (event.target instanceof HTMLElement && event.target.hasAttribute('data-ide-screenshot-frame-path')) return
+          const next = findContainers(event.target)[0]
+          if (!next) {
+            highlightBox.style.display = 'none'
+            return
+          }
           showBounds(next.getBoundingClientRect(), next)
         }
         const onClick = (event: MouseEvent) => {
+          if (event.target instanceof HTMLElement && event.target.hasAttribute('data-ide-screenshot-frame-path')) return
           event.preventDefault()
           event.stopPropagation()
-          const selected = findContainer(event.target)
+          const containers = findContainers(event.target)
+          const selected = containers[0]
+          if (!selected) return
           const framePathText = selected.getAttribute('data-ide-screenshot-frame-path')
           clear()
           if (framePathText) {
@@ -548,21 +577,8 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
             resolve(null)
             return
           }
-          let bounds = data.bounds
-          if (data.framePath.length > 0) {
-            const frameElement = Array.from(document.querySelectorAll<HTMLElement>('[data-ide-screenshot-frame-path]')).find((element) => {
-              try {
-                return JSON.stringify(JSON.parse(element.getAttribute('data-ide-screenshot-frame-path') || 'null')) === JSON.stringify(data.framePath)
-              } catch {
-                return false
-              }
-            })
-            if (frameElement) {
-              const rect = frameElement.getBoundingClientRect()
-              bounds = { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
-            }
-          }
-          showBounds(bounds)
+          if (data.framePath.length === 0) showBounds(data.bounds)
+          else highlightBox.style.display = 'none'
           if (data.action === 'click') {
             clear()
             resolve({ framePath: data.framePath, selector: data.selector })
@@ -586,6 +602,7 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
         document.addEventListener('keydown', onKeyDown, true)
         window.addEventListener('message', onMessage)
       }),
+    { chooseContainer: labels.chooseContainer },
   )
   try {
     const frames = page.frames().filter((frame) => frame !== page.mainFrame())
@@ -621,13 +638,16 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
                 }
                 return parts.join(' > ')
               }
-              const findContainer = (target: EventTarget | null): HTMLElement | null => {
+              const findContainers = (target: EventTarget | null): HTMLElement[] => {
+                const containers: HTMLElement[] = []
                 let current = target instanceof Element ? target : null
                 while (current && current !== document.body) {
-                  if (current instanceof HTMLElement && isScrollable(current)) return current
+                  if (current instanceof HTMLElement && isScrollable(current)) containers.push(current)
                   current = current.parentElement
                 }
-                return document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+                const documentContainer = document.scrollingElement instanceof HTMLElement ? document.scrollingElement : document.documentElement
+                if (!containers.includes(documentContainer)) containers.push(documentContainer)
+                return containers
               }
               const toTopBounds = (bounds: DOMRect) => {
                 let result = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
@@ -641,16 +661,40 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
                 }
                 return result
               }
+              const frameHighlight = document.createElement('div')
+              frameHighlight.style.cssText = 'position:fixed;display:none;pointer-events:none;z-index:2147483647;border:4px solid #ff3b30;background:rgba(255,59,48,.12);box-shadow:0 0 0 2px rgba(255,255,255,.9);box-sizing:border-box;'
+              document.documentElement.appendChild(frameHighlight)
+              const showFrameBounds = (container: HTMLElement) => {
+                const isDocument = container === document.scrollingElement || container === document.documentElement
+                const bounds = isDocument ? { left: 0, top: 0, width: innerWidth, height: innerHeight } : container.getBoundingClientRect()
+                frameHighlight.style.display = 'block'
+                frameHighlight.style.left = `${bounds.left}px`
+                frameHighlight.style.top = `${bounds.top}px`
+                frameHighlight.style.width = `${bounds.width}px`
+                frameHighlight.style.height = `${bounds.height}px`
+              }
               const emit = (event: Event, action: 'move' | 'click') => {
-                const container = findContainer(event.target)
+                if (event.target instanceof HTMLElement && event.target.hasAttribute('data-ide-screenshot-frame-path')) return
+                const containers = findContainers(event.target)
+                const container = containers[0]
                 if (!container) return
                 if (action === 'click') {
                   event.preventDefault()
                   event.stopPropagation()
                 }
+                showFrameBounds(container)
                 const isDocument = container === document.scrollingElement || container === document.documentElement
                 const localBounds = isDocument ? { left: 0, top: 0, width: innerWidth, height: innerHeight } : container.getBoundingClientRect()
-                window.top?.postMessage({ marker: '__ide_browser_screenshot_picker__', action, framePath, selector: isDocument ? '__document__' : pathFor(container), bounds: toTopBounds(new DOMRect(localBounds.left, localBounds.top, localBounds.width, localBounds.height)) }, '*')
+                window.top?.postMessage(
+                  {
+                    marker: '__ide_browser_screenshot_picker__',
+                    action,
+                    framePath,
+                    selector: isDocument ? '__document__' : pathFor(container),
+                    bounds: toTopBounds(new DOMRect(localBounds.left, localBounds.top, localBounds.width, localBounds.height)),
+                  },
+                  '*',
+                )
               }
               const onMove = (event: Event) => emit(event, 'move')
               const onClick = (event: Event) => emit(event, 'click')
@@ -666,7 +710,7 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
               document.addEventListener('mouseover', onMove, true)
               document.addEventListener('click', onClick, true)
               document.addEventListener('keydown', onKeyDown, true)
-              ;(window as unknown as Record<string, unknown>)[key] = { onMove, onClick, onKeyDown }
+              ;(window as unknown as Record<string, unknown>)[key] = { onMove, onClick, onKeyDown, frameHighlight }
             },
             { framePath },
           )
@@ -679,7 +723,7 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
         frame
           .evaluate(() => {
             const key = '__ide_browser_screenshot_frame_picker__'
-            const picker = (window as unknown as Record<string, unknown>)[key] as { onMove?: EventListener; onClick?: EventListener; onKeyDown?: EventListener } | undefined
+            const picker = (window as unknown as Record<string, unknown>)[key] as { onMove?: EventListener; onClick?: EventListener; onKeyDown?: EventListener; frameHighlight?: HTMLElement } | undefined
             if (picker?.onMove) {
               document.removeEventListener('mousemove', picker.onMove, true)
               document.removeEventListener('pointermove', picker.onMove, true)
@@ -687,6 +731,7 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
             }
             if (picker?.onClick) document.removeEventListener('click', picker.onClick, true)
             if (picker?.onKeyDown) document.removeEventListener('keydown', picker.onKeyDown, true)
+            picker?.frameHighlight?.remove()
             delete (window as unknown as Record<string, unknown>)[key]
           })
           .catch(() => undefined),
@@ -696,6 +741,310 @@ async function chooseScrollContainer(page: Page, setCaptureWindowVisible?: (visi
   } finally {
     setCaptureWindowVisible?.(true)
   }
+}
+
+async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, setCaptureWindowVisible?: (visible: boolean) => void): Promise<BrowserScreenshotMarkedElement[] | null> {
+  setCaptureWindowVisible?.(false)
+  const pickerPromise = page.evaluate(
+    ({ labels }) =>
+      new Promise<BrowserScreenshotMarkedElement[] | null>((resolve) => {
+        const key = '__ide_browser_screenshot_element_picker__'
+        const markedAttribute = 'data-ide-browser-screenshot-marked'
+        const host = document.createElement('div')
+        host.id = key
+        host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:none;font-family:system-ui,sans-serif;'
+        const status = document.createElement('div')
+        status.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:9px 14px;border-radius:10px;background:rgba(20,20,24,.9);color:#fff;font:600 13px/1.2 system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.25);'
+        status.textContent = `${labels.chooseElements} · ${labels.cancelSelection}`
+        host.appendChild(status)
+        const highlight = document.createElement('div')
+        highlight.style.cssText = 'position:fixed;display:none;pointer-events:none;border:2px solid #356cff;background:rgba(53,108,255,.08);box-shadow:0 0 0 1px rgba(255,255,255,.85);box-sizing:border-box;'
+        host.appendChild(highlight)
+        const menu = document.createElement('div')
+        menu.style.cssText = 'position:fixed;display:none;pointer-events:auto;min-width:190px;padding:5px;border:1px solid rgba(0,0,0,.14);border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.2);'
+        const menuTitle = document.createElement('div')
+        menuTitle.style.cssText = 'padding:6px 9px 4px;color:#777;font:600 11px/1.2 system-ui,sans-serif;'
+        menuTitle.textContent = labels.markElement
+        menu.appendChild(menuTitle)
+        const marked = new Map<string, BrowserScreenshotMarkedElement>()
+        let pending: { element: HTMLElement | null; item: BrowserScreenshotMarkedElement; bounds: { left: number; top: number; width: number; height: number }; source: Window | null } | null = null
+        let highlighted: HTMLElement | null = null
+        let originalOutline = ''
+        let finished = false
+        const button = (text: string, policy: BrowserScreenshotMarkedElementPolicy) => {
+          const item = document.createElement('button')
+          item.type = 'button'
+          item.textContent = text
+          item.style.cssText = 'display:block;width:100%;padding:8px 9px;border:0;border-radius:7px;background:transparent;color:#222;text-align:left;cursor:pointer;font:600 12px/1.2 system-ui,sans-serif;'
+          item.addEventListener('mouseenter', () => {
+            item.style.background = '#edf2ff'
+          })
+          item.addEventListener('mouseleave', () => {
+            item.style.background = 'transparent'
+          })
+          item.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!pending) return
+            const next = { ...pending.item, policy }
+            marked.set(`${next.framePath.join('.')}:${next.selector}`, next)
+            if (pending.element) {
+              pending.element.setAttribute(markedAttribute, policy)
+              pending.element.style.outline = policy === 'hide' ? '3px solid #ff3b30' : '3px solid #34a853'
+              pending.element.style.outlineOffset = '2px'
+            }
+            pending.source?.postMessage({ marker: key, action: 'mark', selector: next.selector, policy }, '*')
+            pending = null
+            menu.style.display = 'none'
+            status.textContent = `${labels.chooseElements} · ${marked.size} · ${labels.confirmElements}`
+          })
+          return item
+        }
+        menu.appendChild(button(labels.lastAppearance, 'keep-once'))
+        menu.appendChild(button(labels.alwaysHide, 'hide'))
+        host.appendChild(menu)
+        document.documentElement.appendChild(host)
+        const selectorFor = (element: Element): string => {
+          const parts: string[] = []
+          let current: Element | null = element
+          while (current && current !== document.documentElement && current !== document.body) {
+            if (current.id && /^[A-Za-z][\w-]*$/.test(current.id)) {
+              parts.unshift(`#${CSS.escape(current.id)}`)
+              break
+            }
+            const parent: HTMLElement | null = current.parentElement
+            if (!parent) break
+            const index = Array.from(parent.children).indexOf(current)
+            parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${index + 1})`)
+            current = parent
+          }
+          return parts.join(' > ')
+        }
+        const isInternal = (element: Element | null): boolean => Boolean(element && (element.closest(`#${key}`) || element.closest('#__ide-browser-screenshot-control__')))
+        const showMenu = (item: BrowserScreenshotMarkedElement, element: HTMLElement | null, bounds: { left: number; top: number; width: number; height: number }, source: Window | null = null) => {
+          pending = { item, element, bounds, source }
+          menu.style.display = 'block'
+          menu.style.left = `${Math.max(8, Math.min(innerWidth - 205, bounds.left))}px`
+          menu.style.top = `${Math.max(8, Math.min(innerHeight - 110, bounds.top + bounds.height + 8))}px`
+        }
+        const showCandidate = (element: HTMLElement | null, bounds: { left: number; top: number; width: number; height: number } | null) => {
+          if (highlighted && highlighted !== element) highlighted.style.outline = originalOutline
+          highlighted = element
+          originalOutline = element?.style.outline ?? ''
+          if (!bounds) {
+            highlight.style.display = 'none'
+            return
+          }
+          highlight.style.display = 'block'
+          highlight.style.left = `${bounds.left}px`
+          highlight.style.top = `${bounds.top}px`
+          highlight.style.width = `${bounds.width}px`
+          highlight.style.height = `${bounds.height}px`
+        }
+        const cleanup = (result: BrowserScreenshotMarkedElement[] | null) => {
+          if (finished) return
+          finished = true
+          if (highlighted) highlighted.style.outline = originalOutline
+          document.querySelectorAll(`[${markedAttribute}]`).forEach((element) => {
+            element.removeAttribute(markedAttribute)
+            ;(element as HTMLElement).style.outline = ''
+            ;(element as HTMLElement).style.outlineOffset = ''
+          })
+          host.remove()
+          document.removeEventListener('mousemove', onMove, true)
+          document.removeEventListener('pointermove', onMove, true)
+          document.removeEventListener('click', onClick, true)
+          document.removeEventListener('keydown', onKeyDown, true)
+          window.removeEventListener('message', onMessage)
+          resolve(result)
+        }
+        const targetAt = (target: EventTarget | null): HTMLElement | null => {
+          const element = target instanceof HTMLElement ? target : null
+          return element && !isInternal(element) ? element : null
+        }
+        const onMove = (event: MouseEvent) => {
+          if (pending) return
+          const element = targetAt(event.target)
+          showCandidate(
+            element,
+            element
+              ? (() => {
+                  const rect = element.getBoundingClientRect()
+                  return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+                })()
+              : null,
+          )
+        }
+        const onClick = (event: MouseEvent) => {
+          const element = targetAt(event.target)
+          if (!element || menu.contains(event.target as Node)) return
+          event.preventDefault()
+          event.stopImmediatePropagation()
+          const rect = element.getBoundingClientRect()
+          const item = { framePath: [], selector: selectorFor(element), policy: 'keep-once' as BrowserScreenshotMarkedElementPolicy }
+          if (!item.selector) return
+          showMenu(item, element, { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+        }
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as { marker?: string; action?: 'move' | 'click' | 'key'; key?: string; framePath?: number[]; selector?: string; bounds?: { left: number; top: number; width: number; height: number } } | null
+          if (!data || data.marker !== key || !data.action) return
+          if (data.action === 'key') {
+            if (data.key === 'Escape') cleanup(null)
+            if (data.key === 'Enter' && !pending) cleanup(Array.from(marked.values()))
+            return
+          }
+          if (!data.framePath || !data.selector || !data.bounds) return
+          const item = { framePath: data.framePath, selector: data.selector, policy: 'keep-once' as BrowserScreenshotMarkedElementPolicy }
+          showCandidate(null, data.framePath.length === 0 ? data.bounds : null)
+          if (data.action === 'click') showMenu(item, null, data.bounds, event.source as Window | null)
+        }
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            cleanup(null)
+          } else if (event.key === 'Enter' && !pending) {
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            cleanup(Array.from(marked.values()))
+          }
+        }
+        document.addEventListener('mousemove', onMove, true)
+        document.addEventListener('pointermove', onMove, true)
+        document.addEventListener('click', onClick, true)
+        document.addEventListener('keydown', onKeyDown, true)
+        window.addEventListener('message', onMessage)
+        const timeout = window.setTimeout(() => cleanup(null), 60_000)
+        const originalCleanup = cleanup
+        ;(window as unknown as Record<string, unknown>)[key] = {
+          cleanup: (result: BrowserScreenshotMarkedElement[] | null) => {
+            window.clearTimeout(timeout)
+            originalCleanup(result)
+          },
+        }
+      }),
+    { labels },
+  )
+  const frames = page.frames().filter((frame) => frame !== page.mainFrame())
+  await Promise.all(
+    frames.map(async (frame) => {
+      const framePath = getFramePath(frame)
+      await frame
+        .evaluate(
+          ({ framePath, marker }) => {
+            const selectorFor = (element: Element): string => {
+              const parts: string[] = []
+              let current: Element | null = element
+              while (current && current !== document.documentElement && current !== document.body) {
+                if (current.id && /^[A-Za-z][\w-]*$/.test(current.id)) {
+                  parts.unshift(`#${CSS.escape(current.id)}`)
+                  break
+                }
+                const parent: HTMLElement | null = current.parentElement
+                if (!parent) break
+                parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${Array.from(parent.children).indexOf(current) + 1})`)
+                current = parent
+              }
+              return parts.join(' > ')
+            }
+            const toTopBounds = (bounds: DOMRect) => {
+              let result = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+              let current: Window = window
+              while (current !== window.top) {
+                const frameElement = current.frameElement
+                if (!(frameElement instanceof Element)) break
+                const frameBounds = frameElement.getBoundingClientRect()
+                const frameOffset = frameElement instanceof HTMLIFrameElement ? { left: frameElement.clientLeft, top: frameElement.clientTop } : { left: 0, top: 0 }
+                result = { ...result, left: result.left + frameBounds.left + frameOffset.left, top: result.top + frameBounds.top + frameOffset.top }
+                current = current.parent as Window
+              }
+              return result
+            }
+            const frameHighlight = document.createElement('div')
+            frameHighlight.style.cssText = 'position:fixed;display:none;pointer-events:none;z-index:2147483647;border:2px solid #356cff;background:rgba(53,108,255,.08);box-shadow:0 0 0 1px rgba(255,255,255,.85);box-sizing:border-box;'
+            document.documentElement.appendChild(frameHighlight)
+            let selectionLocked = false
+            const showFrameHighlight = (element: HTMLElement | null) => {
+              if (!element) {
+                frameHighlight.style.display = 'none'
+                return
+              }
+              const rect = element.getBoundingClientRect()
+              frameHighlight.style.display = 'block'
+              frameHighlight.style.left = `${rect.left}px`
+              frameHighlight.style.top = `${rect.top}px`
+              frameHighlight.style.width = `${rect.width}px`
+              frameHighlight.style.height = `${rect.height}px`
+            }
+            const onMove = (event: MouseEvent) => {
+              if (selectionLocked) return
+              const element = event.target instanceof HTMLElement ? event.target : null
+              if (!element || element.closest('[data-ide-browser-screenshot-frame-picker]')) return
+              showFrameHighlight(element)
+              const rect = toTopBounds(element.getBoundingClientRect())
+              window.top?.postMessage({ marker, action: 'move', framePath, selector: selectorFor(element), bounds: rect }, '*')
+            }
+            const onClick = (event: MouseEvent) => {
+              const element = event.target instanceof HTMLElement ? event.target : null
+              if (!element) return
+              event.preventDefault()
+              event.stopImmediatePropagation()
+              selectionLocked = true
+              showFrameHighlight(element)
+              const rect = toTopBounds(element.getBoundingClientRect())
+              window.top?.postMessage({ marker, action: 'click', framePath, selector: selectorFor(element), bounds: rect }, '*')
+            }
+            const onMessage = (event: MessageEvent) => {
+              const data = event.data as { marker?: string; action?: 'mark'; selector?: string; policy?: string } | null
+              if (!data || data.marker !== marker || data.action !== 'mark' || !data.selector || !data.policy) return
+              const element = document.querySelector(data.selector)
+              if (!(element instanceof HTMLElement)) return
+              selectionLocked = false
+              element.setAttribute('data-ide-browser-screenshot-marked', data.policy)
+              element.style.outline = data.policy === 'hide' ? '3px solid #ff3b30' : '3px solid #34a853'
+              element.style.outlineOffset = '2px'
+            }
+            const onKeyDown = (event: KeyboardEvent) => {
+              if (event.key === 'Enter' || event.key === 'Escape') window.top?.postMessage({ marker, action: 'key', key: event.key }, '*')
+            }
+            document.addEventListener('mousemove', onMove, true)
+            document.addEventListener('pointermove', onMove, true)
+            document.addEventListener('click', onClick, true)
+            document.addEventListener('keydown', onKeyDown, true)
+            window.addEventListener('message', onMessage)
+            ;(window as unknown as Record<string, unknown>).__ide_browser_screenshot_frame_element_picker__ = { onMove, onClick, onKeyDown, onMessage, frameHighlight }
+          },
+          { framePath, marker: '__ide_browser_screenshot_element_picker__' },
+        )
+        .catch(() => undefined)
+    }),
+  )
+  const result = await pickerPromise
+  await Promise.all(
+    frames.map((frame) =>
+      frame
+        .evaluate(() => {
+          const picker = (window as unknown as Record<string, unknown>).__ide_browser_screenshot_frame_element_picker__ as { onMove?: EventListener; onClick?: EventListener; onKeyDown?: EventListener; onMessage?: EventListener; frameHighlight?: HTMLElement } | undefined
+          if (picker?.onMove) {
+            document.removeEventListener('mousemove', picker.onMove, true)
+            document.removeEventListener('pointermove', picker.onMove, true)
+          }
+          if (picker?.onClick) document.removeEventListener('click', picker.onClick, true)
+          if (picker?.onKeyDown) document.removeEventListener('keydown', picker.onKeyDown, true)
+          if (picker?.onMessage) window.removeEventListener('message', picker.onMessage)
+          picker?.frameHighlight?.remove()
+          document.querySelectorAll('[data-ide-browser-screenshot-marked]').forEach((element) => {
+            element.removeAttribute('data-ide-browser-screenshot-marked')
+            ;(element as HTMLElement).style.outline = ''
+            ;(element as HTMLElement).style.outlineOffset = ''
+          })
+          delete (window as unknown as Record<string, unknown>).__ide_browser_screenshot_frame_element_picker__
+        })
+        .catch(() => undefined),
+    ),
+  )
+  setCaptureWindowVisible?.(true)
+  return result
 }
 
 async function restorePage(page: Page, state: PageState): Promise<void> {
@@ -904,6 +1253,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       if (!page || page.isClosed()) throw Object.assign(new Error(errorMessage('TARGET_NOT_FOUND')), { code: 'TARGET_NOT_FOUND' })
       activePage = page
       let containerTarget: PreciseContainerTarget | undefined
+      let captureRequest = request
       if (request.captureMode === 'precise') {
         emit(taskId, { stage: 'preparing', message: '正在等待网页完成加载。', percent: 7 })
         await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
@@ -912,10 +1262,16 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
         await waitForPageSettle(page, 6_000)
         await waitForDomQuiet(page, 1_500, 10_000)
         emit(taskId, { stage: 'analyzing', message: '请在浏览器中移动鼠标并点击要滚动的容器。按 Esc 可取消。', percent: 8 })
-        containerTarget = (await chooseScrollContainer(page, deps.setCaptureWindowVisible)) ?? undefined
+        containerTarget = (await chooseScrollContainer(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)) ?? undefined
         if (!containerTarget) {
           throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
         }
+        emit(taskId, { stage: 'analyzing', message: deps.getCaptureControlLabels().chooseElements, percent: 9 })
+        const markedElements = await chooseMarkedElements(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)
+        if (!markedElements) {
+          throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
+        }
+        captureRequest = { ...request, markedElements }
       }
       const policy = request.fixedElementPolicy ?? 'keep'
       const state = await preparePage(page, policy)
@@ -947,7 +1303,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
         png = await capturePreciseContainer(
           page,
           taskId,
-          request,
+          captureRequest,
           containerTarget,
           emit,
           () => cancelRequested,
@@ -1038,6 +1394,27 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
   }
 }
 
+async function applyMarkedElementPolicies(page: Page, elements: BrowserScreenshotMarkedElement[], showKeepOnce: boolean): Promise<void> {
+  const apply = async (frame: Frame, framePath: number[]) => {
+    const matching = elements.filter((element) => element.framePath.length === framePath.length && element.framePath.every((value, index) => value === framePath[index]))
+    if (!matching.length) return
+    await frame
+      .evaluate(
+        ({ elements: markedElements, showKeepOnce: shouldShow }) => {
+          for (const marked of markedElements) {
+            const element = document.querySelector(marked.selector)
+            if (!(element instanceof HTMLElement)) continue
+            if (marked.policy === 'hide' || !shouldShow) element.setAttribute('data-ide-screenshot-hidden', 'true')
+            else element.removeAttribute('data-ide-screenshot-hidden')
+          }
+        },
+        { elements: matching, showKeepOnce },
+      )
+      .catch(() => undefined)
+  }
+  await Promise.all(page.frames().map((frame) => apply(frame, getFramePath(frame))))
+}
+
 async function captureSegmented(page: Page, taskId: string, request: BrowserScreenshotRequest, emit: (taskId: string, event: Omit<BrowserScreenshotProgress, 'taskId'>) => void, isCancelled: () => boolean, onSize: (size: { width: number; height: number }) => void): Promise<Buffer> {
   const deadline = Date.now() + (request.maxDurationMs ?? DEFAULT_MAX_DURATION)
   const info = await page.evaluate(() => ({ viewportWidth: innerWidth, viewportHeight: innerHeight, totalHeight: Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0), dpr: devicePixelRatio }))
@@ -1054,6 +1431,7 @@ async function captureSegmented(page: Page, taskId: string, request: BrowserScre
     throwIfCancelled(isCancelled)
     const actualTop = await page.evaluate(() => scrollY)
     throwIfCancelled(isCancelled)
+    await applyMarkedElementPolicies(page, request.markedElements ?? [], requestedTop + info.viewportHeight >= info.totalHeight)
     const buffer = await page.screenshot({ type: 'png' })
     throwIfCancelled(isCancelled)
     const scale = info.dpr
@@ -1146,10 +1524,12 @@ async function capturePreciseContainer(
       clip = { x: left, y: top, width: right - left, height: bottom - top }
     }
     if (clip.width <= 0 || clip.height <= 0) throw new Error('选中的滚动容器不在浏览器可视区域内。')
+    const actualTop = Math.max(0, rect.scrollTop)
+    const willFinish = actualTop + clip.height >= totalHeight - 0.5
+    await applyMarkedElementPolicies(page, request.markedElements ?? [], willFinish)
     const buffer = await page.screenshot({ type: 'png' })
     throwIfCancelled(isCancelled)
     const scale = info.dpr
-    const actualTop = Math.max(0, rect.scrollTop)
     if (index > 0 && actualTop <= previousActualTop) {
       throw Object.assign(
         new Error(`精准截图分段没有前进（段=${index + 1}，requestedTop=${formatPreciseCoordinate(requestedTop)}，actualTop=${formatPreciseCoordinate(actualTop)}，previousActualTop=${formatPreciseCoordinate(previousActualTop)}，previousCapturedEnd=${formatPreciseCoordinate(previousCapturedEnd)}）。`),

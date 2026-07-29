@@ -844,6 +844,14 @@ export type BrowserScreenshotErrorCode = 'BROWSER_NOT_CONNECTED' | 'TARGET_NOT_F
 
 export type BrowserScreenshotFixedElementPolicy = 'keep' | 'hide' | 'keep-once'
 
+export type BrowserScreenshotMarkedElementPolicy = 'hide' | 'keep-once'
+
+export interface BrowserScreenshotMarkedElement {
+  framePath: number[]
+  selector: string
+  policy: BrowserScreenshotMarkedElementPolicy
+}
+
 export type BrowserScreenshotCaptureMode = 'standard' | 'precise'
 
 export interface BrowserScreenshotTarget {
@@ -868,6 +876,7 @@ export interface BrowserScreenshotRequest {
   url?: string
   captureMode?: BrowserScreenshotCaptureMode
   fixedElementPolicy?: BrowserScreenshotFixedElementPolicy
+  markedElements?: BrowserScreenshotMarkedElement[]
   forceSegmented?: boolean
   maxHeight?: number
   maxDurationMs?: number
