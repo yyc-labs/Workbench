@@ -844,7 +844,7 @@ export type BrowserScreenshotErrorCode = 'BROWSER_NOT_CONNECTED' | 'TARGET_NOT_F
 
 export type BrowserScreenshotFixedElementPolicy = 'keep' | 'hide' | 'keep-once'
 
-export type BrowserScreenshotMarkedElementPolicy = 'hide' | 'keep-once'
+export type BrowserScreenshotMarkedElementPolicy = 'hide' | 'keep-once' | 'keep-first'
 
 export interface BrowserScreenshotMarkedElement {
   framePath: number[]

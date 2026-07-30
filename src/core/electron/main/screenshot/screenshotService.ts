@@ -40,10 +40,16 @@ type CaptureControlLabels = {
   chooseContainer: string
   chooseElements: string
   markElement: string
+  cancelMark: string
+  cancelAction: string
+  viewMarked: string
+  editMarked: string
   lastAppearance: string
+  firstAppearance: string
   alwaysHide: string
   confirmElements: string
   cancelSelection: string
+  markedSummary: string
   fullPage: string
   selectArea: string
 }
@@ -86,7 +92,7 @@ function errorMessage(code: BrowserScreenshotErrorCode): string {
 }
 
 type PageCaptureControlResult = { status: BrowserScreenshotResult['status']; errorMessage?: string }
-type PageCaptureControlRequest = { captureMode: BrowserScreenshotCaptureMode; fixedElementPolicy: BrowserScreenshotFixedElementPolicy } | 'open-window'
+type PageCaptureControlRequest = { captureMode: BrowserScreenshotCaptureMode; fixedElementPolicy: BrowserScreenshotFixedElementPolicy } | { action: 'view-marked' | 'edit-marked' } | 'open-window'
 
 function installCaptureControl({ bindingName, labels }: { bindingName: string; labels: CaptureControlLabels }): void {
   const hostId = '__ide-browser-screenshot-control__'
@@ -102,12 +108,13 @@ function installCaptureControl({ bindingName, labels }: { bindingName: string; l
     .trigger { width: 34px; height: 34px; border-radius: 11px; color: #fff; background: #356cff; box-shadow: 0 3px 14px rgba(0,0,0,.22); touch-action: none; user-select: none; }
     .menu { position: absolute; top: 40px; right: 0; display: none; min-width: 180px; padding: 5px; border: 1px solid rgba(0,0,0,.12); border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
     .menu.open { display: grid; gap: 3px; }
+    .marked-summary { display: none; padding: 7px 10px 4px; color: #356cff; font: 600 11px/1.2 system-ui, sans-serif; }
     .policy-label { padding: 7px 10px 3px; color: #777; font: 600 11px/1.2 system-ui, sans-serif; }
     .policy-item.selected { background: #edf2ff; }
     .item { padding: 8px 10px; border-radius: 7px; color: #222; background: transparent; text-align: left; }
     .item:hover { background: #edf2ff; }
     .trigger:disabled, .item:disabled { cursor: wait; opacity: .55; }
-  </style><div class="wrap"><button class="trigger" type="button">▣</button><div class="menu"><div class="policy-label"></div><button class="item policy-item selected" type="button" data-policy="keep"></button><button class="item policy-item" type="button" data-policy="hide"></button><button class="item" type="button" data-mode="standard"></button><button class="item" type="button" data-mode="precise"></button></div></div>`
+  </style><div class="wrap"><button class="trigger" type="button">▣</button><div class="menu"><div class="marked-summary"></div><button class="item" type="button" data-action="view-marked"></button><button class="item" type="button" data-action="edit-marked"></button><div class="policy-label"></div><button class="item policy-item selected" type="button" data-policy="keep"></button><button class="item policy-item" type="button" data-policy="hide"></button><button class="item" type="button" data-mode="standard"></button><button class="item" type="button" data-mode="precise"></button></div></div>`
   const trigger = shadow.querySelector<HTMLButtonElement>('.trigger')
   const menu = shadow.querySelector<HTMLElement>('.menu')
   const items = Array.from(shadow.querySelectorAll<HTMLButtonElement>('.item'))
@@ -123,6 +130,19 @@ function installCaptureControl({ bindingName, labels }: { bindingName: string; l
   if (hidePolicyItem) hidePolicyItem.textContent = labels.hideFixed
   if (fullPageItem) fullPageItem.textContent = labels.fullPage
   if (selectAreaItem) selectAreaItem.textContent = labels.selectArea
+  const viewMarkedItem = shadow.querySelector<HTMLButtonElement>('[data-action="view-marked"]')
+  const editMarkedItem = shadow.querySelector<HTMLButtonElement>('[data-action="edit-marked"]')
+  if (viewMarkedItem) viewMarkedItem.textContent = labels.viewMarked
+  if (editMarkedItem) editMarkedItem.textContent = labels.editMarked
+  const markedSummary = shadow.querySelector<HTMLElement>('.marked-summary')
+  const updateMarkedSummary = () => {
+    const items = ((window as unknown as Record<string, unknown>).__ide_browser_screenshot_marked_elements__ as { items?: unknown[] } | undefined)?.items ?? []
+    if (!markedSummary) return
+    markedSummary.textContent = items.length ? labels.markedSummary.replace('{value}', String(items.length)) : ''
+    markedSummary.style.display = items.length ? 'block' : 'none'
+  }
+  updateMarkedSummary()
+  window.addEventListener('__ide_browser_screenshot_marked_change__', updateMarkedSummary)
   let fixedElementPolicy: BrowserScreenshotFixedElementPolicy = 'keep'
   let dragStartX = 0
   let dragStartY = 0
@@ -170,6 +190,21 @@ function installCaptureControl({ bindingName, labels }: { bindingName: string; l
     item.addEventListener('click', (event) => {
       event.preventDefault()
       event.stopPropagation()
+      const action = item.dataset.action as 'view-marked' | 'edit-marked' | undefined
+      if (action) {
+        trigger.disabled = true
+        items.forEach((next) => {
+          next.disabled = true
+        })
+        menu.classList.remove('open')
+        void (window as unknown as Record<string, (request: PageCaptureControlRequest) => Promise<PageCaptureControlResult>>)[bindingName]({ action }).finally(() => {
+          trigger.disabled = false
+          items.forEach((next) => {
+            next.disabled = false
+          })
+        })
+        return
+      }
       const mode = item.dataset.mode as BrowserScreenshotCaptureMode | undefined
       if (!mode) {
         fixedElementPolicy = item.dataset.policy as BrowserScreenshotFixedElementPolicy
@@ -745,11 +780,31 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
 
 async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, setCaptureWindowVisible?: (visible: boolean) => void): Promise<BrowserScreenshotMarkedElement[] | null> {
   setCaptureWindowVisible?.(false)
+  const existingMarkedElements = await page
+    .evaluate(() => {
+      const state = (window as unknown as Record<string, unknown>).__ide_browser_screenshot_marked_elements__ as { items?: BrowserScreenshotMarkedElement[] } | undefined
+      return state?.items ?? []
+    })
+    .catch(() => [] as BrowserScreenshotMarkedElement[])
   const pickerPromise = page.evaluate(
-    ({ labels }) =>
+    ({ labels, existingMarkedElements }) =>
       new Promise<BrowserScreenshotMarkedElement[] | null>((resolve) => {
         const key = '__ide_browser_screenshot_element_picker__'
         const markedAttribute = 'data-ide-browser-screenshot-marked'
+        const stateKey = '__ide_browser_screenshot_marked_elements__'
+        const markerStyleId = '__ide_browser_screenshot_marked_style__'
+        if (!document.getElementById(markerStyleId)) {
+          const style = document.createElement('style')
+          style.id = markerStyleId
+          style.textContent = `[${markedAttribute}="hide"] { outline: 3px solid #ff3b30 !important; outline-offset: 2px !important; } [${markedAttribute}="keep-once"] { outline: 3px solid #34a853 !important; outline-offset: 2px !important; } [${markedAttribute}="keep-first"] { outline: 3px solid #ff9500 !important; outline-offset: 2px !important; }`
+          document.documentElement.appendChild(style)
+        }
+        const marked = new Map<string, BrowserScreenshotMarkedElement>(existingMarkedElements.map((item) => [`${item.framePath.join('.')}:${item.selector}`, item]))
+        const persist = () => {
+          ;(window as unknown as Record<string, unknown>)[stateKey] = { items: Array.from(marked.values()) }
+          window.dispatchEvent(new Event('__ide_browser_screenshot_marked_change__'))
+        }
+        existingMarkedElements.filter((item) => item.framePath.length === 0).forEach((item) => document.querySelector(item.selector)?.setAttribute(markedAttribute, item.policy))
         const host = document.createElement('div')
         host.id = key
         host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483646;pointer-events:none;font-family:system-ui,sans-serif;'
@@ -766,11 +821,36 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
         menuTitle.style.cssText = 'padding:6px 9px 4px;color:#777;font:600 11px/1.2 system-ui,sans-serif;'
         menuTitle.textContent = labels.markElement
         menu.appendChild(menuTitle)
-        const marked = new Map<string, BrowserScreenshotMarkedElement>()
         let pending: { element: HTMLElement | null; item: BrowserScreenshotMarkedElement; bounds: { left: number; top: number; width: number; height: number }; source: Window | null } | null = null
         let highlighted: HTMLElement | null = null
         let originalOutline = ''
         let finished = false
+        const cancelButton = () => {
+          const item = document.createElement('button')
+          item.type = 'button'
+          item.textContent = labels.cancelMark
+          item.style.cssText = 'display:block;width:100%;padding:8px 9px;border:0;border-radius:7px;background:transparent;color:#ff3b30;text-align:left;cursor:pointer;font:600 12px/1.2 system-ui,sans-serif;'
+          item.addEventListener('mouseenter', () => {
+            item.style.background = '#fff1f0'
+          })
+          item.addEventListener('mouseleave', () => {
+            item.style.background = 'transparent'
+          })
+          item.addEventListener('click', (event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            if (!pending) return
+            const next = pending.item
+            marked.delete(`${next.framePath.join('.')}:${next.selector}`)
+            pending.element?.removeAttribute(markedAttribute)
+            pending.source?.postMessage({ marker: key, action: 'unmark', selector: next.selector }, '*')
+            pending = null
+            menu.style.display = 'none'
+            persist()
+            status.textContent = `${labels.chooseElements} · ${marked.size} · ${labels.confirmElements}`
+          })
+          return item
+        }
         const button = (text: string, policy: BrowserScreenshotMarkedElementPolicy) => {
           const item = document.createElement('button')
           item.type = 'button'
@@ -790,17 +870,39 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
             marked.set(`${next.framePath.join('.')}:${next.selector}`, next)
             if (pending.element) {
               pending.element.setAttribute(markedAttribute, policy)
-              pending.element.style.outline = policy === 'hide' ? '3px solid #ff3b30' : '3px solid #34a853'
-              pending.element.style.outlineOffset = '2px'
             }
             pending.source?.postMessage({ marker: key, action: 'mark', selector: next.selector, policy }, '*')
             pending = null
             menu.style.display = 'none'
+            persist()
             status.textContent = `${labels.chooseElements} · ${marked.size} · ${labels.confirmElements}`
           })
           return item
         }
+        const cancelMarkItem = cancelButton()
+        cancelMarkItem.style.display = 'none'
+        menu.appendChild(cancelMarkItem)
+        const cancelSelectionItem = document.createElement('button')
+        cancelSelectionItem.type = 'button'
+        cancelSelectionItem.textContent = labels.cancelAction
+        cancelSelectionItem.style.cssText = 'display:none;width:100%;padding:8px 9px;border:0;border-radius:7px;background:transparent;color:#666;text-align:left;cursor:pointer;font:600 12px/1.2 system-ui,sans-serif;'
+        cancelSelectionItem.addEventListener('mouseenter', () => {
+          cancelSelectionItem.style.background = '#f3f3f3'
+        })
+        cancelSelectionItem.addEventListener('mouseleave', () => {
+          cancelSelectionItem.style.background = 'transparent'
+        })
+        cancelSelectionItem.addEventListener('click', (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          pending?.source?.postMessage({ marker: key, action: 'cancel' }, '*')
+          pending = null
+          menu.style.display = 'none'
+          showCandidate(null, null)
+        })
+        menu.appendChild(cancelSelectionItem)
         menu.appendChild(button(labels.lastAppearance, 'keep-once'))
+        menu.appendChild(button(labels.firstAppearance, 'keep-first'))
         menu.appendChild(button(labels.alwaysHide, 'hide'))
         host.appendChild(menu)
         document.documentElement.appendChild(host)
@@ -823,9 +925,12 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
         const isInternal = (element: Element | null): boolean => Boolean(element && (element.closest(`#${key}`) || element.closest('#__ide-browser-screenshot-control__')))
         const showMenu = (item: BrowserScreenshotMarkedElement, element: HTMLElement | null, bounds: { left: number; top: number; width: number; height: number }, source: Window | null = null) => {
           pending = { item, element, bounds, source }
+          const isMarked = marked.has(`${item.framePath.join('.')}:${item.selector}`)
+          cancelMarkItem.style.display = isMarked ? 'block' : 'none'
+          cancelSelectionItem.style.display = isMarked ? 'none' : 'block'
           menu.style.display = 'block'
           menu.style.left = `${Math.max(8, Math.min(innerWidth - 205, bounds.left))}px`
-          menu.style.top = `${Math.max(8, Math.min(innerHeight - 110, bounds.top + bounds.height + 8))}px`
+          menu.style.top = `${Math.max(8, Math.min(innerHeight - 150, bounds.top + bounds.height + 8))}px`
         }
         const showCandidate = (element: HTMLElement | null, bounds: { left: number; top: number; width: number; height: number } | null) => {
           if (highlighted && highlighted !== element) highlighted.style.outline = originalOutline
@@ -845,11 +950,8 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
           if (finished) return
           finished = true
           if (highlighted) highlighted.style.outline = originalOutline
-          document.querySelectorAll(`[${markedAttribute}]`).forEach((element) => {
-            element.removeAttribute(markedAttribute)
-            ;(element as HTMLElement).style.outline = ''
-            ;(element as HTMLElement).style.outlineOffset = ''
-          })
+          persist()
+          document.querySelectorAll(`[${markedAttribute}]`).forEach((element) => element.removeAttribute(markedAttribute))
           host.remove()
           document.removeEventListener('mousemove', onMove, true)
           document.removeEventListener('pointermove', onMove, true)
@@ -923,7 +1025,7 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
           },
         }
       }),
-    { labels },
+    { labels, existingMarkedElements },
   )
   const frames = page.frames().filter((frame) => frame !== page.mainFrame())
   await Promise.all(
@@ -931,7 +1033,16 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
       const framePath = getFramePath(frame)
       await frame
         .evaluate(
-          ({ framePath, marker }) => {
+          ({ framePath, marker, existingMarkedElements }) => {
+            const markedAttribute = 'data-ide-browser-screenshot-marked'
+            const markerStyleId = '__ide_browser_screenshot_marked_style__'
+            if (!document.getElementById(markerStyleId)) {
+              const style = document.createElement('style')
+              style.id = markerStyleId
+              style.textContent = `[${markedAttribute}="hide"] { outline: 3px solid #ff3b30 !important; outline-offset: 2px !important; } [${markedAttribute}="keep-once"] { outline: 3px solid #34a853 !important; outline-offset: 2px !important; } [${markedAttribute}="keep-first"] { outline: 3px solid #ff9500 !important; outline-offset: 2px !important; }`
+              document.documentElement.appendChild(style)
+            }
+            existingMarkedElements.filter((item) => item.framePath.length === framePath.length && item.framePath.every((value, index) => value === framePath[index])).forEach((item) => document.querySelector(item.selector)?.setAttribute(markedAttribute, item.policy))
             const selectorFor = (element: Element): string => {
               const parts: string[] = []
               let current: Element | null = element
@@ -995,14 +1106,18 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
               window.top?.postMessage({ marker, action: 'click', framePath, selector: selectorFor(element), bounds: rect }, '*')
             }
             const onMessage = (event: MessageEvent) => {
-              const data = event.data as { marker?: string; action?: 'mark'; selector?: string; policy?: string } | null
-              if (!data || data.marker !== marker || data.action !== 'mark' || !data.selector || !data.policy) return
+              const data = event.data as { marker?: string; action?: 'mark' | 'unmark' | 'cancel'; selector?: string; policy?: string } | null
+              if (!data || data.marker !== marker) return
+              selectionLocked = false
+              if (data.action === 'cancel') {
+                frameHighlight.style.display = 'none'
+                return
+              }
+              if (!data.selector) return
               const element = document.querySelector(data.selector)
               if (!(element instanceof HTMLElement)) return
-              selectionLocked = false
-              element.setAttribute('data-ide-browser-screenshot-marked', data.policy)
-              element.style.outline = data.policy === 'hide' ? '3px solid #ff3b30' : '3px solid #34a853'
-              element.style.outlineOffset = '2px'
+              if (data.action === 'unmark') element.removeAttribute('data-ide-browser-screenshot-marked')
+              else if (data.action === 'mark' && data.policy) element.setAttribute('data-ide-browser-screenshot-marked', data.policy)
             }
             const onKeyDown = (event: KeyboardEvent) => {
               if (event.key === 'Enter' || event.key === 'Escape') window.top?.postMessage({ marker, action: 'key', key: event.key }, '*')
@@ -1014,7 +1129,7 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
             window.addEventListener('message', onMessage)
             ;(window as unknown as Record<string, unknown>).__ide_browser_screenshot_frame_element_picker__ = { onMove, onClick, onKeyDown, onMessage, frameHighlight }
           },
-          { framePath, marker: '__ide_browser_screenshot_element_picker__' },
+          { framePath, marker: '__ide_browser_screenshot_element_picker__', existingMarkedElements },
         )
         .catch(() => undefined)
     }),
@@ -1033,11 +1148,7 @@ async function chooseMarkedElements(page: Page, labels: CaptureControlLabels, se
           if (picker?.onKeyDown) document.removeEventListener('keydown', picker.onKeyDown, true)
           if (picker?.onMessage) window.removeEventListener('message', picker.onMessage)
           picker?.frameHighlight?.remove()
-          document.querySelectorAll('[data-ide-browser-screenshot-marked]').forEach((element) => {
-            element.removeAttribute('data-ide-browser-screenshot-marked')
-            ;(element as HTMLElement).style.outline = ''
-            ;(element as HTMLElement).style.outlineOffset = ''
-          })
+          document.querySelectorAll('[data-ide-browser-screenshot-marked]').forEach((element) => element.removeAttribute('data-ide-browser-screenshot-marked'))
           delete (window as unknown as Record<string, unknown>).__ide_browser_screenshot_frame_element_picker__
         })
         .catch(() => undefined),
@@ -1113,7 +1224,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
   const boundPages = new Set<Page>()
   const captureControlPages = new Set<Page>()
   const captureControlInstallPromises = new Map<Page, Promise<void>>()
-  let startFromPage: ((pageId: string, captureMode: BrowserScreenshotCaptureMode, fixedElementPolicy: BrowserScreenshotFixedElementPolicy) => Promise<PageCaptureControlResult>) | null = null
+  let startFromPage: ((pageId: string, request: Exclude<PageCaptureControlRequest, 'open-window'>) => Promise<PageCaptureControlResult>) | null = null
   let targetsChangedTimer: ReturnType<typeof setTimeout> | null = null
 
   const getPageId = (page: Page): string => {
@@ -1138,7 +1249,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
             return { status: 'completed' } satisfies PageCaptureControlResult
           }
           if (!startFromPage) return { status: 'failed', errorMessage: '截图服务尚未准备好。' } satisfies PageCaptureControlResult
-          return startFromPage(pageId, request.captureMode, request.fixedElementPolicy)
+          return startFromPage(pageId, request)
         })
         await page.addInitScript(installCaptureControl, { bindingName, labels })
         captureControlPages.add(page)
@@ -1227,6 +1338,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     const warnings: string[] = []
     let restoreState: PageState | null = null
     let ownedPage = false
+    let captureRequest = request
     activeTaskId = taskId
     cancelRequested = false
     try {
@@ -1252,8 +1364,14 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       }
       if (!page || page.isClosed()) throw Object.assign(new Error(errorMessage('TARGET_NOT_FOUND')), { code: 'TARGET_NOT_FOUND' })
       activePage = page
+      const persistedMarkedElements = await page
+        .evaluate(() => {
+          const state = (window as unknown as Record<string, unknown>).__ide_browser_screenshot_marked_elements__ as { items?: BrowserScreenshotMarkedElement[] } | undefined
+          return state?.items ?? []
+        })
+        .catch(() => [] as BrowserScreenshotMarkedElement[])
+      captureRequest = request.markedElements ? request : { ...request, markedElements: persistedMarkedElements }
       let containerTarget: PreciseContainerTarget | undefined
-      let captureRequest = request
       if (request.captureMode === 'precise') {
         emit(taskId, { stage: 'preparing', message: '正在等待网页完成加载。', percent: 7 })
         await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
@@ -1291,6 +1409,8 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
         }
       }
       restoreState = state
+      const markedElements = captureRequest.markedElements ?? []
+      if (markedElements.length) await setMarkedElementsVisible(page, markedElements, false)
       emit(taskId, { stage: 'preparing', message: '正在准备页面并等待资源稳定。', percent: 12 })
       await waitForPageSettle(page, 4_000)
       if (cancelRequested) throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
@@ -1360,6 +1480,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       return { taskId, status: finalCode === 'CAPTURE_CANCELLED' ? 'cancelled' : 'failed', startedAt, completedAt: Date.now(), warnings, errorCode: finalCode, errorMessage: error instanceof Error ? error.message : errorMessage(finalCode) }
     } finally {
       if (activePage && restoreState) await restorePage(activePage, restoreState)
+      if (activePage && captureRequest.markedElements?.length) await setMarkedElementsVisible(activePage, captureRequest.markedElements, false)
       if (ownedPage && activePage && !activePage.isClosed()) await activePage.close()
       activePage = null
       activeTaskId = null
@@ -1367,8 +1488,24 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     }
   }
 
-  startFromPage = async (pageId, captureMode, fixedElementPolicy) => {
-    const result = await start({ targetId: pageId, captureMode, fixedElementPolicy })
+  startFromPage = async (pageId, request) => {
+    const page = boundContext ? findPage(boundContext, pageId, pageIds) : null
+    if (!page || page.isClosed()) return { status: 'failed', errorMessage: errorMessage('TARGET_NOT_FOUND') }
+    if ('action' in request && request.action === 'view-marked') {
+      const markedElements = await page
+        .evaluate(() => {
+          const state = (window as unknown as Record<string, unknown>).__ide_browser_screenshot_marked_elements__ as { items?: BrowserScreenshotMarkedElement[] } | undefined
+          return state?.items ?? []
+        })
+        .catch(() => [] as BrowserScreenshotMarkedElement[])
+      await setMarkedElementsVisible(page, markedElements, true)
+      return { status: 'completed' }
+    }
+    if ('action' in request && request.action === 'edit-marked') {
+      const markedElements = await chooseMarkedElements(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)
+      return { status: markedElements ? 'completed' : 'cancelled' }
+    }
+    const result = await start({ targetId: pageId, captureMode: request.captureMode, fixedElementPolicy: request.fixedElementPolicy })
     if (result.status === 'completed' && result.pngBase64) {
       await deps.openViewer({ pngBase64: result.pngBase64, title: result.title ?? 'Browser screenshot', width: result.width, height: result.height })
     }
@@ -1394,21 +1531,51 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
   }
 }
 
-async function applyMarkedElementPolicies(page: Page, elements: BrowserScreenshotMarkedElement[], showKeepOnce: boolean): Promise<void> {
+async function setMarkedElementsVisible(page: Page, elements: BrowserScreenshotMarkedElement[], visible: boolean): Promise<void> {
   const apply = async (frame: Frame, framePath: number[]) => {
     const matching = elements.filter((element) => element.framePath.length === framePath.length && element.framePath.every((value, index) => value === framePath[index]))
     if (!matching.length) return
     await frame
       .evaluate(
-        ({ elements: markedElements, showKeepOnce: shouldShow }) => {
+        ({ elements: markedElements, visible: shouldShow }) => {
+          const markerStyleId = '__ide_browser_screenshot_marked_style__'
+          if (!document.getElementById(markerStyleId)) {
+            const style = document.createElement('style')
+            style.id = markerStyleId
+            style.textContent =
+              '[data-ide-browser-screenshot-marked="hide"] { outline: 3px solid #ff3b30 !important; outline-offset: 2px !important; } [data-ide-browser-screenshot-marked="keep-once"] { outline: 3px solid #34a853 !important; outline-offset: 2px !important; } [data-ide-browser-screenshot-marked="keep-first"] { outline: 3px solid #ff9500 !important; outline-offset: 2px !important; }'
+            document.documentElement.appendChild(style)
+          }
           for (const marked of markedElements) {
             const element = document.querySelector(marked.selector)
             if (!(element instanceof HTMLElement)) continue
-            if (marked.policy === 'hide' || !shouldShow) element.setAttribute('data-ide-screenshot-hidden', 'true')
+            if (shouldShow) element.setAttribute('data-ide-browser-screenshot-marked', marked.policy)
+            else element.removeAttribute('data-ide-browser-screenshot-marked')
+          }
+        },
+        { elements: matching, visible },
+      )
+      .catch(() => undefined)
+  }
+  await Promise.all(page.frames().map((frame) => apply(frame, getFramePath(frame))))
+}
+
+async function applyMarkedElementPolicies(page: Page, elements: BrowserScreenshotMarkedElement[], segmentIndex: number, isLastSegment: boolean): Promise<void> {
+  const apply = async (frame: Frame, framePath: number[]) => {
+    const matching = elements.filter((element) => element.framePath.length === framePath.length && element.framePath.every((value, index) => value === framePath[index]))
+    if (!matching.length) return
+    await frame
+      .evaluate(
+        ({ elements: markedElements, segmentIndex: currentSegment, isLastSegment: lastSegment }) => {
+          for (const marked of markedElements) {
+            const element = document.querySelector(marked.selector)
+            if (!(element instanceof HTMLElement)) continue
+            const shouldShow = marked.policy === 'keep-once' ? lastSegment : marked.policy === 'keep-first' ? currentSegment === 0 : false
+            if (!shouldShow) element.setAttribute('data-ide-screenshot-hidden', 'true')
             else element.removeAttribute('data-ide-screenshot-hidden')
           }
         },
-        { elements: matching, showKeepOnce },
+        { elements: matching, segmentIndex, isLastSegment },
       )
       .catch(() => undefined)
   }
@@ -1431,7 +1598,7 @@ async function captureSegmented(page: Page, taskId: string, request: BrowserScre
     throwIfCancelled(isCancelled)
     const actualTop = await page.evaluate(() => scrollY)
     throwIfCancelled(isCancelled)
-    await applyMarkedElementPolicies(page, request.markedElements ?? [], requestedTop + info.viewportHeight >= info.totalHeight)
+    await applyMarkedElementPolicies(page, request.markedElements ?? [], index, requestedTop + info.viewportHeight >= info.totalHeight)
     const buffer = await page.screenshot({ type: 'png' })
     throwIfCancelled(isCancelled)
     const scale = info.dpr
@@ -1526,7 +1693,7 @@ async function capturePreciseContainer(
     if (clip.width <= 0 || clip.height <= 0) throw new Error('选中的滚动容器不在浏览器可视区域内。')
     const actualTop = Math.max(0, rect.scrollTop)
     const willFinish = actualTop + clip.height >= totalHeight - 0.5
-    await applyMarkedElementPolicies(page, request.markedElements ?? [], willFinish)
+    await applyMarkedElementPolicies(page, request.markedElements ?? [], index, willFinish)
     const buffer = await page.screenshot({ type: 'png' })
     throwIfCancelled(isCancelled)
     const scale = info.dpr
