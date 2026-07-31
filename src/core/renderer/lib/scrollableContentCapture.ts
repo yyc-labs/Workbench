@@ -5,6 +5,8 @@ const CAPTURE_CONTENT_PADDING_CSS = 5
 const CAPTURE_STITCH_OVERLAP_CSS = 1
 const MAX_CANVAS_DIMENSION = 32_767
 const MAX_CANVAS_AREA = 268_000_000
+const MERMAID_CAPTURE_TARGET_LONGEST_EDGE_PX = 3_840
+const MAX_MERMAID_CAPTURE_ZOOM = 4
 
 type CaptureRect = {
   x: number
@@ -20,16 +22,7 @@ type ContentCaptureBounds = {
   heightCss: number
 }
 
-const STRUCTURED_CONTENT_SELECTOR = [
-  '[data-structured-block-kind]',
-  'table',
-  'pre',
-  '.code-markdown-box-flow',
-  '.code-markdown-vertical-flow',
-  '.code-markdown-box-diagram',
-  '.code-markdown-architecture-diagram',
-  '.code-markdown-mermaid-wrap',
-].join(', ')
+const STRUCTURED_CONTENT_SELECTOR = ['[data-structured-block-kind]', 'table', 'pre', '.code-markdown-box-flow', '.code-markdown-vertical-flow', '.code-markdown-box-diagram', '.code-markdown-architecture-diagram', '.code-markdown-mermaid-wrap'].join(', ')
 
 export type ScrollableContentCaptureResult = {
   outputWidth: number
@@ -87,10 +80,7 @@ function resolveCaptureContentElement(contentElement: HTMLElement | null | undef
   return contentElement.querySelector<HTMLElement>(STRUCTURED_CONTENT_SELECTOR) ?? contentElement
 }
 
-function resolveContentCaptureBounds(
-  scrollElement: HTMLElement,
-  contentElement: HTMLElement | null | undefined
-): ContentCaptureBounds {
+function resolveContentCaptureBounds(scrollElement: HTMLElement, contentElement: HTMLElement | null | undefined): ContentCaptureBounds {
   const viewportHeightCss = Math.max(1, Math.floor(scrollElement.clientHeight))
   const viewportWidthCss = Math.max(1, Math.floor(scrollElement.clientWidth))
   const totalWidthCss = Math.max(viewportWidthCss, Math.ceil(scrollElement.scrollWidth))
@@ -114,12 +104,7 @@ function resolveContentCaptureBounds(
   const rawTopCss = contentRect.top - scrollRect.top - scrollElement.clientTop + scrollElement.scrollTop
   const rawBottomCss = contentRect.bottom - scrollRect.top - scrollElement.clientTop + scrollElement.scrollTop
 
-  if (
-    !Number.isFinite(rawLeftCss)
-    || !Number.isFinite(rawRightCss)
-    || !Number.isFinite(rawTopCss)
-    || !Number.isFinite(rawBottomCss)
-  ) {
+  if (!Number.isFinite(rawLeftCss) || !Number.isFinite(rawRightCss) || !Number.isFinite(rawTopCss) || !Number.isFinite(rawBottomCss)) {
     return {
       offsetLeftCss: 0,
       offsetTopCss: 0,
@@ -162,11 +147,7 @@ async function decodePngBase64(base64: string): Promise<ImageBitmap> {
 
 function resolveCanvasScale(width: number, height: number): number {
   if (width <= 0 || height <= 0) return 1
-  const dimensionScale = Math.min(
-    1,
-    MAX_CANVAS_DIMENSION / width,
-    MAX_CANVAS_DIMENSION / height
-  )
+  const dimensionScale = Math.min(1, MAX_CANVAS_DIMENSION / width, MAX_CANVAS_DIMENSION / height)
   const areaScale = Math.min(1, Math.sqrt(MAX_CANVAS_AREA / (width * height)))
   return Math.min(dimensionScale, areaScale)
 }
@@ -175,10 +156,31 @@ function sanitizeOutputSize(size: number): number {
   return Math.max(1, Math.round(size))
 }
 
-export async function captureScrollableContentToClipboard(
-  scrollElement: HTMLElement,
-  options: CaptureScrollableContentOptions = {}
-): Promise<ScrollableContentCaptureResult> {
+function applyMermaidCaptureScale(contentElement: HTMLElement | null | undefined, devicePixelRatio: number): () => void {
+  const mermaidElement = resolveCaptureContentElement(contentElement)?.matches('.code-markdown-mermaid-wrap') ? resolveCaptureContentElement(contentElement) : null
+  if (!mermaidElement) return () => {}
+
+  const svgElement = mermaidElement.querySelector<SVGSVGElement>('svg')
+  if (!svgElement) return () => {}
+
+  const rect = svgElement.getBoundingClientRect()
+  const longestEdgeCss = Math.max(rect.width, rect.height)
+  if (!Number.isFinite(longestEdgeCss) || longestEdgeCss <= 0) return () => {}
+
+  const captureScale = Math.min(MAX_MERMAID_CAPTURE_ZOOM, Math.max(1, MERMAID_CAPTURE_TARGET_LONGEST_EDGE_PX / (longestEdgeCss * Math.max(1, devicePixelRatio))))
+  const previousWidth = mermaidElement.style.getPropertyValue('--structured-capture-mermaid-width')
+  mermaidElement.style.setProperty('--structured-capture-mermaid-width', `${Math.ceil(rect.width * captureScale)}px`)
+
+  return () => {
+    if (previousWidth) {
+      mermaidElement.style.setProperty('--structured-capture-mermaid-width', previousWidth)
+    } else {
+      mermaidElement.style.removeProperty('--structured-capture-mermaid-width')
+    }
+  }
+}
+
+export async function captureScrollableContentToClipboard(scrollElement: HTMLElement, options: CaptureScrollableContentOptions = {}): Promise<ScrollableContentCaptureResult> {
   if (!scrollElement.isConnected) {
     throw new Error('Capture target is not mounted.')
   }
@@ -203,6 +205,7 @@ export async function captureScrollableContentToClipboard(
   scrollElement.style.scrollBehavior = 'auto'
   scrollElement.style.overflowAnchor = 'none'
   classTarget.classList.add(captureBodyClass)
+  const restoreMermaidCaptureScale = applyMermaidCaptureScale(contentElement, windowObject.devicePixelRatio)
 
   try {
     if (ownerDocument.fonts?.ready) {
@@ -217,16 +220,10 @@ export async function captureScrollableContentToClipboard(
     const totalHeightCss = Math.max(viewportHeightCss, Math.ceil(scrollElement.scrollHeight))
     const captureBounds = resolveContentCaptureBounds(scrollElement, contentElement)
     const captureStartLeftCss = Math.max(0, Math.min(captureBounds.offsetLeftCss, totalWidthCss - 1))
-    const captureEndLeftCss = Math.max(
-      captureStartLeftCss + 1,
-      Math.min(totalWidthCss, captureBounds.offsetLeftCss + captureBounds.widthCss)
-    )
+    const captureEndLeftCss = Math.max(captureStartLeftCss + 1, Math.min(totalWidthCss, captureBounds.offsetLeftCss + captureBounds.widthCss))
     const captureWidthCss = Math.max(1, captureEndLeftCss - captureStartLeftCss)
     const captureStartCss = Math.max(0, Math.min(captureBounds.offsetTopCss, totalHeightCss - 1))
-    const captureEndCss = Math.max(
-      captureStartCss + 1,
-      Math.min(totalHeightCss, captureBounds.offsetTopCss + captureBounds.heightCss)
-    )
+    const captureEndCss = Math.max(captureStartCss + 1, Math.min(totalHeightCss, captureBounds.offsetTopCss + captureBounds.heightCss))
     const captureHeightCss = Math.max(1, captureEndCss - captureStartCss)
 
     if (viewportWidthCss <= 0 || viewportHeightCss <= 0) {
@@ -242,29 +239,17 @@ export async function captureScrollableContentToClipboard(
 
     while (logicalTopCss < captureEndCss) {
       const stitchOverlapTopCss = logicalTopCss > captureStartCss ? CAPTURE_STITCH_OVERLAP_CSS : 0
-      const desiredScrollTopCss = Math.max(
-        0,
-        Math.min(logicalTopCss - stitchOverlapTopCss, totalHeightCss - viewportHeightCss)
-      )
+      const desiredScrollTopCss = Math.max(0, Math.min(logicalTopCss - stitchOverlapTopCss, totalHeightCss - viewportHeightCss))
       const visibleStartTopCss = Math.max(0, logicalTopCss - desiredScrollTopCss)
-      const visibleHeightCss = Math.min(
-        viewportHeightCss - visibleStartTopCss,
-        captureEndCss - logicalTopCss
-      )
+      const visibleHeightCss = Math.min(viewportHeightCss - visibleStartTopCss, captureEndCss - logicalTopCss)
       const nextLogicalTopCss = logicalTopCss + visibleHeightCss
 
       let logicalLeftCss = captureStartLeftCss
       while (logicalLeftCss < captureEndLeftCss) {
         const stitchOverlapLeftCss = logicalLeftCss > captureStartLeftCss ? CAPTURE_STITCH_OVERLAP_CSS : 0
-        const desiredScrollLeftCss = Math.max(
-          0,
-          Math.min(logicalLeftCss - stitchOverlapLeftCss, totalWidthCss - viewportWidthCss)
-        )
+        const desiredScrollLeftCss = Math.max(0, Math.min(logicalLeftCss - stitchOverlapLeftCss, totalWidthCss - viewportWidthCss))
         const visibleStartLeftCss = Math.max(0, logicalLeftCss - desiredScrollLeftCss)
-        const visibleWidthCss = Math.min(
-          viewportWidthCss - visibleStartLeftCss,
-          captureEndLeftCss - logicalLeftCss
-        )
+        const visibleWidthCss = Math.min(viewportWidthCss - visibleStartLeftCss, captureEndLeftCss - logicalLeftCss)
         const nextLogicalLeftCss = logicalLeftCss + visibleWidthCss
 
         scrollElement.scrollLeft = desiredScrollLeftCss
@@ -304,17 +289,7 @@ export async function captureScrollableContentToClipboard(
           const destinationTop = Math.round((logicalTopCss - captureStartCss) * bitmapScaleY * outputScale)
           const destinationBottom = Math.round((nextLogicalTopCss - captureStartCss) * bitmapScaleY * outputScale)
 
-          context.drawImage(
-            bitmap,
-            sourceLeft,
-            sourceTop,
-            Math.max(1, sourceRight - sourceLeft),
-            Math.max(1, sourceBottom - sourceTop),
-            destinationLeft,
-            destinationTop,
-            Math.max(1, destinationRight - destinationLeft),
-            Math.max(1, destinationBottom - destinationTop)
-          )
+          context.drawImage(bitmap, sourceLeft, sourceTop, Math.max(1, sourceRight - sourceLeft), Math.max(1, sourceBottom - sourceTop), destinationLeft, destinationTop, Math.max(1, destinationRight - destinationLeft), Math.max(1, destinationBottom - destinationTop))
 
           logicalLeftCss = nextLogicalLeftCss
         } finally {
@@ -343,6 +318,7 @@ export async function captureScrollableContentToClipboard(
     scrollElement.style.scrollBehavior = originalScrollBehavior
     scrollElement.style.overflowAnchor = originalOverflowAnchor
     classTarget.classList.remove(captureBodyClass)
+    restoreMermaidCaptureScale()
     await waitForCaptureSettle(windowObject, 1, 0)
   }
 }

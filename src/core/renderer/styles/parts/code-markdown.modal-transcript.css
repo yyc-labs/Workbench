@@ -15,6 +15,69 @@
   height: auto;
 }
 
+.transcript-preview-zoom-viewport {
+  cursor: grab;
+  overscroll-behavior: contain;
+}
+
+.transcript-preview-zoom-viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.transcript-preview-zoom-canvas {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  transform-origin: 0 0;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.transcript-preview-zoom-capture {
+  display: flex;
+  width: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.transcript-preview-zoom-capture .code-markdown-content--modal > table,
+.transcript-preview-zoom-capture .code-markdown-content--modal > pre,
+.transcript-preview-zoom-capture .code-markdown-box-flow,
+.transcript-preview-zoom-capture .code-markdown-vertical-flow,
+.transcript-preview-zoom-capture .code-markdown-box-diagram,
+.transcript-preview-zoom-capture .code-markdown-architecture-diagram,
+.transcript-preview-zoom-capture .code-markdown-mermaid-wrap,
+.transcript-preview-zoom-capture .code-markdown-mermaid-diagram,
+.transcript-preview-zoom-capture .code-markdown-syntax-block,
+.transcript-preview-zoom-capture .code-markdown-plain-block {
+  max-width: none;
+  overflow: visible;
+}
+
+.transcript-preview-zoom-capture .code-markdown-content--modal > *,
+.transcript-preview-zoom-capture .code-markdown-syntax-wrap {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.code-markdown-mermaid-loading {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+}
+
 .code-markdown-content--modal a.code-markdown-transcript-ref,
 .code-markdown-content--modal span.code-markdown-transcript-ref {
   gap: 0.45rem;
@@ -206,6 +269,8 @@
 }
 
 .transcript-structured-preview-modal {
+  width: min(1280px, calc(100vw - 40px));
+  height: min(88vh, 980px);
   contain: layout paint style;
   box-shadow: none !important;
 }
@@ -218,6 +283,14 @@
 .transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
   min-width: 0;
   width: auto;
+}
+
+.transcript-structured-preview-modal .transcript-preview-zoom-capture .transcript-markdown-content.code-markdown-content--modal {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  container-type: normal;
 }
 
 .transcript-markdown-preview-scroll-root .transcript-markdown-content,
@@ -341,17 +414,6 @@
 .transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-step-detail,
 .transcript-structured-preview-modal .transcript-markdown-content .code-markdown-vertical-flow-connector-label {
   white-space: pre-wrap;
-}
-
-.transcript-structured-preview-modal .code-markdown-box-flow,
-.transcript-structured-preview-modal .code-markdown-vertical-flow,
-.transcript-structured-preview-modal .code-markdown-architecture-diagram,
-.transcript-structured-preview-modal .code-markdown-box-diagram,
-.transcript-structured-preview-modal .code-markdown-content--modal table,
-.transcript-structured-preview-modal .code-markdown-content--modal pre,
-.transcript-structured-preview-modal .code-markdown-mermaid-wrap {
-  content-visibility: auto;
-  contain-intrinsic-size: 360px;
 }
 
 .transcript-structured-preview-modal .code-markdown-box-flow-node-card,

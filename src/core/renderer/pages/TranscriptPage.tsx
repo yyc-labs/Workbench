@@ -469,7 +469,10 @@ export function TranscriptPage() {
       onCodeBlockExpand: (payload) => {
         setCodePreview(payload)
       },
-      onInternalLinkClick: handleInternalLinkClick,
+      onInternalLinkClick: (href) => {
+        setStructuredPreview(null)
+        handleInternalLinkClick(href)
+      },
       projectPath: project.path,
       themeMode: effectiveTheme,
     })

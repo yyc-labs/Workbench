@@ -174,10 +174,14 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
       createMarkdownComponents({
         activeRelativePath,
         enableMarkdownSyntaxHighlight,
+        onProjectFileLinkClick: (relativePath) => {
+          setStructuredPreview(null)
+          onProjectFileLinkClick(relativePath)
+        },
         projectPath,
         themeMode: effectiveTheme,
       }),
-    [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, projectPath],
+    [activeRelativePath, effectiveTheme, enableMarkdownSyntaxHighlight, onProjectFileLinkClick, projectPath],
   )
 
   const handlePasteImage = useCallback(

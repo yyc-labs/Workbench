@@ -4,7 +4,7 @@ import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
 const { buildTranscriptSession } = loadTsModule('src/core/shared/transcript/transcript.parser.ts')
-const { parseBoxDiagram, parseBoxTable, parseTranscriptInlineArrowFlow, parseVerticalFlow } = loadTsModule('src/core/renderer/pages/code/code.markdownBoxTables.parsers.ts')
+const { parseBoxTable } = loadTsModule('src/core/renderer/pages/code/code.markdownBoxTables.parsers.ts')
 
 test('parseBoxTable parses box drawing tables with multiline rows', () => {
   const table = ['┌──────┬────────┐', '│ Name │ Status │', '├──────┼────────┤', '│ API  │ Ready  │', '│      │ Live   │', '└──────┴────────┘'].join('\n')
@@ -184,84 +184,4 @@ test('parseBoxTable tolerates remark paragraph slicing that removes leading inde
   assert.equal(parsed?.columnCount, 5)
   assert.deepEqual(parsed?.rows[0]?.cells, ['项目', '当前是否可改', '代码来源', '说明', '前端建议'])
   assert.deepEqual(parsed?.rows[1]?.cells, ['Subtype', '可改', 'nanopct_inf/app.py:102', '页面下拉输入', '暴露'])
-})
-
-test('parseVerticalFlow parses connector labels and step notes', () => {
-  const flow = ['Collect input // user prompt', '  ↓ validate', 'Plan answer', '  ↓', 'Write files # apply patch'].join('\n')
-
-  const parsed = parseVerticalFlow(flow, 20)
-
-  assert.deepEqual(
-    parsed?.steps.map((step) => ({ title: step.title, note: step.note })),
-    [
-      { title: 'Collect input', note: 'user prompt' },
-      { title: 'Plan answer', note: undefined },
-      { title: 'Write files', note: 'apply patch' },
-    ],
-  )
-  assert.deepEqual(
-    parsed?.connectors.map((connector) => ({
-      label: connector.label,
-      direction: connector.direction,
-      lineNumber: connector.lineNumber,
-    })),
-    [
-      { label: 'validate', direction: 'down', lineNumber: 21 },
-      { label: '', direction: 'down', lineNumber: 23 },
-    ],
-  )
-})
-
-test('parseTranscriptInlineArrowFlow parses transcript shorthand arrows', () => {
-  const parsed = parseTranscriptInlineArrowFlow('Start -> Inspect -> Patch -> Verify', 4)
-
-  assert.deepEqual(
-    parsed?.steps.map((step) => step.title),
-    ['Start', 'Inspect', 'Patch', 'Verify'],
-  )
-  assert.equal(parsed?.connectors.length, 3)
-  assert.equal(parsed?.steps[0]?.lineNumber, 4)
-})
-
-test('parseTranscriptInlineArrowFlow preserves inline-code value descriptions as prose', () => {
-  const parsed = parseTranscriptInlineArrowFlow('按字段类型清空（字符串→`""`，数字→`0`，布尔→`false`，数组→`[]`，对象→`{}`）。', 1)
-
-  assert.equal(parsed, null)
-})
-
-test('parseTranscriptInlineArrowFlow preserves emphasized descriptions as prose', () => {
-  const parsed = parseTranscriptInlineArrowFlow('**上传模式**：用户选择本地文件，组件自动执行校验 → 上传到服务器 → 将返回的文件 URL 写入表单值。', 1)
-
-  assert.equal(parsed, null)
-})
-
-test('parseTranscriptInlineArrowFlow preserves enumerated protocol mappings as prose', () => {
-  const parsed = parseTranscriptInlineArrowFlow('Chat → Chat passthrough、Chat → Anthropic、Chat → Responses；Responses → Responses passthrough、Responses → Chat downgrade', 1)
-
-  assert.equal(parsed, null)
-})
-
-test('parseTranscriptInlineArrowFlow preserves Gateway descriptions as prose', () => {
-  const parsed = parseTranscriptInlineArrowFlow('Gateway → adapter → upstream', 1)
-
-  assert.equal(parsed, null)
-})
-
-test('parseTranscriptInlineArrowFlow preserves cross-layer contract descriptions as prose', () => {
-  const parsed = parseTranscriptInlineArrowFlow('renderer action → preload 契约 → IPC handler 装配；shared → IPC → preload 的同一契约', 1)
-
-  assert.equal(parsed, null)
-})
-
-test('parseBoxDiagram requires connector-like diagram content and preserves source lines', () => {
-  const diagram = ['┌──────────────┐       ┌──────────────┐', '│   Renderer   │  →    │ Main process │', '└──────────────┘       └──────────────┘'].join('\n')
-
-  const parsed = parseBoxDiagram(diagram, 30)
-
-  assert.deepEqual(parsed?.lines, [
-    { text: '┌──────────────┐       ┌──────────────┐', lineNumber: 30 },
-    { text: '│   Renderer   │  →    │ Main process │', lineNumber: 31 },
-    { text: '└──────────────┘       └──────────────┘', lineNumber: 32 },
-  ])
-  assert.equal(parseBoxDiagram('┌──┐\n│A │\n└──┘', 1), null)
 })

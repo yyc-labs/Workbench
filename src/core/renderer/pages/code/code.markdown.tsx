@@ -9,7 +9,7 @@ import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
 import { MermaidBlock } from './code.markdownMermaid'
 import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps, shouldIgnoreStructuredBlockActivation } from './code.markdownStructuredBlocks'
-import { isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
+import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
 import { useMarkdownNearViewport } from './code.markdownVisibility'
 
@@ -514,7 +514,8 @@ function isTranscriptReferenceHref(value: string): boolean {
 }
 
 function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: string | null): string | null {
-  const path = href.trim().split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? ''
+  const encodedPath = href.trim().split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? ''
+  const path = decodeMarkdownUrlPathSafely(encodedPath)
   if (!path || path.startsWith('/') || path.startsWith('//') || isWindowsAbsolutePath(path) || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)) {
     return null
   }

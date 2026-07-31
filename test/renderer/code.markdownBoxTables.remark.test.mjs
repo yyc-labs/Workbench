@@ -55,3 +55,21 @@ test('remarkBoxDrawingTables leaves indented text trees as plain paragraphs', as
 
   assert.equal(tree.children[0]?.type, 'paragraph')
 })
+
+test('remarkBoxDrawingTables leaves arrow prose and ordered-list answers as Markdown', async () => {
+  const source = [
+    '5. **插件的生命周期方法与宿主服务器是什么关系？**',
+    '   要点：宿主 LifecycleNode 在 on_configure/on_activate/on_deactivate/on_cleanup 中逐一调用所持插件的对应方法。',
+    '',
+    '新增完整业务能力的标准链路是：Action 定义 → SimpleActionServer 服务器 → BtActionNode 封装 → XML 编排 → lifecycle_manager 接管。',
+  ].join('\n')
+
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkBoxDrawingTables)
+  const tree = processor.parse(source)
+  await processor.run(tree, { value: source })
+
+  assert.equal(tree.children[0]?.type, 'list')
+  assert.equal(tree.children[0]?.children?.[0]?.children?.[0]?.type, 'paragraph')
+  assert.equal(tree.children[1]?.type, 'paragraph')
+  assert.doesNotMatch(JSON.stringify(tree), /verticalFlow|boxFlow|boxDiagram|architectureDiagram/)
+})

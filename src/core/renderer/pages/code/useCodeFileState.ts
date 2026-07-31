@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react'
+import { type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectFileReadResult } from '../../../shared/types'
 import { translateCurrent } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
@@ -8,6 +8,28 @@ import { markMarkdownPreviewPerformance } from './markdownPreviewPerformance'
 const SAVE_STATUS_RESET_DELAY_MS = 1600
 const FILE_EXTERNAL_CHANGE_POLL_MS = 1200
 const DIRTY_CHECK_DEBOUNCE_MS = 180
+const MAX_FILE_NAVIGATION_HISTORY = 100
+
+type ProjectFileNavigationHistory = {
+  entries: string[]
+  index: number
+}
+
+const fileNavigationHistoryByProjectId = new Map<string, ProjectFileNavigationHistory>()
+
+function recordFileNavigation(projectId: string, relativePath: string): void {
+  const normalizedPath = relativePath.trim()
+  if (!normalizedPath) return
+  const current = fileNavigationHistoryByProjectId.get(projectId)
+  if (!current) {
+    fileNavigationHistoryByProjectId.set(projectId, { entries: [normalizedPath], index: 0 })
+    return
+  }
+  if (current.entries[current.index] === normalizedPath) return
+
+  const entries = [...current.entries.slice(0, current.index + 1), normalizedPath].slice(-MAX_FILE_NAVIGATION_HISTORY)
+  fileNavigationHistoryByProjectId.set(projectId, { entries, index: entries.length - 1 })
+}
 
 export type DiscardUnsavedConfirmState = {
   nextRelativePath: string
@@ -98,7 +120,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
   }, [])
 
   const openFile = useCallback(
-    async (relativePath: string, forceReload = false): Promise<boolean> => {
+    async (relativePath: string, forceReload = false, navigationHistoryIndex?: number): Promise<boolean> => {
       if (activeRelativePath === relativePath && !forceReload) return true
       if (isDirty && activeRelativePath && activeRelativePath !== relativePath) {
         const proceed = await requestDiscardUnsavedConfirm(relativePath, forceReload)
@@ -128,6 +150,14 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
         setHasExternalChange(false)
         onDidOpenFile?.(result)
         void setProjectLastCodeFile(projectId, result.relativePath)
+        if (navigationHistoryIndex === undefined) {
+          recordFileNavigation(projectId, result.relativePath)
+        } else {
+          const history = fileNavigationHistoryByProjectId.get(projectId)
+          if (history?.entries[navigationHistoryIndex] === result.relativePath) {
+            history.index = navigationHistoryIndex
+          }
+        }
         return true
       } catch (error) {
         if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
@@ -144,6 +174,18 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
       }
     },
     [activeRelativePath, isDirty, onBeforeOpenFile, onDidOpenFile, persistedLastCodeFile, projectId, projectPath, requestDiscardUnsavedConfirm, setProjectLastCodeFile],
+  )
+
+  const navigateFileHistory = useCallback(
+    async (direction: -1 | 1): Promise<boolean> => {
+      const history = fileNavigationHistoryByProjectId.get(projectId)
+      if (!history) return false
+      const nextIndex = history.index + direction
+      const nextPath = history.entries[nextIndex]
+      if (!nextPath) return false
+      return openFile(nextPath, false, nextIndex)
+    },
+    [openFile, projectId],
   )
 
   const handleSave = useCallback(async () => {
@@ -266,6 +308,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
     resolveDiscardUnsavedConfirm,
     isDirty,
     openFile,
+    navigateFileHistory,
     handleSave,
     saveText,
     saveIndicatorText,

@@ -518,6 +518,10 @@ export const settingsMessages = {
             title: 'Switch File/Search Mode',
             description: 'On the code page, switch the left workspace panel between file tree and content search.',
           },
+          codeFileHistory: {
+            title: 'Navigate File History',
+            description: 'Move backward or forward through files opened in the current project during this app session.',
+          },
           codeGlobalSearch: {
             title: 'Focus Workspace Search',
             description: 'Open or focus project-wide search on the code page.',
@@ -1473,6 +1477,10 @@ export const settingsMessages = {
           codeViewMode: {
             title: '切换文件/搜索模式',
             description: '在代码页中切换左侧工作区的文件树和内容搜索模式。',
+          },
+          codeFileHistory: {
+            title: '切换文件历史',
+            description: '在当前应用会话中，前后切换本项目打开过的文件。',
           },
           codeGlobalSearch: {
             title: '聚焦工作区搜索',

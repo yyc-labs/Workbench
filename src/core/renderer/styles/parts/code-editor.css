@@ -47,7 +47,10 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring), border-color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring),
+    border-color 120ms var(--spring);
 }
 
 .code-editor-preview-mode-btn:hover:not(:disabled) {
@@ -170,7 +173,10 @@
   color: var(--color-muted-foreground);
   font-size: 12px;
   line-height: 1;
-  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
 }
 
 .code-editor-findbar-toggle:hover {
@@ -194,7 +200,10 @@
   border-radius: 8px;
   background: transparent;
   color: var(--color-muted-foreground);
-  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
 }
 
 .code-editor-findbar-icon-btn:hover {
@@ -216,7 +225,10 @@
   background: transparent;
   color: var(--color-foreground);
   font-size: 12px;
-  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
 }
 
 .code-editor-findbar-action-btn:hover {
@@ -241,4 +253,41 @@
 
 .code-editor-pane--preview {
   overflow: auto;
+}
+
+.code-editor-pane--preview > .code-markdown-content--viewport-scroll {
+  width: min(100%, 860px);
+  min-width: 0;
+  max-width: 860px;
+  overflow-x: hidden;
+}
+
+.code-editor-pane--preview .code-markdown-table-scroll,
+.code-editor-pane--preview .code-markdown-mermaid-wrap {
+  inline-size: min(100%, var(--code-markdown-block-max-inline-size, 100%));
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.code-editor-pane--preview .code-markdown-table-scroll {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+
+.code-editor-pane--preview .code-markdown-table-scroll > table {
+  margin: 0;
+}
+
+.code-editor-pane--preview .code-markdown-mermaid-diagram {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.code-editor-pane--preview .code-markdown-mermaid-diagram svg {
+  inline-size: max-content;
+  min-inline-size: 100%;
+  max-inline-size: none;
 }

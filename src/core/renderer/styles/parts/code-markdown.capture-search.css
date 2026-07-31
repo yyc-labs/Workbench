@@ -7,10 +7,31 @@ body.structured-capture-active .transcript-structured-preview-modal {
   background: var(--color-popover-solid) !important;
 }
 
-body.structured-capture-active .transcript-structured-preview-modal [data-capture-surface='structured-preview'] {
+body.structured-capture-active .transcript-structured-preview-modal [data-capture-surface="structured-preview"] {
   background: var(--color-background-sunken-solid) !important;
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+/* Capture the source DOM at 1:1. Capturing the GPU-scaled preview would
+ * rasterize an already enlarged layer and produces a soft PNG. */
+body.structured-capture-active .transcript-structured-preview-modal .transcript-preview-zoom-viewport {
+  /* Keep this as the scrolling viewport while stitching. `overflow: visible`
+   * makes scrollTop/scrollLeft stop moving the rendered content, so every
+   * capture tile repeats the first viewport instead of covering the SVG. */
+  overflow: auto !important;
+  scrollbar-width: none;
+  cursor: default !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .transcript-preview-zoom-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .transcript-preview-zoom-canvas {
+  contain: none !important;
+  transform: none !important;
+  will-change: auto !important;
 }
 
 body.structured-capture-active .transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
@@ -92,6 +113,24 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
   overflow: visible !important;
 }
 
+/* Mermaid is vector in the DOM, but capturePage exports a raster image. The
+ * capture helper sizes the SVG from its actual aspect ratio so every export
+ * targets the same high-resolution longest edge. This changes the real layout
+ * dimensions, allowing the viewport capturer to stitch every segment safely. */
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-mermaid-wrap {
+  overflow: visible !important;
+  content-visibility: visible !important;
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-mermaid-wrap .code-markdown-mermaid-diagram {
+  width: var(--structured-capture-mermaid-width, auto);
+}
+
+body.structured-capture-active .transcript-structured-preview-modal .code-markdown-mermaid-wrap .code-markdown-mermaid-diagram svg {
+  width: 100% !important;
+  max-width: none !important;
+}
+
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-architecture-diagram-body,
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-diagram-body {
   min-width: max-content !important;
@@ -166,7 +205,7 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
 }
 
 .code-mdc-meta-value--mono {
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 11px;
 }
 

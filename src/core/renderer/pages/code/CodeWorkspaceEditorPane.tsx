@@ -5,6 +5,7 @@ import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
 import type { TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
+import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
@@ -418,7 +419,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
-        <div className="relative flex max-h-[min(88vh,980px)] min-h-0 flex-col">
+        <div className="relative flex h-full min-h-0 flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="section-label mb-1">{t('codeWorkspace.markdown')}</p>
@@ -449,9 +450,11 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
             </div>
           </div>
 
-          <div ref={structuredPreviewCapture.targetRef} data-capture-surface="structured-preview" className="min-h-0 flex-1 overflow-auto rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-subtle)]">
-            <StructuredPreviewMarkdown contentRef={structuredPreviewCapture.contentRef} markdown={structuredPreview?.markdown ?? ''} components={structuredPreviewComponents} />
-          </div>
+          <ZoomPanViewport captureTargetRef={structuredPreviewCapture.targetRef} resetKey={structuredPreview?.markdown ?? ''}>
+            <div data-capture-surface="structured-preview" className="transcript-preview-zoom-capture">
+              <StructuredPreviewMarkdown contentRef={structuredPreviewCapture.contentRef} markdown={structuredPreview?.markdown ?? ''} components={structuredPreviewComponents} />
+            </div>
+          </ZoomPanViewport>
         </div>
       </ModalShell>
 

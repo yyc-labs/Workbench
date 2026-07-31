@@ -1,5 +1,5 @@
-import { memo, Profiler, useEffect, type RefObject } from 'react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import { memo, Profiler, useEffect, useMemo, type ComponentProps, type RefObject } from 'react'
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import { transformMarkdownUrl } from './code.markdownUrls'
@@ -15,6 +15,16 @@ type MarkdownPreviewSurfaceProps = {
 }
 
 export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ components, content, previewRootRef }: MarkdownPreviewSurfaceProps) {
+  const previewComponents = useMemo<Components>(() => {
+    const TableComponent = components.table
+    return {
+      ...components,
+      table({ node, ...props }: ComponentProps<'table'> & ExtraProps) {
+        return <div className="code-markdown-table-scroll">{TableComponent ? <TableComponent node={node} {...props} /> : <table {...props} />}</div>
+      },
+    }
+  }, [components])
+
   useEffect(() => {
     markMarkdownPreviewPerformance('preview.first-paint')
   }, [content])
@@ -26,8 +36,8 @@ export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ com
 
   return (
     <Profiler id="code-markdown-preview" onRender={reportMarkdownPreviewCommit}>
-      <MarkdownPreviewVisibilityProvider rootRef={previewRootRef}>
-        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={components} urlTransform={transformMarkdownUrl}>
+      <MarkdownPreviewVisibilityProvider forceRenderAllBlocks rootRef={previewRootRef}>
+        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={previewComponents} urlTransform={transformMarkdownUrl}>
           {content}
         </ReactMarkdown>
       </MarkdownPreviewVisibilityProvider>

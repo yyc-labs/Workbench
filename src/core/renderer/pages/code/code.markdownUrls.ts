@@ -27,6 +27,10 @@ function decodeUrlComponentSafely(value: string): string {
   }
 }
 
+export function decodeMarkdownUrlPathSafely(value: string): string {
+  return decodeUrlComponentSafely(value)
+}
+
 function normalizeFileUrl(value: string): string {
   try {
     const parsed = new URL(value)

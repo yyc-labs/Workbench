@@ -146,14 +146,34 @@ export function CodeWorkspacePanel({
     markOpenedFileInExplorerRef.current(result.relativePath)
     setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
   }, [])
-  const { activeFile, editorValue, setEditorValue, activeRelativePath, isReading, readError, saveStatus, saveError, hasExternalChange, setHasExternalChange, isReloadingFromDisk, discardUnsavedConfirm, resolveDiscardUnsavedConfirm, isDirty, openFile, handleSave, saveText, saveIndicatorText, saveIndicatorToneClass } =
-    useCodeFileState({
-      projectId,
-      projectPath,
-      persistedLastCodeFile,
-      onBeforeOpenFile: handleBeforeOpenCodeFile,
-      onDidOpenFile: handleDidOpenCodeFile,
-    })
+  const {
+    activeFile,
+    editorValue,
+    setEditorValue,
+    activeRelativePath,
+    isReading,
+    readError,
+    saveStatus,
+    saveError,
+    hasExternalChange,
+    setHasExternalChange,
+    isReloadingFromDisk,
+    discardUnsavedConfirm,
+    resolveDiscardUnsavedConfirm,
+    isDirty,
+    openFile,
+    navigateFileHistory,
+    handleSave,
+    saveText,
+    saveIndicatorText,
+    saveIndicatorToneClass,
+  } = useCodeFileState({
+    projectId,
+    projectPath,
+    persistedLastCodeFile,
+    onBeforeOpenFile: handleBeforeOpenCodeFile,
+    onDidOpenFile: handleDidOpenCodeFile,
+  })
   const handleMarkdownProjectFileLinkClick = useCallback(
     (relativePath: string) => {
       void openFile(relativePath)
@@ -488,6 +508,19 @@ export function CodeWorkspacePanel({
       setIsExplorerOpen(true)
     }
   }, [isExplorerOpen, isNarrowViewport])
+
+  useEffect(() => {
+    if (activePane !== 'code') return
+    const onFileHistoryKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      event.stopPropagation()
+      void navigateFileHistory(event.key === 'ArrowLeft' ? -1 : 1)
+    }
+    window.addEventListener('keydown', onFileHistoryKeyDown, true)
+    return () => window.removeEventListener('keydown', onFileHistoryKeyDown, true)
+  }, [activePane, navigateFileHistory])
 
   useEffect(() => {
     if (activePane !== 'code') return

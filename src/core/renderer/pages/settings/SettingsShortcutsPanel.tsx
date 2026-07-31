@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Keyboard, MousePointer2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import type { ShortcutPreferencesConfig } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 
@@ -119,6 +119,12 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
           trigger: 'Ctrl/Cmd+Tab',
           titleKey: 'settings.shortcuts.items.codeViewMode.title',
           descriptionKey: 'settings.shortcuts.items.codeViewMode.description',
+        },
+        {
+          id: 'code-file-history',
+          trigger: 'Alt+← / Alt+→',
+          titleKey: 'settings.shortcuts.items.codeFileHistory.title',
+          descriptionKey: 'settings.shortcuts.items.codeFileHistory.description',
         },
         {
           id: 'code-global-search',
