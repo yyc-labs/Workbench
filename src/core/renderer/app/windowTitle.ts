@@ -1,10 +1,5 @@
 import type { AppConfig } from '../../shared/types'
-import {
-  isSettingsSection,
-  isSettingsSectionAlias,
-  type Section,
-  type SettingsSectionAlias,
-} from '../pages/settings/settings.types'
+import { isSettingsSection, isSettingsSectionAlias, type Section, type SettingsSectionAlias } from '../pages/settings/settings.types'
 
 export function toTitleCase(value: string): string {
   return value
@@ -14,13 +9,7 @@ export function toTitleCase(value: string): string {
     .join(' ')
 }
 
-export function resolveWindowTitle(
-  pathname: string,
-  projects: Array<{ id: string; name: string; customName?: string }>,
-  getSettingsSectionLabel: (section: Section) => string,
-  appName: string,
-  settingsLabel: string
-): string {
+export function resolveWindowTitle(pathname: string, projects: Array<{ id: string; name: string; customName?: string }>, getSettingsSectionLabel: (section: Section) => string, appName: string, settingsLabel: string): string {
   const segments = pathname.split('/').filter(Boolean)
 
   if (segments[0] === 'settings') {
@@ -38,13 +27,15 @@ export function resolveWindowTitle(
     const project = projects.find((item) => item.id === segments[1])
     const projectLabel = project?.customName?.trim() || project?.name || 'Project'
     const paneLabel = segments[2] ? toTitleCase(segments[2]) : null
-    return paneLabel
-      ? `${projectLabel} - ${paneLabel} - ${appName}`
-      : `${projectLabel} - ${appName}`
+    return paneLabel ? `${projectLabel} - ${paneLabel} - ${appName}` : `${projectLabel} - ${appName}`
   }
 
   if (segments[0] === 'learning') {
     return `Learning Center - ${appName}`
+  }
+
+  if (segments[0] === 'markdown') {
+    return `Markdown - ${appName}`
   }
 
   return appName

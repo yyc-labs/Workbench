@@ -8,6 +8,10 @@ import { capabilityManager } from './capability-manager'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
+import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
+import { MarkdownDocumentOpenRequestStore } from './markdown-document/markdownDocumentOpenRequest'
+import { parseMarkdownDocumentOpenRequest } from './markdown-document/markdownDocumentOpenRequest'
 import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
 import { ProcessManager } from './runner'
@@ -38,6 +42,8 @@ let trayController: AppTrayController | null = null
 const shouldStartHiddenToTray = isSilentAutostartLaunch(process.argv)
 const shouldUseTrayLifecycle = process.platform === 'win32'
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
+const markdownDocumentOpenRequestStore = new MarkdownDocumentOpenRequestStore()
+markdownDocumentOpenRequestStore.setFromArgv(process.argv)
 
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -64,6 +70,7 @@ const services = createAppServices({
   emitRuntimeStateChanged,
   emitTranscriptImported,
 })
+const markdownDocumentService = new MarkdownDocumentService(new MarkdownDocumentRepository(app.getPath('userData')), () => mainWindow)
 const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
 
 function createMainWindow(): void {
@@ -525,6 +532,13 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
 registerAppLifecycle(app, {
   onSecondInstance: (_event, argv) => {
     if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
+    const markdownPath = parseMarkdownDocumentOpenRequest(argv)
+    if (markdownPath) {
+      markdownDocumentOpenRequestStore.setFromArgv(argv)
+      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.isLoading() === false) {
+        mainWindow.webContents.send(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, { path: markdownPath })
+      }
+    }
     showMainWindowFromTray()
   },
   onBeforeQuit: handleBeforeQuit,
@@ -631,6 +645,8 @@ app.whenReady().then(async () => {
               skillService,
               transcriptService,
               transcriptShareService,
+              markdownDocumentService,
+              markdownDocumentOpenRequestStore,
             })
           },
         },

@@ -335,6 +335,19 @@ function AppNavigateListener() {
   return null
 }
 
+function MarkdownDocumentOpenListener() {
+  const navigate = useNavigate()
+  useEffect(
+    () =>
+      window.electronAPI.onMarkdownDocumentOpenRequested(({ path }) => {
+        if (!path) return
+        navigate('/markdown')
+      }),
+    [navigate],
+  )
+  return null
+}
+
 function ProjectRoutePreloader() {
   const location = useLocation()
 
@@ -383,6 +396,7 @@ export function AppGlobalEffects() {
       <MouseGestureNavigatorOverlay />
       <GlobalHomeShortcutListener />
       <AppNavigateListener />
+      <MarkdownDocumentOpenListener />
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
       <GlobalProjectDropListener />

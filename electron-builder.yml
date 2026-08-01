@@ -31,6 +31,18 @@ win:
       arch:
         - x64
 
+fileAssociations:
+  - ext: md
+    name: Markdown Document
+    description: Markdown document
+    role: Editor
+    icon: icon/Y.ico
+  - ext: markdown
+    name: Markdown Document
+    description: Markdown document
+    role: Editor
+    icon: icon/Y.ico
+
 nsis:
   oneClick: false
   perMachine: false

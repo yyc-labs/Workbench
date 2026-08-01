@@ -18,6 +18,8 @@ import type { BrowserAiService } from '../browser-ai/browserAiService'
 import type { BrowserScreenshotService } from '../screenshot/screenshotService'
 import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent, TranscriptGatewayImportPayload } from '../../../shared/types'
 import type { BrowserScreenshotViewerPayload } from '../../../shared/types'
+import type { MarkdownDocumentService } from '../markdown-document/markdownDocumentService'
+import type { MarkdownDocumentOpenRequestStore } from '../markdown-document/markdownDocumentOpenRequest'
 
 export type RuntimeStateChangedPayload = {
   reason: string
@@ -49,6 +51,8 @@ export type RegisterIpcHandlersDependencies = {
   skillService: SkillService
   transcriptService: TranscriptService
   transcriptShareService: TranscriptShareService
+  markdownDocumentService: MarkdownDocumentService
+  markdownDocumentOpenRequestStore: MarkdownDocumentOpenRequestStore
 }
 
 type GitRequestWithRepoRoot = {

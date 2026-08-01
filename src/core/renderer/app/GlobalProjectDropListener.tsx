@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FolderPlus } from 'lucide-react'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 
 function GlobalProjectDropListener() {
   const { t } = useI18n()
+  const navigate = useNavigate()
   const addProject = useAppStore((state) => state.addProject)
+  const openMarkdownDocument = useAppStore((state) => state.openMarkdownDocument)
   const [isDragOver, setIsDragOver] = useState(false)
   const isDragOverRef = useRef(false)
   const dragHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -64,7 +67,14 @@ function GlobalProjectDropListener() {
         if (path) paths.add(path)
       }
 
+      const markdownPath = [...paths].find((path) => /\.(md|markdown)$/i.test(path))
+      if (markdownPath) {
+        navigate('/markdown')
+        void openMarkdownDocument(markdownPath)
+      }
+
       for (const path of paths) {
+        if (path === markdownPath) continue
         try {
           await addProject(path)
         } catch (error) {
@@ -82,7 +92,7 @@ function GlobalProjectDropListener() {
       window.removeEventListener('blur', stopDragTracking)
       stopDragTracking()
     }
-  }, [addProject, setDragOverlay, stopDragTracking])
+  }, [addProject, navigate, openMarkdownDocument, setDragOverlay, stopDragTracking])
 
   if (!isDragOver) return null
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, Bot, Code2, FileText, FolderOpen, GraduationCap, Home, Map, Route as RouteIcon, Search, Settings, type LucideIcon, X } from 'lucide-react'
+import { ArrowRight, Bot, Code2, FileText, FolderOpen, GraduationCap, Home, Map, Route as RouteIcon, Search, Settings, FileType2, type LucideIcon, X } from 'lucide-react'
 import type { ProjectInfo } from '../../shared/types'
 import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n'
@@ -10,7 +10,7 @@ import { SETTINGS_SECTIONS, DEFAULT_SETTINGS_SECTION, type Section } from '../pa
 import { useAppStore } from '../stores/appStore'
 
 type RouteCatalogGroupId = 'base' | 'project' | 'settings'
-type RouteCatalogIconName = 'home' | 'learning' | 'project' | 'code' | 'ai' | 'transcript' | 'settings' | 'route'
+type RouteCatalogIconName = 'home' | 'learning' | 'markdown' | 'project' | 'code' | 'ai' | 'transcript' | 'settings' | 'route'
 type ProjectPaneRoute = 'code' | 'aicommit' | 'transcript'
 
 type RouteCatalogEntry = {
@@ -38,6 +38,7 @@ type RouteCatalogProject = Pick<ProjectInfo, 'id' | 'path' | 'name' | 'customNam
 const routeIconMap: Record<RouteCatalogIconName, LucideIcon> = {
   home: Home,
   learning: GraduationCap,
+  markdown: FileType2,
   project: FolderOpen,
   code: Code2,
   ai: Bot,
@@ -169,6 +170,15 @@ function RouteCatalogDialog({ open, onClose }: { open: boolean; onClose: () => v
         pattern: '/learning',
         description: t('common.routeCatalog.routes.learningDescription'),
         targetPath: '/learning',
+      },
+      {
+        id: 'markdown',
+        groupId: 'base',
+        icon: 'markdown',
+        label: t('common.routeCatalog.routes.markdownLabel'),
+        pattern: '/markdown',
+        description: t('common.routeCatalog.routes.markdownDescription'),
+        targetPath: '/markdown',
       },
     ]
 

@@ -5,6 +5,7 @@ import { commonMessages } from './messages/common'
 import { detailMessages } from './messages/detail'
 import { docsAndCommandsMessages } from './messages/docsAndCommands'
 import { learningMessages } from './messages/learning'
+import { markdownDocumentMessages } from './messages/markdownDocument'
 import { projectMessages } from './messages/project'
 import { settingsMessages } from './messages/settings'
 import { transcriptMessages } from './messages/transcript'
@@ -24,6 +25,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
     { project: projectMessages[locale].project },
     { detail: detailMessages[locale].detail },
     { learning: learningMessages[locale].learning },
+    { markdownDocument: markdownDocumentMessages[locale].markdownDocument },
     {
       projectMeta: projectMessages[locale].projectMeta,
       workspaceManager: projectMessages[locale].workspaceManager,
@@ -46,7 +48,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
     {
       settingsRuntime: aiAndRuntimeMessages[locale].settingsRuntime,
       settingsRules: aiAndRuntimeMessages[locale].settingsRules,
-    }
+    },
   )
 }
 

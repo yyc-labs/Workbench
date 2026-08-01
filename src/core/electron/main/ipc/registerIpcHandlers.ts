@@ -10,6 +10,7 @@ import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
 import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
 import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
 import { registerTranscriptIpcHandlers } from './registerTranscriptIpcHandlers'
+import { registerMarkdownDocumentIpcHandlers } from './registerMarkdownDocumentIpcHandlers'
 import type { RegisterIpcHandlersDependencies, RuntimeStateChangedPayload } from './registerIpcHandlers.shared'
 
 let ipcHandlersRegistered = false
@@ -35,4 +36,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerAiConnectionIpcHandlers(deps)
   registerBrowserAiIpcHandlers(deps)
   registerBrowserScreenshotIpcHandlers(deps)
+  registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore)
 }

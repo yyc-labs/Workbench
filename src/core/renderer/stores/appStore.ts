@@ -11,6 +11,7 @@ import { createBrowserAiActionsSlice } from './appStore.browserAiSlice'
 import { createSkillActionsSlice } from './appStore.skillSlice'
 import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../../shared/aiRuntimeProfiles'
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
+import { createMarkdownDocumentActionsSlice } from './appStore.markdownDocumentSlice'
 
 export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   isAppReady: false,
@@ -74,4 +75,5 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createTranscriptActionsSlice(...args),
   ...createBrowserAiActionsSlice(...args),
   ...createSkillActionsSlice(...args),
+  ...createMarkdownDocumentActionsSlice(...args),
 }))

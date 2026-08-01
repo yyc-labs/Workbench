@@ -6,6 +6,14 @@ import type { RuntimeSessionInfo, TmuxSessionInfo } from './types/runtime'
 import type { TranscriptSession, TranscriptSourceType, TranscriptViewerMode } from './types/transcript'
 
 export type {
+  MarkdownDocumentDisplayMode,
+  MarkdownDocumentHistoryEntry,
+  MarkdownDocumentOpenRequest,
+  MarkdownDocumentReadResult,
+  MarkdownDocumentWriteResult,
+} from './types/markdownDocument'
+
+export type {
   AiGatewayClientBinding,
   AiGatewayClientBindingBackup,
   AiGatewayClientCli,

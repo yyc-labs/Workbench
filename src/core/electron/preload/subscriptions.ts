@@ -1,6 +1,6 @@
 import { ipcRenderer, type IpcRendererEvent } from 'electron'
 import { IPC } from '../main/ipc'
-import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, TranscriptImportedEvent } from '../../shared/types'
+import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, MarkdownDocumentOpenRequest, TranscriptImportedEvent } from '../../shared/types'
 
 type AiCommitOutputData = { projectId: string; data: string }
 type AiCommitStatusData = { projectId: string; status: 'running' | 'success' | 'error' }
@@ -79,5 +79,7 @@ export function createSubscriptionApi() {
     onGlobalHomeShortcut: (cb: () => void) => subscribeIpcSignal(IPC.GLOBAL_HOME_SHORTCUT, cb),
 
     onGlobalThemeShortcut: (cb: () => void) => subscribeIpcSignal(IPC.GLOBAL_THEME_SHORTCUT, cb),
+
+    onMarkdownDocumentOpenRequested: (cb: (data: MarkdownDocumentOpenRequest) => void) => subscribeIpcEvent(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, cb),
   }
 }

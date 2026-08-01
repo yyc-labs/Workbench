@@ -1,14 +1,11 @@
-import type {
-  ProjectPanePreloadHandle,
-  ProjectPanePreloadOptions,
-  ProjectPaneTab,
-} from '../components/ProjectPaneTabs'
+import type { ProjectPanePreloadHandle, ProjectPanePreloadOptions, ProjectPaneTab } from '../components/ProjectPaneTabs'
 
 type HomePageModule = typeof import('../pages/Home')
 type DetailPageModule = typeof import('../pages/Detail')
 type TranscriptPageModule = typeof import('../pages/TranscriptPage')
 type SettingsPageModule = typeof import('../pages/Settings')
 type LearningCenterPageModule = typeof import('../pages/LearningCenterPage')
+type MarkdownDocumentPageModule = typeof import('../pages/markdown-document/MarkdownDocumentPage')
 type CodeWorkspacePanelModule = typeof import('../pages/code/CodeWorkspacePanel')
 type DetailAiCommitPaneHostModule = typeof import('../pages/detail/DetailAiCommitPaneHost')
 type MonacoPreloadModule = typeof import('./monacoPreload')
@@ -23,6 +20,7 @@ let detailPageModulePromise: Promise<DetailPageModule> | null = null
 let transcriptPageModulePromise: Promise<TranscriptPageModule> | null = null
 let settingsPageModulePromise: Promise<SettingsPageModule> | null = null
 let learningCenterPageModulePromise: Promise<LearningCenterPageModule> | null = null
+let markdownDocumentPageModulePromise: Promise<MarkdownDocumentPageModule> | null = null
 let codeWorkspacePanelModulePromise: Promise<CodeWorkspacePanelModule> | null = null
 let detailAiCommitPaneHostModulePromise: Promise<DetailAiCommitPaneHostModule> | null = null
 let monacoPreloadModulePromise: Promise<MonacoPreloadModule> | null = null
@@ -52,6 +50,11 @@ export function loadSettingsPageModule(): Promise<SettingsPageModule> {
 export function loadLearningCenterPageModule(): Promise<LearningCenterPageModule> {
   learningCenterPageModulePromise ??= import('../pages/LearningCenterPage')
   return learningCenterPageModulePromise
+}
+
+export function loadMarkdownDocumentPageModule(): Promise<MarkdownDocumentPageModule> {
+  markdownDocumentPageModulePromise ??= import('../pages/markdown-document/MarkdownDocumentPage')
+  return markdownDocumentPageModulePromise
 }
 
 export function loadCodeWorkspacePanelModule(): Promise<CodeWorkspacePanelModule> {
@@ -154,10 +157,7 @@ function preloadProjectPaneNow(activePane: ProjectPaneTab): void {
   scheduleMonacoEditorPreload()
 }
 
-export function preloadProjectPane(
-  pane: string | undefined,
-  options: ProjectPanePreloadOptions = {}
-): ProjectPanePreloadHandle {
+export function preloadProjectPane(pane: string | undefined, options: ProjectPanePreloadOptions = {}): ProjectPanePreloadHandle {
   const activePane = normalizeProjectPane(pane)
 
   if (options.intent === 'intent') {

@@ -4,6 +4,7 @@
 @import "./parts/legacy-pages.css";
 @import "./parts/code-workspace.css";
 @import "./parts/learning-center.css";
+@import "./parts/markdown-document.css";
 
 .button-interactive {
   transition:
@@ -23,7 +24,7 @@
   cursor: not-allowed;
 }
 
-.button-interactive[aria-busy='true'] {
+.button-interactive[aria-busy="true"] {
   cursor: progress;
 }
 

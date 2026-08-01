@@ -247,6 +247,7 @@ export function HomePage() {
           void handleAddFolder()
         }}
         onLearningCenterClick={() => navigate('/learning')}
+        onMarkdownClick={() => navigate('/markdown')}
         onSettingsClick={() => navigate('/settings')}
         onManageWorkspace={() => setWorkspaceDialogOpen(true)}
         searchRef={searchRef}

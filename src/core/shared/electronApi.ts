@@ -100,6 +100,10 @@ import type {
   TranscriptShareStartPayload,
   TranscriptShareStartResult,
   TranscriptUpdatePayload,
+  MarkdownDocumentHistoryEntry,
+  MarkdownDocumentOpenRequest,
+  MarkdownDocumentReadResult,
+  MarkdownDocumentWriteResult,
 } from './types'
 import type { AiRuntimeProfile } from './types'
 
@@ -244,6 +248,16 @@ export interface ProjectFileElectronApi {
   writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => Promise<ProjectFileWriteImageResult>
 }
 
+export interface MarkdownDocumentElectronApi {
+  selectMarkdownDocument: () => Promise<string | null>
+  readMarkdownDocument: (path: string) => Promise<MarkdownDocumentReadResult>
+  writeMarkdownDocument: (path: string, content: string, expectedMtimeMs: number) => Promise<MarkdownDocumentWriteResult>
+  listMarkdownDocumentHistory: () => Promise<MarkdownDocumentHistoryEntry[]>
+  removeMarkdownDocumentHistory: (path: string) => Promise<MarkdownDocumentHistoryEntry[]>
+  clearMarkdownDocumentHistory: () => Promise<void>
+  consumePendingMarkdownDocumentOpen: () => Promise<MarkdownDocumentOpenRequest | null>
+}
+
 export interface TranscriptElectronApi {
   importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
   importExternalTranscript: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
@@ -348,6 +362,7 @@ export interface SubscriptionElectronApi {
   onCodeToggleViewMode: ElectronApiSignalSubscription
   onGlobalHomeShortcut: ElectronApiSignalSubscription
   onGlobalThemeShortcut: ElectronApiSignalSubscription
+  onMarkdownDocumentOpenRequested: ElectronApiSubscription<MarkdownDocumentOpenRequest>
 }
 
 export type ElectronApi = CoreElectronApi &
@@ -356,6 +371,7 @@ export type ElectronApi = CoreElectronApi &
   AiGatewayElectronApi &
   GitElectronApi &
   ProjectFileElectronApi &
+  MarkdownDocumentElectronApi &
   TranscriptElectronApi &
   LearningElectronApi &
   SkillElectronApi &

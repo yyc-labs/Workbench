@@ -12,6 +12,7 @@ import { createSkillInvokeApi } from './invokeApi.skill'
 import { createProjectFileInvokeApi } from './invokeApi.projectFiles'
 import { createRuntimeInvokeApi } from './invokeApi.runtime'
 import { createTranscriptInvokeApi } from './invokeApi.transcript'
+import { createMarkdownDocumentInvokeApi } from './invokeApi.markdownDocument'
 import { createSubscriptionApi } from './subscriptions'
 
 const api = {
@@ -28,6 +29,7 @@ const api = {
   ...createSkillInvokeApi(),
   ...createRuntimeInvokeApi(),
   ...createSubscriptionApi(),
+  ...createMarkdownDocumentInvokeApi(),
 } satisfies ElectronApi
 
 contextBridge.exposeInMainWorld('electronAPI', api)
