@@ -32,6 +32,7 @@ body.structured-capture-active .transcript-structured-preview-modal .transcript-
   contain: none !important;
   transform: none !important;
   will-change: auto !important;
+  align-items: start !important;
 }
 
 body.structured-capture-active .transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
@@ -120,6 +121,7 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-mermaid-wrap {
   overflow: visible !important;
   content-visibility: visible !important;
+  align-self: flex-start !important;
 }
 
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-mermaid-wrap .code-markdown-mermaid-diagram {
