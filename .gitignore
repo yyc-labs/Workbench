@@ -17,3 +17,23 @@ release/
 AGENTS.md
 CLAUDE.md
 cache/
+
+# Runtime output and temporary verification files
+logs/
+.tmp-*/
+*.pid
+*.seed
+
+# Local secrets and machine-specific settings
+.env.*
+!.env.example
+*.local
+*.secret
+*.private
+*.key
+*.pem
+*.p12
+*.pfx
+
+docs/*
+!docs/README.md
