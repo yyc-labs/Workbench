@@ -4,7 +4,9 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-Workbench is an Electron-based desktop IDE for developers who want one focused workspace for local development and AI-assisted workflows. It brings project navigation, code browsing, Git operations, local AI CLI runtimes, transcript management, learning notes, Markdown documents, and browser screenshots into a single Windows application.
+Workbench is an Electron-based, local-first desktop workspace for developers who want one focused context for local development and AI-assisted workflows. It brings project navigation, code editing, Git operations, terminal management, local AI CLI runtimes, an AI Gateway, transcript management, learning notes, Markdown documents, and browser screenshots into a single Windows application.
+
+The project is organized around the local project as the primary context. Code, terminals, Git state, AI sessions, and documentation can be accessed from the same workspace, helping developers reduce tool switching and preserve the context of an AI-assisted task.
 
 > Workbench is under active development. Some features and interfaces may change as the project evolves.
 
@@ -15,11 +17,12 @@ Because the project currently has access to a Windows development environment on
 ## Highlights
 
 - 🗂️ **Project workspace** — Add, switch, and manage local projects with recent-project persistence.
-- 🧭 **Code workspace** — Browse project trees, edit source files, inspect diffs, and preview Markdown.
+- 🧭 **Code workspace** — Browse project trees, edit source files with Monaco, inspect diffs, and preview Markdown.
 - 🌿 **Git workflow** — Review repository status, branches, commits, diffs, staging, common operations, and conflicts.
+- 🖥️ **Terminals and processes** — Manage interactive terminals and project tasks through node-pty and xterm.js.
 - 🤖 **Local AI runtimes** — Configure and run local Claude Code and OpenAI Codex CLI workflows per project.
-- 🔌 **AI Gateway** — Centralize provider configuration, model routing, and Codex-compatible gateway bindings.
-- 🧾 **Transcript workspace** — Import, browse, organize, capture, and share AI CLI session transcripts.
+- 🔌 **AI Gateway** — Centralize providers, model routing, gateway bindings, streaming responses, and protocol compatibility.
+- 🧾 **Agent Hooks and transcripts** — Capture agent lifecycle events and import, browse, organize, and share AI CLI transcripts.
 - 📚 **Learning center** — Maintain structured notes, categories, skills, and browser-assisted learning material.
 - 📝 **Markdown workspace** — Render GFM, syntax-highlighted code, tables, and Mermaid diagrams.
 - 📸 **Browser screenshots** — Capture long web pages, handle fixed elements, and inspect or save screenshots in a dedicated window.
@@ -37,21 +40,7 @@ Because the project currently has access to a Windows development environment on
 
 Workbench follows Electron's process boundaries and keeps shared contracts separate from platform capabilities and UI composition.
 
-```mermaid
-graph TD
-    User[Developer] --> Renderer[Renderer UI<br/>React + Zustand]
-    Renderer --> Preload[Preload API<br/>contextBridge]
-    Preload --> IPC[IPC handlers]
-    IPC --> Main[Electron main domains]
-    Main --> Runtime[Runtime and process execution]
-    Main --> Git[Git and project files]
-    Main --> AI[AI Gateway and CLI configuration]
-    Main --> Transcript[Transcript and learning services]
-    Main --> Windows[Windows and WSL integration]
-    Shared[Shared types and rules] -. contracts .-> Renderer
-    Shared -. contracts .-> Preload
-    Shared -. contracts .-> Main
-```
+See the [module and architecture reference](./docs/reference/architecture.md) for product modules, layer responsibilities, and the typical AI workflow.
 
 ### Layer responsibilities
 
@@ -72,6 +61,23 @@ graph TD
 - **Content:** React Markdown, remark-gfm, Mermaid, syntax highlighting
 - **AI integrations:** Claude Code and OpenAI Codex CLI workflows, with a local model-protocol gateway
 - **Testing:** Node.js built-in test runner
+
+## Product modules
+
+Workbench is more than a collection of separate tools. It organizes the local development process around a project context:
+
+```text
+Project
+ ├── Code and files
+ ├── Git
+ ├── Terminals and process tasks
+ ├── AI Runtime / AI Gateway
+ ├── Agent Hooks / Transcripts
+ ├── Markdown documents
+ └── Learning material and browser screenshots
+```
+
+The [module and architecture reference](./docs/reference/architecture.md) describes each module, its responsibilities, and the boundaries between Renderer, Preload, Main, and Shared layers.
 
 ## Requirements
 
@@ -152,6 +158,8 @@ Runtime configuration can include:
 - Local gateway settings
 - Git and project workspace preferences
 
+Windows-native and WSL are modeled as explicit execution targets. Windows projects use Windows paths and process environments, while WSL projects use the selected distribution's paths and environment. Runtime behavior should not depend on guessing a default backend.
+
 When adding a new configuration option, keep its schema, persistence, IPC contract, and renderer usage synchronized.
 
 ## Project structure
@@ -170,6 +178,8 @@ When adding a new configuration option, keep its schema, persistence, IPC contra
 ├── package.json
 └── README.md
 ```
+
+For a detailed module map and architecture overview, see [`docs/reference/architecture.md`](./docs/reference/architecture.md).
 
 ## Windows distribution
 
@@ -200,6 +210,9 @@ The roadmap is maintained alongside implementation plans in [`docs/`](./docs/).
 - [x] Transcript import and browsing
 - [x] Markdown rendering with Mermaid and GFM support
 - [x] Browser screenshot capture and viewing
+- [x] Terminal and project task management
+- [x] Agent Hook Gateway and transcript import
+- [x] Learning center and basic skill management
 - [ ] Broader platform support beyond Windows
 - [ ] More runtime providers and integrations
 - [ ] More complete release automation and distribution channels

@@ -4,7 +4,9 @@
 
 [English](./README.md) | 简体中文
 
-Workbench 是一个基于 Electron 的桌面 IDE，将项目导航、代码浏览、Git 操作、本地 AI CLI Runtime、会话记录、学习笔记、Markdown 文档和浏览器截图整合到一个 Windows 应用中。
+Workbench 是一个基于 Electron 的本地优先开发工作台，将项目导航、代码浏览与编辑、Git 操作、终端管理、本地 AI CLI Runtime、AI Gateway、会话记录、学习笔记、Markdown 文档和浏览器截图整合到一个 Windows 应用中。
+
+Workbench 以“项目”为开发上下文，把代码、终端、Git、AI 会话和文档连接起来，帮助开发者减少工具切换，保留 AI 辅助开发过程中的完整上下文。
 
 > Workbench 仍在持续开发中，部分功能和界面可能会随版本演进而调整。
 
@@ -15,11 +17,12 @@ Workbench 是一个基于 Electron 的桌面 IDE，将项目导航、代码浏�
 ## 核心功能
 
 - 🗂️ **项目工作区** — 添加、切换和管理本地项目，保存最近打开记录。
-- 🧭 **代码工作区** — 浏览项目文件树、编辑源代码、查看差异并预览 Markdown。
+- 🧭 **代码工作区** — 浏览项目文件树，使用 Monaco 编辑源代码，查看差异并预览 Markdown。
 - 🌿 **Git 工作流** — 查看仓库状态、分支、提交、差异，执行暂存、常用操作和冲突处理。
+- 🖥️ **终端与运行管理** — 基于 node-pty 和 xterm.js 管理交互式终端与项目运行任务。
 - 🤖 **本地 AI Runtime** — 按项目配置并运行 Claude Code、OpenAI Codex 等本地 AI CLI。
-- 🔌 **AI Gateway** — 集中管理 Provider、模型路由和 Codex 兼容的 Gateway 绑定。
-- 🧾 **会话记录工作区** — 导入、浏览、整理、捕获和分享 AI CLI 会话记录。
+- 🔌 **AI Gateway** — 统一管理 Provider、模型路由、Gateway 绑定、流式响应和协议兼容。
+- 🧾 **Agent Hooks 与 Transcript** — 捕获 Agent 生命周期事件，导入、浏览和整理 AI CLI 会话记录。
 - 📚 **学习中心** — 维护结构化笔记、分类、技能和浏览器辅助学习资料。
 - 📝 **Markdown 工作区** — 支持 GFM、代码高亮、表格和 Mermaid 图表渲染。
 - 📸 **浏览器截图** — 捕获长网页、处理固定元素，并在独立窗口中预览或保存截图。
@@ -37,21 +40,7 @@ Workbench 是一个基于 Electron 的桌面 IDE，将项目导航、代码浏�
 
 Workbench 遵循 Electron 的进程边界，将共享契约、平台能力和 UI 编排分离。
 
-```mermaid
-graph TD
-    User[开发者] --> Renderer[Renderer UI<br/>React + Zustand]
-    Renderer --> Preload[Preload API<br/>contextBridge]
-    Preload --> IPC[IPC handlers]
-    IPC --> Main[Electron main domains]
-    Main --> Runtime[Runtime 与进程执行]
-    Main --> Git[Git 与项目文件]
-    Main --> AI[AI Gateway 与 CLI 配置]
-    Main --> Transcript[Transcript 与学习服务]
-    Main --> Windows[Windows 与 WSL 集成]
-    Shared[共享类型与规则] -. contracts .-> Renderer
-    Shared -. contracts .-> Preload
-    Shared -. contracts .-> Main
-```
+详细的产品模块、分层职责和典型 AI 工作流请参阅[模块与架构说明](./docs/reference/architecture.md)。
 
 ### 各层职责
 
@@ -72,6 +61,23 @@ graph TD
 - **内容渲染**：React Markdown、remark-gfm、Mermaid、代码高亮
 - **AI 集成**：Claude Code、OpenAI Codex CLI 工作流，以及本地模型协议 Gateway
 - **测试**：Node.js 内置测试运行器
+
+## 产品模块
+
+Workbench 不是多个独立工具的简单集合，而是围绕项目上下文组织的一套本地开发流程：
+
+```text
+项目
+ ├── 代码与文件
+ ├── Git
+ ├── 终端与运行任务
+ ├── AI Runtime / AI Gateway
+ ├── Agent Hooks / Transcript
+ ├── Markdown 文档
+ └── 学习资料与浏览器截图
+```
+
+模块的详细职责、数据流和边界见 [`docs/reference/architecture.md`](./docs/reference/architecture.md)。
 
 ## 环境要求
 
@@ -150,6 +156,8 @@ Runtime 配置可能包括：
 - 本地 Gateway 设置
 - Git 与项目工作区偏好
 
+Workbench 将 Windows Native 和 WSL 视为不同的执行目标。Windows 项目使用 Windows 路径和进程环境，WSL 项目使用对应发行版中的路径和环境；Runtime 不依赖模糊的默认后端猜测。
+
 新增配置项时，请同步维护配置 Schema、持久化逻辑、IPC 契约和 Renderer 使用方。
 
 ## 项目结构
@@ -168,6 +176,8 @@ Runtime 配置可能包括：
 ├── package.json
 └── README.md
 ```
+
+更完整的模块说明位于 [`docs/reference/architecture.md`](./docs/reference/architecture.md)。
 
 ## Windows 构建与发布
 
@@ -198,6 +208,9 @@ npm run dist:win
 - [x] Transcript 导入与浏览
 - [x] 支持 Mermaid 和 GFM 的 Markdown 渲染
 - [x] 浏览器截图捕获与查看
+- [x] 终端与项目运行任务管理
+- [x] Agent Hook Gateway 与 Transcript 导入
+- [x] 学习中心与技能管理基础能力
 - [ ] 扩展 Windows 之外的平台支持
 - [ ] 增加更多 Runtime Provider 和集成
 - [ ] 完善发布自动化和分发渠道
