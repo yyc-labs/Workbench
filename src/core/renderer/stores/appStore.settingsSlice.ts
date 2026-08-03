@@ -1,14 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from './appStore.types'
-import type {
-  AiRuntimeProfile,
-  ClaudeRuntimeProfile,
-  CodexGatewayBindingResult,
-  CodexGatewayBindingSaveInput,
-  CodexSettingsInput,
-  CodexSettingsSnapshot,
-  ProjectDocTagOption,
-} from '../../shared/types'
+import type { AiRuntimeProfile, ClaudeRuntimeProfile, CodexGatewayBindingResult, CodexGatewayBindingSaveInput, CodexSettingsInput, CodexSettingsSnapshot, ProjectDocTagOption, ProjectFileExclusionsConfig } from '../../shared/types'
 import { getCodexScopeCacheKey } from '../../shared/codexScope'
 
 const RUNTIME_MODE_SWITCH_COOLDOWN_MS = 1200
@@ -20,6 +12,7 @@ export type SettingsActionsSlice = Pick<
   | 'setLaunchOnLogin'
   | 'setLaunchOnLoginDisplayMode'
   | 'setCloseWindowBehavior'
+  | 'setCodeFileExclusions'
   | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
   | 'setRuntimeLauncherScript'
@@ -92,6 +85,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
     }))
   },
 
+  setCodeFileExclusions: async (codeFileExclusions: ProjectFileExclusionsConfig) => {
+    const updated = await window.electronAPI.setConfig({ codeFileExclusions })
+    set((state) => ({
+      config: {
+        ...state.config,
+        codeFileExclusions: updated.codeFileExclusions,
+      },
+    }))
+  },
+
   setCacheLocation: async (cacheLocation) => {
     const updated = await window.electronAPI.setConfig({ cacheLocation })
     set((state) => ({
@@ -114,9 +117,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
         aiEnvironment: updated.aiEnvironment,
       },
       capability,
-      runtimeModeSwitchCooldownUntil: modeChanged
-        ? Date.now() + RUNTIME_MODE_SWITCH_COOLDOWN_MS
-        : state.runtimeModeSwitchCooldownUntil,
+      runtimeModeSwitchCooldownUntil: modeChanged ? Date.now() + RUNTIME_MODE_SWITCH_COOLDOWN_MS : state.runtimeModeSwitchCooldownUntil,
     }))
   },
 
@@ -167,9 +168,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
   loadCodexSettings: async (): Promise<CodexSettingsSnapshot> => {
     const snapshot = await window.electronAPI.getCodexSettings()
     const scopeKey = getCodexScopeCacheKey(snapshot.scope)
-    const currentConfig = window.electronAPI.getConfig
-      ? await window.electronAPI.getConfig()
-      : undefined
+    const currentConfig = window.electronAPI.getConfig ? await window.electronAPI.getConfig() : undefined
     const updated = await window.electronAPI.setConfig({
       codexProviderApiKeys: {
         ...(currentConfig?.codexProviderApiKeys ?? {}),
@@ -194,9 +193,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
     return snapshot
   },
 
-  saveCodexGatewayBinding: async (
-    payload: CodexGatewayBindingSaveInput
-  ): Promise<CodexGatewayBindingResult> => {
+  saveCodexGatewayBinding: async (payload: CodexGatewayBindingSaveInput): Promise<CodexGatewayBindingResult> => {
     const result = await window.electronAPI.saveCodexGatewayBinding(payload)
     set({
       config: result.appConfig,

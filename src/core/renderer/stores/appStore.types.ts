@@ -33,6 +33,7 @@ import type {
   ProjectInfo,
   ProcessInfo,
   AppConfig,
+  ProjectFileExclusionsConfig,
   AppCacheLocationConfig,
   AppCacheLocationInfo,
   BrowserDataCleanupResult,
@@ -172,6 +173,7 @@ export interface AppState {
   setLaunchOnLogin: (enabled: boolean) => Promise<void>
   setLaunchOnLoginDisplayMode: (mode: NonNullable<AppConfig['launchOnLoginDisplayMode']>) => Promise<void>
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
+  setCodeFileExclusions: (exclusions: ProjectFileExclusionsConfig) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>

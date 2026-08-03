@@ -1505,6 +1505,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       const markedElements = await chooseMarkedElements(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)
       return { status: markedElements ? 'completed' : 'cancelled' }
     }
+    if (!('captureMode' in request)) return { status: 'failed', errorMessage: '无效的截图请求。' }
     const result = await start({ targetId: pageId, captureMode: request.captureMode, fixedElementPolicy: request.fixedElementPolicy })
     if (result.status === 'completed' && result.pngBase64) {
       await deps.openViewer({ pngBase64: result.pngBase64, title: result.title ?? 'Browser screenshot', width: result.width, height: result.height })

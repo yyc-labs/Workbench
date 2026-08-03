@@ -1,12 +1,8 @@
 import { Dirent } from 'node:fs'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type {
-  ProjectFileAutoLoadDecision,
-  ProjectFileNode,
-  ProjectFileTreeOptions,
-  ProjectFileTreeResult,
-} from '../../../shared/types'
+import type { ProjectFileAutoLoadDecision, ProjectFileNode, ProjectFileTreeOptions, ProjectFileTreeResult } from '../../../shared/types'
+import { loadConfig } from '../config'
 import {
   LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
   MAX_DIRECTORY_ENTRIES,
@@ -18,6 +14,7 @@ import {
   type DirectoryListCounters,
   type ScanCounters,
   compareTreeNodesByName,
+  createRgExcludeGlobs,
   ensureWithinRoot,
   execFileUtf8,
   fileDepth,
@@ -29,7 +26,7 @@ import {
   normalizeListedRelativePath,
   normalizeRelativeInput,
   resolveRoot,
-  RG_EXCLUDE_GLOBS,
+  type ProjectFileExclusions,
   scanDirectoryForAutoLoadThreshold,
   shouldSkipListedFilePath,
   toPosixRelativePath,
@@ -42,19 +39,33 @@ interface ProjectFileListCacheEntry {
 
 const projectFileListCache = new Map<string, ProjectFileListCacheEntry>()
 
-function setProjectFileListCache(rootRealPath: string, paths: string[]): void {
-  projectFileListCache.set(rootRealPath, {
+function getProjectFileExclusions(): ProjectFileExclusions {
+  const configured = loadConfig().codeFileExclusions
+  return {
+    directories: new Set(configured?.directories ?? []),
+    files: new Set(configured?.files ?? []),
+  }
+}
+
+function projectFileCacheKey(rootRealPath: string, exclusions: ProjectFileExclusions): string {
+  return `${rootRealPath}\0${Array.from(exclusions.directories).join('\0')}\0${Array.from(exclusions.files).join('\0')}`
+}
+
+function setProjectFileListCache(rootRealPath: string, exclusions: ProjectFileExclusions, paths: string[]): void {
+  projectFileListCache.set(projectFileCacheKey(rootRealPath, exclusions), {
     paths,
     updatedAtMs: Date.now(),
   })
 }
 
 function invalidateProjectFileListCache(rootRealPath: string): void {
-  projectFileListCache.delete(rootRealPath)
+  for (const key of projectFileListCache.keys()) {
+    if (key.startsWith(`${rootRealPath}\0`)) projectFileListCache.delete(key)
+  }
 }
 
-function getProjectFileListFromCache(rootRealPath: string): string[] | null {
-  const cached = projectFileListCache.get(rootRealPath)
+function getProjectFileListFromCache(rootRealPath: string, exclusions: ProjectFileExclusions): string[] | null {
+  const cached = projectFileListCache.get(projectFileCacheKey(rootRealPath, exclusions))
   if (!cached) return null
   if (Date.now() - cached.updatedAtMs > PROJECT_FILE_LIST_CACHE_TTL_MS) {
     projectFileListCache.delete(rootRealPath)
@@ -63,17 +74,8 @@ function getProjectFileListFromCache(rootRealPath: string): string[] | null {
   return cached.paths
 }
 
-async function listProjectFilesByRipgrep(rootRealPath: string): Promise<string[] | null> {
-  const args = [
-    '--files',
-    '--hidden',
-    '--no-ignore',
-    '--null',
-    '--max-depth',
-    String(MAX_TREE_DEPTH),
-    ...RG_EXCLUDE_GLOBS.flatMap((glob) => ['--glob', glob]),
-    '.',
-  ]
+async function listProjectFilesByRipgrep(rootRealPath: string, exclusions: ProjectFileExclusions): Promise<string[] | null> {
+  const args = ['--files', '--hidden', '--no-ignore', '--null', '--max-depth', String(MAX_TREE_DEPTH), ...createRgExcludeGlobs(exclusions).flatMap((glob) => ['--glob', glob]), '.']
 
   try {
     const output = await execFileUtf8(rootRealPath, args)
@@ -100,12 +102,7 @@ async function listProjectFilesByRipgrep(rootRealPath: string): Promise<string[]
   }
 }
 
-async function scanDirectoryFallback(
-  rootRealPath: string,
-  absoluteDirPath: string,
-  depth: number,
-  counters: ScanCounters
-): Promise<ProjectFileNode[]> {
+async function scanDirectoryFallback(rootRealPath: string, absoluteDirPath: string, depth: number, counters: ScanCounters, exclusions: ProjectFileExclusions): Promise<ProjectFileNode[]> {
   if (depth > MAX_TREE_DEPTH) {
     counters.skippedDirectories += 1
     return []
@@ -133,7 +130,7 @@ async function scanDirectoryFallback(
     }
 
     if (entry.isDirectory()) {
-      if (isExcludedDirectory(entry.name)) {
+      if (isExcludedDirectory(entry.name, exclusions)) {
         counters.skippedDirectories += 1
         continue
       }
@@ -143,7 +140,7 @@ async function scanDirectoryFallback(
         continue
       }
 
-      const children = await scanDirectoryFallback(rootRealPath, entryAbsolutePath, depth + 1, counters)
+      const children = await scanDirectoryFallback(rootRealPath, entryAbsolutePath, depth + 1, counters, exclusions)
       directories.push({
         name: entry.name,
         relativePath,
@@ -157,7 +154,7 @@ async function scanDirectoryFallback(
 
     if (!entry.isFile()) continue
 
-    if (isExcludedFile(entry.name)) {
+    if (isExcludedFile(entry.name, exclusions)) {
       counters.skippedFiles += 1
       continue
     }
@@ -178,14 +175,9 @@ async function scanDirectoryFallback(
   return [...directories, ...files]
 }
 
-async function listProjectDirectoryChildren(
-  rootRealPath: string,
-  directoryRelativePath: string | null
-): Promise<ProjectFileTreeResult> {
+async function listProjectDirectoryChildren(rootRealPath: string, directoryRelativePath: string | null, exclusions: ProjectFileExclusions): Promise<ProjectFileTreeResult> {
   const normalizedDirectoryRelativePath = directoryRelativePath ? normalizeRelativeInput(directoryRelativePath) : null
-  const targetDirectoryPath = normalizedDirectoryRelativePath
-    ? path.join(rootRealPath, normalizedDirectoryRelativePath)
-    : rootRealPath
+  const targetDirectoryPath = normalizedDirectoryRelativePath ? path.join(rootRealPath, normalizedDirectoryRelativePath) : rootRealPath
   const directoryRealPath = await fs.realpath(targetDirectoryPath)
   ensureWithinRoot(rootRealPath, directoryRealPath)
 
@@ -231,7 +223,7 @@ async function listProjectDirectoryChildren(
     }
 
     if (entry.isDirectory()) {
-      if (isExcludedDirectory(entry.name)) {
+      if (isExcludedDirectory(entry.name, exclusions)) {
         counters.skippedDirectories += 1
         continue
       }
@@ -252,7 +244,7 @@ async function listProjectDirectoryChildren(
 
     if (!entry.isFile()) continue
 
-    if (isExcludedFile(entry.name)) {
+    if (isExcludedFile(entry.name, exclusions)) {
       counters.skippedFiles += 1
       continue
     }
@@ -278,28 +270,24 @@ async function listProjectDirectoryChildren(
   }
 }
 
-export async function listProjectDirectoryFiles(
-  projectPath: string,
-  directoryRelativePath: string | null
-): Promise<ProjectFileTreeResult> {
+export async function listProjectDirectoryFiles(projectPath: string, directoryRelativePath: string | null): Promise<ProjectFileTreeResult> {
   const rootRealPath = await resolveRoot(projectPath)
-  return listProjectDirectoryChildren(rootRealPath, directoryRelativePath)
+  return listProjectDirectoryChildren(rootRealPath, directoryRelativePath, getProjectFileExclusions())
 }
 
-export async function listProjectFiles(
-  projectPath: string,
-  options: ProjectFileTreeOptions = {}
-): Promise<ProjectFileTreeResult> {
+export async function listProjectFiles(projectPath: string, options: ProjectFileTreeOptions = {}): Promise<ProjectFileTreeResult> {
   const rootRealPath = await resolveRoot(projectPath)
+  const exclusions = getProjectFileExclusions()
   if (options.invalidateCache) {
     invalidateProjectFileListCache(rootRealPath)
   }
-  return listProjectDirectoryChildren(rootRealPath, null)
+  return listProjectDirectoryChildren(rootRealPath, null, exclusions)
 }
 
 export async function getProjectFileAutoLoadDecision(projectPath: string): Promise<ProjectFileAutoLoadDecision> {
   const rootRealPath = await resolveRoot(projectPath)
-  const cached = getProjectFileListFromCache(rootRealPath)
+  const exclusions = getProjectFileExclusions()
+  const cached = getProjectFileListFromCache(rootRealPath, exclusions)
   if (cached) {
     return {
       shouldAutoLoad: cached.length <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
@@ -309,10 +297,10 @@ export async function getProjectFileAutoLoadDecision(projectPath: string): Promi
     }
   }
 
-  const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
+  const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
   if (listedPaths) {
-    const filtered = filterListedFilePaths(listedPaths)
-    setProjectFileListCache(rootRealPath, filtered.acceptedPaths)
+    const filtered = filterListedFilePaths(listedPaths, exclusions)
+    setProjectFileListCache(rootRealPath, exclusions, filtered.acceptedPaths)
     const fileCountSample = filtered.acceptedPaths.length
     return {
       shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
@@ -325,7 +313,7 @@ export async function getProjectFileAutoLoadDecision(projectPath: string): Promi
   const counters: AutoLoadProbeCounters = {
     filesSeen: 0,
   }
-  await scanDirectoryForAutoLoadThreshold(rootRealPath, rootRealPath, 0, LARGE_PROJECT_AUTOLOAD_FILE_LIMIT, counters)
+  await scanDirectoryForAutoLoadThreshold(rootRealPath, rootRealPath, 0, LARGE_PROJECT_AUTOLOAD_FILE_LIMIT, counters, exclusions)
   const fileCountSample = counters.filesSeen
   return {
     shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
@@ -340,13 +328,14 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
   if (!normalizedQuery) return []
 
   const rootRealPath = await resolveRoot(projectPath)
+  const exclusions = getProjectFileExclusions()
 
-  let resolvedPaths = getProjectFileListFromCache(rootRealPath)
+  let resolvedPaths = getProjectFileListFromCache(rootRealPath, exclusions)
   if (!resolvedPaths) {
-    const listedPaths = await listProjectFilesByRipgrep(rootRealPath)
+    const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
     if (listedPaths) {
       listedPaths.sort((a, b) => a.localeCompare(b))
-      const filtered = filterListedFilePaths(listedPaths)
+      const filtered = filterListedFilePaths(listedPaths, exclusions)
       resolvedPaths = filtered.acceptedPaths
     } else {
       const counters: ScanCounters = {
@@ -354,7 +343,7 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
         skippedFiles: 0,
         skippedDirectories: 0,
       }
-      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters)
+      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters, exclusions)
       const nextPaths: string[] = []
       const walk = (nodes: ProjectFileNode[]) => {
         for (const node of nodes) {
@@ -370,7 +359,7 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
       walk(tree)
       resolvedPaths = nextPaths
     }
-    setProjectFileListCache(rootRealPath, resolvedPaths)
+    setProjectFileListCache(rootRealPath, exclusions, resolvedPaths)
   }
 
   const matches: ProjectFileNode[] = []

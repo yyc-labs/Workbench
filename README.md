@@ -1,141 +1,244 @@
-# IDE Electron
+# Workbench
 
-一个面向本地开发工作流的 Windows 桌面 IDE。它将项目管理、代码浏览、Git 操作、AI CLI Runtime、会话记录和 Markdown 文档工作区集中在一个 Electron 应用中。
+> A local-first Windows desktop workspace for projects, code, Git, AI runtimes, transcripts, and Markdown.
 
-## 功能
+English | [简体中文](./README.zh-CN.md)
 
-- 项目管理：添加、移除和切换本地项目，保存最近打开记录。
-- 代码工作区：项目文件树、代码编辑与 Markdown 预览。
-- Git 工作流：查看项目状态，执行常用 Git 操作。
-- AI Runtime：管理 Codex、Claude 等本地 AI CLI，支持项目级 Runtime 配置和会话状态。
-- AI Gateway：统一管理 AI Provider、模型路由和 Codex 连接配置。
-- Transcript：导入、查看和管理 AI CLI 会话记录。
-- 学习中心：管理学习内容、技能和浏览器辅助能力。
-- Markdown 工作区：直接打开 Markdown 文件，支持 GFM、代码高亮、Mermaid 和表格预览。
-- 浏览器截图：捕获网页内容，处理固定元素，并在独立窗口中预览或保存截图。
-- Windows 集成：支持 `.md` 和 `.markdown` 文件关联，以及 NSIS 安装包生成。
+Workbench is an Electron-based desktop IDE for developers who want one focused workspace for local development and AI-assisted workflows. It brings project navigation, code browsing, Git operations, local AI CLI runtimes, transcript management, learning notes, Markdown documents, and browser screenshots into a single Windows application.
 
-## 技术栈
+> Workbench is under active development. Some features and interfaces may change as the project evolves.
 
-- Electron 42
-- React 18
-- TypeScript
-- Vite / electron-vite
-- Zustand
-- Tailwind CSS
-- Monaco Editor
-- node-pty
+## Platform support
 
-## 环境要求
+Because the project currently has access to a Windows development environment only, we currently provide Windows installation packages exclusively. Windows and WSL are supported at this time. macOS and Linux may potentially work in development mode, but they have not been thoroughly tested, so stability cannot be guaranteed. If possible, we plan to gradually improve and enable support for more platforms in the future.
 
-- Windows 10 或更高版本，推荐 Windows 11
-- Node.js 22 LTS 或更高版本
+## Highlights
+
+- 🗂️ **Project workspace** — Add, switch, and manage local projects with recent-project persistence.
+- 🧭 **Code workspace** — Browse project trees, edit source files, inspect diffs, and preview Markdown.
+- 🌿 **Git workflow** — Review repository status, branches, commits, diffs, staging, common operations, and conflicts.
+- 🤖 **Local AI runtimes** — Configure and run local Claude Code and OpenAI Codex CLI workflows per project.
+- 🔌 **AI Gateway** — Centralize provider configuration, model routing, and Codex-compatible gateway bindings.
+- 🧾 **Transcript workspace** — Import, browse, organize, capture, and share AI CLI session transcripts.
+- 📚 **Learning center** — Maintain structured notes, categories, skills, and browser-assisted learning material.
+- 📝 **Markdown workspace** — Render GFM, syntax-highlighted code, tables, and Mermaid diagrams.
+- 📸 **Browser screenshots** — Capture long web pages, handle fixed elements, and inspect or save screenshots in a dedicated window.
+- 🪟 **Windows and WSL support** — Keep Windows-native and WSL project execution paths explicit in the runtime model.
+
+## Screenshots
+
+![Workbench home](./docs/images/overview.png)
+
+![Code workspace](./docs/images/code-workspace.png)
+
+![Markdown workspace](./docs/images/markdown-workspace.png)
+
+## Architecture
+
+Workbench follows Electron's process boundaries and keeps shared contracts separate from platform capabilities and UI composition.
+
+```mermaid
+graph TD
+    User[Developer] --> Renderer[Renderer UI<br/>React + Zustand]
+    Renderer --> Preload[Preload API<br/>contextBridge]
+    Preload --> IPC[IPC handlers]
+    IPC --> Main[Electron main domains]
+    Main --> Runtime[Runtime and process execution]
+    Main --> Git[Git and project files]
+    Main --> AI[AI Gateway and CLI configuration]
+    Main --> Transcript[Transcript and learning services]
+    Main --> Windows[Windows and WSL integration]
+    Shared[Shared types and rules] -. contracts .-> Renderer
+    Shared -. contracts .-> Preload
+    Shared -. contracts .-> Main
+```
+
+### Layer responsibilities
+
+- **Renderer** — Pages, reusable components, application state, themes, editors, and user interactions.
+- **Preload** — Typed, minimal APIs exposed from the isolated Electron bridge.
+- **Main process** — File-system, process, Git, window, runtime, transcript, and Windows integration services.
+- **Shared** — Types, configuration models, runtime profiles, IPC contracts, and pure rules shared across layers.
+
+## Tech stack
+
+- **Language:** TypeScript
+- **Desktop:** Electron 42
+- **UI:** React 18, React Router, Tailwind CSS
+- **Build:** Vite, electron-vite, Electron Builder
+- **State:** Zustand
+- **Editor:** Monaco Editor
+- **Terminal:** node-pty, xterm.js
+- **Content:** React Markdown, remark-gfm, Mermaid, syntax highlighting
+- **AI integrations:** Claude Code and OpenAI Codex CLI workflows, with a local model-protocol gateway
+- **Testing:** Node.js built-in test runner
+
+## Requirements
+
+- Windows 10 or later; Windows 11 is recommended
+- Node.js 22 LTS or later
 - npm
 - Git
-- 如果需要使用 AI Runtime：安装对应的 AI CLI，并确保命令可以在终端中直接执行
+- Optional: a working WSL distribution for WSL-based projects
+- Optional: installed and authenticated AI CLIs for AI runtime features
 
-当前内置的默认 AI CLI 包括：
+The built-in runtime profiles currently target:
 
 - [Claude Code](https://www.npmjs.com/package/@anthropic-ai/claude-code)
 - [OpenAI Codex CLI](https://www.npmjs.com/package/@openai/codex)
 
-## 安装依赖
+## Installation
+
+Clone the repository and install dependencies:
 
 ```powershell
+git clone https://github.com/yyc-labs/ide-electron.git
+cd ide-electron
 npm install
 ```
 
-`postinstall` 会为 Electron 重建 `node-pty`。如果依赖安装后终端能力异常，可以手动执行：
+The `postinstall` script rebuilds `node-pty` for Electron. If terminal functionality is not available after installation, run:
 
 ```powershell
 npm run rebuild:pty
 ```
 
-安装 AI CLI：
+Install optional AI CLIs when you need them:
 
 ```powershell
 npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
 ```
 
-安装完成后，根据 CLI 官方文档完成登录或 API 配置。
+Complete authentication and API configuration according to the official documentation for each CLI.
 
-## 本地开发
+## Development
 
-启动 Electron 开发环境：
+Start the Electron development environment:
 
 ```powershell
 npm run dev
 ```
 
-常用命令：
+Useful commands:
 
 ```powershell
-# 监听模式
+# Start with file watching
 npm run dev:watch
 
-# 类型检查
+# Type-check main and renderer projects
 npm run typecheck
 
-# 样式检查
+# Run repository style checks
 npm run check:style
 
-# 运行测试
+# Run tests
 npm test
 
-# 完整验证
+# Run type-checking, style checks, and tests
 npm run verify
 ```
 
-## 构建与发布
+## Configuration
 
-构建应用资源：
+Workbench stores application and runtime configuration locally. AI credentials, tokens, and provider secrets should be configured through the application or the corresponding CLI; do not commit secrets to the repository.
+
+Runtime configuration can include:
+
+- Windows-native or WSL execution targets
+- Project-level AI runtime profiles
+- Claude and Codex settings
+- AI provider and model routes
+- Local gateway settings
+- Git and project workspace preferences
+
+When adding a new configuration option, keep its schema, persistence, IPC contract, and renderer usage synchronized.
+
+## Project structure
+
+```text
+.
+├── src/core/
+│   ├── electron/     # Main process, preload, IPC, runtime, Git, files, and windows
+│   ├── renderer/     # React pages, components, stores, editors, and styles
+│   └── shared/       # Shared types, rules, runtime profiles, and API contracts
+├── docs/             # Architecture notes, design plans, and release documentation
+├── script/           # Development, release, and automated Git scripts
+├── test/             # Node.js tests and fixtures
+├── icon/             # Windows application icons
+├── electron-builder.yml
+├── package.json
+└── README.md
+```
+
+## Windows distribution
+
+Build the application resources:
 
 ```powershell
 npm run build
 ```
 
-生成 Windows x64 NSIS 安装包：
+Create a Windows x64 NSIS installer:
 
 ```powershell
 npm run dist:win
 ```
 
-构建产物位于 `release/`。发布流程、版本号规则、SHA-256 校验和以及 Windows 未签名安装包说明，详见 [`docs/release-process.md`](docs/release-process.md)。
+Release artifacts are written to `release/`. See [`docs/release/release-process.md`](./docs/release/release-process.md) for versioning, checksums, and release notes.
 
-目前安装包未配置 Windows 代码签名证书，首次安装时可能会出现 SmartScreen 或“未知发布者”提示。
+The current installer is not configured with a Windows code-signing certificate, so Windows SmartScreen may show an “unknown publisher” warning during installation.
 
-## 项目结构
+## Roadmap
 
-```text
-src/core/
-├── electron/       # 主进程与 preload：系统能力、IPC、Runtime、文件和窗口管理
-├── renderer/       # React 渲染进程：页面、组件、状态和主题
-└── shared/         # main、preload、renderer 共享的类型与规则
+The roadmap is maintained alongside implementation plans in [`docs/`](./docs/).
 
-docs/               # 设计说明、开发计划和发布文档
-script/             # 构建、发布和自动提交脚本
-test/               # Node test 测试与测试夹具
-electron-builder.yml
-```
+- [x] Local project and code workspace
+- [x] Git repository inspection and operations
+- [x] Claude and Codex runtime profiles
+- [x] AI provider gateway and model routing
+- [x] Transcript import and browsing
+- [x] Markdown rendering with Mermaid and GFM support
+- [x] Browser screenshot capture and viewing
+- [ ] Broader platform support beyond Windows
+- [ ] More runtime providers and integrations
+- [ ] More complete release automation and distribution channels
 
-## 开发说明
+## Contributing
 
-应用主要针对 Windows 本地开发环境设计。涉及 AI Runtime、终端和项目执行时，应用会根据项目环境选择 Windows Native 或 WSL；使用 WSL 项目时，请提前准备可用的 WSL 发行版及对应工具链。
+Contributions, issue reports, and focused improvements are welcome.
 
-项目中的 AI 自动提交脚本提供以下命令：
+1. Fork the repository.
+2. Create a feature branch.
+3. Make a focused change with tests where appropriate.
+4. Run the relevant checks.
+5. Open a pull request with context and verification details.
 
 ```powershell
-# 预览 AI 提交结果，不实际提交
-npm run ai:commit:dry
-
-# 使用 AI 生成并执行提交
-npm run ai:commit
+git checkout -b feature/your-feature
+npm run typecheck
+npm test
 ```
 
-使用这些命令前，请确认当前 Git 工作区和 AI CLI 配置符合预期。
+Please preserve the existing process boundaries between `renderer`, `preload`, `main`, and `shared`, and consider both Windows-native and WSL execution paths when changing runtime behavior.
 
-## 许可证
+## Security
 
-本项目使用 [MIT License](LICENSE)。
+Please do not include API keys, access tokens, private transcripts, or other sensitive data in issues, pull requests, screenshots, or commits.
 
+For security-sensitive reports, contact the maintainers privately before publishing exploit details. A dedicated security policy will be added as the project moves toward a broader public release.
+
+## License
+
+Workbench is released under the [MIT License](./LICENSE).
+
+Copyright © 2026 YYC Labs.
+
+## Author
+
+**YYC Labs**
+
+- GitHub: [yyc-labs](https://github.com/yyc-labs)
+- QQ group: `1095597870`
+
+---

@@ -608,7 +608,7 @@ app.whenReady().then(async () => {
           run: () => {
             if (!shouldUseTrayLifecycle) return
             trayController = createAppTray({
-              getTooltip: () => 'IDE Electron',
+              getTooltip: () => 'Workbench',
               buildMenu: buildTrayMenuTemplate,
               onOpenMainWindow: openMainWindowFromTray,
             })

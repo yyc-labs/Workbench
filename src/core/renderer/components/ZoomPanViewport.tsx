@@ -124,6 +124,7 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
       pendingPointerRef.current = pointerPosition
       scheduleTransform()
     }
+    const updatePendingPointerListener: EventListener = (event) => updatePendingPointer(event as PointerEvent)
 
     const supportsPointerRawUpdate = 'onpointerrawupdate' in window
 
@@ -144,7 +145,7 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
 
     viewport.addEventListener('wheel', onWheel, { passive: false })
     viewport.addEventListener('pointerdown', onPointerDown)
-    viewport.addEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointer)
+    viewport.addEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointerListener)
     viewport.addEventListener('pointerup', onPointerUp)
     viewport.addEventListener('pointercancel', onPointerUp)
     viewport.addEventListener('lostpointercapture', onPointerUp)
@@ -152,7 +153,7 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
     return () => {
       viewport.removeEventListener('wheel', onWheel)
       viewport.removeEventListener('pointerdown', onPointerDown)
-      viewport.removeEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointer)
+      viewport.removeEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointerListener)
       viewport.removeEventListener('pointerup', onPointerUp)
       viewport.removeEventListener('pointercancel', onPointerUp)
       viewport.removeEventListener('lostpointercapture', onPointerUp)

@@ -172,6 +172,7 @@ export class AiGatewayService {
           ...snapshot.config.modelProviders,
           [AI_GATEWAY_LOCAL_ROUTER_PROVIDER_ID]: {
             name: 'Local Router',
+            model: snapshot.config.model,
             baseUrl: getAiGatewayOpenAiBaseUrl(config),
             wireApi: 'responses',
             requiresOpenaiAuth: true,

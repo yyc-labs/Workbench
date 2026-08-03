@@ -4,6 +4,11 @@ import type { Dirent, Stats } from 'node:fs'
 import path from 'node:path'
 import type { ProjectFileContentSearchResult, ProjectFileNode } from '../../../shared/types'
 
+export interface ProjectFileExclusions {
+  directories: ReadonlySet<string>
+  files: ReadonlySet<string>
+}
+
 export const MAX_TEXT_FILE_SIZE = 1024 * 1024
 export const MAX_TREE_FILES = 5000
 export const MAX_TREE_DEPTH = 8
@@ -21,26 +26,9 @@ export const RG_CONTENT_SEARCH_TIMEOUT_MS = 25_000
 export const RG_CONTENT_SEARCH_MAX_BUFFER = 32 * 1024 * 1024
 export const RG_CONTENT_SEARCH_MAX_COLUMNS = 500
 
-export const EXCLUDED_DIRECTORIES = new Set([
-  '.git',
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  '.next',
-  '.nuxt',
-  '.turbo',
-  '.cache',
-  'coverage',
-  '.venv',
-  'venv',
-  '__pycache__',
-])
+export const EXCLUDED_DIRECTORIES = new Set(['.git', 'node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.turbo', '.cache', 'coverage', '.venv', 'venv', '__pycache__'])
 
-export const EXCLUDED_FILES = new Set([
-  '.DS_Store',
-  'Thumbs.db',
-])
+export const EXCLUDED_FILES = new Set(['.DS_Store', 'Thumbs.db'])
 
 export const RG_EXCLUDE_GLOBS = (() => {
   const globs = new Set<string>()
@@ -54,6 +42,19 @@ export const RG_EXCLUDE_GLOBS = (() => {
   }
   return Array.from(globs)
 })()
+
+export function createRgExcludeGlobs(exclusions: ProjectFileExclusions): string[] {
+  const globs = new Set<string>()
+  for (const directory of exclusions.directories) {
+    globs.add(`!${directory}/**`)
+    globs.add(`!**/${directory}/**`)
+  }
+  for (const file of exclusions.files) {
+    globs.add(`!${file}`)
+    globs.add(`!**/${file}`)
+  }
+  return Array.from(globs)
+}
 
 const BINARY_EXTENSIONS = new Set([
   '.png',
@@ -222,10 +223,7 @@ export async function resolveRoot(projectPath: string): Promise<string> {
   return rootRealPath
 }
 
-export async function openValidatedFileHandle(
-  projectPath: string,
-  relativePath: string
-): Promise<OpenValidatedFileHandleResult> {
+export async function openValidatedFileHandle(projectPath: string, relativePath: string): Promise<OpenValidatedFileHandleResult> {
   const rootRealPath = await resolveRoot(projectPath)
   const normalizedRelativePath = normalizeRelativeInput(relativePath)
   validateRelativePathLooksSafe(normalizedRelativePath)
@@ -280,12 +278,12 @@ export function inferLanguageFromPath(relativePath: string): string {
   return 'plaintext'
 }
 
-export function isExcludedDirectory(name: string): boolean {
-  return EXCLUDED_DIRECTORIES.has(name)
+export function isExcludedDirectory(name: string, exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): boolean {
+  return exclusions.directories.has(name)
 }
 
-export function isExcludedFile(name: string): boolean {
-  return EXCLUDED_FILES.has(name)
+export function isExcludedFile(name: string, exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): boolean {
+  return exclusions.files.has(name)
 }
 
 export function isLikelyBinaryByExtension(filePath: string): boolean {
@@ -309,21 +307,21 @@ export function normalizeListedRelativePath(rawPath: string): string | null {
   return normalized
 }
 
-export function hasExcludedDirectorySegment(relativePath: string): boolean {
+export function hasExcludedDirectorySegment(relativePath: string, exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): boolean {
   const segments = relativePath.split('/')
   if (segments.length <= 1) return false
   for (let i = 0; i < segments.length - 1; i += 1) {
-    if (isExcludedDirectory(segments[i])) return true
+    if (isExcludedDirectory(segments[i], exclusions)) return true
   }
   return false
 }
 
-export function shouldSkipListedFilePath(relativePath: string): boolean {
+export function shouldSkipListedFilePath(relativePath: string, exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): boolean {
   const segments = relativePath.split('/')
   const fileName = segments[segments.length - 1]
   if (!fileName) return true
-  if (isExcludedFile(fileName)) return true
-  if (hasExcludedDirectorySegment(relativePath)) return true
+  if (isExcludedFile(fileName, exclusions)) return true
+  if (hasExcludedDirectorySegment(relativePath, exclusions)) return true
   return false
 }
 
@@ -385,11 +383,7 @@ export function normalizeSearchLineText(lineText: string): string {
 
 export function normalizeContentSearchIncludeGlobs(includeGlobs: unknown): string[] {
   if (!Array.isArray(includeGlobs)) return []
-  const normalized = Array.from(new Set(
-    includeGlobs
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter((item) => item.length > 0)
-  ))
+  const normalized = Array.from(new Set(includeGlobs.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0)))
   return normalized.slice(0, 24)
 }
 
@@ -403,10 +397,7 @@ export function parseSearchMatchLine(rawLine: string): RgJsonMatchMessage | null
   }
 }
 
-export function toContentSearchResultRecord(
-  results: Map<string, ProjectFileContentSearchResult>,
-  relativePath: string
-): ProjectFileContentSearchResult {
+export function toContentSearchResultRecord(results: Map<string, ProjectFileContentSearchResult>, relativePath: string): ProjectFileContentSearchResult {
   const existing = results.get(relativePath)
   if (existing) return existing
   const next: ProjectFileContentSearchResult = {
@@ -419,12 +410,12 @@ export function toContentSearchResultRecord(
   return next
 }
 
-export function filterListedFilePaths(listedPaths: string[]): FilterListedPathsResult {
+export function filterListedFilePaths(listedPaths: string[], exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): FilterListedPathsResult {
   let skippedFiles = 0
   const acceptedPaths: string[] = []
 
   for (const relativePath of listedPaths) {
-    if (shouldSkipListedFilePath(relativePath)) {
+    if (shouldSkipListedFilePath(relativePath, exclusions)) {
       skippedFiles += 1
       continue
     }
@@ -445,13 +436,7 @@ export function filterListedFilePaths(listedPaths: string[]): FilterListedPathsR
   return { acceptedPaths, skippedFiles }
 }
 
-export async function scanDirectoryForAutoLoadThreshold(
-  rootRealPath: string,
-  absoluteDirPath: string,
-  depth: number,
-  limit: number,
-  counters: AutoLoadProbeCounters
-): Promise<void> {
+export async function scanDirectoryForAutoLoadThreshold(rootRealPath: string, absoluteDirPath: string, depth: number, limit: number, counters: AutoLoadProbeCounters, exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): Promise<void> {
   if (counters.filesSeen > limit) return
   if (depth > MAX_TREE_DEPTH) return
 
@@ -470,13 +455,13 @@ export async function scanDirectoryForAutoLoadThreshold(
     if (!relativePath || relativePath.startsWith('..')) continue
 
     if (entry.isDirectory()) {
-      if (isExcludedDirectory(entry.name)) continue
-      await scanDirectoryForAutoLoadThreshold(rootRealPath, entryAbsolutePath, depth + 1, limit, counters)
+      if (isExcludedDirectory(entry.name, exclusions)) continue
+      await scanDirectoryForAutoLoadThreshold(rootRealPath, entryAbsolutePath, depth + 1, limit, counters, exclusions)
       continue
     }
 
     if (!entry.isFile()) continue
-    if (isExcludedFile(entry.name)) continue
+    if (isExcludedFile(entry.name, exclusions)) continue
     counters.filesSeen += 1
   }
 }
@@ -501,17 +486,12 @@ export async function execFileUtf8(cwd: string, args: string[]): Promise<string>
           return
         }
         resolve(typeof stdout === 'string' ? stdout : '')
-      }
+      },
     )
   })
 }
 
-export async function execFileUtf8WithLimits(
-  cwd: string,
-  args: string[],
-  timeoutMs: number,
-  maxBufferBytes: number
-): Promise<string> {
+export async function execFileUtf8WithLimits(cwd: string, args: string[], timeoutMs: number, maxBufferBytes: number): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       'rg',
@@ -531,7 +511,7 @@ export async function execFileUtf8WithLimits(
           return
         }
         resolve(typeof stdout === 'string' ? stdout : '')
-      }
+      },
     )
   })
 }

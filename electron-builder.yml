@@ -1,5 +1,5 @@
 appId: com.yaoyuchen.yyc
-productName: IDE Electron
+productName: Workbench
 artifactName: ${productName}-${version}-${arch}-setup.${ext}
 
 directories:
@@ -25,7 +25,7 @@ electronDownload:
 
 win:
   icon: icon/Y.ico
-  executableName: IDE Electron
+  executableName: Workbench
   target:
     - target: nsis
       arch:

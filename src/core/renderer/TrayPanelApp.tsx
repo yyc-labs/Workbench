@@ -62,9 +62,7 @@ function TrayPanelAutoSize() {
 
     const sendSize = () => {
       const root = document.getElementById('root')
-      const target = root?.firstElementChild instanceof HTMLElement
-        ? root.firstElementChild
-        : document.body
+      const target = root?.firstElementChild instanceof HTMLElement ? root.firstElementChild : document.body
       const rect = target.getBoundingClientRect()
       const width = Math.ceil(rect.width) + 2
       const height = Math.ceil(rect.height) + 2
@@ -84,9 +82,7 @@ function TrayPanelAutoSize() {
     schedule()
 
     const root = document.getElementById('root')
-    const target = root?.firstElementChild instanceof HTMLElement
-      ? root.firstElementChild
-      : document.body
+    const target = root?.firstElementChild instanceof HTMLElement ? root.firstElementChild : document.body
     const observer = new ResizeObserver(() => {
       schedule()
     })
@@ -120,46 +116,26 @@ export function TrayPanelApp() {
             background: 'var(--color-popover-solid)',
           }}
         >
-          <div className="px-3.5 py-2.5 text-[12px] font-semibold text-[color:var(--color-foreground)]">
-            IDE Electron
-          </div>
+          <div className="px-3.5 py-2.5 text-[12px] font-semibold text-[color:var(--color-foreground)]">Workbench</div>
 
-          <div
-            className="mx-3 border-t"
-            style={{ borderColor: 'var(--color-border)' }}
-          />
+          <div className="mx-3 border-t" style={{ borderColor: 'var(--color-border)' }} />
 
           <div className="py-1">
-            <button
-              type="button"
-              className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => void window.electronAPI.trayPanelShowMainWindow()}
-            >
+            <button type="button" className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => void window.electronAPI.trayPanelShowMainWindow()}>
               <Eye className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" strokeWidth={1.8} />
               <span className="min-w-0 flex-1">{t('common.show')}</span>
               <ChevronRight className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" strokeWidth={1.9} />
             </button>
-            <button
-              type="button"
-              className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => void window.electronAPI.trayPanelHideMainWindow()}
-            >
+            <button type="button" className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => void window.electronAPI.trayPanelHideMainWindow()}>
               <EyeOff className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
               <span className="min-w-0 flex-1">{t('common.hide')}</span>
             </button>
           </div>
 
-          <div
-            className="mx-3 border-t"
-            style={{ borderColor: 'var(--color-border)' }}
-          />
+          <div className="mx-3 border-t" style={{ borderColor: 'var(--color-border)' }} />
 
           <div className="py-1">
-            <button
-              type="button"
-              className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)]"
-              onClick={() => void window.electronAPI.trayPanelQuitApp()}
-            >
+            <button type="button" className="button-interactive flex h-10 w-full items-center gap-2.5 px-3.5 text-left text-[12px] font-medium text-[color:var(--color-destructive)] transition-colors hover:bg-[color:var(--color-destructive-background)]" onClick={() => void window.electronAPI.trayPanelQuitApp()}>
               <Power className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
               <span className="min-w-0 flex-1">{t('common.close')}</span>
             </button>

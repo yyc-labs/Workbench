@@ -73,6 +73,8 @@ export const IPC = {
   CONFIG_SET: 'config:set',
   APP_RESTART: 'app:restart',
   CACHE_LOCATION_GET: 'cache-location:get',
+  LEGACY_USER_DATA_MIGRATION_GET: 'legacy-user-data-migration:get',
+  LEGACY_USER_DATA_MIGRATION_RUN: 'legacy-user-data-migration:run',
   BROWSER_DATA_MAINTENANCE_GET: 'browser-data-maintenance:get',
   BROWSER_DATA_MAINTENANCE_CLEANUP: 'browser-data-maintenance:cleanup',
   CODEX_SCOPE_GET: 'codex-scope:get',

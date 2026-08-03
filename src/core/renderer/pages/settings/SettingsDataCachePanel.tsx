@@ -1,11 +1,4 @@
-import type {
-  AppCacheLocationConfig,
-  AppCacheLocationInfo,
-  AppCacheLocationMode,
-  BrowserDataCleanupResult,
-  BrowserDataMaintenanceInfo,
-  BrowserDataOperationItemResult,
-} from '../../../shared/types'
+import type { AppCacheLocationConfig, AppCacheLocationInfo, AppCacheLocationMode, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, BrowserDataOperationItemResult, LegacyUserDataMigrationInfo } from '../../../shared/types'
 import { useEffect, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { Select, type SelectOption } from '../../components/ui/select'
@@ -17,12 +10,16 @@ type DataCachePanelProps = {
   browserDataMaintenanceAction: 'cleanup' | null
   browserDataMaintenanceResult: BrowserDataCleanupResult | null
   browserDataMaintenanceError: string | null
+  legacyUserDataMigrationInfo: LegacyUserDataMigrationInfo | null
+  legacyUserDataMigrationAction: boolean
+  legacyUserDataMigrationError: string | null
   onCacheLocationChange: (cacheLocation: AppCacheLocationConfig) => void | Promise<void>
   onRestartApp: () => void | Promise<void>
   onSelectCustomCacheDirectory: () => void | Promise<void>
   onCleanupLegacyBrowserCaches: (rootPath?: string | null) => void | Promise<void>
   onOpenCurrentBrowserDataDirectory: () => void | Promise<void>
   onOpenOldBrowserDataDirectory: (rootPath?: string | null) => void | Promise<void>
+  onMigrateLegacyUserData: () => void | Promise<void>
 }
 
 function SettingsDataCachePanel({
@@ -32,12 +29,16 @@ function SettingsDataCachePanel({
   browserDataMaintenanceAction,
   browserDataMaintenanceResult,
   browserDataMaintenanceError,
+  legacyUserDataMigrationInfo,
+  legacyUserDataMigrationAction,
+  legacyUserDataMigrationError,
   onCacheLocationChange,
   onRestartApp,
   onSelectCustomCacheDirectory,
   onCleanupLegacyBrowserCaches,
   onOpenCurrentBrowserDataDirectory,
   onOpenOldBrowserDataDirectory,
+  onMigrateLegacyUserData,
 }: DataCachePanelProps) {
   const { t } = useI18n()
   const [selectedOldCacheRootPath, setSelectedOldCacheRootPath] = useState<string>('all')
@@ -67,18 +68,8 @@ function SettingsDataCachePanel({
       path: customPath || t('settings.dataCache.cacheLocationCustomEmpty'),
     },
   ]
-  const cacheSwitchLossDescriptions = [
-    t('settings.dataCache.cacheSwitchLossLogin'),
-    t('settings.dataCache.cacheSwitchLossLocalStorage'),
-    t('settings.dataCache.cacheSwitchLossIndexedDb'),
-    t('settings.dataCache.cacheSwitchLossUiState'),
-  ]
-  const cacheCleanupSafeDescriptions = [
-    t('settings.dataCache.cacheCleanupSafeProjects'),
-    t('settings.dataCache.cacheCleanupSafeTranscripts'),
-    t('settings.dataCache.cacheCleanupSafeLearningNotes'),
-    t('settings.dataCache.cacheCleanupSafeSettings'),
-  ]
+  const cacheSwitchLossDescriptions = [t('settings.dataCache.cacheSwitchLossLogin'), t('settings.dataCache.cacheSwitchLossLocalStorage'), t('settings.dataCache.cacheSwitchLossIndexedDb'), t('settings.dataCache.cacheSwitchLossUiState')]
+  const cacheCleanupSafeDescriptions = [t('settings.dataCache.cacheCleanupSafeProjects'), t('settings.dataCache.cacheCleanupSafeTranscripts'), t('settings.dataCache.cacheCleanupSafeLearningNotes'), t('settings.dataCache.cacheCleanupSafeSettings')]
   const browserDataResultItems = browserDataMaintenanceResult?.items ?? []
   const oldCacheRoots = browserDataMaintenanceInfo?.oldCacheRoots ?? []
   const selectedOldCacheRoot = selectedOldCacheRootPath === 'all' ? null : selectedOldCacheRootPath
@@ -92,15 +83,10 @@ function SettingsDataCachePanel({
       label: item.rootPath,
     })),
   ]
-  const visibleOldCacheRoots = selectedOldCacheRoot
-    ? oldCacheRoots.filter((item) => item.rootPath === selectedOldCacheRoot)
-    : oldCacheRoots
+  const visibleOldCacheRoots = selectedOldCacheRoot ? oldCacheRoots.filter((item) => item.rootPath === selectedOldCacheRoot) : oldCacheRoots
 
   useEffect(() => {
-    if (
-      selectedOldCacheRootPath !== 'all'
-      && !oldCacheRoots.some((item) => item.rootPath === selectedOldCacheRootPath)
-    ) {
+    if (selectedOldCacheRootPath !== 'all' && !oldCacheRoots.some((item) => item.rootPath === selectedOldCacheRootPath)) {
       setSelectedOldCacheRootPath('all')
     }
   }, [oldCacheRoots, selectedOldCacheRootPath])
@@ -139,9 +125,7 @@ function SettingsDataCachePanel({
       <div>
         <p className="section-label mb-3">{t('settings.dataCache.cacheStorage')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheLocation')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settings.dataCache.cacheLocationDescription')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.dataCache.cacheLocationDescription')}</p>
 
         <div className="space-y-3">
           {cacheOptions.map((option) => {
@@ -151,28 +135,14 @@ function SettingsDataCachePanel({
                 key={option.value}
                 type="button"
                 onClick={() => handleCacheModeClick(option.value)}
-                className={`button-interactive quiet-control w-full rounded-[20px] px-4 py-3 text-left transition-all ${
-                  selected
-                    ? 'ring-2 ring-[color:var(--color-ring)] bg-[color:var(--color-card)]'
-                    : 'hover:bg-[color:var(--color-accent)]'
-                }`}
+                className={`button-interactive quiet-control w-full rounded-[20px] px-4 py-3 text-left transition-all ${selected ? 'ring-2 ring-[color:var(--color-ring)] bg-[color:var(--color-card)]' : 'hover:bg-[color:var(--color-accent)]'}`}
               >
                 <span className="flex items-start gap-3">
-                  <span className={`mt-1 h-3 w-3 rounded-full border ${
-                    selected
-                      ? 'border-primary bg-primary'
-                      : 'border-[color:var(--color-muted-foreground)]'
-                  }`} />
+                  <span className={`mt-1 h-3 w-3 rounded-full border ${selected ? 'border-primary bg-primary' : 'border-[color:var(--color-muted-foreground)]'}`} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-[color:var(--color-foreground)]">
-                      {option.label}
-                    </span>
-                    <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                      {option.description}
-                    </span>
-                    <code className="mt-2 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                      {option.path}
-                    </code>
+                    <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{option.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{option.description}</span>
+                    <code className="mt-2 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{option.path}</code>
                   </span>
                 </span>
               </button>
@@ -181,11 +151,7 @@ function SettingsDataCachePanel({
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void onSelectCustomCacheDirectory()}
-            className="button-interactive quiet-control h-9 rounded-full px-4 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-          >
+          <button type="button" onClick={() => void onSelectCustomCacheDirectory()} className="button-interactive quiet-control h-9 rounded-full px-4 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]">
             {t('settings.dataCache.selectCacheDirectory')}
           </button>
         </div>
@@ -193,34 +159,20 @@ function SettingsDataCachePanel({
         {cacheLocationInfo && (
           <div className="mt-4 grid gap-3 text-xs text-[color:var(--color-muted-foreground)]">
             <div>
-              <span className="font-medium text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.activeCachePath')}
-              </span>
-              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                {cacheLocationInfo.activePath}
-              </code>
+              <span className="font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.activeCachePath')}</span>
+              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{cacheLocationInfo.activePath}</code>
             </div>
             <div>
-              <span className="font-medium text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.nextCachePath')}
-              </span>
-              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                {cacheLocationInfo.nextActivePath}
-              </code>
+              <span className="font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.nextCachePath')}</span>
+              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{cacheLocationInfo.nextActivePath}</code>
             </div>
           </div>
         )}
 
         {cacheLocationInfo?.restartRequired && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[16px] bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-700 dark:text-amber-200">
-            <span className="min-w-0 flex-1">
-              {t('settings.dataCache.cacheLocationRestartRequired')}
-            </span>
-            <button
-              type="button"
-              onClick={() => void onRestartApp()}
-              className="button-interactive h-8 rounded-full bg-amber-600 px-4 text-xs font-medium text-white hover:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
-            >
+            <span className="min-w-0 flex-1">{t('settings.dataCache.cacheLocationRestartRequired')}</span>
+            <button type="button" onClick={() => void onRestartApp()} className="button-interactive h-8 rounded-full bg-amber-600 px-4 text-xs font-medium text-white hover:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400">
               {t('settings.dataCache.restartApp')}
             </button>
           </div>
@@ -233,22 +185,34 @@ function SettingsDataCachePanel({
             })}
           </p>
         )}
+
+        {legacyUserDataMigrationInfo?.sourceExists && (
+          <div className="mt-4 rounded-[20px] border border-amber-500/20 bg-amber-500/10 p-4">
+            <p className="section-label mb-2 text-amber-700 dark:text-amber-200">{legacyUserDataMigrationInfo.migrationCompleted ? t('settings.dataCache.legacyMigrationCompletedKicker') : t('settings.dataCache.legacyMigrationKicker')}</p>
+            <p className="text-sm leading-6 text-[color:var(--color-foreground)]">{legacyUserDataMigrationInfo.migrationCompleted ? t('settings.dataCache.legacyMigrationCompleted') : t('settings.dataCache.legacyMigrationDescription')}</p>
+            {legacyUserDataMigrationInfo.migrationCompleted && <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.legacyMigrationDeleteHint')}</p>}
+            <code className="mt-2 block break-all rounded-[12px] bg-[color:var(--color-background)]/70 px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{legacyUserDataMigrationInfo.sourcePath}</code>
+            {!legacyUserDataMigrationInfo.migrationCompleted && (
+              <button
+                type="button"
+                disabled={legacyUserDataMigrationAction}
+                onClick={() => void onMigrateLegacyUserData()}
+                className="button-interactive mt-3 h-9 rounded-full bg-amber-600 px-4 text-xs font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
+              >
+                {legacyUserDataMigrationAction ? t('settings.dataCache.legacyMigrationRunning') : t('settings.dataCache.legacyMigrationAction')}
+              </button>
+            )}
+            {legacyUserDataMigrationError && <p className="mt-3 rounded-[14px] bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-700 dark:text-red-200">{legacyUserDataMigrationError}</p>}
+          </div>
+        )}
       </div>
 
       <div className="rounded-[24px] border border-amber-500/20 bg-amber-500/10 p-5">
-        <p className="section-label mb-3 text-amber-700 dark:text-amber-200">
-          {t('settings.dataCache.cacheSwitchRiskKicker')}
-        </p>
-        <h2 className="text-[24px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-          {t('settings.dataCache.cacheSwitchRiskTitle')}
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-          {t('settings.dataCache.cacheSwitchRiskDescription')}
-        </p>
+        <p className="section-label mb-3 text-amber-700 dark:text-amber-200">{t('settings.dataCache.cacheSwitchRiskKicker')}</p>
+        <h2 className="text-[24px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheSwitchRiskTitle')}</h2>
+        <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.cacheSwitchRiskDescription')}</p>
         <div className="mt-4 rounded-[18px] border border-amber-500/20 bg-[color:var(--color-background)]/60 p-4">
-          <p className="text-xs font-semibold text-[color:var(--color-foreground)]">
-            {t('settings.dataCache.cacheSwitchLossTitle')}
-          </p>
+          <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheSwitchLossTitle')}</p>
           <ul className="mt-3 space-y-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
             {cacheSwitchLossDescriptions.map((item) => (
               <li key={item}>{item}</li>
@@ -259,28 +223,18 @@ function SettingsDataCachePanel({
 
       <div>
         <p className="section-label mb-3">{t('settings.dataCache.cacheCleanupKicker')}</p>
-        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">
-          {t('settings.dataCache.cacheCleanupTitle')}
-        </h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settings.dataCache.cacheCleanupDescription')}
-        </p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheCleanupTitle')}</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.dataCache.cacheCleanupDescription')}</p>
 
         <div className="rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/70 p-5">
           <div className="grid gap-3 text-xs text-[color:var(--color-muted-foreground)]">
             <div>
-              <span className="font-medium text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.currentBrowserDataPath')}
-              </span>
-              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                {browserDataMaintenanceInfo?.currentBrowserDataPath || t('common.loading')}
-              </code>
+              <span className="font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.currentBrowserDataPath')}</span>
+              <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{browserDataMaintenanceInfo?.currentBrowserDataPath || t('common.loading')}</code>
             </div>
             {oldCacheRoots.length > 1 && (
               <label className="grid gap-1.5">
-                <span className="font-medium text-[color:var(--color-foreground)]">
-                  {t('settings.dataCache.oldCacheDirectorySelector')}
-                </span>
+                <span className="font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.oldCacheDirectorySelector')}</span>
                 <Select
                   ariaLabel={t('settings.dataCache.oldCacheDirectorySelector')}
                   value={selectedOldCacheRootPath}
@@ -293,35 +247,24 @@ function SettingsDataCachePanel({
               </label>
             )}
             <div>
-              <span className="font-medium text-[color:var(--color-foreground)]">
-                {browserDataMaintenanceInfo?.oldBrowserDataDetected
-                  ? t('settings.dataCache.detectedOldBrowserDataPath')
-                  : t('settings.dataCache.noOldBrowserDataDetected')}
-              </span>
+              <span className="font-medium text-[color:var(--color-foreground)]">{browserDataMaintenanceInfo?.oldBrowserDataDetected ? t('settings.dataCache.detectedOldBrowserDataPath') : t('settings.dataCache.noOldBrowserDataDetected')}</span>
               {oldCacheRoots.length > 0 ? (
                 <div className="mt-1 max-h-36 space-y-2 overflow-y-auto pr-1">
                   {visibleOldCacheRoots.map((item) => (
-                    <code
-                      key={item.rootPath}
-                      className="block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]"
-                    >
+                    <code key={item.rootPath} className="block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
                       {item.rootPath}
                     </code>
                   ))}
                 </div>
               ) : (
-                <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                  {browserDataMaintenanceInfo?.oldCacheRootPath || t('common.loading')}
-                </code>
+                <code className="mt-1 block break-all rounded-[12px] bg-[color:var(--color-background)] px-3 py-2 font-mono text-[11px] text-[color:var(--color-foreground)]">{browserDataMaintenanceInfo?.oldCacheRootPath || t('common.loading')}</code>
               )}
             </div>
           </div>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/70 p-4">
-              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.cacheCleanupDeletesTitle')}
-              </p>
+              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheCleanupDeletesTitle')}</p>
               <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
                 {(browserDataMaintenanceInfo?.cleanupItems ?? []).map((item) => (
                   <li key={item}>{item}</li>
@@ -329,9 +272,7 @@ function SettingsDataCachePanel({
               </ul>
             </div>
             <div className="rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/70 p-4">
-              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.cacheCleanupSafeTitle')}
-              </p>
+              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheCleanupSafeTitle')}</p>
               <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
                 {cacheCleanupSafeDescriptions.map((item) => (
                   <li key={item}>{item}</li>
@@ -340,9 +281,7 @@ function SettingsDataCachePanel({
             </div>
           </div>
 
-          <p className="mt-4 rounded-[16px] bg-[color:var(--color-background)]/80 px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-            {t('settings.dataCache.browserDataRiskHint')}
-          </p>
+          <p className="mt-4 rounded-[16px] bg-[color:var(--color-background)]/80 px-4 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.browserDataRiskHint')}</p>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -359,9 +298,7 @@ function SettingsDataCachePanel({
               onClick={() => void onCleanupLegacyBrowserCaches(selectedOldCacheRoot)}
               className="button-interactive quiet-control h-9 rounded-full px-4 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {browserDataMaintenanceAction === 'cleanup'
-                ? t('settings.dataCache.cleanupLegacyBrowserCachesRunning')
-                : t('settings.dataCache.deleteSelectedCacheDirectory')}
+              {browserDataMaintenanceAction === 'cleanup' ? t('settings.dataCache.cleanupLegacyBrowserCachesRunning') : t('settings.dataCache.deleteSelectedCacheDirectory')}
             </button>
             <button
               type="button"
@@ -373,36 +310,19 @@ function SettingsDataCachePanel({
             </button>
           </div>
 
-          {browserDataMaintenanceError && (
-            <p className="mt-3 rounded-[16px] bg-red-500/10 px-4 py-3 text-xs leading-5 text-red-700 dark:text-red-200">
-              {browserDataMaintenanceError}
-            </p>
-          )}
+          {browserDataMaintenanceError && <p className="mt-3 rounded-[16px] bg-red-500/10 px-4 py-3 text-xs leading-5 text-red-700 dark:text-red-200">{browserDataMaintenanceError}</p>}
 
           {browserDataMaintenanceResult && (
             <div className="mt-4 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/70 p-4">
-              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">
-                {t('settings.dataCache.browserDataCleanupResultTitle')}
-              </p>
+              <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('settings.dataCache.browserDataCleanupResultTitle')}</p>
               <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
                 {browserDataResultItems.map((item) => (
-                  <div
-                    key={item.name}
-                    className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/70 px-3 py-2 text-xs"
-                  >
+                  <div key={item.name} className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]/70 px-3 py-2 text-xs">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="min-w-0 break-all font-mono text-[11px] text-[color:var(--color-foreground)]">
-                        {item.rootPath ? `${item.rootPath} :: ${item.name}` : item.name}
-                      </span>
-                      <span className={`shrink-0 font-medium ${getBrowserDataStatusClassName(item.status)}`}>
-                        {formatBrowserDataStatus(item.status)}
-                      </span>
+                      <span className="min-w-0 break-all font-mono text-[11px] text-[color:var(--color-foreground)]">{item.rootPath ? `${item.rootPath} :: ${item.name}` : item.name}</span>
+                      <span className={`shrink-0 font-medium ${getBrowserDataStatusClassName(item.status)}`}>{formatBrowserDataStatus(item.status)}</span>
                     </div>
-                    {item.error && (
-                      <p className="mt-1 break-all text-[11px] leading-5 text-red-700 dark:text-red-300">
-                        {item.error}
-                      </p>
-                    )}
+                    {item.error && <p className="mt-1 break-all text-[11px] leading-5 text-red-700 dark:text-red-300">{item.error}</p>}
                   </div>
                 ))}
               </div>

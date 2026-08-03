@@ -127,6 +127,21 @@ export interface AppCacheLocationInfo {
   fallbackReason?: string
 }
 
+export interface LegacyUserDataMigrationInfo {
+  sourcePath: string
+  targetPath: string
+  sourceExists: boolean
+  migrationCompleted: boolean
+}
+
+export interface LegacyUserDataMigrationResult {
+  ok: boolean
+  sourcePath: string
+  targetPath: string
+  copiedCount: number
+  error?: string
+}
+
 export interface BrowserDataCacheRootInfo {
   rootPath: string
   browserDataPath: string
@@ -255,6 +270,7 @@ export interface ClaudeRuntimeProfile {
 
 export interface CodexModelProviderConfig {
   name: string
+  model: string
   baseUrl: string
   wireApi: string
   requiresOpenaiAuth: boolean
@@ -1462,6 +1478,8 @@ export interface AppConfig {
   launchOnLoginDisplayMode?: LaunchOnLoginDisplayMode
   /** Control whether closing the main window quits the app or hides it to tray. */
   closeWindowBehavior?: CloseWindowBehavior
+  /** Names of directories and files omitted from the Code workspace explorer. */
+  codeFileExclusions?: ProjectFileExclusionsConfig
   /** Chromium session/cache storage location. Changes apply after restart. */
   cacheLocation?: AppCacheLocationConfig
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
@@ -1586,6 +1604,11 @@ export interface ProjectFileTreeResult {
 
 export interface ProjectFileTreeOptions {
   invalidateCache?: boolean
+}
+
+export interface ProjectFileExclusionsConfig {
+  directories: string[]
+  files: string[]
 }
 
 export interface ProjectFileAutoLoadDecision {

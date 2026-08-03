@@ -54,11 +54,11 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
 
 export const messages = {
   'en-US': {
-    appName: 'IDE Electron',
+    appName: 'Workbench',
     ...mergeLocaleMessages('en-US'),
   },
   'zh-CN': {
-    appName: 'IDE Electron',
+    appName: 'Workbench',
     ...mergeLocaleMessages('zh-CN'),
   },
 } as const

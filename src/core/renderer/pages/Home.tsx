@@ -29,6 +29,7 @@ export function HomePage() {
   const setClassifierFilter = useAppStore((s) => s.setHomeClassifierFilter)
   const markHomeDefaultFilterApplied = useAppStore((s) => s.markHomeDefaultFilterApplied)
   const addProject = useAppStore((s) => s.addProject)
+  const openMarkdownDocument = useAppStore((s) => s.openMarkdownDocument)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const createFolder = useAppStore((s) => s.createFolder)
   const renameFolder = useAppStore((s) => s.renameFolder)
@@ -212,6 +213,13 @@ export function HomePage() {
     if (dirPath) await addProject(dirPath)
   }, [addProject])
 
+  const handleOpenMarkdown = useCallback(async () => {
+    const filePath = await window.electronAPI.selectMarkdownDocument()
+    if (!filePath) return
+    navigate('/markdown')
+    await openMarkdownDocument(filePath)
+  }, [navigate, openMarkdownDocument])
+
   const handleSelect = useCallback(
     (id: string) => {
       updateLastOpened(id)
@@ -229,6 +237,9 @@ export function HomePage() {
       <HomeEmptyState
         onAddFolder={() => {
           void handleAddFolder()
+        }}
+        onOpenMarkdown={() => {
+          void handleOpenMarkdown()
         }}
         onOpenLearningCenter={() => navigate('/learning')}
         onOpenSettings={() => navigate('/settings')}

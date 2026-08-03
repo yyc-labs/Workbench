@@ -34,7 +34,7 @@ test('writeCodexSettings writes OPENAI_API_KEY into WSL bashrc for windows custo
   wslBridge.exec = async (cmd) => {
     if (cmd === 'printf %s "$HOME"') return '/home/ubuntu'
     if (cmd.includes("[ -f '/home/ubuntu/.codex/config.toml' ]")) return '0'
-    if (cmd.includes("mkdir -p '/home/ubuntu/.codex'") || cmd.includes("mv '") && cmd.includes("'/home/ubuntu/.codex/config.toml'")) {
+    if (cmd.includes("mkdir -p '/home/ubuntu/.codex'") || (cmd.includes("mv '") && cmd.includes("'/home/ubuntu/.codex/config.toml'"))) {
       writes.push({ kind: 'codex-config', cmd })
       return ''
     }
@@ -60,22 +60,25 @@ test('writeCodexSettings writes OPENAI_API_KEY into WSL bashrc for windows custo
   }
 
   try {
-    const snapshot = await codexConfigModule.writeCodexSettings({
-      hostPlatform: 'windows',
-      backend: 'wsl-pty',
-      hasPty: true,
-      hasWsl: true,
-      hasTmux: true,
-      wslDistro: 'Ubuntu',
-      wslShell: 'bash',
-      wslEnv: undefined,
-    }, {
-      providerApiKeys: {
-        nowcoding: 'sk-test-wsl',
-        aisz: '',
+    const snapshot = await codexConfigModule.writeCodexSettings(
+      {
+        hostPlatform: 'windows',
+        backend: 'wsl-pty',
+        hasPty: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslDistro: 'Ubuntu',
+        wslShell: 'bash',
+        wslEnv: undefined,
       },
-      config: codexConfigModule.defaultCodexConfig(),
-    })
+      {
+        providerApiKeys: {
+          openai: 'sk-test-wsl',
+          aisz: '',
+        },
+        config: codexConfigModule.defaultCodexConfig(),
+      },
+    )
 
     assert.equal(snapshot.scope.target, 'wsl')
     assert.equal(snapshot.scope.envStorage, 'bashrc')
@@ -114,14 +117,7 @@ test('writeCodexSettings creates single-file backups before rewriting existing W
     commands.push(cmd)
     if (cmd === 'printf %s "$HOME"') return '/home/ubuntu'
     if (cmd.includes("cat '/home/ubuntu/.codex/config.toml'")) {
-      return [
-        'model_provider = "nowcoding"',
-        'model = "older-model"',
-        'model_reasoning_effort = "xhigh"',
-        'preferred_auth_method = "apikey"',
-        'approvals_reviewer = "guardian_subagent"',
-        '',
-      ].join('\n')
+      return ['model_provider = "openai"', 'model = "older-model"', 'model_reasoning_effort = "xhigh"', 'preferred_auth_method = "apikey"', 'approvals_reviewer = "guardian_subagent"', ''].join('\n')
     }
     if (cmd.includes("cat '/home/ubuntu/.bashrc'")) return 'export OPENAI_API_KEY="old-key"\n'
     if (cmd.includes("cp '/home/ubuntu/.codex/config.toml' '/home/ubuntu/.codex/config.toml.bak'")) return ''
@@ -141,22 +137,25 @@ test('writeCodexSettings creates single-file backups before rewriting existing W
   }
 
   try {
-    await codexConfigModule.writeCodexSettings({
-      hostPlatform: 'windows',
-      backend: 'wsl-pty',
-      hasPty: true,
-      hasWsl: true,
-      hasTmux: true,
-      wslDistro: 'Ubuntu',
-      wslShell: 'bash',
-      wslEnv: undefined,
-    }, {
-      providerApiKeys: {
-        nowcoding: 'new-key',
-        aisz: '',
+    await codexConfigModule.writeCodexSettings(
+      {
+        hostPlatform: 'windows',
+        backend: 'wsl-pty',
+        hasPty: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslDistro: 'Ubuntu',
+        wslShell: 'bash',
+        wslEnv: undefined,
       },
-      config: codexConfigModule.defaultCodexConfig(),
-    })
+      {
+        providerApiKeys: {
+          openai: 'new-key',
+          aisz: '',
+        },
+        config: codexConfigModule.defaultCodexConfig(),
+      },
+    )
 
     assert.ok(commands.some((cmd) => cmd.includes("cp '/home/ubuntu/.codex/config.toml' '/home/ubuntu/.codex/config.toml.bak'")))
     assert.ok(commands.some((cmd) => cmd.includes("cp '/home/ubuntu/.bashrc' '/home/ubuntu/.bashrc.bak'")))
@@ -180,15 +179,15 @@ test('writeCodexSettings skips config and bashrc rewrites when content is unchan
 
   const defaultConfig = codexConfigModule.defaultCodexConfig()
   const existingToml = [
-    'model_provider = "nowcoding"',
+    'model_provider = "openai"',
     'model = "gpt-5.4"',
     'model_reasoning_effort = "xhigh"',
     'preferred_auth_method = "apikey"',
     'approvals_reviewer = "guardian_subagent"',
     '',
-    '[model_providers.nowcoding]',
-    'name = "NowCoding"',
-    'base_url = "https://nowcoding.ai/v1"',
+    '[model_providers.openai]',
+    'name = "OpenAI"',
+    'base_url = "https://api.openai.com/v1"',
     'wire_api = "responses"',
     'requires_openai_auth = true',
     'env_key = "OPENAI_API_KEY"',
@@ -237,24 +236,27 @@ test('writeCodexSettings skips config and bashrc rewrites when content is unchan
   }
 
   try {
-    const snapshot = await codexConfigModule.writeCodexSettings({
-      hostPlatform: 'windows',
-      backend: 'wsl-pty',
-      hasPty: true,
-      hasWsl: true,
-      hasTmux: true,
-      wslDistro: 'Ubuntu',
-      wslShell: 'bash',
-      wslEnv: undefined,
-    }, {
-      providerApiKeys: {
-        nowcoding: 'sk-test-wsl',
-        aisz: '',
+    const snapshot = await codexConfigModule.writeCodexSettings(
+      {
+        hostPlatform: 'windows',
+        backend: 'wsl-pty',
+        hasPty: true,
+        hasWsl: true,
+        hasTmux: true,
+        wslDistro: 'Ubuntu',
+        wslShell: 'bash',
+        wslEnv: undefined,
       },
-      config: defaultConfig,
-    })
+      {
+        providerApiKeys: {
+          openai: 'sk-test-wsl',
+          aisz: '',
+        },
+        config: defaultConfig,
+      },
+    )
 
-    assert.equal(snapshot.config.modelProvider, 'nowcoding')
+    assert.equal(snapshot.config.modelProvider, 'openai')
     assert.deepEqual(writes, [])
   } finally {
     configModule.loadConfig = originalLoadConfig

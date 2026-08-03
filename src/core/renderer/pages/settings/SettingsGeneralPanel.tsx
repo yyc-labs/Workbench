@@ -1,5 +1,8 @@
-import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginDisplayMode } from '../../../shared/types'
+import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginDisplayMode, ProjectFileExclusionsConfig } from '../../../shared/types'
+import { useEffect, useState } from 'react'
 import { useI18n } from '../../i18n'
+import { Button } from '../../components/ui/button'
+import { Textarea } from '../../components/ui/textarea'
 import type { ThemeMode } from './settings.types'
 import { ThemeSegmentedControl } from './ThemeSegmentedControl'
 
@@ -9,6 +12,7 @@ type GeneralPanelProps = {
   launchOnLogin: boolean
   launchOnLoginDisplayMode: LaunchOnLoginDisplayMode
   closeWindowBehavior: CloseWindowBehavior
+  codeFileExclusions: ProjectFileExclusionsConfig
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
   configRecovery?: ConfigRecoveryInfo
@@ -17,10 +21,32 @@ type GeneralPanelProps = {
   onLaunchOnLoginChange: (enabled: boolean) => void | Promise<void>
   onLaunchOnLoginDisplayModeChange: (mode: LaunchOnLoginDisplayMode) => void | Promise<void>
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
+  onCodeFileExclusionsChange: (exclusions: ProjectFileExclusionsConfig) => void | Promise<void>
 }
 
-function SettingsGeneralPanel({ theme, locale, launchOnLogin, launchOnLoginDisplayMode, closeWindowBehavior, supportsLaunchOnLogin, supportsCloseWindowBehavior, configRecovery, onThemeChange, onLocaleChange, onLaunchOnLoginChange, onLaunchOnLoginDisplayModeChange, onCloseWindowBehaviorChange }: GeneralPanelProps) {
+function SettingsGeneralPanel({
+  theme,
+  locale,
+  launchOnLogin,
+  launchOnLoginDisplayMode,
+  closeWindowBehavior,
+  codeFileExclusions,
+  supportsLaunchOnLogin,
+  supportsCloseWindowBehavior,
+  configRecovery,
+  onThemeChange,
+  onLocaleChange,
+  onLaunchOnLoginChange,
+  onLaunchOnLoginDisplayModeChange,
+  onCloseWindowBehaviorChange,
+  onCodeFileExclusionsChange,
+}: GeneralPanelProps) {
   const { t } = useI18n()
+  const [codeExclusionsDraft, setCodeExclusionsDraft] = useState(codeFileExclusions)
+
+  useEffect(() => {
+    setCodeExclusionsDraft(codeFileExclusions)
+  }, [codeFileExclusions])
 
   return (
     <div className="space-y-8">
@@ -36,6 +62,46 @@ function SettingsGeneralPanel({ theme, locale, launchOnLogin, launchOnLoginDispl
           </div>
         )}
         <ThemeSegmentedControl value={theme} onChange={onThemeChange} />
+      </div>
+
+      <div>
+        <p className="section-label mb-3">{t('settings.general.codeWorkspace')}</p>
+        <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settings.general.codeExclusionsTitle')}</h2>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settings.general.codeExclusionsDescription')}</p>
+        <div className="grid gap-5 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[color:var(--color-foreground)]">{t('settings.general.codeExcludedDirectories')}</span>
+            <Textarea
+              value={codeExclusionsDraft.directories.join('\n')}
+              onChange={(event) =>
+                setCodeExclusionsDraft({
+                  ...codeExclusionsDraft,
+                  directories: event.target.value.split(/\r?\n/),
+                })
+              }
+              rows={8}
+              spellCheck={false}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[color:var(--color-foreground)]">{t('settings.general.codeExcludedFiles')}</span>
+            <Textarea
+              value={codeExclusionsDraft.files.join('\n')}
+              onChange={(event) =>
+                setCodeExclusionsDraft({
+                  ...codeExclusionsDraft,
+                  files: event.target.value.split(/\r?\n/),
+                })
+              }
+              rows={8}
+              spellCheck={false}
+            />
+          </label>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.codeExclusionsHint')}</p>
+        <Button className="mt-4" onClick={() => void onCodeFileExclusionsChange(codeExclusionsDraft)}>
+          {t('settings.general.saveCodeExclusions')}
+        </Button>
       </div>
 
       <div>

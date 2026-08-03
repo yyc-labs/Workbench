@@ -1,75 +1,36 @@
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  dialog,
-  ipcMain,
-  type IpcMainInvokeEvent,
-  nativeImage,
-  nativeTheme,
-  shell,
-} from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, nativeTheme, shell } from 'electron'
 import { detectProject } from '../detector'
 import { loadConfig, updateConfig } from '../config'
+import { getLegacyUserDataMigrationInfo, migrateLegacyUserData } from '../legacy-user-data-migration'
 import { IPC } from '../ipc'
 import { readLocalImageAsDataUrl } from '../local-image-service'
-import {
-  normalizeClaudeBashrcConfig,
-  readClaudeBashrcConfig,
-  writeClaudeBashrcConfig,
-} from '../claude-bashrc'
-import {
-  normalizeCodexConfig,
-  resolveCodexEnvironmentScope,
-  readCodexSettings,
-  writeCodexSettings,
-} from '../codex-config'
+import { normalizeClaudeBashrcConfig, readClaudeBashrcConfig, writeClaudeBashrcConfig } from '../claude-bashrc'
+import { normalizeCodexConfig, resolveCodexEnvironmentScope, readCodexSettings, writeCodexSettings } from '../codex-config'
 import { applyWindowsUserEnvToCurrentProcess, writeWindowsUserEnv } from '../windows-env'
-import {
-  deleteDocLinkSecret,
-  getDocLinkSecret,
-  setDocLinkSecret,
-} from '../doc-link-secret-store'
+import { deleteDocLinkSecret, getDocLinkSecret, setDocLinkSecret } from '../doc-link-secret-store'
 import { applyWindowBackground } from '../window/createWindow'
 import { openFolder, openVsCode } from '../shell/openers'
 import { buildInteractiveRelaunchArgs } from '../launchArgs'
 import { syncWindowsLaunchOnLogin } from '../launchOnLogin'
 import { describeAppCacheLocation, rememberAppCacheLocation } from '../cache-location'
-import {
-  cleanupLegacyBrowserCaches,
-  getBrowserDataMaintenanceInfo,
-} from '../browser-data-maintenance'
-import type {
-  AiCommitRunOverride,
-  AiCommitTaskSnapshot,
-  AiCommitUndoCloseReason,
-  AiCommitUndoResult,
-  AppConfig,
-  CodexSettingsSaveResult,
-} from '../../../shared/types'
+import { cleanupLegacyBrowserCaches, getBrowserDataMaintenanceInfo } from '../browser-data-maintenance'
+import type { AiCommitRunOverride, AiCommitTaskSnapshot, AiCommitUndoCloseReason, AiCommitUndoResult, AppConfig, CodexSettingsSaveResult } from '../../../shared/types'
 import { getBootDistro, type RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
-export function registerCoreIpcHandlers(
-  deps: RegisterIpcHandlersDependencies
-): void {
-  const resolveSenderWindow = (event: IpcMainInvokeEvent): BrowserWindow | null => (
-    BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow()
-  )
+export function registerCoreIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
+  const resolveSenderWindow = (event: IpcMainInvokeEvent): BrowserWindow | null => BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow()
 
   ipcMain.handle(IPC.DETECT_DIRECTORY, (_event, dirPath: string) => {
     return detectProject(dirPath)
   })
 
-  ipcMain.handle(
-    IPC.PROCESS_START,
-    (_event, projectId: string, command: string, cwd: string, useWsl?: boolean) => {
-      const started = deps.getProcessManager()?.start(projectId, command, cwd, useWsl) ?? false
-      if (started) {
-        deps.emitRuntimeStateChanged({ reason: 'process-start', projectId })
-      }
-      return started
+  ipcMain.handle(IPC.PROCESS_START, (_event, projectId: string, command: string, cwd: string, useWsl?: boolean) => {
+    const started = deps.getProcessManager()?.start(projectId, command, cwd, useWsl) ?? false
+    if (started) {
+      deps.emitRuntimeStateChanged({ reason: 'process-start', projectId })
     }
-  )
+    return started
+  })
 
   ipcMain.handle(IPC.PROCESS_STOP, (_event, projectId: string) => {
     const stopped = deps.getProcessManager()?.stop(projectId) ?? false
@@ -89,23 +50,20 @@ export function registerCoreIpcHandlers(
     return true
   })
 
-  ipcMain.handle(
-    IPC.WINDOW_CAPTURE_RECT,
-    async (_event, rect: { x: number; y: number; width: number; height: number }) => {
-      const targetWindow = deps.getMainWindow()
-      if (!targetWindow || targetWindow.isDestroyed()) {
-        throw new Error('Main window is not available.')
-      }
-
-      const x = Math.max(0, Math.floor(Number(rect?.x) || 0))
-      const y = Math.max(0, Math.floor(Number(rect?.y) || 0))
-      const width = Math.max(1, Math.floor(Number(rect?.width) || 0))
-      const height = Math.max(1, Math.floor(Number(rect?.height) || 0))
-
-      const image = await targetWindow.webContents.capturePage({ x, y, width, height })
-      return image.toPNG().toString('base64')
+  ipcMain.handle(IPC.WINDOW_CAPTURE_RECT, async (_event, rect: { x: number; y: number; width: number; height: number }) => {
+    const targetWindow = deps.getMainWindow()
+    if (!targetWindow || targetWindow.isDestroyed()) {
+      throw new Error('Main window is not available.')
     }
-  )
+
+    const x = Math.max(0, Math.floor(Number(rect?.x) || 0))
+    const y = Math.max(0, Math.floor(Number(rect?.y) || 0))
+    const width = Math.max(1, Math.floor(Number(rect?.width) || 0))
+    const height = Math.max(1, Math.floor(Number(rect?.height) || 0))
+
+    const image = await targetWindow.webContents.capturePage({ x, y, width, height })
+    return image.toPNG().toString('base64')
+  })
 
   ipcMain.handle(IPC.CLIPBOARD_WRITE_IMAGE, (_event, pngBase64: string) => {
     const normalized = typeof pngBase64 === 'string' ? pngBase64.trim() : ''
@@ -134,31 +92,19 @@ export function registerCoreIpcHandlers(
     return loadConfig()
   })
 
-  ipcMain.handle(
-    IPC.CONFIG_SET,
-    async (_event, partial: Record<string, unknown>) => {
-      const updated = await updateConfig(
-        partial as Partial<AppConfig> & { startupDefaultTagId?: string }
-      )
-      if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
-        applyWindowBackground(
-          deps.getMainWindow(),
-          updated.theme,
-          nativeTheme.shouldUseDarkColors
-        )
-      }
-      if (
-        Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin')
-        || Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode')
-      ) {
-        syncWindowsLaunchOnLogin(updated)
-      }
-      if (Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')) {
-        rememberAppCacheLocation(updated.cacheLocation)
-      }
-      return updated
+  ipcMain.handle(IPC.CONFIG_SET, async (_event, partial: Record<string, unknown>) => {
+    const updated = await updateConfig(partial as Partial<AppConfig> & { startupDefaultTagId?: string })
+    if (Object.prototype.hasOwnProperty.call(partial, 'theme')) {
+      applyWindowBackground(deps.getMainWindow(), updated.theme, nativeTheme.shouldUseDarkColors)
     }
-  )
+    if (Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') || Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode')) {
+      syncWindowsLaunchOnLogin(updated)
+    }
+    if (Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')) {
+      rememberAppCacheLocation(updated.cacheLocation)
+    }
+    return updated
+  })
 
   ipcMain.handle(IPC.APP_RESTART, () => {
     setTimeout(() => {
@@ -170,6 +116,14 @@ export function registerCoreIpcHandlers(
 
   ipcMain.handle(IPC.CACHE_LOCATION_GET, () => {
     return describeAppCacheLocation(loadConfig().cacheLocation)
+  })
+
+  ipcMain.handle(IPC.LEGACY_USER_DATA_MIGRATION_GET, () => {
+    return getLegacyUserDataMigrationInfo()
+  })
+
+  ipcMain.handle(IPC.LEGACY_USER_DATA_MIGRATION_RUN, () => {
+    return migrateLegacyUserData()
   })
 
   ipcMain.handle(IPC.BROWSER_DATA_MAINTENANCE_GET, () => {
@@ -188,28 +142,19 @@ export function registerCoreIpcHandlers(
     return readCodexSettings(deps.getCapability())
   })
 
-  ipcMain.handle(
-    IPC.CODEX_SETTINGS_SET,
-    async (_event, payload: Record<string, unknown>): Promise<CodexSettingsSaveResult> => {
-      const providerApiKeys =
-        payload.providerApiKeys && typeof payload.providerApiKeys === 'object'
-          ? (payload.providerApiKeys as Record<string, string>)
-          : {}
-      const config =
-        payload.config && typeof payload.config === 'object'
-          ? normalizeCodexConfig(payload.config as Record<string, unknown>)
-          : normalizeCodexConfig({})
+  ipcMain.handle(IPC.CODEX_SETTINGS_SET, async (_event, payload: Record<string, unknown>): Promise<CodexSettingsSaveResult> => {
+    const providerApiKeys = payload.providerApiKeys && typeof payload.providerApiKeys === 'object' ? (payload.providerApiKeys as Record<string, string>) : {}
+    const config = payload.config && typeof payload.config === 'object' ? normalizeCodexConfig(payload.config as Record<string, unknown>) : normalizeCodexConfig({})
 
-      const snapshot = await writeCodexSettings(deps.getCapability(), {
-        providerApiKeys,
-        config,
-      })
-      return {
-        snapshot,
-        appConfig: loadConfig(),
-      }
+    const snapshot = await writeCodexSettings(deps.getCapability(), {
+      providerApiKeys,
+      config,
+    })
+    return {
+      snapshot,
+      appConfig: loadConfig(),
     }
-  )
+  })
 
   ipcMain.handle(IPC.CLAUDE_BASHRC_GET, async () => {
     return readClaudeBashrcConfig()
@@ -219,9 +164,7 @@ export function registerCoreIpcHandlers(
     const normalized = normalizeClaudeBashrcConfig(config)
     const saved = await writeClaudeBashrcConfig(normalized)
     await writeWindowsUserEnv(saved).catch(() => {})
-    return process.platform === 'win32'
-      ? applyWindowsUserEnvToCurrentProcess(saved)
-      : saved
+    return process.platform === 'win32' ? applyWindowsUserEnvToCurrentProcess(saved) : saved
   })
 
   ipcMain.handle(IPC.WINDOWS_USER_ENV_SET, async (_event, config: Record<string, unknown>) => {
@@ -230,13 +173,10 @@ export function registerCoreIpcHandlers(
     return applyWindowsUserEnvToCurrentProcess(normalized)
   })
 
-  ipcMain.handle(
-    IPC.DOC_LINK_SECRET_SET,
-    (_event, projectId: string, linkId: string, secret: string) => {
-      setDocLinkSecret(projectId, linkId, secret)
-      return true
-    }
-  )
+  ipcMain.handle(IPC.DOC_LINK_SECRET_SET, (_event, projectId: string, linkId: string, secret: string) => {
+    setDocLinkSecret(projectId, linkId, secret)
+    return true
+  })
 
   ipcMain.handle(IPC.DOC_LINK_SECRET_GET, (_event, projectId: string, linkId: string) => {
     const secret = getDocLinkSecret(projectId, linkId)
@@ -248,12 +188,9 @@ export function registerCoreIpcHandlers(
     return true
   })
 
-  ipcMain.handle(
-    IPC.AI_COMMIT_RUN,
-    async (_event, projectId: string, repoRoot: string, override?: AiCommitRunOverride) => {
-      return deps.aiCommitService.runAiCommit(projectId, repoRoot, override)
-    }
-  )
+  ipcMain.handle(IPC.AI_COMMIT_RUN, async (_event, projectId: string, repoRoot: string, override?: AiCommitRunOverride) => {
+    return deps.aiCommitService.runAiCommit(projectId, repoRoot, override)
+  })
 
   ipcMain.handle(IPC.AI_COMMIT_CANCEL, (_event, projectId: string): boolean => {
     return deps.aiCommitService.cancelAiCommit(projectId)
@@ -263,30 +200,21 @@ export function registerCoreIpcHandlers(
     return deps.aiCommitService.getAiCommitState(projectId)
   })
 
-  ipcMain.handle(
-    IPC.AI_COMMIT_BEGIN_UNDO_AUTH,
-    (_event, projectId: string): AiCommitTaskSnapshot | null => {
-      return deps.aiCommitService.beginAiCommitUndoAuth(projectId)
-    }
-  )
+  ipcMain.handle(IPC.AI_COMMIT_BEGIN_UNDO_AUTH, (_event, projectId: string): AiCommitTaskSnapshot | null => {
+    return deps.aiCommitService.beginAiCommitUndoAuth(projectId)
+  })
 
-  ipcMain.handle(
-    IPC.AI_COMMIT_CANCEL_UNDO_AUTH,
-    (_event, projectId: string): AiCommitTaskSnapshot | null => {
-      return deps.aiCommitService.cancelAiCommitUndoAuth(projectId)
-    }
-  )
+  ipcMain.handle(IPC.AI_COMMIT_CANCEL_UNDO_AUTH, (_event, projectId: string): AiCommitTaskSnapshot | null => {
+    return deps.aiCommitService.cancelAiCommitUndoAuth(projectId)
+  })
 
   ipcMain.handle(IPC.AI_COMMIT_UNDO, async (_event, projectId: string): Promise<AiCommitUndoResult> => {
     return deps.aiCommitService.undoAiCommit(projectId)
   })
 
-  ipcMain.handle(
-    IPC.AI_COMMIT_CLOSE_UNDO,
-    (_event, projectId: string, reason?: AiCommitUndoCloseReason): AiCommitTaskSnapshot | null => {
-      return deps.aiCommitService.closeAiCommitUndo(projectId, reason)
-    }
-  )
+  ipcMain.handle(IPC.AI_COMMIT_CLOSE_UNDO, (_event, projectId: string, reason?: AiCommitUndoCloseReason): AiCommitTaskSnapshot | null => {
+    return deps.aiCommitService.closeAiCommitUndo(projectId, reason)
+  })
 
   ipcMain.handle(IPC.AGENT_HOOK_GET_STATUS, () => {
     return deps.agentHookGateway.getStatus()
@@ -361,10 +289,7 @@ export function registerCoreIpcHandlers(
 
     const result = await dialog.showOpenDialog(currentWindow, {
       properties: ['openDirectory'],
-      defaultPath:
-        typeof defaultPath === 'string' && defaultPath.trim()
-          ? defaultPath.trim()
-          : undefined,
+      defaultPath: typeof defaultPath === 'string' && defaultPath.trim() ? defaultPath.trim() : undefined,
     })
     if (!result.canceled && result.filePaths.length > 0) {
       return result.filePaths[0]

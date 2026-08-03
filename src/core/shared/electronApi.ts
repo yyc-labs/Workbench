@@ -17,6 +17,8 @@ import type {
   AiGatewaySaveConfigResult,
   AiGatewayStatus,
   AppCacheLocationInfo,
+  LegacyUserDataMigrationInfo,
+  LegacyUserDataMigrationResult,
   AppConfig,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
@@ -160,6 +162,8 @@ export interface CoreElectronApi {
   setConfig: (config: Record<string, unknown>) => Promise<AppConfig>
   restartApp: () => Promise<boolean>
   getCacheLocationInfo: () => Promise<AppCacheLocationInfo>
+  getLegacyUserDataMigrationInfo: () => Promise<LegacyUserDataMigrationInfo>
+  migrateLegacyUserData: () => Promise<LegacyUserDataMigrationResult>
   getBrowserDataMaintenanceInfo: () => Promise<BrowserDataMaintenanceInfo>
   cleanupLegacyBrowserCaches: (rootPath?: string) => Promise<BrowserDataCleanupResult>
   getCodexEnvironmentScope: () => Promise<CodexEnvironmentScope>

@@ -13,6 +13,7 @@ export function getAiGatewayOpenAiBaseUrl(config: Pick<AiGatewayConfig, 'host' |
 export function buildCodexLocalRouterProvider(config: Pick<AiGatewayConfig, 'host' | 'port'>): CodexModelProviderConfig {
   return {
     name: 'Local Router',
+    model: 'gpt-5.4',
     baseUrl: getAiGatewayOpenAiBaseUrl(config),
     wireApi: 'responses',
     requiresOpenaiAuth: true,

@@ -9,6 +9,8 @@ import type {
   AiCommitUndoResult,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
+  LegacyUserDataMigrationInfo,
+  LegacyUserDataMigrationResult,
   ClaudeBashrcConfig,
   CodexSettingsInput,
   CodexSettingsSaveResult,
@@ -19,16 +21,13 @@ export function createCoreInvokeApi() {
   return {
     detectProjects: (dirPath: string) => ipcRenderer.invoke(IPC.DETECT_DIRECTORY, dirPath),
 
-    startProcess: (projectId: string, command: string, cwd: string, useWsl?: boolean) =>
-      ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd, useWsl),
+    startProcess: (projectId: string, command: string, cwd: string, useWsl?: boolean) => ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd, useWsl),
 
     stopProcess: (projectId: string) => ipcRenderer.invoke(IPC.PROCESS_STOP, projectId),
 
-    sendInput: (projectId: string, data: string) =>
-      ipcRenderer.invoke(IPC.PROCESS_INPUT, projectId, data),
+    sendInput: (projectId: string, data: string) => ipcRenderer.invoke(IPC.PROCESS_INPUT, projectId, data),
 
-    resizeTerminal: (projectId: string, cols: number, rows: number) =>
-      ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
+    resizeTerminal: (projectId: string, cols: number, rows: number) => ipcRenderer.invoke(IPC.PROCESS_RESIZE, projectId, cols, rows),
 
     getConfig: () => ipcRenderer.invoke(IPC.CONFIG_GET),
 
@@ -38,40 +37,36 @@ export function createCoreInvokeApi() {
 
     getCacheLocationInfo: () => ipcRenderer.invoke(IPC.CACHE_LOCATION_GET),
 
-    getBrowserDataMaintenanceInfo: () =>
-      ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_GET) as Promise<BrowserDataMaintenanceInfo>,
+    getLegacyUserDataMigrationInfo: () => ipcRenderer.invoke(IPC.LEGACY_USER_DATA_MIGRATION_GET) as Promise<LegacyUserDataMigrationInfo>,
 
-    cleanupLegacyBrowserCaches: (rootPath?: string) =>
-      ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_CLEANUP, rootPath) as Promise<BrowserDataCleanupResult>,
+    migrateLegacyUserData: () => ipcRenderer.invoke(IPC.LEGACY_USER_DATA_MIGRATION_RUN) as Promise<LegacyUserDataMigrationResult>,
+
+    getBrowserDataMaintenanceInfo: () => ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_GET) as Promise<BrowserDataMaintenanceInfo>,
+
+    cleanupLegacyBrowserCaches: (rootPath?: string) => ipcRenderer.invoke(IPC.BROWSER_DATA_MAINTENANCE_CLEANUP, rootPath) as Promise<BrowserDataCleanupResult>,
 
     getCodexEnvironmentScope: () => ipcRenderer.invoke(IPC.CODEX_SCOPE_GET),
 
     getCodexSettings: () => ipcRenderer.invoke(IPC.CODEX_SETTINGS_GET),
 
-    setCodexSettings: (payload: CodexSettingsInput): Promise<CodexSettingsSaveResult> =>
-      ipcRenderer.invoke(IPC.CODEX_SETTINGS_SET, payload),
+    setCodexSettings: (payload: CodexSettingsInput): Promise<CodexSettingsSaveResult> => ipcRenderer.invoke(IPC.CODEX_SETTINGS_SET, payload),
 
     getClaudeBashrcConfig: () => ipcRenderer.invoke(IPC.CLAUDE_BASHRC_GET),
 
-    setClaudeBashrcConfig: (config: ClaudeBashrcConfig) =>
-      ipcRenderer.invoke(IPC.CLAUDE_BASHRC_SET, config),
+    setClaudeBashrcConfig: (config: ClaudeBashrcConfig) => ipcRenderer.invoke(IPC.CLAUDE_BASHRC_SET, config),
 
-    setWindowsUserEnv: (config: ClaudeBashrcConfig) =>
-      ipcRenderer.invoke(IPC.WINDOWS_USER_ENV_SET, config),
+    setWindowsUserEnv: (config: ClaudeBashrcConfig) => ipcRenderer.invoke(IPC.WINDOWS_USER_ENV_SET, config),
 
-    setDocLinkSecret: (projectId: string, linkId: string, secret: string) =>
-      ipcRenderer.invoke(IPC.DOC_LINK_SECRET_SET, projectId, linkId, secret),
+    setDocLinkSecret: (projectId: string, linkId: string, secret: string) => ipcRenderer.invoke(IPC.DOC_LINK_SECRET_SET, projectId, linkId, secret),
 
     getDocLinkSecret: (projectId: string, linkId: string) =>
       ipcRenderer.invoke(IPC.DOC_LINK_SECRET_GET, projectId, linkId) as Promise<{
         secret: string | null
       }>,
 
-    deleteDocLinkSecret: (projectId: string, linkId: string) =>
-      ipcRenderer.invoke(IPC.DOC_LINK_SECRET_DELETE, projectId, linkId),
+    deleteDocLinkSecret: (projectId: string, linkId: string) => ipcRenderer.invoke(IPC.DOC_LINK_SECRET_DELETE, projectId, linkId),
 
-    selectDirectory: (defaultPath?: string) =>
-      ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY, defaultPath),
+    selectDirectory: (defaultPath?: string) => ipcRenderer.invoke(IPC.DIALOG_SELECT_DIRECTORY, defaultPath),
 
     getPathForFile: (file: File) => {
       try {
@@ -99,22 +94,17 @@ export function createCoreInvokeApi() {
       }
     },
 
-    consumeTranscriptCaptureInitialText: () =>
-      ipcRenderer.invoke(IPC.TRANSCRIPT_CAPTURE_INITIAL_TEXT_CONSUME) as Promise<TranscriptCaptureInitialText>,
+    consumeTranscriptCaptureInitialText: () => ipcRenderer.invoke(IPC.TRANSCRIPT_CAPTURE_INITIAL_TEXT_CONSUME) as Promise<TranscriptCaptureInitialText>,
 
-    captureWindowRectToPngBase64: (rect: { x: number; y: number; width: number; height: number }) =>
-      ipcRenderer.invoke(IPC.WINDOW_CAPTURE_RECT, rect) as Promise<string>,
+    captureWindowRectToPngBase64: (rect: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke(IPC.WINDOW_CAPTURE_RECT, rect) as Promise<string>,
 
-    writeClipboardImagePngBase64: (pngBase64: string) =>
-      ipcRenderer.invoke(IPC.CLIPBOARD_WRITE_IMAGE, pngBase64) as Promise<boolean>,
+    writeClipboardImagePngBase64: (pngBase64: string) => ipcRenderer.invoke(IPC.CLIPBOARD_WRITE_IMAGE, pngBase64) as Promise<boolean>,
 
-    readLocalImageAsDataUrl: (source: string) =>
-      ipcRenderer.invoke(IPC.LOCAL_IMAGE_READ_DATA_URL, source) as Promise<string>,
+    readLocalImageAsDataUrl: (source: string) => ipcRenderer.invoke(IPC.LOCAL_IMAGE_READ_DATA_URL, source) as Promise<string>,
 
     openExternal: (url: string) => ipcRenderer.invoke(IPC.SHELL_OPEN_EXTERNAL, url),
 
-    openFolder: (folderPath: string, revealPath?: string) =>
-      ipcRenderer.invoke(IPC.SHELL_OPEN_FOLDER, folderPath, revealPath),
+    openFolder: (folderPath: string, revealPath?: string) => ipcRenderer.invoke(IPC.SHELL_OPEN_FOLDER, folderPath, revealPath),
 
     openInVsCode: (folderPath: string) => ipcRenderer.invoke(IPC.SHELL_OPEN_VSCODE, folderPath),
 
@@ -134,37 +124,24 @@ export function createCoreInvokeApi() {
 
     trayPanelDismiss: () => ipcRenderer.invoke(IPC.TRAY_PANEL_DISMISS),
 
-    trayPanelResizeToContent: (size: { width: number; height: number }) =>
-      ipcRenderer.invoke(IPC.TRAY_PANEL_RESIZE_TO_CONTENT, size),
+    trayPanelResizeToContent: (size: { width: number; height: number }) => ipcRenderer.invoke(IPC.TRAY_PANEL_RESIZE_TO_CONTENT, size),
 
-    runAiCommit: (
-      projectId: string,
-      repoRoot: string,
-      override?: AiCommitRunOverride
-    ) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, repoRoot, override),
+    runAiCommit: (projectId: string, repoRoot: string, override?: AiCommitRunOverride) => ipcRenderer.invoke(IPC.AI_COMMIT_RUN, projectId, repoRoot, override),
 
-    cancelAiCommit: (projectId: string) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL, projectId) as Promise<boolean>,
+    cancelAiCommit: (projectId: string) => ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL, projectId) as Promise<boolean>,
 
-    getAiCommitState: (projectId: string) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId) as Promise<AiCommitTaskSnapshot | null>,
+    getAiCommitState: (projectId: string) => ipcRenderer.invoke(IPC.AI_COMMIT_GET_STATE, projectId) as Promise<AiCommitTaskSnapshot | null>,
 
-    beginAiCommitUndoAuth: (projectId: string) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_BEGIN_UNDO_AUTH, projectId) as Promise<AiCommitTaskSnapshot | null>,
+    beginAiCommitUndoAuth: (projectId: string) => ipcRenderer.invoke(IPC.AI_COMMIT_BEGIN_UNDO_AUTH, projectId) as Promise<AiCommitTaskSnapshot | null>,
 
-    cancelAiCommitUndoAuth: (projectId: string) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL_UNDO_AUTH, projectId) as Promise<AiCommitTaskSnapshot | null>,
+    cancelAiCommitUndoAuth: (projectId: string) => ipcRenderer.invoke(IPC.AI_COMMIT_CANCEL_UNDO_AUTH, projectId) as Promise<AiCommitTaskSnapshot | null>,
 
-    undoAiCommit: (projectId: string) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_UNDO, projectId) as Promise<AiCommitUndoResult>,
+    undoAiCommit: (projectId: string) => ipcRenderer.invoke(IPC.AI_COMMIT_UNDO, projectId) as Promise<AiCommitUndoResult>,
 
-    closeAiCommitUndo: (projectId: string, reason?: AiCommitUndoCloseReason) =>
-      ipcRenderer.invoke(IPC.AI_COMMIT_CLOSE_UNDO, projectId, reason) as Promise<AiCommitTaskSnapshot | null>,
+    closeAiCommitUndo: (projectId: string, reason?: AiCommitUndoCloseReason) => ipcRenderer.invoke(IPC.AI_COMMIT_CLOSE_UNDO, projectId, reason) as Promise<AiCommitTaskSnapshot | null>,
 
-    getAgentHookStatus: () =>
-      ipcRenderer.invoke(IPC.AGENT_HOOK_GET_STATUS) as Promise<AgentHookGatewayStatus>,
+    getAgentHookStatus: () => ipcRenderer.invoke(IPC.AGENT_HOOK_GET_STATUS) as Promise<AgentHookGatewayStatus>,
 
-    getAgentHookRecentEvents: () =>
-      ipcRenderer.invoke(IPC.AGENT_HOOK_GET_RECENT_EVENTS) as Promise<AgentHookEnvelope[]>,
+    getAgentHookRecentEvents: () => ipcRenderer.invoke(IPC.AGENT_HOOK_GET_RECENT_EVENTS) as Promise<AgentHookEnvelope[]>,
   }
 }

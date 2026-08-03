@@ -61,11 +61,12 @@ export const createMarkdownDocumentActionsSlice: StateCreator<AppState, [], [], 
   setMarkdownDocumentMode: (mode: MarkdownDocumentDisplayMode) => set({ markdownDocumentMode: mode }),
   saveMarkdownDocument: async () => {
     const active = get().markdownDocumentActive
-    if (!active) return
+    const content = get().markdownDocumentValue
+    if (!active || get().markdownDocumentSaving || content === active.content) return
     set({ markdownDocumentSaving: true, markdownDocumentError: null })
     try {
-      const saved = await window.electronAPI.writeMarkdownDocument(active.path, get().markdownDocumentValue, active.mtimeMs)
-      set({ markdownDocumentActive: { ...active, ...saved }, markdownDocumentSaving: false, markdownDocumentConflict: false })
+      const saved = await window.electronAPI.writeMarkdownDocument(active.path, content, active.mtimeMs)
+      set({ markdownDocumentActive: { ...active, ...saved, content }, markdownDocumentSaving: false, markdownDocumentConflict: false })
     } catch (error) {
       set({ markdownDocumentSaving: false, markdownDocumentConflict: (error as { code?: string }).code === 'conflict', markdownDocumentError: error instanceof Error ? error.message : String(error) })
     }

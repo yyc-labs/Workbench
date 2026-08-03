@@ -1,4 +1,4 @@
-import { memo, Profiler, useEffect, useMemo, type ComponentProps, type RefObject } from 'react'
+import { type ComponentProps, type ComponentType, memo, Profiler, type RefObject, useEffect, useMemo } from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
@@ -16,7 +16,7 @@ type MarkdownPreviewSurfaceProps = {
 
 export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ components, content, previewRootRef }: MarkdownPreviewSurfaceProps) {
   const previewComponents = useMemo<Components>(() => {
-    const TableComponent = components.table
+    const TableComponent = components.table as ComponentType<ComponentProps<'table'> & ExtraProps> | undefined
     return {
       ...components,
       table({ node, ...props }: ComponentProps<'table'> & ExtraProps) {

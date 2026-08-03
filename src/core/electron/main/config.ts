@@ -25,6 +25,7 @@ import type {
   CodexSettingsSnapshotMap,
   LaunchOnLoginDisplayMode,
   ShortcutPreferencesConfig,
+  ProjectFileExclusionsConfig,
 } from '../../shared/types'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/gateway-config'
@@ -72,6 +73,10 @@ const DEFAULT_CACHE_LOCATION_CONFIG: AppCacheLocationConfig = {
 const DEFAULT_SHORTCUT_PREFERENCES: ShortcutPreferencesConfig = {
   quickTranscriptCaptureOpenViewer: false,
 }
+const DEFAULT_CODE_FILE_EXCLUSIONS: ProjectFileExclusionsConfig = {
+  directories: ['.git', 'node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.turbo', '.cache', 'coverage', '.venv', 'venv', '__pycache__'],
+  files: ['.DS_Store', 'Thumbs.db'],
+}
 
 function getConfigPath(): string {
   return join(app.getPath('userData'), CONFIG_FILE)
@@ -113,6 +118,7 @@ const DEFAULT_CONFIG: AppConfig = {
   launchOnLogin: false,
   launchOnLoginDisplayMode: 'tray',
   closeWindowBehavior: 'quit',
+  codeFileExclusions: DEFAULT_CODE_FILE_EXCLUSIONS,
   cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
   folders: [],
@@ -392,6 +398,7 @@ function normalizeCodexModelProviderConfig(providerKey: string, value: unknown):
 
   return {
     name: name || providerKey,
+    model: typeof raw.model === 'string' ? raw.model.trim() : '',
     baseUrl,
     wireApi: wireApi || 'responses',
     requiresOpenaiAuth,
@@ -723,6 +730,25 @@ function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | 
   }
 }
 
+function normalizeCodeFileExclusions(value: AppConfig['codeFileExclusions'] | unknown): ProjectFileExclusionsConfig {
+  const input = value && typeof value === 'object' ? (value as Partial<ProjectFileExclusionsConfig>) : {}
+  const normalize = (items: unknown, fallback: string[]) => {
+    if (!Array.isArray(items)) return [...fallback]
+    return Array.from(
+      new Set(
+        items
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => item.trim())
+          .filter((item) => item && item !== '.' && item !== '..' && !item.includes('/') && !item.includes('\\')),
+      ),
+    ).slice(0, 200)
+  }
+  return {
+    directories: normalize(input.directories, DEFAULT_CODE_FILE_EXCLUSIONS.directories),
+    files: normalize(input.files, DEFAULT_CODE_FILE_EXCLUSIONS.files),
+  }
+}
+
 function normalizeAiEnvironmentConfig(config: AppConfig): AppConfig['aiEnvironment'] {
   try {
     const capability = capabilityManager.get()
@@ -823,6 +849,7 @@ export function loadConfig(): AppConfig {
       browserAi: normalizeBrowserAiConfig(parsed.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
+      codeFileExclusions: normalizeCodeFileExclusions(parsed.codeFileExclusions),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
         ...parsed,
@@ -874,6 +901,7 @@ export function loadConfig(): AppConfig {
       browserAi: normalizeBrowserAiConfig(DEFAULT_CONFIG.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
+      codeFileExclusions: normalizeCodeFileExclusions(DEFAULT_CONFIG.codeFileExclusions),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
       configRecovery,
     }
@@ -923,6 +951,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi') ? normalizeBrowserAiConfig(partial.browserAi) : normalizeBrowserAiConfig(current.browserAi),
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
+    codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
   }
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false) : (current.launchOnLogin ?? false)
   updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode') ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode) : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)

@@ -1,5 +1,5 @@
 import { ArrowLeft, Camera, Check, Clipboard, Download, ExternalLink, X } from 'lucide-react'
-import { type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
+import { type PointerEvent, useEffect, useRef, useState, type WheelEvent } from 'react'
 import type { BrowserScreenshotViewerPayload } from '../shared/types'
 import { resolveTheme } from './app/windowTitle'
 import { Button } from './components/ui/button'
@@ -208,7 +208,7 @@ export function BrowserScreenshotViewerApp() {
               onLoad={() => void window.electronAPI.markBrowserScreenshotViewerReady()}
               onError={() => void window.electronAPI.markBrowserScreenshotViewerReady()}
               className="pointer-events-none max-h-full max-w-full select-none object-contain shadow-sm"
-              style={{ transform: 'translate3d(0px, 0px, 0) scale(1)', WebkitUserDrag: 'none' }}
+              style={{ transform: 'translate3d(0px, 0px, 0) scale(1)' }}
             />
           </div>
         ) : (

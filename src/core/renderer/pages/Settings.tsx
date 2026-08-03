@@ -2,8 +2,9 @@ import { ChevronLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
-import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode } from '../../shared/types'
+import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode, LegacyUserDataMigrationInfo, ProjectFileExclusionsConfig } from '../../shared/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Input } from '../components/ui/input'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
@@ -26,7 +27,7 @@ import { DEFAULT_SETTINGS_SECTION, isSettingsSection, isSettingsSectionAlias, ty
 
 const DEFAULT_CACHE_LOCATION: AppCacheLocationConfig = { mode: 'default' }
 
-type SettingsConfirmDialogState = { type: 'restart' } | { type: 'install-cache-warning'; nextLocation: AppCacheLocationConfig } | { type: 'cleanup'; rootPath: string | null }
+type SettingsConfirmDialogState = { type: 'restart' } | { type: 'migration-confirm' } | { type: 'migration-restart' } | { type: 'install-cache-warning'; nextLocation: AppCacheLocationConfig } | { type: 'cleanup'; rootPath: string | null }
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -44,6 +45,7 @@ export function SettingsPage() {
   const setLaunchOnLoginConfig = useAppStore((s) => s.setLaunchOnLogin)
   const setLaunchOnLoginDisplayModeConfig = useAppStore((s) => s.setLaunchOnLoginDisplayMode)
   const setCloseWindowBehaviorConfig = useAppStore((s) => s.setCloseWindowBehavior)
+  const setCodeFileExclusions = useAppStore((s) => s.setCodeFileExclusions)
   const setCacheLocationConfig = useAppStore((s) => s.setCacheLocation)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
@@ -56,12 +58,17 @@ export function SettingsPage() {
   const [launchOnLogin, setLaunchOnLogin] = useState(config.launchOnLogin ?? false)
   const [launchOnLoginDisplayMode, setLaunchOnLoginDisplayMode] = useState<LaunchOnLoginDisplayMode>(config.launchOnLoginDisplayMode ?? 'tray')
   const [closeWindowBehavior, setCloseWindowBehavior] = useState<CloseWindowBehavior>(config.closeWindowBehavior ?? 'quit')
+  const [codeFileExclusions, setCodeFileExclusionsState] = useState<ProjectFileExclusionsConfig>(config.codeFileExclusions ?? { directories: [], files: [] })
   const [cacheLocation, setCacheLocation] = useState<AppCacheLocationConfig>(config.cacheLocation ?? DEFAULT_CACHE_LOCATION)
   const [cacheLocationInfo, setCacheLocationInfo] = useState<AppCacheLocationInfo | null>(null)
   const [browserDataMaintenanceInfo, setBrowserDataMaintenanceInfo] = useState<BrowserDataMaintenanceInfo | null>(null)
   const [browserDataMaintenanceAction, setBrowserDataMaintenanceAction] = useState<'cleanup' | null>(null)
   const [browserDataMaintenanceResult, setBrowserDataMaintenanceResult] = useState<BrowserDataCleanupResult | null>(null)
   const [browserDataMaintenanceError, setBrowserDataMaintenanceError] = useState<string | null>(null)
+  const [legacyUserDataMigrationInfo, setLegacyUserDataMigrationInfo] = useState<LegacyUserDataMigrationInfo | null>(null)
+  const [legacyUserDataMigrationAction, setLegacyUserDataMigrationAction] = useState(false)
+  const [legacyUserDataMigrationError, setLegacyUserDataMigrationError] = useState<string | null>(null)
+  const [legacyMigrationConfirmText, setLegacyMigrationConfirmText] = useState('')
   const [confirmDialog, setConfirmDialog] = useState<SettingsConfirmDialogState | null>(null)
   const alias = isSettingsSectionAlias(sectionParam) ? (sectionParam as SettingsSectionAlias) : null
   const section = isSettingsSection(sectionParam) ? sectionParam : alias ? 'agents' : DEFAULT_SETTINGS_SECTION
@@ -89,10 +96,29 @@ export function SettingsPage() {
   }, [config.closeWindowBehavior])
 
   useEffect(() => {
+    setCodeFileExclusionsState(config.codeFileExclusions ?? { directories: [], files: [] })
+  }, [config.codeFileExclusions])
+
+  useEffect(() => {
     setCacheLocation(config.cacheLocation ?? DEFAULT_CACHE_LOCATION)
     setBrowserDataMaintenanceResult(null)
     setBrowserDataMaintenanceError(null)
   }, [config.cacheLocation])
+
+  useEffect(() => {
+    let canceled = false
+    window.electronAPI
+      .getLegacyUserDataMigrationInfo()
+      .then((info) => {
+        if (!canceled) setLegacyUserDataMigrationInfo(info)
+      })
+      .catch(() => {
+        if (!canceled) setLegacyUserDataMigrationInfo(null)
+      })
+    return () => {
+      canceled = true
+    }
+  }, [])
 
   useEffect(() => {
     let canceled = false
@@ -163,6 +189,11 @@ export function SettingsPage() {
     await setCloseWindowBehaviorConfig(behavior)
   }
 
+  const handleCodeFileExclusionsChange = async (next: ProjectFileExclusionsConfig) => {
+    setCodeFileExclusionsState(next)
+    await setCodeFileExclusions(next)
+  }
+
   const applyCacheLocationChange = async (nextLocation: AppCacheLocationConfig) => {
     setCacheLocation(nextLocation)
     await setCacheLocationConfig(nextLocation)
@@ -185,6 +216,35 @@ export function SettingsPage() {
 
   const executeRestartApp = async () => {
     await window.electronAPI.restartApp()
+  }
+
+  const handleMigrateLegacyUserData = async () => {
+    setLegacyUserDataMigrationAction(true)
+    setLegacyUserDataMigrationError(null)
+    try {
+      const result = await window.electronAPI.migrateLegacyUserData()
+      if (!result.ok) {
+        setLegacyUserDataMigrationError(result.error || t('settings.dataCache.legacyMigrationFailed'))
+        return
+      }
+      setLegacyUserDataMigrationInfo({
+        sourcePath: result.sourcePath,
+        targetPath: result.targetPath,
+        sourceExists: true,
+        migrationCompleted: true,
+      })
+      setConfirmDialog({ type: 'migration-restart' })
+    } catch (error) {
+      setLegacyUserDataMigrationError(toErrorMessage(error))
+    } finally {
+      setLegacyUserDataMigrationAction(false)
+    }
+  }
+
+  const handleOpenLegacyMigrationConfirm = () => {
+    setLegacyMigrationConfirmText('')
+    setLegacyUserDataMigrationError(null)
+    setConfirmDialog({ type: 'migration-confirm' })
   }
 
   const handleSelectCustomCacheDirectory = async () => {
@@ -257,6 +317,22 @@ export function SettingsPage() {
       return
     }
 
+    if (confirmDialog.type === 'migration-restart') {
+      setConfirmDialog(null)
+      await executeRestartApp()
+      return
+    }
+
+    if (confirmDialog.type === 'migration-confirm') {
+      if (legacyMigrationConfirmText.trim() !== t('settings.dataCache.legacyMigrationConfirmPhrase')) {
+        setLegacyUserDataMigrationError(t('settings.dataCache.legacyMigrationConfirmMismatch'))
+        return
+      }
+      setConfirmDialog(null)
+      await handleMigrateLegacyUserData()
+      return
+    }
+
     if (confirmDialog.type === 'install-cache-warning') {
       setConfirmDialog(null)
       await applyCacheLocationChange(confirmDialog.nextLocation)
@@ -293,6 +369,7 @@ export function SettingsPage() {
                   launchOnLogin={launchOnLogin}
                   launchOnLoginDisplayMode={launchOnLoginDisplayMode}
                   closeWindowBehavior={closeWindowBehavior}
+                  codeFileExclusions={codeFileExclusions}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
                   configRecovery={config.configRecovery}
@@ -301,6 +378,7 @@ export function SettingsPage() {
                   onLaunchOnLoginChange={handleLaunchOnLoginChange}
                   onLaunchOnLoginDisplayModeChange={handleLaunchOnLoginDisplayModeChange}
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
+                  onCodeFileExclusionsChange={handleCodeFileExclusionsChange}
                 />
               )}
               {section === 'shortcuts' && <SettingsShortcutsPanel shortcutPreferences={config.shortcutPreferences} onSave={setShortcutPreferences} />}
@@ -312,12 +390,16 @@ export function SettingsPage() {
                   browserDataMaintenanceAction={browserDataMaintenanceAction}
                   browserDataMaintenanceResult={browserDataMaintenanceResult}
                   browserDataMaintenanceError={browserDataMaintenanceError}
+                  legacyUserDataMigrationInfo={legacyUserDataMigrationInfo}
+                  legacyUserDataMigrationAction={legacyUserDataMigrationAction}
+                  legacyUserDataMigrationError={legacyUserDataMigrationError}
                   onCacheLocationChange={handleCacheLocationChange}
                   onRestartApp={handleRestartApp}
                   onSelectCustomCacheDirectory={handleSelectCustomCacheDirectory}
                   onCleanupLegacyBrowserCaches={handleCleanupLegacyBrowserCaches}
                   onOpenCurrentBrowserDataDirectory={handleOpenCurrentBrowserDataDirectory}
                   onOpenOldBrowserDataDirectory={handleOpenOldBrowserDataDirectory}
+                  onMigrateLegacyUserData={handleOpenLegacyMigrationConfirm}
                 />
               )}
               {section === 'runtime' && (
@@ -365,10 +447,48 @@ export function SettingsPage() {
         open={Boolean(confirmDialog)}
         onClose={handleCloseConfirmDialog}
         onConfirm={handleConfirmDialogConfirm}
-        ariaLabel={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirmTitle') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmTitle') : t('settings.dataCache.restartConfirmTitle')}
-        title={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirmTitle') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmTitle') : t('settings.dataCache.restartConfirmTitle')}
-        description={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.browserDataCleanupConfirm') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirm') : t('settings.dataCache.restartConfirm')}
-        confirmLabel={confirmDialog?.type === 'cleanup' ? t('settings.dataCache.cleanupLegacyBrowserCaches') : confirmDialog?.type === 'install-cache-warning' ? t('settings.dataCache.cacheLocationInstallConfirmButton') : t('settings.dataCache.restartApp')}
+        ariaLabel={
+          confirmDialog?.type === 'cleanup'
+            ? t('settings.dataCache.browserDataCleanupConfirmTitle')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
+              : confirmDialog?.type === 'migration-confirm'
+                ? t('settings.dataCache.legacyMigrationConfirmTitle')
+                : confirmDialog?.type === 'migration-restart'
+                  ? t('settings.dataCache.legacyMigrationRestartTitle')
+                  : t('settings.dataCache.restartConfirmTitle')
+        }
+        title={
+          confirmDialog?.type === 'cleanup'
+            ? t('settings.dataCache.browserDataCleanupConfirmTitle')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmTitle')
+              : confirmDialog?.type === 'migration-confirm'
+                ? t('settings.dataCache.legacyMigrationConfirmTitle')
+                : confirmDialog?.type === 'migration-restart'
+                  ? t('settings.dataCache.legacyMigrationRestartTitle')
+                  : t('settings.dataCache.restartConfirmTitle')
+        }
+        description={
+          confirmDialog?.type === 'cleanup'
+            ? t('settings.dataCache.browserDataCleanupConfirm')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirm')
+              : confirmDialog?.type === 'migration-confirm'
+                ? t('settings.dataCache.legacyMigrationConfirmDescription')
+                : confirmDialog?.type === 'migration-restart'
+                  ? t('settings.dataCache.legacyMigrationRestart')
+                  : t('settings.dataCache.restartConfirm')
+        }
+        confirmLabel={
+          confirmDialog?.type === 'cleanup'
+            ? t('settings.dataCache.cleanupLegacyBrowserCaches')
+            : confirmDialog?.type === 'install-cache-warning'
+              ? t('settings.dataCache.cacheLocationInstallConfirmButton')
+              : confirmDialog?.type === 'migration-confirm'
+                ? t('settings.dataCache.legacyMigrationConfirmButton')
+                : t('settings.dataCache.restartApp')
+        }
         confirmVariant={confirmDialog?.type === 'cleanup' ? 'destructive' : 'default'}
         busy={browserDataMaintenanceAction === 'cleanup'}
       >
@@ -377,6 +497,16 @@ export function SettingsPage() {
             <p className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmAdviceTitle')}</p>
             <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmAdvice')}</p>
             <code className="mt-3 block break-all font-mono text-[11px] text-[color:var(--color-foreground)]">{t('settings.dataCache.cacheLocationInstallConfirmExample')}</code>
+          </div>
+        )}
+        {confirmDialog?.type === 'migration-confirm' && (
+          <div className="space-y-3">
+            <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+              <p className="text-xs font-medium text-[color:var(--color-foreground)]">{t('settings.dataCache.legacyMigrationConfirmPhraseLabel')}</p>
+              <code className="mt-2 block select-all font-mono text-[11px] text-[color:var(--color-foreground)]">{t('settings.dataCache.legacyMigrationConfirmPhrase')}</code>
+            </div>
+            <Input value={legacyMigrationConfirmText} onChange={(event) => setLegacyMigrationConfirmText(event.target.value)} placeholder={t('settings.dataCache.legacyMigrationConfirmInputPlaceholder')} autoFocus />
+            {legacyUserDataMigrationError && <p className="text-xs leading-5 text-red-700 dark:text-red-200">{legacyUserDataMigrationError}</p>}
           </div>
         )}
         {confirmDialog?.type === 'cleanup' && (

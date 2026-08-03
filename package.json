@@ -1,8 +1,8 @@
 {
-  "name": "ide-electron",
-  "version": "1.0.0",
+  "name": "workbench",
+  "version": "1.0.1",
   "private": true,
-  "description": "Local Electron IDE workspace for managing projects, AI CLI runtimes, and transcript history.",
+  "description": "An elegant desktop workspace for AI coding agents, projects, Git, notes, and developer workflows.",
   "license": "MIT",
   "author": "yyc <yyc200501317710@gmail.com>",
   "type": "commonjs",

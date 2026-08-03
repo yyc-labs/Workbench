@@ -30,6 +30,7 @@ function cloneProviderDrafts(modelProviders: CodexConfig['modelProviders'], prov
     draftId: createProviderDraftId(),
     key,
     name: provider.name,
+    model: provider.model,
     baseUrl: provider.baseUrl,
     wireApi: provider.wireApi,
     requiresOpenaiAuth: provider.requiresOpenaiAuth,
@@ -42,12 +43,13 @@ function normalizeProviderKey(value: string): string {
   return value.trim().replace(/\s+/g, '-')
 }
 
-function buildConfig(drafts: ProviderDraft[], currentProvider: string, model: string, modelReasoningEffort: string, preferredAuthMethod: string, approvalsReviewer: string): CodexConfig {
+function buildConfig(drafts: ProviderDraft[], currentProvider: string, modelReasoningEffort: string, preferredAuthMethod: string, approvalsReviewer: string): CodexConfig {
   const modelProviders = Object.fromEntries(
     drafts.map((provider) => [
       normalizeProviderKey(provider.key),
       {
         name: provider.name.trim(),
+        model: provider.model.trim(),
         baseUrl: provider.baseUrl.trim(),
         wireApi: provider.wireApi.trim(),
         requiresOpenaiAuth: provider.requiresOpenaiAuth,
@@ -61,7 +63,7 @@ function buildConfig(drafts: ProviderDraft[], currentProvider: string, model: st
 
   return {
     modelProvider: resolvedProvider,
-    model: model.trim(),
+    model: modelProviders[resolvedProvider]?.model ?? '',
     modelReasoningEffort: modelReasoningEffort.trim(),
     preferredAuthMethod: preferredAuthMethod.trim(),
     approvalsReviewer: approvalsReviewer.trim(),
@@ -78,7 +80,7 @@ function renderEnvStorage(scope: CodexEnvironmentScope, t: ReturnType<typeof use
 }
 
 function createEmptySnapshot(): Pick<CodexSettingsSnapshot, 'config' | 'providerApiKeys' | 'configExists'> {
-  const defaultProviderKey = 'nowcoding'
+  const defaultProviderKey = 'openai'
   return {
     configExists: false,
     config: {
@@ -89,8 +91,9 @@ function createEmptySnapshot(): Pick<CodexSettingsSnapshot, 'config' | 'provider
       approvalsReviewer: 'guardian_subagent',
       modelProviders: {
         [defaultProviderKey]: {
-          name: 'NowCoding',
-          baseUrl: 'https://nowcoding.ai/v1',
+          name: 'OpenAI',
+          model: 'gpt-5.4',
+          baseUrl: 'https://api.openai.com/v1',
           wireApi: 'responses',
           requiresOpenaiAuth: true,
           envKey: 'OPENAI_API_KEY',
@@ -111,7 +114,6 @@ function applySnapshotToState(
     setScope: (scope: CodexSettingsSnapshot['scope'] | null) => void
     setConfigExists: (configExists: boolean) => void
     setSelectedProviderDraftId: (value: string) => void
-    setModel: (value: string) => void
     setModelReasoningEffort: (value: string) => void
     setPreferredAuthMethod: (value: string) => void
     setApprovalsReviewer: (value: string) => void
@@ -123,7 +125,6 @@ function applySnapshotToState(
   apply.setScope(snapshot.scope ?? null)
   apply.setConfigExists(snapshot.configExists)
   apply.setSelectedProviderDraftId(selectedDraft?.draftId ?? '')
-  apply.setModel(snapshot.config.model)
   apply.setModelReasoningEffort(snapshot.config.modelReasoningEffort)
   apply.setPreferredAuthMethod(snapshot.config.preferredAuthMethod)
   apply.setApprovalsReviewer(snapshot.config.approvalsReviewer)
@@ -153,7 +154,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [useGatewayMode, setUseGatewayMode] = useState(false)
   const [selectedGatewayProviderId, setSelectedGatewayProviderId] = useState('')
   const [selectedProviderDraftId, setSelectedProviderDraftId] = useState('')
-  const [model, setModel] = useState('')
   const [modelReasoningEffort, setModelReasoningEffort] = useState('')
   const [preferredAuthMethod, setPreferredAuthMethod] = useState('')
   const [approvalsReviewer, setApprovalsReviewer] = useState('')
@@ -228,7 +228,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setScope,
       setConfigExists,
       setSelectedProviderDraftId,
-      setModel,
       setModelReasoningEffort,
       setPreferredAuthMethod,
       setApprovalsReviewer,
@@ -307,6 +306,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       draftId: createProviderDraftId(),
       key: nextKey,
       name: nextKey,
+      model: 'gpt-5.4',
       baseUrl: '',
       wireApi: 'responses',
       requiresOpenaiAuth: true,
@@ -320,7 +320,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
   const saveProviderDrafts = async (sourceProviders: ProviderDraft[], currentProvider: string) => {
     const normalizedProviderApiKeys = Object.fromEntries(sourceProviders.map((provider) => [normalizeProviderKey(provider.key), provider.apiKey.trim()] as const).filter(([key]) => Boolean(key)))
-    const nextConfig = buildConfig(sourceProviders, currentProvider, model, modelReasoningEffort, preferredAuthMethod, approvalsReviewer)
+    const nextConfig = buildConfig(sourceProviders, currentProvider, modelReasoningEffort, preferredAuthMethod, approvalsReviewer)
 
     if (useGatewayMode || codexGatewayBinding?.enabled) {
       if (useGatewayMode && !selectedGatewayProviderId) {
@@ -339,7 +339,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         setScope,
         setConfigExists,
         setSelectedProviderDraftId,
-        setModel,
         setModelReasoningEffort,
         setPreferredAuthMethod,
         setApprovalsReviewer,
@@ -357,7 +356,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setScope,
       setConfigExists,
       setSelectedProviderDraftId,
-      setModel,
       setModelReasoningEffort,
       setPreferredAuthMethod,
       setApprovalsReviewer,
@@ -405,7 +403,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         setScope,
         setConfigExists,
         setSelectedProviderDraftId,
-        setModel,
         setModelReasoningEffort,
         setPreferredAuthMethod,
         setApprovalsReviewer,
@@ -536,7 +533,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
           </div>
           <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
             <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.currentModel')}</div>
-            <div className="mt-1 truncate text-sm font-medium text-[color:var(--color-foreground)]">{model || t('settings.codex.notSynced')}</div>
+            <div className="mt-1 truncate text-sm font-medium text-[color:var(--color-foreground)]">{activeProvider?.model || t('settings.codex.notSynced')}</div>
           </div>
           <div className="rounded-[18px] bg-[color:var(--color-card)] px-4 py-3">
             <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.directProvider')}</div>
@@ -670,6 +667,10 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
                 <Input value={activeProvider.name} onChange={(event) => handleProviderChange(activeProviderIndex, 'name', event.target.value)} disabled={inputDisabled} />
               </div>
               <div className="space-y-1.5">
+                <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.model')}</p>
+                <Input value={activeProvider.model} onChange={(event) => handleProviderChange(activeProviderIndex, 'model', event.target.value)} disabled={inputDisabled} />
+              </div>
+              <div className="space-y-1.5">
                 <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.providerBaseUrl')}</p>
                 <Input value={activeProvider.baseUrl} onChange={(event) => handleProviderChange(activeProviderIndex, 'baseUrl', event.target.value)} disabled={inputDisabled} />
               </div>
@@ -763,10 +764,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.model')}</p>
-            <Input value={model} onChange={(event) => setModel(event.target.value)} disabled={inputDisabled} />
-          </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.modelReasoningEffort')}</p>
             <Input value={modelReasoningEffort} onChange={(event) => setModelReasoningEffort(event.target.value)} disabled={inputDisabled} />

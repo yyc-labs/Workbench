@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { FileText, FolderOpen, Menu, Save, Search, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -45,13 +45,6 @@ export function MarkdownDocumentPage() {
   }, [loadHistory])
 
   useEffect(() => {
-    void window.electronAPI.consumePendingMarkdownDocumentOpen().then((request) => {
-      if (request) requestOpen(request.path)
-    })
-    return window.electronAPI.onMarkdownDocumentOpenRequested((request) => requestOpen(request.path))
-  })
-
-  useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!isDirty) return
       event.preventDefault()
@@ -61,12 +54,32 @@ export function MarkdownDocumentPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isDirty])
 
-  const runWithDirtyConfirmation = (action: () => void) => {
-    if (!isDirty) action()
-    else setPendingAction(() => action)
-  }
+  const runWithDirtyConfirmation = useCallback(
+    (action: () => void) => {
+      if (!isDirty) action()
+      else setPendingAction(() => action)
+    },
+    [isDirty],
+  )
 
-  const requestOpen = (filePath: string) => runWithDirtyConfirmation(() => void openDocument(filePath))
+  const requestOpen = useCallback((filePath: string) => runWithDirtyConfirmation(() => void openDocument(filePath)), [openDocument, runWithDirtyConfirmation])
+
+  useEffect(() => {
+    void window.electronAPI.consumePendingMarkdownDocumentOpen().then((request) => {
+      if (request) requestOpen(request.path)
+    })
+    return window.electronAPI.onMarkdownDocumentOpenRequested((request) => requestOpen(request.path))
+  }, [requestOpen])
+
+  useEffect(() => {
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      if (active && isDirty && !saving) void save()
+    }
+    window.addEventListener('keydown', handleShortcut)
+    return () => window.removeEventListener('keydown', handleShortcut)
+  }, [active, isDirty, saving, save])
 
   const handleOpen = async () => {
     const selected = await window.electronAPI.selectMarkdownDocument()
@@ -93,10 +106,6 @@ export function MarkdownDocumentPage() {
       }
       return
     }
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-      event.preventDefault()
-      void save()
-    }
   }
 
   const filteredHistory = useMemo(() => {
@@ -116,7 +125,7 @@ export function MarkdownDocumentPage() {
           if (resolved) requestOpen(resolved)
         },
       }),
-    [active, effectiveTheme, openDocument],
+    [active, effectiveTheme, requestOpen],
   )
 
   return (

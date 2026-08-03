@@ -6,32 +6,26 @@ import { loadConfig, updateConfig } from './config'
 import { wslBridge } from './wsl-bridge'
 import { readWindowsUserEnvVar, writeWindowsUserEnvVar } from './windows-env'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
-import type {
-  AiExecutionMode,
-  CodexConfig,
-  CodexEnvironmentScope,
-  CodexModelProviderConfig,
-  CodexSettingsInput,
-  CodexSettingsSnapshot,
-  Capability,
-} from '../../shared/types'
+import type { AiExecutionMode, CodexConfig, CodexEnvironmentScope, CodexModelProviderConfig, CodexSettingsInput, CodexSettingsSnapshot, Capability } from '../../shared/types'
 
 const DEFAULT_CODEX_CONFIG: CodexConfig = {
-  modelProvider: 'nowcoding',
+  modelProvider: 'openai',
   model: 'gpt-5.4',
   modelReasoningEffort: 'xhigh',
   preferredAuthMethod: 'apikey',
   approvalsReviewer: 'guardian_subagent',
   modelProviders: {
-    nowcoding: {
-      name: 'NowCoding',
-      baseUrl: 'https://nowcoding.ai/v1',
+    openai: {
+      name: 'OpenAI',
+      model: 'gpt-5.4',
+      baseUrl: 'https://api.openai.com/v1',
       wireApi: 'responses',
       requiresOpenaiAuth: true,
       envKey: 'OPENAI_API_KEY',
     },
     aisz: {
       name: 'aisz',
+      model: 'gpt-5.4',
       baseUrl: 'https://api.aisz.mom/v1',
       wireApi: 'responses',
       requiresOpenaiAuth: true,
@@ -40,13 +34,7 @@ const DEFAULT_CODEX_CONFIG: CodexConfig = {
   },
 }
 
-const ALL_SUPPORTED_ROOT_KEYS = new Set([
-  'model_provider',
-  'model',
-  'model_reasoning_effort',
-  'preferred_auth_method',
-  'approvals_reviewer',
-])
+const ALL_SUPPORTED_ROOT_KEYS = new Set(['model_provider', 'model', 'model_reasoning_effort', 'preferred_auth_method', 'approvals_reviewer'])
 
 const wslHomePathCache = new Map<string, string>()
 
@@ -87,10 +75,7 @@ function decodeShellExportValue(rawValue: string): string {
   if (!trimmed) return ''
 
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
   }
 
   if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
@@ -117,29 +102,21 @@ function replaceOrAppendShellExport(content: string, envName: string, value: str
 }
 
 function areStringRecordsEqual(a: Record<string, string> | undefined, b: Record<string, string> | undefined): boolean {
-  const keys = new Set([
-    ...Object.keys(a ?? {}),
-    ...Object.keys(b ?? {}),
-  ])
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])
   for (const key of keys) {
     if ((a?.[key] ?? '') !== (b?.[key] ?? '')) return false
   }
   return true
 }
 
-function areModelProvidersEqual(
-  a: CodexConfig['modelProviders'],
-  b: CodexConfig['modelProviders'],
-): boolean {
-  const keys = new Set([
-    ...Object.keys(a),
-    ...Object.keys(b),
-  ])
+function areModelProvidersEqual(a: CodexConfig['modelProviders'], b: CodexConfig['modelProviders']): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
   for (const key of keys) {
     const left = a[key]
     const right = b[key]
     if (!left || !right) return false
     if (left.name !== right.name) return false
+    if (left.model !== right.model) return false
     if (left.baseUrl !== right.baseUrl) return false
     if (left.wireApi !== right.wireApi) return false
     if (left.requiresOpenaiAuth !== right.requiresOpenaiAuth) return false
@@ -149,39 +126,23 @@ function areModelProvidersEqual(
 }
 
 function areCodexConfigsEqual(a: CodexConfig, b: CodexConfig): boolean {
-  return a.modelProvider === b.modelProvider
-    && a.model === b.model
-    && a.modelReasoningEffort === b.modelReasoningEffort
-    && a.preferredAuthMethod === b.preferredAuthMethod
-    && a.approvalsReviewer === b.approvalsReviewer
-    && areModelProvidersEqual(a.modelProviders, b.modelProviders)
+  return a.modelProvider === b.modelProvider && a.model === b.model && a.modelReasoningEffort === b.modelReasoningEffort && a.preferredAuthMethod === b.preferredAuthMethod && a.approvalsReviewer === b.approvalsReviewer && areModelProvidersEqual(a.modelProviders, b.modelProviders)
 }
 
 function areScopesEqual(a: CodexEnvironmentScope, b: CodexEnvironmentScope): boolean {
-  return a.target === b.target
-    && a.hostPlatform === b.hostPlatform
-    && a.runtimeMode === b.runtimeMode
-    && a.homePath === b.homePath
-    && a.configPath === b.configPath
-    && a.envStorage === b.envStorage
-    && a.envStoragePath === b.envStoragePath
+  return a.target === b.target && a.hostPlatform === b.hostPlatform && a.runtimeMode === b.runtimeMode && a.homePath === b.homePath && a.configPath === b.configPath && a.envStorage === b.envStorage && a.envStoragePath === b.envStoragePath
 }
 
 function areCodexSettingsSnapshotsEqual(a: CodexSettingsSnapshot | undefined, b: CodexSettingsSnapshot): boolean {
   if (!a) return false
-  return a.configExists === b.configExists
-    && areScopesEqual(a.scope, b.scope)
-    && areCodexConfigsEqual(a.config, b.config)
-    && areStringRecordsEqual(a.providerApiKeys, b.providerApiKeys)
+  return a.configExists === b.configExists && areScopesEqual(a.scope, b.scope) && areCodexConfigsEqual(a.config, b.config) && areStringRecordsEqual(a.providerApiKeys, b.providerApiKeys)
 }
 
-function normalizeProviderConfig(
-  providerKey: string,
-  value: Partial<CodexModelProviderConfig> | undefined,
-): CodexModelProviderConfig {
+function normalizeProviderConfig(providerKey: string, value: Partial<CodexModelProviderConfig> | undefined, modelFallback: string): CodexModelProviderConfig {
   const defaults = DEFAULT_CODEX_CONFIG.modelProviders[providerKey]
   const fallback = defaults ?? {
     name: providerKey,
+    model: modelFallback,
     baseUrl: '',
     wireApi: 'responses',
     requiresOpenaiAuth: true,
@@ -190,6 +151,7 @@ function normalizeProviderConfig(
 
   return {
     name: normalizeString(value?.name, fallback.name),
+    model: normalizeString(value?.model, fallback.model || modelFallback),
     baseUrl: normalizeString(value?.baseUrl, fallback.baseUrl),
     wireApi: normalizeString(value?.wireApi, fallback.wireApi),
     requiresOpenaiAuth: normalizeBoolean(value?.requiresOpenaiAuth, fallback.requiresOpenaiAuth),
@@ -200,41 +162,33 @@ function normalizeProviderConfig(
 export function defaultCodexConfig(): CodexConfig {
   return {
     ...DEFAULT_CODEX_CONFIG,
-    modelProviders: Object.fromEntries(
-      Object.entries(DEFAULT_CODEX_CONFIG.modelProviders).map(([key, value]) => [
-        key,
-        { ...value },
-      ]),
-    ),
+    modelProviders: Object.fromEntries(Object.entries(DEFAULT_CODEX_CONFIG.modelProviders).map(([key, value]) => [key, { ...value }])),
   }
 }
 
 export function normalizeCodexConfig(input: Partial<CodexConfig> | Record<string, unknown>): CodexConfig {
   const defaults = defaultCodexConfig()
-  const rawProviders = input.modelProviders && typeof input.modelProviders === 'object'
-    ? input.modelProviders as Record<string, Partial<CodexModelProviderConfig>>
-    : {}
+  const modelFallback = normalizeString(input.model, defaults.model)
+  const rawProviders = input.modelProviders && typeof input.modelProviders === 'object' ? (input.modelProviders as Record<string, Partial<CodexModelProviderConfig>>) : {}
 
   const normalizedProviders = Object.fromEntries(
     Object.entries(rawProviders)
       .map(([rawKey, rawProvider]) => {
         const key = normalizeProviderKey(rawKey)
         if (!key) return null
-        return [key, normalizeProviderConfig(key, rawProvider)] as const
+        return [key, normalizeProviderConfig(key, rawProvider, modelFallback)] as const
       })
       .filter((entry): entry is readonly [string, CodexModelProviderConfig] => Boolean(entry)),
   )
 
-  const modelProviders = Object.keys(normalizedProviders).length > 0
-    ? normalizedProviders
-    : defaults.modelProviders
+  const modelProviders = Object.keys(normalizedProviders).length > 0 ? normalizedProviders : defaults.modelProviders
 
   const modelProvider = normalizeString(input.modelProvider, defaults.modelProvider)
   const resolvedModelProvider = modelProviders[modelProvider] ? modelProvider : Object.keys(modelProviders)[0]!
 
   return {
     modelProvider: resolvedModelProvider,
-    model: normalizeString(input.model, defaults.model),
+    model: normalizeString(normalizedProviders[resolvedModelProvider]?.model, modelFallback),
     modelReasoningEffort: normalizeString(input.modelReasoningEffort, defaults.modelReasoningEffort),
     preferredAuthMethod: normalizeString(input.preferredAuthMethod, defaults.preferredAuthMethod),
     approvalsReviewer: normalizeString(input.approvalsReviewer, defaults.approvalsReviewer),
@@ -287,9 +241,7 @@ export async function resolveCodexEnvironmentScope(capability: Capability | null
     homePath,
     configPath: join(homePath, '.codex', 'config.toml'),
     envStorage: process.platform === 'win32' ? 'windows-user-env' : 'bashrc',
-    envStoragePath: process.platform === 'win32'
-      ? 'HKCU\\Environment'
-      : join(homePath, '.bashrc'),
+    envStoragePath: process.platform === 'win32' ? 'HKCU\\Environment' : join(homePath, '.bashrc'),
   }
 }
 
@@ -311,10 +263,7 @@ async function ensureBackupFile(scope: CodexEnvironmentScope, targetPath: string
   if (scope.target === 'wsl') {
     const escapedTarget = shellSingleQuote(targetPath)
     const escapedBackup = shellSingleQuote(backupPath)
-    await wslBridge.exec(
-      `[ -f '${escapedTarget}' ] && [ ! -f '${escapedBackup}' ] && cp '${escapedTarget}' '${escapedBackup}' || true`,
-      15000,
-    )
+    await wslBridge.exec(`[ -f '${escapedTarget}' ] && [ ! -f '${escapedBackup}' ] && cp '${escapedTarget}' '${escapedBackup}' || true`, 15000)
     return
   }
 
@@ -335,10 +284,7 @@ async function writeTextFile(scope: CodexEnvironmentScope, targetPath: string, c
     const escapedTempFile = shellSingleQuote(tempPath)
     const payloadBase64 = Buffer.from(content, 'utf-8').toString('base64')
     await ensureBackupFile(scope, targetPath)
-    await wslBridge.exec(
-      `mkdir -p '${escapedDir}' && printf '%s' '${payloadBase64}' | base64 -d > '${escapedTempFile}' && mv '${escapedTempFile}' '${escapedFile}'`,
-      15000,
-    )
+    await wslBridge.exec(`mkdir -p '${escapedDir}' && printf '%s' '${payloadBase64}' | base64 -d > '${escapedTempFile}' && mv '${escapedTempFile}' '${escapedFile}'`, 15000)
     return
   }
 
@@ -371,10 +317,7 @@ function parseTomlValue(rawValue: string): string | boolean {
   if (trimmed === 'true') return true
   if (trimmed === 'false') return false
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed
-      .slice(1, -1)
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
+    return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
   }
   return trimmed
 }
@@ -412,6 +355,7 @@ function parseCodexToml(content: string): CodexConfig {
     if (currentProviderKey) {
       const target = providers[currentProviderKey] ?? {}
       if (rawKey === 'name') target.name = String(rawValue)
+      if (rawKey === 'model') target.model = String(rawValue)
       if (rawKey === 'base_url') target.baseUrl = String(rawValue)
       if (rawKey === 'wire_api') target.wireApi = String(rawValue)
       if (rawKey === 'requires_openai_auth') target.requiresOpenaiAuth = Boolean(rawValue)
@@ -448,6 +392,7 @@ function buildCodexManagedToml(config: CodexConfig): string {
   for (const [providerKey, provider] of Object.entries(config.modelProviders)) {
     lines.push(`[model_providers.${providerKey}]`)
     lines.push(`name = ${tomlBasicString(provider.name)}`)
+    lines.push(`model = ${tomlBasicString(provider.model)}`)
     lines.push(`base_url = ${tomlBasicString(provider.baseUrl)}`)
     lines.push(`wire_api = ${tomlBasicString(provider.wireApi)}`)
     lines.push(`requires_openai_auth = ${provider.requiresOpenaiAuth ? 'true' : 'false'}`)
@@ -480,9 +425,7 @@ function mergeCodexToml(existingContent: string, config: CodexConfig): string {
 
     if (skipProviderBlock) continue
 
-    const rootKeyMatch = currentTableName === null
-      ? trimmed.match(/^([A-Za-z0-9_]+)\s*=/)
-      : null
+    const rootKeyMatch = currentTableName === null ? trimmed.match(/^([A-Za-z0-9_]+)\s*=/) : null
     if (rootKeyMatch && ALL_SUPPORTED_ROOT_KEYS.has(rootKeyMatch[1] ?? '')) {
       continue
     }
@@ -515,10 +458,7 @@ async function readOpenAiApiKey(scope: CodexEnvironmentScope): Promise<string> {
   }
 }
 
-function normalizeProviderApiKeys(
-  providerApiKeys: Record<string, string> | undefined,
-  modelProviders: CodexConfig['modelProviders'],
-): Record<string, string> {
+function normalizeProviderApiKeys(providerApiKeys: Record<string, string> | undefined, modelProviders: CodexConfig['modelProviders']): Record<string, string> {
   const keys = Object.keys(modelProviders)
   const normalized: Record<string, string> = {}
 
@@ -533,16 +473,10 @@ async function persistCodexSettingsSnapshot(snapshot: CodexSettingsSnapshot): Pr
   try {
     const currentConfig = loadConfig()
     const scopeKey = getCodexScopeCacheKey(snapshot.scope)
-    const currentProviderApiKeys = normalizeProviderApiKeys(
-      currentConfig.codexProviderApiKeys?.[scopeKey],
-      snapshot.config.modelProviders,
-    )
+    const currentProviderApiKeys = normalizeProviderApiKeys(currentConfig.codexProviderApiKeys?.[scopeKey], snapshot.config.modelProviders)
     const currentSnapshot = currentConfig.codexSettingsSnapshots?.[scopeKey]
 
-    if (
-      areStringRecordsEqual(currentProviderApiKeys, snapshot.providerApiKeys)
-      && areCodexSettingsSnapshotsEqual(currentSnapshot, snapshot)
-    ) {
+    if (areStringRecordsEqual(currentProviderApiKeys, snapshot.providerApiKeys) && areCodexSettingsSnapshotsEqual(currentSnapshot, snapshot)) {
       return
     }
 
@@ -594,9 +528,7 @@ async function writeOpenAiApiKey(scope: CodexEnvironmentScope, value: string): P
 export async function readCodexSettings(capability: Capability | null): Promise<CodexSettingsSnapshot> {
   const scope = await resolveCodexEnvironmentScope(capability)
   const configExists = await pathExists(scope, scope.configPath)
-  const rawConfig = configExists
-    ? await readTextFile(scope, scope.configPath).catch(() => '')
-    : ''
+  const rawConfig = configExists ? await readTextFile(scope, scope.configPath).catch(() => '') : ''
   const config = rawConfig.trim() ? parseCodexToml(rawConfig) : defaultCodexConfig()
   const scopeKey = getCodexScopeCacheKey(scope)
   const storedProviderApiKeysByScope = loadConfig().codexProviderApiKeys ?? {}
@@ -617,10 +549,7 @@ export async function readCodexSettings(capability: Capability | null): Promise<
   return snapshot
 }
 
-export async function writeCodexSettings(
-  capability: Capability | null,
-  input: CodexSettingsInput,
-): Promise<CodexSettingsSnapshot> {
+export async function writeCodexSettings(capability: Capability | null, input: CodexSettingsInput): Promise<CodexSettingsSnapshot> {
   const scope = await resolveCodexEnvironmentScope(capability)
   const normalizedConfig = normalizeCodexConfig(input.config)
   const normalizedProviderApiKeys = normalizeProviderApiKeys(input.providerApiKeys, normalizedConfig.modelProviders)
@@ -629,9 +558,7 @@ export async function writeCodexSettings(
   const shouldWriteConfig = !existingConfig || !areCodexConfigsEqual(existingConfig, normalizedConfig)
 
   if (shouldWriteConfig) {
-    const nextToml = existingContent.trim()
-      ? mergeCodexToml(existingContent, normalizedConfig)
-      : buildCodexManagedToml(normalizedConfig)
+    const nextToml = existingContent.trim() ? mergeCodexToml(existingContent, normalizedConfig) : buildCodexManagedToml(normalizedConfig)
     if (nextToml !== existingContent) {
       await writeTextFile(scope, scope.configPath, nextToml)
     }

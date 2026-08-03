@@ -37,3 +37,11 @@ logs/
 
 docs/*
 !docs/README.md
+!docs/images/
+!docs/images/*
+!docs/guides/
+!docs/guides/**
+!docs/reference/
+!docs/reference/**
+!docs/release/
+!docs/release/**

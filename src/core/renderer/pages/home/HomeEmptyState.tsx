@@ -1,14 +1,15 @@
-import { BookOpenText, FolderPlus, Plus, Settings, Zap } from 'lucide-react'
+import { BookOpenText, FileType2, FolderPlus, Plus, Settings, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
 
 type HomeEmptyStateProps = {
   onAddFolder: () => void
+  onOpenMarkdown: () => void
   onOpenLearningCenter: () => void
   onOpenSettings: () => void
 }
 
-function HomeEmptyState({ onAddFolder, onOpenLearningCenter, onOpenSettings }: HomeEmptyStateProps) {
+function HomeEmptyState({ onAddFolder, onOpenMarkdown, onOpenLearningCenter, onOpenSettings }: HomeEmptyStateProps) {
   const { t } = useI18n()
 
   return (
@@ -42,10 +43,16 @@ function HomeEmptyState({ onAddFolder, onOpenLearningCenter, onOpenSettings }: H
             <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)] mb-3">{t('home.emptyTitle')}</h1>
             <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('home.emptyDescription')}</p>
           </div>
-          <Button onClick={onAddFolder} className="gap-2 rounded-full h-11 px-6 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
-            <Plus className="w-4 h-4" strokeWidth={1.8} />
-            {t('common.addProjectFolder')}
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={onAddFolder} className="gap-2 rounded-full h-11 px-6 bg-primary hover:bg-primary-hover text-white shadow-sm" size="lg">
+              <Plus className="w-4 h-4" strokeWidth={1.8} />
+              {t('common.addProjectFolder')}
+            </Button>
+            <Button onClick={onOpenMarkdown} variant="outline" className="gap-2 rounded-full h-11 px-5" size="lg">
+              <FileType2 className="w-4 h-4" strokeWidth={1.8} />
+              {t('markdownDocument.open')}
+            </Button>
+          </div>
           <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('home.supportedStacks')}</p>
         </div>
       </div>
