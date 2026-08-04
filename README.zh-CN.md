@@ -28,13 +28,61 @@ Workbench 以“项目”为开发上下文，把代码、终端、Git、AI 会�
 - 📸 **浏览器截图** — 捕获长网页、处理固定元素，并在独立窗口中预览或保存截图。
 - 🪟 **Windows 和 WSL 支持** — 在 Runtime 模型中明确区分 Windows Native 和 WSL 项目执行路径。
 
-## 截图
+## ✨ 功能展示
 
-![Workbench 首页](./docs/images/overview.png)
+### AI 工作台
 
-![代码工作区域](./docs/images/code-workspace.png)
+Workbench 提供统一的 AI 工作台，可集中管理常用的 AI 工具、开发项目和工作环境。无需频繁切换不同应用，即可快速进入开发状态，为 AI 编程打造更加流畅、高效的工作流。
 
-![Markdown 工作区](./docs/images/markdown-workspace.png)
+![Workbench 首页](./docs/images/workbench-home.png)
+
+### 一键启动项目
+
+Workbench 能够自动识别项目根目录中的启动脚本，并提供一键启动能力。所有开发服务均由 Workbench 统一管理，同时支持多个项目并行管理，减少终端窗口对任务栏和桌面的占用。
+
+![项目运行](./docs/images/project-runner.png)
+
+### 集成开发工作区
+
+Workbench 提供轻量级集成开发工作区，将项目浏览、文件管理、代码编辑、终端以及 Markdown 阅读整合到同一界面，减少开发过程中在 IDE、资源管理器、终端和文档工具之间的切换。
+
+![集成开发工作区](./docs/images/workspace.png)
+
+### Git 助手
+
+内置 Git 助手，帮助开发者快速完成日常版本管理工作，支持标准化 Commit 信息生成和快速提交代码，减少重复命令输入，使 Git 操作更加高效、规范。
+
+![Git 助手](./docs/images/git-assistant.png)
+
+### Markdown 阅读器
+
+安装 Workbench 后，可直接关联并打开 Markdown 文件。内置高质量 Markdown 渲染引擎，支持快速浏览 README、项目文档、接口文档及开发笔记。
+
+![Markdown 阅读器](./docs/images/markdown-viewer.png)
+
+### 浏览器集成
+
+完成浏览器配置后，可通过 **Ctrl + Shift + S** 快速启动浏览器。浏览器实例由 Workbench 统一管理，为开发页面、截图、自动化测试及页面调试提供统一入口。
+
+![浏览器集成](./docs/images/browser-integration.png)
+
+### 浏览器截图
+
+Workbench 内置浏览器截图能力，支持整页长截图以及指定元素截图。截图完成后既可以直接在 Workbench 内查看，也可以调用系统默认图片查看器打开，方便开发、测试、文档编写及 Bug 反馈。
+
+![浏览器截图](./docs/images/browser-screenshot.png)
+
+### AI 网关与协议转换
+
+Workbench 内置本地 AI 网关，可统一管理模型访问配置，并支持不同 AI 服务之间的协议转换。通过协议适配，可将不同模型接口统一为一致的调用方式，方便在 Claude Code、Codex 等 AI 编程工具之间切换。
+
+![AI 网关](./docs/images/ai-gateway.png)
+
+### AI 消息通知
+
+Workbench 支持接收 Claude Code、Codex 等 AI 编程工具的运行消息。通过简单配置，可将通知实时推送至手机飞书应用，在任务完成、需要用户确认或发生异常时第一时间收到提醒。
+
+![AI 消息通知](./docs/images/ai-notifications.png)
 
 ## 架构
 

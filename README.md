@@ -28,13 +28,61 @@ Because the project currently has access to a Windows development environment on
 - 📸 **Browser screenshots** — Capture long web pages, handle fixed elements, and inspect or save screenshots in a dedicated window.
 - 🪟 **Windows and WSL support** — Keep Windows-native and WSL project execution paths explicit in the runtime model.
 
-## Screenshots
+## Feature Showcase
 
-![Workbench home](./docs/images/overview.png)
+### AI Workbench
 
-![Code workspace](./docs/images/code-workspace.png)
+Workbench provides a unified AI workbench for managing frequently used AI tools, development projects, and working environments. It helps developers enter a productive state quickly without switching between multiple applications.
 
-![Markdown workspace](./docs/images/markdown-workspace.png)
+![Workbench home](./docs/images/workbench-home.png)
+
+### One-click Project Startup
+
+Workbench detects startup scripts in project roots and provides one-click project startup. Development services are managed in one place, while multiple projects can be managed at the same time without filling the desktop with terminal windows.
+
+![Project runner](./docs/images/project-runner.png)
+
+### Integrated Development Workspace
+
+Workbench combines project browsing, file management, code editing, terminals, and Markdown reading in a lightweight integrated workspace. This reduces the need to switch between an IDE, file explorer, terminal, and documentation tools.
+
+![Integrated workspace](./docs/images/workspace.png)
+
+### Git Assistant
+
+The built-in Git assistant helps developers generate standardized commit messages and complete common Git operations quickly, reducing repetitive command input for both personal development and team collaboration.
+
+![Git assistant](./docs/images/git-assistant.png)
+
+### Markdown Viewer
+
+Workbench can be associated with Markdown files and provides high-quality rendering for README files, project documentation, API documentation, and development notes.
+
+![Markdown viewer](./docs/images/markdown-viewer.png)
+
+### Browser Integration
+
+After browser configuration, press **Ctrl + Shift + S** to launch a browser quickly. Browser instances are managed by Workbench, providing a consistent entry point for development pages, screenshots, automated testing, and page debugging.
+
+![Browser integration](./docs/images/browser-integration.png)
+
+### Browser Screenshots
+
+Workbench supports full-page screenshots and screenshots of selected elements. Captured images can be viewed inside Workbench or opened with the system image viewer for development, testing, documentation, and bug reporting.
+
+![Browser screenshot](./docs/images/browser-screenshot.png)
+
+### AI Gateway and Protocol Conversion
+
+Workbench includes a local AI Gateway for managing model access configuration and converting between AI service protocols. This provides a consistent calling method across services such as Claude Code and Codex, reducing integration costs and making AI workflows more flexible.
+
+![AI Gateway](./docs/images/ai-gateway.png)
+
+### AI Notifications
+
+Workbench can receive runtime messages from AI coding tools such as Claude Code and Codex. Notifications can be pushed to Feishu on mobile when a task completes, requires confirmation, or encounters an exception, so developers do not need to wait at their computers.
+
+![AI notifications](./docs/images/ai-notifications.png)
 
 ## Architecture
 
