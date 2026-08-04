@@ -1,6 +1,6 @@
 import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Check, Copy, Maximize2 } from 'lucide-react'
+import { Check, Copy, Maximize2, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -11,6 +11,8 @@ import { MermaidBlock } from './code.markdownMermaid'
 import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps, shouldIgnoreStructuredBlockActivation } from './code.markdownStructuredBlocks'
 import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
+import { ModalShell } from '../../components/ModalShell'
+import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useMarkdownNearViewport } from './code.markdownVisibility'
 
 export type {
@@ -342,8 +344,10 @@ function shouldOpenInSystemBrowser(href: string): boolean {
 }
 
 function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; alt: string; props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'> }) {
+  const { t } = useI18n()
   const [imageRef, isNearViewport] = useMarkdownNearViewport<HTMLElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
   const [displaySrc, setDisplaySrc] = useState(() => (resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://') ? resolvedSrc : ''))
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -393,7 +397,53 @@ function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; 
     )
   }
 
-  return <img ref={imageRef} {...props} src={displaySrc} alt={alt} loading="lazy" />
+  const openPreview = () => {
+    setIsPreviewOpen(true)
+  }
+
+  return (
+    <>
+      <img
+        ref={imageRef}
+        {...props}
+        src={displaySrc}
+        alt={alt}
+        loading="lazy"
+        className={[props.className, 'code-markdown-previewable-image'].filter(Boolean).join(' ')}
+        role="button"
+        tabIndex={0}
+        title={t('codeMarkdown.imageExpand')}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          openPreview()
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          event.stopPropagation()
+          openPreview()
+        }}
+      />
+      <ModalShell open={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} widthClassName="max-w-[min(1440px,calc(100vw-32px))]" baseZIndex={1240} ariaLabel={t('codeMarkdown.imagePreviewAria')} overlayClassName="backdrop-blur-0 bg-black/35" panelClassName="code-markdown-image-preview-modal p-4 sm:p-5">
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="mb-3 flex min-w-0 items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-[color:var(--color-foreground)]">{alt || t('codeMarkdown.imagePreviewTitle')}</p>
+            </div>
+            <button type="button" className="quiet-control flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)]" onClick={() => setIsPreviewOpen(false)} title={t('common.close')}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <ZoomPanViewport fitContentOnReset resetKey={displaySrc}>
+            <div className="code-markdown-image-preview-canvas">
+              <img src={displaySrc} alt={alt} draggable={false} />
+            </div>
+          </ZoomPanViewport>
+        </div>
+      </ModalShell>
+    </>
+  )
 }
 
 type MarkdownCodeBlockProps = {

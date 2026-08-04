@@ -3,6 +3,7 @@ import { type MutableRefObject, type ReactNode, type Ref, useEffect, useRef } fr
 type ZoomPanViewportProps = {
   captureTargetRef?: Ref<HTMLDivElement>
   children: ReactNode
+  fitContentOnReset?: boolean
   resetKey: string
 }
 
@@ -11,7 +12,7 @@ function applyCanvasTransform(canvas: HTMLDivElement | null, zoom: number, offse
   canvas.style.transform = `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})`
 }
 
-export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPanViewportProps) {
+export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset = false, resetKey }: ZoomPanViewportProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const zoomRef = useRef(1)
@@ -30,11 +31,43 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
 
   useEffect(() => {
     void resetKey
-    zoomRef.current = 1
-    offsetRef.current = { x: 0, y: 0 }
     didDragRef.current = false
-    applyCanvasTransform(canvasRef.current, 1, offsetRef.current)
-  }, [resetKey])
+
+    const viewport = viewportRef.current
+    const canvas = canvasRef.current
+    if (!fitContentOnReset || !viewport || !canvas) {
+      zoomRef.current = 1
+      offsetRef.current = { x: 0, y: 0 }
+      applyCanvasTransform(canvas, 1, offsetRef.current)
+      return
+    }
+
+    const fitContent = () => {
+      const viewportWidth = viewport.clientWidth
+      const viewportHeight = viewport.clientHeight
+      const contentWidth = canvas.scrollWidth
+      const contentHeight = canvas.scrollHeight
+      if (viewportWidth <= 0 || viewportHeight <= 0 || contentWidth <= 0 || contentHeight <= 0) return
+
+      const nextZoom = Math.min(1, viewportWidth / contentWidth, viewportHeight / contentHeight)
+      zoomRef.current = nextZoom
+      offsetRef.current = {
+        x: (viewportWidth - contentWidth * nextZoom) / 2,
+        y: (viewportHeight - contentHeight * nextZoom) / 2,
+      }
+      applyCanvasTransform(canvas, nextZoom, offsetRef.current)
+    }
+
+    const animationFrame = window.requestAnimationFrame(fitContent)
+    const resizeObserver = new ResizeObserver(fitContent)
+    resizeObserver.observe(viewport)
+    resizeObserver.observe(canvas)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      resizeObserver.disconnect()
+    }
+  }, [fitContentOnReset, resetKey])
 
   useEffect(() => {
     const viewport = viewportRef.current

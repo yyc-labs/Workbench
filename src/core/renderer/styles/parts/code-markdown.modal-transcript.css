@@ -15,6 +15,39 @@
   height: auto;
 }
 
+.code-markdown-content .code-markdown-previewable-image {
+  cursor: zoom-in;
+}
+
+.code-markdown-content .code-markdown-previewable-image:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--color-ring);
+  outline-offset: 3px;
+}
+
+.code-markdown-image-preview-modal {
+  width: min(1440px, calc(100vw - 32px));
+  height: min(92vh, 1080px);
+}
+
+.code-markdown-image-preview-canvas {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.code-markdown-image-preview-canvas img {
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  user-select: none;
+}
+
 .transcript-preview-zoom-viewport {
   cursor: grab;
   overscroll-behavior: contain;
@@ -27,10 +60,10 @@
 
 .transcript-preview-zoom-canvas {
   display: grid;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
+  width: max-content;
+  height: max-content;
+  min-width: 100%;
+  min-height: 100%;
   place-items: center;
   transform-origin: 0 0;
   will-change: transform;
@@ -39,7 +72,8 @@
 
 .transcript-preview-zoom-capture {
   display: flex;
-  width: 100%;
+  width: max-content;
+  height: max-content;
   min-width: 100%;
   min-height: 100%;
   box-sizing: border-box;
@@ -90,6 +124,27 @@
   font-size: 15px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.transcript-structured-preview-modal .code-markdown-table-scroll,
+.transcript-structured-preview-modal .code-markdown-content--modal table {
+  overflow: visible;
+  scrollbar-width: none;
+}
+
+.transcript-structured-preview-modal .code-markdown-table-scroll::-webkit-scrollbar,
+.transcript-structured-preview-modal .code-markdown-content--modal table::-webkit-scrollbar {
+  display: none;
+}
+
+.transcript-structured-preview-modal .transcript-preview-zoom-viewport,
+.transcript-structured-preview-modal .transcript-preview-zoom-viewport * {
+  scrollbar-width: none;
+}
+
+.transcript-structured-preview-modal .transcript-preview-zoom-viewport::-webkit-scrollbar,
+.transcript-structured-preview-modal .transcript-preview-zoom-viewport *::-webkit-scrollbar {
+  display: none;
 }
 
 .code-markdown-content--modal th,
@@ -283,6 +338,15 @@
 .transcript-structured-preview-modal .transcript-markdown-content.code-markdown-content--modal {
   min-width: 0;
   width: auto;
+}
+
+.transcript-structured-preview-modal .code-markdown-content.code-markdown-content--modal.transcript-markdown-content {
+  overflow: visible;
+  scrollbar-width: none;
+}
+
+.transcript-structured-preview-modal .code-markdown-content.code-markdown-content--modal.transcript-markdown-content::-webkit-scrollbar {
+  display: none;
 }
 
 .transcript-structured-preview-modal .transcript-preview-zoom-capture .transcript-markdown-content.code-markdown-content--modal {
