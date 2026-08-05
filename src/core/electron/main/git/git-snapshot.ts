@@ -1,17 +1,6 @@
-import {
-  DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-  normalizeGitOperationOutput,
-  type GitCommandRunner,
-} from './git-command'
+import { DEFAULT_GIT_OUTPUT_LIMIT_BYTES, normalizeGitOperationOutput, type GitCommandRunner } from './git-command'
 import { promises as fs } from 'node:fs'
-import type {
-  GitBranchInfo,
-  GitChangedFile,
-  GitChangeKind,
-  GitChangeScope,
-  GitHistoryCommitInfo,
-  GitRepositorySnapshot,
-} from '../../../shared/types'
+import type { GitBranchInfo, GitChangedFile, GitChangeKind, GitChangeScope, GitHistoryCommitInfo, GitRepositorySnapshot } from '../../../shared/types'
 
 const GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES = 256 * 1024
 const MAX_GIT_BRANCH_LIST_ITEMS = 500
@@ -73,16 +62,11 @@ function classifyGitChangeScope(indexStatus: string, worktreeStatus: string): Gi
   return 'unstaged'
 }
 
-function createGitChangedFile(
-  pathValue: string,
-  indexStatus: string,
-  worktreeStatus: string,
-  originalPath?: string
-): GitChangedFile | null {
+function createGitChangedFile(pathValue: string, indexStatus: string, worktreeStatus: string, originalPath?: string): GitChangedFile | null {
   const path = pathValue.trim()
   if (!path) return null
   const staged = indexStatus !== '.' && indexStatus !== '?'
-  const unstaged = worktreeStatus !== '.' && worktreeStatus !== '?' || indexStatus === '?' || worktreeStatus === '?'
+  const unstaged = (worktreeStatus !== '.' && worktreeStatus !== '?') || indexStatus === '?' || worktreeStatus === '?'
   return {
     path,
     originalPath: originalPath?.trim() || undefined,
@@ -141,12 +125,7 @@ function parseGitStatus(raw: string): { branch: GitBranchInfo; changedFiles: Git
 
     if (record.startsWith('2 ')) {
       const xy = gitStatusToken(record, 1)
-      const file = createGitChangedFile(
-        remainderAfterTokens(record, 9),
-        xy[0] || '.',
-        xy[1] || '.',
-        records[index + 1]
-      )
+      const file = createGitChangedFile(remainderAfterTokens(record, 9), xy[0] || '.', xy[1] || '.', records[index + 1])
       if (file) changedFiles.push(file)
       index += 1
       continue
@@ -165,49 +144,39 @@ function parseGitStatus(raw: string): { branch: GitBranchInfo; changedFiles: Git
 export function createGitSnapshotReader(runner: GitCommandRunner) {
   const { runGitCommand, listGitLines } = runner
 
-  async function readGitCommitFilesChangedMap(cwd: string, limit: number): Promise<Map<string, number>> {
-    const result = await runGitCommand(cwd, [
-      'log',
-      `-${limit}`,
-      '--pretty=format:%H',
-      '--numstat',
-    ], {
+  async function readGitCommitFilesChangedMap(cwd: string, limit: number): Promise<Map<string, string[]>> {
+    const result = await runGitCommand(cwd, ['log', `-${limit}`, '--pretty=format:%H%x00', '--name-only', '-z'], {
       stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
     if (result.code !== 0) return new Map()
 
-    const lines = result.stdout.replace(/\r/g, '').split('\n')
-    const countsByHash = new Map<string, number>()
+    const records = result.stdout.replace(/\r/g, '').split('\x00')
+    const filesByHash = new Map<string, string[]>()
     let currentHash = ''
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim()
-      if (!line) continue
+    for (const rawRecord of records) {
+      const record = rawRecord.trim()
+      if (!record) continue
 
-      if (/^[0-9a-f]{40}$/i.test(line)) {
-        currentHash = line.toLowerCase()
-        if (!countsByHash.has(currentHash)) {
-          countsByHash.set(currentHash, 0)
+      if (/^[0-9a-f]{40}$/i.test(record)) {
+        currentHash = record.toLowerCase()
+        if (!filesByHash.has(currentHash)) {
+          filesByHash.set(currentHash, [])
         }
         continue
       }
 
       if (!currentHash) continue
-      const fields = line.split('\t')
-      if (fields.length < 3) continue
-      countsByHash.set(currentHash, (countsByHash.get(currentHash) ?? 0) + 1)
+      const files = filesByHash.get(currentHash)
+      if (files && !files.includes(record)) files.push(record)
     }
 
-    return countsByHash
+    return filesByHash
   }
 
   async function readGitCommitHistory(cwd: string, limit: number): Promise<GitHistoryCommitInfo[]> {
-    const result = await runGitCommand(cwd, [
-      'log',
-      `-${limit}`,
-      '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e',
-    ], {
+    const result = await runGitCommand(cwd, ['log', `-${limit}`, '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e'], {
       stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
     })
@@ -248,12 +217,15 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
         refs,
         bullets,
         filesChanged: 0,
+        changedFiles: [],
       })
     }
 
     const filesChangedByHash = await readGitCommitFilesChangedMap(cwd, limit)
     for (const commit of commits) {
-      commit.filesChanged = filesChangedByHash.get(commit.hash.toLowerCase()) ?? 0
+      const changedFiles = filesChangedByHash.get(commit.hash.toLowerCase()) ?? []
+      commit.changedFiles = changedFiles
+      commit.filesChanged = changedFiles.length
     }
 
     return commits
@@ -310,9 +282,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     }
 
     const repositoryResult = await runner.runGitCommand(checkedRepoRoot, ['rev-parse', '--show-toplevel'])
-    const repositoryRoot = repositoryResult.code === 0
-      ? repositoryResult.stdout.replace(/\r/g, '').trim()
-      : ''
+    const repositoryRoot = repositoryResult.code === 0 ? repositoryResult.stdout.replace(/\r/g, '').trim() : ''
     const effectiveRepoRoot = repositoryRoot || checkedRepoRoot
     const repository = repositoryRoot
       ? {
@@ -368,9 +338,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
     const remoteBranchSet = new Set(filteredRemoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
-    const upstreamOid = parsed.branch.upstream && !upstreamGone
-      ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream)
-      : undefined
+    const upstreamOid = parsed.branch.upstream && !upstreamGone ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream) : undefined
     const branch = {
       ...parsed.branch,
       upstreamGone,

@@ -1,11 +1,13 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
-import { Copy } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Copy, FileCode2 } from 'lucide-react'
 import { formatCommitDate } from './detail.aiFlow'
 import { translateCurrent } from '../../i18n'
 import type { DetailGitSnapshot } from './detail.types'
 
 type GitHistoryCommit = DetailGitSnapshot['recentCommits'][number]
 type CopyStatus = 'idle' | 'success' | 'error'
+type ChangedFilesMenuState = { x: number; y: number } | null
 
 export type CommitHistoryDisplayItem = GitHistoryCommit & {
   withinRecentBatch: boolean
@@ -16,9 +18,7 @@ export type CommitHistoryDisplayItem = GitHistoryCommit & {
 
 export function formatFilesChangedLabel(count: number): string {
   if (!Number.isFinite(count) || count <= 0) return translateCurrent('detail.commitHistoryFilesChanged', { count: 0 })
-  return count === 1
-    ? translateCurrent('detail.commitHistoryFilesChanged', { count })
-    : translateCurrent('detail.commitHistoryFilesChangedPlural', { count })
+  return count === 1 ? translateCurrent('detail.commitHistoryFilesChanged', { count }) : translateCurrent('detail.commitHistoryFilesChangedPlural', { count })
 }
 
 export function buildCommitHistoryDisplayItems(
@@ -30,7 +30,7 @@ export function buildCommitHistoryDisplayItems(
     upstreamGone: boolean
     branchAhead: number
     branchBehind: number
-  }
+  },
 ): CommitHistoryDisplayItem[] {
   const COMMIT_BATCH_WINDOW_MS = 15_000
   const commitTimes = commits.map((commit) => new Date(commit.committedAt).getTime())
@@ -117,17 +117,10 @@ async function copyTextToClipboard(text: string): Promise<boolean> {
   return copied
 }
 
-export function CommitHistoryItem({
-  commit,
-  activeCommitHash,
-  setActiveCommitHash,
-}: {
-  commit: CommitHistoryDisplayItem
-  activeCommitHash: string | null
-  setActiveCommitHash: Dispatch<SetStateAction<string | null>>
-}) {
+export function CommitHistoryItem({ commit, activeCommitHash, setActiveCommitHash }: { commit: CommitHistoryDisplayItem; activeCommitHash: string | null; setActiveCommitHash: Dispatch<SetStateAction<string | null>> }) {
   const active = activeCommitHash === commit.hash
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle')
+  const [changedFilesMenu, setChangedFilesMenu] = useState<ChangedFilesMenuState>(null)
   const hashLabel = copyStatus === 'success' ? translateCurrent('detail.commitHistoryCopied') : copyStatus === 'error' ? translateCurrent('detail.commitHistoryCopyFailed') : commit.shortHash
   const showRelationBadge = commit.isLocalHead || commit.isUpstreamHead
 
@@ -140,6 +133,21 @@ export function CommitHistoryItem({
       window.clearTimeout(timer)
     }
   }, [copyStatus])
+
+  useEffect(() => {
+    if (!changedFilesMenu) return
+
+    const closeMenu = () => setChangedFilesMenu(null)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu()
+    }
+    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [changedFilesMenu])
 
   const handleCopyHash = async () => {
     const ok = await copyTextToClipboard(commit.hash)
@@ -155,15 +163,19 @@ export function CommitHistoryItem({
             ? 'border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)]/45 hover:border-[color:var(--color-warning)]/65 hover:bg-[color:var(--color-warning-background)]/60'
             : 'border-[color:var(--color-border)] bg-[color:var(--color-card)] hover:border-[color:var(--color-border-hover)] hover:bg-[color:var(--color-background)]/70'
       }`}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const width = 360
+        const height = Math.min(420, 112 + Math.max(commit.changedFiles.length, 1) * 30)
+        setChangedFilesMenu({
+          x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+          y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+        })
+      }}
     >
-      <button
-        type="button"
-        className="block w-full min-w-0 text-left"
-        onClick={() => setActiveCommitHash((prev) => (prev === commit.hash ? null : commit.hash))}
-      >
-        <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">
-          {commit.subject}
-        </p>
+      <button type="button" className="block w-full min-w-0 text-left" onClick={() => setActiveCommitHash((prev) => (prev === commit.hash ? null : commit.hash))}>
+        <p className="truncate text-[13px] font-semibold tracking-[-0.01em] text-[color:var(--color-foreground)]">{commit.subject}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
           <span
             className={`inline-flex cursor-pointer select-none items-center gap-1 rounded-full border px-2 py-0.5 font-mono transition-colors ${
@@ -184,29 +196,13 @@ export function CommitHistoryItem({
           </span>
           {showRelationBadge && (
             <>
-              {commit.isLocalHead && (
-                <span className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/12 px-2 py-0.5 text-[color:var(--color-primary)]">
-                  {translateCurrent('detail.commitHistoryLocalHead')}
-                </span>
-              )}
-              {commit.isUpstreamHead && (
-                <span className="rounded-full border border-[color:var(--color-success)]/45 bg-[color:var(--color-success-background)] px-2 py-0.5 text-[color:var(--color-success)]">
-                  {translateCurrent('detail.commitHistoryUpstream')}
-                </span>
-              )}
-              <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]/80">
-                {commit.relationLabel}
-              </span>
+              {commit.isLocalHead && <span className="rounded-full border border-[color:var(--color-primary)]/40 bg-[color:var(--color-primary)]/12 px-2 py-0.5 text-[color:var(--color-primary)]">{translateCurrent('detail.commitHistoryLocalHead')}</span>}
+              {commit.isUpstreamHead && <span className="rounded-full border border-[color:var(--color-success)]/45 bg-[color:var(--color-success-background)] px-2 py-0.5 text-[color:var(--color-success)]">{translateCurrent('detail.commitHistoryUpstream')}</span>}
+              <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[color:var(--color-foreground)]/80">{commit.relationLabel}</span>
             </>
           )}
-          <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5">
-            {formatFilesChangedLabel(commit.filesChanged)}
-          </span>
-          {commit.withinRecentBatch && (
-            <span className="rounded-full border border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">
-              {translateCurrent('detail.commitHistorySameBatch')}
-            </span>
-          )}
+          <span className="rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5">{formatFilesChangedLabel(commit.filesChanged)}</span>
+          {commit.withinRecentBatch && <span className="rounded-full border border-[color:var(--color-warning)]/45 bg-[color:var(--color-warning-background)] px-2 py-0.5 text-[color:var(--color-warning)]">{translateCurrent('detail.commitHistorySameBatch')}</span>}
           <span>{formatCommitDate(commit.committedAt)}</span>
         </div>
       </button>
@@ -229,6 +225,39 @@ export function CommitHistoryItem({
           )}
         </div>
       )}
+
+      {changedFilesMenu &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed z-[300] w-[360px] max-w-[calc(100vw-16px)] rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3 shadow-2xl"
+            style={{ left: changedFilesMenu.x, top: changedFilesMenu.y }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{translateCurrent('detail.commitHistoryChangedFilesTitle')}</p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-[color:var(--color-foreground)]">{commit.subject}</p>
+              </div>
+              <span className="shrink-0 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{formatFilesChangedLabel(commit.filesChanged)}</span>
+            </div>
+            {commit.changedFiles.length > 0 ? (
+              <div className="max-h-[290px] space-y-1 overflow-auto rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/65 p-1.5">
+                {commit.changedFiles.map((file) => (
+                  <div key={file} className="flex min-w-0 items-start gap-2 rounded-lg px-2 py-1.5 text-[11px] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]">
+                    <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                    <span className="min-w-0 break-all font-mono leading-4">{file}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-[10px] border border-dashed border-[color:var(--color-border)] px-3 py-4 text-center text-[11px] text-[color:var(--color-muted-foreground)]">{translateCurrent('detail.commitHistoryChangedFilesEmpty')}</p>
+            )}
+            <p className="mt-2 text-[10px] text-[color:var(--color-muted-foreground)]">{translateCurrent('detail.commitHistoryChangedFilesHint')}</p>
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

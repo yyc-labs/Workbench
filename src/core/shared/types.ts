@@ -1176,6 +1176,7 @@ export interface GitHistoryCommitInfo {
   refs: string[]
   bullets: string[]
   filesChanged: number
+  changedFiles: string[]
 }
 
 export type GitRepositoryLoadState = 'unloaded' | 'loading' | 'loaded' | 'dirty' | 'error'
