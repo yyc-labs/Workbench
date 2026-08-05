@@ -55,6 +55,7 @@ export interface BrowserAiService {
   deleteTaskRecord: (recordId: string) => Promise<boolean>
   cleanupOnBeforeQuit: () => Promise<void>
   ensureBrowserConnection: () => Promise<{ browser: Browser; context: BrowserContext }>
+  reconnectBrowserConnection: () => Promise<{ browser: Browser; context: BrowserContext }>
 }
 
 const siteAdapters: Record<BrowserAiSite, BrowserAiSiteAdapter> = {
@@ -373,6 +374,22 @@ export function createBrowserAiService(deps: BrowserAiServiceDependencies): Brow
     getSnapshot,
 
     ensureBrowserConnection: async () => {
+      await ensureConnected()
+      if (!browser || !context) {
+        throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'The browser connection is not available.')
+      }
+      return { browser, context }
+    },
+
+    reconnectBrowserConnection: async () => {
+      const connectedBrowser = browser
+      if (connectedBrowser?.isConnected()) await disconnectFromCdp(connectedBrowser)
+      if (browser === connectedBrowser) {
+        browser = null
+        context = null
+        cdpPort = undefined
+        connection = 'disconnected'
+      }
       await ensureConnected()
       if (!browser || !context) {
         throw new BrowserAiServiceError('CDP_UNAVAILABLE', 'The browser connection is not available.')

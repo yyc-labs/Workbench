@@ -111,9 +111,12 @@ type PageCaptureControlRequest = { captureMode: BrowserScreenshotCaptureMode; fi
 
 function installCaptureControl({ bindingName, labels }: { bindingName: string; labels: CaptureControlLabels }): void {
   const hostId = '__ide-browser-screenshot-control__'
-  if (document.getElementById(hostId)) return
+  const existingHost = document.getElementById(hostId)
+  if (existingHost?.getAttribute('data-binding-name') === bindingName) return
+  existingHost?.remove()
   const host = document.createElement('div')
   host.id = hostId
+  host.setAttribute('data-binding-name', bindingName)
   host.style.cssText = 'all:initial;position:fixed;top:12px;right:12px;z-index:2147483646;'
   const shadow = host.attachShadow({ mode: 'closed' })
   shadow.innerHTML = `<style>
@@ -1190,6 +1193,11 @@ function findPage(context: BrowserContext, id: string, pageIds: Map<Page, string
   return index >= 0 ? pages[index] : null
 }
 
+export function isManagedBrowserNewTabUrl(url: string): boolean {
+  const normalizedUrl = url.trim().toLowerCase()
+  return normalizedUrl === 'about:newtab' || /^(chrome|edge):\/\/newtab\/?(?:[?#].*)?$/.test(normalizedUrl)
+}
+
 export interface BrowserScreenshotService {
   listTargets: () => Promise<BrowserScreenshotTarget[]>
   start: (request: BrowserScreenshotRequest) => Promise<BrowserScreenshotResult>
@@ -1211,6 +1219,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
   const captureControlInstallPromises = new Map<Page, Promise<void>>()
   let startFromPage: ((pageId: string, request: Exclude<PageCaptureControlRequest, 'open-window'>) => Promise<PageCaptureControlResult>) | null = null
   let targetsChangedTimer: ReturnType<typeof setTimeout> | null = null
+  let reconnectAfterNewTabPromise: Promise<void> | null = null
 
   const getPageId = (page: Page): string => {
     const existingId = pageIds.get(page)
@@ -1279,6 +1288,19 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     }, 60)
   }
 
+  const reconnectAfterNewTab = (): void => {
+    if (reconnectAfterNewTabPromise) return
+    reconnectAfterNewTabPromise = (async () => {
+      const { context } = await deps.browserAiService.reconnectBrowserConnection()
+      bindContext(context)
+      emitCurrentTargets(context)
+    })()
+      .catch(() => undefined)
+      .finally(() => {
+        reconnectAfterNewTabPromise = null
+      })
+  }
+
   const bindPage = (page: Page, context: BrowserContext): void => {
     if (boundPages.has(page)) return
     boundPages.add(page)
@@ -1293,7 +1315,10 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     page.on('request', (request) => {
       if (request.isNavigationRequest() && request.frame() === page.mainFrame()) emitCurrentTargets(context)
     })
-    page.on('framenavigated', () => emitCurrentTargets(context))
+    page.on('framenavigated', (frame) => {
+      emitCurrentTargets(context)
+      if (frame === page.mainFrame() && isManagedBrowserNewTabUrl(page.url())) reconnectAfterNewTab()
+    })
     page.on('domcontentloaded', () => emitCurrentTargets(context))
     page.on('load', () => emitCurrentTargets(context))
   }
