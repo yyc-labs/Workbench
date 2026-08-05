@@ -67,6 +67,21 @@ type PreciseContainerRect = {
   totalHeight: number
 }
 
+type CaptureTiming = {
+  connectionReadyAt?: number
+  domAccessibleAt?: number
+  pickerInstalledAt?: number
+  containerSelectedAt?: number
+  elementMarkingCompletedAt?: number
+  pagePreparedAt?: number
+  initialTargetStableAt?: number
+  segmentWaitMs: number[]
+  segmentScreenshotMs: number[]
+  composeMs?: number
+  restoreMs?: number
+  waitTimeoutReasons: string[]
+}
+
 function formatPreciseCoordinate(value: number): string {
   return Number.isFinite(value) ? Number(value.toFixed(2)).toString() : String(value)
 }
@@ -251,24 +266,19 @@ async function waitForPageSettle(page: Page, timeoutMs: number): Promise<void> {
   ]).catch(() => undefined)
 }
 
+async function waitForAnimationFrames(page: Page, frames = 2): Promise<void> {
+  await page
+    .evaluate(async (frameCount) => {
+      for (let index = 0; index < frameCount; index += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      }
+    }, frames)
+    .catch(() => undefined)
+}
+
 async function waitForSegmentReady(page: Page, timeoutMs = 800): Promise<void> {
   await Promise.race([
     page.evaluate(async () => {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-      const images = Array.from(document.images).filter((image) => image.getBoundingClientRect().bottom >= 0 && image.getBoundingClientRect().top <= innerHeight)
-      await Promise.all(images.map((image) => image.decode?.().catch(() => undefined)))
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    }),
-    new Promise((resolve) => setTimeout(resolve, timeoutMs)),
-  ]).catch(() => undefined)
-}
-
-async function waitForPreciseSegmentReady(page: Page, target: PreciseContainerTarget, timeoutMs = 800): Promise<void> {
-  if (target === 'document') return waitForSegmentReady(page, timeoutMs)
-  const frame = resolveFrame(page, target.framePath)
-  if (!frame) return
-  await Promise.race([
-    frame.evaluate(async () => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       const images = Array.from(document.images).filter((image) => image.getBoundingClientRect().bottom >= 0 && image.getBoundingClientRect().top <= innerHeight)
       await Promise.all(images.map((image) => image.decode?.().catch(() => undefined)))
@@ -303,33 +313,6 @@ async function setFrameInteractionLock(frame: Frame, locked: boolean): Promise<v
     .catch(() => undefined)
 }
 
-async function waitForDomQuiet(page: Page, quietMs = 1_200, timeoutMs = 8_000): Promise<void> {
-  await page
-    .evaluate(
-      ({ quietMs, timeoutMs }) =>
-        new Promise<void>((resolve) => {
-          let quietTimer: number | null = null
-          let timeout = 0
-          const observer = new MutationObserver(() => schedule())
-          const done = () => {
-            if (quietTimer !== null) window.clearTimeout(quietTimer)
-            window.clearTimeout(timeout)
-            observer.disconnect()
-            resolve()
-          }
-          const schedule = () => {
-            if (quietTimer !== null) window.clearTimeout(quietTimer)
-            quietTimer = window.setTimeout(done, quietMs)
-          }
-          timeout = window.setTimeout(done, timeoutMs)
-          observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true })
-          schedule()
-        }),
-      { quietMs, timeoutMs },
-    )
-    .catch(() => undefined)
-}
-
 function resolveFrame(page: Page, framePath: number[]): Frame | null {
   let frame: Frame = page.mainFrame()
   for (const index of framePath) {
@@ -351,90 +334,74 @@ function getFramePath(frame: Frame): number[] {
   return path
 }
 
-async function stabilizePreciseContainer(page: Page, target: PreciseContainerTarget, requestedTop?: number): Promise<PreciseContainerRect> {
-  if (target === 'document') {
-    return page.evaluate(
-      async ({ requestedTop }) => {
-        const element = document.scrollingElement
-        if (!(element instanceof HTMLElement)) throw new Error('页面滚动容器已不存在。')
-        const read = () => ({ x: 0, y: 0, width: innerWidth, height: innerHeight, scrollTop: window.scrollY, totalHeight: element.scrollHeight })
-        if (typeof requestedTop === 'number') window.scrollTo({ top: Math.min(Math.max(0, element.scrollHeight - innerHeight), Math.max(0, requestedTop)), behavior: 'auto' })
+async function waitForPreciseCaptureReady(page: Page, target: PreciseContainerTarget, requestedTop?: number, timeoutMs = 800): Promise<PreciseContainerRect> {
+  const stabilize = async (frame: Frame, selector: string | null): Promise<PreciseContainerRect> =>
+    frame.evaluate(
+      async ({ selector, requestedTop, timeoutMs }) => {
+        const element = selector ? document.querySelector(selector) : document.scrollingElement
+        if (!(element instanceof HTMLElement)) throw new Error('选中的滚动容器已不存在。')
+        const isDocument = selector === null
+        const read = () => {
+          const bounds = isDocument ? { x: 0, y: 0, width: innerWidth, height: innerHeight } : element.getBoundingClientRect()
+          return {
+            x: bounds.x,
+            y: bounds.y,
+            width: isDocument ? innerWidth : element.clientWidth,
+            height: isDocument ? innerHeight : element.clientHeight,
+            scrollTop: isDocument ? window.scrollY : element.scrollTop,
+            totalHeight: element.scrollHeight,
+          }
+        }
+        if (typeof requestedTop === 'number') {
+          const current = read()
+          const targetTop = Math.min(Math.max(0, current.totalHeight - current.height), Math.max(0, requestedTop))
+          if (isDocument) window.scrollTo({ top: targetTop, behavior: 'auto' })
+          else element.scrollTo({ top: targetTop, behavior: 'auto' })
+        }
+        const initial = read()
+        const visibleImages = Array.from(document.images).filter((image) => {
+          if (image.complete && image.naturalWidth > 0) return false
+          const bounds = image.getBoundingClientRect()
+          return bounds.right > initial.x && bounds.left < initial.x + initial.width && bounds.bottom > initial.y && bounds.top < initial.y + initial.height
+        })
+        await Promise.all(visibleImages.map((image) => Promise.race([image.decode?.().catch(() => undefined) ?? Promise.resolve(), new Promise<void>((resolve) => window.setTimeout(resolve, 200))])))
+        let changed = false
+        const mutationObserver = new MutationObserver(() => {
+          changed = true
+        })
+        const resizeObserver = new ResizeObserver(() => {
+          changed = true
+        })
+        mutationObserver.observe(element, { subtree: true, childList: true, attributes: true, characterData: true })
+        resizeObserver.observe(element)
         let previous = read()
         let stableFrames = 0
-        const deadline = performance.now() + 800
-        while (performance.now() < deadline) {
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          const current = read()
-          const unchanged = current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height && current.scrollTop === previous.scrollTop && current.totalHeight === previous.totalHeight
-          stableFrames = unchanged ? stableFrames + 1 : 0
-          if (stableFrames >= 3) return current
-          previous = current
+        const deadline = performance.now() + timeoutMs
+        try {
+          while (performance.now() < deadline) {
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+            const current = read()
+            const unchanged = !changed && current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height && current.scrollTop === previous.scrollTop && current.totalHeight === previous.totalHeight
+            changed = false
+            stableFrames = unchanged ? stableFrames + 1 : 0
+            if (stableFrames >= 2) return current
+            previous = current
+          }
+        } finally {
+          mutationObserver.disconnect()
+          resizeObserver.disconnect()
         }
         throw new Error('滚动容器布局未在截图前稳定。')
       },
-      { requestedTop },
+      { selector, requestedTop, timeoutMs },
     )
+
+  if (target === 'document') {
+    return stabilize(page.mainFrame(), null)
   }
   const frame = resolveFrame(page, target.framePath)
   if (!frame) throw new Error('选中的 iframe 已不存在。')
-  if (target.selector === '__document__') {
-    return frame.evaluate(
-      async ({ requestedTop }) => {
-        const element = document.scrollingElement
-        if (!(element instanceof HTMLElement)) throw new Error('iframe 页面滚动容器已不存在。')
-        const read = () => ({ x: 0, y: 0, width: innerWidth, height: innerHeight, scrollTop: window.scrollY, totalHeight: element.scrollHeight })
-        if (typeof requestedTop === 'number') window.scrollTo({ top: Math.min(Math.max(0, element.scrollHeight - innerHeight), Math.max(0, requestedTop)), behavior: 'auto' })
-        let previous = read()
-        let stableFrames = 0
-        const deadline = performance.now() + 800
-        while (performance.now() < deadline) {
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-          const current = read()
-          const unchanged = current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height && current.scrollTop === previous.scrollTop && current.totalHeight === previous.totalHeight
-          stableFrames = unchanged ? stableFrames + 1 : 0
-          if (stableFrames >= 3) return current
-          previous = current
-        }
-        throw new Error('iframe 页面布局未在截图前稳定。')
-      },
-      { requestedTop },
-    )
-  }
-  return frame.evaluate(
-    async ({ selector, requestedTop }) => {
-      const element = document.querySelector(selector)
-      if (!(element instanceof HTMLElement)) throw new Error('选中的滚动容器已不存在。')
-      const read = () => {
-        const bounds = element.getBoundingClientRect()
-        return {
-          x: bounds.x,
-          y: bounds.y,
-          width: element.clientWidth,
-          height: element.clientHeight,
-          scrollTop: element.scrollTop,
-          totalHeight: element.scrollHeight,
-        }
-      }
-      if (typeof requestedTop === 'number') {
-        const maximumTop = Math.max(0, element.scrollHeight - element.clientHeight)
-        const targetTop = Math.min(maximumTop, Math.max(0, requestedTop))
-        element.scrollTo({ top: targetTop, behavior: 'auto' })
-      }
-      let previous = read()
-      let stableFrames = 0
-      const deadline = performance.now() + 800
-      while (performance.now() < deadline) {
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-        const current = read()
-        const unchanged = current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height && current.scrollTop === previous.scrollTop && current.totalHeight === previous.totalHeight
-        stableFrames = unchanged ? stableFrames + 1 : 0
-        if (stableFrames >= 3) return current
-        previous = current
-      }
-      throw new Error('滚动容器布局未在截图前稳定。')
-    },
-    { selector: target.selector, requestedTop },
-  )
+  return stabilize(frame, target.selector === '__document__' ? null : target.selector)
 }
 
 async function getPreciseContainerBounds(page: Page, target: PreciseContainerTarget): Promise<{ x: number; y: number; width: number; height: number } | null> {
@@ -448,6 +415,13 @@ async function getPreciseContainerBounds(page: Page, target: PreciseContainerTar
     return frameBounds
   }
   return frame.locator(target.selector).boundingBox()
+}
+
+async function getPreciseContainerScrollTop(page: Page, target: PreciseContainerTarget): Promise<number> {
+  if (target === 'document') return page.evaluate(() => window.scrollY)
+  const frame = resolveFrame(page, target.framePath)
+  if (!frame) throw new Error('选中的 iframe 已不存在。')
+  return frame.evaluate((selector) => (selector === '__document__' ? window.scrollY : ((document.querySelector(selector) as HTMLElement | null)?.scrollTop ?? 0)), target.selector)
 }
 
 async function preparePage(page: Page, policy: BrowserScreenshotFixedElementPolicy): Promise<PageState> {
@@ -529,13 +503,13 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
           highlightBox.style.width = `${bounds.width}px`
           highlightBox.style.height = `${bounds.height}px`
         }
+        let pendingMoveTarget: EventTarget | null = null
+        let moveFrame = 0
         const isScrollable = (element: HTMLElement): boolean => {
           const style = getComputedStyle(element)
           const canScrollVertically = element.scrollHeight > element.clientHeight + 4
-          const canScrollHorizontally = element.scrollWidth > element.clientWidth + 4
           const allowsVerticalScroll = ['auto', 'scroll', 'overlay'].includes(style.overflowY) || ['auto', 'scroll', 'overlay'].includes(style.overflow)
-          const allowsHorizontalScroll = ['auto', 'scroll', 'overlay'].includes(style.overflowX) || ['auto', 'scroll', 'overlay'].includes(style.overflow)
-          return (canScrollVertically && allowsVerticalScroll) || (canScrollHorizontally && allowsHorizontalScroll)
+          return canScrollVertically && allowsVerticalScroll
         }
         const pathFor = (element: Element): string => {
           const parts: string[] = []
@@ -565,22 +539,28 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
           highlightBox.remove()
           document.documentElement.removeAttribute('data-ide-screenshot-picker')
           document.querySelectorAll('[data-ide-screenshot-frame-path]').forEach((element) => element.removeAttribute('data-ide-screenshot-frame-path'))
-          document.removeEventListener('mousemove', onMove, true)
           document.removeEventListener('pointermove', onMove, true)
-          document.removeEventListener('mouseover', onMove, true)
+          if (moveFrame) cancelAnimationFrame(moveFrame)
           document.removeEventListener('click', onClick, true)
           document.removeEventListener('keydown', onKeyDown, true)
           window.removeEventListener('message', onMessage)
           window.clearTimeout(timeout)
         }
-        const onMove = (event: MouseEvent) => {
-          if (event.target instanceof HTMLElement && event.target.hasAttribute('data-ide-screenshot-frame-path')) return
-          const next = findContainers(event.target)[0]
+        const updateHighlight = () => {
+          moveFrame = 0
+          const target = pendingMoveTarget
+          pendingMoveTarget = null
+          if (target instanceof HTMLElement && target.hasAttribute('data-ide-screenshot-frame-path')) return
+          const next = findContainers(target)[0]
           if (!next) {
             highlightBox.style.display = 'none'
             return
           }
           showBounds(next.getBoundingClientRect(), next)
+        }
+        const onMove = (event: PointerEvent) => {
+          pendingMoveTarget = event.target
+          if (!moveFrame) moveFrame = requestAnimationFrame(updateHighlight)
         }
         const onClick = (event: MouseEvent) => {
           if (event.target instanceof HTMLElement && event.target.hasAttribute('data-ide-screenshot-frame-path')) return
@@ -630,9 +610,7 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
           resolve(null)
         }, 60_000)
         document.documentElement.setAttribute('data-ide-browser-screenshot-picker', marker)
-        document.addEventListener('mousemove', onMove, true)
         document.addEventListener('pointermove', onMove, true)
-        document.addEventListener('mouseover', onMove, true)
         document.addEventListener('click', onClick, true)
         document.addEventListener('keydown', onKeyDown, true)
         window.addEventListener('message', onMessage)
@@ -641,7 +619,7 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
   )
   try {
     const frames = page.frames().filter((frame) => frame !== page.mainFrame())
-    await Promise.all(
+    const frameInstallations = Promise.all(
       frames.map(async (frame) => {
         const framePath = getFramePath(frame)
         const frameElement = await frame.frameElement().catch(() => null)
@@ -657,10 +635,8 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
               const isScrollable = (element: HTMLElement): boolean => {
                 const style = getComputedStyle(element)
                 const canScrollVertically = element.scrollHeight > element.clientHeight + 4
-                const canScrollHorizontally = element.scrollWidth > element.clientWidth + 4
                 const allowsVerticalScroll = ['auto', 'scroll', 'overlay'].includes(style.overflowY) || ['auto', 'scroll', 'overlay'].includes(style.overflow)
-                const allowsHorizontalScroll = ['auto', 'scroll', 'overlay'].includes(style.overflowX) || ['auto', 'scroll', 'overlay'].includes(style.overflow)
-                return (canScrollVertically && allowsVerticalScroll) || (canScrollHorizontally && allowsHorizontalScroll)
+                return canScrollVertically && allowsVerticalScroll
               }
               const pathFor = (element: Element): string => {
                 const parts: string[] = []
@@ -731,7 +707,17 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
                   '*',
                 )
               }
-              const onMove = (event: Event) => emit(event, 'move')
+              let pendingMove: Event | null = null
+              let moveFrame = 0
+              const onMove = (event: Event) => {
+                pendingMove = event
+                if (moveFrame) return
+                moveFrame = requestAnimationFrame(() => {
+                  moveFrame = 0
+                  if (pendingMove) emit(pendingMove, 'move')
+                  pendingMove = null
+                })
+              }
               const onClick = (event: Event) => emit(event, 'click')
               const onKeyDown = (event: Event) => {
                 if (event instanceof KeyboardEvent && event.key === 'Escape') {
@@ -740,12 +726,10 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
                   window.top?.postMessage({ marker: '__ide_browser_screenshot_picker__', action: 'cancel', framePath, selector: '__document__', bounds: { left: 0, top: 0, width: 0, height: 0 } }, '*')
                 }
               }
-              document.addEventListener('mousemove', onMove, true)
               document.addEventListener('pointermove', onMove, true)
-              document.addEventListener('mouseover', onMove, true)
               document.addEventListener('click', onClick, true)
               document.addEventListener('keydown', onKeyDown, true)
-              ;(window as unknown as Record<string, unknown>)[key] = { onMove, onClick, onKeyDown, frameHighlight }
+              ;(window as unknown as Record<string, unknown>)[key] = { onMove, onClick, onKeyDown, frameHighlight, cancelMove: () => moveFrame && cancelAnimationFrame(moveFrame) }
             },
             { framePath },
           )
@@ -753,23 +737,24 @@ async function chooseScrollContainer(page: Page, labels: CaptureControlLabels, s
       }),
     )
     const result = await pickerPromise
-    await Promise.all(
-      frames.map((frame) =>
-        frame
-          .evaluate(() => {
-            const key = '__ide_browser_screenshot_frame_picker__'
-            const picker = (window as unknown as Record<string, unknown>)[key] as { onMove?: EventListener; onClick?: EventListener; onKeyDown?: EventListener; frameHighlight?: HTMLElement } | undefined
-            if (picker?.onMove) {
-              document.removeEventListener('mousemove', picker.onMove, true)
-              document.removeEventListener('pointermove', picker.onMove, true)
-              document.removeEventListener('mouseover', picker.onMove, true)
-            }
-            if (picker?.onClick) document.removeEventListener('click', picker.onClick, true)
-            if (picker?.onKeyDown) document.removeEventListener('keydown', picker.onKeyDown, true)
-            picker?.frameHighlight?.remove()
-            delete (window as unknown as Record<string, unknown>)[key]
-          })
-          .catch(() => undefined),
+    void frameInstallations.then(() =>
+      Promise.all(
+        frames.map((frame) =>
+          frame
+            .evaluate(() => {
+              const key = '__ide_browser_screenshot_frame_picker__'
+              const picker = (window as unknown as Record<string, unknown>)[key] as { onMove?: EventListener; onClick?: EventListener; onKeyDown?: EventListener; frameHighlight?: HTMLElement; cancelMove?: () => void } | undefined
+              if (picker?.onMove) {
+                document.removeEventListener('pointermove', picker.onMove, true)
+              }
+              picker?.cancelMove?.()
+              if (picker?.onClick) document.removeEventListener('click', picker.onClick, true)
+              if (picker?.onKeyDown) document.removeEventListener('keydown', picker.onKeyDown, true)
+              picker?.frameHighlight?.remove()
+              delete (window as unknown as Record<string, unknown>)[key]
+            })
+            .catch(() => undefined),
+        ),
       ),
     )
     return result
@@ -1336,6 +1321,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     const taskId = `browser-screenshot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
     const startedAt = Date.now()
     const warnings: string[] = []
+    const timing: CaptureTiming = { segmentWaitMs: [], segmentScreenshotMs: [], waitTimeoutReasons: [] }
     let restoreState: PageState | null = null
     let ownedPage = false
     let captureRequest = request
@@ -1344,6 +1330,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
     try {
       emit(taskId, { stage: 'analyzing', message: '正在分析浏览器页面。', percent: 5 })
       const { context } = await deps.browserAiService.ensureBrowserConnection()
+      timing.connectionReadyAt = Date.now()
       bindContext(context)
       let page: Page | null = request.targetId ? findPage(context, request.targetId, pageIds) : null
       if (request.url?.trim()) {
@@ -1364,6 +1351,8 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       }
       if (!page || page.isClosed()) throw Object.assign(new Error(errorMessage('TARGET_NOT_FOUND')), { code: 'TARGET_NOT_FOUND' })
       activePage = page
+      await page.evaluate(() => document.documentElement != null)
+      timing.domAccessibleAt = Date.now()
       const persistedMarkedElements = await page
         .evaluate(() => {
           const state = (window as unknown as Record<string, unknown>).__ide_browser_screenshot_marked_elements__ as { items?: BrowserScreenshotMarkedElement[] } | undefined
@@ -1373,23 +1362,23 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       captureRequest = request.markedElements ? request : { ...request, markedElements: persistedMarkedElements }
       let containerTarget: PreciseContainerTarget | undefined
       if (request.captureMode === 'precise') {
-        emit(taskId, { stage: 'preparing', message: '正在等待网页完成加载。', percent: 7 })
-        await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
         if (cancelRequested) throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
-        await page.waitForLoadState('load', { timeout: 10_000 }).catch(() => undefined)
-        await waitForPageSettle(page, 6_000)
-        await waitForDomQuiet(page, 1_500, 10_000)
         emit(taskId, { stage: 'analyzing', message: '请在浏览器中移动鼠标并点击要滚动的容器。按 Esc 可取消。', percent: 8 })
-        containerTarget = (await chooseScrollContainer(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)) ?? undefined
+        const pickerPromise = chooseScrollContainer(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)
+        await waitForAnimationFrames(page)
+        timing.pickerInstalledAt = Date.now()
+        containerTarget = (await pickerPromise) ?? undefined
         if (!containerTarget) {
           throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
         }
+        timing.containerSelectedAt = Date.now()
         emit(taskId, { stage: 'analyzing', message: deps.getCaptureControlLabels().chooseElements, percent: 9 })
         const markedElements = await chooseMarkedElements(page, deps.getCaptureControlLabels(), deps.setCaptureWindowVisible)
         if (!markedElements) {
           throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
         }
         captureRequest = { ...request, markedElements }
+        timing.elementMarkingCompletedAt = Date.now()
       }
       const policy = request.fixedElementPolicy ?? 'keep'
       const state = await preparePage(page, policy)
@@ -1401,7 +1390,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       )
       if (containerTarget) {
         state.containerTarget = containerTarget
-        state.containerScrollTop = await stabilizePreciseContainer(page, containerTarget).then((rect) => rect.scrollTop)
+        state.containerScrollTop = await getPreciseContainerScrollTop(page, containerTarget)
         if (containerTarget !== 'document' && containerTarget.framePath.length === 0) {
           await page.evaluate((selector) => {
             document.querySelector(selector)?.removeAttribute('data-ide-screenshot-hidden')
@@ -1409,12 +1398,11 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
         }
       }
       restoreState = state
+      timing.pagePreparedAt = Date.now()
       const markedElements = captureRequest.markedElements ?? []
       if (markedElements.length) await setMarkedElementsVisible(page, markedElements, false)
-      emit(taskId, { stage: 'preparing', message: '正在准备页面并等待资源稳定。', percent: 12 })
-      await waitForPageSettle(page, 4_000)
-      if (cancelRequested) throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
-      if (containerTarget) await waitForDomQuiet(page, 1_500, 10_000)
+      emit(taskId, { stage: 'preparing', message: '正在准备页面。', percent: 12 })
+      await waitForAnimationFrames(page)
       if (cancelRequested) throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
       let png: Buffer
       let width = 0
@@ -1431,6 +1419,7 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
             width = value.width
             height = value.height
           },
+          timing,
         )
       } else if (!request.forceSegmented) {
         try {
@@ -1479,9 +1468,24 @@ export function createBrowserScreenshotService(deps: ScreenshotDependencies): Br
       emit(taskId, { stage: finalCode === 'CAPTURE_CANCELLED' ? 'cancelled' : 'failed', message: error instanceof Error ? error.message : errorMessage(finalCode), errorCode: finalCode, percent: 100 })
       return { taskId, status: finalCode === 'CAPTURE_CANCELLED' ? 'cancelled' : 'failed', startedAt, completedAt: Date.now(), warnings, errorCode: finalCode, errorMessage: error instanceof Error ? error.message : errorMessage(finalCode) }
     } finally {
+      const restoreStartedAt = Date.now()
       if (activePage && restoreState) await restorePage(activePage, restoreState)
       if (activePage && captureRequest.markedElements?.length) await setMarkedElementsVisible(activePage, captureRequest.markedElements, false)
+      timing.restoreMs = Date.now() - restoreStartedAt
       if (ownedPage && activePage && !activePage.isClosed()) await activePage.close()
+      const completedAt = Date.now()
+      console.info('[browser-screenshot] timing', {
+        connectMs: timing.connectionReadyAt ? timing.connectionReadyAt - startedAt : undefined,
+        pickerReadyMs: timing.pickerInstalledAt && timing.connectionReadyAt ? timing.pickerInstalledAt - timing.connectionReadyAt : undefined,
+        userSelectionMs: timing.elementMarkingCompletedAt && timing.pickerInstalledAt ? timing.elementMarkingCompletedAt - timing.pickerInstalledAt : undefined,
+        prepareToFirstShotMs: timing.initialTargetStableAt && timing.pagePreparedAt ? timing.initialTargetStableAt - timing.pagePreparedAt : undefined,
+        perSegmentWaitMs: timing.segmentWaitMs,
+        perSegmentScreenshotMs: timing.segmentScreenshotMs,
+        composeMs: timing.composeMs,
+        restoreMs: timing.restoreMs,
+        totalMs: completedAt - startedAt,
+        waitTimeoutReasons: timing.waitTimeoutReasons,
+      })
       activePage = null
       activeTaskId = null
       cancelRequested = false
@@ -1625,12 +1629,15 @@ async function capturePreciseContainer(
   emit: (taskId: string, event: Omit<BrowserScreenshotProgress, 'taskId'>) => void,
   isCancelled: () => boolean,
   onSize: (size: { width: number; height: number }) => void,
+  timing: CaptureTiming,
 ): Promise<Buffer> {
   const deadline = Date.now() + (request.maxDurationMs ?? DEFAULT_MAX_DURATION)
   await page.bringToFront().catch(() => undefined)
-  await waitForPageSettle(page, 2_500)
   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio }))
-  const initialRect = await stabilizePreciseContainer(page, target)
+  const initialReadyStartedAt = Date.now()
+  const initialRect = await waitForPreciseCaptureReady(page, target, 0, 1_500)
+  timing.initialTargetStableAt = Date.now()
+  const initialWaitMs = timing.initialTargetStableAt - initialReadyStartedAt
   const info = { ...initialRect, dpr: viewport.dpr, viewportWidth: viewport.width, viewportHeightLimit: viewport.height }
   const totalHeight = Math.max(1, info.totalHeight)
   const slices: PngSlice[] = []
@@ -1642,27 +1649,16 @@ async function capturePreciseContainer(
   while (requestedTop < totalHeight) {
     if (isCancelled()) throw Object.assign(new Error(errorMessage('CAPTURE_CANCELLED')), { code: 'CAPTURE_CANCELLED' })
     if (Date.now() > deadline) throw Object.assign(new Error(errorMessage('CAPTURE_TIMEOUT')), { code: 'CAPTURE_TIMEOUT' })
-    const scrolledRect = await stabilizePreciseContainer(page, target, requestedTop)
+    const readyStartedAt = Date.now()
+    let rect = index === 0 ? initialRect : await waitForPreciseCaptureReady(page, target, requestedTop, 800)
+    timing.segmentWaitMs.push(index === 0 ? initialWaitMs : Date.now() - readyStartedAt)
     throwIfCancelled(isCancelled)
-    const expectedTop = Math.min(requestedTop, Math.max(0, scrolledRect.totalHeight - scrolledRect.height))
-    if (Math.abs(scrolledRect.scrollTop - expectedTop) > 1) {
+    const expectedTop = Math.min(requestedTop, Math.max(0, rect.totalHeight - rect.height))
+    if (Math.abs(rect.scrollTop - expectedTop) > 1) {
       throw Object.assign(
-        new Error(
-          `精准截图滚动未到目标位置（段=${index + 1}，requestedTop=${formatPreciseCoordinate(requestedTop)}，expectedTop=${formatPreciseCoordinate(expectedTop)}，actualTop=${formatPreciseCoordinate(scrolledRect.scrollTop)}，maxTop=${formatPreciseCoordinate(Math.max(0, scrolledRect.totalHeight - scrolledRect.height))}）。`,
-        ),
+        new Error(`精准截图滚动未到目标位置（段=${index + 1}，requestedTop=${formatPreciseCoordinate(requestedTop)}，expectedTop=${formatPreciseCoordinate(expectedTop)}，actualTop=${formatPreciseCoordinate(rect.scrollTop)}，maxTop=${formatPreciseCoordinate(Math.max(0, rect.totalHeight - rect.height))}）。`),
         { code: 'PAGE_NOT_SUPPORTED' },
       )
-    }
-    await waitForDomQuiet(page, 300, 1_000)
-    throwIfCancelled(isCancelled)
-    await waitForPreciseSegmentReady(page, target)
-    throwIfCancelled(isCancelled)
-    await waitForDomQuiet(page, 200, 800)
-    throwIfCancelled(isCancelled)
-    let rect = await stabilizePreciseContainer(page, target)
-    throwIfCancelled(isCancelled)
-    if (Math.abs(rect.scrollTop - scrolledRect.scrollTop) > 1) {
-      throw Object.assign(new Error(`精准截图等待期间滚动位置改变（段=${index + 1}，requestedTop=${formatPreciseCoordinate(requestedTop)}，afterScroll=${formatPreciseCoordinate(scrolledRect.scrollTop)}，beforeShot=${formatPreciseCoordinate(rect.scrollTop)}）。`), { code: 'PAGE_NOT_SUPPORTED' })
     }
     let bounds = await getPreciseContainerBounds(page, target)
     if (!bounds) throw new Error('选中的 iframe 或滚动容器已不存在。')
@@ -1680,9 +1676,8 @@ async function capturePreciseContainer(
           }, target.selector)
         }
       }
-      await waitForPageSettle(page, 1_000)
-      await waitForDomQuiet(page, 700, 3_000)
-      rect = await stabilizePreciseContainer(page, target)
+      await waitForAnimationFrames(page)
+      rect = await waitForPreciseCaptureReady(page, target, requestedTop, 800)
       bounds = await getPreciseContainerBounds(page, target)
       if (!bounds) throw new Error('选中的 iframe 或滚动容器已不存在。')
       left = Math.max(0, bounds.x)
@@ -1695,7 +1690,9 @@ async function capturePreciseContainer(
     const actualTop = Math.max(0, rect.scrollTop)
     const willFinish = actualTop + clip.height >= totalHeight - 0.5
     await applyMarkedElementPolicies(page, request.markedElements ?? [], index, willFinish)
-    const buffer = await page.screenshot({ type: 'png' })
+    const screenshotStartedAt = Date.now()
+    const buffer = await page.screenshot({ type: 'png', clip })
+    timing.segmentScreenshotMs.push(Date.now() - screenshotStartedAt)
     throwIfCancelled(isCancelled)
     const scale = info.dpr
     if (index > 0 && actualTop <= previousActualTop) {
@@ -1705,7 +1702,7 @@ async function capturePreciseContainer(
       )
     }
     const contentCropTop = Math.min(clip.height, Math.max(0, previousCapturedEnd - actualTop))
-    const sourceTop = Math.round((top + contentCropTop) * scale)
+    const sourceTop = Math.round(contentCropTop * scale)
     const destinationTop = Math.round((actualTop + contentCropTop) * scale)
     const remainingHeight = Math.max(0, totalHeight - (actualTop + contentCropTop))
     const copyHeight = Math.min(clip.height - contentCropTop, remainingHeight)
@@ -1718,7 +1715,7 @@ async function capturePreciseContainer(
         { code: 'COMPOSE_FAILED' },
       )
     }
-    slices.push({ buffer, sourceLeft: Math.round(left * scale), sourceRight: Math.round((left + clip.width) * scale), sourceTop, sourceBottom, destinationTop })
+    slices.push({ buffer, sourceLeft: 0, sourceRight: Math.round(clip.width * scale), sourceTop, sourceBottom, destinationTop })
     previousCapturedEnd = (destinationTop + (sourceBottom - sourceTop)) / scale
     previousActualTop = actualTop
     emit(taskId, { stage: 'capturing', message: `正在精准截图第 ${index + 1}/${totalSegments} 段。`, currentSegment: index + 1, totalSegments, percent: 15 + Math.round(((index + 1) / totalSegments) * 70) })
@@ -1751,5 +1748,8 @@ async function capturePreciseContainer(
       { selector: target.selector, scrollTop: info.scrollTop },
     )
   }
-  return composePngSlices(slices, width, height)
+  const composeStartedAt = Date.now()
+  const composed = composePngSlices(slices, width, height)
+  timing.composeMs = Date.now() - composeStartedAt
+  return composed
 }
