@@ -11,6 +11,17 @@ const { wslBridge } = require(resolveFromRepo('src/core/electron/main/wsl-bridge
 const windowsEnvModule = require(resolveFromRepo('src/core/electron/main/windows-env.ts'))
 const os = require('node:os')
 
+test('normalizeCodexConfig forces danger-full-access when approval policy is never', () => {
+  const normalized = codexConfigModule.normalizeCodexConfig({
+    ...codexConfigModule.defaultCodexConfig(),
+    approvalPolicy: 'never',
+    sandboxMode: 'workspace-write',
+  })
+
+  assert.equal(normalized.approvalPolicy, 'never')
+  assert.equal(normalized.sandboxMode, 'danger-full-access')
+})
+
 test('writeCodexSettings writes OPENAI_API_KEY into WSL bashrc for windows custom-script WSL scope', async () => {
   const originalLoadConfig = configModule.loadConfig
   const originalExec = wslBridge.exec
@@ -117,7 +128,7 @@ test('writeCodexSettings creates single-file backups before rewriting existing W
     commands.push(cmd)
     if (cmd === 'printf %s "$HOME"') return '/home/ubuntu'
     if (cmd.includes("cat '/home/ubuntu/.codex/config.toml'")) {
-      return ['model_provider = "openai"', 'model = "older-model"', 'model_reasoning_effort = "xhigh"', 'preferred_auth_method = "apikey"', 'approvals_reviewer = "guardian_subagent"', ''].join('\n')
+      return ['model_provider = "openai"', 'model = "older-model"', 'model_reasoning_effort = "xhigh"', 'preferred_auth_method = "apikey"', 'approval_policy = "on-request"', 'sandbox_mode = "workspace-write"', 'approvals_reviewer = "auto_review"', ''].join('\n')
     }
     if (cmd.includes("cat '/home/ubuntu/.bashrc'")) return 'export OPENAI_API_KEY="old-key"\n'
     if (cmd.includes("cp '/home/ubuntu/.codex/config.toml' '/home/ubuntu/.codex/config.toml.bak'")) return ''
@@ -183,7 +194,9 @@ test('writeCodexSettings skips config and bashrc rewrites when content is unchan
     'model = "gpt-5.4"',
     'model_reasoning_effort = "xhigh"',
     'preferred_auth_method = "apikey"',
-    'approvals_reviewer = "guardian_subagent"',
+    'approval_policy = "on-request"',
+    'sandbox_mode = "workspace-write"',
+    'approvals_reviewer = "auto_review"',
     '',
     '[model_providers.openai]',
     'name = "OpenAI"',

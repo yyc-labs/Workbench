@@ -6,14 +6,26 @@ import { loadConfig, updateConfig } from './config'
 import { wslBridge } from './wsl-bridge'
 import { readWindowsUserEnvVar, writeWindowsUserEnvVar } from './windows-env'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
-import type { AiExecutionMode, CodexConfig, CodexEnvironmentScope, CodexModelProviderConfig, CodexSettingsInput, CodexSettingsSnapshot, Capability } from '../../shared/types'
+import type {
+  AiExecutionMode,
+  Capability,
+  CodexApprovalPolicy,
+  CodexConfig,
+  CodexEnvironmentScope,
+  CodexModelProviderConfig,
+  CodexSandboxMode,
+  CodexSettingsInput,
+  CodexSettingsSnapshot,
+} from '../../shared/types'
 
 const DEFAULT_CODEX_CONFIG: CodexConfig = {
   modelProvider: 'openai',
   model: 'gpt-5.4',
   modelReasoningEffort: 'xhigh',
   preferredAuthMethod: 'apikey',
-  approvalsReviewer: 'guardian_subagent',
+  approvalPolicy: 'on-request',
+  sandboxMode: 'workspace-write',
+  approvalsReviewer: 'auto_review',
   modelProviders: {
     openai: {
       name: 'OpenAI',
@@ -34,7 +46,18 @@ const DEFAULT_CODEX_CONFIG: CodexConfig = {
   },
 }
 
-const ALL_SUPPORTED_ROOT_KEYS = new Set(['model_provider', 'model', 'model_reasoning_effort', 'preferred_auth_method', 'approvals_reviewer'])
+const APPROVAL_POLICY_VALUES: CodexApprovalPolicy[] = ['untrusted', 'on-request', 'on-failure', 'never']
+const SANDBOX_MODE_VALUES: CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
+
+const ALL_SUPPORTED_ROOT_KEYS = new Set([
+  'model_provider',
+  'model',
+  'model_reasoning_effort',
+  'preferred_auth_method',
+  'approval_policy',
+  'sandbox_mode',
+  'approvals_reviewer',
+])
 
 const wslHomePathCache = new Map<string, string>()
 
@@ -64,6 +87,18 @@ function normalizeBoolean(value: unknown, fallback: boolean): boolean {
     if (normalized === 'false') return false
   }
   return fallback
+}
+
+function normalizeApprovalPolicy(value: unknown, fallback: CodexApprovalPolicy): CodexApprovalPolicy {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim()
+  return APPROVAL_POLICY_VALUES.includes(normalized as CodexApprovalPolicy) ? (normalized as CodexApprovalPolicy) : fallback
+}
+
+function normalizeSandboxMode(value: unknown, fallback: CodexSandboxMode): CodexSandboxMode {
+  if (typeof value !== 'string') return fallback
+  const normalized = value.trim()
+  return SANDBOX_MODE_VALUES.includes(normalized as CodexSandboxMode) ? (normalized as CodexSandboxMode) : fallback
 }
 
 function normalizeProviderKey(value: string): string {
@@ -126,7 +161,16 @@ function areModelProvidersEqual(a: CodexConfig['modelProviders'], b: CodexConfig
 }
 
 function areCodexConfigsEqual(a: CodexConfig, b: CodexConfig): boolean {
-  return a.modelProvider === b.modelProvider && a.model === b.model && a.modelReasoningEffort === b.modelReasoningEffort && a.preferredAuthMethod === b.preferredAuthMethod && a.approvalsReviewer === b.approvalsReviewer && areModelProvidersEqual(a.modelProviders, b.modelProviders)
+  return (
+    a.modelProvider === b.modelProvider &&
+    a.model === b.model &&
+    a.modelReasoningEffort === b.modelReasoningEffort &&
+    a.preferredAuthMethod === b.preferredAuthMethod &&
+    a.approvalPolicy === b.approvalPolicy &&
+    a.sandboxMode === b.sandboxMode &&
+    a.approvalsReviewer === b.approvalsReviewer &&
+    areModelProvidersEqual(a.modelProviders, b.modelProviders)
+  )
 }
 
 function areScopesEqual(a: CodexEnvironmentScope, b: CodexEnvironmentScope): boolean {
@@ -185,12 +229,16 @@ export function normalizeCodexConfig(input: Partial<CodexConfig> | Record<string
 
   const modelProvider = normalizeString(input.modelProvider, defaults.modelProvider)
   const resolvedModelProvider = modelProviders[modelProvider] ? modelProvider : Object.keys(modelProviders)[0]!
+  const approvalPolicy = normalizeApprovalPolicy(input.approvalPolicy, defaults.approvalPolicy)
+  const sandboxMode = normalizeSandboxMode(input.sandboxMode, defaults.sandboxMode)
 
   return {
     modelProvider: resolvedModelProvider,
     model: normalizeString(normalizedProviders[resolvedModelProvider]?.model, modelFallback),
     modelReasoningEffort: normalizeString(input.modelReasoningEffort, defaults.modelReasoningEffort),
     preferredAuthMethod: normalizeString(input.preferredAuthMethod, defaults.preferredAuthMethod),
+    approvalPolicy,
+    sandboxMode: approvalPolicy === 'never' ? 'danger-full-access' : sandboxMode,
     approvalsReviewer: normalizeString(input.approvalsReviewer, defaults.approvalsReviewer),
     modelProviders,
   }
@@ -374,6 +422,8 @@ function parseCodexToml(content: string): CodexConfig {
     model: typeof rootValues.model === 'string' ? rootValues.model : defaults.model,
     modelReasoningEffort: typeof rootValues.model_reasoning_effort === 'string' ? rootValues.model_reasoning_effort : defaults.modelReasoningEffort,
     preferredAuthMethod: typeof rootValues.preferred_auth_method === 'string' ? rootValues.preferred_auth_method : defaults.preferredAuthMethod,
+    approvalPolicy: typeof rootValues.approval_policy === 'string' ? rootValues.approval_policy : defaults.approvalPolicy,
+    sandboxMode: typeof rootValues.sandbox_mode === 'string' ? rootValues.sandbox_mode : defaults.sandboxMode,
     approvalsReviewer: typeof rootValues.approvals_reviewer === 'string' ? rootValues.approvals_reviewer : defaults.approvalsReviewer,
     modelProviders: providers,
   })
@@ -385,6 +435,8 @@ function buildCodexManagedToml(config: CodexConfig): string {
     `model = ${tomlBasicString(config.model)}`,
     `model_reasoning_effort = ${tomlBasicString(config.modelReasoningEffort)}`,
     `preferred_auth_method = ${tomlBasicString(config.preferredAuthMethod)}`,
+    `approval_policy = ${tomlBasicString(config.approvalPolicy)}`,
+    `sandbox_mode = ${tomlBasicString(config.sandboxMode)}`,
     `approvals_reviewer = ${tomlBasicString(config.approvalsReviewer)}`,
     '',
   ]
@@ -436,6 +488,31 @@ function mergeCodexToml(existingContent: string, config: CodexConfig): string {
   const extra = preservedLines.join('\n').trim()
   if (!extra) return managedContent
   return `${managedContent}\n${extra}\n`
+}
+
+function hasAllManagedCodexRootKeys(content: string): boolean {
+  const presentKeys = new Set<string>()
+  let currentTableName: string | null = null
+
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+
+    const tableMatch = trimmed.match(/^\[([^\]]+)\]$/)
+    if (tableMatch) {
+      currentTableName = tableMatch[1] ?? null
+      continue
+    }
+
+    if (currentTableName !== null) continue
+
+    const rootKeyMatch = trimmed.match(/^([A-Za-z0-9_]+)\s*=/)
+    if (rootKeyMatch && ALL_SUPPORTED_ROOT_KEYS.has(rootKeyMatch[1] ?? '')) {
+      presentKeys.add(rootKeyMatch[1] ?? '')
+    }
+  }
+
+  return Array.from(ALL_SUPPORTED_ROOT_KEYS).every((key) => presentKeys.has(key))
 }
 
 async function readOpenAiApiKey(scope: CodexEnvironmentScope): Promise<string> {
@@ -530,6 +607,20 @@ export async function readCodexSettings(capability: Capability | null): Promise<
   const configExists = await pathExists(scope, scope.configPath)
   const rawConfig = configExists ? await readTextFile(scope, scope.configPath).catch(() => '') : ''
   const config = rawConfig.trim() ? parseCodexToml(rawConfig) : defaultCodexConfig()
+  let nextConfigExists = configExists
+
+  if (!configExists || !hasAllManagedCodexRootKeys(rawConfig)) {
+    const nextToml = configExists ? mergeCodexToml(rawConfig, config) : buildCodexManagedToml(config)
+    if (nextToml !== rawConfig) {
+      try {
+        await writeTextFile(scope, scope.configPath, nextToml)
+        nextConfigExists = true
+      } catch {
+        // Best-effort persistence; the settings UI can still function if the write fails.
+      }
+    }
+  }
+
   const scopeKey = getCodexScopeCacheKey(scope)
   const storedProviderApiKeysByScope = loadConfig().codexProviderApiKeys ?? {}
   const storedProviderApiKeys = normalizeProviderApiKeys(storedProviderApiKeysByScope[scopeKey], config.modelProviders)
@@ -542,7 +633,7 @@ export async function readCodexSettings(capability: Capability | null): Promise<
   const snapshot = {
     scope,
     providerApiKeys,
-    configExists,
+    configExists: nextConfigExists,
     config,
   }
 

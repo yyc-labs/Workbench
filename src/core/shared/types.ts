@@ -78,6 +78,8 @@ export type AiRuntimeProfileKind = 'native' | 'custom'
 export type AiExecutionMode = 'windows-wsl' | 'windows-native' | 'linux-native' | 'macos-native' | 'custom-script' | 'disabled'
 export type AiRuntimeProfileMode = AiExecutionMode | 'inherit'
 export type AiShell = 'bash' | 'zsh' | 'pwsh' | 'powershell' | 'cmd' | 'sh'
+export type CodexApprovalPolicy = 'untrusted' | 'on-request' | 'on-failure' | 'never'
+export type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type AiCommitProfileSource = 'manual' | 'claude' | 'codex'
 export type RuntimeEntrypointTarget = 'native' | 'wsl'
 export type RuntimeEntrypointWslPrefix = '~/' | '$HOME/' | '${HOME}/' | '/'
@@ -282,6 +284,8 @@ export interface CodexConfig {
   model: string
   modelReasoningEffort: string
   preferredAuthMethod: string
+  approvalPolicy: CodexApprovalPolicy
+  sandboxMode: CodexSandboxMode
   approvalsReviewer: string
   modelProviders: Record<string, CodexModelProviderConfig>
 }
@@ -1213,7 +1217,9 @@ export interface GitRepositorySnapshot {
   error?: string
 }
 
-export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'commit' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'
+export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'commit' | 'undo-commit' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'
+
+export type GitOperationSkipReason = 'nothing-to-pull' | 'nothing-to-push' | 'missing-upstream' | 'upstream-gone' | 'dirty-worktree' | 'conflicts-present' | 'detached-head' | 'target-required' | 'target-is-current' | 'target-not-found' | 'already-on-target' | 'other'
 
 export interface GitOperationRequest {
   repoRoot: string
@@ -1221,6 +1227,7 @@ export interface GitOperationRequest {
   message?: string
   targetBranch?: string
   remoteName?: string
+  expectedHead?: string
 }
 
 export interface GitOperationResult {
@@ -1232,7 +1239,9 @@ export interface GitOperationResult {
   output: string
   exitCode: number | null
   skipped?: boolean
+  skipReason?: GitOperationSkipReason
   error?: string
+  commitHead?: string
   targetBranch?: string
 }
 

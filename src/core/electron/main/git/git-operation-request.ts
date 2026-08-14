@@ -6,6 +6,7 @@ export type NormalizedGitOperationRequest = {
   remoteName: string
   repoRoot: string
   targetBranch?: string
+  expectedHead?: string
 }
 
 export function normalizeGitRemoteName(input: string | undefined): string {
@@ -30,11 +31,13 @@ export function isValidGitBranchName(name: string): boolean {
 export function normalizeGitOperationRequest(request: GitOperationRequest): NormalizedGitOperationRequest {
   const message = request.message?.trim()
   const targetBranch = request.targetBranch?.trim()
+  const expectedHead = request.expectedHead?.trim()
   return {
     operation: request.operation,
     remoteName: normalizeGitRemoteName(request.remoteName),
     repoRoot: request.repoRoot.trim(),
     targetBranch: targetBranch || undefined,
     ...(message ? { message } : {}),
+    ...(expectedHead ? { expectedHead } : {}),
   }
 }

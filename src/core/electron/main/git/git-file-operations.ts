@@ -1,28 +1,8 @@
 import { constants as FsConstants } from 'fs'
 import { access, readFile, writeFile, realpath, stat } from 'fs/promises'
 import { join } from 'path'
-import {
-  appendGitOutputLimitNotice,
-  DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-  formatGitCommand,
-  normalizeGitDiffOutput,
-  normalizeGitOperationOutput,
-  type GitCommandExecutionResult,
-  type GitCommandRunner,
-} from './git-command'
-import type {
-  GitChangedFile,
-  GitConflictFileRequest,
-  GitConflictFileResult,
-  GitConflictStageContent,
-  GitFileDiffRequest,
-  GitFileDiffResult,
-  GitRepositorySnapshot,
-  GitResolveConflictRequest,
-  GitResolveConflictResult,
-  GitSetFileStageRequest,
-  GitSetFileStageResult,
-} from '../../../shared/types'
+import { appendGitOutputLimitNotice, DEFAULT_GIT_OUTPUT_LIMIT_BYTES, formatGitCommand, normalizeGitDiffOutput, normalizeGitOperationOutput, type GitCommandExecutionResult, type GitCommandRunner } from './git-command'
+import type { GitChangedFile, GitConflictFileRequest, GitConflictFileResult, GitConflictStageContent, GitFileDiffRequest, GitFileDiffResult, GitRepositorySnapshot, GitResolveConflictRequest, GitResolveConflictResult, GitSetFileStageRequest, GitSetFileStageResult } from '../../../shared/types'
 import { translateMain, type MainLocale } from '../mainI18n'
 
 const GIT_DIFF_OUTPUT_LIMIT_BYTES = 512 * 1024
@@ -43,25 +23,17 @@ function firstNonEmptyLine(input: string): string | undefined {
   return lines.find(Boolean)
 }
 
-function buildEmptyGitDiffHint(
-  filePath: string,
-  locale: MainLocale,
-  file?: GitChangedFile,
-  eolInfo?: string
-): string {
-  const lines = [
-    translateMain(locale, 'git.noTextualPatchOutput'),
-    translateMain(locale, 'git.diffEmptyHint'),
-    translateMain(locale, 'git.diffEmptyCause'),
-    translateMain(locale, 'git.file', { value: filePath }),
-  ]
+function buildEmptyGitDiffHint(filePath: string, locale: MainLocale, file?: GitChangedFile, eolInfo?: string): string {
+  const lines = [translateMain(locale, 'git.noTextualPatchOutput'), translateMain(locale, 'git.diffEmptyHint'), translateMain(locale, 'git.diffEmptyCause'), translateMain(locale, 'git.file', { value: filePath })]
 
   if (file) {
-    lines.push(translateMain(locale, 'git.status', {
-      scope: file.scope,
-      index: file.indexStatus,
-      worktree: file.worktreeStatus,
-    }))
+    lines.push(
+      translateMain(locale, 'git.status', {
+        scope: file.scope,
+        index: file.indexStatus,
+        worktree: file.worktreeStatus,
+      }),
+    )
   }
   if (eolInfo) {
     lines.push(translateMain(locale, 'git.eol', { value: eolInfo }))
@@ -99,11 +71,7 @@ async function resolveGitFilePath(repoRoot: string, filePath: string): Promise<s
     const rootRealPath = await realpath(repoRoot)
     const candidatePath = join(rootRealPath, normalized)
     const candidateRealPath = await realpath(candidatePath)
-    if (
-      candidateRealPath === rootRealPath
-      || candidateRealPath.startsWith(`${rootRealPath}\\`)
-      || candidateRealPath.startsWith(`${rootRealPath}/`)
-    ) {
+    if (candidateRealPath === rootRealPath || candidateRealPath.startsWith(`${rootRealPath}\\`) || candidateRealPath.startsWith(`${rootRealPath}/`)) {
       return candidateRealPath
     }
     return null
@@ -117,11 +85,7 @@ function hasConflictMarker(content: string): boolean {
   return normalized.includes('\n<<<<<<< ') || normalized.startsWith('<<<<<<< ')
 }
 
-export function createGitFileOperations({
-  runner,
-  getLocale,
-  readGitRepositorySnapshot,
-}: GitFileOperationDependencies) {
+export function createGitFileOperations({ runner, getLocale, readGitRepositorySnapshot }: GitFileOperationDependencies) {
   const { runGitCommand } = runner
 
   async function readGitFileEolInfo(cwd: string, filePath: string): Promise<string | undefined> {
@@ -130,11 +94,7 @@ export function createGitFileOperations({
     return firstNonEmptyLine(result.stdout)
   }
 
-  async function readGitShowStageContent(
-    repoRoot: string,
-    filePath: string,
-    stage: 1 | 2 | 3
-  ): Promise<GitConflictStageContent> {
+  async function readGitShowStageContent(repoRoot: string, filePath: string, stage: 1 | 2 | 3): Promise<GitConflictStageContent> {
     const spec = `:${stage}:${filePath}`
     const args = ['show', '--textconv', spec]
     const execution = await runGitCommand(repoRoot, args, {
@@ -158,9 +118,7 @@ export function createGitFileOperations({
       stdoutLimit: execution.stdoutLimit,
       stderrLimit: execution.stderrLimit,
     })
-    const missing = /path '.*' is in the index, but not at stage/i.test(combined)
-      || /exists on disk, but not in '.*'/i.test(combined)
-      || /fatal: bad object/i.test(combined)
+    const missing = /path '.*' is in the index, but not at stage/i.test(combined) || /exists on disk, but not in '.*'/i.test(combined) || /fatal: bad object/i.test(combined)
 
     return {
       stage,
@@ -168,7 +126,7 @@ export function createGitFileOperations({
       exists: !missing,
       output: missing ? '' : normalizedOutput,
       outputLimit: execution.stdoutLimit,
-      error: missing ? undefined : (combined || `git show exited with code ${execution.code ?? 'unknown'}`),
+      error: missing ? undefined : combined || `git show exited with code ${execution.code ?? 'unknown'}`,
     }
   }
 
@@ -211,7 +169,7 @@ export function createGitFileOperations({
 
     const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
-      const reason = snapshot.error || 'Not a git repository.'
+      const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
         repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
@@ -298,20 +256,11 @@ export function createGitFileOperations({
       }
     }
 
-    const stageContents = await Promise.all([
-      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 1),
-      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 2),
-      readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 3),
-    ])
+    const stageContents = await Promise.all([readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 1), readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 2), readGitShowStageContent(resolvedRepoRoot, normalizedFilePath, 3)])
 
-    const errors = stageContents
-      .map((item) => item.error)
-      .filter((item): item is string => Boolean(item))
+    const errors = stageContents.map((item) => item.error).filter((item): item is string => Boolean(item))
 
-    const outputParts = [
-      `Loaded conflict for ${normalizedFilePath}.`,
-      errors.length > 0 ? `Some stages failed to load:\n${errors.join('\n')}` : '',
-    ].filter(Boolean)
+    const outputParts = [`Loaded conflict for ${normalizedFilePath}.`, errors.length > 0 ? `Some stages failed to load:\n${errors.join('\n')}` : ''].filter(Boolean)
 
     return {
       repoRoot: resolvedRepoRoot,
@@ -359,7 +308,7 @@ export function createGitFileOperations({
 
     const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
-      const reason = snapshot.error || 'Not a git repository.'
+      const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
         repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
@@ -463,7 +412,7 @@ export function createGitFileOperations({
 
     const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
-      const reason = snapshot.error || 'Not a git repository.'
+      const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
         repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
@@ -531,9 +480,9 @@ export function createGitFileOperations({
 
     const output = lastExecution
       ? normalizeGitOperationOutput(lastExecution.stdout, lastExecution.stderr, {
-        stdoutLimit: lastExecution.stdoutLimit,
-        stderrLimit: lastExecution.stderrLimit,
-      })
+          stdoutLimit: lastExecution.stdoutLimit,
+          stderrLimit: lastExecution.stderrLimit,
+        })
       : 'Unstage operation failed.'
     return {
       repoRoot: resolvedRepoRoot,
@@ -579,7 +528,7 @@ export function createGitFileOperations({
 
     const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
-      const reason = snapshot.error || 'Not a git repository.'
+      const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
         repoRoot: snapshot.repoRoot || repoRoot,
         ok: false,
@@ -596,9 +545,7 @@ export function createGitFileOperations({
     const changedFile = snapshot.changedFiles.find((file) => file.path === filePath)
     const shouldTryUntrackedFallback = !staged && changedFile?.scope === 'untracked'
 
-    let args = staged
-      ? ['diff', '--cached', '--', filePath]
-      : ['diff', '--', filePath]
+    let args = staged ? ['diff', '--cached', '--', filePath] : ['diff', '--', filePath]
     let execution = await runGitCommand(resolvedRepoRoot, args, {
       stdoutLimitBytes: GIT_DIFF_OUTPUT_LIMIT_BYTES,
       stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
@@ -608,9 +555,9 @@ export function createGitFileOperations({
     let errorText = ok
       ? undefined
       : normalizeGitOperationOutput(execution.stdout, execution.stderr, {
-        stdoutLimit: execution.stdoutLimit,
-        stderrLimit: execution.stderrLimit,
-      }) || undefined
+          stdoutLimit: execution.stdoutLimit,
+          stderrLimit: execution.stderrLimit,
+        }) || undefined
 
     if (shouldTryUntrackedFallback && ok && !output) {
       const existsInWorkingTree = await fileExistsAtCwd(resolvedRepoRoot, filePath)

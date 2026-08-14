@@ -46,3 +46,5 @@ docs/*
 !docs/reference/**
 !docs/release/
 !docs/release/**
+!docs/development/
+docs/development/*

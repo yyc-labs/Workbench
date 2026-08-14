@@ -4,7 +4,7 @@ import { isValidGitBranchName, normalizeGitOperationRequest } from './git-operat
 import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
-import type { MainLocale } from '../mainI18n'
+import { translateMain, type MainLocale } from '../mainI18n'
 
 type GitServiceDependencies = {
   getDefaultWslDistro: () => string
@@ -24,7 +24,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
   async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
     const checkedAt = Date.now()
-    const { message, operation, remoteName, repoRoot, targetBranch } = normalizeGitOperationRequest(request)
+    const { expectedHead, message, operation, remoteName, repoRoot, targetBranch } = normalizeGitOperationRequest(request)
 
     if (!repoRoot) {
       return {
@@ -41,7 +41,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
     const snapshot = await readGitRepositorySnapshot(repoRoot)
     if (!snapshot.isGitRepository) {
-      const reason = snapshot.error || 'Not a git repository.'
+      const reason = snapshot.error || translateMain(deps.getLocale(), 'git.notARepository')
       return {
         repoRoot: snapshot.repoRoot || repoRoot,
         operation,
@@ -64,10 +64,15 @@ export function createGitService(deps: GitServiceDependencies) {
     const localBranchSet = new Set(snapshot.branch.localBranches)
     const remoteBranchSet = new Set(snapshot.branch.remoteBranches)
     let skipReason: string | null = null
+    let skipCode: GitOperationResult['skipReason']
     let args: string[] = []
     let commandSequence: string[][] | null = null
     let resolvedTargetBranch = targetBranch
-    let skipAsError = false
+
+    const setSkipReason = (code: GitOperationResult['skipReason'], fallback: string) => {
+      skipCode = code
+      skipReason = fallback
+    }
 
     switch (operation) {
       case 'fetch': {
@@ -76,23 +81,23 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'pull': {
         if (!hasUpstream) {
-          skipReason = 'Current branch has no upstream tracking branch.'
+          setSkipReason('missing-upstream', 'Current branch has no upstream tracking branch.')
           break
         }
         if (upstreamGone) {
-          skipReason = `Upstream branch ${branchUpstream} is gone. Push with -u to recreate tracking.`
+          setSkipReason('upstream-gone', `Upstream branch ${branchUpstream} is gone. Push with -u to recreate tracking.`)
           break
         }
         if (hasConflicts) {
-          skipReason = 'Resolve conflicts before pull.'
+          setSkipReason('conflicts-present', 'Resolve conflicts before pull.')
           break
         }
         if (hasWorkingTreeChanges) {
-          skipReason = 'Working tree is not clean. Commit, stash, or discard changes before pull.'
+          setSkipReason('dirty-worktree', 'Working tree is not clean. Commit, stash, or discard changes before pull.')
           break
         }
         if (snapshot.branch.behind <= 0) {
-          skipReason = 'No incoming commits to pull.'
+          setSkipReason('nothing-to-pull', 'No incoming commits to pull.')
           break
         }
         args = ['pull', '--ff-only']
@@ -100,15 +105,15 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'push': {
         if (hasConflicts) {
-          skipReason = 'Resolve conflicts before push.'
+          setSkipReason('conflicts-present', 'Resolve conflicts before push.')
           break
         }
         if (!currentBranch || currentBranch === 'DETACHED') {
-          skipReason = 'Detached HEAD cannot be pushed.'
+          setSkipReason('detached-head', 'Detached HEAD cannot be pushed.')
           break
         }
         if (hasUpstream && !upstreamGone && snapshot.branch.ahead <= 0) {
-          skipReason = 'No outgoing commits to push.'
+          setSkipReason('nothing-to-push', 'No outgoing commits to push.')
           break
         }
         args = hasUpstream && !upstreamGone ? ['push'] : ['push', '-u', 'origin', currentBranch]
@@ -116,19 +121,19 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'merge': {
         if (hasConflicts) {
-          skipReason = 'Resolve conflicts before merge.'
+          setSkipReason('conflicts-present', 'Resolve conflicts before merge.')
           break
         }
         if (hasWorkingTreeChanges) {
-          skipReason = 'Working tree is not clean. Commit, stash, or discard changes before merge.'
+          setSkipReason('dirty-worktree', 'Working tree is not clean. Commit, stash, or discard changes before merge.')
           break
         }
         if (!targetBranch) {
-          skipReason = 'Select a branch to merge from.'
+          setSkipReason('target-required', 'Select a branch to merge from.')
           break
         }
         if (targetBranch === currentBranch) {
-          skipReason = 'Cannot merge current branch into itself.'
+          setSkipReason('target-is-current', 'Cannot merge current branch into itself.')
           break
         }
         args = ['merge', '--no-edit', targetBranch]
@@ -136,15 +141,15 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'switch': {
         if (hasConflicts) {
-          skipReason = 'Resolve conflicts before switching branch.'
+          setSkipReason('conflicts-present', 'Resolve conflicts before switching branch.')
           break
         }
         if (!targetBranch) {
-          skipReason = 'Select a branch to switch to.'
+          setSkipReason('target-required', 'Select a branch to switch to.')
           break
         }
         if (targetBranch === currentBranch) {
-          skipReason = 'Already on the selected branch.'
+          setSkipReason('already-on-target', 'Already on the selected branch.')
           break
         }
 
@@ -155,7 +160,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
         const remoteMatch = targetBranch.match(/^([^/]+)\/(.+)$/)
         if (!remoteMatch) {
-          skipReason = 'Target branch must be a local branch name or a remote-qualified branch like origin/feature/x.'
+          setSkipReason('target-not-found', 'Target branch must be a local branch name or a remote-qualified branch like origin/feature/x.')
           break
         }
 
@@ -164,17 +169,16 @@ export function createGitService(deps: GitServiceDependencies) {
         resolvedTargetBranch = localBranchName
 
         if (!isValidGitBranchName(localBranchName)) {
-          skipReason = `Invalid local branch name derived from remote ref: ${localBranchName}.`
+          setSkipReason('other', `Invalid local branch name derived from remote ref: ${localBranchName}.`)
           break
         }
 
         if (!remoteBranchSet.has(remoteRef)) {
           if (localBranchSet.has(localBranchName)) {
-            skipReason = `Remote branch ${remoteRef} not found, cannot rebind upstream for existing local branch ${localBranchName}.`
-            skipAsError = true
+            setSkipReason('other', `Remote branch ${remoteRef} not found, cannot rebind upstream for existing local branch ${localBranchName}.`)
             break
           }
-          skipReason = `Remote branch ${remoteRef} not found.`
+          setSkipReason('target-not-found', `Remote branch ${remoteRef} not found.`)
           break
         }
 
@@ -191,41 +195,46 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'commit': {
         if (hasConflicts) {
-          skipReason = 'Resolve conflicts before committing.'
-          skipAsError = true
+          setSkipReason('conflicts-present', 'Resolve conflicts before committing.')
           break
         }
         if (!message) {
-          skipReason = 'Commit message is required.'
-          skipAsError = true
+          setSkipReason('other', 'Commit message is required.')
           break
         }
         if (!snapshot.changedFiles.some((file) => file.staged)) {
-          skipReason = 'There are no staged changes to commit.'
-          skipAsError = true
+          setSkipReason('other', 'There are no staged changes to commit.')
           break
         }
         args = ['commit', '-m', message]
         break
       }
+      case 'undo-commit': {
+        if (!expectedHead || snapshot.branch.oid !== expectedHead) {
+          setSkipReason('other', 'The latest commit changed, so undo is no longer available.')
+          break
+        }
+        args = ['reset', '--soft', 'HEAD^']
+        break
+      }
       case 'create-remote-branch': {
         if (!currentBranch || currentBranch === 'DETACHED') {
-          skipReason = 'Detached HEAD cannot create remote branch.'
+          setSkipReason('detached-head', 'Detached HEAD cannot create remote branch.')
           break
         }
         if (!targetBranch) {
-          skipReason = 'Enter branch name to create on remote.'
+          setSkipReason('target-required', 'Enter branch name to create on remote.')
           break
         }
         if (!isValidGitBranchName(targetBranch)) {
-          skipReason = 'Invalid branch name.'
+          setSkipReason('other', 'Invalid branch name.')
           break
         }
 
         const remoteCandidates = new Set(snapshot.branch.remoteBranches)
         const remoteRef = `${remoteName}/${targetBranch}`
         if (remoteCandidates.has(remoteRef)) {
-          skipReason = 'Remote branch already exists.'
+          setSkipReason('already-on-target', 'Remote branch already exists.')
           break
         }
 
@@ -234,15 +243,15 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'create-local-branch': {
         if (!targetBranch) {
-          skipReason = 'Enter local branch name to create.'
+          setSkipReason('target-required', 'Enter local branch name to create.')
           break
         }
         if (!isValidGitBranchName(targetBranch)) {
-          skipReason = 'Invalid branch name.'
+          setSkipReason('other', 'Invalid branch name.')
           break
         }
         if (snapshot.branch.localBranches.includes(targetBranch)) {
-          skipReason = 'Local branch already exists.'
+          setSkipReason('already-on-target', 'Local branch already exists.')
           break
         }
         const remoteRef = `${remoteName}/${targetBranch}`
@@ -255,15 +264,15 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'delete-local-branch': {
         if (!targetBranch) {
-          skipReason = 'Select local branch to delete.'
+          setSkipReason('target-required', 'Select local branch to delete.')
           break
         }
         if (targetBranch === currentBranch) {
-          skipReason = 'Cannot delete current branch.'
+          setSkipReason('target-is-current', 'Cannot delete current branch.')
           break
         }
         if (!snapshot.branch.localBranches.includes(targetBranch)) {
-          skipReason = 'Local branch not found.'
+          setSkipReason('target-not-found', 'Local branch not found.')
           break
         }
         args = ['branch', '-d', targetBranch]
@@ -271,16 +280,16 @@ export function createGitService(deps: GitServiceDependencies) {
       }
       case 'set-upstream': {
         if (!currentBranch || currentBranch === 'DETACHED') {
-          skipReason = 'Detached HEAD cannot set upstream.'
+          setSkipReason('detached-head', 'Detached HEAD cannot set upstream.')
           break
         }
         if (!targetBranch) {
-          skipReason = 'Select upstream branch to set.'
+          setSkipReason('target-required', 'Select upstream branch to set.')
           break
         }
         const remoteRef = targetBranch.includes('/') ? targetBranch : `${remoteName}/${targetBranch}`
         if (!remoteBranchSet.has(remoteRef)) {
-          skipReason = `Remote branch ${remoteRef} not found. Run fetch first or verify remote name.`
+          setSkipReason('target-not-found', `Remote branch ${remoteRef} not found. Run fetch first or verify remote name.`)
           break
         }
         args = ['branch', `--set-upstream-to=${remoteRef}`, currentBranch]
@@ -310,7 +319,8 @@ export function createGitService(deps: GitServiceDependencies) {
         command: '',
         output: skipReason,
         exitCode: null,
-        skipped: skipAsError ? undefined : true,
+        skipped: true,
+        ...(skipCode ? { skipReason: skipCode } : {}),
         error: skipReason,
         targetBranch: resolvedTargetBranch,
       }
@@ -321,6 +331,7 @@ export function createGitService(deps: GitServiceDependencies) {
     let exitCode: number | null
     let command: string
     let error: string | undefined
+    let commitHead: string | undefined
 
     if (commandSequence && commandSequence.length > 0) {
       const sequenceResult = await runGitCommandSequence(resolvedRepoRoot, commandSequence)
@@ -345,6 +356,11 @@ export function createGitService(deps: GitServiceDependencies) {
       error = ok ? undefined : output
     }
 
+    if (ok && operation === 'commit') {
+      const afterSnapshot = await readGitRepositorySnapshot(resolvedRepoRoot)
+      commitHead = afterSnapshot.branch.oid
+    }
+
     return {
       repoRoot: resolvedRepoRoot,
       operation,
@@ -354,6 +370,7 @@ export function createGitService(deps: GitServiceDependencies) {
       output,
       exitCode,
       error,
+      ...(commitHead ? { commitHead } : {}),
       targetBranch: resolvedTargetBranch,
     }
   }
