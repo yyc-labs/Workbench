@@ -569,7 +569,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   }, [filePath, language, value])
 
   return (
-    <div className="h-full w-full">
+    <div className="relative h-full w-full">
       {searchVisible && (
         <MonacoCodeEditorFindBar
           activeSearchMatchIndex={activeSearchMatchIndex}
