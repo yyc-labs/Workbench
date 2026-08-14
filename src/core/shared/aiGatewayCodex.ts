@@ -10,10 +10,10 @@ export function getAiGatewayOpenAiBaseUrl(config: Pick<AiGatewayConfig, 'host' |
   return `${getAiGatewayListenUrl(config)}/v1`
 }
 
-export function buildCodexLocalRouterProvider(config: Pick<AiGatewayConfig, 'host' | 'port'>): CodexModelProviderConfig {
+export function buildCodexLocalRouterProvider(config: Pick<AiGatewayConfig, 'host' | 'port'>, model: string): CodexModelProviderConfig {
   return {
     name: 'Local Router',
-    model: 'gpt-5.4',
+    model: model.trim() || 'gpt-5.4',
     baseUrl: getAiGatewayOpenAiBaseUrl(config),
     wireApi: 'responses',
     requiresOpenaiAuth: true,
@@ -27,7 +27,7 @@ export function buildCodexGatewayConfig(directConfig: CodexConfig, gatewayConfig
     ...directConfig,
     modelProviders: {
       ...directConfig.modelProviders,
-      [activeProviderId]: buildCodexLocalRouterProvider(gatewayConfig),
+      [activeProviderId]: buildCodexLocalRouterProvider(gatewayConfig, directConfig.model),
     },
   }
 }
