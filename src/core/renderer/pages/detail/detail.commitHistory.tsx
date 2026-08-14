@@ -230,8 +230,15 @@ export function CommitHistoryItem({ commit, activeCommitHash, setActiveCommitHas
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="fixed z-[300] w-[360px] max-w-[calc(100vw-16px)] rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3 shadow-2xl"
-            style={{ left: changedFilesMenu.x, top: changedFilesMenu.y }}
+            className="fixed z-[300] w-[360px] max-w-[calc(100vw-16px)] rounded-[16px] border border-[color:var(--color-border)] p-3"
+            style={{
+              left: changedFilesMenu.x,
+              top: changedFilesMenu.y,
+              background: 'var(--color-popover)',
+              boxShadow: 'var(--shadow-popover)',
+              backdropFilter: 'saturate(145%) blur(14px)',
+              WebkitBackdropFilter: 'saturate(145%) blur(14px)',
+            }}
             onMouseDown={(event) => event.stopPropagation()}
             onContextMenu={(event) => event.preventDefault()}
           >

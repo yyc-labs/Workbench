@@ -106,6 +106,8 @@ export function getOperationLabel(operation: GitOperationKind): string {
       return translateCurrent('detail.gitOpMerge')
     case 'commit':
       return translateCurrent('detail.gitOpCommit')
+    case 'undo-commit':
+      return translateCurrent('detail.gitOpUndoCommit')
     case 'create-remote-branch':
       return translateCurrent('detail.gitOpCreateRemote')
     case 'create-local-branch':

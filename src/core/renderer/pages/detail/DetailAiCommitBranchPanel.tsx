@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { GitBranch, GitCommitHorizontal } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, RotateCcw } from 'lucide-react'
 import { Combobox, type ComboboxGroup } from '../../components/ui/combobox'
 import { getGitOperationItems, type OperationCardState, type PanelGitOperationKind } from './detail.gitOperations'
 import type { IndexedBranchCandidate } from './detail.aiCommitPanel.types'
@@ -10,6 +10,9 @@ type DetailAiCommitBranchPanelProps = {
   branchBehind: number
   commitBlockedReason: string | null
   commitPending: boolean
+  commitUndoAvailable: boolean
+  commitUndoRemainingSeconds: number
+  commitUndoRunning: boolean
   currentBranch: string
   localMergeCandidates: IndexedBranchCandidate[]
   remoteMergeCandidates: IndexedBranchCandidate[]
@@ -17,6 +20,7 @@ type DetailAiCommitBranchPanelProps = {
   mergeSearchValue: string
   onChangeMergeSearchValue: (value: string) => void
   onRequestCommit: () => void
+  onRequestUndoCommit: () => void
   onOpenCurrentBranchManager: () => void
   onOpenGitGuide: () => void
   onOpenUpstreamManager: () => void
@@ -76,6 +80,9 @@ export function DetailAiCommitBranchPanel({
   branchBehind,
   commitBlockedReason,
   commitPending,
+  commitUndoAvailable,
+  commitUndoRemainingSeconds,
+  commitUndoRunning,
   currentBranch,
   localMergeCandidates,
   remoteMergeCandidates,
@@ -83,6 +90,7 @@ export function DetailAiCommitBranchPanel({
   mergeSearchValue,
   onChangeMergeSearchValue,
   onRequestCommit,
+  onRequestUndoCommit,
   onOpenCurrentBranchManager,
   onOpenGitGuide,
   onOpenUpstreamManager,
@@ -237,15 +245,19 @@ export function DetailAiCommitBranchPanel({
               className={`rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-left transition-colors ${
                 commitBlockedReason || commitPending ? 'cursor-not-allowed bg-[color:var(--color-background-sunken)]/40 opacity-55' : 'bg-[color:var(--color-background-sunken)]/65 hover:bg-[color:var(--color-background)]'
               }`}
-              title={`${t('detail.commitStagedTitle')} · ${commitBlockedReason || t('detail.commitStagedActionHint')}`}
-              disabled={Boolean(commitBlockedReason) || commitPending}
-              onClick={onRequestCommit}
+              title={`${commitUndoAvailable ? t('detail.gitOpUndoCommit') : t('detail.commitStagedTitle')} · ${commitBlockedReason || t('detail.commitStagedActionHint')}`}
+              disabled={(!commitUndoAvailable && Boolean(commitBlockedReason)) || commitPending || commitUndoRunning}
+              onClick={commitUndoAvailable ? onRequestUndoCommit : onRequestCommit}
             >
               <div className="flex items-center gap-2 text-[12px] font-semibold text-[color:var(--color-foreground)]">
-                <GitCommitHorizontal className={`h-3.5 w-3.5 ${commitPending ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-primary)]'}`} />
-                {commitPending ? `${t('detail.gitOpCommit')}...` : t('detail.gitOpCommit')}
+                {commitUndoAvailable ? (
+                  <RotateCcw className={`h-3.5 w-3.5 ${commitUndoRunning ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-warning)]'}`} />
+                ) : (
+                  <GitCommitHorizontal className={`h-3.5 w-3.5 ${commitPending ? 'animate-pulse text-[color:var(--color-warning)]' : 'text-[color:var(--color-primary)]'}`} />
+                )}
+                {commitUndoRunning ? `${t('detail.gitOpUndoCommit')}...` : commitUndoAvailable ? `${t('detail.gitOpUndoCommit')} ${commitUndoRemainingSeconds}s` : commitPending ? `${t('detail.gitOpCommit')}...` : t('detail.gitOpCommit')}
               </div>
-              <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]/85">{commitPending ? t('detail.commitStagedCommitting') : commitBlockedReason || t('detail.commitStagedActionHint')}</p>
+              <p className="mt-1 text-[10px] text-[color:var(--color-muted-foreground)]/85">{commitUndoAvailable ? t('detail.gitUndoCommitHint') : commitPending ? t('detail.commitStagedCommitting') : commitBlockedReason || t('detail.commitStagedActionHint')}</p>
             </button>
           </div>
         </>

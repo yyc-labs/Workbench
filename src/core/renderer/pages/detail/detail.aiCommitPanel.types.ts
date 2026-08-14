@@ -1,7 +1,7 @@
 import type { PanelGitOperationKind } from './detail.gitOperations'
 
 export type OperationConfirmState = {
-  operation: PanelGitOperationKind | 'undo-ai-commit'
+  operation: PanelGitOperationKind | 'undo-ai-commit' | 'undo-commit'
   message: string
   title?: string
   confirmLabel?: string

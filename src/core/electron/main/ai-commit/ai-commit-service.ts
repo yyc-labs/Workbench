@@ -5,34 +5,20 @@ import { StringDecoder } from 'string_decoder'
 import { resolveAppResourcePath } from '../app-resource-path'
 import { loadConfig } from '../config'
 import { toHostAccessiblePath } from '../host-path'
-import {
-  createGitCommandRunner,
-  DEFAULT_GIT_OPERATION_TIMEOUT_MS,
-  formatGitCommand,
-  normalizeGitOperationOutput,
-} from '../git/git-command'
+import { createGitCommandRunner, DEFAULT_GIT_OPERATION_TIMEOUT_MS, formatGitCommand, normalizeGitOperationOutput } from '../git/git-command'
 import { IPC } from '../ipc'
-import {
-  appendAiCommitTaskOutput,
-  getAiCommitTask,
-  upsertAiCommitTask,
-} from '../ai-commit-registry'
+import { appendAiCommitTaskOutput, getAiCommitTask, upsertAiCommitTask } from '../ai-commit-registry'
+import { translateMain, type MainLocale } from '../mainI18n'
 import { resolveWindowsPowerShell } from '../shell/windows-shell'
 import { wslBridge } from '../wsl-bridge'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
-import type {
-  AiCommitConfig,
-  AiCommitRunOverride,
-  AiCommitTaskSnapshot,
-  AiCommitUndoCloseReason,
-  AiCommitUndoResult,
-  AiCommitUndoState,
-} from '../../../shared/types'
+import type { AiCommitConfig, AiCommitRunOverride, AiCommitTaskSnapshot, AiCommitUndoCloseReason, AiCommitUndoResult, AiCommitUndoState } from '../../../shared/types'
 
 type AiCommitServiceDependencies = {
   getMainWindow: () => BrowserWindow | null
   getDefaultWslDistro: () => string
   aiEnvironmentController: AiEnvironmentController
+  getLocale: () => MainLocale
 }
 
 const AI_COMMIT_UNDO_WINDOW_MS = 30_000
@@ -93,15 +79,27 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
           windowsHide: true,
         })
         killer.on('error', () => {
-          try { proc.kill('SIGTERM') } catch { /* already dead */ }
+          try {
+            proc.kill('SIGTERM')
+          } catch {
+            /* already dead */
+          }
         })
         return
       }
 
       if (pid != null) {
-        try { process.kill(-pid, 'SIGTERM') } catch { /* already dead */ }
+        try {
+          process.kill(-pid, 'SIGTERM')
+        } catch {
+          /* already dead */
+        }
         setTimeout(() => {
-          try { process.kill(-pid, 'SIGKILL') } catch { /* already dead */ }
+          try {
+            process.kill(-pid, 'SIGKILL')
+          } catch {
+            /* already dead */
+          }
         }, 2_000)
         return
       }
@@ -109,7 +107,11 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       // Fall through to the direct child kill below.
     }
 
-    try { proc.kill('SIGTERM') } catch { /* already dead */ }
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      /* already dead */
+    }
   }
 
   function sendAiCommitOutput(projectId: string, data: string): void {
@@ -159,11 +161,14 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     return GIT_HASH_RE.test(head) ? head : undefined
   }
 
-  async function countUndoCommits(
-    repoRoot: string,
-    beforeHead: string | undefined,
-    afterHead: string
-  ): Promise<number> {
+  async function readGitRepositoryRoot(repoRoot: string): Promise<string | undefined> {
+    const result = await gitCommandRunner.runGitCommand(repoRoot, ['rev-parse', '--show-toplevel'])
+    if (result.code !== 0) return undefined
+    const repositoryRoot = result.stdout.replace(/\r/g, '').trim()
+    return repositoryRoot || undefined
+  }
+
+  async function countUndoCommits(repoRoot: string, beforeHead: string | undefined, afterHead: string): Promise<number> {
     const revisionRange = beforeHead ? `${beforeHead}..${afterHead}` : afterHead
     const result = await gitCommandRunner.runGitCommand(repoRoot, ['rev-list', '--count', revisionRange])
     if (result.code !== 0) return 0
@@ -171,11 +176,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     return Number.isFinite(count) ? Math.max(0, count) : 0
   }
 
-  async function createUndoState(
-    repoRoot: string,
-    runId: string,
-    beforeHead: string | undefined
-  ): Promise<AiCommitUndoState | undefined> {
+  async function createUndoState(repoRoot: string, runId: string, beforeHead: string | undefined): Promise<AiCommitUndoState | undefined> {
     const afterHead = await readGitHead(repoRoot)
     if (!afterHead || afterHead === beforeHead) return undefined
 
@@ -202,21 +203,13 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
   }
 
   function getUndoEffectiveExpiresAt(undo: AiCommitUndoState): number {
-    if (
-      Number.isFinite(undo.authStartedAt)
-      && Number.isFinite(undo.authExpiresAt)
-      && (undo.authStartedAt as number) <= undo.expiresAt
-      && (undo.authExpiresAt as number) > undo.expiresAt
-    ) {
+    if (Number.isFinite(undo.authStartedAt) && Number.isFinite(undo.authExpiresAt) && (undo.authStartedAt as number) <= undo.expiresAt && (undo.authExpiresAt as number) > undo.expiresAt) {
       return undo.authExpiresAt as number
     }
     return undo.expiresAt
   }
 
-  function closeAiCommitUndo(
-    projectId: string,
-    reason: AiCommitUndoCloseReason = 'manual'
-  ): AiCommitTaskSnapshot | null {
+  function closeAiCommitUndo(projectId: string, reason: AiCommitUndoCloseReason = 'manual'): AiCommitTaskSnapshot | null {
     const task = getAiCommitTask(projectId)
     if (!task) return null
     if (!task.undo || task.undo.status !== 'available') return task
@@ -250,11 +243,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
     const now = Date.now()
     const effectiveExpiresAt = getUndoEffectiveExpiresAt(task.undo)
-    if (
-      Number.isFinite(task.undo.authStartedAt)
-      && Number.isFinite(task.undo.authExpiresAt)
-      && effectiveExpiresAt > now
-    ) {
+    if (Number.isFinite(task.undo.authStartedAt) && Number.isFinite(task.undo.authExpiresAt) && effectiveExpiresAt > now) {
       return task
     }
 
@@ -297,11 +286,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     })
   }
 
-  async function runAiCommit(
-    projectId: string,
-    repoRoot: string,
-    override?: AiCommitRunOverride
-  ): Promise<boolean> {
+  async function runAiCommit(projectId: string, repoRoot: string, override?: AiCommitRunOverride): Promise<boolean> {
     const existing = markAiCommitInterruptedIfOrphan(projectId)
     if (existing && existing.status === 'running') {
       sendAiCommitOutput(projectId, '[AI Commit] skipped: a commit task is already running for this project.\r\n')
@@ -309,12 +294,20 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       return true
     }
 
+    const repositoryRoot = await readGitRepositoryRoot(repoRoot)
+    if (!repositoryRoot) {
+      const message = translateMain(deps.getLocale(), 'git.notARepository')
+      sendAiCommitOutput(projectId, `[AI Commit] process error: ${message}\r\n`)
+      sendAiCommitStatus(projectId, 'error')
+      return false
+    }
+
     const now = Date.now()
     const runId = `${now}-${Math.random().toString(36).slice(2, 8)}`
-    const beforeHead = await readGitHead(repoRoot)
+    const beforeHead = await readGitHead(repositoryRoot)
     upsertAiCommitTask({
       projectId,
-      repoRoot,
+      repoRoot: repositoryRoot,
       runId,
       status: 'running',
       output: '',
@@ -329,49 +322,24 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     const aiCfg = {
       ...aiCfgRaw,
       split: typeof override?.split === 'boolean' ? override.split : aiCfgRaw.split,
-      splitMaxBatches: typeof override?.splitMaxBatches === 'number'
-        ? override.splitMaxBatches
-        : aiCfgRaw.splitMaxBatches,
-      maxBullets: typeof override?.maxBullets === 'number'
-        ? override.maxBullets
-        : aiCfgRaw.maxBullets,
+      splitMaxBatches: typeof override?.splitMaxBatches === 'number' ? override.splitMaxBatches : aiCfgRaw.splitMaxBatches,
+      maxBullets: typeof override?.maxBullets === 'number' ? override.maxBullets : aiCfgRaw.maxBullets,
     }
     const wslPwshPath = (aiCfg.wslPwshPath || '').replace(/[\r\n]/g, '').trim() || '/snap/bin/pwsh'
     const splitEnabled = Boolean(aiCfg.split)
-    const splitMaxBatches = Math.max(
-      1,
-      Math.min(
-        12,
-        Number.isFinite(aiCfg.splitMaxBatches)
-          ? Math.trunc(aiCfg.splitMaxBatches as number)
-          : 4
-      )
-    )
-    const maxBullets = Math.max(
-      1,
-      Math.min(
-        20,
-        Number.isFinite(aiCfg.maxBullets)
-          ? Math.trunc(aiCfg.maxBullets as number)
-          : 8
-      )
-    )
+    const splitMaxBatches = Math.max(1, Math.min(12, Number.isFinite(aiCfg.splitMaxBatches) ? Math.trunc(aiCfg.splitMaxBatches as number) : 4))
+    const maxBullets = Math.max(1, Math.min(20, Number.isFinite(aiCfg.maxBullets) ? Math.trunc(aiCfg.maxBullets as number) : 8))
     const scriptPs1Path = resolveAppResourcePath('script', 'auto-git-commit', 'auto_commit.ps1')
     const scriptPs1WslPath = process.platform === 'win32' ? wslBridge.toWslPath(scriptPs1Path) : null
-    const hostRepoRoot = process.platform === 'win32'
-      ? toHostAccessiblePath(repoRoot, deps.getDefaultWslDistro())
-      : repoRoot
+    const hostRepoRoot = process.platform === 'win32' ? toHostAccessiblePath(repositoryRoot, deps.getDefaultWslDistro()) : repositoryRoot
 
     sendAiCommitStatus(projectId, 'running')
-    sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${repoRoot}\r\n`)
-    sendAiCommitOutput(
-      projectId,
-      `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}, max bullets=${maxBullets}\r\n`
-    )
+    sendAiCommitOutput(projectId, `\r\n[AI Commit] Starting in ${repositoryRoot}\r\n`)
+    sendAiCommitOutput(projectId, `[AI Commit] mode: ${splitEnabled ? `split (max batches=${splitMaxBatches})` : 'single'}, max bullets=${maxBullets}\r\n`)
 
     return new Promise<boolean>((resolve) => {
       let launchPlanPromise = deps.aiEnvironmentController.resolveAiCommitLaunch({
-        repoRoot,
+        repoRoot: repositoryRoot,
         scriptPath: scriptPs1Path,
         scriptWslPath: scriptPs1WslPath,
         aiCommitConfig: {
@@ -426,10 +394,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         if (stopReason === 'cancelled') {
           sendAiCommitOutput(projectId, '[AI Commit] cancelled by user.\r\n')
         } else if (stopReason === 'timeout') {
-          sendAiCommitOutput(
-            projectId,
-            `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)} and was stopped.\r\n`
-          )
+          sendAiCommitOutput(projectId, `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)} and was stopped.\r\n`)
         } else if (stopReason === 'quit') {
           sendAiCommitOutput(projectId, '[AI Commit] stopped because the app is quitting.\r\n')
         }
@@ -452,7 +417,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
 
           if (ok) {
             try {
-              const undo = await createUndoState(repoRoot, runId, beforeHead)
+              const undo = await createUndoState(repositoryRoot, runId, beforeHead)
               const current = getAiCommitTask(projectId)
               if (undo && current?.runId === runId) {
                 upsertAiCommitTask({
@@ -460,10 +425,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
                   undo,
                   updatedAt: Date.now(),
                 })
-                sendAiCommitOutput(
-                  projectId,
-                  `[AI Commit] undo available for ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''} (30s, +10s while confirming).\r\n`
-                )
+                sendAiCommitOutput(projectId, `[AI Commit] undo available for ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''} (30s, +10s while confirming).\r\n`)
               }
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error)
@@ -495,10 +457,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         if (reason === 'cancelled') {
           sendAiCommitOutput(projectId, '[AI Commit] cancel requested. Stopping current task...\r\n')
         } else if (reason === 'timeout') {
-          sendAiCommitOutput(
-            projectId,
-            `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)}. Stopping current task...\r\n`
-          )
+          sendAiCommitOutput(projectId, `[AI Commit] timed out after ${formatAiCommitDuration(AI_COMMIT_RUN_TIMEOUT_MS)}. Stopping current task...\r\n`)
         } else if (reason === 'quit') {
           sendAiCommitOutput(projectId, '[AI Commit] app is quitting. Stopping current task...\r\n')
         }
@@ -537,81 +496,87 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
         })
       }
 
-      void launchPlanPromise.then((plan) => {
-        if (settled) return
-        child = spawn(plan.command, plan.args, {
-          cwd: plan.cwd,
-          shell: plan.shell ?? false,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: plan.env ? { ...process.env, ...plan.env } : process.env,
-        })
+      void launchPlanPromise
+        .then((plan) => {
+          if (settled) return
+          child = spawn(plan.command, plan.args, {
+            cwd: plan.cwd,
+            shell: plan.shell ?? false,
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: plan.env ? { ...process.env, ...plan.env } : process.env,
+          })
 
-        child.on('spawn', () => {
-          started = true
-          sendAiCommitOutput(projectId, `[AI Commit] shell: ${plan.outputLabel}\r\n`)
-          attachStreams(child!)
-        })
+          child.on('spawn', () => {
+            started = true
+            sendAiCommitOutput(projectId, `[AI Commit] shell: ${plan.outputLabel}\r\n`)
+            attachStreams(child!)
+          })
 
-        child.on('error', (err) => {
-          if (stopReason) {
-            finalize(null)
-            return
-          }
-          if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
-            switchedToWindowsPowerShell = true
-            const fallbackShell = resolveWindowsPowerShell('powershell')
-            sendAiCommitOutput(projectId, `[AI Commit] shell launch failed, fallback to ${fallbackShell.command} (${err.message})\r\n`)
-            child = spawn(fallbackShell.command, [
-              '-NoProfile',
-              '-ExecutionPolicy',
-              'Bypass',
-              '-File',
-              scriptPs1Path,
-              '-All',
-              ...(aiCfg.enabled ?? true ? ['-UseAi'] : []),
-              ...(splitEnabled ? ['-Split', '-SplitMaxBatches', String(splitMaxBatches)] : []),
-              '-MaxBullets',
-              String(maxBullets),
-              ...(aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim() ? ['-ApiBaseUrl', aiCfg.apiBaseUrl.trim()] : []),
-              ...(aiCfg.apiKey && aiCfg.apiKey.trim() ? ['-ApiKey', aiCfg.apiKey.trim()] : []),
-              ...(aiCfg.model && aiCfg.model.trim() ? ['-Model', aiCfg.model.trim()] : []),
-            ], {
-              cwd: hostRepoRoot,
-              shell: false,
-              stdio: ['ignore', 'pipe', 'pipe'],
-            })
-            child.on('spawn', () => {
-              sendAiCommitOutput(projectId, `[AI Commit] shell: ${fallbackShell.kind}\r\n`)
-              attachStreams(child!)
-            })
-            child.on('error', (fallbackErr) => {
-              if (stopReason) {
-                finalize(null)
-                return
-              }
-              fail(fallbackErr.message)
-            })
-            child.on('close', (code) => finalize(code))
+          child.on('error', (err) => {
             if (stopReason) {
-              requestStop(stopReason)
+              finalize(null)
+              return
             }
-            return
+            if (!started && allowWindowsFallback && !switchedToWindowsPowerShell) {
+              switchedToWindowsPowerShell = true
+              const fallbackShell = resolveWindowsPowerShell('powershell')
+              sendAiCommitOutput(projectId, `[AI Commit] shell launch failed, fallback to ${fallbackShell.command} (${err.message})\r\n`)
+              child = spawn(
+                fallbackShell.command,
+                [
+                  '-NoProfile',
+                  '-ExecutionPolicy',
+                  'Bypass',
+                  '-File',
+                  scriptPs1Path,
+                  '-All',
+                  ...((aiCfg.enabled ?? true) ? ['-UseAi'] : []),
+                  ...(splitEnabled ? ['-Split', '-SplitMaxBatches', String(splitMaxBatches)] : []),
+                  '-MaxBullets',
+                  String(maxBullets),
+                  ...(aiCfg.apiBaseUrl && aiCfg.apiBaseUrl.trim() ? ['-ApiBaseUrl', aiCfg.apiBaseUrl.trim()] : []),
+                  ...(aiCfg.apiKey && aiCfg.apiKey.trim() ? ['-ApiKey', aiCfg.apiKey.trim()] : []),
+                  ...(aiCfg.model && aiCfg.model.trim() ? ['-Model', aiCfg.model.trim()] : []),
+                ],
+                {
+                  cwd: hostRepoRoot,
+                  shell: false,
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                },
+              )
+              child.on('spawn', () => {
+                sendAiCommitOutput(projectId, `[AI Commit] shell: ${fallbackShell.kind}\r\n`)
+                attachStreams(child!)
+              })
+              child.on('error', (fallbackErr) => {
+                if (stopReason) {
+                  finalize(null)
+                  return
+                }
+                fail(fallbackErr.message)
+              })
+              child.on('close', (code) => finalize(code))
+              if (stopReason) {
+                requestStop(stopReason)
+              }
+              return
+            }
+
+            fail(err.message)
+          })
+
+          child.on('close', (code) => {
+            finalize(code)
+          })
+
+          if (stopReason) {
+            requestStop(stopReason)
           }
-
-          fail(err.message)
         })
-
-        child.on('close', (code) => {
-          finalize(code)
+        .catch((error) => {
+          if (settled) return
+          fail(error instanceof Error ? error.message : String(error))
         })
-
-        if (stopReason) {
-          requestStop(stopReason)
-        }
-      }).catch((error) => {
-        if (settled) return
-        fail(error instanceof Error ? error.message : String(error))
-      })
     })
   }
 
@@ -635,12 +600,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     const checkedAt = Date.now()
     const task = expireAiCommitUndoIfNeeded(getAiCommitTask(projectId))
     const repoRoot = task?.undo?.repoRoot || task?.repoRoot || ''
-    const fail = (
-      message: string,
-      command = '',
-      output = message,
-      exitCode: number | null = null
-    ): AiCommitUndoResult => ({
+    const fail = (message: string, command = '', output = message, exitCode: number | null = null): AiCommitUndoResult => ({
       projectId,
       repoRoot,
       ok: false,
@@ -680,9 +640,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
       }
     }
 
-    const args = undo.beforeHead
-      ? ['reset', '--soft', undo.beforeHead]
-      : ['update-ref', '-d', 'HEAD']
+    const args = undo.beforeHead ? ['reset', '--soft', undo.beforeHead] : ['update-ref', '-d', 'HEAD']
     const command = formatGitCommand(args)
     sendAiCommitOutput(projectId, `[AI Commit] undo: ${command}\r\n`)
 
@@ -700,10 +658,7 @@ export function createAiCommitService(deps: AiCommitServiceDependencies) {
     }
 
     const closed = closeAiCommitUndo(projectId, 'undone')
-    sendAiCommitOutput(
-      projectId,
-      `[AI Commit] undo complete: returned before ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''}.\r\n`
-    )
+    sendAiCommitOutput(projectId, `[AI Commit] undo complete: returned before ${undo.commitCount} commit${undo.commitCount > 1 ? 's' : ''}.\r\n`)
 
     return {
       projectId,

@@ -21,6 +21,7 @@ import { useDetailBranchManagerState } from './useDetailBranchManagerState'
 import { useDetailGitDiffState } from './useDetailGitDiffState'
 
 type DetailAiCommitPanelProps = {
+  projectId: string
   projectHeaderCollapsed?: boolean
   projectName?: string
   projectLinkItems?: ProjectLinkItem[]
@@ -81,8 +82,11 @@ type PreflightItem = {
   title: string
   tone: 'success' | 'warning' | 'danger' | 'neutral'
 }
+type CommitUndoState = { repoRoot: string; expectedHead: string; expiresAt: number }
+const COMMIT_UNDO_WINDOW_MS = 15_000
 
 function DetailAiCommitPanel({
+  projectId,
   projectHeaderCollapsed = false,
   projectName,
   projectLinkItems = [],
@@ -152,6 +156,9 @@ function DetailAiCommitPanel({
   const [commitError, setCommitError] = useState<string | null>(null)
   const [commitPending, setCommitPending] = useState(false)
   const [commitModalOpen, setCommitModalOpen] = useState(false)
+  const [commitUndo, setCommitUndo] = useState<CommitUndoState | null>(null)
+  const [commitUndoRemainingMs, setCommitUndoRemainingMs] = useState(0)
+  const [commitUndoRunning, setCommitUndoRunning] = useState(false)
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
@@ -204,6 +211,10 @@ function DetailAiCommitPanel({
           ? t('detail.commitStagedNoChanges')
           : null
   const aiCommitBlockedReason = changedFilesSuppressed ? t('detail.aiCommitBlockedDescription') : null
+  const gitErrorMessages = useMemo(() => {
+    const messages = [gitRepositoriesError, gitSnapshotError].filter((value): value is string => Boolean(value))
+    return Array.from(new Set(messages))
+  }, [gitRepositoriesError, gitSnapshotError])
   const appendOperationLog = useCallback((result: GitOperationResult) => {
     setOperationLogs((prev) => [result, ...prev].slice(0, 50))
   }, [])
@@ -383,11 +394,28 @@ function DetailAiCommitPanel({
 
   useEffect(() => {
     if (activePane === 'aicommit') return
+    setCommitUndo(null)
+    setCommitUndoRemainingMs(0)
     setMergeSearchValue('')
     setOperationConfirm(null)
     setOperationConfirmInput('')
     setCommitModalOpen(false)
   }, [activePane])
+
+  useEffect(() => {
+    if (!commitUndo) {
+      setCommitUndoRemainingMs(0)
+      return
+    }
+    const updateRemaining = () => {
+      const remaining = Math.max(0, commitUndo.expiresAt - Date.now())
+      setCommitUndoRemainingMs(remaining)
+      if (remaining <= 0) setCommitUndo(null)
+    }
+    updateRemaining()
+    const timer = window.setInterval(updateRemaining, 250)
+    return () => window.clearInterval(timer)
+  }, [commitUndo])
 
   useEffect(() => {
     if (!operationConfirm) return
@@ -560,6 +588,7 @@ function DetailAiCommitPanel({
       })
       appendOperationLog(result)
       if (result.ok) {
+        if (result.commitHead) setCommitUndo({ repoRoot: result.repoRoot, expectedHead: result.commitHead, expiresAt: Date.now() + COMMIT_UNDO_WINDOW_MS })
         setCommitMessage('')
         setCommitModalOpen(false)
         setMiddlePanelMode('history')
@@ -623,6 +652,37 @@ function DetailAiCommitPanel({
     })
   }
 
+  const requestUndoCommit = () => {
+    if (!commitUndo || commitUndoRunning) return
+    setOperationConfirm({
+      operation: 'undo-commit',
+      message: t('detail.operationConfirmUndoCommitMessage'),
+      title: t('detail.operationConfirmUndoCommitTitle'),
+      confirmLabel: t('detail.operationConfirmUndoCommitConfirm'),
+      cancelLabel: t('detail.operationConfirmUndoCommitCancel'),
+      helperText: t('detail.operationConfirmUndoCommitHelper'),
+      riskLevel: 'high',
+    })
+  }
+
+  const runUndoCommit = async () => {
+    if (!commitUndo || commitUndoRunning || !gitSnapshot) return
+    setCommitUndoRunning(true)
+    try {
+      const result = await window.electronAPI.runGitOperation({ repoRoot: commitUndo.repoRoot, operation: 'undo-commit', expectedHead: commitUndo.expectedHead })
+      appendOperationLog(result)
+      if (result.ok) setCommitUndo(null)
+      else setMiddlePanelMode('git-log')
+    } catch (error) {
+      const output = error instanceof Error ? error.message : String(error)
+      appendOperationLog({ repoRoot: commitUndo.repoRoot, operation: 'undo-commit', ok: false, checkedAt: Date.now(), command: '', output, exitCode: null, error: output })
+      setMiddlePanelMode('git-log')
+    } finally {
+      await onRefreshGitSnapshot()
+      setCommitUndoRunning(false)
+    }
+  }
+
   const requestUndoAiCommit = useCallback(async () => {
     if (!aiCommitUndoAvailable || !aiCommitUndoActionAvailable || aiCommitUndoRunning) return
     const ready = await onBeginUndoAiCommitAuth()
@@ -649,9 +709,7 @@ function DetailAiCommitPanel({
         targetBranch: operation === 'merge' || operation === 'switch' ? mergeTarget : undefined,
       })
       setOperationLogs((prev) => [result, ...prev].slice(0, 50))
-      if (!result.ok && !result.skipped) {
-        setMiddlePanelMode('git-log')
-      }
+      if (!result.ok && !result.skipped) setMiddlePanelMode('git-log')
     } catch (error) {
       const failedResult: GitOperationResult = {
         repoRoot: gitSnapshot.repoRoot,
@@ -671,7 +729,13 @@ function DetailAiCommitPanel({
     }
   }
 
-  const pendingOperationLabel = operationConfirm ? (operationConfirm.operation === 'undo-ai-commit' ? t('detail.operationConfirmUndoConfirm') : (gitOperationItems.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git')) : 'Git'
+  const pendingOperationLabel = operationConfirm
+    ? operationConfirm.operation === 'undo-ai-commit'
+      ? t('detail.operationConfirmUndoConfirm')
+      : operationConfirm.operation === 'undo-commit'
+        ? t('detail.operationConfirmUndoCommitConfirm')
+        : (gitOperationItems.find((item) => item.key === operationConfirm.operation)?.label ?? 'Git')
+    : 'Git'
   const pendingOperation = operationConfirm?.operation ?? null
   const pendingOperationMessage = pendingOperation === 'undo-ai-commit' ? (aiCommitUndoGraceActive ? t('detail.operationConfirmUndoMessageGrace', { seconds: aiCommitUndoGraceRemainingSeconds }) : t('detail.operationConfirmUndoMessage')) : (operationConfirm?.message ?? '')
   const confirmExactMatch = operationConfirm?.requireExactMatch ?? ''
@@ -741,9 +805,11 @@ function DetailAiCommitPanel({
             statusText={statusText}
           />
 
-          {gitRepositoriesError && <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{gitRepositoriesError}</div>}
-
-          {gitSnapshotError && <div className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{gitSnapshotError}</div>}
+          {gitErrorMessages.map((message) => (
+            <div key={message} className="shrink-0 rounded-[14px] border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
+              {message}
+            </div>
+          ))}
 
           <section className="grid min-h-0 flex-1 grid-cols-[minmax(260px,0.9fr)_minmax(360px,1.1fr)_300px] gap-4 overflow-hidden xl:grid-cols-[minmax(320px,0.95fr)_minmax(460px,1.2fr)_340px]">
             <DetailAiCommitWorkingTreePanel
@@ -777,6 +843,9 @@ function DetailAiCommitPanel({
               branchBehind={branchBehind}
               commitBlockedReason={commitBlockedReason}
               commitPending={commitPending}
+              commitUndoAvailable={Boolean(commitUndo)}
+              commitUndoRemainingSeconds={Math.ceil(commitUndoRemainingMs / 1000)}
+              commitUndoRunning={commitUndoRunning}
               currentBranch={currentBranch}
               localMergeCandidates={localMergeCandidates}
               remoteMergeCandidates={remoteMergeCandidates}
@@ -787,6 +856,7 @@ function DetailAiCommitPanel({
               onOpenGitGuide={() => setGitGuideOpen(true)}
               onOpenUpstreamManager={() => setBranchManagerMode('upstream')}
               onRequestCommit={requestCommitStagedChanges}
+              onRequestUndoCommit={requestUndoCommit}
               onRequestGitOperation={requestGitOperation}
               onSelectMergeTarget={setMergeTarget}
               operationStates={operationStates}
@@ -816,6 +886,10 @@ function DetailAiCommitPanel({
             void onUndoAiCommit()
             return
           }
+          if (pendingOperation === 'undo-commit') {
+            void runUndoCommit()
+            return
+          }
           setMiddlePanelMode('git-log')
           void runGitOperation(pendingOperation)
         }}
@@ -830,11 +904,14 @@ function DetailAiCommitPanel({
         helperText={pendingOperationHelperText}
       />
       <DetailAiCommitCommitModal
+        aiCommitStatus={aiCommitStatus}
         blockedReason={commitBlockedReason}
         commitError={commitError}
         commitMessage={commitMessage}
         committing={commitPending}
+        isAiEnabled={isAiEnabled}
         onChangeCommitMessage={setCommitMessage}
+        onAiCommit={onAiAutoCommit}
         onClose={() => {
           if (commitPending) return
           setCommitModalOpen(false)
@@ -878,7 +955,7 @@ function DetailAiCommitPanel({
         upstreamManagerDangerInput={upstreamManagerDangerInput}
         upstreamManagerRemoteName={upstreamManagerRemoteName}
       />
-      <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} />
+      <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} projectId={projectId} gitSnapshot={gitSnapshot} onRefreshGitSnapshot={onRefreshGitSnapshot} onOperationResult={appendOperationLog} />
       <DetailGitDiffDrawer
         open={diffDrawerOpen}
         changedFiles={changedFiles}

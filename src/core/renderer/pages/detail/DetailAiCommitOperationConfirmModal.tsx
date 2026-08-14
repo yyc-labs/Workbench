@@ -43,32 +43,17 @@ export function DetailAiCommitOperationConfirmModal({
   const resolvedConfirmLabel = confirmLabel || t('detail.operationConfirmExecute')
 
   return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      widthClassName="max-w-[420px]"
-      baseZIndex={1100}
-      ariaLabel={resolvedTitle}
-    >
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[420px]" baseZIndex={1150} ariaLabel={resolvedTitle}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="section-label mb-1">{t('detail.operationConfirmRemoteOperation')}</p>
-          <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-            {resolvedTitle}
-          </p>
+          <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{resolvedTitle}</p>
         </div>
-        <button
-          type="button"
-          className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-          onClick={onClose}
-          title={t('detail.operationConfirmClose')}
-        >
+        <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={onClose} title={t('detail.operationConfirmClose')}>
           <X className="h-4 w-4" />
         </button>
       </div>
-      <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
-        {pendingOperationMessage}
-      </p>
+      <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">{pendingOperationMessage}</p>
       {riskLevel === 'high' && (
         <div className="mt-2 rounded-[14px] border border-[color:var(--color-destructive)]/28 bg-[color:var(--color-destructive-background)] px-3 py-2">
           <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-[color:var(--color-destructive)]">
@@ -92,24 +77,14 @@ export function DetailAiCommitOperationConfirmModal({
           )}
         </div>
       )}
-      <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-        {helperText || t('detail.operationConfirmHelper')}
-      </p>
+      <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">{helperText || t('detail.operationConfirmHelper')}</p>
       <div className="mt-4 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-          onClick={onClose}
-        >
+        <button type="button" className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={onClose}>
           {resolvedCancelLabel}
         </button>
         <button
           type="button"
-          className={`inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-medium text-white transition-colors ${
-            riskLevel === 'high'
-              ? 'bg-[color:var(--color-destructive)] hover:opacity-90'
-              : 'bg-primary hover:bg-primary-hover'
-          } disabled:cursor-not-allowed disabled:opacity-50`}
+          className={`inline-flex h-9 items-center justify-center rounded-full px-4 text-xs font-medium text-white transition-colors ${riskLevel === 'high' ? 'bg-[color:var(--color-destructive)] hover:opacity-90' : 'bg-primary hover:bg-primary-hover'} disabled:cursor-not-allowed disabled:opacity-50`}
           disabled={!confirmTypedMatchPassed}
           onClick={onConfirm}
         >

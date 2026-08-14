@@ -156,35 +156,19 @@ export function DetailAiCommitPaneHost({
         >
           <div className="mb-3 flex items-center justify-between">
             <p className="text-xs font-semibold text-[color:var(--color-foreground)]">{t('detail.quickAiCommitConfigTitle')}</p>
-            <button
-              className="rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={() => setQuickConfigOpen(false)}
-            >
+            <button className="rounded-full px-2 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={() => setQuickConfigOpen(false)}>
               {t('common.close')}
             </button>
           </div>
 
           <label className="mb-2 flex items-center gap-2 text-xs text-[color:var(--color-foreground)]">
-            <input
-              type="checkbox"
-              checked={quickSplit}
-              onChange={(e) => setQuickSplit(e.target.checked)}
-            />
+            <input type="checkbox" checked={quickSplit} onChange={(e) => setQuickSplit(e.target.checked)} />
             {t('detail.quickAiCommitEnableSplitCommit')}
           </label>
 
           <div className="mb-3">
             <p className="mb-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('detail.quickAiCommitSplitBatches')}</p>
-            <input
-              type="number"
-              min={1}
-              max={12}
-              step={1}
-              value={quickSplitMaxBatches}
-              disabled={!quickSplit}
-              onChange={(e) => setQuickSplitMaxBatches(e.target.value)}
-              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
-            />
+            <input type="number" min={1} max={12} step={1} value={quickSplitMaxBatches} disabled={!quickSplit} onChange={(e) => setQuickSplitMaxBatches(e.target.value)} className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]" />
           </div>
 
           <div className="mb-3">
@@ -196,11 +180,7 @@ export function DetailAiCommitPaneHost({
                   <button
                     key={value}
                     type="button"
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                      active
-                        ? 'bg-primary text-white'
-                        : 'border border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-                    }`}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${active ? 'bg-primary text-white' : 'border border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'}`}
                     onClick={() => setQuickMaxBullets(String(value))}
                   >
                     {value}
@@ -208,16 +188,7 @@ export function DetailAiCommitPaneHost({
                 )
               })}
             </div>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              value={quickMaxBullets}
-              onChange={(e) => setQuickMaxBullets(e.target.value)}
-              className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]"
-              placeholder="8"
-            />
+            <input type="number" min={1} max={20} step={1} value={quickMaxBullets} onChange={(e) => setQuickMaxBullets(e.target.value)} className="quiet-control h-8 w-full rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)]" placeholder="8" />
           </div>
 
           <div className="mb-2 text-[10px] text-[color:var(--color-muted-foreground)]">
@@ -229,17 +200,10 @@ export function DetailAiCommitPaneHost({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              className="flex-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover"
-              onClick={() => void runWithQuickConfig()}
-              disabled={aiCommitStatus === 'running'}
-            >
+            <button className="flex-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-hover" onClick={() => void runWithQuickConfig()} disabled={aiCommitStatus === 'running'}>
               {t('detail.quickAiCommitRunThisTime')}
             </button>
-            <button
-              className="rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
-              onClick={() => void saveQuickConfigAsDefault()}
-            >
+            <button className="rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={() => void saveQuickConfigAsDefault()}>
               {t('detail.quickAiCommitSaveDefault')}
             </button>
           </div>
@@ -247,6 +211,7 @@ export function DetailAiCommitPaneHost({
       )}
 
       <DetailAiCommitPanel
+        projectId={projectId}
         projectHeaderCollapsed={projectHeaderCollapsed}
         projectName={projectName}
         projectLinkItems={projectLinkItems}
