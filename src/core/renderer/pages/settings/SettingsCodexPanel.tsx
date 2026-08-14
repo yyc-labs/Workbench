@@ -1,5 +1,5 @@
 import { AlertTriangle, KeyRound, Plus, RefreshCw, Router, Save, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../../shared/codexScope'
 import type { AiGatewayConfig, AiGatewayStatus, Capability, CodexApprovalPolicy, CodexConfig, CodexEnvironmentScope, CodexGatewayBinding, CodexModelProviderConfig, CodexSandboxMode, CodexSettingsSnapshot } from '../../../shared/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -21,6 +21,8 @@ type ProviderDraft = CodexModelProviderConfig & {
   key: string
   apiKey: string
 }
+
+const autoSyncScopeKeys = new Set<string>()
 
 const APPROVAL_POLICY_VALUES: CodexApprovalPolicy[] = ['untrusted', 'on-request', 'on-failure', 'never']
 const SANDBOX_MODE_VALUES: CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
@@ -177,7 +179,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [gatewayConfig, setGatewayConfig] = useState<AiGatewayConfig | null>(null)
   const [gatewayStatus, setGatewayStatus] = useState<AiGatewayStatus | null>(null)
   const [resolvedScopeKey, setResolvedScopeKey] = useState<string | null>(null)
-  const autoSyncScopeKeyRef = useRef<string | null>(null)
   const [scope, setScope] = useState<CodexSettingsSnapshot['scope'] | null>(null)
   const [configExists, setConfigExists] = useState(false)
   const [useGatewayMode, setUseGatewayMode] = useState(false)
@@ -538,8 +539,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
   useEffect(() => {
     if (!loaded || !resolvedScopeKey) return
-    if (autoSyncScopeKeyRef.current === resolvedScopeKey) return
-    autoSyncScopeKeyRef.current = resolvedScopeKey
+    if (autoSyncScopeKeys.has(resolvedScopeKey)) return
+    autoSyncScopeKeys.add(resolvedScopeKey)
     void handleSync()
   }, [handleSync, loaded, resolvedScopeKey])
 
