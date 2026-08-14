@@ -6,17 +6,7 @@ import { loadConfig, updateConfig } from './config'
 import { wslBridge } from './wsl-bridge'
 import { readWindowsUserEnvVar, writeWindowsUserEnvVar } from './windows-env'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
-import type {
-  AiExecutionMode,
-  Capability,
-  CodexApprovalPolicy,
-  CodexConfig,
-  CodexEnvironmentScope,
-  CodexModelProviderConfig,
-  CodexSandboxMode,
-  CodexSettingsInput,
-  CodexSettingsSnapshot,
-} from '../../shared/types'
+import type { AiExecutionMode, Capability, CodexApprovalPolicy, CodexConfig, CodexEnvironmentScope, CodexModelProviderConfig, CodexSandboxMode, CodexSettingsInput, CodexSettingsSnapshot } from '../../shared/types'
 
 const DEFAULT_CODEX_CONFIG: CodexConfig = {
   modelProvider: 'openai',
@@ -490,31 +480,6 @@ function mergeCodexToml(existingContent: string, config: CodexConfig): string {
   return `${managedContent}\n${extra}\n`
 }
 
-function hasAllManagedCodexRootKeys(content: string): boolean {
-  const presentKeys = new Set<string>()
-  let currentTableName: string | null = null
-
-  for (const line of content.split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-
-    const tableMatch = trimmed.match(/^\[([^\]]+)\]$/)
-    if (tableMatch) {
-      currentTableName = tableMatch[1] ?? null
-      continue
-    }
-
-    if (currentTableName !== null) continue
-
-    const rootKeyMatch = trimmed.match(/^([A-Za-z0-9_]+)\s*=/)
-    if (rootKeyMatch && ALL_SUPPORTED_ROOT_KEYS.has(rootKeyMatch[1] ?? '')) {
-      presentKeys.add(rootKeyMatch[1] ?? '')
-    }
-  }
-
-  return Array.from(ALL_SUPPORTED_ROOT_KEYS).every((key) => presentKeys.has(key))
-}
-
 async function readOpenAiApiKey(scope: CodexEnvironmentScope): Promise<string> {
   if (scope.target === 'wsl') {
     const output = await wslBridge.execBashInteractiveLogin('printf %s "${OPENAI_API_KEY:-}"', 15000)
@@ -609,15 +574,13 @@ export async function readCodexSettings(capability: Capability | null): Promise<
   const config = rawConfig.trim() ? parseCodexToml(rawConfig) : defaultCodexConfig()
   let nextConfigExists = configExists
 
-  if (!configExists || !hasAllManagedCodexRootKeys(rawConfig)) {
-    const nextToml = configExists ? mergeCodexToml(rawConfig, config) : buildCodexManagedToml(config)
-    if (nextToml !== rawConfig) {
-      try {
-        await writeTextFile(scope, scope.configPath, nextToml)
-        nextConfigExists = true
-      } catch {
-        // Best-effort persistence; the settings UI can still function if the write fails.
-      }
+  const nextToml = configExists ? mergeCodexToml(rawConfig, config) : buildCodexManagedToml(config)
+  if (nextToml !== rawConfig) {
+    try {
+      await writeTextFile(scope, scope.configPath, nextToml)
+      nextConfigExists = true
+    } catch {
+      // Best-effort persistence; the settings UI can still function if the write fails.
     }
   }
 
