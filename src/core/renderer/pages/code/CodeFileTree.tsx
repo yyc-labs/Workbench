@@ -17,6 +17,7 @@ interface CodeFileTreeProps {
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -51,11 +52,7 @@ function useContainerSize() {
       const rect = container.getBoundingClientRect()
       const nextWidth = Math.max(0, Math.floor(rect.width))
       const nextHeight = Math.max(0, Math.floor(rect.height))
-      setSize((prev) => (
-        prev.width === nextWidth && prev.height === nextHeight
-          ? prev
-          : { width: nextWidth, height: nextHeight }
-      ))
+      setSize((prev) => (prev.width === nextWidth && prev.height === nextHeight ? prev : { width: nextWidth, height: nextHeight }))
       return { width: nextWidth, height: nextHeight }
     }
 
@@ -148,16 +145,7 @@ function centerTreeNodeInViewport(tree: TreeApi<ProjectFileNode>, relativePath: 
   return true
 }
 
-function FileTreeNodeRenderer({
-  node,
-  style,
-  dragHandle,
-  activeRelativePath,
-  flatFileListMode,
-  onToggleDirectory,
-  onSelectFile,
-  onOpenFileContextMenu,
-}: FileTreeNodeRendererProps) {
+function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onToggleDirectory, onSelectFile, onOpenFileContextMenu }: FileTreeNodeRendererProps) {
   const data = node.data
   if (isPlaceholderNode(data)) {
     return <div style={style} aria-hidden="true" />
@@ -208,23 +196,8 @@ function FileTreeNodeRenderer({
           <span className="inline-block h-3.5 w-3.5 shrink-0" />
         )}
 
-        {isDirectory ? (
-          isExpanded ? (
-            <FolderOpen className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
-          ) : (
-            <Folder className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
-          )
-        ) : (
-          <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        )}
-        <Tooltip
-          content={data.relativePath}
-          align="start"
-          placementMode="pointer"
-          interactive={false}
-          className="w-0 min-w-0 flex-1"
-          contentClassName="font-mono text-[10.5px] leading-[1.4]"
-        >
+        {isDirectory ? isExpanded ? <FolderOpen className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" /> : <Folder className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" /> : <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+        <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="w-0 min-w-0 flex-1" contentClassName="font-mono text-[10.5px] leading-[1.4]">
           <span className="block min-w-0 truncate">{rowLabel}</span>
         </Tooltip>
       </button>
@@ -239,6 +212,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   onToggleDirectory,
   onSelectFile,
   onOpenNodeFolder,
+  onOpenNodeTerminal,
   onCopyNodeName,
   onCopyNodeRelativePath,
   onCopyNodeRelativePathWithoutSlashes,
@@ -341,25 +315,19 @@ export const CodeFileTree = memo(function CodeFileTree({
   }, [])
 
   if (!hasNodes) {
-    return (
-      <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
-        {t('codeFileTree.noFilesAvailable')}
-      </div>
-    )
+    return <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeFileTree.noFilesAvailable')}</div>
   }
 
   return (
     <div ref={containerRef} className="code-tree-virtual-wrap">
       {isMeasuring ? (
-        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">
-          {t('codeFileTree.preparingFileTree')}
-        </div>
+        <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeFileTree.preparingFileTree')}</div>
       ) : (
         <Tree<ProjectFileNode>
           ref={treeRef}
           data={nodes}
           idAccessor={(item) => item.relativePath}
-          childrenAccessor={flatFileListMode ? (() => null) : getTreeChildren}
+          childrenAccessor={flatFileListMode ? () => null : getTreeChildren}
           width={size.width}
           height={size.height}
           rowHeight={28}
@@ -373,16 +341,7 @@ export const CodeFileTree = memo(function CodeFileTree({
           disableEdit
           disableMultiSelection
         >
-          {(props) => (
-            <FileTreeNodeRenderer
-              {...props}
-              activeRelativePath={activeRelativePath}
-              flatFileListMode={flatFileListMode}
-              onToggleDirectory={onToggleDirectory}
-              onSelectFile={onSelectFile}
-              onOpenFileContextMenu={handleOpenFileContextMenu}
-            />
-          )}
+          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={onToggleDirectory} onSelectFile={onSelectFile} onOpenFileContextMenu={handleOpenFileContextMenu} />}
         </Tree>
       )}
       {contextMenu && (
@@ -392,11 +351,10 @@ export const CodeFileTree = memo(function CodeFileTree({
           nodeName={contextMenu.nodeName}
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
+          onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
-          onCopyRelativePathWithoutSlashes={() => (
-            onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)
-          )}
+          onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}
           onClose={closeContextMenu}
         />
       )}

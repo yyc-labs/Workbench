@@ -1,31 +1,13 @@
 import { AlertTriangle, Check, ChevronDown, Loader2, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type {
-  AiEnvironmentConfig,
-  AiExecutionMode,
-  AiRuntimeProfile,
-  Capability,
-  RuntimeEntrypointConfig,
-  RuntimeEntrypointTarget,
-  RuntimeEntrypointWslPrefix,
-  RuntimeEntry,
-} from '../../../shared/types'
+import type { AiEnvironmentConfig, AiExecutionMode, AiRuntimeProfile, Capability, RuntimeEntrypointConfig, RuntimeEntrypointTarget, RuntimeEntrypointWslPrefix, RuntimeEntry } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
 import { isTmuxRuntimeMode } from '../../lib/runtimePresentation'
-import {
-  composeRuntimeEntrypointConfig,
-  composeWslEntrypointPath,
-  createRuntimeEntrypointConfigFromPath,
-  createWslRuntimeEntrypointConfig,
-  isLikelyWslEntrypointPath,
-  normalizeRuntimeEntrypointConfig,
-  runtimeEntrypointConfigsToHistory,
-  splitWslEntrypointPath,
-} from '../../../shared/runtimeEntrypoint'
+import { composeRuntimeEntrypointConfig, composeWslEntrypointPath, createRuntimeEntrypointConfigFromPath, createWslRuntimeEntrypointConfig, isLikelyWslEntrypointPath, normalizeRuntimeEntrypointConfig, runtimeEntrypointConfigsToHistory, splitWslEntrypointPath } from '../../../shared/runtimeEntrypoint'
 import { SettingsAiRuntimeProfilesPanel } from './SettingsAiRuntimeProfilesPanel'
 import { RuntimeDiagnosticsCard } from './runtime/RuntimeDiagnosticsCard'
 import type { RuntimeDiagnosticsState } from './runtime/settingsRuntimeShared'
@@ -57,19 +39,7 @@ function supportsWindowsWslOption(capability: Capability | null): boolean {
   return capability?.hostPlatform === 'windows' && Boolean(capability.hasWsl || capability.hasWslInstalled)
 }
 
-function SettingsRuntimePanel({
-  capability,
-  aiEnvironment,
-  onAiEnvironmentSave,
-  runtimeLauncherScript,
-  runtimeKeepAliveOnQuit,
-  onRuntimeKeepAliveToggle,
-  aiRuntimeProfiles,
-  activeAiRuntimeProfileId,
-  onAiRuntimeProfilesSave,
-  projects,
-  runtimeEntries,
-}: RuntimePanelProps) {
+function SettingsRuntimePanel({ capability, aiEnvironment, onAiEnvironmentSave, runtimeLauncherScript, runtimeKeepAliveOnQuit, onRuntimeKeepAliveToggle, aiRuntimeProfiles, activeAiRuntimeProfileId, onAiRuntimeProfilesSave, projects, runtimeEntries }: RuntimePanelProps) {
   const { t } = useI18n()
   const getDefaultMode = (): AiExecutionMode => {
     if (capability?.hostPlatform === 'windows') {
@@ -82,9 +52,7 @@ function SettingsRuntimePanel({
   const getAvailableModes = (): AiExecutionMode[] => {
     if (!capability) return []
     if (capability.hostPlatform === 'windows') {
-      return supportsWindowsWslOption(capability)
-        ? ['windows-native', 'windows-wsl', 'custom-script', 'disabled']
-        : ['windows-native', 'custom-script', 'disabled']
+      return supportsWindowsWslOption(capability) ? ['windows-native', 'windows-wsl', 'custom-script', 'disabled'] : ['windows-native', 'custom-script', 'disabled']
     }
     return [capability.hostPlatform === 'macos' ? 'macos-native' : 'linux-native', 'custom-script', 'disabled']
   }
@@ -97,26 +65,19 @@ function SettingsRuntimePanel({
   }
 
   const [executionMode, setExecutionMode] = useState<AiExecutionMode>(resolveMode(aiEnvironment?.mode))
-  const [windowsAiRunningShell, setWindowsAiRunningShell] = useState<WindowsAiRunningShell>(
-    normalizeWindowsAiRunningShell(aiEnvironment?.shell)
-  )
-  const initialEntrypointConfig = normalizeRuntimeEntrypointConfig(
-    aiEnvironment?.runtimeEntrypointConfig,
-    runtimeLauncherScript,
-  )
+  const [windowsAiRunningShell, setWindowsAiRunningShell] = useState<WindowsAiRunningShell>(normalizeWindowsAiRunningShell(aiEnvironment?.shell))
+  const initialEntrypointConfig = normalizeRuntimeEntrypointConfig(aiEnvironment?.runtimeEntrypointConfig, runtimeLauncherScript)
   const initialWslParts = splitWslEntrypointPath(initialEntrypointConfig?.path)
   const [scriptPath, setScriptPath] = useState(runtimeLauncherScript)
   const [scriptTarget, setScriptTarget] = useState<RuntimeEntrypointTarget>(initialEntrypointConfig?.target ?? 'native')
-  const [wslPathPrefix, setWslPathPrefix] = useState<RuntimeEntrypointWslPrefix>(
-    initialEntrypointConfig?.wslPrefix ?? initialWslParts.prefix
-  )
-  const [wslPathSuffix, setWslPathSuffix] = useState(
-    initialEntrypointConfig?.wslRelativePath ?? initialWslParts.relativePath
-  )
+  const [wslPathPrefix, setWslPathPrefix] = useState<RuntimeEntrypointWslPrefix>(initialEntrypointConfig?.wslPrefix ?? initialWslParts.prefix)
+  const [wslPathSuffix, setWslPathSuffix] = useState(initialEntrypointConfig?.wslRelativePath ?? initialWslParts.relativePath)
   const [runtimePassProjectPath, setRuntimePassProjectPath] = useState(aiEnvironment?.runtimePassProjectPath ?? true)
   const [diag, setDiag] = useState<RuntimeDiagnosticsState | null>(null)
   const [loading, setLoading] = useState(false)
   const [saveModeLoading, setSaveModeLoading] = useState(false)
+  const [saveModeHint, setSaveModeHint] = useState<string | null>(null)
+  const [saveModeError, setSaveModeError] = useState<string | null>(null)
   const [keepAliveEnabled, setKeepAliveEnabled] = useState(runtimeKeepAliveOnQuit)
   const [keepAliveSaving, setKeepAliveSaving] = useState(false)
 
@@ -136,12 +97,8 @@ function SettingsRuntimePanel({
     setKeepAliveEnabled(runtimeKeepAliveOnQuit)
   }, [runtimeKeepAliveOnQuit])
 
-  const canShowWslPathOptions = capability?.hostPlatform === 'windows'
-    && (supportsWindowsWslOption(capability) || scriptTarget === 'wsl')
-  const targetOptions: SelectOption[] = [
-    { value: 'native', label: t('settingsRuntime.customScriptTargetNative') },
-    ...(canShowWslPathOptions ? [{ value: 'wsl', label: t('settingsRuntime.customScriptTargetWsl') }] : []),
-  ]
+  const canShowWslPathOptions = capability?.hostPlatform === 'windows' && (supportsWindowsWslOption(capability) || scriptTarget === 'wsl')
+  const targetOptions: SelectOption[] = [{ value: 'native', label: t('settingsRuntime.customScriptTargetNative') }, ...(canShowWslPathOptions ? [{ value: 'wsl', label: t('settingsRuntime.customScriptTargetWsl') }] : [])]
   const wslPrefixOptions: SelectOption[] = [
     { value: '~/', label: '~/' },
     { value: '$HOME/', label: '$HOME/' },
@@ -157,41 +114,35 @@ function SettingsRuntimePanel({
     }
     return createRuntimeEntrypointConfigFromPath(normalizedNativeScriptPath, 'native')
   }, [normalizedNativeScriptPath, scriptTarget, wslPathPrefix, wslPathSuffix])
-  const buildAiEnvironmentPayload = (
-    nextRuntimeEntrypointConfig: RuntimeEntrypointConfig | undefined,
-    nextRuntimeEntrypointHistoryEntries: RuntimeEntrypointConfig[],
-  ): AiEnvironmentConfig => ({
+  const buildAiEnvironmentPayload = (nextRuntimeEntrypointConfig: RuntimeEntrypointConfig | undefined, nextRuntimeEntrypointHistoryEntries: RuntimeEntrypointConfig[]): AiEnvironmentConfig => ({
     mode: executionMode,
     wslDistro: aiEnvironment?.wslDistro,
     shell: capability?.hostPlatform === 'windows' ? windowsAiRunningShell : aiEnvironment?.shell,
     runtimeEntrypointConfig: executionMode === 'custom-script' ? nextRuntimeEntrypointConfig : aiEnvironment?.runtimeEntrypointConfig,
-    runtimeEntrypoint: executionMode === 'custom-script'
-      ? composeRuntimeEntrypointConfig(nextRuntimeEntrypointConfig) || ''
-      : aiEnvironment?.runtimeEntrypoint,
-    runtimeEntrypointHistoryEntries: executionMode === 'custom-script'
-      ? nextRuntimeEntrypointHistoryEntries
-      : aiEnvironment?.runtimeEntrypointHistoryEntries,
-    runtimeEntrypointHistory: executionMode === 'custom-script'
-      ? runtimeEntrypointConfigsToHistory(nextRuntimeEntrypointHistoryEntries)
-      : aiEnvironment?.runtimeEntrypointHistory,
+    runtimeEntrypoint: executionMode === 'custom-script' ? composeRuntimeEntrypointConfig(nextRuntimeEntrypointConfig) || '' : aiEnvironment?.runtimeEntrypoint,
+    runtimeEntrypointHistoryEntries: executionMode === 'custom-script' ? nextRuntimeEntrypointHistoryEntries : aiEnvironment?.runtimeEntrypointHistoryEntries,
+    runtimeEntrypointHistory: executionMode === 'custom-script' ? runtimeEntrypointConfigsToHistory(nextRuntimeEntrypointHistoryEntries) : aiEnvironment?.runtimeEntrypointHistory,
     runtimePassProjectPath,
     aiCommitEntrypoint: aiEnvironment?.aiCommitEntrypoint,
   })
-  const applyDraftConfig = useMemo(() => (config: RuntimeEntrypointConfig | undefined) => {
-    const parts = splitWslEntrypointPath(config?.path)
-    if (config?.target === 'wsl') {
-      setScriptTarget('wsl')
-      setWslPathPrefix(config.wslPrefix ?? parts.prefix)
-      setWslPathSuffix(config.wslRelativePath ?? parts.relativePath)
-      setScriptPath(config.path)
-      return
-    }
+  const applyDraftConfig = useMemo(
+    () => (config: RuntimeEntrypointConfig | undefined) => {
+      const parts = splitWslEntrypointPath(config?.path)
+      if (config?.target === 'wsl') {
+        setScriptTarget('wsl')
+        setWslPathPrefix(config.wslPrefix ?? parts.prefix)
+        setWslPathSuffix(config.wslRelativePath ?? parts.relativePath)
+        setScriptPath(config.path)
+        return
+      }
 
-    setScriptTarget(config?.target ?? 'native')
-    setScriptPath(config?.path ?? runtimeLauncherScript)
-    setWslPathPrefix(parts.prefix)
-    setWslPathSuffix(parts.relativePath)
-  }, [runtimeLauncherScript])
+      setScriptTarget(config?.target ?? 'native')
+      setScriptPath(config?.path ?? runtimeLauncherScript)
+      setWslPathPrefix(parts.prefix)
+      setWslPathSuffix(parts.relativePath)
+    },
+    [runtimeLauncherScript],
+  )
   const {
     handleConfirmRuntimeEntrypointHistoryDelete,
     handleSelectRuntimeEntrypoint,
@@ -242,11 +193,13 @@ function SettingsRuntimePanel({
 
   const handleSaveMode = async () => {
     setSaveModeLoading(true)
+    setSaveModeHint(null)
+    setSaveModeError(null)
     try {
-      await onAiEnvironmentSave(buildAiEnvironmentPayload(
-        executionMode === 'custom-script' ? currentRuntimeEntrypointConfig : aiEnvironment?.runtimeEntrypointConfig,
-        executionMode === 'custom-script' ? mergedRuntimeEntrypointHistoryEntries : (aiEnvironment?.runtimeEntrypointHistoryEntries ?? []),
-      ))
+      await onAiEnvironmentSave(buildAiEnvironmentPayload(executionMode === 'custom-script' ? currentRuntimeEntrypointConfig : aiEnvironment?.runtimeEntrypointConfig, executionMode === 'custom-script' ? mergedRuntimeEntrypointHistoryEntries : (aiEnvironment?.runtimeEntrypointHistoryEntries ?? [])))
+      setSaveModeHint(t('settingsRuntime.saveModeSaved'))
+    } catch (error) {
+      setSaveModeError(error instanceof Error ? error.message : t('settingsRuntime.saveModeSaveError'))
     } finally {
       setSaveModeLoading(false)
     }
@@ -291,94 +244,41 @@ function SettingsRuntimePanel({
       description: t('settingsRuntime.windowsShellCmdDescription'),
     },
   ]
-  const {
-    inventoryLoading,
-    stopAllLoading,
-    stopSummary,
-    projectManagedRows,
-    sessionGroups,
-    idleManagedRows,
-    refreshInventory,
-    closeManagedProcess,
-    closeSessionRow,
-    closeAllTerminals,
-  } = useTerminalProcessInventory(projects)
+  const { inventoryLoading, stopAllLoading, stopSummary, projectManagedRows, sessionGroups, idleManagedRows, refreshInventory, closeManagedProcess, closeSessionRow, closeAllTerminals } = useTerminalProcessInventory(projects)
 
   return (
     <div className="space-y-8">
       <div>
         <p className="section-label mb-3">{t('settingsRuntime.kicker')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settingsRuntime.title')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {usesTmuxRuntime
-            ? t('settings.runtimePanel.managedDescription')
-            : t('settings.runtimePanel.unmanagedDescription')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{usesTmuxRuntime ? t('settings.runtimePanel.managedDescription') : t('settings.runtimePanel.unmanagedDescription')}</p>
         <div className="mb-6 rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/45 px-4 py-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-          <p>
-            {usesTmuxRuntime
-              ? t('settings.runtimePanel.managedCurrentMode')
-              : t('settings.runtimePanel.unmanagedCurrentMode')}
-          </p>
-          <p className="mt-2">
-            {usesTmuxRuntime
-              ? t('settings.runtimePanel.managedSwitchHint')
-              : t('settings.runtimePanel.unmanagedSwitchHint')}
-          </p>
+          <p>{usesTmuxRuntime ? t('settings.runtimePanel.managedCurrentMode') : t('settings.runtimePanel.unmanagedCurrentMode')}</p>
+          <p className="mt-2">{usesTmuxRuntime ? t('settings.runtimePanel.managedSwitchHint') : t('settings.runtimePanel.unmanagedSwitchHint')}</p>
         </div>
         <div className="space-y-4">
           <div className="grid gap-2 md:grid-cols-2">
             {modeOptions.map((option) => (
-              <label
-                key={option.value}
-                className="flex items-center gap-2 rounded-[18px] border px-4 py-3 text-sm text-[color:var(--color-foreground)]"
-                style={{ borderColor: executionMode === option.value ? 'var(--color-primary)' : 'var(--color-border)' }}
-              >
-                <input
-                  type="radio"
-                  name="runtime-execution-mode"
-                  value={option.value}
-                  checked={executionMode === option.value}
-                  onChange={() => setExecutionMode(option.value)}
-                />
+              <label key={option.value} className="flex items-center gap-2 rounded-[18px] border px-4 py-3 text-sm text-[color:var(--color-foreground)]" style={{ borderColor: executionMode === option.value ? 'var(--color-primary)' : 'var(--color-border)' }}>
+                <input type="radio" name="runtime-execution-mode" value={option.value} checked={executionMode === option.value} onChange={() => setExecutionMode(option.value)} />
                 {option.label}
               </label>
             ))}
           </div>
-          {modeOptions.length === 0 && (
-            <p className="text-sm text-[color:var(--color-muted-foreground)]">
-              {t('settingsRuntime.detectingCapabilities')}
-            </p>
-          )}
+          {modeOptions.length === 0 && <p className="text-sm text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.detectingCapabilities')}</p>}
           {showWindowsShellOptions && (
             <div className="rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/35 px-4 py-4">
               <div className="mb-3">
-                <p className="text-sm font-medium text-[color:var(--color-foreground)]">
-                  {t('settingsRuntime.windowsShellTitle')}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                  {t('settingsRuntime.windowsShellHint')}
-                </p>
+                <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('settingsRuntime.windowsShellTitle')}</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.windowsShellHint')}</p>
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 {windowsShellOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-start gap-2 rounded-[16px] border px-4 py-3 text-sm text-[color:var(--color-foreground)]"
-                    style={{ borderColor: windowsAiRunningShell === option.value ? 'var(--color-primary)' : 'var(--color-border)' }}
-                  >
-                    <input
-                      type="radio"
-                      name="windows-ai-running-shell"
-                      value={option.value}
-                      checked={windowsAiRunningShell === option.value}
-                      onChange={() => setWindowsAiRunningShell(option.value)}
-                    />
+                  <label key={option.value} className="flex items-start gap-2 rounded-[16px] border px-4 py-3 text-sm text-[color:var(--color-foreground)]" style={{ borderColor: windowsAiRunningShell === option.value ? 'var(--color-primary)' : 'var(--color-border)' }}>
+                    <input type="radio" name="windows-ai-running-shell" value={option.value} checked={windowsAiRunningShell === option.value} onChange={() => setWindowsAiRunningShell(option.value)} />
                     <span>
                       <span className="block font-medium">{option.label}</span>
-                      <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                        {option.description}
-                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{option.description}</span>
                     </span>
                   </label>
                 ))}
@@ -399,33 +299,18 @@ function SettingsRuntimePanel({
                         const nextTarget = value === 'wsl' ? 'wsl' : 'native'
                         setScriptTarget(nextTarget)
                         if (nextTarget === 'wsl' && normalizedNativeScriptPath && !normalizedWslScriptPath) {
-                          const inferredParts = splitWslEntrypointPath(
-                            isLikelyWslEntrypointPath(normalizedNativeScriptPath)
-                              ? normalizedNativeScriptPath
-                              : `~/${normalizedNativeScriptPath.replace(/^\/+/, '')}`
-                          )
+                          const inferredParts = splitWslEntrypointPath(isLikelyWslEntrypointPath(normalizedNativeScriptPath) ? normalizedNativeScriptPath : `~/${normalizedNativeScriptPath.replace(/^\/+/, '')}`)
                           setWslPathPrefix(inferredParts.prefix)
                           setWslPathSuffix(inferredParts.relativePath)
                         }
                       }}
                     />
-                    <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">
-                      {t(
-                        scriptTarget === 'wsl'
-                          ? 'settingsRuntime.customScriptTargetWslHint'
-                          : 'settingsRuntime.customScriptTargetNativeHint'
-                      )}
-                    </p>
+                    <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t(scriptTarget === 'wsl' ? 'settingsRuntime.customScriptTargetWslHint' : 'settingsRuntime.customScriptTargetNativeHint')}</p>
                   </div>
                   {scriptTarget === 'wsl' && (
                     <div className="space-y-1.5">
                       <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.customScriptWslPrefix')}</p>
-                      <Select
-                        ariaLabel={t('settingsRuntime.customScriptWslPrefix')}
-                        value={wslPathPrefix}
-                        options={wslPrefixOptions}
-                        onChange={(value) => setWslPathPrefix(value as RuntimeEntrypointWslPrefix)}
-                      />
+                      <Select ariaLabel={t('settingsRuntime.customScriptWslPrefix')} value={wslPathPrefix} options={wslPrefixOptions} onChange={(value) => setWslPathPrefix(value as RuntimeEntrypointWslPrefix)} />
                     </div>
                   )}
                 </div>
@@ -436,20 +321,10 @@ function SettingsRuntimePanel({
                     {scriptTarget === 'wsl' ? (
                       <div className="quiet-control flex h-11 w-full items-center rounded-full border-0 px-4 pr-12 text-sm text-[color:var(--color-foreground)]">
                         <span className="mr-2 shrink-0 text-[color:var(--color-muted-foreground)]">{wslPathPrefix}</span>
-                        <input
-                          value={wslPathSuffix}
-                          onChange={(e) => setWslPathSuffix(e.target.value)}
-                          className="min-w-0 flex-1 bg-transparent text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
-                          placeholder={t('settingsRuntime.customScriptWslPlaceholder')}
-                        />
+                        <input value={wslPathSuffix} onChange={(e) => setWslPathSuffix(e.target.value)} className="min-w-0 flex-1 bg-transparent text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]" placeholder={t('settingsRuntime.customScriptWslPlaceholder')} />
                       </div>
                     ) : (
-                      <Input
-                        value={scriptPath}
-                        onChange={(e) => setScriptPath(e.target.value)}
-                        className="quiet-control flex-1 h-11 rounded-full border-0 px-4 pr-12 text-[color:var(--color-foreground)]"
-                        placeholder={t('settingsRuntime.customScriptPlaceholder')}
-                      />
+                      <Input value={scriptPath} onChange={(e) => setScriptPath(e.target.value)} className="quiet-control flex-1 h-11 rounded-full border-0 px-4 pr-12 text-[color:var(--color-foreground)]" placeholder={t('settingsRuntime.customScriptPlaceholder')} />
                     )}
                     <button
                       type="button"
@@ -466,9 +341,7 @@ function SettingsRuntimePanel({
                       style={{ WebkitBackdropFilter: 'saturate(170%) blur(22px)' }}
                     >
                       <div className="mb-1 flex items-center justify-between gap-2 px-2 py-1">
-                        <span className="text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
-                          {t('settingsRuntime.savedScriptPaths')}
-                        </span>
+                        <span className="text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.savedScriptPaths')}</span>
                         <button
                           type="button"
                           className="button-interactive inline-flex h-7 items-center justify-center rounded-full px-2 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -486,12 +359,7 @@ function SettingsRuntimePanel({
                             const itemKey = `${item.target}:${item.path}`
                             const selected = itemKey === selectedRuntimeEntrypointHistoryKey
                             return (
-                              <div
-                                key={itemKey}
-                                className={`flex items-center gap-2 rounded-[13px] px-2 py-1.5 ${
-                                  selected ? 'bg-[color:var(--color-primary)]/12' : ''
-                                }`}
-                              >
+                              <div key={itemKey} className={`flex items-center gap-2 rounded-[13px] px-2 py-1.5 ${selected ? 'bg-[color:var(--color-primary)]/12' : ''}`}>
                                 <button
                                   type="button"
                                   className="button-interactive flex min-w-0 flex-1 items-center gap-2 rounded-[11px] px-1.5 py-1.5 text-left outline-none transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60"
@@ -515,41 +383,28 @@ function SettingsRuntimePanel({
                             )
                           })
                         ) : (
-                          <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">
-                            {t('settingsRuntime.noSavedScriptPaths')}
-                          </p>
+                          <p className="px-2 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.noSavedScriptPaths')}</p>
                         )}
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-              {historyMutationError && (
-                <p className="text-xs text-[color:var(--color-destructive)]">{historyMutationError}</p>
-              )}
+              {historyMutationError && <p className="text-xs text-[color:var(--color-destructive)]">{historyMutationError}</p>}
               <label className="inline-flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
-                <input
-                  type="checkbox"
-                  checked={runtimePassProjectPath}
-                  onChange={(e) => setRuntimePassProjectPath(e.target.checked)}
-                />
+                <input type="checkbox" checked={runtimePassProjectPath} onChange={(e) => setRuntimePassProjectPath(e.target.checked)} />
                 <span>
                   <span className="block">{t('settingsRuntime.passProjectPath')}</span>
-                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                    {t('settingsRuntime.passProjectPathHint')}
-                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settingsRuntime.passProjectPathHint')}</span>
                 </span>
               </label>
             </div>
           )}
-          <Button
-            className="h-11 rounded-full px-5 text-sm"
-            onClick={() => void handleSaveMode()}
-            loading={saveModeLoading}
-          >
+          <Button className="h-11 rounded-full px-5 text-sm" onClick={() => void handleSaveMode()} loading={saveModeLoading}>
             <Save className="h-4 w-4" />
             {t('settingsRuntime.saveMode')}
           </Button>
+          {(saveModeHint || saveModeError) && <p className={`text-xs leading-5 ${saveModeError ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-muted-foreground)]'}`}>{saveModeError || saveModeHint}</p>}
         </div>
       </div>
 
@@ -560,11 +415,7 @@ function SettingsRuntimePanel({
           setHistoryDeleteConfirmTarget(null)
         }}
         widthClassName="max-w-[560px]"
-        ariaLabel={t(
-          historyDeleteConfirmIsClearAll
-            ? 'settingsRuntime.clearSavedPathsConfirmLabel'
-            : 'settingsRuntime.deleteSavedPathConfirmLabel'
-        )}
+        ariaLabel={t(historyDeleteConfirmIsClearAll ? 'settingsRuntime.clearSavedPathsConfirmLabel' : 'settingsRuntime.deleteSavedPathConfirmLabel')}
       >
         <div className="space-y-4">
           <div className="flex items-start gap-3">
@@ -578,90 +429,42 @@ function SettingsRuntimePanel({
               <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
-                {t(
-                  historyDeleteConfirmIsClearAll
-                    ? 'settingsRuntime.clearSavedPathsConfirmTitle'
-                    : 'settingsRuntime.deleteSavedPathConfirmTitle'
-                )}
-              </h3>
-              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-                {historyDeleteConfirmIsClearAll
-                  ? t('settingsRuntime.clearSavedPathsConfirmHint', { count: runtimeEntrypointHistoryEntries.length })
-                  : t('settingsRuntime.deleteSavedPathConfirmHint', { value: historyDeleteConfirmValue })}
-              </p>
+              <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t(historyDeleteConfirmIsClearAll ? 'settingsRuntime.clearSavedPathsConfirmTitle' : 'settingsRuntime.deleteSavedPathConfirmTitle')}</h3>
+              <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{historyDeleteConfirmIsClearAll ? t('settingsRuntime.clearSavedPathsConfirmHint', { count: runtimeEntrypointHistoryEntries.length }) : t('settingsRuntime.deleteSavedPathConfirmHint', { value: historyDeleteConfirmValue })}</p>
             </div>
           </div>
 
-          <div
-            className="rounded-[18px] border px-4 py-3"
-            style={{ borderColor: 'var(--color-border)' }}
-          >
-            <p className="break-all text-sm text-[color:var(--color-foreground)]">
-              {historyDeleteConfirmValue}
-            </p>
+          <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+            <p className="break-all text-sm text-[color:var(--color-foreground)]">{historyDeleteConfirmValue}</p>
           </div>
 
-          {historyMutationError && (
-            <p className="text-xs text-[color:var(--color-destructive)]">{historyMutationError}</p>
-          )}
+          {historyMutationError && <p className="text-xs text-[color:var(--color-destructive)]">{historyMutationError}</p>}
 
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-10 px-4"
-              onClick={() => setHistoryDeleteConfirmTarget(null)}
-              disabled={historyMutationPending}
-            >
+            <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setHistoryDeleteConfirmTarget(null)} disabled={historyMutationPending}>
               {t('common.cancel')}
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="h-10 px-4"
-              onClick={handleConfirmRuntimeEntrypointHistoryDelete}
-              loading={historyMutationPending}
-              disabled={historyMutationPending || !historyDeleteConfirmTarget}
-            >
+            <Button type="button" variant="destructive" className="h-10 px-4" onClick={handleConfirmRuntimeEntrypointHistoryDelete} loading={historyMutationPending} disabled={historyMutationPending || !historyDeleteConfirmTarget}>
               {t('common.delete')}
             </Button>
           </div>
         </div>
       </ModalShell>
 
-      <SettingsAiRuntimeProfilesPanel
-        capability={capability}
-        profiles={aiRuntimeProfiles}
-        activeProfileId={activeAiRuntimeProfileId}
-        onProfilesSave={onAiRuntimeProfilesSave}
-      />
+      <SettingsAiRuntimeProfilesPanel capability={capability} profiles={aiRuntimeProfiles} activeProfileId={activeAiRuntimeProfileId} onProfilesSave={onAiRuntimeProfilesSave} />
 
       <div>
         <p className="section-label mb-3">{t('settingsRuntime.lifecycle')}</p>
         <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settingsRuntime.quitBehavior')}</h3>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-4">
-          {usesTmuxRuntime
-            ? t('settings.runtimePanel.managedQuitDescription')
-            : t('settings.runtimePanel.unmanagedQuitDescription')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-4">{usesTmuxRuntime ? t('settings.runtimePanel.managedQuitDescription') : t('settings.runtimePanel.unmanagedQuitDescription')}</p>
         <label className="inline-flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
-          <input
-            type="checkbox"
-            checked={keepAliveEnabled}
-            onChange={(e) => void handleKeepAliveToggle(e.target.checked)}
-            disabled={!usesTmuxRuntime || keepAliveSaving}
-          />
+          <input type="checkbox" checked={keepAliveEnabled} onChange={(e) => void handleKeepAliveToggle(e.target.checked)} disabled={!usesTmuxRuntime || keepAliveSaving} />
           {usesTmuxRuntime ? t('settings.runtimePanel.managedQuitLabel') : t('settings.runtimePanel.unmanagedQuitLabel')}
           {keepAliveSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--color-muted-foreground)]" /> : null}
         </label>
       </div>
 
-      <RuntimeDiagnosticsCard
-        diag={diag}
-        loading={loading}
-        onRunCheck={() => void runDiagnostics()}
-      />
+      <RuntimeDiagnosticsCard diag={diag} loading={loading} onRunCheck={() => void runDiagnostics()} />
 
       <RuntimeTerminalInventory
         usesTmuxRuntime={usesTmuxRuntime}

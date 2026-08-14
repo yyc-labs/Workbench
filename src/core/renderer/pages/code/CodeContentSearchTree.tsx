@@ -18,6 +18,7 @@ interface CodeContentSearchTreeProps {
   activeLocation: ActiveContentSearchLocation | null
   onOpenMatch: (relativePath: string, lineNumber: number, column: number) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -72,11 +73,7 @@ function useContainerSize() {
       const rect = container.getBoundingClientRect()
       const nextWidth = Math.max(0, Math.floor(rect.width))
       const nextHeight = Math.max(0, Math.floor(rect.height))
-      setSize((prev) => (
-        prev.width === nextWidth && prev.height === nextHeight
-          ? prev
-          : { width: nextWidth, height: nextHeight }
-      ))
+      setSize((prev) => (prev.width === nextWidth && prev.height === nextHeight ? prev : { width: nextWidth, height: nextHeight }))
     }
 
     updateSize()
@@ -95,12 +92,12 @@ function useContainerSize() {
 
 function buildContentSearchTreeData(
   files: ProjectFileContentSearchResult[],
-  autoCollapseMatchThreshold: number
+  autoCollapseMatchThreshold: number,
 ): {
-    nodes: ContentSearchTreeNode[]
-    fileNodeIds: string[]
-    defaultCollapsedFileNodeIds: Set<string>
-  } {
+  nodes: ContentSearchTreeNode[]
+  fileNodeIds: string[]
+  defaultCollapsedFileNodeIds: Set<string>
+} {
   const nodes: ContentSearchTreeNode[] = []
   const fileNodeIds: string[] = []
   const defaultCollapsedFileNodeIds = new Set<string>()
@@ -135,14 +132,7 @@ function buildContentSearchTreeData(
   return { nodes, fileNodeIds, defaultCollapsedFileNodeIds }
 }
 
-function ContentSearchNodeRenderer({
-  node,
-  style,
-  dragHandle,
-  activeLocation,
-  onOpenMatch,
-  onOpenFileContextMenu,
-}: ContentSearchNodeRendererProps) {
+function ContentSearchNodeRenderer({ node, style, dragHandle, activeLocation, onOpenMatch, onOpenFileContextMenu }: ContentSearchNodeRendererProps) {
   const data = node.data
 
   if (data.kind === 'file') {
@@ -168,20 +158,9 @@ function ContentSearchNodeRenderer({
             })
           }}
         >
-          {node.isOpen ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          )}
+          {node.isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
           <FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          <Tooltip
-            content={data.relativePath}
-            align="start"
-            placementMode="pointer"
-            interactive={false}
-            className="min-w-0 flex-1"
-            contentClassName="font-mono text-[10.5px] leading-[1.4]"
-          >
+          <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="min-w-0 flex-1" contentClassName="font-mono text-[10.5px] leading-[1.4]">
             <span className="code-content-search-file-path">{data.name}</span>
           </Tooltip>
           <div className="code-content-search-file-count">{data.matchCount}</div>
@@ -190,9 +169,7 @@ function ContentSearchNodeRenderer({
     )
   }
 
-  const isActive = activeLocation?.relativePath === data.relativePath
-    && activeLocation.lineNumber === data.lineNumber
-    && activeLocation.column === data.column
+  const isActive = activeLocation?.relativePath === data.relativePath && activeLocation.lineNumber === data.lineNumber && activeLocation.column === data.column
 
   return (
     <div ref={dragHandle} style={style}>
@@ -226,104 +203,85 @@ function ContentSearchNodeRenderer({
   )
 }
 
-const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeContentSearchTreeProps>(
-  function CodeContentSearchTreeInner({
-    files,
-    activeLocation,
-    onOpenMatch,
-    onOpenNodeFolder,
-    onCopyNodeName,
-    onCopyNodeRelativePath,
-    onCopyNodeRelativePathWithoutSlashes,
-    autoCollapseMatchThreshold = 10,
-  }, ref) {
-    const treeRef = useRef<TreeApi<ContentSearchTreeNode> | null>(null)
-    const { containerRef, size } = useContainerSize()
-    const [contextMenu, setContextMenu] = useState<CodeTreeContextMenuPayload | null>(null)
-    const {
-      nodes,
-      fileNodeIds,
-      defaultCollapsedFileNodeIds,
-    } = useMemo(
-      () => buildContentSearchTreeData(files, autoCollapseMatchThreshold),
-      [autoCollapseMatchThreshold, files]
-    )
+const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeContentSearchTreeProps>(function CodeContentSearchTreeInner(
+  { files, activeLocation, onOpenMatch, onOpenNodeFolder, onOpenNodeTerminal, onCopyNodeName, onCopyNodeRelativePath, onCopyNodeRelativePathWithoutSlashes, autoCollapseMatchThreshold = 10 },
+  ref,
+) {
+  const treeRef = useRef<TreeApi<ContentSearchTreeNode> | null>(null)
+  const { containerRef, size } = useContainerSize()
+  const [contextMenu, setContextMenu] = useState<CodeTreeContextMenuPayload | null>(null)
+  const { nodes, fileNodeIds, defaultCollapsedFileNodeIds } = useMemo(() => buildContentSearchTreeData(files, autoCollapseMatchThreshold), [autoCollapseMatchThreshold, files])
 
-    useImperativeHandle(ref, () => ({
+  useImperativeHandle(
+    ref,
+    () => ({
       expandAll: () => {
         treeRef.current?.openAll()
       },
       collapseAll: () => {
         treeRef.current?.closeAll()
       },
-    }), [])
+    }),
+    [],
+  )
 
-    useEffect(() => {
-      const tree = treeRef.current
-      if (!tree) return
+  useEffect(() => {
+    const tree = treeRef.current
+    if (!tree) return
 
-      tree.closeAll()
-      for (const fileNodeId of fileNodeIds) {
-        if (defaultCollapsedFileNodeIds.has(fileNodeId)) continue
-        tree.open(fileNodeId)
-      }
-    }, [defaultCollapsedFileNodeIds, fileNodeIds])
+    tree.closeAll()
+    for (const fileNodeId of fileNodeIds) {
+      if (defaultCollapsedFileNodeIds.has(fileNodeId)) continue
+      tree.open(fileNodeId)
+    }
+  }, [defaultCollapsedFileNodeIds, fileNodeIds])
 
-    const handleOpenFileContextMenu = useCallback((payload: CodeTreeContextMenuPayload) => {
-      setContextMenu(payload)
-    }, [])
+  const handleOpenFileContextMenu = useCallback((payload: CodeTreeContextMenuPayload) => {
+    setContextMenu(payload)
+  }, [])
 
-    const closeContextMenu = useCallback(() => {
-      setContextMenu(null)
-    }, [])
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null)
+  }, [])
 
-    return (
-      <div ref={containerRef} className="code-content-search-virtual-wrap">
-        {size.width > 0 && size.height > 0 && (
-          <Tree<ContentSearchTreeNode>
-            ref={treeRef}
-            data={nodes}
-            idAccessor={(item) => item.id}
-            childrenAccessor={(item) => (item.kind === 'file' ? item.children : null)}
-            width={size.width}
-            height={size.height}
-            rowHeight={34}
-            indent={14}
-            overscanCount={10}
-            className="code-content-search-virtual-list"
-            disableDrag
-            disableDrop
-            disableEdit
-            disableMultiSelection
-          >
-            {(props) => (
-              <ContentSearchNodeRenderer
-                {...props}
-                activeLocation={activeLocation}
-                onOpenMatch={onOpenMatch}
-                onOpenFileContextMenu={handleOpenFileContextMenu}
-              />
-            )}
-          </Tree>
-        )}
-        {contextMenu && (
-          <CodeTreeContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            nodeName={contextMenu.nodeName}
-            nodeKind={contextMenu.nodeKind}
-            onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
-            onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
-            onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
-            onCopyRelativePathWithoutSlashes={() => (
-              onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)
-            )}
-            onClose={closeContextMenu}
-          />
-        )}
-      </div>
-    )
-  }
-)
+  return (
+    <div ref={containerRef} className="code-content-search-virtual-wrap">
+      {size.width > 0 && size.height > 0 && (
+        <Tree<ContentSearchTreeNode>
+          ref={treeRef}
+          data={nodes}
+          idAccessor={(item) => item.id}
+          childrenAccessor={(item) => (item.kind === 'file' ? item.children : null)}
+          width={size.width}
+          height={size.height}
+          rowHeight={34}
+          indent={14}
+          overscanCount={10}
+          className="code-content-search-virtual-list"
+          disableDrag
+          disableDrop
+          disableEdit
+          disableMultiSelection
+        >
+          {(props) => <ContentSearchNodeRenderer {...props} activeLocation={activeLocation} onOpenMatch={onOpenMatch} onOpenFileContextMenu={handleOpenFileContextMenu} />}
+        </Tree>
+      )}
+      {contextMenu && (
+        <CodeTreeContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          nodeName={contextMenu.nodeName}
+          nodeKind={contextMenu.nodeKind}
+          onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
+          onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
+          onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}
+          onClose={closeContextMenu}
+        />
+      )}
+    </div>
+  )
+})
 
 export const CodeContentSearchTree = memo(CodeContentSearchTreeInner)

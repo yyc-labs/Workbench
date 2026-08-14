@@ -48,6 +48,7 @@ type CodeWorkspaceSidebarProps = {
   onCopyTreeNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenContentSearchResult: (relativePath: string, lineNumber: number, column: number) => void
   onOpenTreeNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onOpenTreeNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onReloadTree: () => void
   onSelectTreeFile: (relativePath: string) => void
   onSetContentSearchCaseSensitive: Dispatch<SetStateAction<boolean>>
@@ -98,6 +99,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   onCopyTreeNodeRelativePathWithoutSlashes,
   onOpenContentSearchResult,
   onOpenTreeNodeFolder,
+  onOpenTreeNodeTerminal,
   onReloadTree,
   onSelectTreeFile,
   onSetContentSearchCaseSensitive,
@@ -188,6 +190,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             onToggleDirectory={onToggleTreeDirectory}
             onSelectFile={onSelectTreeFile}
             onOpenNodeFolder={onOpenTreeNodeFolder}
+            onOpenNodeTerminal={onOpenTreeNodeTerminal}
             onCopyNodeName={onCopyTreeNodeName}
             onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
             onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
@@ -311,6 +314,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
           autoCollapseMatchThreshold={autoCollapseMatchThreshold}
           onOpenMatch={onOpenContentSearchResult}
           onOpenNodeFolder={onOpenTreeNodeFolder}
+          onOpenNodeTerminal={onOpenTreeNodeTerminal}
           onCopyNodeName={onCopyTreeNodeName}
           onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
           onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}

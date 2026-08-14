@@ -1,16 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Plus, RefreshCw, Trash2 } from 'lucide-react'
-import type {
-  AiCommitConfig,
-  AiCommitProfile,
-  ClaudeRuntimeProfile,
-  CodexSettingsSnapshotMap,
-} from '../../../shared/types'
+import type { AiCommitConfig, AiCommitProfile, CodexGatewayBindingMap, ClaudeRuntimeProfile, CodexSettingsSnapshotMap } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select, type SelectOption } from '../../components/ui/select'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
+import { getCodexDisplaySnapshot } from '../../lib/codexGatewaySummary'
 import { clampMaxBullets, clampSplitMaxBatches } from './settings.helpers'
 
 type AiCommitPanelProps = {
@@ -18,6 +14,7 @@ type AiCommitPanelProps = {
   onSave: (value: AiCommitConfig) => Promise<void>
   claudeRuntimeProfiles?: ClaudeRuntimeProfile[]
   codexSettingsSnapshots?: CodexSettingsSnapshotMap
+  codexGatewayBindings?: CodexGatewayBindingMap
   preferredCodexScopeKey?: string
 }
 
@@ -62,9 +59,7 @@ function normalizeProfile(profile: Partial<AiCommitProfile>, fallbackIndex: numb
 
 function normalizeProfiles(aiCommit: AiCommitConfig): AiCommitProfile[] {
   const sourceProfiles = Array.isArray(aiCommit.profiles) ? aiCommit.profiles : []
-  const normalized = sourceProfiles
-    .map((profile, index) => normalizeProfile(profile, index))
-    .filter((profile) => profile.id)
+  const normalized = sourceProfiles.map((profile, index) => normalizeProfile(profile, index)).filter((profile) => profile.id)
 
   const deduped: AiCommitProfile[] = []
   const usedIds = new Set<string>()
@@ -76,12 +71,14 @@ function normalizeProfiles(aiCommit: AiCommitConfig): AiCommitProfile[] {
 
   if (deduped.length > 0) return deduped
 
-  return [{
-    ...createDefaultProfile(),
-    apiBaseUrl: aiCommit.apiBaseUrl?.trim() || 'https://api.openai.com/v1',
-    apiKey: aiCommit.apiKey?.trim() || '',
-    model: aiCommit.model?.trim() || 'gpt-4o-mini',
-  }]
+  return [
+    {
+      ...createDefaultProfile(),
+      apiBaseUrl: aiCommit.apiBaseUrl?.trim() || 'https://api.openai.com/v1',
+      apiKey: aiCommit.apiKey?.trim() || '',
+      model: aiCommit.model?.trim() || 'gpt-4o-mini',
+    },
+  ]
 }
 
 function resolveActiveProfileId(aiCommit: AiCommitConfig, profiles: AiCommitProfile[]): string {
@@ -99,11 +96,7 @@ function getProfileSourceLabel(source: AiCommitProfile['source'] | undefined): s
 }
 
 function normalizeLoadedAgentProfileKeys(keys: AiCommitConfig['loadedAgentProfileKeys']): string[] {
-  return Array.from(new Set(
-    (keys ?? [])
-      .map((key) => key.trim())
-      .filter(Boolean)
-  ))
+  return Array.from(new Set((keys ?? []).map((key) => key.trim()).filter(Boolean)))
 }
 
 function getAgentProfileIdentityKey(profile: Pick<AiCommitProfile, 'source' | 'sourceKey'>): string | null {
@@ -123,17 +116,10 @@ function getAgentProfileIdentityKey(profile: Pick<AiCommitProfile, 'source' | 's
   return null
 }
 
-function buildClaudeAgentProfileCandidates(
-  profiles: ClaudeRuntimeProfile[] | undefined,
-): AgentProfileCandidate[] {
+function buildClaudeAgentProfileCandidates(profiles: ClaudeRuntimeProfile[] | undefined): AgentProfileCandidate[] {
   const list = profiles ?? []
   return list.map((profile) => {
-    const sourceKey = [
-      'claude',
-      profile.id,
-      profile.config.anthropicBaseUrl,
-      profile.config.anthropicModel,
-    ].join(':')
+    const sourceKey = ['claude', profile.id, profile.config.anthropicBaseUrl, profile.config.anthropicModel].join(':')
 
     return {
       key: sourceKey,
@@ -151,77 +137,51 @@ function buildClaudeAgentProfileCandidates(
   })
 }
 
-function buildCodexAgentProfileCandidates(
-  snapshots: CodexSettingsSnapshotMap | undefined,
-  preferredScopeKey: string | undefined
-): AgentProfileCandidate[] {
+function buildCodexAgentProfileCandidates(snapshots: CodexSettingsSnapshotMap | undefined, bindings: CodexGatewayBindingMap | undefined, preferredScopeKey: string | undefined): AgentProfileCandidate[] {
   const entries = Object.entries(snapshots ?? {})
   if (entries.length === 0) return []
 
-  const sortedEntries = entries
-    .slice()
-    .sort(([left], [right]) => {
-      if (left === preferredScopeKey) return -1
-      if (right === preferredScopeKey) return 1
-      return left.localeCompare(right)
+  const sortedEntries = entries.slice().sort(([left], [right]) => {
+    if (left === preferredScopeKey) return -1
+    if (right === preferredScopeKey) return 1
+    return left.localeCompare(right)
+  })
+  const selectedEntries = preferredScopeKey ? sortedEntries.filter(([scopeKey]) => scopeKey === preferredScopeKey) : sortedEntries.slice(0, 1)
+
+  return selectedEntries.flatMap(([scopeKey, snapshot]) => {
+    const binding = bindings?.[scopeKey]
+    const displaySnapshot = getCodexDisplaySnapshot(snapshot, binding) ?? snapshot
+
+    return Object.entries(displaySnapshot.config.modelProviders).map(([providerKey, provider]) => {
+      const sourceKey = ['codex', scopeKey, providerKey, provider.baseUrl, provider.model].join(':')
+
+      return {
+        key: sourceKey,
+        identityKey: `codex:${scopeKey}:${providerKey}`,
+        profile: {
+          id: createProfileId(),
+          name: `Codex - ${provider.name || providerKey}`,
+          source: 'codex' as const,
+          sourceKey,
+          apiBaseUrl: provider.baseUrl,
+          apiKey: displaySnapshot.providerApiKeys[providerKey] ?? '',
+          model: provider.model,
+        },
+      }
     })
-  const selectedEntries = preferredScopeKey
-    ? sortedEntries.filter(([scopeKey]) => scopeKey === preferredScopeKey)
-    : sortedEntries.slice(0, 1)
-
-  return selectedEntries
-    .flatMap(([scopeKey, snapshot]) =>
-      Object.entries(snapshot.config.modelProviders).map(([providerKey, provider]) => {
-        const sourceKey = [
-          'codex',
-          scopeKey,
-          providerKey,
-          provider.baseUrl,
-          snapshot.config.model,
-        ].join(':')
-
-        return {
-          key: sourceKey,
-          identityKey: `codex:${scopeKey}:${providerKey}`,
-          profile: {
-            id: createProfileId(),
-            name: `Codex - ${provider.name || providerKey}`,
-            source: 'codex' as const,
-            sourceKey,
-            apiBaseUrl: provider.baseUrl,
-            apiKey: snapshot.providerApiKeys[providerKey] ?? '',
-            model: snapshot.config.model,
-          },
-        }
-      })
-    )
+  })
 }
 
-function buildAgentProfileCandidates(
-  claudeRuntimeProfiles: ClaudeRuntimeProfile[] | undefined,
-  codexSettingsSnapshots: CodexSettingsSnapshotMap | undefined,
-  preferredCodexScopeKey: string | undefined
-): AgentProfileCandidate[] {
-  return [
-    ...buildClaudeAgentProfileCandidates(claudeRuntimeProfiles),
-    ...buildCodexAgentProfileCandidates(codexSettingsSnapshots, preferredCodexScopeKey),
-  ]
+function buildAgentProfileCandidates(claudeRuntimeProfiles: ClaudeRuntimeProfile[] | undefined, codexSettingsSnapshots: CodexSettingsSnapshotMap | undefined, codexGatewayBindings: CodexGatewayBindingMap | undefined, preferredCodexScopeKey: string | undefined): AgentProfileCandidate[] {
+  return [...buildClaudeAgentProfileCandidates(claudeRuntimeProfiles), ...buildCodexAgentProfileCandidates(codexSettingsSnapshots, codexGatewayBindings, preferredCodexScopeKey)]
 }
 
-function SettingsAiCommitPanel({
-  aiCommit,
-  onSave,
-  claudeRuntimeProfiles,
-  codexSettingsSnapshots,
-  preferredCodexScopeKey,
-}: AiCommitPanelProps) {
+function SettingsAiCommitPanel({ aiCommit, onSave, claudeRuntimeProfiles, codexSettingsSnapshots, codexGatewayBindings, preferredCodexScopeKey }: AiCommitPanelProps) {
   const { t, tHtml } = useI18n()
   const autoLoadSignatureRef = useRef<string | null>(null)
   const [enabled, setEnabled] = useState(Boolean(aiCommit.enabled ?? true))
   const [profiles, setProfiles] = useState<AiCommitProfile[]>(() => normalizeProfiles(aiCommit))
-  const [activeProfileId, setActiveProfileId] = useState(() =>
-    resolveActiveProfileId(aiCommit, normalizeProfiles(aiCommit))
-  )
+  const [activeProfileId, setActiveProfileId] = useState(() => resolveActiveProfileId(aiCommit, normalizeProfiles(aiCommit)))
   const [wslPwshPath, setWslPwshPath] = useState(aiCommit.wslPwshPath || '/snap/bin/pwsh')
   const [split, setSplit] = useState(Boolean(aiCommit.split ?? false))
   const [splitMaxBatches, setSplitMaxBatches] = useState(String(clampSplitMaxBatches(aiCommit.splitMaxBatches)))
@@ -246,74 +206,34 @@ function SettingsAiCommitPanel({
     setDeleteError(null)
     setSyncAgentMessage(null)
     setSyncAgentError(null)
-  }, [
-    aiCommit.enabled,
-    aiCommit.activeProfileId,
-    aiCommit.profiles,
-    aiCommit.apiBaseUrl,
-    aiCommit.apiKey,
-    aiCommit.model,
-    aiCommit.wslPwshPath,
-    aiCommit.split,
-    aiCommit.splitMaxBatches,
-    aiCommit.maxBullets,
-  ])
+  }, [aiCommit.enabled, aiCommit.activeProfileId, aiCommit.profiles, aiCommit.apiBaseUrl, aiCommit.apiKey, aiCommit.model, aiCommit.wslPwshPath, aiCommit.split, aiCommit.splitMaxBatches, aiCommit.maxBullets])
 
-  const activeProfile = useMemo(
-    () => profiles.find((profile) => profile.id === activeProfileId) ?? profiles[0] ?? createDefaultProfile(),
-    [activeProfileId, profiles]
-  )
-  const deleteConfirmProfile = useMemo(
-    () => profiles.find((profile) => profile.id === deleteConfirmProfileId) ?? null,
-    [deleteConfirmProfileId, profiles]
-  )
-  const loadedAgentProfileKeys = useMemo(
-    () => normalizeLoadedAgentProfileKeys(aiCommit.loadedAgentProfileKeys),
-    [aiCommit.loadedAgentProfileKeys]
-  )
-  const agentProfileCandidates = useMemo(
-    () => buildAgentProfileCandidates(
-      claudeRuntimeProfiles,
-      codexSettingsSnapshots,
-      preferredCodexScopeKey
-    ),
-    [claudeRuntimeProfiles, codexSettingsSnapshots, preferredCodexScopeKey]
-  )
+  const activeProfile = useMemo(() => profiles.find((profile) => profile.id === activeProfileId) ?? profiles[0] ?? createDefaultProfile(), [activeProfileId, profiles])
+  const deleteConfirmProfile = useMemo(() => profiles.find((profile) => profile.id === deleteConfirmProfileId) ?? null, [deleteConfirmProfileId, profiles])
+  const loadedAgentProfileKeys = useMemo(() => normalizeLoadedAgentProfileKeys(aiCommit.loadedAgentProfileKeys), [aiCommit.loadedAgentProfileKeys])
+  const agentProfileCandidates = useMemo(() => buildAgentProfileCandidates(claudeRuntimeProfiles, codexSettingsSnapshots, codexGatewayBindings, preferredCodexScopeKey), [claudeRuntimeProfiles, codexSettingsSnapshots, codexGatewayBindings, preferredCodexScopeKey])
   const profileOptions = useMemo<SelectOption[]>(
-    () => profiles.map((profile) => ({
-      value: profile.id,
-      label: `${profile.name} · ${getProfileSourceLabel(profile.source)}`,
-    })),
-    [profiles]
+    () =>
+      profiles.map((profile) => ({
+        value: profile.id,
+        label: `${profile.name} · ${getProfileSourceLabel(profile.source)}`,
+      })),
+    [profiles],
   )
 
   useEffect(() => {
     const loadedKeys = new Set(loadedAgentProfileKeys)
-    const existingIdentityKeys = new Set(
-      profiles
-        .map((profile) => getAgentProfileIdentityKey(profile))
-        .filter((key): key is string => Boolean(key))
-    )
-    const newCandidates = agentProfileCandidates.filter((candidate) =>
-      !loadedKeys.has(candidate.key) && !existingIdentityKeys.has(candidate.identityKey)
-    )
+    const existingIdentityKeys = new Set(profiles.map((profile) => getAgentProfileIdentityKey(profile)).filter((key): key is string => Boolean(key)))
+    const newCandidates = agentProfileCandidates.filter((candidate) => !loadedKeys.has(candidate.key) && !existingIdentityKeys.has(candidate.identityKey))
 
     if (newCandidates.length === 0) return
     const loadSignature = newCandidates.map((candidate) => candidate.key).join('|')
     if (autoLoadSignatureRef.current === loadSignature) return
 
     autoLoadSignatureRef.current = loadSignature
-    const nextProfiles = [
-      ...profiles,
-      ...newCandidates.map((candidate) => candidate.profile),
-    ]
-    const nextLoadedKeys = Array.from(new Set([
-      ...loadedAgentProfileKeys,
-      ...newCandidates.map((candidate) => candidate.key),
-    ]))
-    const activeProfileForSave = nextProfiles.find((profile) => profile.id === activeProfileId)
-      ?? nextProfiles[0]
-      ?? createDefaultProfile()
+    const nextProfiles = [...profiles, ...newCandidates.map((candidate) => candidate.profile)]
+    const nextLoadedKeys = Array.from(new Set([...loadedAgentProfileKeys, ...newCandidates.map((candidate) => candidate.key)]))
+    const activeProfileForSave = nextProfiles.find((profile) => profile.id === activeProfileId) ?? nextProfiles[0] ?? createDefaultProfile()
 
     setProfiles(nextProfiles)
     void onSave({
@@ -327,21 +247,10 @@ function SettingsAiCommitPanel({
     }).catch(() => {
       autoLoadSignatureRef.current = null
     })
-  }, [
-    activeProfileId,
-    agentProfileCandidates,
-    aiCommit,
-    loadedAgentProfileKeys,
-    onSave,
-    profiles,
-  ])
+  }, [activeProfileId, agentProfileCandidates, aiCommit, loadedAgentProfileKeys, onSave, profiles])
 
   const updateActiveProfile = (patch: Partial<AiCommitProfile>) => {
-    setProfiles((current) =>
-      current.map((profile) =>
-        profile.id === activeProfile.id ? { ...profile, ...patch } : profile
-      )
-    )
+    setProfiles((current) => current.map((profile) => (profile.id === activeProfile.id ? { ...profile, ...patch } : profile)))
   }
 
   const addProfile = () => {
@@ -361,15 +270,9 @@ function SettingsAiCommitPanel({
     setSyncAgentError(null)
   }
 
-  const buildSavePayload = (
-    sourceProfiles: AiCommitProfile[],
-    requestedActiveProfileId: string,
-    nextLoadedAgentProfileKeys = loadedAgentProfileKeys
-  ) => {
+  const buildSavePayload = (sourceProfiles: AiCommitProfile[], requestedActiveProfileId: string, nextLoadedAgentProfileKeys = loadedAgentProfileKeys) => {
     const normalizedProfiles = sourceProfiles.map((profile, index) => normalizeProfile(profile, index))
-    const normalizedActiveProfile = normalizedProfiles.find((profile) => profile.id === requestedActiveProfileId)
-      ?? normalizedProfiles[0]
-      ?? createDefaultProfile()
+    const normalizedActiveProfile = normalizedProfiles.find((profile) => profile.id === requestedActiveProfileId) ?? normalizedProfiles[0] ?? createDefaultProfile()
     const parsedSplitMaxBatches = Number.parseInt(splitMaxBatches.trim(), 10)
     const normalizedSplitMaxBatches = clampSplitMaxBatches(parsedSplitMaxBatches)
     const parsedMaxBullets = Number.parseInt(maxBullets.trim(), 10)
@@ -402,13 +305,7 @@ function SettingsAiCommitPanel({
     const nextProfiles = profiles.filter((profile) => profile.id !== deleteConfirmProfile.id)
     const nextSelectedIndex = Math.max(deletedIndex - 1, 0)
     const nextActiveProfileId = nextProfiles[nextSelectedIndex]?.id ?? DEFAULT_AI_COMMIT_PROFILE_ID
-    const {
-      payload,
-      normalizedProfiles,
-      normalizedActiveProfile,
-      normalizedSplitMaxBatches,
-      normalizedMaxBullets,
-    } = buildSavePayload(nextProfiles, nextActiveProfileId)
+    const { payload, normalizedProfiles, normalizedActiveProfile, normalizedSplitMaxBatches, normalizedMaxBullets } = buildSavePayload(nextProfiles, nextActiveProfileId)
 
     setSaving(true)
     setDeleteError(null)
@@ -432,9 +329,7 @@ function SettingsAiCommitPanel({
 
     const currentIndex = profiles.findIndex((profile) => profile.id === activeProfileId)
     const previousProfiles = currentIndex >= 0 ? profiles.slice(0, currentIndex).reverse() : []
-    const previousProfile = previousProfiles.find((profile) =>
-      nextProfiles.some((nextProfile) => nextProfile.id === profile.id)
-    )
+    const previousProfile = previousProfiles.find((profile) => nextProfiles.some((nextProfile) => nextProfile.id === profile.id))
 
     return previousProfile?.id ?? nextProfiles[0]?.id ?? DEFAULT_AI_COMMIT_PROFILE_ID
   }
@@ -442,9 +337,7 @@ function SettingsAiCommitPanel({
   const syncAgentProfiles = async () => {
     if (saving || syncingAgentProfiles) return
 
-    const candidateByIdentityKey = new Map(
-      agentProfileCandidates.map((candidate) => [candidate.identityKey, candidate])
-    )
+    const candidateByIdentityKey = new Map(agentProfileCandidates.map((candidate) => [candidate.identityKey, candidate]))
     const usedCandidateKeys = new Set<string>()
     const usedIdentityKeys = new Set<string>()
     const syncedProfiles = profiles.flatMap((profile) => {
@@ -457,10 +350,12 @@ function SettingsAiCommitPanel({
 
       usedIdentityKeys.add(identityKey)
       usedCandidateKeys.add(candidate.key)
-      return [{
-        ...candidate.profile,
-        id: profile.id,
-      }]
+      return [
+        {
+          ...candidate.profile,
+          id: profile.id,
+        },
+      ]
     })
 
     for (const candidate of agentProfileCandidates) {
@@ -471,17 +366,7 @@ function SettingsAiCommitPanel({
 
     const nextProfiles = syncedProfiles.length > 0 ? syncedProfiles : [createDefaultProfile()]
     const nextLoadedAgentProfileKeys = agentProfileCandidates.map((candidate) => candidate.key)
-    const {
-      payload,
-      normalizedProfiles,
-      normalizedActiveProfile,
-      normalizedSplitMaxBatches,
-      normalizedMaxBullets,
-    } = buildSavePayload(
-      nextProfiles,
-      resolveActiveProfileAfterSync(nextProfiles),
-      nextLoadedAgentProfileKeys
-    )
+    const { payload, normalizedProfiles, normalizedActiveProfile, normalizedSplitMaxBatches, normalizedMaxBullets } = buildSavePayload(nextProfiles, resolveActiveProfileAfterSync(nextProfiles), nextLoadedAgentProfileKeys)
 
     setSyncingAgentProfiles(true)
     setSyncAgentMessage(null)
@@ -506,13 +391,7 @@ function SettingsAiCommitPanel({
   const handleSave = async () => {
     setSaving(true)
     try {
-      const {
-        payload,
-        normalizedProfiles,
-        normalizedActiveProfile,
-        normalizedSplitMaxBatches,
-        normalizedMaxBullets,
-      } = buildSavePayload(profiles, activeProfileId)
+      const { payload, normalizedProfiles, normalizedActiveProfile, normalizedSplitMaxBatches, normalizedMaxBullets } = buildSavePayload(profiles, activeProfileId)
 
       await onSave(payload)
       setProfiles(normalizedProfiles)
@@ -530,9 +409,7 @@ function SettingsAiCommitPanel({
       <div>
         <p className="section-label mb-3">{t('settingsAiCommit.kicker')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('settingsAiCommit.title')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('settingsAiCommit.description')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('settingsAiCommit.description')}</p>
       </div>
 
       <div className="rounded-[28px] border px-6 py-6 surface-card space-y-6" style={{ borderColor: 'var(--color-border)' }}>
@@ -540,27 +417,14 @@ function SettingsAiCommitPanel({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('settingsAiCommit.profileSectionTitle')}</p>
-              <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                {t('settingsAiCommit.profileSectionDescription')}
-              </p>
+              <p className="mt-1 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.profileSectionDescription')}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                className="h-9 rounded-full px-3 text-xs"
-                onClick={() => addProfile()}
-                disabled={saving || syncingAgentProfiles}
-              >
+              <Button variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={() => addProfile()} disabled={saving || syncingAgentProfiles}>
                 <Plus className="h-3.5 w-3.5" />
                 {t('settingsAiCommit.addProfile')}
               </Button>
-              <Button
-                variant="outline"
-                className="h-9 rounded-full px-3 text-xs"
-                onClick={() => void syncAgentProfiles()}
-                loading={syncingAgentProfiles}
-                disabled={saving}
-              >
+              <Button variant="outline" className="h-9 rounded-full px-3 text-xs" onClick={() => void syncAgentProfiles()} loading={syncingAgentProfiles} disabled={saving}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 {t('settingsAiCommit.syncAgentProfiles')}
               </Button>
@@ -570,23 +434,14 @@ function SettingsAiCommitPanel({
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.activeProfile')}</p>
-              <Select
-                ariaLabel={t('settingsAiCommit.activeProfile')}
-                value={activeProfile.id}
-                options={profileOptions}
-                onChange={setActiveProfileId}
-              />
+              <Select ariaLabel={t('settingsAiCommit.activeProfile')} value={activeProfile.id} options={profileOptions} onChange={setActiveProfileId} />
             </div>
             <div className="flex items-end">
               <Button
                 variant="outline"
                 className="h-10 rounded-full px-4 text-xs text-[color:var(--color-destructive)]"
                 disabled={profiles.length <= 1 || activeProfile.source !== 'manual'}
-                title={
-                  activeProfile.source !== 'manual'
-                    ? t('settingsAiCommit.deleteExternalProfileDisabled')
-                    : undefined
-                }
+                title={activeProfile.source !== 'manual' ? t('settingsAiCommit.deleteExternalProfileDisabled') : undefined}
                 onClick={() => {
                   setDeleteError(null)
                   setDeleteConfirmProfileId(activeProfile.id)
@@ -598,52 +453,27 @@ function SettingsAiCommitPanel({
             </div>
           </div>
 
-          {(syncAgentMessage || syncAgentError) && (
-            <p className={`text-xs ${syncAgentError ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
-              {syncAgentError || syncAgentMessage}
-            </p>
-          )}
+          {(syncAgentMessage || syncAgentError) && <p className={`text-xs ${syncAgentError ? 'text-[color:var(--color-destructive)]' : 'text-[color:var(--color-muted-foreground)]'}`}>{syncAgentError || syncAgentMessage}</p>}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.profileName')}</p>
-              <Input
-                value={activeProfile.name}
-                onChange={(e) => updateActiveProfile({ name: e.target.value })}
-                className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-                placeholder={t('settingsAiCommit.profileNamePlaceholder')}
-              />
+              <Input value={activeProfile.name} onChange={(e) => updateActiveProfile({ name: e.target.value })} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder={t('settingsAiCommit.profileNamePlaceholder')} />
             </div>
 
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.model')}</p>
-              <Input
-                value={activeProfile.model ?? ''}
-                onChange={(e) => updateActiveProfile({ model: e.target.value })}
-                className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-                placeholder="gpt-4o-mini"
-              />
+              <Input value={activeProfile.model ?? ''} onChange={(e) => updateActiveProfile({ model: e.target.value })} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="gpt-4o-mini" />
             </div>
 
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.apiBaseUrl')}</p>
-              <Input
-                value={activeProfile.apiBaseUrl ?? ''}
-                onChange={(e) => updateActiveProfile({ apiBaseUrl: e.target.value })}
-                className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-                placeholder="https://api.openai.com/v1"
-              />
+              <Input value={activeProfile.apiBaseUrl ?? ''} onChange={(e) => updateActiveProfile({ apiBaseUrl: e.target.value })} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="https://api.openai.com/v1" />
             </div>
 
             <div className="space-y-1.5">
               <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.apiKey')}</p>
-              <Input
-                type="password"
-                value={activeProfile.apiKey ?? ''}
-                onChange={(e) => updateActiveProfile({ apiKey: e.target.value })}
-                className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-                placeholder="sk-..."
-              />
+              <Input type="password" value={activeProfile.apiKey ?? ''} onChange={(e) => updateActiveProfile({ apiKey: e.target.value })} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="sk-..." />
             </div>
           </div>
         </div>
@@ -651,70 +481,34 @@ function SettingsAiCommitPanel({
         <div className="h-px bg-[color:var(--color-border)]" />
 
         <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
-          />
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           {t('settingsAiCommit.enableAiCommit')}
         </label>
 
         <label className="flex items-center gap-2 text-sm text-[color:var(--color-foreground)]">
-          <input
-            type="checkbox"
-            checked={split}
-            onChange={(e) => setSplit(e.target.checked)}
-          />
+          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} />
           {t('settingsAiCommit.enableSplitCommit')}
         </label>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.splitMaxBatches')}</p>
-            <Input
-              type="number"
-              min={1}
-              max={12}
-              step={1}
-              value={splitMaxBatches}
-              onChange={(e) => setSplitMaxBatches(e.target.value)}
-              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-              placeholder="4"
-              disabled={!split}
-            />
+            <Input type="number" min={1} max={12} step={1} value={splitMaxBatches} onChange={(e) => setSplitMaxBatches(e.target.value)} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="4" disabled={!split} />
           </div>
 
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.maxBullets')}</p>
-            <Input
-              type="number"
-              min={1}
-              max={20}
-              step={1}
-              value={maxBullets}
-              onChange={(e) => setMaxBullets(e.target.value)}
-              className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-              placeholder="8"
-            />
+            <Input type="number" min={1} max={20} step={1} value={maxBullets} onChange={(e) => setMaxBullets(e.target.value)} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="8" />
           </div>
         </div>
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settingsAiCommit.wslPwshPath')}</p>
-          <Input
-            value={wslPwshPath}
-            onChange={(e) => setWslPwshPath(e.target.value)}
-            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-            placeholder="/snap/bin/pwsh"
-          />
+          <Input value={wslPwshPath} onChange={(e) => setWslPwshPath(e.target.value)} className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]" placeholder="/snap/bin/pwsh" />
           <p className="text-[11px] text-[color:var(--color-muted-foreground)]" dangerouslySetInnerHTML={tHtml('settingsAiCommit.wslPwshHint')} />
         </div>
 
-        <Button
-          className="h-10 rounded-full px-5 text-sm disabled:opacity-60"
-          loading={saving}
-          onClick={() => void handleSave()}
-        >
+        <Button className="h-10 rounded-full px-5 text-sm disabled:opacity-60" loading={saving} onClick={() => void handleSave()}>
           {saving ? t('common.saving') : t('settingsAiCommit.save')}
         </Button>
 
@@ -739,9 +533,7 @@ function SettingsAiCommitPanel({
                 <AlertTriangle className="h-5 w-5" strokeWidth={1.8} />
               </div>
               <div className="min-w-0">
-                <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">
-                  {t('settingsAiCommit.deleteProfileConfirmTitle')}
-                </h3>
+                <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settingsAiCommit.deleteProfileConfirmTitle')}</h3>
                 <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
                   {t('settingsAiCommit.deleteProfileConfirmHint', {
                     value: deleteConfirmProfile?.name ?? '',
@@ -750,37 +542,17 @@ function SettingsAiCommitPanel({
               </div>
             </div>
 
-            <div
-              className="rounded-[18px] border px-4 py-3"
-              style={{ borderColor: 'var(--color-border)' }}
-            >
-              <p className="text-sm text-[color:var(--color-foreground)]">
-                {deleteConfirmProfile?.name}
-              </p>
+            <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+              <p className="text-sm text-[color:var(--color-foreground)]">{deleteConfirmProfile?.name}</p>
             </div>
 
-            {deleteError && (
-              <p className="text-xs text-[color:var(--color-destructive)]">{deleteError}</p>
-            )}
+            {deleteError && <p className="text-xs text-[color:var(--color-destructive)]">{deleteError}</p>}
 
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                onClick={() => setDeleteConfirmProfileId(null)}
-                disabled={saving}
-              >
+              <Button type="button" variant="outline" className="h-10 px-4" onClick={() => setDeleteConfirmProfileId(null)} disabled={saving}>
                 {t('common.cancel')}
               </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="h-10 px-4"
-                onClick={() => void deleteActiveProfile()}
-                loading={saving}
-                disabled={saving || !deleteConfirmProfile}
-              >
+              <Button type="button" variant="destructive" className="h-10 px-4" onClick={() => void deleteActiveProfile()} loading={saving} disabled={saving || !deleteConfirmProfile}>
                 {t('common.delete')}
               </Button>
             </div>

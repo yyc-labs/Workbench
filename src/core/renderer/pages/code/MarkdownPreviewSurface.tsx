@@ -1,4 +1,4 @@
-import { type ComponentProps, type ComponentType, memo, Profiler, type RefObject, useEffect, useMemo } from 'react'
+import { type ComponentProps, type ComponentType, memo, Profiler, type RefObject, useDeferredValue, useEffect, useMemo } from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
@@ -11,10 +11,12 @@ const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBoxDrawingTables]
 type MarkdownPreviewSurfaceProps = {
   components: Components
   content: string
+  forceRenderAllBlocks?: boolean
   previewRootRef: RefObject<Element | null>
 }
 
-export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ components, content, previewRootRef }: MarkdownPreviewSurfaceProps) {
+export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ components, content, forceRenderAllBlocks = false, previewRootRef }: MarkdownPreviewSurfaceProps) {
+  const deferredContent = useDeferredValue(content)
   const previewComponents = useMemo<Components>(() => {
     const TableComponent = components.table as ComponentType<ComponentProps<'table'> & ExtraProps> | undefined
     return {
@@ -27,7 +29,7 @@ export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ com
 
   useEffect(() => {
     markMarkdownPreviewPerformance('preview.first-paint')
-  }, [content])
+  }, [deferredContent])
 
   useEffect(() => {
     if (!isMarkdownPreviewPerformanceDebugEnabled()) return
@@ -36,9 +38,9 @@ export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ com
 
   return (
     <Profiler id="code-markdown-preview" onRender={reportMarkdownPreviewCommit}>
-      <MarkdownPreviewVisibilityProvider forceRenderAllBlocks rootRef={previewRootRef}>
+      <MarkdownPreviewVisibilityProvider forceRenderAllBlocks={forceRenderAllBlocks} rootRef={previewRootRef}>
         <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={previewComponents} urlTransform={transformMarkdownUrl}>
-          {content}
+          {deferredContent}
         </ReactMarkdown>
       </MarkdownPreviewVisibilityProvider>
     </Profiler>

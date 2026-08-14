@@ -1,7 +1,8 @@
 import { AlertTriangle, KeyRound, Plus, RefreshCw, Router, Save, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../../shared/codexScope'
-import type { AiGatewayConfig, AiGatewayStatus, Capability, CodexConfig, CodexEnvironmentScope, CodexGatewayBinding, CodexModelProviderConfig, CodexSettingsSnapshot } from '../../../shared/types'
+import type { AiGatewayConfig, AiGatewayStatus, Capability, CodexApprovalPolicy, CodexConfig, CodexEnvironmentScope, CodexGatewayBinding, CodexModelProviderConfig, CodexSandboxMode, CodexSettingsSnapshot } from '../../../shared/types'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -20,6 +21,23 @@ type ProviderDraft = CodexModelProviderConfig & {
   key: string
   apiKey: string
 }
+
+const APPROVAL_POLICY_VALUES: CodexApprovalPolicy[] = ['untrusted', 'on-request', 'on-failure', 'never']
+const SANDBOX_MODE_VALUES: CodexSandboxMode[] = ['read-only', 'workspace-write', 'danger-full-access']
+const APPROVALS_REVIEWER_PRESET_OPTIONS: SelectOption[] = [
+  {
+    value: 'user',
+    label: 'user',
+  },
+  {
+    value: 'auto_review',
+    label: 'auto_review',
+  },
+  {
+    value: 'guardian_subagent',
+    label: 'guardian_subagent',
+  },
+]
 
 function createProviderDraftId(): string {
   return `provider-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -43,7 +61,7 @@ function normalizeProviderKey(value: string): string {
   return value.trim().replace(/\s+/g, '-')
 }
 
-function buildConfig(drafts: ProviderDraft[], currentProvider: string, modelReasoningEffort: string, preferredAuthMethod: string, approvalsReviewer: string): CodexConfig {
+function buildConfig(drafts: ProviderDraft[], currentProvider: string, modelReasoningEffort: string, preferredAuthMethod: string, approvalPolicy: CodexApprovalPolicy, sandboxMode: CodexSandboxMode, approvalsReviewer: string): CodexConfig {
   const modelProviders = Object.fromEntries(
     drafts.map((provider) => [
       normalizeProviderKey(provider.key),
@@ -60,12 +78,16 @@ function buildConfig(drafts: ProviderDraft[], currentProvider: string, modelReas
 
   const availableKeys = Object.keys(modelProviders)
   const resolvedProvider = modelProviders[currentProvider] ? currentProvider : (availableKeys[0] ?? '')
+  const resolvedApprovalPolicy = APPROVAL_POLICY_VALUES.includes(approvalPolicy) ? approvalPolicy : 'on-request'
+  const resolvedSandboxMode = SANDBOX_MODE_VALUES.includes(sandboxMode) ? sandboxMode : 'workspace-write'
 
   return {
     modelProvider: resolvedProvider,
     model: modelProviders[resolvedProvider]?.model ?? '',
     modelReasoningEffort: modelReasoningEffort.trim(),
     preferredAuthMethod: preferredAuthMethod.trim(),
+    approvalPolicy: resolvedApprovalPolicy,
+    sandboxMode: resolvedApprovalPolicy === 'never' ? 'danger-full-access' : resolvedSandboxMode,
     approvalsReviewer: approvalsReviewer.trim(),
     modelProviders,
   }
@@ -88,7 +110,9 @@ function createEmptySnapshot(): Pick<CodexSettingsSnapshot, 'config' | 'provider
       model: 'gpt-5.4',
       modelReasoningEffort: 'xhigh',
       preferredAuthMethod: 'apikey',
-      approvalsReviewer: 'guardian_subagent',
+      approvalPolicy: 'on-request',
+      sandboxMode: 'workspace-write',
+      approvalsReviewer: 'auto_review',
       modelProviders: {
         [defaultProviderKey]: {
           name: 'OpenAI',
@@ -116,6 +140,8 @@ function applySnapshotToState(
     setSelectedProviderDraftId: (value: string) => void
     setModelReasoningEffort: (value: string) => void
     setPreferredAuthMethod: (value: string) => void
+    setApprovalPolicy: (value: CodexApprovalPolicy) => void
+    setSandboxMode: (value: CodexSandboxMode) => void
     setApprovalsReviewer: (value: string) => void
     setProviders: (providers: ProviderDraft[]) => void
   },
@@ -127,6 +153,8 @@ function applySnapshotToState(
   apply.setSelectedProviderDraftId(selectedDraft?.draftId ?? '')
   apply.setModelReasoningEffort(snapshot.config.modelReasoningEffort)
   apply.setPreferredAuthMethod(snapshot.config.preferredAuthMethod)
+  apply.setApprovalPolicy(snapshot.config.approvalPolicy)
+  apply.setSandboxMode(snapshot.config.sandboxMode)
   apply.setApprovalsReviewer(snapshot.config.approvalsReviewer)
   apply.setProviders(drafts)
 }
@@ -156,8 +184,12 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const [selectedProviderDraftId, setSelectedProviderDraftId] = useState('')
   const [modelReasoningEffort, setModelReasoningEffort] = useState('')
   const [preferredAuthMethod, setPreferredAuthMethod] = useState('')
+  const [approvalPolicy, setApprovalPolicy] = useState<CodexApprovalPolicy>('on-request')
+  const [sandboxMode, setSandboxMode] = useState<CodexSandboxMode>('workspace-write')
   const [approvalsReviewer, setApprovalsReviewer] = useState('')
   const [providers, setProviders] = useState<ProviderDraft[]>([])
+  const [dangerousSaveConfirmOpen, setDangerousSaveConfirmOpen] = useState(false)
+  const [dangerousSaveConfirmed, setDangerousSaveConfirmed] = useState(false)
   const [deleteConfirmProviderDraftId, setDeleteConfirmProviderDraftId] = useState<string | null>(null)
   const cachedSnapshot = resolvedScopeKey ? cachedSnapshots[resolvedScopeKey] : undefined
   const codexGatewayBinding = resolvedScopeKey ? codexGatewayBindings[resolvedScopeKey] : undefined
@@ -230,6 +262,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setSelectedProviderDraftId,
       setModelReasoningEffort,
       setPreferredAuthMethod,
+      setApprovalPolicy,
+      setSandboxMode,
       setApprovalsReviewer,
       setProviders,
     })
@@ -259,6 +293,26 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
   const activeProviderIndex = activeProvider ? providers.findIndex((provider) => provider.draftId === activeProvider.draftId) : -1
   const activeProviderKey = normalizeProviderKey(activeProvider?.key ?? '')
   const activeProviderApiKey = activeProvider?.apiKey ?? ''
+  const approvalPolicyOptions = useMemo<SelectOption[]>(
+    () =>
+      APPROVAL_POLICY_VALUES.map((value) => ({
+        value,
+        label: `${t(`settings.codex.approvalPolicyOptions.${value}`)} (${value})`,
+      })),
+    [t],
+  )
+  const sandboxModeOptions = useMemo<SelectOption[]>(
+    () =>
+      SANDBOX_MODE_VALUES.map((value) => ({
+        value,
+        label: `${t(`settings.codex.sandboxModeOptions.${value}`)} (${value})`,
+      })),
+    [t],
+  )
+  const approvalsReviewerPresetValue = APPROVALS_REVIEWER_PRESET_OPTIONS.some((option) => option.value === approvalsReviewer.trim()) ? approvalsReviewer.trim() : ''
+  const approvalPolicyLabel = t(`settings.codex.approvalPolicyOptions.${approvalPolicy}`)
+  const sandboxModeLabel = t(`settings.codex.sandboxModeOptions.${sandboxMode}`)
+  const dangerousPermissionCombo = approvalPolicy === 'never' || sandboxMode === 'danger-full-access'
   const deleteConfirmProvider = providers.find((provider) => provider.draftId === deleteConfirmProviderDraftId) ?? null
   const hasCachedSnapshot = Boolean(cachedSnapshot)
   const gatewayProviderOptions = useMemo<SelectOption[]>(
@@ -292,6 +346,22 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
     setProviders((current) => current.map((provider, providerIndex) => (providerIndex === index ? { ...provider, [field]: value } : provider)))
   }
 
+  const handleApprovalPolicyChange = (value: string) => {
+    const nextValue = APPROVAL_POLICY_VALUES.includes(value as CodexApprovalPolicy) ? (value as CodexApprovalPolicy) : 'on-request'
+    setApprovalPolicy(nextValue)
+    if (nextValue === 'never' && sandboxMode !== 'danger-full-access') {
+      setSandboxMode('danger-full-access')
+    }
+  }
+
+  const handleSandboxModeChange = (value: string) => {
+    const nextValue = SANDBOX_MODE_VALUES.includes(value as CodexSandboxMode) ? (value as CodexSandboxMode) : 'workspace-write'
+    setSandboxMode(nextValue)
+    if (approvalPolicy === 'never' && nextValue !== 'danger-full-access') {
+      setApprovalPolicy('on-request')
+    }
+  }
+
   const handleAddProvider = () => {
     const nextKeyBase = 'provider'
     let suffix = providers.length + 1
@@ -320,7 +390,7 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
 
   const saveProviderDrafts = async (sourceProviders: ProviderDraft[], currentProvider: string) => {
     const normalizedProviderApiKeys = Object.fromEntries(sourceProviders.map((provider) => [normalizeProviderKey(provider.key), provider.apiKey.trim()] as const).filter(([key]) => Boolean(key)))
-    const nextConfig = buildConfig(sourceProviders, currentProvider, modelReasoningEffort, preferredAuthMethod, approvalsReviewer)
+    const nextConfig = buildConfig(sourceProviders, currentProvider, modelReasoningEffort, preferredAuthMethod, approvalPolicy, sandboxMode, approvalsReviewer)
 
     if (useGatewayMode || codexGatewayBinding?.enabled) {
       if (useGatewayMode && !selectedGatewayProviderId) {
@@ -341,6 +411,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         setSelectedProviderDraftId,
         setModelReasoningEffort,
         setPreferredAuthMethod,
+        setApprovalPolicy,
+        setSandboxMode,
         setApprovalsReviewer,
         setProviders,
       })
@@ -358,9 +430,53 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setSelectedProviderDraftId,
       setModelReasoningEffort,
       setPreferredAuthMethod,
+      setApprovalPolicy,
+      setSandboxMode,
       setApprovalsReviewer,
       setProviders,
     })
+  }
+
+  const performSave = async () => {
+    if (!hasCachedSnapshot) {
+      setError(t('settings.codex.syncRequired'))
+      return
+    }
+
+    if (formValidationError) {
+      setError(formValidationError)
+      return
+    }
+
+    setSaving(true)
+    setSavedHint(null)
+    setError(null)
+
+    try {
+      await saveProviderDrafts(providers, activeProviderKey)
+      setSavedHint(useGatewayMode ? t('settings.codex.gatewaySavedHint') : t('settings.codex.savedHint'))
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError)
+      setError(message || t('settings.codex.saveError'))
+    } finally {
+      setDangerousSaveConfirmed(false)
+      setSaving(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (dangerousPermissionCombo && !dangerousSaveConfirmed) {
+      setDangerousSaveConfirmOpen(true)
+      return
+    }
+
+    await performSave()
+  }
+
+  const handleConfirmDangerousSave = async () => {
+    setDangerousSaveConfirmOpen(false)
+    setDangerousSaveConfirmed(true)
+    await performSave()
   }
 
   const handleDeleteProvider = async (draftId: string) => {
@@ -405,6 +521,8 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         setSelectedProviderDraftId,
         setModelReasoningEffort,
         setPreferredAuthMethod,
+        setApprovalPolicy,
+        setSandboxMode,
         setApprovalsReviewer,
         setProviders,
       })
@@ -414,32 +532,6 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
       setError(message || t('settings.codex.loadError'))
     } finally {
       setSyncing(false)
-    }
-  }
-
-  const handleSave = async () => {
-    if (!hasCachedSnapshot) {
-      setError(t('settings.codex.syncRequired'))
-      return
-    }
-
-    if (formValidationError) {
-      setError(formValidationError)
-      return
-    }
-
-    setSaving(true)
-    setSavedHint(null)
-    setError(null)
-
-    try {
-      await saveProviderDrafts(providers, activeProviderKey)
-      setSavedHint(useGatewayMode ? t('settings.codex.gatewaySavedHint') : t('settings.codex.savedHint'))
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : String(saveError)
-      setError(message || t('settings.codex.saveError'))
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -772,9 +864,49 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.preferredAuthMethod')}</p>
             <Input value={preferredAuthMethod} onChange={(event) => setPreferredAuthMethod(event.target.value)} disabled={inputDisabled} />
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border px-6 py-6 surface-card space-y-5" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="space-y-1.5">
+          <h3 className="text-base font-semibold text-[color:var(--color-foreground)]">{t('settings.codex.permissionsTitle')}</h3>
+          <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.codex.permissionsDescription')}</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalPolicy')}</p>
+            <Select ariaLabel={t('settings.codex.approvalPolicy')} value={approvalPolicy} options={approvalPolicyOptions} onChange={handleApprovalPolicyChange} disabled={inputDisabled} />
+            <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalPolicyHint')}</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.sandboxMode')}</p>
+            <Select ariaLabel={t('settings.codex.sandboxMode')} value={sandboxMode} options={sandboxModeOptions} onChange={handleSandboxModeChange} disabled={inputDisabled} />
+            <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{approvalPolicy === 'never' ? t('settings.codex.sandboxModeNeverHint') : t('settings.codex.sandboxModeHint')}</p>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalsReviewer')}</p>
-            <Input value={approvalsReviewer} onChange={(event) => setApprovalsReviewer(event.target.value)} disabled={inputDisabled} />
+            <div className="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalsReviewerPreset')}</p>
+                <Select
+                  ariaLabel={t('settings.codex.approvalsReviewerPreset')}
+                  value={approvalsReviewerPresetValue}
+                  options={APPROVALS_REVIEWER_PRESET_OPTIONS}
+                  onChange={(value) => setApprovalsReviewer(value)}
+                  placeholder={t('settings.codex.approvalsReviewerPresetPlaceholder')}
+                  disabled={inputDisabled}
+                  emptyText={t('settings.codex.approvalsReviewerPresetEmpty')}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalsReviewerCustom')}</p>
+                <Input value={approvalsReviewer} onChange={(event) => setApprovalsReviewer(event.target.value)} disabled={inputDisabled} placeholder={t('settings.codex.approvalsReviewerCustomPlaceholder')} />
+              </div>
+            </div>
+            <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.codex.approvalsReviewerHint')}</p>
           </div>
         </div>
 
@@ -788,6 +920,28 @@ function SettingsCodexPanel({ capability, embedded = false }: SettingsCodexPanel
         {savedHint && <p className="text-xs text-[color:var(--color-muted-foreground)]">{savedHint}</p>}
         {(formValidationError || error) && <p className="text-xs text-[color:var(--color-destructive)]">{formValidationError || error}</p>}
       </div>
+
+      <ConfirmDialog
+        open={dangerousSaveConfirmOpen}
+        onClose={() => setDangerousSaveConfirmOpen(false)}
+        onConfirm={handleConfirmDangerousSave}
+        ariaLabel={t('settings.codex.dangerousSaveConfirmLabel')}
+        title={t('settings.codex.dangerousSaveConfirmTitle')}
+        description={t('settings.codex.dangerousSaveConfirmDescription', {
+          approvalPolicy: approvalPolicyLabel,
+          sandboxMode: sandboxModeLabel,
+        })}
+        confirmLabel={t('settings.codex.dangerousSaveConfirmAction')}
+        confirmVariant="destructive"
+        busy={saving}
+      >
+        <div className="rounded-[18px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
+          <div className="space-y-2 text-sm leading-6 text-[color:var(--color-foreground)]">
+            <p>{t('settings.codex.dangerousSaveConfirmPolicy', { value: approvalPolicyLabel })}</p>
+            <p>{t('settings.codex.dangerousSaveConfirmSandbox', { value: sandboxModeLabel })}</p>
+          </div>
+        </div>
+      </ConfirmDialog>
 
       <div className="rounded-[24px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-start gap-3 text-sm text-[color:var(--color-muted-foreground)]">

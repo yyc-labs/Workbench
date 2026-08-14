@@ -450,11 +450,13 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   const [credentialMenuOpen, setCredentialMenuOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [activeEntryIndex, setActiveEntryIndex] = useState(0)
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
   const categoryMenuRef = useRef<HTMLDivElement | null>(null)
   const itemActionsMenuRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const entryRefs = useRef<Array<HTMLDivElement | null>>([])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const copiedCredentialTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -525,9 +527,12 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       return isFuzzySubsequence(deferredQuery, entry.normalizedLabel) || isFuzzySubsequence(deferredQuery, entry.normalizedUrl) || isFuzzySubsequence(deferredQuery, entry.normalizedDescription) || isFuzzySubsequence(deferredQuery, entry.normalizedTag) || isFuzzySubsequence(deferredQuery, entry.normalizedTagLabel)
     })
   }, [deferredQuery, categoryFilteredEntries])
+  const activeEntryIndexResolved = filteredEntries.length === 0 ? -1 : Math.min(Math.max(activeEntryIndex, 0), filteredEntries.length - 1)
+  const activeEntry = activeEntryIndexResolved >= 0 ? filteredEntries[activeEntryIndexResolved] : null
 
   const handleChangeCategory = (value: string) => {
     setSelectedCategory(value)
+    setActiveEntryIndex(0)
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus()
     })
@@ -678,6 +683,15 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
     }
   }
 
+  const moveActiveEntry = (delta: number) => {
+    if (filteredEntries.length === 0) return
+    setActiveEntryIndex((current) => {
+      const startIndex = current < 0 ? 0 : current
+      const nextIndex = (startIndex + delta + filteredEntries.length) % filteredEntries.length
+      return nextIndex
+    })
+  }
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -694,6 +708,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       setOpeningEntryKey(null)
       setCredentialMenuOpen(false)
       setSelectedCategory('all')
+      setActiveEntryIndex(0)
       return
     }
     const rafId = window.requestAnimationFrame(() => {
@@ -703,6 +718,19 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       window.cancelAnimationFrame(rafId)
     }
   }, [show])
+
+  useEffect(() => {
+    if (!show) return
+    if (filteredEntries.length === 0) {
+      setActiveEntryIndex(-1)
+    }
+  }, [filteredEntries.length, show])
+
+  useEffect(() => {
+    if (!show || activeEntryIndexResolved < 0) return
+    const node = entryRefs.current[activeEntryIndexResolved]
+    node?.scrollIntoView({ block: 'nearest' })
+  }, [activeEntryIndexResolved, show])
 
   useEffect(() => {
     if (!show) return
@@ -760,7 +788,10 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
             ref={searchInputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setActiveEntryIndex(0)
+            }}
             onFocus={() => {
               focusWithinRef.current = true
               clearHideTimer()
@@ -769,13 +800,25 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
               if (e.key === 'Escape') {
                 e.preventDefault()
                 setQuery('')
+                setActiveEntryIndex(0)
+                return
+              }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                moveActiveEntry(1)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                moveActiveEntry(-1)
                 return
               }
               if (e.key === 'Enter' && filteredEntries[0]) {
                 e.preventDefault()
-                void handleOpenEntry(filteredEntries[0])
+                void handleOpenEntry(activeEntry ?? filteredEntries[0])
               }
             }}
+            aria-activedescendant={activeEntry ? `url-popover-entry-${activeEntryIndexResolved}` : undefined}
             placeholder={t('common.searchLinks')}
             className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 w-full' : ' w-full'}`}
           />
@@ -787,17 +830,23 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
         {filteredEntries.length === 0 ? (
           <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)]">{t('common.noMatches')}</div>
         ) : (
-          filteredEntries.map((entry) => {
+          filteredEntries.map((entry, index) => {
             const isCopied = copiedKey === entry.key
             const isOpening = openingEntryKey === entry.key
+            const isActive = index === activeEntryIndexResolved
             return (
               <div
                 key={entry.key}
-                className={`group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 hover:bg-[color:var(--color-accent)]/70 ${isOpening ? 'cursor-progress' : 'cursor-pointer'}`}
+                id={`url-popover-entry-${index}`}
+                ref={(node) => {
+                  entryRefs.current[index] = node
+                }}
+                className={`group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 ${isActive ? 'bg-[color:var(--color-accent)]/80' : 'hover:bg-[color:var(--color-accent)]/70'} ${isOpening ? 'cursor-progress' : 'cursor-pointer'}`}
                 role="button"
                 tabIndex={0}
                 aria-busy={isOpening || undefined}
                 aria-disabled={isOpening || undefined}
+                aria-current={isActive || undefined}
                 onClick={() => {
                   void handleOpenEntry(entry)
                 }}
@@ -809,6 +858,9 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                   }
                 }}
                 aria-label={entry.label}
+                onMouseEnter={() => {
+                  setActiveEntryIndex(index)
+                }}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]">
                   {entry.kind === 'ssh' ? <Link2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />}

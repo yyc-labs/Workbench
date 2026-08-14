@@ -435,7 +435,16 @@ export function SettingsPage() {
               {section === 'hooks' && <SettingsAgentHooksPanel />}
               {section === 'agent-logs' && <SettingsAgentLogsPanel />}
               {section === 'logs' && <SettingsStartupLogsPanel projects={projects} />}
-              {section === 'ai' && <SettingsAiCommitPanel aiCommit={config.aiCommit || {}} onSave={setAiCommitConfig} claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []} codexSettingsSnapshots={config.codexSettingsSnapshots ?? {}} preferredCodexScopeKey={preferredCodexScopeKey} />}
+              {section === 'ai' && (
+                <SettingsAiCommitPanel
+                  aiCommit={config.aiCommit || {}}
+                  onSave={setAiCommitConfig}
+                  claudeRuntimeProfiles={config.claudeRuntimeProfiles ?? []}
+                  codexSettingsSnapshots={config.codexSettingsSnapshots ?? {}}
+                  codexGatewayBindings={config.codexGatewayBindings ?? {}}
+                  preferredCodexScopeKey={preferredCodexScopeKey}
+                />
+              )}
               {section === 'rules' && <SettingsRulesPanel />}
               {section === 'about' && <SettingsAboutPanel />}
             </div>

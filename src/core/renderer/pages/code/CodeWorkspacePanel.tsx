@@ -132,6 +132,7 @@ export function CodeWorkspacePanel({
   const handleOpenedCodeFileRef = useRef<(relativePath: string) => void>(() => {})
   const resetScrollSyncStateRef = useRef<() => void>(() => {})
   const pendingLocateAfterTreeReloadRef = useRef<string | null>(null)
+  const pendingSearchInputFocusModeRef = useRef<CodeViewMode | null>(null)
   const handleBeforeOpenCodeFile = useCallback(() => {
     captureCurrentModeScrollRef.current()
   }, [])
@@ -447,33 +448,36 @@ export function CodeWorkspacePanel({
     window.localStorage.setItem(CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, isLeftSidebarCollapsed ? '1' : '0')
   }, [isLeftSidebarCollapsed])
 
-  const focusSearchInputByMode = useCallback(() => {
-    const focusTarget = () => {
-      const target = viewMode === 'search' ? contentSearchInputRef.current : fileSearchInputRef.current
-      if (!target) return
-      target.focus()
-      target.select()
-    }
+  const focusSearchInputByMode = useCallback(
+    (mode: CodeViewMode = viewMode) => {
+      const focusTarget = () => {
+        const target = mode === 'search' ? contentSearchInputRef.current : fileSearchInputRef.current
+        if (!target) return
+        target.focus()
+        target.select()
+      }
 
-    if (!isNarrowViewport && isLeftSidebarCollapsed) {
-      setIsLeftSidebarCollapsed(false)
-      refreshRootIfStale()
-      window.setTimeout(() => {
-        focusTarget()
-      }, 0)
-      return
-    }
+      if (!isNarrowViewport && isLeftSidebarCollapsed) {
+        setIsLeftSidebarCollapsed(false)
+        refreshRootIfStale()
+        window.setTimeout(() => {
+          focusTarget()
+        }, 0)
+        return
+      }
 
-    if (isNarrowViewport && !isExplorerOpen) {
-      setIsExplorerOpen(true)
-      window.setTimeout(() => {
-        focusTarget()
-      }, 0)
-      return
-    }
+      if (isNarrowViewport && !isExplorerOpen) {
+        setIsExplorerOpen(true)
+        window.setTimeout(() => {
+          focusTarget()
+        }, 0)
+        return
+      }
 
-    focusTarget()
-  }, [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, refreshRootIfStale, viewMode])
+      focusTarget()
+    },
+    [contentSearchInputRef, fileSearchInputRef, isExplorerOpen, isLeftSidebarCollapsed, isNarrowViewport, refreshRootIfStale, viewMode],
+  )
 
   const openEditorSearchByMode = useCallback(
     (mode: EditorSearchMode = 'find') => {
@@ -503,11 +507,28 @@ export function CodeWorkspacePanel({
   )
 
   const toggleCodeViewMode = useCallback(() => {
-    setViewMode((prev) => (prev === 'files' ? 'search' : 'files'))
+    setViewMode((prev) => {
+      const next = prev === 'files' ? 'search' : 'files'
+      pendingSearchInputFocusModeRef.current = next === 'search' ? next : null
+      return next
+    })
     if (isNarrowViewport && !isExplorerOpen) {
       setIsExplorerOpen(true)
     }
   }, [isExplorerOpen, isNarrowViewport])
+
+  useEffect(() => {
+    if (pendingSearchInputFocusModeRef.current !== viewMode) return
+    pendingSearchInputFocusModeRef.current = null
+
+    const timer = window.setTimeout(() => {
+      focusSearchInputByMode(viewMode)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [focusSearchInputByMode, viewMode])
 
   useEffect(() => {
     if (activePane !== 'code') return
@@ -609,7 +630,7 @@ export function CodeWorkspacePanel({
     },
     [expandedDirectories, hasSearchQuery, loadDirectory],
   )
-  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
+  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleOpenTreeNodeTerminal, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
     isNarrowViewport,
     openContentSearchMatch,
     openFile,
@@ -835,6 +856,7 @@ export function CodeWorkspacePanel({
                 onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
                 onOpenContentSearchResult={handleOpenContentSearchResult}
                 onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
+                onOpenTreeNodeTerminal={handleOpenTreeNodeTerminal}
                 onReloadTree={handleReloadTree}
                 onSelectTreeFile={handleSelectTreeFile}
                 onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
