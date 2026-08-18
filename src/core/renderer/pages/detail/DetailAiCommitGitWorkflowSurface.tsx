@@ -1,5 +1,5 @@
 import '@xyflow/react/dist/style.css'
-import { applyEdgeChanges, applyNodeChanges, Background, type Connection, Controls, type Edge, type EdgeChange, type Node, type NodeChange, ReactFlow, useReactFlow } from '@xyflow/react'
+import { applyEdgeChanges, applyNodeChanges, Background, type Connection, Controls, type Edge, type EdgeChange, type EdgeTypes, type Node, type NodeChange, type NodeTypes, ReactFlow, useReactFlow } from '@xyflow/react'
 import { type DragEvent, type ForwardedRef, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { DetailAiCommitGitWorkflowEdge } from './DetailAiCommitGitWorkflowEdge'
 import { DetailAiCommitGitWorkflowNode } from './DetailAiCommitGitWorkflowNode'
@@ -39,8 +39,8 @@ export type WorkflowSurfaceHandle = {
   getGraphSnapshot: () => PersistedGitWorkflowGraph | null
 }
 
-const nodeTypes = { gitOperation: DetailAiCommitGitWorkflowNode } as const
-const edgeTypes = { customEdge: DetailAiCommitGitWorkflowEdge } as const
+const nodeTypes = { gitOperation: DetailAiCommitGitWorkflowNode } as unknown as NodeTypes
+const edgeTypes = { customEdge: DetailAiCommitGitWorkflowEdge } as unknown as EdgeTypes
 
 function areStringArraysEqual(left?: string[], right?: string[]) {
   if (left === right) return true
@@ -133,7 +133,8 @@ function patchFlowEdges(currentEdges: FlowEdge[], graph: PersistedGitWorkflowGra
     const graphEdge = edgesById.get(edge.id)
     if (!graphEdge) return edge
     const nextActive = runState.activeEdgeId === graphEdge.id
-    if (edge.data.kind === graphEdge.type && edge.data.active === nextActive && edge.source === graphEdge.source && edge.target === graphEdge.target && edge.sourceHandle === graphEdge.sourceHandle && edge.targetHandle === graphEdge.targetHandle) {
+    const edgeData = edge.data ?? { kind: graphEdge.type, active: false }
+    if (edgeData.kind === graphEdge.type && edgeData.active === nextActive && edge.source === graphEdge.source && edge.target === graphEdge.target && edge.sourceHandle === graphEdge.sourceHandle && edge.targetHandle === graphEdge.targetHandle) {
       return edge
     }
     changed = true
@@ -231,7 +232,7 @@ export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiComm
     (changes: NodeChange[]) => {
       const removedNodeIds = changes.filter((change): change is Extract<NodeChange, { type: 'remove' }> => change.type === 'remove').map((change) => change.id)
       setNodes((current) => {
-        const next = applyNodeChanges(changes, current)
+        const next = applyNodeChanges(changes, current) as FlowNode[]
         nodesRef.current = next
         return next
       })
@@ -254,7 +255,7 @@ export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiComm
   )
 
   const onEdgesChange = (changes: EdgeChange[]) => {
-    setEdges((current) => applyEdgeChanges(changes, current))
+    setEdges((current) => applyEdgeChanges(changes, current) as FlowEdge[])
     const removedEdgeIds = changes.filter((change): change is Extract<EdgeChange, { type: 'remove' }> => change.type === 'remove').map((change) => change.id)
     for (const edgeId of removedEdgeIds) {
       onDeleteEdge(edgeId)
@@ -263,7 +264,13 @@ export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiComm
 
   const handleConnect = useCallback(
     (connection: Connection) => {
-      onConnect(connection)
+      if (!connection.source || !connection.target || connection.sourceHandle == null || connection.targetHandle == null) return
+      onConnect({
+        source: connection.source,
+        sourceHandle: connection.sourceHandle === 'failure' ? 'failure' : 'success',
+        target: connection.target,
+        targetHandle: 'input',
+      })
     },
     [onConnect],
   )

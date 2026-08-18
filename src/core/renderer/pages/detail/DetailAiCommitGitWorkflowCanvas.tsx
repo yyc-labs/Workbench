@@ -1,4 +1,4 @@
-import { ReactFlowProvider } from '@xyflow/react'
+import { ReactFlowProvider, type Connection } from '@xyflow/react'
 import { Trash2 } from 'lucide-react'
 import { type DragEvent, useCallback, useRef } from 'react'
 import { Combobox } from '../../components/ui/combobox'
@@ -10,6 +10,9 @@ import type { GitWorkflowNodeData } from './gitWorkflow.types'
 import type { GitWorkflowRunnerApi } from './useGitWorkflowRunner'
 
 type WorkflowRunner = GitWorkflowRunnerApi
+type SwitchNodeData = Extract<GitWorkflowNodeData, { operation: 'switch' }>
+type MergeNodeData = Extract<GitWorkflowNodeData, { operation: 'merge' }>
+type CommitNodeData = Extract<GitWorkflowNodeData, { operation: 'commit' }>
 
 function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
   const { t } = useI18n()
@@ -47,8 +50,8 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
   }, [])
 
   const handleConnect = useCallback(
-    (connection: { source?: string; sourceHandle?: string; target?: string }) => {
-      if (!connection.source || !connection.target || !connection.sourceHandle) return
+    (connection: Connection) => {
+      if (!connection.source || !connection.target || connection.sourceHandle == null) return
       const sourceHandle = connection.sourceHandle === 'failure' ? 'failure' : 'success'
       runner.connect(connection.source, sourceHandle, connection.target)
     },
@@ -126,14 +129,24 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                     <button
                       type="button"
                       className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.target.mode === 'prompt' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
-                      onClick={() => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, target: { mode: 'prompt' } } }))}
+                      onClick={() =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as SwitchNodeData
+                          return { ...next, config: { ...next.config, target: { mode: 'prompt' } } }
+                        })
+                      }
                     >
                       {t('detail.gitWorkflowTargetPrompt')}
                     </button>
                     <button
                       type="button"
                       className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.target.mode === 'fixed' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
-                      onClick={() => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, target: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' } } }))}
+                      onClick={() =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as SwitchNodeData
+                          return { ...next, config: { ...next.config, target: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' } } }
+                        })
+                      }
                     >
                       {t('detail.gitWorkflowTargetFixed')}
                     </button>
@@ -143,7 +156,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                       ariaLabel={t('detail.gitWorkflowSwitchTarget')}
                       value={selectedNode.data.config.target.branch}
                       options={runner.branchTargetOptions.map((branch) => ({ value: branch, label: branch }))}
-                      onChange={(value) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, target: { mode: 'fixed', branch: value } } }))}
+                      onChange={(value) =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as SwitchNodeData
+                          return { ...next, config: { ...next.config, target: { mode: 'fixed', branch: value } } }
+                        })
+                      }
                       triggerPlaceholder={t('detail.gitWorkflowSwitchTarget')}
                       inputPlaceholder={t('detail.gitWorkflowSwitchTarget')}
                       emptyText={t('detail.branchPanelNoBranches')}
@@ -162,14 +180,24 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                     <button
                       type="button"
                       className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.source.mode === 'prompt' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
-                      onClick={() => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, source: { mode: 'prompt' }, noEdit: true } }))}
+                      onClick={() =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as MergeNodeData
+                          return { ...next, config: { ...next.config, source: { mode: 'prompt' }, noEdit: true } }
+                        })
+                      }
                     >
                       {t('detail.gitWorkflowTargetPrompt')}
                     </button>
                     <button
                       type="button"
                       className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.source.mode === 'fixed' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
-                      onClick={() => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, source: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' }, noEdit: true } }))}
+                      onClick={() =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as MergeNodeData
+                          return { ...next, config: { ...next.config, source: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' }, noEdit: true } }
+                        })
+                      }
                     >
                       {t('detail.gitWorkflowTargetFixed')}
                     </button>
@@ -179,7 +207,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                       ariaLabel={t('detail.gitWorkflowMergeSource')}
                       value={selectedNode.data.config.source.branch}
                       options={runner.branchTargetOptions.map((branch) => ({ value: branch, label: branch }))}
-                      onChange={(value) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, source: { mode: 'fixed', branch: value }, noEdit: true } }))}
+                      onChange={(value) =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as MergeNodeData
+                          return { ...next, config: { ...next.config, source: { mode: 'fixed', branch: value }, noEdit: true } }
+                        })
+                      }
                       triggerPlaceholder={t('detail.gitWorkflowMergeSource')}
                       inputPlaceholder={t('detail.gitWorkflowMergeSource')}
                       emptyText={t('detail.branchPanelNoBranches')}
@@ -197,7 +230,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                   <Textarea
                     id="git-workflow-commit-preset"
                     value={selectedNode.data.config.message.preset || ''}
-                    onChange={(event) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, config: { ...data.config, message: { ...data.config.message, preset: event.target.value || undefined } } }))}
+                    onChange={(event) =>
+                      runner.updateNodeConfig(selectedNode.id, (data) => {
+                        const next = data as CommitNodeData
+                        return { ...next, config: { ...next.config, message: { ...next.config.message, preset: event.target.value || undefined } } }
+                      })
+                    }
                     placeholder={t('detail.gitWorkflowCommitPresetPlaceholder')}
                     className="min-h-[96px] text-[12px]"
                   />
@@ -253,26 +291,31 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
             {t('detail.gitWorkflowRun')}
           </button>
         </div>
-        {runner.runState.status === 'waiting-for-input' && runner.runtimeTarget && (
-          <div className="rounded-[14px] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]/45 p-3">
-            <p className="mb-2 text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowChooseTarget')}</p>
-            <Combobox
-              ariaLabel={t('detail.gitWorkflowChooseTarget')}
-              value={runner.runtimeTargetValue}
-              options={runner.branchTargetOptions.map((branch) => ({ value: branch, label: branch }))}
-              onChange={(value) => runner.setRuntimeTargetForNode(runner.runtimeTarget.nodeId, value)}
-              triggerPlaceholder={t('detail.gitWorkflowChooseTarget')}
-              inputPlaceholder={t('detail.gitWorkflowChooseTarget')}
-              emptyText={t('detail.branchPanelNoBranches')}
-              triggerClassName="h-9 rounded-[12px] px-3 text-[11px]"
-              contentClassName="surface-card rounded-[12px] p-1"
-              optionClassName="rounded-[8px] px-2 py-1.5 text-[11px]"
-            />
-            <button type="button" className="mt-2 quiet-control w-full rounded-full px-3 py-2 text-[11px]" onClick={() => void runner.continueRuntimeTarget()} disabled={!runner.runtimeTargetValue}>
-              {t('detail.gitWorkflowContinue')}
-            </button>
-          </div>
-        )}
+        {runner.runState.status === 'waiting-for-input' && runner.runtimeTarget
+          ? (() => {
+              const runtimeTarget = runner.runtimeTarget
+              return (
+                <div className="rounded-[14px] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]/45 p-3">
+                  <p className="mb-2 text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowChooseTarget')}</p>
+                  <Combobox
+                    ariaLabel={t('detail.gitWorkflowChooseTarget')}
+                    value={runner.runtimeTargetValue}
+                    options={runner.branchTargetOptions.map((branch) => ({ value: branch, label: branch }))}
+                    onChange={(value) => runner.setRuntimeTargetForNode(runtimeTarget.nodeId, value)}
+                    triggerPlaceholder={t('detail.gitWorkflowChooseTarget')}
+                    inputPlaceholder={t('detail.gitWorkflowChooseTarget')}
+                    emptyText={t('detail.branchPanelNoBranches')}
+                    triggerClassName="h-9 rounded-[12px] px-3 text-[11px]"
+                    contentClassName="surface-card rounded-[12px] p-1"
+                    optionClassName="rounded-[8px] px-2 py-1.5 text-[11px]"
+                  />
+                  <button type="button" className="mt-2 quiet-control w-full rounded-full px-3 py-2 text-[11px]" onClick={() => void runner.continueRuntimeTarget()} disabled={!runner.runtimeTargetValue}>
+                    {t('detail.gitWorkflowContinue')}
+                  </button>
+                </div>
+              )
+            })()
+          : null}
       </div>
     </div>
   )

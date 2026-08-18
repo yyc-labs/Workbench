@@ -64,11 +64,23 @@ function resolveLocalImagePath(input: string): string {
     throw new Error('Image source is empty.')
   }
 
+  if (trimmed.toLowerCase().startsWith('ide-local-image:')) {
+    return normalizeLocalPathForCurrentHost(decodeLocalImageUri(trimmed.slice('ide-local-image:'.length)))
+  }
+
   if (trimmed.toLowerCase().startsWith('file://')) {
     return resolveFileUrlToLocalPath(trimmed)
   }
 
-  return normalizeLocalPathForCurrentHost(trimmed)
+  return normalizeLocalPathForCurrentHost(decodeLocalImageUri(trimmed))
+}
+
+function decodeLocalImageUri(encodedPath: string): string {
+  try {
+    return decodeURIComponent(encodedPath)
+  } catch {
+    return encodedPath
+  }
 }
 
 export async function readLocalImageAsDataUrl(source: string): Promise<string> {

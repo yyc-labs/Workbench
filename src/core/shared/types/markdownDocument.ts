@@ -23,4 +23,10 @@ export type MarkdownDocumentWriteResult = {
   mtimeMs: number
 }
 
+export type MarkdownDocumentImageSaveResult = {
+  path: string
+  size: number
+  mtimeMs: number
+}
+
 export type MarkdownDocumentOpenRequest = { path: string }

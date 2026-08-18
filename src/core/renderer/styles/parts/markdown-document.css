@@ -13,6 +13,7 @@
   padding: 10px clamp(16px, 3vw, 32px);
 }
 .markdown-document-body {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -20,12 +21,87 @@
   padding: 14px clamp(16px, 3vw, 32px) 20px;
 }
 .markdown-document-sidebar {
+  position: relative;
   display: flex;
   width: clamp(220px, 22vw, 280px);
   min-width: 200px;
   min-height: 0;
   flex-direction: column;
-  padding: 16px;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 14px;
+}
+.markdown-document-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.markdown-document-sidebar-clear {
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.markdown-document-sidebar-clear:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+.markdown-document-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+.markdown-document-history-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 72%, transparent);
+}
+.markdown-document-history-item.is-active {
+  border-color: color-mix(in srgb, var(--color-primary) 34%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-accent));
+}
+.markdown-document-sidebar-rail {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  right: -16px;
+  display: inline-flex;
+  width: 28px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-popover) 96%, var(--color-background));
+  color: var(--color-muted-foreground);
+  box-shadow: var(--shadow-popover);
+  transform: translateY(-50%);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+.markdown-document-sidebar-rail:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+.markdown-document-sidebar-rail:active {
+  transform: translateY(-50%) scale(0.94);
+}
+.markdown-document-sidebar-rail--expand {
+  top: 50%;
+  left: 8px;
+  right: auto;
 }
 .markdown-document-main {
   display: flex;
@@ -34,7 +110,7 @@
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 14px;
 }
 .markdown-document-meta {
   display: flex;
@@ -45,11 +121,26 @@
   font-size: 12px;
   color: var(--color-muted-foreground);
 }
+.markdown-document-note {
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+  background: color-mix(in srgb, var(--color-accent) 34%, transparent);
+}
 .markdown-document-content {
   display: flex;
   min-height: 0;
   flex: 1;
   overflow: hidden;
+}
+.markdown-document-rich-root {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 0;
+  scrollbar-gutter: stable both-edges;
+  padding-bottom: calc(var(--scrollbar-size) + 6px);
 }
 .markdown-document-editor,
 .markdown-document-preview {
@@ -80,6 +171,9 @@
 .markdown-document-preview-content > * {
   margin-inline: auto;
 }
+.markdown-document-preview-content {
+  width: 100%;
+}
 .markdown-document-editor.is-split,
 .markdown-document-preview.is-split {
   flex-basis: 50%;
@@ -106,6 +200,71 @@
   background: var(--color-warning-background);
   color: var(--color-foreground);
   font-size: 12px;
+}
+.markdown-document-rich-root .milkdown {
+  min-height: 100%;
+}
+.markdown-document-rich-root .editor {
+  min-height: 100%;
+  outline: none;
+}
+.markdown-document-rich-root .markdown-document-rich-editor {
+  max-width: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  padding: 28px clamp(18px, 4vw, 56px) 40px;
+}
+.markdown-document-rich-root .markdown-document-rich-editor code:not(pre code) {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-accent) 82%, transparent);
+  padding: 0.12em 0.34em;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.markdown-document-table-insert {
+  position: fixed;
+  z-index: 30;
+  background: color-mix(in srgb, var(--color-primary) 72%, transparent);
+  pointer-events: none;
+}
+.markdown-document-table-insert button {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-popover) 92%, var(--color-background));
+  color: var(--color-foreground);
+  box-shadow: var(--shadow-popover);
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+.markdown-document-table-insert button:hover {
+  background: var(--color-accent);
+  color: var(--color-primary);
+}
+.markdown-document-table-insert button:active {
+  transform: translate(-50%, -50%) scale(0.92);
+}
+.markdown-document-table-insert button svg {
+  width: 14px;
+  height: 14px;
 }
 @media (max-width: 760px) {
   .markdown-document-body {
@@ -140,5 +299,11 @@
   }
   .markdown-document-mode {
     padding-inline: 7px;
+  }
+  .markdown-document-rich-root {
+    padding: 0;
+  }
+  .markdown-document-rich-root .markdown-document-rich-editor {
+    padding: 28px 18px 40px;
   }
 }

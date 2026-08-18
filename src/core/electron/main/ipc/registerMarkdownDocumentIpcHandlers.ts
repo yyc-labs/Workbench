@@ -10,5 +10,6 @@ export function registerMarkdownDocumentIpcHandlers(service: MarkdownDocumentSer
   ipcMain.handle(IPC.MARKDOWN_DOCUMENT_HISTORY_LIST, () => service.listHistory())
   ipcMain.handle(IPC.MARKDOWN_DOCUMENT_HISTORY_REMOVE, (_event, filePath: string) => service.removeHistory(filePath))
   ipcMain.handle(IPC.MARKDOWN_DOCUMENT_HISTORY_CLEAR, () => service.clearHistory())
+  ipcMain.handle(IPC.MARKDOWN_DOCUMENT_PASTED_IMAGE_SAVE_AS, (_event, dataBase64: string, extension: string, suggestedName?: string) => service.savePastedImageAs(dataBase64, extension, suggestedName))
   ipcMain.handle(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, () => openRequestStore.consume())
 }

@@ -112,6 +112,7 @@ export const IPC = {
   MARKDOWN_DOCUMENT_HISTORY_LIST: 'markdown-document:history-list',
   MARKDOWN_DOCUMENT_HISTORY_REMOVE: 'markdown-document:history-remove',
   MARKDOWN_DOCUMENT_HISTORY_CLEAR: 'markdown-document:history-clear',
+  MARKDOWN_DOCUMENT_PASTED_IMAGE_SAVE_AS: 'markdown-document:pasted-image-save-as',
   MARKDOWN_DOCUMENT_OPEN_REQUESTED: 'markdown-document:open-requested',
   TRANSCRIPT_IMPORT: 'transcript:import',
   TRANSCRIPT_IMPORT_EXTERNAL: 'transcript:import-external',

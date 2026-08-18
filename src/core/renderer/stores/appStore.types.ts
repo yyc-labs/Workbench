@@ -109,7 +109,8 @@ import type {
   SkillUpdatePayload,
 } from '../../shared/types'
 import type { ElectronApi } from '../../shared/electronApi'
-import type { MarkdownDocumentDisplayMode, MarkdownDocumentHistoryEntry, MarkdownDocumentReadResult } from '../../shared/types'
+import type { MarkdownDocumentHistoryEntry, MarkdownDocumentReadResult } from '../../shared/types'
+import type { MarkdownDocumentCompatibility, MarkdownDocumentComplexity, MarkdownDocumentDisplayMode } from '../pages/markdown-document/markdownDocumentTypes'
 
 declare global {
   interface Window {
@@ -154,13 +155,16 @@ export interface AppState {
   markdownDocumentActive: MarkdownDocumentReadResult | null
   markdownDocumentValue: string
   markdownDocumentMode: MarkdownDocumentDisplayMode
+  markdownDocumentDirty: boolean
+  markdownDocumentCompatibility: MarkdownDocumentCompatibility | null
+  markdownDocumentComplexity: MarkdownDocumentComplexity | null
   markdownDocumentLoading: boolean
   markdownDocumentSaving: boolean
   markdownDocumentError: string | null
   markdownDocumentConflict: boolean
   reloadMarkdownDocument: () => Promise<void>
   loadMarkdownDocumentHistory: () => Promise<void>
-  openMarkdownDocument: (filePath: string) => Promise<void>
+  openMarkdownDocument: (filePath: string, options?: { refreshHistory?: boolean }) => Promise<void>
   setMarkdownDocumentValue: (value: string) => void
   setMarkdownDocumentMode: (mode: MarkdownDocumentDisplayMode) => void
   saveMarkdownDocument: () => Promise<void>

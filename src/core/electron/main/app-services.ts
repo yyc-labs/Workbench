@@ -79,6 +79,7 @@ export function createAppServices(options: AppServicesOptions) {
     getMainWindow: options.getMainWindow,
     getDefaultWslDistro: () => options.getCapability()?.wslDistro || 'Ubuntu',
     aiEnvironmentController,
+    getLocale: options.getLocale,
   })
   const aiConnectionService = createAiConnectionService()
   const transcriptService = createTranscriptService({

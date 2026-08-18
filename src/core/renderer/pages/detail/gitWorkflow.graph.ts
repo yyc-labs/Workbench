@@ -405,9 +405,9 @@ export function updateNodeRunState(runState: GitWorkflowRunState, nodeId: string
     nodeStates: {
       ...runState.nodeStates,
       [nodeId]: {
-        status: 'idle',
-        ...runState.nodeStates[nodeId],
+        ...(runState.nodeStates[nodeId] ?? {}),
         ...patch,
+        status: patch.status ?? runState.nodeStates[nodeId]?.status ?? 'idle',
       },
     },
   }

@@ -51,11 +51,15 @@ export function normalizeAbsoluteMarkdownFileUrl(value: string): string | null {
     return normalizeFileUrl(trimmed)
   }
 
+  const decoded = decodeUrlComponentSafely(trimmed)
+  if (isWindowsAbsolutePath(decoded)) {
+    return toFileUrlFromAbsolutePath(decoded) || decoded
+  }
+
   if (isWindowsAbsolutePath(trimmed)) {
     return toFileUrlFromAbsolutePath(trimmed) || trimmed
   }
 
-  const decoded = decodeUrlComponentSafely(trimmed)
   if (decoded !== trimmed && isWindowsAbsolutePath(decoded)) {
     return toFileUrlFromAbsolutePath(decoded) || decoded
   }

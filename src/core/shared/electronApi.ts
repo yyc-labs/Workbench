@@ -103,6 +103,7 @@ import type {
   TranscriptShareStartResult,
   TranscriptUpdatePayload,
   MarkdownDocumentHistoryEntry,
+  MarkdownDocumentImageSaveResult,
   MarkdownDocumentOpenRequest,
   MarkdownDocumentReadResult,
   MarkdownDocumentWriteResult,
@@ -259,6 +260,7 @@ export interface MarkdownDocumentElectronApi {
   listMarkdownDocumentHistory: () => Promise<MarkdownDocumentHistoryEntry[]>
   removeMarkdownDocumentHistory: (path: string) => Promise<MarkdownDocumentHistoryEntry[]>
   clearMarkdownDocumentHistory: () => Promise<void>
+  saveMarkdownDocumentPastedImageAs: (dataBase64: string, extension: string, suggestedName?: string) => Promise<MarkdownDocumentImageSaveResult | null>
   consumePendingMarkdownDocumentOpen: () => Promise<MarkdownDocumentOpenRequest | null>
 }
 

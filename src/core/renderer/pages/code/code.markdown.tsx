@@ -135,7 +135,7 @@ export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string,
   }
 
   const lower = trimmed.toLowerCase()
-  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('file:')) {
+  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('file:') || lower.startsWith('ide-local-image:')) {
     return trimmed
   }
 

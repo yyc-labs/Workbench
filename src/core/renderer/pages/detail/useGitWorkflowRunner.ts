@@ -152,7 +152,7 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
   }, [gitSnapshot, graph])
 
   const graphNodeMap = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node] as const)), [graph.nodes])
-  const selectedNode = useMemo(() => graphNodeMap.get(selectedNodeId) ?? null, [graphNodeMap, selectedNodeId])
+  const selectedNode = useMemo(() => (selectedNodeId ? (graphNodeMap.get(selectedNodeId) ?? null) : null), [graphNodeMap, selectedNodeId])
 
   const branchTargetOptions = useMemo(() => {
     const local = gitSnapshot?.branch.localBranches ?? []
@@ -291,9 +291,9 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
       nodeStates: {
         ...prev.nodeStates,
         [nodeId]: {
-          status: 'idle',
-          ...prev.nodeStates[nodeId],
+          ...(prev.nodeStates[nodeId] ?? {}),
           ...patch,
+          status: patch.status ?? prev.nodeStates[nodeId]?.status ?? 'idle',
         },
       },
     }))

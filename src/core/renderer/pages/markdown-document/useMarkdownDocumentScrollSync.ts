@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import { getMarkdownPreviewSourceLineAtScrollTop, scrollMarkdownPreviewToSourceLine } from '../code/code.markdownShared'
+type MarkdownDocumentScrollMode = 'preview' | 'edit' | 'split'
 
 function getTextareaSourceLine(textarea: HTMLTextAreaElement): number {
   const styles = window.getComputedStyle(textarea)
@@ -15,7 +16,7 @@ function scrollTextareaToSourceLine(textarea: HTMLTextAreaElement, lineNumber: n
   textarea.scrollTop = Math.max(0, paddingTop + (Math.max(1, Math.floor(lineNumber)) - 1) * lineHeight)
 }
 
-export function useMarkdownDocumentScrollSync(mode: 'edit' | 'preview' | 'split', editorRef: RefObject<HTMLTextAreaElement | null>, documentKey: string | null) {
+export function useMarkdownDocumentScrollSync(mode: MarkdownDocumentScrollMode, editorRef: RefObject<HTMLTextAreaElement | null>, documentKey: string | null) {
   const previewRef = useRef<HTMLDivElement | null>(null)
   const previousModeRef = useRef(mode)
   const editorLineRef = useRef<number | null>(null)
@@ -68,8 +69,8 @@ export function useMarkdownDocumentScrollSync(mode: 'edit' | 'preview' | 'split'
     const timer = window.setTimeout(() => {
       const editor = editorRef.current
       const preview = previewRef.current
-      if (mode === 'preview' && preview && editor && previousMode !== 'preview') scrollMarkdownPreviewToSourceLine(preview, editorLineRef.current ?? getTextareaSourceLine(editor))
-      if (mode === 'edit' && editor && previousMode !== 'edit' && previewLineRef.current != null) scrollTextareaToSourceLine(editor, previewLineRef.current)
+      if (mode === 'preview' && preview && editor && previousMode !== mode) scrollMarkdownPreviewToSourceLine(preview, editorLineRef.current ?? getTextareaSourceLine(editor))
+      if (mode === 'edit' && editor && previousMode !== mode && previewLineRef.current != null) scrollTextareaToSourceLine(editor, previewLineRef.current)
       if (mode === 'split' && preview && editor) {
         if (previousMode === 'edit') scrollMarkdownPreviewToSourceLine(preview, editorLineRef.current ?? getTextareaSourceLine(editor))
         if (previousMode === 'preview' && previewLineRef.current != null) scrollTextareaToSourceLine(editor, previewLineRef.current)

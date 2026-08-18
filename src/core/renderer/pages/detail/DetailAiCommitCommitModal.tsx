@@ -7,14 +7,14 @@ import { useI18n } from '../../i18n'
 
 type DetailAiCommitCommitModalProps = {
   blockedReason: string | null
-  aiCommitStatus: AiCommitStatus
-  isAiEnabled: boolean
+  aiCommitStatus?: AiCommitStatus
+  isAiEnabled?: boolean
   commitError: string | null
   commitMessage: string
   committing: boolean
   onChangeCommitMessage: (value: string) => void
   onClose: () => void
-  onAiCommit: () => void
+  onAiCommit?: () => void
   onCommit: () => void
   open: boolean
   stagedFileCount: number
@@ -24,7 +24,7 @@ export function DetailAiCommitCommitModal({ blockedReason, aiCommitStatus, isAiE
   const { t } = useI18n()
   const [commitMode, setCommitMode] = useState<'manual' | 'ai'>('manual')
   const aiCommitRunning = aiCommitStatus === 'running'
-  const aiCommitAvailable = isAiEnabled && !aiCommitRunning
+  const aiCommitAvailable = (isAiEnabled ?? false) && !aiCommitRunning
   const aiCommitDisabledReason = aiCommitRunning ? t('detail.commitStagedModeAiRunning') : t('detail.commitStagedModeAiDisabled')
   const canCommit = !committing && !blockedReason && (commitMode === 'ai' ? aiCommitAvailable : Boolean(commitMessage.trim()))
 
@@ -121,7 +121,7 @@ export function DetailAiCommitCommitModal({ blockedReason, aiCommitStatus, isAiE
           onClick={() => {
             if (commitMode === 'ai') {
               onClose()
-              onAiCommit()
+              onAiCommit?.()
               return
             }
             onCommit()

@@ -8,6 +8,7 @@ import type { TranscriptSession, TranscriptSourceType, TranscriptViewerMode } fr
 export type {
   MarkdownDocumentDisplayMode,
   MarkdownDocumentHistoryEntry,
+  MarkdownDocumentImageSaveResult,
   MarkdownDocumentOpenRequest,
   MarkdownDocumentReadResult,
   MarkdownDocumentWriteResult,

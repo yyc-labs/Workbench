@@ -9,6 +9,7 @@ export function createMarkdownDocumentInvokeApi() {
     listMarkdownDocumentHistory: () => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_HISTORY_LIST),
     removeMarkdownDocumentHistory: (filePath: string) => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_HISTORY_REMOVE, filePath),
     clearMarkdownDocumentHistory: () => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_HISTORY_CLEAR),
+    saveMarkdownDocumentPastedImageAs: (dataBase64: string, extension: string, suggestedName?: string) => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_PASTED_IMAGE_SAVE_AS, dataBase64, extension, suggestedName),
     consumePendingMarkdownDocumentOpen: () => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED),
   }
 }

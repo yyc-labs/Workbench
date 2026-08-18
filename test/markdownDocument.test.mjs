@@ -7,6 +7,7 @@ import { loadTsModule } from './helpers/load-ts-module.mjs'
 
 const { parseMarkdownDocumentOpenRequest, MarkdownDocumentOpenRequestStore } = loadTsModule('src/core/electron/main/markdown-document/markdownDocumentOpenRequest.ts')
 const { MarkdownDocumentRepository } = loadTsModule('src/core/electron/main/markdown-document/markdownDocumentRepository.ts')
+const { classifyMarkdownDocumentCompatibility, classifyMarkdownDocumentComplexity, inferMarkdownDocumentDisplayMode } = loadTsModule('src/core/renderer/pages/markdown-document/markdownDocumentCapabilities.ts')
 
 test('parses the last existing markdown argv candidate', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'markdown-test-'))
@@ -31,9 +32,24 @@ test('repository trims history', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'markdown-history-'))
   const repository = new MarkdownDocumentRepository(root)
   for (let index = 0; index < 52; index += 1) {
-    await repository.record({ path: `C:\\docs\\${index}.md`, normalizedPath: `c:\\docs\\${index}.md`, displayName: `${index}.md`, lastOpenedAt: index })
+    const filePath = 'C:\\docs\\' + index + '.md'
+    await repository.record({ path: filePath, normalizedPath: filePath.toLowerCase(), displayName: index + '.md', lastOpenedAt: index })
   }
   const history = await repository.list()
   assert.equal(history.length, 50)
   assert.equal(history[0].displayName, '51.md')
+})
+
+test('classifies markdown compatibility and complexity', () => {
+  assert.deepEqual(classifyMarkdownDocumentCompatibility('# note'), { level: 'full', reasons: [] })
+  assert.equal(classifyMarkdownDocumentCompatibility('---\ntitle: note\n---\n# note').level, 'normalized')
+  assert.equal(classifyMarkdownDocumentCompatibility('<section>note</section>').level, 'source-only')
+
+  const fence = String.fromCharCode(96).repeat(3)
+  const repeatedCodeBlocks = Array.from({ length: 101 }, (_, index) => fence + 'js\nconsole.log(' + (index + 1) + ')\n' + fence).join('\n')
+  assert.equal(classifyMarkdownDocumentComplexity('# note').level, 'normal')
+  assert.equal(classifyMarkdownDocumentComplexity(repeatedCodeBlocks).level, 'reduced')
+  assert.equal(classifyMarkdownDocumentComplexity('line\n'.repeat(100_001)).level, 'source-first')
+  assert.equal(inferMarkdownDocumentDisplayMode('# note'), 'preview')
+  assert.equal(inferMarkdownDocumentDisplayMode('<section>note</section>'), 'preview')
 })
