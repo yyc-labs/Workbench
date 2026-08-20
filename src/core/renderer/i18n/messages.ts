@@ -47,6 +47,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
     },
     {
       settingsRuntime: aiAndRuntimeMessages[locale].settingsRuntime,
+      settingsProcesses: aiAndRuntimeMessages[locale].settingsProcesses,
       settingsRules: aiAndRuntimeMessages[locale].settingsRules,
     },
   )

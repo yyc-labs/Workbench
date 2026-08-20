@@ -52,6 +52,7 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   shortcuts: 'common.routeCatalog.settingsDescriptions.shortcuts',
   data: 'common.routeCatalog.settingsDescriptions.data',
   runtime: 'common.routeCatalog.settingsDescriptions.runtime',
+  processes: 'common.routeCatalog.settingsDescriptions.processes',
   agents: 'common.routeCatalog.settingsDescriptions.agents',
   gateway: 'common.routeCatalog.settingsDescriptions.gateway',
   'browser-ai': 'common.routeCatalog.settingsDescriptions.browserAi',

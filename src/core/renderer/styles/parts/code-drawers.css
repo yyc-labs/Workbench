@@ -16,7 +16,9 @@
   transform: translateX(calc(100% + 16px));
   opacity: 0;
   pointer-events: none;
-  transition: transform 220ms var(--spring), opacity 220ms var(--spring);
+  transition:
+    transform 220ms var(--spring),
+    opacity 220ms var(--spring);
   will-change: transform;
   display: flex;
   flex-direction: column;
@@ -112,7 +114,9 @@
   border: 1px solid var(--color-border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--color-background) 96%, transparent);
-  transition: background-color 120ms var(--spring), border-color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    border-color 120ms var(--spring);
 }
 
 .code-file-quick-drawer-item:hover {
@@ -138,7 +142,7 @@
 
 .code-file-quick-drawer-path {
   display: block;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 11.5px;
   color: var(--color-foreground);
   white-space: nowrap;
@@ -170,7 +174,9 @@
   border-radius: 10px;
   background: transparent;
   color: var(--color-muted-foreground);
-  transition: color 120ms var(--spring), background-color 120ms var(--spring);
+  transition:
+    color 120ms var(--spring),
+    background-color 120ms var(--spring);
 }
 
 .code-file-quick-drawer-action:hover {
@@ -221,7 +227,9 @@
   font-weight: 600;
   line-height: 1;
   padding: 6px 9px;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring);
 }
 
 .monaco-inline-action-widget__button:hover {
@@ -245,7 +253,7 @@
 .recent-project-drawer {
   --recent-project-drawer-top: clamp(96px, 14vh, 150px);
   position: fixed;
-  z-index: 90;
+  z-index: 20001;
   top: var(--recent-project-drawer-top);
   left: 12px;
   right: 12px;
@@ -260,7 +268,9 @@
   transform: translate3d(0, calc(-100% - 22px), 0);
   opacity: 0;
   pointer-events: none;
-  transition: transform 220ms var(--spring), opacity 220ms var(--spring);
+  transition:
+    transform 220ms var(--spring),
+    opacity 220ms var(--spring);
   will-change: transform, opacity;
   display: flex;
   flex-direction: column;
@@ -348,7 +358,9 @@
   border: 1px solid var(--color-border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--color-background) 96%, transparent);
-  transition: background-color 120ms var(--spring), border-color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    border-color 120ms var(--spring);
   contain: layout paint;
   content-visibility: auto;
   contain-intrinsic-size: 56px;
@@ -406,7 +418,9 @@
   background: transparent;
   color: var(--color-muted-foreground);
   margin-right: 8px;
-  transition: color 120ms var(--spring), background-color 120ms var(--spring);
+  transition:
+    color 120ms var(--spring),
+    background-color 120ms var(--spring);
 }
 
 .recent-project-drawer-remove:hover {

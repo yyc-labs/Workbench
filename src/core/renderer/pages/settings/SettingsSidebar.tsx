@@ -1,4 +1,4 @@
-import { Palette, Database, FileText, Info, Wrench, Bot, Terminal as TerminalIcon, RadioTower, HardDrive, Keyboard, Router, ScrollText, Globe2, PlugZap } from 'lucide-react'
+import { Palette, Database, FileText, Info, Wrench, Bot, Terminal as TerminalIcon, RadioTower, HardDrive, Keyboard, Router, ScrollText, Globe2, PlugZap, Cpu } from 'lucide-react'
 import { useI18n } from '../../i18n'
 import { SETTINGS_SECTIONS, type Section } from './settings.types'
 
@@ -14,6 +14,7 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
     shortcuts: Keyboard,
     data: HardDrive,
     runtime: Wrench,
+    processes: Cpu,
     agents: Bot,
     gateway: Router,
     'browser-ai': Globe2,

@@ -1475,6 +1475,29 @@ export interface TerminalStopAllResult {
   tmuxSkipped: number
 }
 
+/** Which execution environment the process runs in. v1 only 'host'; reserved for future WSL. */
+export type ProcessPortHost = 'host' | 'wsl'
+
+/** A host process that is listening on one or more TCP ports. */
+export interface ProcessPortInfo {
+  pid: number
+  /** Executable base name, e.g. node / node.exe / python / java. */
+  name: string
+  /** Full command line (may be empty when the OS hides it). */
+  command: string
+  /** Sorted, de-duplicated listening TCP ports. */
+  ports: number[]
+  host: ProcessPortHost
+}
+
+export interface ProcessPortInventory {
+  checkedAt: number
+  hostPlatform: 'windows' | 'linux' | 'macos'
+  processes: ProcessPortInfo[]
+  /** Present when collection partially or fully failed; the UI shows an error state. */
+  error?: string
+}
+
 export interface AppConfig {
   /** Schema version used by the main-process config migration chain. */
   configVersion?: number

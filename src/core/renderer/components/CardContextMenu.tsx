@@ -41,6 +41,8 @@ interface CardContextMenuProps {
   onTogglePin?: () => void | Promise<unknown>
   onEditMetadata?: () => void | Promise<unknown>
   onRemoveProject?: () => void | Promise<unknown>
+  /** Stacking layer for the menu surface (default 9998, matching the original CSS). */
+  zIndex?: number
 }
 
 type MenuTone = 'default' | 'primary' | 'success' | 'warning' | 'danger'
@@ -202,6 +204,7 @@ export function CardContextMenu({
   onTogglePin,
   onEditMetadata,
   onRemoveProject,
+  zIndex = 9998,
 }: CardContextMenuProps) {
   const { t } = useI18n()
   const [actionError, setActionError] = useState<string | null>(null)
@@ -491,8 +494,9 @@ export function CardContextMenu({
       <div
         ref={profileSubmenuRef}
         role="menu"
-        className="fixed z-[10020] overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
+        className="fixed overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
         style={{
+          zIndex: zIndex + 22,
           top: profileSubmenuLayout?.top ?? 0,
           left: profileSubmenuLayout?.left ?? 0,
           width: profileSubmenuLayout?.width ?? AI_PROFILE_SUBMENU_WIDTH,
@@ -570,8 +574,9 @@ export function CardContextMenu({
     <>
       <div
         ref={menuRef}
-        className="fixed z-[9998] rounded-[24px] p-2"
+        className="fixed rounded-[24px] p-2"
         style={{
+          zIndex,
           top: menuTop,
           left: menuLeft,
           width: menuWidth,

@@ -73,6 +73,7 @@ import type {
   SkillUpdateCategoryPayload,
   SkillUpdatePayload,
   ProcessInfo,
+  ProcessPortInventory,
   ProjectFileAutoLoadDecision,
   ProjectFileContentSearchOptions,
   ProjectFileContentSearchResponse,
@@ -351,6 +352,10 @@ export interface RuntimeElectronApi {
   openSshTerminal: (payload: OpenSshTerminalPayload) => Promise<OpenSshTerminalResult>
 }
 
+export interface ProcessPortsElectronApi {
+  listProcessPorts: () => Promise<ProcessPortInventory>
+}
+
 export interface SubscriptionElectronApi {
   onProcessOutput: ElectronApiSubscription<ProcessOutputEvent>
   onProcessStatus: ElectronApiSubscription<ProcessStatusEvent>
@@ -385,4 +390,5 @@ export type ElectronApi = CoreElectronApi &
   BrowserAiElectronApi &
   BrowserScreenshotElectronApi &
   RuntimeElectronApi &
+  ProcessPortsElectronApi &
   SubscriptionElectronApi

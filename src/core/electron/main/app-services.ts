@@ -18,6 +18,7 @@ import { FeishuNotifier } from './hooks/feishu-notifier'
 import { IPC } from './ipc'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
+import { createProcessPortService } from './process-ports/process-port-service'
 import { translateMain, type MainLocale } from './mainI18n'
 import type { ProcessManager } from './runner'
 import { createRuntimeService } from './runtime/runtime-service'
@@ -74,6 +75,9 @@ export function createAppServices(options: AppServicesOptions) {
     getProcessManager: options.getProcessManager,
     aiEnvironmentController,
     emitRuntimeStateChanged: options.emitRuntimeStateChanged,
+  })
+  const processPortService = createProcessPortService({
+    getCapability: options.getCapability,
   })
   const aiCommitService = createAiCommitService({
     getMainWindow: options.getMainWindow,
@@ -233,6 +237,7 @@ export function createAppServices(options: AppServicesOptions) {
     aiEnvironmentController,
     gitService,
     runtimeService,
+    processPortService,
     aiCommitService,
     aiConnectionService,
     transcriptService,

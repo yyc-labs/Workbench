@@ -194,6 +194,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
     <CardContextMenu
       x={contextMenu.x}
       y={contextMenu.y}
+      zIndex={20002}
       onClose={onClose}
       isRuntimeActive={isRuntimeActive}
       usesTmuxRuntime={usesTmuxRuntime}
@@ -317,7 +318,7 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
 
   return (
     <>
-      <button type="button" data-allow-recent-gesture="true" className={`fixed inset-0 z-[89] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`} aria-label={t('common.closeRecentProjectsBackdrop')} onClick={onClose} />
+      <button type="button" data-allow-recent-gesture="true" className={`fixed inset-0 z-[20000] bg-[color:var(--color-background-sunken)]/42 backdrop-blur-[3px] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`} aria-label={t('common.closeRecentProjectsBackdrop')} onClick={onClose} />
 
       <aside className={`recent-project-drawer ${visible ? 'is-open' : ''}`} data-allow-recent-gesture="true" data-recent-project-drawer-open={open ? 'true' : 'false'}>
         <div className={`flex h-full min-h-0 flex-col transition-opacity duration-150 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}>

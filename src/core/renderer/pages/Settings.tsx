@@ -17,6 +17,7 @@ import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
 import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
 import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
+import { SettingsProcessesPanel } from './settings/processes/SettingsProcessesPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
 import { SettingsShortcutsPanel } from './settings/SettingsShortcutsPanel'
@@ -419,6 +420,7 @@ export function SettingsPage() {
                   runtimeEntries={runtimeEntries}
                 />
               )}
+              {section === 'processes' && <SettingsProcessesPanel />}
               {section === 'agents' && (
                 <SettingsAgentsPanel
                   capability={capability}

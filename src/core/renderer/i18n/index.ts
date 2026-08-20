@@ -9,6 +9,7 @@ const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = 
   shortcuts: 'settings.sections.shortcuts',
   data: 'settings.sections.data',
   runtime: 'settings.sections.runtime',
+  processes: 'settings.sections.processes',
   agents: 'settings.sections.agents',
   gateway: 'settings.sections.gateway',
   'browser-ai': 'settings.sections.browserAi',

@@ -11,6 +11,7 @@ import type { GitService } from '../git/git-service'
 import type { LearningService } from '../learning/learningService'
 import type { SkillService } from '../skill/skillService'
 import type { RuntimeService } from '../runtime/runtime-service'
+import type { ProcessPortService } from '../process-ports/process-port-service'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
@@ -47,6 +48,7 @@ export type RegisterIpcHandlersDependencies = {
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService
+  processPortService: ProcessPortService
   learningService: LearningService
   skillService: SkillService
   transcriptService: TranscriptService

@@ -34,6 +34,11 @@ function buildPreviewBootstrapHtml(theme: HtmlPreviewTheme): string {
     `  --color-text-tertiary: ${isDark ? '#73737a' : '#9ca3af'};`,
     '}',
     '</style>',
+    // Sandboxed preview iframes get an opaque origin, so reading window.localStorage /
+    // window.sessionStorage throws a SecurityError that can crash the page's boot
+    // script (breaking in-page buttons). Install an in-memory shim (deliberately not
+    // persisted) so such pages still function; real storage stays unavailable.
+    '<script>!function(){function m(){var a=new Map;return{getItem:function(k){return a.has(String(k))?a.get(String(k)):null},setItem:function(k,v){a.set(String(k),String(v))},removeItem:function(k){a.delete(String(k))},clear:function(){a.clear()},key:function(i){var ks=Array.from(a.keys());return i>=0&&i<ks.length?ks[i]:null},get length(){return a.size}}};try{void window.localStorage}catch(e){try{Object.defineProperty(window,"localStorage",{value:m(),writable:true,configurable:true})}catch(e2){}}try{void window.sessionStorage}catch(e3){try{Object.defineProperty(window,"sessionStorage",{value:m(),writable:true,configurable:true})}catch(e4){}}}();</script>',
     '<script>!function(){let t=!1,n=0,o=0;const r=e=>{window.parent.postMessage({type:"preview:mouse-gesture",eventType:e.type,clientX:e.clientX,clientY:e.clientY,button:e.button,buttons:e.buttons,ctrlKey:e.ctrlKey,metaKey:e.metaKey,shiftKey:e.shiftKey,altKey:e.altKey},"*")};window.addEventListener("mousedown",e=>{if(2!==e.button)return;t=!1,n=e.clientX,o=e.clientY,r(e)},!0),window.addEventListener("mousemove",e=>{2&e.buttons&&(t||Math.hypot(e.clientX-n,e.clientY-o)>=8&&(t=!0),r(e))},!0),window.addEventListener("mouseup",e=>{2===e.button&&r(e)},!0),window.addEventListener("contextmenu",e=>{t&&e.preventDefault(),r(e),t=!1},!0)}();</script>',
     // Load the Tabler icon webfont asynchronously so a slow/offline CDN never
     // render-blocks the preview page.

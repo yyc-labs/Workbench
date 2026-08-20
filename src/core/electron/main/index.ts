@@ -74,7 +74,7 @@ const services = createAppServices({
   emitTranscriptImported,
 })
 const markdownDocumentService = new MarkdownDocumentService(new MarkdownDocumentRepository(app.getPath('userData')), () => mainWindow)
-const { gitService, runtimeService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
+const { gitService, runtimeService, processPortService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -644,6 +644,7 @@ app.whenReady().then(async () => {
               agentHookGateway,
               gitService,
               runtimeService,
+              processPortService,
               learningService,
               skillService,
               transcriptService,

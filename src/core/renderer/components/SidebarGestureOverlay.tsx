@@ -14,7 +14,7 @@ export function SidebarGestureOverlay({ overlay }: SidebarGestureOverlayProps) {
   const strokeColor = overlay.status === 'ready' ? 'var(--color-success)' : overlay.status === 'invalid' ? 'var(--color-destructive)' : 'var(--color-muted-foreground)'
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[10045]">
+    <div className="pointer-events-none fixed inset-0 z-[20050]">
       <svg className="h-full w-full">
         {polylinePoints.length > 0 ? <polyline points={polylinePoints} fill="none" stroke={strokeColor} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.82 }} /> : null}
         {startPoint ? <circle cx={startPoint.x} cy={startPoint.y} r={4} fill={strokeColor} style={{ opacity: 0.75 }} /> : null}
