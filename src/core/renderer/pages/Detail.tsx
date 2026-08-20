@@ -15,6 +15,7 @@ import { useI18n, useLocale } from '../i18n'
 import { useAppStore } from '../stores/appStore'
 import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
 import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preloadProjectPane } from '../lib/projectPagePreload'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
@@ -135,6 +136,7 @@ export function DetailPage() {
     runStartupMode: project?.runStartupMode,
     startProject,
   })
+  const openStartupLogs = useOpenStartupLogs()
   const docLinkState = useProjectDocLinks({ project })
   const {
     docLinks,
@@ -435,6 +437,11 @@ export function DetailPage() {
                   onClick={() => {
                     void startAndOpenDevUrl()
                   }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (projectId) openStartupLogs(projectId)
+                  }}
                   disabled={pendingOpenDevUrl}
                   title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                   aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
@@ -577,6 +584,9 @@ export function DetailPage() {
                     activePane={activePane}
                     onPreloadPane={preloadProjectPane}
                     onStartAndOpenDevUrl={startAndOpenDevUrl}
+                    onOpenStartupLogs={() => {
+                      if (projectId) openStartupLogs(projectId)
+                    }}
                     onSwitchPane={(nextPane) => {
                       if (!projectId || nextPane === activePane) return
                       navigate(`/project/${projectId}/${nextPane}`)
@@ -616,6 +626,9 @@ export function DetailPage() {
                       navigate(`/project/${projectId}/${nextPane}`)
                     }}
                     onStartAndOpenDevUrl={startAndOpenDevUrl}
+                    onOpenStartupLogs={() => {
+                      if (projectId) openStartupLogs(projectId)
+                    }}
                     onOpenTranscript={() => {
                       if (!projectId) return
                       navigate(`/project/${projectId}/transcript`)

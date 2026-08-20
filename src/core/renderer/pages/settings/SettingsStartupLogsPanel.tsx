@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
 import { Terminal as AppTerminal } from '../../components/Terminal'
@@ -8,13 +8,15 @@ import { backendLabel } from './settings.helpers'
 
 type StartupLogsPanelProps = {
   projects: { id: string; name: string; path: string }[]
+  initialProjectId?: string | null
 }
 
-function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
+function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPanelProps) {
   const { t } = useI18n()
   const [inventoryLoading, setInventoryLoading] = useState(false)
   const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
+  const appliedInitialProjectIdRef = useRef<string | null | undefined>(undefined)
 
   const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
 
@@ -55,39 +57,39 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
       return
     }
     if (selectedProcessId && projectManaged.some((p) => p.processId === selectedProcessId)) return
-    setSelectedProcessId(projectManaged[0].processId)
-  }, [projectManaged, selectedProcessId])
 
-  const selectedManagedProcess = selectedProcessId
-    ? projectManaged.find((p) => p.processId === selectedProcessId) || null
-    : null
+    // 优先选中 URL 指定的项目进程（首次加载或目标变化时）；否则回退到第一个
+    if (initialProjectId && appliedInitialProjectIdRef.current !== initialProjectId) {
+      appliedInitialProjectIdRef.current = initialProjectId
+      const target = projectManaged.find((item) => item.processId === initialProjectId || item.processId === `${initialProjectId}::toolbox`)
+      if (target) {
+        setSelectedProcessId(target.processId)
+        return
+      }
+    }
+    appliedInitialProjectIdRef.current = null
+    setSelectedProcessId(projectManaged[0].processId)
+  }, [initialProjectId, projectManaged, selectedProcessId])
+
+  const selectedManagedProcess = selectedProcessId ? projectManaged.find((p) => p.processId === selectedProcessId) || null : null
 
   return (
     <div className="space-y-8">
       <div>
         <p className="section-label mb-3">{t('startupLogs.kicker')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('startupLogs.title')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">
-          {t('startupLogs.description')}
-        </p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('startupLogs.description')}</p>
       </div>
 
       <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center justify-between mb-2 gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('startupLogs.sectionTitle')}</p>
-            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">
-              {t('startupLogs.sectionDescription')}
-            </p>
+            <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('startupLogs.sectionDescription')}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-[color:var(--color-muted-foreground)] shrink-0">{projectManaged.length}</span>
-            <Button
-              variant="outline"
-              className="h-7 rounded-full px-2 text-[11px]"
-              onClick={() => void refreshInventory()}
-              disabled={inventoryLoading}
-            >
+            <Button variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => void refreshInventory()} disabled={inventoryLoading}>
               {inventoryLoading ? t('settingsRuntime.refreshing') : t('settingsRuntime.refresh')}
             </Button>
           </div>
@@ -103,11 +105,7 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
                 return (
                   <button
                     key={`log-tab-${item.processId}`}
-                    className={`button-interactive px-2.5 py-1 rounded-full border text-[11px] transition-colors ${
-                      selected
-                        ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]'
-                        : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                    }`}
+                    className={`button-interactive px-2.5 py-1 rounded-full border text-[11px] transition-colors ${selected ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
                     style={{ borderColor: 'var(--color-border)' }}
                     onClick={() => setSelectedProcessId(item.processId)}
                     title={label}
@@ -119,17 +117,11 @@ function SettingsStartupLogsPanel({ projects }: StartupLogsPanelProps) {
             </div>
 
             {selectedManagedProcess ? (
-              <div
-                className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)]"
-                style={{ borderColor: 'var(--color-border)' }}
-              >
+              <div className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)]" style={{ borderColor: 'var(--color-border)' }}>
                 <AppTerminal projectId={selectedManagedProcess.processId} variant="soft" />
               </div>
             ) : (
-              <div
-                className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)]"
-                style={{ borderColor: 'var(--color-border)' }}
-              >
+              <div className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
                 {t('startupLogs.selectProcess')}
               </div>
             )}

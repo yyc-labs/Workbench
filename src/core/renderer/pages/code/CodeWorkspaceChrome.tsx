@@ -27,6 +27,7 @@ type CodeWorkspaceChromeProps = {
   onOpenFirstProjectLink?: () => void
   onPreloadPane?: ProjectPanePreload
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
+  onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   onReloadFromDisk: () => void
@@ -100,6 +101,7 @@ export function CodeWorkspaceChrome({
   onOpenFirstProjectLink,
   onPreloadPane,
   onStartAndOpenDevUrl,
+  onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
   onReloadFromDisk,
@@ -160,6 +162,11 @@ export function CodeWorkspaceChrome({
                   }`}
                   onClick={() => {
                     void onStartAndOpenDevUrl()
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onOpenStartupLogs?.()
                   }}
                   disabled={projectDevUrlPending}
                   title={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}

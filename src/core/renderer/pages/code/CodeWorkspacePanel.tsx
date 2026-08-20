@@ -51,6 +51,7 @@ type CodeWorkspacePanelProps = {
   onPreloadPane?: ProjectPanePreload
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
+  onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
 }
@@ -75,6 +76,7 @@ export function CodeWorkspacePanel({
   onPreloadPane,
   onSwitchPane,
   onStartAndOpenDevUrl,
+  onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
 }: CodeWorkspacePanelProps) {
@@ -767,6 +769,7 @@ export function CodeWorkspacePanel({
         }}
         onPreloadPane={onPreloadPane}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
+        onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         onReloadFromDisk={() => {

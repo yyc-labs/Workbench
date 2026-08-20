@@ -1,6 +1,6 @@
 import { ChevronLeft } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getCodexScopeCacheKey, resolveCodexScopeDescriptor } from '../../shared/codexScope'
 import type { AppCacheLocationConfig, AppCacheLocationInfo, AppLocale, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, CloseWindowBehavior, LaunchOnLoginDisplayMode, LegacyUserDataMigrationInfo, ProjectFileExclusionsConfig } from '../../shared/types'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -36,6 +36,8 @@ function toErrorMessage(error: unknown): string {
 export function SettingsPage() {
   const { section: sectionParam } = useParams<{ section?: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const startupLogsInitialProjectId = searchParams.get('project')
   const config = useAppStore((s) => s.config)
   const capability = useAppStore((s) => s.capability)
   const projects = useAppStore((s) => s.projects)
@@ -434,7 +436,7 @@ export function SettingsPage() {
               {section === 'transcripts' && <SettingsTranscriptPanel projects={projects} removedProjects={config.removedProjects} />}
               {section === 'hooks' && <SettingsAgentHooksPanel />}
               {section === 'agent-logs' && <SettingsAgentLogsPanel />}
-              {section === 'logs' && <SettingsStartupLogsPanel projects={projects} />}
+              {section === 'logs' && <SettingsStartupLogsPanel projects={projects} initialProjectId={startupLogsInitialProjectId} />}
               {section === 'ai' && (
                 <SettingsAiCommitPanel
                   aiCommit={config.aiCommit || {}}

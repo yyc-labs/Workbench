@@ -13,6 +13,7 @@ import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagL
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
@@ -278,6 +279,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     runStartupMode: project.runStartupMode,
     startProject,
   })
+  const openStartupLogs = useOpenStartupLogs()
 
   const handleOpenFirstLink = useCallback(async () => {
     if (defaultDocLink) {
@@ -501,6 +503,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             onClick={(e) => {
               e.stopPropagation()
               void startAndOpenDevUrl()
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              openStartupLogs(project.id)
             }}
             title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
             aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}

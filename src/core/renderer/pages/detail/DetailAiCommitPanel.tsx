@@ -34,6 +34,7 @@ type DetailAiCommitPanelProps = {
   onPreloadPane?: ProjectPanePreload
   onSwitchPane?: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
+  onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
   jumpToAiLogToken: number
@@ -99,6 +100,7 @@ function DetailAiCommitPanel({
   onPreloadPane,
   onSwitchPane,
   onStartAndOpenDevUrl,
+  onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
   jumpToAiLogToken,
@@ -788,6 +790,7 @@ function DetailAiCommitPanel({
             onOpenTranscript={onOpenTranscript}
             onPreloadPane={onPreloadPane}
             onStartAndOpenDevUrl={onStartAndOpenDevUrl}
+            onOpenStartupLogs={onOpenStartupLogs}
             onUndoAiCommit={() => {
               void requestUndoAiCommit()
             }}

@@ -12,6 +12,7 @@ import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
 import { Button } from '../components/ui/button'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
 import { useScrollableContentCapture } from '../hooks/useScrollableContentCapture'
 import { MonacoTextViewer } from '../components/MonacoTextViewer'
 import { formatStructuredBlockKind as formatStructuredBlockKindLabel, formatTranscriptSourceType, useI18n, useLocale } from '../i18n'
@@ -304,6 +305,7 @@ export function TranscriptPage() {
     runStartupMode: project?.runStartupMode,
     startProject,
   })
+  const openStartupLogs = useOpenStartupLogs()
   const projectLinkItems = useMemo(() => [...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, processUrls])
   const firstProjectLinkItem = projectLinkItems[0]
   const projectDocsCountLabel = t('project.docsCount', { count: docLinks.length })
@@ -782,6 +784,9 @@ export function TranscriptPage() {
             pendingOpenDevUrl={pendingOpenDevUrl}
             isActive={isActive}
             startAndOpenDevUrl={startAndOpenDevUrl}
+            onOpenStartupLogs={() => {
+              if (projectId) openStartupLogs(projectId)
+            }}
             onRefreshList={() => {
               void loadProjectTranscripts(projectId)
             }}

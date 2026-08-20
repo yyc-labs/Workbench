@@ -24,6 +24,7 @@ type DetailAiCommitPaneHostProps = {
   onPreloadPane?: ProjectPanePreload
   onSwitchPane: (pane: 'code' | 'aicommit') => void
   onStartAndOpenDevUrl?: () => void | Promise<unknown>
+  onOpenStartupLogs?: () => void
   onOpenTranscript: () => void
   onOpenProjectLinksManager: () => void
   onCloseProjectContextMenu: () => void
@@ -45,6 +46,7 @@ export function DetailAiCommitPaneHost({
   onPreloadPane,
   onSwitchPane,
   onStartAndOpenDevUrl,
+  onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
   onCloseProjectContextMenu,
@@ -224,6 +226,7 @@ export function DetailAiCommitPaneHost({
         onPreloadPane={onPreloadPane}
         onSwitchPane={onSwitchPane}
         onStartAndOpenDevUrl={onStartAndOpenDevUrl}
+        onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         jumpToAiLogToken={jumpToAiLogToken}
