@@ -18,6 +18,36 @@ type PreviewMouseGestureMessage = {
   altKey: boolean
 }
 
+export function dispatchPreviewMouseGesture(message: Partial<PreviewMouseGestureMessage> | null, bounds: DOMRect): void {
+  if (
+    !message ||
+    message.type !== 'preview:mouse-gesture' ||
+    typeof message.eventType !== 'string' ||
+    !['mousedown', 'mousemove', 'mouseup', 'contextmenu'].includes(message.eventType) ||
+    typeof message.clientX !== 'number' ||
+    typeof message.clientY !== 'number' ||
+    typeof message.button !== 'number' ||
+    typeof message.buttons !== 'number'
+  )
+    return
+
+  document.dispatchEvent(
+    new MouseEvent(message.eventType, {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: bounds.left + message.clientX,
+      clientY: bounds.top + message.clientY,
+      button: message.button,
+      buttons: message.buttons,
+      ctrlKey: Boolean(message.ctrlKey),
+      metaKey: Boolean(message.metaKey),
+      shiftKey: Boolean(message.shiftKey),
+      altKey: Boolean(message.altKey),
+    }),
+  )
+}
+
 /**
  * Iframes have their own event document, so right-drag events never reach the
  * app-level gesture navigator. Preview pages forward the raw mouse sequence via
@@ -29,34 +59,8 @@ export function usePreviewIframeMouseGestureBridge(iframeRef: RefObject<HTMLIFra
     const onMessage = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return
       const message = event.data as Partial<PreviewMouseGestureMessage> | null
-      if (
-        !message ||
-        message.type !== 'preview:mouse-gesture' ||
-        typeof message.eventType !== 'string' ||
-        !['mousedown', 'mousemove', 'mouseup', 'contextmenu'].includes(message.eventType) ||
-        typeof message.clientX !== 'number' ||
-        typeof message.clientY !== 'number' ||
-        typeof message.button !== 'number' ||
-        typeof message.buttons !== 'number'
-      )
-        return
-
       const bounds = iframeRef.current.getBoundingClientRect()
-      document.dispatchEvent(
-        new MouseEvent(message.eventType, {
-          bubbles: true,
-          cancelable: true,
-          view: window,
-          clientX: bounds.left + message.clientX,
-          clientY: bounds.top + message.clientY,
-          button: message.button,
-          buttons: message.buttons,
-          ctrlKey: Boolean(message.ctrlKey),
-          metaKey: Boolean(message.metaKey),
-          shiftKey: Boolean(message.shiftKey),
-          altKey: Boolean(message.altKey),
-        }),
-      )
+      dispatchPreviewMouseGesture(message, bounds)
     }
 
     window.addEventListener('message', onMessage)

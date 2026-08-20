@@ -59,6 +59,19 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (!params.src.startsWith('yyc-workbench://')) {
+      event.preventDefault()
+      return
+    }
+
+    // The guest preload only relays right-drag gesture messages to its host. It
+    // does not expose Electron APIs to project HTML.
+    webPreferences.preload = join(__dirname, '../preload/htmlPreview.js')
+    webPreferences.contextIsolation = true
+    webPreferences.nodeIntegration = false
+    webPreferences.sandbox = true
+  })
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' && input.type !== 'rawKeyDown') return
 

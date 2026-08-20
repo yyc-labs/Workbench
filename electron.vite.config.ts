@@ -24,6 +24,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/core/electron/preload/index.ts'),
+          htmlPreview: resolve(__dirname, 'src/core/electron/preload/html-preview.ts'),
         },
       },
     },

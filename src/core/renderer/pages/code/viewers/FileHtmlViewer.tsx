@@ -3,7 +3,7 @@ import { CircleAlert, Code2, Eye, Monitor, RefreshCw, Smartphone, Square } from 
 import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
 import { MonacoCodeEditor } from '../MonacoCodeEditor'
-import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
+import { dispatchPreviewMouseGesture, FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
 type FileHtmlViewerProps = {
   previewUrl: string
@@ -18,6 +18,7 @@ type HtmlViewMode = 'render' | 'source'
 type HtmlViewportMode = 'desktop' | 'mobile'
 
 type PreviewLoadEvent = Event & { errorCode?: number }
+type PreviewIpcMessageEvent = Event & { channel?: string; args?: unknown[] }
 
 function HtmlPreviewGuest({ previewUrl, relativePath, refreshKey, onStopped }: { previewUrl: string; relativePath: string; refreshKey: number; onStopped: () => void }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -37,9 +38,15 @@ function HtmlPreviewGuest({ previewUrl, relativePath, refreshKey, onStopped }: {
       // Reloading a guest aborts its previous navigation; it is not a preview failure.
       if ((event as PreviewLoadEvent).errorCode !== -3) onStopped()
     }
+    const handleIpcMessage = (event: Event) => {
+      const messageEvent = event as PreviewIpcMessageEvent
+      if (messageEvent.channel !== 'preview:mouse-gesture') return
+      dispatchPreviewMouseGesture((messageEvent.args?.[0] as Parameters<typeof dispatchPreviewMouseGesture>[0]) ?? null, webview.getBoundingClientRect())
+    }
 
     webview.addEventListener('render-process-gone', handleProcessGone)
     webview.addEventListener('did-fail-load', handleLoadFailure)
+    webview.addEventListener('ipc-message', handleIpcMessage)
     container.replaceChildren(webview)
 
     // Electron creates the guest before CSS layout settles. Keep its native
@@ -72,6 +79,7 @@ function HtmlPreviewGuest({ previewUrl, relativePath, refreshKey, onStopped }: {
       webview.removeEventListener('did-attach', syncGuestViewport)
       webview.removeEventListener('render-process-gone', handleProcessGone)
       webview.removeEventListener('did-fail-load', handleLoadFailure)
+      webview.removeEventListener('ipc-message', handleIpcMessage)
       webview.remove()
     }
   }, [onStopped, previewUrl, refreshKey, relativePath])
