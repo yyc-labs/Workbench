@@ -18,7 +18,6 @@ type CodeWorkspaceChromeProps = {
   isDirty: boolean
   isExplorerOpen: boolean
   isNarrowViewport: boolean
-  isReading: boolean
   isReloadingFromDisk: boolean
   onCloseOpenTab: (relativePath: string) => void
   onHandleSave: () => void
@@ -59,26 +58,11 @@ type CodeWorkspaceChromeProps = {
   viewMode: 'files' | 'search'
 }
 
-function EmptyStateSummary({
-  activeRelativePath,
-  activeLanguage,
-  projectFileSize,
-  chooseFileLabel,
-}: {
-  activeRelativePath: string | null
-  activeLanguage: string | null
-  projectFileSize: number
-  chooseFileLabel: string
-}) {
-  const summaryText = activeRelativePath
-    ? `${activeLanguage || 'plaintext'} • ${formatFileSize(projectFileSize)}`
-    : chooseFileLabel
+function EmptyStateSummary({ activeRelativePath, activeLanguage, projectFileSize, chooseFileLabel }: { activeRelativePath: string | null; activeLanguage: string | null; projectFileSize: number; chooseFileLabel: string }) {
+  const summaryText = activeRelativePath ? `${activeLanguage || 'plaintext'} • ${formatFileSize(projectFileSize)}` : chooseFileLabel
 
   return (
-    <p
-      className="truncate text-xs text-[color:var(--color-muted-foreground)]"
-      title={activeRelativePath ? `${activeRelativePath} • ${summaryText}` : summaryText}
-    >
+    <p className="truncate text-xs text-[color:var(--color-muted-foreground)]" title={activeRelativePath ? `${activeRelativePath} • ${summaryText}` : summaryText}>
       {activeRelativePath ? `${activeRelativePath} • ${summaryText}` : summaryText}
     </p>
   )
@@ -107,7 +91,6 @@ export function CodeWorkspaceChrome({
   isDirty,
   isExplorerOpen,
   isNarrowViewport,
-  isReading,
   isReloadingFromDisk,
   onCloseOpenTab,
   onHandleSave,
@@ -150,10 +133,7 @@ export function CodeWorkspaceChrome({
   const { t } = useI18n()
   return (
     <>
-      <div
-        className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[20px] border px-4 py-2"
-        style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}
-      >
+      <div className="mb-3 flex min-h-[52px] items-center justify-between gap-3 rounded-[20px] border px-4 py-2" style={{ borderColor: 'var(--color-border)', background: 'color-mix(in srgb, var(--color-card) 95%, transparent)' }}>
         <div className="min-w-0">
           {projectHeaderCollapsed ? (
             <div className="flex min-w-0 items-center gap-2.5">
@@ -171,44 +151,26 @@ export function CodeWorkspaceChrome({
                   onSwitchPane?.(pane)
                 }}
               />
-              {hasProjectDocLinks && (
-                <ProjectLinksTrigger
-                  items={projectLinkItems}
-                  tagOptions={projectLinkTagOptions}
-                  onOpenDefault={onOpenFirstProjectLink}
-                  onOpenManager={onOpenProjectLinksManager}
-                  size="icon"
-                  title={t('common.leftClickOpenFirstLink')}
-                />
-              )}
+              {hasProjectDocLinks && <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={onOpenFirstProjectLink} onOpenManager={onOpenProjectLinksManager} size="icon" title={t('common.leftClickOpenFirstLink')} />}
               {projectDevUrlActionVisible && onStartAndOpenDevUrl && (
                 <button
                   type="button"
                   className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
-                    projectDevUrlReady
-                      ? 'text-primary hover:text-primary'
-                      : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+                    projectDevUrlReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
                   }`}
-                  onClick={() => { void onStartAndOpenDevUrl() }}
+                  onClick={() => {
+                    void onStartAndOpenDevUrl()
+                  }}
                   disabled={projectDevUrlPending}
                   title={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                   aria-label={projectDevUrlReady ? t('project.openDevUrl') : projectDevUrlPending ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
                 >
-                  {projectDevUrlPending ? (
-                    <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                  ) : (
-                    <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
-                  )}
+                  {projectDevUrlPending ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />}
                 </button>
               )}
             </div>
           ) : (
-            <EmptyStateSummary
-              activeRelativePath={activeRelativePath}
-              activeLanguage={activeLanguage}
-              projectFileSize={projectFileSize}
-              chooseFileLabel={t('codeWorkspace.chooseFileToStart')}
-            />
+            <EmptyStateSummary activeRelativePath={activeRelativePath} activeLanguage={activeLanguage} projectFileSize={projectFileSize} chooseFileLabel={t('codeWorkspace.chooseFileToStart')} />
           )}
         </div>
 
@@ -217,9 +179,7 @@ export function CodeWorkspaceChrome({
             <button
               type="button"
               className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1.5 text-xs transition-colors ${
-                isActiveFileFavorite
-                  ? 'border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                  : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                isActiveFileFavorite ? 'border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]' : 'border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
               }`}
               onClick={() => onToggleFavorite(activeRelativePath)}
               title={isActiveFileFavorite ? t('codeWorkspace.removeFavorite') : t('codeWorkspace.addFavorite')}
@@ -253,9 +213,7 @@ export function CodeWorkspaceChrome({
           <button
             type="button"
             className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-              isExplorerOpen
-                ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
-                : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+              isExplorerOpen ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
             }`}
             onClick={() => onSetQuickDrawerOpen((prev) => !prev)}
             title={t('codeWorkspace.quickFileDrawer')}
@@ -264,25 +222,11 @@ export function CodeWorkspaceChrome({
             {t('codeWorkspace.files')}
           </button>
           <div className="code-view-mode-switch" role="tablist" aria-label={t('codeWorkspace.modeAria')}>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'files'}
-              className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`}
-              onClick={() => onSetViewMode('files')}
-              title={t('codeWorkspace.fileExplorerAndEditor')}
-            >
+            <button type="button" role="tab" aria-selected={viewMode === 'files'} className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`} onClick={() => onSetViewMode('files')} title={t('codeWorkspace.fileExplorerAndEditor')}>
               <Files className="h-3.5 w-3.5" />
               {t('codeWorkspace.files')}
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={viewMode === 'search'}
-              className={`code-view-mode-btn ${viewMode === 'search' ? 'is-active' : ''}`}
-              onClick={() => onSetViewMode('search')}
-              title={t('codeWorkspace.globalContentSearch')}
-            >
+            <button type="button" role="tab" aria-selected={viewMode === 'search'} className={`code-view-mode-btn ${viewMode === 'search' ? 'is-active' : ''}`} onClick={() => onSetViewMode('search')} title={t('codeWorkspace.globalContentSearch')}>
               <TextSearch className="h-3.5 w-3.5" />
               {t('codeWorkspace.search')}
             </button>
@@ -292,20 +236,16 @@ export function CodeWorkspaceChrome({
               type="button"
               className="inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
               onClick={() => onSetExplorerOpen((prev) => !prev)}
-              title={isExplorerOpen ? t('codeWorkspace.switchToEditor') : (viewMode === 'search' ? t('codeWorkspace.openSearchPanel') : t('codeWorkspace.openFileExplorer'))}
+              title={isExplorerOpen ? t('codeWorkspace.switchToEditor') : viewMode === 'search' ? t('codeWorkspace.openSearchPanel') : t('codeWorkspace.openFileExplorer')}
             >
               <Code2 className="h-3.5 w-3.5" />
-              {isExplorerOpen ? t('codeWorkspace.editor') : (viewMode === 'search' ? t('codeWorkspace.search') : t('codeWorkspace.explorer'))}
+              {isExplorerOpen ? t('codeWorkspace.editor') : viewMode === 'search' ? t('codeWorkspace.search') : t('codeWorkspace.explorer')}
             </button>
           )}
           <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
           <button
             type="button"
-            className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-              saveStatus === 'saving'
-                ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
-                : 'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:opacity-50'
-            }`}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${saveStatus === 'saving' ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' : 'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:opacity-50'}`}
             onClick={onHandleSave}
             disabled={!activeRelativePath || !isDirty || saveStatus === 'saving'}
           >
@@ -364,92 +304,52 @@ export function CodeWorkspaceChrome({
             color: 'var(--color-foreground)',
           }}
         >
-          <span>
-            {t('codeWorkspace.externalChange')}
-          </span>
+          <span>{t('codeWorkspace.externalChange')}</span>
           <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={onKeepMyChanges}
-            >
+            <button type="button" className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={onKeepMyChanges}>
               {t('codeWorkspace.keepMyChanges')}
             </button>
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover"
-              onClick={onReloadFromDisk}
-            >
+            <button type="button" className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover" onClick={onReloadFromDisk}>
               {t('codeWorkspace.reloadFromDisk')}
             </button>
           </div>
         </div>
       )}
 
-      <ModalShell
-        open={Boolean(discardUnsavedConfirm)}
-        onClose={() => onResolveDiscardUnsavedConfirm(false)}
-        widthClassName="max-w-[440px]"
-        baseZIndex={1100}
-        ariaLabel={t('codeWorkspace.unsavedAria')}
-      >
+      <ModalShell open={Boolean(discardUnsavedConfirm)} onClose={() => onResolveDiscardUnsavedConfirm(false)} widthClassName="max-w-[440px]" baseZIndex={1100} ariaLabel={t('codeWorkspace.unsavedAria')}>
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="section-label mb-1">{t('codeWorkspace.unsavedTitle')}</p>
-            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
-              {t('codeWorkspace.unsavedCurrentFile')}
-            </p>
+            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('codeWorkspace.unsavedCurrentFile')}</p>
           </div>
-          <button
-            type="button"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-            onClick={() => onResolveDiscardUnsavedConfirm(false)}
-            title={t('common.close')}
-          >
+          <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={() => onResolveDiscardUnsavedConfirm(false)} title={t('common.close')}>
             <X className="h-4 w-4" />
           </button>
         </div>
         <p className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/70 px-3 py-2 text-[12px] text-[color:var(--color-foreground)]">
-          {discardUnsavedConfirm?.forceReload
-            ? t('codeWorkspace.unsavedForceReload')
-            : t('codeWorkspace.unsavedSwitchFile', { path: discardUnsavedConfirm?.nextRelativePath ?? t('codeWorkspace.chooseFileToStart') })}
+          {discardUnsavedConfirm?.forceReload ? t('codeWorkspace.unsavedForceReload') : t('codeWorkspace.unsavedSwitchFile', { path: discardUnsavedConfirm?.nextRelativePath ?? t('codeWorkspace.chooseFileToStart') })}
         </p>
-        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">
-          {t('codeWorkspace.unsavedHint')}
-        </p>
+        <p className="mt-2 text-[10.5px] text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.unsavedHint')}</p>
         <div className="mt-4 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onClick={() => onResolveDiscardUnsavedConfirm(false)}
-          >
+          <button type="button" className="quiet-control inline-flex h-9 items-center justify-center rounded-full border-0 px-4 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => onResolveDiscardUnsavedConfirm(false)}>
             {t('common.cancel')}
           </button>
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover"
-            onClick={() => onResolveDiscardUnsavedConfirm(true)}
-          >
+          <button type="button" className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover" onClick={() => onResolveDiscardUnsavedConfirm(true)}>
             {t('codeWorkspace.discardAndContinue')}
           </button>
         </div>
       </ModalShell>
 
-      {(readError || saveError || isReading || isReloadingFromDisk || skippedDirectories > 0 || skippedFiles > 0) && (
-        <div className="px-1 pb-1 pt-2">
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[color:var(--color-muted-foreground)]">
-            {isReading && <span>{t('codeWorkspace.readingFile')}</span>}
+      <div className="min-h-[21px] px-1 pb-1 pt-2">
+        {(readError || saveError || isReloadingFromDisk || skippedDirectories > 0 || skippedFiles > 0) && (
+          <div className="flex flex-wrap items-center gap-3 text-[11px] leading-[16px] text-[color:var(--color-muted-foreground)]">
             {isReloadingFromDisk && <span>{t('codeWorkspace.reloadingChangedFile')}</span>}
             {readError && <span className="text-[color:var(--color-destructive)]">{readError}</span>}
             {saveError && <span className="text-[color:var(--color-destructive)]">{saveError}</span>}
-            {(skippedDirectories > 0 || skippedFiles > 0) && (
-              <span>
-                {t('codeWorkspace.skippedListing', { directories: skippedDirectories, files: skippedFiles })}
-              </span>
-            )}
+            {(skippedDirectories > 0 || skippedFiles > 0) && <span>{t('codeWorkspace.skippedListing', { directories: skippedDirectories, files: skippedFiles })}</span>}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </>
   )
 }

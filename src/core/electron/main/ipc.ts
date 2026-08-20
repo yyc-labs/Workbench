@@ -106,6 +106,7 @@ export const IPC = {
   PROJECT_FILE_STAT: 'project-file:stat',
   PROJECT_FILE_WRITE: 'project-file:write',
   PROJECT_FILE_WRITE_IMAGE: 'project-file:write-image',
+  PROJECT_FILE_OPEN_PATH: 'project-file:open-path',
   MARKDOWN_DOCUMENT_SELECT: 'markdown-document:select',
   MARKDOWN_DOCUMENT_READ: 'markdown-document:read',
   MARKDOWN_DOCUMENT_WRITE: 'markdown-document:write',

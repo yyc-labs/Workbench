@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      :root {
+        color-scheme: light;
+        --pdf-surface: #ececf0;
+        --pdf-page-shadow: 0 4px 24px rgba(29, 29, 31, 0.16);
+      }
+      [data-theme='dark'] {
+        color-scheme: dark;
+        --pdf-surface: #141416;
+        --pdf-page-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--pdf-surface);
+      }
+      #pdf-scroll {
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+      }
+      #pdf-pages {
+        padding: 16px 16px 40px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .pdf-page-wrapper {
+        position: relative;
+        margin-bottom: 16px;
+      }
+      .pdf-page-wrapper:last-child {
+        margin-bottom: 0;
+      }
+      .pdf-page-canvas {
+        display: block;
+        background: #ffffff;
+        box-shadow: var(--pdf-page-shadow);
+      }
+      .textLayer {
+        position: absolute;
+        text-align: initial;
+        inset: 0;
+        overflow: clip;
+        opacity: 1;
+        line-height: 1;
+        letter-spacing: normal;
+        word-spacing: normal;
+        text-size-adjust: none;
+        forced-color-adjust: none;
+        transform-origin: 0 0;
+        caret-color: CanvasText;
+        z-index: 0;
+        --min-font-size: 1;
+        --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+        --min-font-size-inv: calc(1 / var(--min-font-size));
+      }
+      .textLayer :is(span, br) {
+        color: transparent;
+        position: absolute;
+        white-space: pre;
+        cursor: text;
+        transform-origin: 0% 0%;
+        user-select: text;
+      }
+      .textLayer > :not(.markedContent),
+      .textLayer .markedContent span:not(.markedContent) {
+        z-index: 1;
+        --font-height: 0;
+        font-size: calc(var(--text-scale-factor) * var(--font-height));
+        --scale-x: 1;
+        --rotate: 0deg;
+        transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+      }
+      .textLayer .markedContent {
+        display: contents;
+      }
+      .textLayer span[role='img'] {
+        user-select: none;
+        cursor: default;
+      }
+    </style>
+    <title>PDF Preview</title>
+  </head>
+  <body>
+    <div id="pdf-scroll"><div id="pdf-pages"></div></div>
+    <script type="module" src="./pdf-viewer.ts"></script>
+  </body>
+</html>

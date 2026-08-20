@@ -1,5 +1,5 @@
 import { type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
-import type { ProjectFileReadResult } from '../../../shared/types'
+import type { ProjectFilePreviewKind, ProjectFileReadResult } from '../../../shared/types'
 import { translateCurrent } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import type { SaveStatus } from './code.types'
@@ -44,7 +44,9 @@ type UseCodeFileStateOptions = {
   onDidOpenFile?: (file: ProjectFileReadResult) => void
 }
 
-type ActiveCodeFile = Omit<ProjectFileReadResult, 'content' | 'encoding'>
+type ActiveCodeFile = Omit<ProjectFileReadResult, 'content' | 'encoding'> & {
+  kind: ProjectFilePreviewKind
+}
 
 function toActiveCodeFile(result: ProjectFileReadResult): ActiveCodeFile {
   return {
@@ -52,6 +54,8 @@ function toActiveCodeFile(result: ProjectFileReadResult): ActiveCodeFile {
     size: result.size,
     mtimeMs: result.mtimeMs,
     language: result.language,
+    kind: result.kind,
+    mimeType: result.mimeType,
   }
 }
 
@@ -79,6 +83,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [savedContentFingerprint, setSavedContentFingerprint] = useState(0)
   const [savedContentLength, setSavedContentLength] = useState(0)
+  const [binaryDataUrl, setBinaryDataUrl] = useState<string | null>(null)
   const discardUnsavedResolverRef = useRef<((proceed: boolean) => void) | null>(null)
   const openRequestSeqRef = useRef(0)
   const mountedRef = useRef(true)
@@ -140,12 +145,31 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
       try {
         const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
         if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
-        const contentFingerprint = hashTextContent(result.content)
+
+        const isBinaryKind = result.kind === 'image' || result.kind === 'pdf' || result.kind === 'video' || result.kind === 'audio'
+        const isUnsupportedKind = result.kind === 'unsupported'
+
         setActiveFile(toActiveCodeFile(result))
         setActiveRelativePath(result.relativePath)
-        setEditorValueState(result.content)
-        setSavedContentFingerprint(contentFingerprint)
-        setSavedContentLength(result.content.length)
+
+        if (isBinaryKind) {
+          setBinaryDataUrl(`data:${result.mimeType ?? ''};base64,${result.content}`)
+          setEditorValueState('')
+          setSavedContentFingerprint(0)
+          setSavedContentLength(0)
+        } else if (isUnsupportedKind) {
+          setBinaryDataUrl(null)
+          setEditorValueState('')
+          setSavedContentFingerprint(0)
+          setSavedContentLength(0)
+        } else {
+          setBinaryDataUrl(null)
+          setEditorValueState(result.content)
+          const contentFingerprint = hashTextContent(result.content)
+          setSavedContentFingerprint(contentFingerprint)
+          setSavedContentLength(result.content.length)
+        }
+
         setHasUnsavedChanges(false)
         setHasExternalChange(false)
         onDidOpenFile?.(result)
@@ -190,6 +214,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
 
   const handleSave = useCallback(async () => {
     if (!activeRelativePath || !activeFile) return
+    if (activeFile.kind !== 'text' && activeFile.kind !== 'markdown') return
     if (!isDirty) return
 
     setSaveStatus('saving')
@@ -294,6 +319,8 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
 
   return {
     activeFile,
+    activeKind: activeFile?.kind ?? 'text',
+    binaryDataUrl,
     editorValue,
     setEditorValue,
     activeRelativePath,

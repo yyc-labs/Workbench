@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
 import type { TranscriptFileReference } from '../../../shared/types'
+import type { ProjectFilePreviewKind } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
@@ -16,6 +17,13 @@ import { MarkdownPreviewSurface } from './MarkdownPreviewSurface'
 import { MarkdownPreviewVisibilityProvider } from './code.markdownVisibility'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
+import { buildYycWorkbenchPreviewUrl } from './code.helpers'
+import { FileCsvViewer } from './viewers/FileCsvViewer'
+import { FileHtmlViewer } from './viewers/FileHtmlViewer'
+import { FileImageViewer } from './viewers/FileImageViewer'
+import { FileMediaViewer } from './viewers/FileMediaViewer'
+import { FilePdfViewer } from './viewers/FilePdfViewer'
+import { FileUnsupportedViewer } from './viewers/FileUnsupportedViewer'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
@@ -65,17 +73,22 @@ function formatStructuredBlockKind(kind: MarkdownStructuredPreviewState['kind'])
 type CodeWorkspaceEditorPaneProps = {
   activeLanguage: string | null
   activeRelativePath: string | null
+  binaryDataUrl: string | null
   closeCodePreview: () => void
   closeStructuredPreview: () => void
   codePreview: MarkdownCodePreviewState | null
   editorRef: Ref<MonacoCodeEditorHandle>
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
+  fileKind: ProjectFilePreviewKind
+  fileMtimeMs: number | null
+  fileSize: number
   handlePasteImage: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
   isInitialRestoring: boolean
   isMdcFile: boolean
   isMarkdownFile: boolean
   isNarrowViewport: boolean
+  isReading: boolean
   markdownComponents: Components
   markdownPreviewContent: string
   isMarkdownPreviewStale: boolean
@@ -103,6 +116,8 @@ type CodeWorkspaceEditorPaneProps = {
   previewSearchQuery: string
   previewSearchVisible: boolean
   previewSearchMatchIndex: number
+  projectId: string
+  projectPath: string
   smartEmptyFiles: string[]
   structuredPreview: MarkdownStructuredPreviewState | null
   structuredPreviewComponents: Components
@@ -113,17 +128,22 @@ type CodeWorkspaceEditorPaneProps = {
 export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   activeLanguage,
   activeRelativePath,
+  binaryDataUrl,
   closeCodePreview,
   closeStructuredPreview,
   codePreview,
   editorRef,
   editorValue,
   effectiveMarkdownPreviewMode,
+  fileKind,
+  fileMtimeMs,
+  fileSize,
   handlePasteImage,
   isInitialRestoring,
   isMdcFile,
   isMarkdownFile,
   isNarrowViewport,
+  isReading,
   markdownComponents,
   markdownPreviewContent,
   isMarkdownPreviewStale,
@@ -151,6 +171,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   previewSearchQuery,
   previewSearchVisible,
   previewSearchMatchIndex,
+  projectId,
+  projectPath,
   smartEmptyFiles,
   structuredPreview,
   structuredPreviewComponents,
@@ -211,7 +233,13 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   }
 
   return (
-    <div className="code-editor-shell">
+    <div className="code-editor-shell relative">
+      {isReading && activeRelativePath && (
+        <div className="pointer-events-none absolute right-3 top-2 z-20 flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/85 px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] backdrop-blur-sm">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          {t('codeWorkspace.readingFile')}
+        </div>
+      )}
       {transcriptReferences.length > 0 && (
         <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/78 px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
@@ -286,19 +314,35 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
       <div className={`code-editor-content ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-content--split' : 'code-editor-content--single'}`}>
         {effectiveMarkdownPreviewMode !== 'preview' && (
           <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`}>
-            <MonacoCodeEditor
-              ref={editorRef}
-              filePath={activeRelativePath}
-              value={editorValue}
-              language={activeLanguage || 'plaintext'}
-              theme={monacoTheme}
-              onPasteImage={handlePasteImage}
-              onChange={onChangeEditorValue}
-              onScrollStateChange={onEditorScrollStateChange}
-              onCursorPositionChange={onSetCursorPosition}
-              onFocusSearch={onFocusSearch}
-              onSave={onHandleSave}
-            />
+            {fileKind === 'image' && binaryDataUrl ? (
+              <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : fileKind === 'pdf' && binaryDataUrl ? (
+              <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : fileKind === 'html' ? (
+              <FileHtmlViewer previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')} sourceHtml={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} activeLanguage={activeLanguage} />
+            ) : fileKind === 'video' && binaryDataUrl ? (
+              <FileMediaViewer dataUrl={binaryDataUrl} kind="video" projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : fileKind === 'audio' && binaryDataUrl ? (
+              <FileMediaViewer dataUrl={binaryDataUrl} kind="audio" projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : fileKind === 'csv' ? (
+              <FileCsvViewer sourceText={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
+            ) : fileKind === 'unsupported' ? (
+              <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : (
+              <MonacoCodeEditor
+                ref={editorRef}
+                filePath={activeRelativePath}
+                value={editorValue}
+                language={activeLanguage || 'plaintext'}
+                theme={monacoTheme}
+                onPasteImage={handlePasteImage}
+                onChange={onChangeEditorValue}
+                onScrollStateChange={onEditorScrollStateChange}
+                onCursorPositionChange={onSetCursorPosition}
+                onFocusSearch={onFocusSearch}
+                onSave={onHandleSave}
+              />
+            )}
           </div>
         )}
 

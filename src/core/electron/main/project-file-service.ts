@@ -6,6 +6,7 @@ export {
 } from './project-file/tree-service'
 export { searchProjectContent } from './project-file/content-search-service'
 export {
+  openProjectFileInSystem,
   readProjectFile,
   statProjectFile,
   writeProjectFile,

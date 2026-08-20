@@ -13,20 +13,20 @@ export default defineConfig({
       rollupOptions: {
         external: ['node-pty'],
         input: {
-          index: resolve(__dirname, 'src/core/electron/main/index.ts')
-        }
-      }
-    }
+          index: resolve(__dirname, 'src/core/electron/main/index.ts'),
+        },
+      },
+    },
   },
   preload: {
     build: {
       outDir: 'out/preload',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/core/electron/preload/index.ts')
-        }
-      }
-    }
+          index: resolve(__dirname, 'src/core/electron/preload/index.ts'),
+        },
+      },
+    },
   },
   renderer: {
     // renderer was moved from src/renderer to src/core/renderer
@@ -34,24 +34,25 @@ export default defineConfig({
     plugins: [react(), tailwindcss()],
     server: {
       port: DEV_SERVER_PORT,
-      strictPort: true
+      strictPort: true,
     },
     preview: {
       port: PREVIEW_SERVER_PORT,
-      strictPort: true
+      strictPort: true,
     },
     build: {
       outDir: 'out/renderer',
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/core/renderer/index.html')
-        }
-      }
+          index: resolve(__dirname, 'src/core/renderer/index.html'),
+          pdfViewer: resolve(__dirname, 'src/core/renderer/pdf-viewer.html'),
+        },
+      },
     },
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src/core/renderer')
-      }
-    }
-  }
+        '@': resolve(__dirname, 'src/core/renderer'),
+      },
+    },
+  },
 })

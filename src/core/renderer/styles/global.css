@@ -3,6 +3,7 @@
 @import "./parts/app-shell.css";
 @import "./parts/legacy-pages.css";
 @import "./parts/code-workspace.css";
+@import "./parts/code-file-viewers.css";
 @import "./parts/learning-center.css";
 @import "./parts/markdown-document.css";
 

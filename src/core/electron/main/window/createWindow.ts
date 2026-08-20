@@ -6,28 +6,18 @@ import type { AppConfig } from '../../../shared/types'
 
 export type ThemeMode = AppConfig['theme']
 
-export function resolveEffectiveTheme(
-  theme: ThemeMode,
-  shouldUseDarkColors: boolean
-): 'light' | 'dark' {
+export function resolveEffectiveTheme(theme: ThemeMode, shouldUseDarkColors: boolean): 'light' | 'dark' {
   if (theme === 'system') {
     return shouldUseDarkColors ? 'dark' : 'light'
   }
   return theme
 }
 
-export function getWindowBackgroundColor(
-  theme: ThemeMode,
-  shouldUseDarkColors: boolean
-): string {
+export function getWindowBackgroundColor(theme: ThemeMode, shouldUseDarkColors: boolean): string {
   return resolveEffectiveTheme(theme, shouldUseDarkColors) === 'dark' ? '#09090b' : '#f5f7fb'
 }
 
-export function applyWindowBackground(
-  mainWindow: BrowserWindow | null,
-  theme: ThemeMode,
-  shouldUseDarkColors: boolean
-): void {
+export function applyWindowBackground(mainWindow: BrowserWindow | null, theme: ThemeMode, shouldUseDarkColors: boolean): void {
   if (!mainWindow) return
   mainWindow.setBackgroundColor(getWindowBackgroundColor(theme, shouldUseDarkColors))
 }
@@ -43,20 +33,9 @@ interface CreateWindowOptions {
 }
 
 export function createWindow(options: CreateWindowOptions): BrowserWindow {
-  const {
-    theme,
-    shouldUseDarkColors,
-    showOnReady = true,
-    onToggleViewMode,
-    onFocusSearch,
-    onWindowStateChange,
-    onClosed,
-  } = options
+  const { theme, shouldUseDarkColors, showOnReady = true, onToggleViewMode, onFocusSearch, onWindowStateChange, onClosed } = options
 
-  const windowIcon =
-    process.platform === 'win32'
-      ? resolveAppResourcePath('icon', 'Y.ico')
-      : resolveAppResourcePath('icon', 'Y.png')
+  const windowIcon = process.platform === 'win32' ? resolveAppResourcePath('icon', 'Y.ico') : resolveAppResourcePath('icon', 'Y.png')
 
   const mainWindow = new BrowserWindow({
     width: 1200,

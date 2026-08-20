@@ -71,6 +71,8 @@ export function inferLanguageFromRelativePath(relativePath: string): string {
   if (lower.endsWith('.d.ts') || lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript'
   if (lower.endsWith('.mjs') || lower.endsWith('.cjs') || lower.endsWith('.js') || lower.endsWith('.jsx')) return 'javascript'
   if (lower.endsWith('.json')) return 'json'
+  if (lower.endsWith('.ini')) return 'ini'
+  if (lower.endsWith('.toml')) return 'toml'
   if (lower.endsWith('.css')) return 'css'
   if (lower.endsWith('.scss')) return 'scss'
   if (lower.endsWith('.less')) return 'less'
@@ -125,6 +127,15 @@ export function formatFileSize(size: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
+ * Builds a custom-scheme URL consumed by the main process to stream a project file.
+ * Each path segment is encoded so relative paths with spaces or non-ASCII characters
+ * survive the round-trip; the main-process handler decodeURIComponent's them back.
+ */
+export function buildYycWorkbenchPreviewUrl(projectId: string, relativePath: string, theme: 'light' | 'dark'): string {
+  return `yyc-workbench://${projectId}/${relativePath.split('/').map(encodeURIComponent).join('/')}?theme=${theme}`
 }
 
 function compactPathToken(value: string): string {

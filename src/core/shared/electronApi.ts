@@ -251,6 +251,7 @@ export interface ProjectFileElectronApi {
   statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
   writeProjectFile: (projectPath: string, relativePath: string, content: string, expectedMtimeMs?: number) => Promise<ProjectFileWriteResult>
   writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => Promise<ProjectFileWriteImageResult>
+  openProjectFilePath: (projectPath: string, relativePath: string) => Promise<{ ok: boolean; error?: string }>
 }
 
 export interface MarkdownDocumentElectronApi {

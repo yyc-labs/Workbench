@@ -51,9 +51,12 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
 
       const nextZoom = Math.min(1, viewportWidth / contentWidth, viewportHeight / contentHeight)
       zoomRef.current = nextZoom
+      // Center the canvas by its layout size (offsetWidth/Height), not the content
+      // size: the canvas is stretched by min-width/min-height:100% when the content
+      // is smaller than the viewport, and offset reflects the real painted box.
       offsetRef.current = {
-        x: (viewportWidth - contentWidth * nextZoom) / 2,
-        y: (viewportHeight - contentHeight * nextZoom) / 2,
+        x: (viewportWidth - canvas.offsetWidth * nextZoom) / 2,
+        y: (viewportHeight - canvas.offsetHeight * nextZoom) / 2,
       }
       applyCanvasTransform(canvas, nextZoom, offsetRef.current)
     }

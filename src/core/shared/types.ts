@@ -1629,13 +1629,17 @@ export interface ProjectFileAutoLoadDecision {
   limit: number
 }
 
+export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'video' | 'audio' | 'csv' | 'unsupported'
+
 export interface ProjectFileReadResult {
   relativePath: string
   content: string
   size: number
   mtimeMs: number
   language: string
-  encoding: 'utf-8'
+  encoding: 'utf-8' | 'base64'
+  kind: ProjectFilePreviewKind
+  mimeType?: string
 }
 
 export interface ProjectFileWriteResult {

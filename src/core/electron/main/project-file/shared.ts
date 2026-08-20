@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
 import path from 'node:path'
-import type { ProjectFileContentSearchResult, ProjectFileNode } from '../../../shared/types'
+import type { ProjectFileContentSearchResult, ProjectFileNode, ProjectFilePreviewKind } from '../../../shared/types'
 
 export interface ProjectFileExclusions {
   directories: ReadonlySet<string>
@@ -102,6 +102,68 @@ const BINARY_EXTENSIONS = new Set([
   '.sqlite3',
   '.lockb',
 ])
+
+export const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp', '.tiff', '.tif', '.avif'])
+export const PREVIEW_HTML_EXTENSIONS = new Set(['.html', '.htm'])
+export const PREVIEW_PDF_EXTENSIONS = new Set(['.pdf'])
+export const PREVIEW_VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mkv', '.avi', '.webm'])
+export const PREVIEW_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'])
+export const PREVIEW_CSV_EXTENSIONS = new Set(['.csv', '.tsv'])
+export const PREVIEW_MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdx', '.mdc'])
+
+export const MAX_PREVIEW_IMAGE_BYTES = 8 * 1024 * 1024
+export const MAX_PREVIEW_PDF_BYTES = 50 * 1024 * 1024
+export const MAX_PREVIEW_MEDIA_BYTES = 50 * 1024 * 1024
+
+export function inferPreviewKindFromPath(relativePath: string): ProjectFilePreviewKind {
+  const ext = path.extname(relativePath).toLowerCase()
+  if (PREVIEW_IMAGE_EXTENSIONS.has(ext)) return 'image'
+  if (PREVIEW_HTML_EXTENSIONS.has(ext)) return 'html'
+  if (PREVIEW_PDF_EXTENSIONS.has(ext)) return 'pdf'
+  if (PREVIEW_VIDEO_EXTENSIONS.has(ext)) return 'video'
+  if (PREVIEW_AUDIO_EXTENSIONS.has(ext)) return 'audio'
+  if (PREVIEW_CSV_EXTENSIONS.has(ext)) return 'csv'
+  if (PREVIEW_MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
+  if (BINARY_EXTENSIONS.has(ext)) return 'unsupported'
+  return 'text'
+}
+
+export function mimeTypeFromPreviewPath(relativePath: string): string {
+  const lower = relativePath.toLowerCase()
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'text/html'
+  if (lower.endsWith('.css')) return 'text/css'
+  if (lower.endsWith('.js') || lower.endsWith('.mjs') || lower.endsWith('.cjs')) return 'text/javascript'
+  if (lower.endsWith('.json') || lower.endsWith('.jsonc')) return 'application/json'
+  if (lower.endsWith('.xml')) return 'application/xml'
+  if (lower.endsWith('.woff2')) return 'font/woff2'
+  if (lower.endsWith('.woff')) return 'font/woff'
+  if (lower.endsWith('.ttf')) return 'font/ttf'
+  if (lower.endsWith('.otf')) return 'font/otf'
+  if (lower.endsWith('.eot')) return 'application/vnd.ms-fontobject'
+  if (lower.endsWith('.csv')) return 'text/csv'
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.svg')) return 'image/svg+xml'
+  if (lower.endsWith('.bmp')) return 'image/bmp'
+  if (lower.endsWith('.ico')) return 'image/x-icon'
+  if (lower.endsWith('.tif') || lower.endsWith('.tiff')) return 'image/tiff'
+  if (lower.endsWith('.avif')) return 'image/avif'
+  if (lower.endsWith('.mp4')) return 'video/mp4'
+  if (lower.endsWith('.webm')) return 'video/webm'
+  if (lower.endsWith('.mov')) return 'video/quicktime'
+  if (lower.endsWith('.mkv')) return 'video/x-matroska'
+  if (lower.endsWith('.avi')) return 'video/x-msvideo'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.flac')) return 'audio/flac'
+  if (lower.endsWith('.aac')) return 'audio/aac'
+  if (lower.endsWith('.ogg')) return 'audio/ogg'
+  if (lower.endsWith('.m4a')) return 'audio/mp4'
+  if (lower.endsWith('.pdf')) return 'application/pdf'
+  return 'application/octet-stream'
+}
 
 export class ProjectFileServiceError extends Error {
   constructor(message: string) {

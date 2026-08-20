@@ -8,6 +8,7 @@ import { capabilityManager } from './capability-manager'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
 import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
 import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
 import { MarkdownDocumentOpenRequestStore } from './markdown-document/markdownDocumentOpenRequest'
@@ -48,6 +49,8 @@ markdownDocumentOpenRequestStore.setFromArgv(process.argv)
 if (!gotSingleInstanceLock) {
   app.quit()
 }
+
+registerYycWorkbenchScheme()
 
 const services = createAppServices({
   getCapability: () => bootCapability,
@@ -648,6 +651,12 @@ app.whenReady().then(async () => {
               markdownDocumentService,
               markdownDocumentOpenRequestStore,
             })
+          },
+        },
+        {
+          name: 'yyc-workbench-protocol',
+          run: () => {
+            registerYycWorkbenchHandler()
           },
         },
         {

@@ -149,6 +149,8 @@ export function CodeWorkspacePanel({
   }, [])
   const {
     activeFile,
+    activeKind,
+    binaryDataUrl,
     editorValue,
     setEditorValue,
     activeRelativePath,
@@ -747,7 +749,6 @@ export function CodeWorkspacePanel({
         isDirty={isDirty}
         isExplorerOpen={isExplorerOpen}
         isNarrowViewport={isNarrowViewport}
-        isReading={isReading}
         isReloadingFromDisk={isReloadingFromDisk}
         onCloseOpenTab={handleCloseOpenTab}
         onHandleSave={() => {
@@ -794,7 +795,7 @@ export function CodeWorkspacePanel({
         saveIndicatorToneClass={saveIndicatorToneClass}
         saveStatus={saveStatus}
         saveText={saveText}
-        showEditorSearchActions={isShowingEditor}
+        showEditorSearchActions={isShowingEditor && (activeKind === 'text' || activeKind === 'markdown' || activeKind === 'csv' || activeKind === 'html')}
         skippedDirectories={tree.skippedDirectories}
         skippedFiles={tree.skippedFiles}
         viewMode={viewMode}
@@ -878,17 +879,22 @@ export function CodeWorkspacePanel({
               <CodeWorkspaceEditorPane
                 activeLanguage={activeLanguage}
                 activeRelativePath={activeRelativePath}
+                binaryDataUrl={binaryDataUrl}
                 closeCodePreview={closeCodePreview}
                 closeStructuredPreview={closeStructuredPreview}
                 codePreview={codePreview}
                 editorRef={editorRef}
                 editorValue={editorValue}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
+                fileKind={activeKind}
+                fileMtimeMs={activeFile?.mtimeMs ?? null}
+                fileSize={activeFileSize}
                 handlePasteImage={handlePasteImage}
                 isInitialRestoring={isInitialRestoring}
                 isMdcFile={isMdcFile}
                 isMarkdownFile={isMarkdownFile}
                 isNarrowViewport={isNarrowViewport}
+                isReading={isReading}
                 isMarkdownPreviewStale={isMarkdownPreviewStale}
                 markdownComponents={markdownComponents}
                 markdownPreviewContent={markdownPreviewContent}
@@ -916,6 +922,8 @@ export function CodeWorkspacePanel({
                 previewSearchQuery={previewSearchQuery}
                 previewSearchVisible={previewSearchVisible}
                 previewSearchMatchIndex={activePreviewSearchMatchIndex}
+                projectId={projectId}
+                projectPath={projectPath}
                 structuredPreview={structuredPreview}
                 structuredPreviewComponents={structuredPreviewComponents}
                 smartEmptyFiles={smartEmptyFiles}

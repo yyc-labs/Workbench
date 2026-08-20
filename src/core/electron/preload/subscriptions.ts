@@ -1,6 +1,7 @@
-import { ipcRenderer, type IpcRendererEvent } from 'electron'
-import { IPC } from '../main/ipc'
+import { type IpcRendererEvent, ipcRenderer } from 'electron'
+import type { WindowStateEvent } from '../../shared/electronApi'
 import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, MarkdownDocumentOpenRequest, TranscriptImportedEvent } from '../../shared/types'
+import { IPC } from '../main/ipc'
 
 type AiCommitOutputData = { projectId: string; data: string }
 type AiCommitStatusData = { projectId: string; status: 'running' | 'success' | 'error' }
@@ -68,7 +69,7 @@ export function createSubscriptionApi() {
 
     onBrowserScreenshotViewerData: (cb: (data: BrowserScreenshotViewerPayload) => void) => subscribeIpcEvent(IPC.BROWSER_SCREENSHOT_VIEWER_DATA, cb),
 
-    onWindowState: (cb: (data: { isMaximized: boolean }) => void) => subscribeIpcEvent(IPC.WINDOW_STATE, cb),
+    onWindowState: (cb: (data: WindowStateEvent) => void) => subscribeIpcEvent(IPC.WINDOW_STATE, cb),
 
     onAppNavigate: (cb: (data: { path: string }) => void) => subscribeIpcEvent(IPC.APP_NAVIGATE, cb),
 
