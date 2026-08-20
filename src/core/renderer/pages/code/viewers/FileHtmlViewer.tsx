@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
-import { Code2, Eye, Monitor, RefreshCw, Smartphone } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { CircleAlert, Code2, Eye, Monitor, RefreshCw, Smartphone, Square } from 'lucide-react'
+import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
 import { MonacoCodeEditor } from '../MonacoCodeEditor'
-import { FileViewerOpenButton, FileViewerShell, usePreviewIframeMouseGestureBridge } from './fileViewerShared'
+import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
 type FileHtmlViewerProps = {
   previewUrl: string
@@ -16,15 +17,81 @@ type FileHtmlViewerProps = {
 type HtmlViewMode = 'render' | 'source'
 type HtmlViewportMode = 'desktop' | 'mobile'
 
+type PreviewLoadEvent = Event & { errorCode?: number }
+
+function HtmlPreviewGuest({ previewUrl, relativePath, refreshKey, onStopped }: { previewUrl: string; relativePath: string; refreshKey: number; onStopped: () => void }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const webview = document.createElement('webview')
+    webview.className = 'code-file-viewer-iframe code-file-viewer-html-iframe'
+    webview.setAttribute('aria-label', relativePath)
+    webview.setAttribute('allowpopups', '')
+    webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no, sandbox=yes')
+
+    const handleProcessGone = () => onStopped()
+    const handleLoadFailure = (event: Event) => {
+      // Reloading a guest aborts its previous navigation; it is not a preview failure.
+      if ((event as PreviewLoadEvent).errorCode !== -3) onStopped()
+    }
+
+    webview.addEventListener('render-process-gone', handleProcessGone)
+    webview.addEventListener('did-fail-load', handleLoadFailure)
+    container.replaceChildren(webview)
+
+    // Electron creates the guest before CSS layout settles. Keep its native
+    // viewport synchronized with the flex container so viewport units and
+    // nested iframes use the visible preview height rather than 300x150.
+    const syncGuestViewport = () => {
+      const { width, height } = container.getBoundingClientRect()
+      webview.setAttribute('width', `${Math.round(width)}`)
+      webview.setAttribute('height', `${Math.round(height)}`)
+
+      // Electron 42 exposes the guest iframe through an open shadow root, but
+      // leaves its default 150px height in place. Size the actual guest frame,
+      // not only the host <webview> element.
+      const guestFrame = webview.shadowRoot?.querySelector('iframe')
+      if (guestFrame instanceof HTMLIFrameElement) {
+        guestFrame.style.position = 'absolute'
+        guestFrame.style.inset = '0'
+        guestFrame.style.width = '100%'
+        guestFrame.style.height = '100%'
+      }
+    }
+    const resizeObserver = new ResizeObserver(syncGuestViewport)
+    resizeObserver.observe(container)
+    webview.addEventListener('did-attach', syncGuestViewport)
+    syncGuestViewport()
+    webview.setAttribute('src', previewUrl)
+
+    return () => {
+      resizeObserver.disconnect()
+      webview.removeEventListener('did-attach', syncGuestViewport)
+      webview.removeEventListener('render-process-gone', handleProcessGone)
+      webview.removeEventListener('did-fail-load', handleLoadFailure)
+      webview.remove()
+    }
+  }, [onStopped, previewUrl, refreshKey, relativePath])
+
+  return <div ref={containerRef} className="code-file-viewer-html-guest" />
+}
+
 export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePath, monacoTheme, activeLanguage }: FileHtmlViewerProps) {
   const { t } = useI18n()
   const [mode, setMode] = useState<HtmlViewMode>('render')
   const [viewportMode, setViewportMode] = useState<HtmlViewportMode>('desktop')
   const [refreshKey, setRefreshKey] = useState(0)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  usePreviewIframeMouseGestureBridge(iframeRef)
+  const [isPreviewStopped, setIsPreviewStopped] = useState(false)
 
   const isMobile = viewportMode === 'mobile'
+  const stopPreview = useCallback(() => setIsPreviewStopped(true), [])
+  const refreshPreview = () => {
+    setIsPreviewStopped(false)
+    setRefreshKey((value) => value + 1)
+  }
 
   return (
     <FileViewerShell
@@ -32,23 +99,36 @@ export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePa
       actions={
         <>
           <div className="code-editor-preview-mode-group">
-            <button type="button" className={`code-editor-preview-mode-btn ${mode === 'render' ? 'is-active' : ''}`} onClick={() => setMode('render')} title={t('codeWorkspace.htmlViewRender')}>
-              <Eye className="h-3.5 w-3.5" />
-              {t('codeWorkspace.htmlViewRender')}
-            </button>
-            <button type="button" className={`code-editor-preview-mode-btn ${mode === 'source' ? 'is-active' : ''}`} onClick={() => setMode('source')} title={t('codeWorkspace.htmlViewSource')}>
-              <Code2 className="h-3.5 w-3.5" />
-              {t('codeWorkspace.htmlViewSource')}
-            </button>
+            <Tooltip content={t('codeWorkspace.htmlViewRender')} interactive={false}>
+              <button type="button" className={`code-editor-preview-mode-btn ${mode === 'render' ? 'is-active' : ''}`} onClick={() => setMode('render')}>
+                <Eye className="h-3.5 w-3.5" />
+                {t('codeWorkspace.htmlViewRender')}
+              </button>
+            </Tooltip>
+            <Tooltip content={t('codeWorkspace.htmlViewSource')} interactive={false}>
+              <button type="button" className={`code-editor-preview-mode-btn ${mode === 'source' ? 'is-active' : ''}`} onClick={() => setMode('source')}>
+                <Code2 className="h-3.5 w-3.5" />
+                {t('codeWorkspace.htmlViewSource')}
+              </button>
+            </Tooltip>
           </div>
           {mode === 'render' && (
             <>
-              <button type="button" className={`code-editor-preview-mode-btn inline-flex items-center gap-1.5 ${isMobile ? 'is-active' : ''}`} onClick={() => setViewportMode(isMobile ? 'desktop' : 'mobile')} title={isMobile ? t('codeWorkspace.htmlViewDesktop') : t('codeWorkspace.htmlViewMobile')}>
-                {isMobile ? <Smartphone className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
-              </button>
-              <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={() => setRefreshKey((value) => value + 1)} title={t('codeWorkspace.htmlRefresh')}>
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip content={isMobile ? t('codeWorkspace.htmlViewDesktop') : t('codeWorkspace.htmlViewMobile')} interactive={false}>
+                <button type="button" className={`code-editor-preview-mode-btn inline-flex items-center gap-1.5 ${isMobile ? 'is-active' : ''}`} onClick={() => setViewportMode(isMobile ? 'desktop' : 'mobile')}>
+                  {isMobile ? <Smartphone className="h-3.5 w-3.5" /> : <Monitor className="h-3.5 w-3.5" />}
+                </button>
+              </Tooltip>
+              <Tooltip content={t('codeWorkspace.htmlRefresh')} interactive={false}>
+                <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={refreshPreview}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('codeWorkspace.htmlStop')} interactive={false}>
+                <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={stopPreview}>
+                  <Square className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
             </>
           )}
           <FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />
@@ -58,7 +138,15 @@ export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePa
       {mode === 'render' ? (
         <div className={`code-file-viewer-html-viewport ${isMobile ? 'is-mobile' : ''}`}>
           <div className="code-file-viewer-html-iframe-shell">
-            <iframe ref={iframeRef} key={refreshKey} src={previewUrl} aria-label={relativePath} className="code-file-viewer-iframe code-file-viewer-html-iframe" sandbox="allow-scripts allow-forms allow-modals allow-popups allow-downloads" />
+            {isPreviewStopped ? (
+              <div className="code-file-viewer-unsupported code-file-viewer--center">
+                <CircleAlert className="h-5 w-5" aria-hidden="true" />
+                <h2 className="code-file-viewer-unsupported-title">{t('codeWorkspace.htmlPreviewStopped')}</h2>
+                <p className="code-file-viewer-unsupported-hint">{t('codeWorkspace.htmlPreviewStoppedHint')}</p>
+              </div>
+            ) : (
+              <HtmlPreviewGuest previewUrl={previewUrl} relativePath={relativePath} refreshKey={refreshKey} onStopped={stopPreview} />
+            )}
           </div>
         </div>
       ) : (

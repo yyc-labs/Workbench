@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { FileText, Table2 } from 'lucide-react'
+import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
 import { MonacoCodeEditor } from '../MonacoCodeEditor'
 import { parseDelimited } from './csvParser'
@@ -32,14 +33,18 @@ export function FileCsvViewer({ sourceText, projectPath, relativePath, monacoThe
       actions={
         <>
           <div className="code-editor-preview-mode-group">
-            <button type="button" className={`code-editor-preview-mode-btn ${mode === 'table' ? 'is-active' : ''}`} onClick={() => setMode('table')} title={t('codeWorkspace.csvViewTable')}>
-              <Table2 className="h-3.5 w-3.5" />
-              {t('codeWorkspace.csvViewTable')}
-            </button>
-            <button type="button" className={`code-editor-preview-mode-btn ${mode === 'text' ? 'is-active' : ''}`} onClick={() => setMode('text')} title={t('codeWorkspace.csvViewText')}>
-              <FileText className="h-3.5 w-3.5" />
-              {t('codeWorkspace.csvViewText')}
-            </button>
+            <Tooltip content={t('codeWorkspace.csvViewTable')} interactive={false}>
+              <button type="button" className={`code-editor-preview-mode-btn ${mode === 'table' ? 'is-active' : ''}`} onClick={() => setMode('table')}>
+                <Table2 className="h-3.5 w-3.5" />
+                {t('codeWorkspace.csvViewTable')}
+              </button>
+            </Tooltip>
+            <Tooltip content={t('codeWorkspace.csvViewText')} interactive={false}>
+              <button type="button" className={`code-editor-preview-mode-btn ${mode === 'text' ? 'is-active' : ''}`} onClick={() => setMode('text')}>
+                <FileText className="h-3.5 w-3.5" />
+                {t('codeWorkspace.csvViewText')}
+              </button>
+            </Tooltip>
           </div>
           <FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />
         </>

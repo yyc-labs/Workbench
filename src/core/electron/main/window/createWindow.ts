@@ -51,6 +51,9 @@ export function createWindow(options: CreateWindowOptions): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // HTML file previews run in a guest renderer, so an untrusted page cannot
+      // block or crash the IDE renderer that hosts the workspace.
+      webviewTag: true,
     },
     show: false,
   })

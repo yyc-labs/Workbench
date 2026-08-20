@@ -2,6 +2,7 @@ import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, use
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { ExternalLink, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
+import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
 
 type PreviewMouseGestureMessage = {
@@ -144,18 +145,19 @@ export function FileViewerShell({ title, actions, children, canFullscreen = true
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {actions}
         {canFullscreen ? (
-          <button
-            type="button"
-            className="code-file-viewer-fullscreen-btn"
-            onClick={() => {
-              const nextFullscreen = !isFullscreen
-              setUncontrolledFullscreen(nextFullscreen)
-              onFullscreenChange?.(nextFullscreen)
-            }}
-            title={fullscreenLabel}
-          >
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-          </button>
+          <Tooltip content={fullscreenLabel} interactive={false}>
+            <button
+              type="button"
+              className="code-file-viewer-fullscreen-btn"
+              onClick={() => {
+                const nextFullscreen = !isFullscreen
+                setUncontrolledFullscreen(nextFullscreen)
+                onFullscreenChange?.(nextFullscreen)
+              }}
+            >
+              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            </button>
+          </Tooltip>
         ) : null}
       </div>
     </div>
@@ -204,17 +206,18 @@ export function FileViewerOpenButton({ projectPath, relativePath }: FileViewerOp
 
   return (
     <>
-      <button
-        type="button"
-        className="code-editor-preview-mode-btn inline-flex items-center gap-1.5"
-        onClick={() => {
-          void handleOpen()
-        }}
-        title={t('codeWorkspace.previewOpenInSystem')}
-      >
-        <ExternalLink className="h-3.5 w-3.5" />
-        <span>{t('codeWorkspace.previewOpenInSystem')}</span>
-      </button>
+      <Tooltip content={t('codeWorkspace.previewOpenInSystem')} interactive={false}>
+        <button
+          type="button"
+          className="code-editor-preview-mode-btn inline-flex items-center gap-1.5"
+          onClick={() => {
+            void handleOpen()
+          }}
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          <span>{t('codeWorkspace.previewOpenInSystem')}</span>
+        </button>
+      </Tooltip>
       {error ? <span className="code-file-viewer-error">{error}</span> : null}
     </>
   )
