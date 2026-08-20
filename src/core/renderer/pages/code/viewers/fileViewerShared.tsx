@@ -1,5 +1,6 @@
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation } from 'react-router-dom'
 import { ExternalLink, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 import { useI18n } from '../../../i18n'
 
@@ -87,11 +88,23 @@ type FileViewerShellProps = {
  */
 export function FileViewerShell({ title, actions, children, canFullscreen = true, isFullscreen: controlledFullscreen, onFullscreenChange }: FileViewerShellProps) {
   const { t } = useI18n()
+  const location = useLocation()
   const [uncontrolledFullscreen, setUncontrolledFullscreen] = useState(false)
   const isFullscreen = controlledFullscreen ?? uncontrolledFullscreen
   const inlineRef = useRef<HTMLDivElement>(null)
   const fullscreenRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
+
+  // Collapse the overlay when leaving the code route. The shell stays mounted
+  // inside the always-present code pane (which is only hidden via CSS when
+  // another pane is active), so switching panes/pages would otherwise leave a
+  // fullscreen layer stuck on top of the whole window.
+  useEffect(() => {
+    if (!isFullscreen) return
+    if (/^\/project\/[^/]+\/code$/.test(location.pathname)) return
+    setUncontrolledFullscreen(false)
+    onFullscreenChange?.(false)
+  }, [location.pathname, isFullscreen, onFullscreenChange])
 
   useEffect(() => {
     if (!isFullscreen) return
