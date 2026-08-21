@@ -15,10 +15,7 @@ import {
   sanitizeProjectCodeSessionByPaths,
   type EditorCursorPosition,
 } from './useProjectCodeSession'
-import {
-  isSameCodeFileDrawerState,
-  normalizeCodeFileDrawerState,
-} from './code.helpers'
+import { isSameCodeFileDrawerState, normalizeCodeFileDrawerState } from './code.helpers'
 
 type UseProjectCodeSessionStateOptions = {
   projectId: string
@@ -30,6 +27,7 @@ type UseProjectCodeSessionStateOptions = {
   setContentSearchScopeInput: Dispatch<SetStateAction<string>>
   knownFilePaths: Set<string>
   allProjectFilePathSet?: Set<string>
+  excludedPaths?: ReadonlySet<string>
   treeStatus: 'idle' | 'loading' | 'ready' | 'error'
   setProjectCodeSession: (projectId: string, session?: ProjectCodeSession) => Promise<void>
   setProjectCodeFileDrawerState: (projectId: string, state: CodeFileDrawerState) => Promise<void>
@@ -46,53 +44,30 @@ export function useProjectCodeSessionState({
   setContentSearchScopeInput,
   knownFilePaths,
   allProjectFilePathSet,
+  excludedPaths,
   treeStatus,
   setProjectCodeSession,
   setProjectCodeFileDrawerState,
   setProjectLastCodeFile,
 }: UseProjectCodeSessionStateOptions) {
-  const [openTabPaths, setOpenTabPaths] = useState<string[]>(
-    () => persistedProjectCodeSession?.tabs ?? []
-  )
-  const [cursorPositionsByPath, setCursorPositionsByPath] = useState<Record<string, EditorCursorPosition>>(
-    () => persistedProjectCodeSession?.cursorPositions ?? {}
-  )
-  const [codeFileDrawerState, setCodeFileDrawerState] = useState<CodeFileDrawerState>(() => (
-    normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
-  ))
+  const [openTabPaths, setOpenTabPaths] = useState<string[]>(() => persistedProjectCodeSession?.tabs ?? [])
+  const [cursorPositionsByPath, setCursorPositionsByPath] = useState<Record<string, EditorCursorPosition>>(() => persistedProjectCodeSession?.cursorPositions ?? {})
+  const [codeFileDrawerState, setCodeFileDrawerState] = useState<CodeFileDrawerState>(() => normalizeCodeFileDrawerState(persistedCodeFileDrawerState))
   // Tree paths are lazy-loaded by directory, so persisted session paths can be valid before they appear in the tree.
-  const effectiveKnownFilePaths = useMemo(() => (
-    buildKnownFilePathSet(
-      allProjectFilePathSet ?? knownFilePaths,
-      openTabPaths,
-      activeRelativePath,
-      codeFileDrawerState,
-      persistedProjectCodeSession,
-      persistedLastCodeFile,
-    )
-  ), [
-    activeRelativePath,
-    allProjectFilePathSet,
-    codeFileDrawerState,
-    knownFilePaths,
-    openTabPaths,
-    persistedLastCodeFile,
-    persistedProjectCodeSession,
-  ])
+  const effectiveKnownFilePaths = useMemo(
+    () => buildKnownFilePathSet(allProjectFilePathSet ?? knownFilePaths, openTabPaths, activeRelativePath, codeFileDrawerState, persistedProjectCodeSession, persistedLastCodeFile, excludedPaths),
+    [activeRelativePath, allProjectFilePathSet, codeFileDrawerState, excludedPaths, knownFilePaths, openTabPaths, persistedLastCodeFile, persistedProjectCodeSession],
+  )
 
   const saveCodeSessionTimerRef = useRef<number | null>(null)
   const lastPersistedCodeSessionJsonRef = useRef<string>('')
   const isRestoringCodeSessionRef = useRef(true)
 
-  const visibleOpenTabs = useMemo(() => (
-    openTabPaths.filter((path) => effectiveKnownFilePaths.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-  ), [effectiveKnownFilePaths, openTabPaths])
+  const visibleOpenTabs = useMemo(() => openTabPaths.filter((path) => effectiveKnownFilePaths.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS), [effectiveKnownFilePaths, openTabPaths])
 
   useEffect(() => {
     const normalized = normalizeCodeFileDrawerState(persistedCodeFileDrawerState)
-    setCodeFileDrawerState((prev) => (
-      isSameCodeFileDrawerState(prev, normalized) ? prev : normalized
-    ))
+    setCodeFileDrawerState((prev) => (isSameCodeFileDrawerState(prev, normalized) ? prev : normalized))
   }, [persistedCodeFileDrawerState, projectId])
 
   useEffect(() => {
@@ -118,16 +93,18 @@ export function useProjectCodeSessionState({
     // Avoid overwriting the persisted active tab before the initial restore picks a file.
     if (!activeRelativePath && isRestoringCodeSessionRef.current) return
     const activePath = activeRelativePath?.trim() || undefined
-    const tabs = openTabPaths.slice(0, MAX_PROJECT_CODE_SESSION_TABS)
-    if (activePath && !tabs.includes(activePath)) {
-      tabs.push(activePath)
+    // 被排除条目只作为解释视图，不进入 tab / session。
+    const isExcludedPath = (path: string | undefined): boolean => Boolean(path && excludedPaths?.has(path))
+    const persistableActivePath = isExcludedPath(activePath) ? undefined : activePath
+    const tabs = openTabPaths.filter((path) => !isExcludedPath(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS)
+    if (persistableActivePath && !tabs.includes(persistableActivePath)) {
+      tabs.push(persistableActivePath)
       if (tabs.length > MAX_PROJECT_CODE_SESSION_TABS) {
         tabs.splice(0, tabs.length - MAX_PROJECT_CODE_SESSION_TABS)
       }
     }
 
-    let sessionCursorEntries = Object.entries(cursorPositionsByPath)
-      .filter(([pathKey]) => pathKey.trim().length > 0)
+    let sessionCursorEntries = Object.entries(cursorPositionsByPath).filter(([pathKey]) => pathKey.trim().length > 0)
     const sessionTabSet = new Set(tabs)
     sessionCursorEntries = sessionCursorEntries.filter(([pathKey]) => sessionTabSet.has(pathKey))
     if (sessionCursorEntries.length > MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS) {
@@ -136,7 +113,7 @@ export function useProjectCodeSessionState({
 
     const nextSession = normalizeProjectCodeSession({
       tabs,
-      activePath,
+      activePath: persistableActivePath,
       cursorPositions: Object.fromEntries(sessionCursorEntries),
       contentSearchScope: contentSearchScopeInput,
     })
@@ -151,14 +128,7 @@ export function useProjectCodeSessionState({
       void setProjectCodeSession(projectId, nextSession)
       saveCodeSessionTimerRef.current = null
     }, PROJECT_CODE_SESSION_SAVE_DEBOUNCE_MS)
-  }, [
-    activeRelativePath,
-    contentSearchScopeInput,
-    cursorPositionsByPath,
-    openTabPaths,
-    projectId,
-    setProjectCodeSession,
-  ])
+  }, [activeRelativePath, contentSearchScopeInput, cursorPositionsByPath, excludedPaths, openTabPaths, projectId, setProjectCodeSession])
 
   useEffect(() => {
     if (treeStatus !== 'ready') return
@@ -197,19 +167,7 @@ export function useProjectCodeSessionState({
     if (normalizedLastCodeFile && !effectiveKnownFilePaths.has(normalizedLastCodeFile)) {
       void setProjectLastCodeFile(projectId, undefined)
     }
-  }, [
-    cursorPositionsByPath,
-    effectiveKnownFilePaths,
-    openTabPaths,
-    persistedCodeFileDrawerState,
-    persistedLastCodeFile,
-    persistedProjectCodeSession,
-    projectId,
-    setProjectCodeFileDrawerState,
-    setProjectCodeSession,
-    setProjectLastCodeFile,
-    treeStatus,
-  ])
+  }, [cursorPositionsByPath, effectiveKnownFilePaths, openTabPaths, persistedCodeFileDrawerState, persistedLastCodeFile, persistedProjectCodeSession, projectId, setProjectCodeFileDrawerState, setProjectCodeSession, setProjectLastCodeFile, treeStatus])
 
   useEffect(() => {
     return () => {

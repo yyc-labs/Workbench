@@ -9,6 +9,12 @@ interface UrlPopoverProps {
   items?: UrlPopoverItem[]
   tagOptions?: ReadonlyArray<{ value: string; label: string }>
   children: React.ReactNode
+  /** Stacking layer for the popover surface (default 9999, matching the original CSS). */
+  zIndex?: number
+  /** 即使只有 1 个条目也显示弹出层(默认需 2 个以上才会弹出)。 */
+  forcePopover?: boolean
+  /** 追加到触发容器上的 className。 */
+  triggerClassName?: string
 }
 
 export type UrlPopoverItem = {
@@ -54,9 +60,10 @@ type UrlPopoverItemActionsMenuProps = {
   onCopyAction: (entryKey: string, action: UrlPopoverCredentialAction) => void
   floatingMenuRef: MutableRefObject<HTMLDivElement | null>
   onOpenChange?: (open: boolean) => void
+  zIndex?: number
 }
 
-function UrlPopoverItemActionsMenu({ entryKey, actions, copiedActionKey, onCopyAction, floatingMenuRef, onOpenChange }: UrlPopoverItemActionsMenuProps) {
+function UrlPopoverItemActionsMenu({ entryKey, actions, copiedActionKey, onCopyAction, floatingMenuRef, onOpenChange, zIndex = 10011 }: UrlPopoverItemActionsMenuProps) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -173,11 +180,12 @@ function UrlPopoverItemActionsMenu({ entryKey, actions, copiedActionKey, onCopyA
             ref={(node) => {
               floatingMenuRef.current = node
             }}
-            className="fixed z-[10011] overflow-hidden rounded-[14px]"
+            className="fixed overflow-hidden rounded-[14px]"
             style={{
               top: menuLayout.top,
               left: menuLayout.left,
               width: menuLayout.width,
+              zIndex,
               background: 'var(--color-popover)',
               border: '1px solid var(--color-border)',
               boxShadow: 'var(--shadow-popover)',
@@ -186,6 +194,9 @@ function UrlPopoverItemActionsMenu({ entryKey, actions, copiedActionKey, onCopyA
             }}
             role="menu"
             aria-label={t('common.moreActions')}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
             onClick={(event) => {
               event.stopPropagation()
             }}
@@ -231,9 +242,10 @@ type UrlPopoverCategorySelectProps = {
   onChange: (value: string) => void
   floatingMenuRef: MutableRefObject<HTMLDivElement | null>
   onOpenChange?: (open: boolean) => void
+  zIndex?: number
 }
 
-function UrlPopoverCategorySelect({ value, options, onChange, floatingMenuRef, onOpenChange }: UrlPopoverCategorySelectProps) {
+function UrlPopoverCategorySelect({ value, options, onChange, floatingMenuRef, onOpenChange, zIndex = 10010 }: UrlPopoverCategorySelectProps) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
@@ -365,14 +377,18 @@ function UrlPopoverCategorySelect({ value, options, onChange, floatingMenuRef, o
             ref={(node) => {
               floatingMenuRef.current = node
             }}
-            className="surface-card fixed z-[10010] overflow-hidden rounded-[14px]"
+            className="surface-card fixed overflow-hidden rounded-[14px]"
             style={{
               top: menuLayout.top,
               left: menuLayout.left,
               width: menuLayout.width,
+              zIndex,
             }}
             role="listbox"
             aria-label={selectedOption?.label}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
             onMouseEnter={() => {
               clearCloseTimer()
             }}
@@ -440,7 +456,7 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
   await window.electronAPI.openExternal(entry.url)
 }
 
-export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
@@ -484,7 +500,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       }),
     [entries],
   )
-  const hasPopover = preparedEntries.length > 1
+  const hasPopover = preparedEntries.length > 1 || (forcePopover && preparedEntries.length > 0)
   const showCategorySelect = Boolean(tagOptions && tagOptions.length > 0)
   const hasSshEntries = preparedEntries.some((e) => e.kind === 'ssh')
   const hasTagEntries = preparedEntries.some((e) => e.tag)
@@ -751,12 +767,13 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   const popover = show && (
     <div
       ref={popoverRef}
-      className="fixed z-[9999] flex flex-col rounded-[20px] px-1.5 py-2"
+      className="fixed flex flex-col rounded-[20px] px-1.5 py-2"
       style={{
         top: layout.top,
         left: layout.left,
         maxHeight: layout.maxHeight,
         width: layout.width,
+        zIndex,
         background: 'var(--color-popover)',
         border: '1px solid var(--color-border)',
         boxShadow: 'var(--shadow-popover)',
@@ -765,6 +782,9 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
       }}
       onMouseEnter={handlePopoverEnter}
       onMouseLeave={handlePopoverLeave}
+      onPointerDown={(event) => {
+        event.stopPropagation()
+      }}
       onFocusCapture={() => {
         focusWithinRef.current = true
         clearHideTimer()
@@ -822,7 +842,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
             placeholder={t('common.searchLinks')}
             className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 w-full' : ' w-full'}`}
           />
-          {showCategorySelect && <UrlPopoverCategorySelect value={selectedCategory} options={categoryOptions} onChange={handleChangeCategory} floatingMenuRef={categoryMenuRef} onOpenChange={handleCategorySelectOpenChange} />}
+          {showCategorySelect && <UrlPopoverCategorySelect value={selectedCategory} options={categoryOptions} onChange={handleChangeCategory} floatingMenuRef={categoryMenuRef} onOpenChange={handleCategorySelectOpenChange} zIndex={zIndex + 1} />}
         </div>
       </div>
 
@@ -879,6 +899,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
                     }}
                     floatingMenuRef={itemActionsMenuRef}
                     onOpenChange={setCredentialMenuOpen}
+                    zIndex={zIndex + 1}
                   />
                 )}
                 {isOpening ? (
@@ -910,7 +931,7 @@ export function UrlPopover({ urls, items, tagOptions, children }: UrlPopoverProp
   )
 
   return (
-    <div ref={triggerRef} className="relative inline-flex" onMouseEnter={handleTriggerEnter} onMouseLeave={handleTriggerLeave} onContextMenuCapture={() => closePopover({ blur: true })}>
+    <div ref={triggerRef} className={`relative inline-flex${triggerClassName ? ` ${triggerClassName}` : ''}`} onMouseEnter={handleTriggerEnter} onMouseLeave={handleTriggerLeave} onContextMenuCapture={() => closePopover({ blur: true })}>
       {children}
       {createPortal(popover, document.body)}
     </div>

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Clock3, Map } from 'lucide-react'
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
+import { ToastViewport } from '../components/ui/toast'
 import { useI18n } from '../i18n'
 import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
 import { navigateHomeWithStartupDefaultReset, useMouseGestureNavigator } from '../hooks/useMouseGestureNavigator'
@@ -403,6 +404,7 @@ export function AppGlobalEffects() {
       <GlobalRecentProjectsDrawerHost />
       <RouteCatalogDialogHost />
       <GlobalTitleTooltipBridge />
+      <ToastViewport />
     </>
   )
 }

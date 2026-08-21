@@ -1,9 +1,16 @@
 import { useEffect, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronRight, Play, Square, Terminal, RefreshCw, FolderOpen, Code2, Zap, Bot, Pin, Trash2 } from 'lucide-react'
+import { BookOpen, Bot, Check, ChevronRight, Code2, FolderOpen, Pin, Play, RefreshCw, Square, Terminal, Trash2, Zap } from 'lucide-react'
 import type { AiRuntimeProfile, CliTool } from '../../shared/types'
 import { getAiRuntimeProfileCli, getAiRuntimeProfileLabel } from '../../shared/aiRuntimeProfiles'
 import { useI18n } from '../i18n'
+import { UrlPopover, type UrlPopoverItem } from './UrlPopover'
+
+export type CardContextMenuInfo = {
+  /** 项目文档链接,与 Home 卡片上的链接展示一致。 */
+  items: UrlPopoverItem[]
+  tagOptions?: ReadonlyArray<{ value: string; label: string }>
+}
 
 interface CardContextMenuProps {
   x: number
@@ -41,6 +48,8 @@ interface CardContextMenuProps {
   onTogglePin?: () => void | Promise<unknown>
   onEditMetadata?: () => void | Promise<unknown>
   onRemoveProject?: () => void | Promise<unknown>
+  /** 展示在主要操作右侧的信息 popover 数据;传入时渲染 hover 触发的信息按钮。 */
+  info?: CardContextMenuInfo
   /** Stacking layer for the menu surface (default 9998, matching the original CSS). */
   zIndex?: number
 }
@@ -204,6 +213,7 @@ export function CardContextMenu({
   onTogglePin,
   onEditMetadata,
   onRemoveProject,
+  info,
   zIndex = 9998,
 }: CardContextMenuProps) {
   const { t } = useI18n()
@@ -226,6 +236,18 @@ export function CardContextMenu({
       }
     },
     [onClose],
+  )
+
+  const infoItems = info?.items.map((item) =>
+    item.onOpen
+      ? {
+          ...item,
+          onOpen: async () => {
+            await item.onOpen?.()
+            onClose()
+          },
+        }
+      : item,
   )
 
   useEffect(() => {
@@ -629,7 +651,7 @@ export function CardContextMenu({
           </div>
         </div>
 
-        <div className="mt-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryActions.length)}, minmax(0, 1fr))` }}>
+        <div className="mt-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.max(1, primaryActions.length + (info ? 1 : 0))}, minmax(0, 1fr))` }}>
           {primaryActions.map((item) => (
             <button
               key={item.label}
@@ -649,6 +671,25 @@ export function CardContextMenu({
               </span>
             </button>
           ))}
+          {info && (
+            <UrlPopover items={infoItems ?? []} tagOptions={info.tagOptions} zIndex={zIndex + 20} forcePopover triggerClassName="w-full">
+              <button
+                type="button"
+                className="group flex h-full min-w-0 w-full items-center gap-2.5 rounded-[17px] border px-3 py-2.5 text-left transition-colors hover:bg-[color:var(--color-accent)]/75"
+                style={{ borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)' }}
+                aria-label={t('common.projectInfo')}
+                title={t('common.projectInfo')}
+              >
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[color:var(--color-card)]/80">
+                  <BookOpen className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold tracking-[-0.01em]">{t('common.links')}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-normal opacity-70">{t('common.projectInfo')}</span>
+                </span>
+              </button>
+            </UrlPopover>
+          )}
         </div>
 
         <div

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
+import type { ProjectFileNodeKind } from '../../../shared/types'
 import type { TranscriptFileReference } from '../../../shared/types'
 import type { ProjectFilePreviewKind } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
@@ -19,6 +20,7 @@ import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import type { MarkdownPreviewMode } from './code.workspace.types'
 import { buildYycWorkbenchPreviewUrl } from './code.helpers'
 import { FileCsvViewer } from './viewers/FileCsvViewer'
+import { FileExcludedViewer } from './viewers/FileExcludedViewer'
 import { FileHtmlViewer } from './viewers/FileHtmlViewer'
 import { FileImageViewer } from './viewers/FileImageViewer'
 import { FileMediaViewer } from './viewers/FileMediaViewer'
@@ -80,6 +82,7 @@ type CodeWorkspaceEditorPaneProps = {
   editorRef: Ref<MonacoCodeEditorHandle>
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
+  excludedNodeKind: ProjectFileNodeKind
   fileKind: ProjectFilePreviewKind
   fileMtimeMs: number | null
   fileSize: number
@@ -135,6 +138,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   editorRef,
   editorValue,
   effectiveMarkdownPreviewMode,
+  excludedNodeKind,
   fileKind,
   fileMtimeMs,
   fileSize,
@@ -328,6 +332,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               <FileCsvViewer sourceText={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
             ) : fileKind === 'unsupported' ? (
               <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} />
+            ) : fileKind === 'excluded' ? (
+              <FileExcludedViewer nodeKind={excludedNodeKind} projectPath={projectPath} relativePath={activeRelativePath} />
             ) : (
               <MonacoCodeEditor
                 ref={editorRef}

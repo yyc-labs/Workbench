@@ -51,6 +51,7 @@ type CodeWorkspaceSidebarProps = {
   onOpenTreeNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onReloadTree: () => void
   onSelectTreeFile: (relativePath: string) => void
+  onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onSetContentSearchCaseSensitive: Dispatch<SetStateAction<boolean>>
   onSetContentSearchScopeInput: Dispatch<SetStateAction<string>>
   onSetContentSearchAdvancedOpen: Dispatch<SetStateAction<boolean>>
@@ -102,6 +103,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   onOpenTreeNodeTerminal,
   onReloadTree,
   onSelectTreeFile,
+  onSelectExcluded,
   onSetContentSearchCaseSensitive,
   onSetContentSearchScopeInput,
   onSetContentSearchAdvancedOpen,
@@ -189,6 +191,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             locateRequestToken={locateRequestToken}
             onToggleDirectory={onToggleTreeDirectory}
             onSelectFile={onSelectTreeFile}
+            onSelectExcluded={onSelectExcluded}
             onOpenNodeFolder={onOpenTreeNodeFolder}
             onOpenNodeTerminal={onOpenTreeNodeTerminal}
             onCopyNodeName={onCopyTreeNodeName}

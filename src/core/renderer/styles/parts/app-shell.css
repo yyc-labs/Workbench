@@ -9,26 +9,16 @@
 }
 
 .git-panel-skeleton::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, #ffffff 48%, transparent) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, #ffffff 48%, transparent) 50%, transparent 100%);
   animation: git-panel-shimmer 1.2s ease-in-out infinite;
 }
 
-[data-theme='dark'] .git-panel-skeleton::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, #ffffff 18%, transparent) 50%,
-    transparent 100%
-  );
+[data-theme="dark"] .git-panel-skeleton::after {
+  background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, #ffffff 18%, transparent) 50%, transparent 100%);
 }
 
 @keyframes git-panel-shimmer {
@@ -62,25 +52,19 @@ body.gesture-active .mouse-gesture-hint {
 }
 
 .route-catalog-overlay {
-  background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 32%),
-    color-mix(in srgb, #05060a 42%, transparent) !important;
+  background: radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 32%), color-mix(in srgb, #05060a 42%, transparent) !important;
 }
 
 .route-catalog-panel {
   overflow: hidden;
   padding: 0 !important;
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--color-card) 92%, transparent), var(--color-popover)),
-    var(--color-popover) !important;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-card) 92%, transparent), var(--color-popover)), var(--color-popover) !important;
 }
 
 .route-catalog-header {
   padding: 20px 22px 16px;
   border-bottom: 1px solid var(--color-border);
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 42%),
-    color-mix(in srgb, var(--color-card) 82%, transparent);
+  background: radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 42%), color-mix(in srgb, var(--color-card) 82%, transparent);
 }
 
 .route-catalog-title-row {
@@ -502,7 +486,9 @@ body.gesture-active .mouse-gesture-hint {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 160ms var(--spring), color 160ms var(--spring);
+  transition:
+    background-color 160ms var(--spring),
+    color 160ms var(--spring);
 }
 
 .window-titlebar__button:hover {
@@ -546,15 +532,190 @@ body.gesture-active .mouse-gesture-hint {
   pointer-events: none;
 }
 
+/* Toast notifications */
+.toast-viewport {
+  position: fixed;
+  z-index: 10060;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 220px;
+  max-width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-popover) 96%, transparent);
+  color: var(--color-popover-foreground);
+  box-shadow: var(--shadow-popover);
+  backdrop-filter: saturate(150%) blur(16px);
+  -webkit-backdrop-filter: saturate(150%) blur(16px);
+  animation: toast-item-in 160ms var(--spring) both;
+}
+
+.toast-item--sm {
+  min-width: 180px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.toast-item--sm .toast-item-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.toast-item--sm .toast-item-message {
+  font-size: 11px;
+}
+
+.toast-item--sm .toast-item-description {
+  font-size: 10px;
+}
+
+.toast-item--lg {
+  min-width: 280px;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.toast-item--lg .toast-item-message {
+  font-size: 13px;
+}
+
+.toast-item--lg .toast-item-description {
+  font-size: 11.5px;
+}
+
+@keyframes toast-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.toast-item-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.toast-item--info .toast-item-icon {
+  color: var(--color-primary);
+}
+
+.toast-item--success .toast-item-icon {
+  color: var(--color-success);
+}
+
+.toast-item--warning .toast-item-icon {
+  color: var(--color-warning);
+}
+
+.toast-item--error .toast-item-icon {
+  color: var(--color-destructive);
+}
+
+.toast-item-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.toast-item-message {
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.toast-item-description {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.toast-item-actions {
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toast-item-action {
+  flex-shrink: 0;
+  align-self: center;
+  border: 0;
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring);
+}
+
+.toast-item-action--secondary {
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.toast-item-action--secondary:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.toast-item-action--primary {
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+.toast-item-action--primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.toast-item-close {
+  flex-shrink: 0;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  cursor: pointer;
+  transition:
+    color 120ms var(--spring),
+    background-color 120ms var(--spring);
+}
+
+.toast-item-close:hover {
+  color: var(--color-foreground);
+  background: var(--color-accent);
+}
+
 /* Monaco find-widget control hovers can overlap controls and cause hover flicker; suppress while hovering those controls. */
 body.monaco-find-widget-control-hover .workbench-hover-container {
   display: none !important;
 }
 
-[data-theme='dark'] body {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
-    var(--color-background);
+[data-theme="dark"] body {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)), var(--color-background);
 }
 
 /* ── Unified Scrollbar ── */
@@ -599,7 +760,7 @@ body.monaco-find-widget-control-hover .workbench-hover-container {
 
 /* ── Unified Checkbox (Apple-like) ── */
 
-input[type='checkbox'] {
+input[type="checkbox"] {
   -webkit-appearance: none;
   appearance: none;
   inline-size: var(--checkbox-size);
@@ -623,8 +784,8 @@ input[type='checkbox'] {
     transform 180ms var(--spring);
 }
 
-input[type='checkbox']::before {
-  content: '';
+input[type="checkbox"]::before {
+  content: "";
   width: 5px;
   height: 9px;
   border-right: 2px solid var(--checkbox-checkmark);
@@ -634,12 +795,12 @@ input[type='checkbox']::before {
   transition: transform 180ms var(--spring);
 }
 
-input[type='checkbox']:hover:not(:checked) {
+input[type="checkbox"]:hover:not(:checked) {
   background: var(--checkbox-bg-hover);
   border-color: var(--checkbox-border-hover);
 }
 
-input[type='checkbox']:checked {
+input[type="checkbox"]:checked {
   background: var(--color-primary);
   border-color: var(--color-primary);
   box-shadow:
@@ -647,22 +808,22 @@ input[type='checkbox']:checked {
     0 1px 2px rgba(29, 29, 31, 0.14);
 }
 
-input[type='checkbox']:checked::before {
+input[type="checkbox"]:checked::before {
   transform: translateY(-1px) rotate(45deg) scale(1);
 }
 
-input[type='checkbox']:focus-visible {
+input[type="checkbox"]:focus-visible {
   outline: none;
   box-shadow:
     0 0 0 4px color-mix(in srgb, var(--color-ring) 65%, transparent),
     var(--checkbox-shadow);
 }
 
-input[type='checkbox']:active {
+input[type="checkbox"]:active {
   transform: scale(0.96);
 }
 
-input[type='checkbox']:disabled {
+input[type="checkbox"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -672,7 +833,7 @@ code,
 pre,
 kbd,
 samp {
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
 .surface-card {
@@ -710,7 +871,7 @@ samp {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 
-[data-theme='dark'] .quiet-control {
+[data-theme="dark"] .quiet-control {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 

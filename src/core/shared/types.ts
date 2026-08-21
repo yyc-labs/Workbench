@@ -1624,6 +1624,8 @@ export interface ProjectFileNode {
   hasChildren?: boolean
   isLoaded?: boolean
   children?: ProjectFileNode[]
+  /** 该条目被项目排除配置命中，仅作占位展示，点击进入解释视图而非打开内容。 */
+  isExcluded?: boolean
 }
 
 export interface ProjectFileTreeResult {
@@ -1652,7 +1654,7 @@ export interface ProjectFileAutoLoadDecision {
   limit: number
 }
 
-export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'video' | 'audio' | 'csv' | 'unsupported'
+export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'video' | 'audio' | 'csv' | 'unsupported' | 'excluded'
 
 export interface ProjectFileReadResult {
   relativePath: string

@@ -1,13 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { Clock3, Trash2, X } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { CardContextMenu } from './CardContextMenu'
+import { CardContextMenu, type CardContextMenuInfo } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
+import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 
 type RecentProjectDrawerCardProps = {
@@ -119,6 +120,14 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const aiCommitStatus: AiCommitStatus = 'idle'
+  const { docMenuItems, docLinkTagOptions, handleOpenDocMenuItem } = useProjectDocLinks({ project })
+  const info: CardContextMenuInfo = {
+    items: docMenuItems.map((item) => ({
+      ...item,
+      onOpen: () => handleActionAndCloseDrawer(() => handleOpenDocMenuItem(item.linkId ?? '')),
+    })),
+    tagOptions: docLinkTagOptions,
+  }
 
   const handleSelectAiRuntimeProfile = useCallback(
     (profileId: string) => {
@@ -229,6 +238,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
         onEditMetadata(project.id)
         onRequestCloseDrawer()
       }}
+      info={info}
     />
   )
 })

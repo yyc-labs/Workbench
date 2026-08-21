@@ -7,6 +7,7 @@ type UseCodeTreePathActionsArgs = {
   isNarrowViewport: boolean
   openContentSearchMatch: (relativePath: string, lineNumber: number, column: number) => Promise<void> | void
   openFile: (relativePath: string) => Promise<boolean> | void
+  openExcludedEntry: (relativePath: string, nodeKind: ProjectFileNodeKind) => Promise<boolean> | void
   openFileWithTreeLocate: (relativePath: string) => Promise<boolean> | void
   projectPath: string
   setActiveContentSearchLocation: (value: { relativePath: string; lineNumber: number; column: number }) => void
@@ -14,7 +15,7 @@ type UseCodeTreePathActionsArgs = {
   setIsQuickDrawerOpen: Dispatch<SetStateAction<boolean>>
 }
 
-export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openFileWithTreeLocate, projectPath, setActiveContentSearchLocation, setIsExplorerOpen, setIsQuickDrawerOpen }: UseCodeTreePathActionsArgs) {
+export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openExcludedEntry, openFileWithTreeLocate, projectPath, setActiveContentSearchLocation, setIsExplorerOpen, setIsQuickDrawerOpen }: UseCodeTreePathActionsArgs) {
   const collapseExplorerIfNeeded = useCallback(() => {
     if (isNarrowViewport) {
       setIsExplorerOpen(false)
@@ -27,6 +28,14 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
       collapseExplorerIfNeeded()
     },
     [collapseExplorerIfNeeded, openFile],
+  )
+
+  const handleSelectExcluded = useCallback(
+    (relativePath: string, nodeKind: ProjectFileNodeKind) => {
+      void openExcludedEntry(relativePath, nodeKind)
+      collapseExplorerIfNeeded()
+    },
+    [collapseExplorerIfNeeded, openExcludedEntry],
   )
 
   const handleOpenTreeNodeFolder = useCallback(
@@ -92,6 +101,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     handleOpenSmartEmptyFile,
     handleOpenTreeNodeFolder,
     handleOpenTreeNodeTerminal,
+    handleSelectExcluded,
     handleSelectTreeFile,
     openFileFromQuickDrawer,
   }

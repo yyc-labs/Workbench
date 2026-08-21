@@ -149,30 +149,7 @@ export function CodeWorkspacePanel({
     markOpenedFileInExplorerRef.current(result.relativePath)
     setCodeFileDrawerState((prev) => pushRecentCodeFilePath(prev, result.relativePath))
   }, [])
-  const {
-    activeFile,
-    activeKind,
-    binaryDataUrl,
-    editorValue,
-    setEditorValue,
-    activeRelativePath,
-    isReading,
-    readError,
-    saveStatus,
-    saveError,
-    hasExternalChange,
-    setHasExternalChange,
-    isReloadingFromDisk,
-    discardUnsavedConfirm,
-    resolveDiscardUnsavedConfirm,
-    isDirty,
-    openFile,
-    navigateFileHistory,
-    handleSave,
-    saveText,
-    saveIndicatorText,
-    saveIndicatorToneClass,
-  } = useCodeFileState({
+  const { activeFile, activeKind, binaryDataUrl, editorValue, setEditorValue, activeRelativePath, isReading, saveStatus, discardUnsavedConfirm, resolveDiscardUnsavedConfirm, isDirty, openFile, openExcludedEntry, navigateFileHistory, handleSave, saveText, saveIndicatorText, saveIndicatorToneClass } = useCodeFileState({
     projectId,
     projectPath,
     persistedLastCodeFile,
@@ -198,6 +175,7 @@ export function CodeWorkspacePanel({
     contentSearchScopeSummary,
     contentSearchToggleLabel,
     ensureTreePathLoaded,
+    excludedPathKinds,
     expandedDirectories,
     fileSearchError,
     hasContentSearchScope,
@@ -262,6 +240,7 @@ export function CodeWorkspacePanel({
     shouldHandleFindInPreview,
     markdownPreviewContent,
   )
+  const excludedPaths = useMemo(() => new Set(excludedPathKinds.keys()), [excludedPathKinds])
   const { codeFileDrawerState, cursorPositionsByPath, isRestoringCodeSessionRef, openTabPaths, setCodeFileDrawerState, setCursorPositionsByPath, setOpenTabPaths, visibleOpenTabs } = useProjectCodeSessionState({
     projectId,
     persistedProjectCodeSession,
@@ -271,14 +250,15 @@ export function CodeWorkspacePanel({
     contentSearchScopeInput,
     setContentSearchScopeInput,
     knownFilePaths: tree.knownFilePaths,
+    excludedPaths,
     treeStatus: tree.status,
     setProjectCodeSession,
     setProjectCodeFileDrawerState,
     setProjectLastCodeFile,
   })
   const allProjectFilePathSet = useMemo(
-    () => buildKnownFilePathSet(tree.knownFilePaths, openTabPaths, activeRelativePath, codeFileDrawerState, persistedProjectCodeSession, persistedLastCodeFile),
-    [activeRelativePath, codeFileDrawerState, openTabPaths, persistedLastCodeFile, persistedProjectCodeSession, tree.knownFilePaths],
+    () => buildKnownFilePathSet(tree.knownFilePaths, openTabPaths, activeRelativePath, codeFileDrawerState, persistedProjectCodeSession, persistedLastCodeFile, excludedPaths),
+    [activeRelativePath, codeFileDrawerState, excludedPaths, openTabPaths, persistedLastCodeFile, persistedProjectCodeSession, tree.knownFilePaths],
   )
   const smartEmptyFiles = useMemo(() => {
     const available = new Set(allProjectFilePathSet)
@@ -310,13 +290,19 @@ export function CodeWorkspacePanel({
       const normalizedPath = relativePath.trim()
       if (!normalizedPath) return false
 
+      // 被排除条目在树中进入解释视图；tab / 会话恢复等入口点击同样拦截，避免走文件读取。
+      const excludedKind = excludedPathKinds.get(normalizedPath)
+      if (excludedKind) {
+        return openExcludedEntry(normalizedPath, excludedKind)
+      }
+
       const opened = await openFile(normalizedPath, forceReload)
       if (!opened) return false
 
       await locateFileInTree(normalizedPath)
       return true
     },
-    [locateFileInTree, openFile],
+    [excludedPathKinds, locateFileInTree, openExcludedEntry, openFile],
   )
   const { captureCurrentModeScroll, handleEditorScrollStateChange, handlePreviewScroll, resetScrollSyncState } = useCodeWorkspaceScrollSync({
     activeRelativePath,
@@ -634,10 +620,11 @@ export function CodeWorkspacePanel({
     },
     [expandedDirectories, hasSearchQuery, loadDirectory],
   )
-  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleOpenTreeNodeTerminal, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
+  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleOpenTreeNodeTerminal, handleSelectExcluded, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
     isNarrowViewport,
     openContentSearchMatch,
     openFile,
+    openExcludedEntry,
     openFileWithTreeLocate,
     projectPath,
     setActiveContentSearchLocation,
@@ -746,18 +733,13 @@ export function CodeWorkspacePanel({
         activeRelativePath={activeRelativePath}
         activePane={activePane}
         discardUnsavedConfirm={discardUnsavedConfirm}
-        hasExternalChange={hasExternalChange}
         isActiveFileFavorite={isActiveFileFavorite}
         isDirty={isDirty}
         isExplorerOpen={isExplorerOpen}
         isNarrowViewport={isNarrowViewport}
-        isReloadingFromDisk={isReloadingFromDisk}
         onCloseOpenTab={handleCloseOpenTab}
         onHandleSave={() => {
           void handleSave()
-        }}
-        onKeepMyChanges={() => {
-          setHasExternalChange(false)
         }}
         onOpenEditorSearch={openEditorSearchByMode}
         onOpenFileFromTab={handleSelectOpenTab}
@@ -772,10 +754,6 @@ export function CodeWorkspacePanel({
         onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
-        onReloadFromDisk={() => {
-          if (!activeRelativePath) return
-          void openFile(activeRelativePath, true)
-        }}
         onResolveDiscardUnsavedConfirm={resolveDiscardUnsavedConfirm}
         onSetExplorerOpen={setIsExplorerOpen}
         onSetQuickDrawerOpen={setIsQuickDrawerOpen}
@@ -792,15 +770,11 @@ export function CodeWorkspacePanel({
         hasProjectDocLinks={hasProjectDocLinks}
         projectLinkTagOptions={projectLinkTagOptions}
         projectName={projectName}
-        readError={readError}
-        saveError={saveError}
         saveIndicatorText={saveIndicatorText}
         saveIndicatorToneClass={saveIndicatorToneClass}
         saveStatus={saveStatus}
         saveText={saveText}
         showEditorSearchActions={isShowingEditor && (activeKind === 'text' || activeKind === 'markdown' || activeKind === 'csv' || activeKind === 'html')}
-        skippedDirectories={tree.skippedDirectories}
-        skippedFiles={tree.skippedFiles}
         viewMode={viewMode}
       />
 
@@ -863,6 +837,7 @@ export function CodeWorkspacePanel({
                 onOpenTreeNodeTerminal={handleOpenTreeNodeTerminal}
                 onReloadTree={handleReloadTree}
                 onSelectTreeFile={handleSelectTreeFile}
+                onSelectExcluded={handleSelectExcluded}
                 onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
                 onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
                 onSetContentSearchScopeInput={setContentSearchScopeInput}
@@ -889,6 +864,7 @@ export function CodeWorkspacePanel({
                 editorRef={editorRef}
                 editorValue={editorValue}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
+                excludedNodeKind={activeFile?.excludedNodeKind ?? 'file'}
                 fileKind={activeKind}
                 fileMtimeMs={activeFile?.mtimeMs ?? null}
                 fileSize={activeFileSize}

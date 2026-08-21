@@ -212,6 +212,11 @@
   gap: 8px;
 }
 
+.code-file-viewer-unsupported-path {
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+
 .code-file-table-scroll {
   flex: 1;
   min-height: 0;

@@ -75,7 +75,9 @@
   font-size: 11px;
   color: var(--color-muted-foreground);
   background: transparent;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring);
 }
 
 .code-view-mode-btn:hover {
@@ -96,10 +98,15 @@
   padding-bottom: 2px;
 }
 
-.code-open-tab {
+.code-open-tab-trigger {
   flex: 0 0 auto;
   min-width: 0;
-  max-width: min(320px, 42vw);
+  max-width: 200px;
+}
+
+.code-open-tab {
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-card) 92%, transparent);
@@ -112,7 +119,10 @@
   align-items: center;
   padding: 7px 8px 7px 10px;
   text-align: left;
-  transition: border-color 120ms var(--spring), background-color 120ms var(--spring), color 120ms var(--spring);
+  transition:
+    border-color 120ms var(--spring),
+    background-color 120ms var(--spring),
+    color 120ms var(--spring);
 }
 
 .code-open-tab:hover {
@@ -144,7 +154,7 @@
   min-width: 0;
   font-size: 10px;
   line-height: 1.2;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   color: var(--color-muted-foreground);
   white-space: nowrap;
   overflow: hidden;
@@ -161,7 +171,9 @@
   height: 24px;
   border-radius: 8px;
   color: var(--color-muted-foreground);
-  transition: color 120ms var(--spring), background-color 120ms var(--spring);
+  transition:
+    color 120ms var(--spring),
+    background-color 120ms var(--spring);
 }
 
 .code-open-tab-close:hover,
@@ -178,9 +190,7 @@
   justify-content: stretch;
   gap: 10px;
   padding: 12px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 46%),
-    color-mix(in srgb, var(--color-card) 96%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 7%, transparent), transparent 46%), color-mix(in srgb, var(--color-card) 96%, transparent);
 }
 
 .code-search-title-row {
@@ -300,7 +310,10 @@
   background: color-mix(in srgb, var(--color-card) 92%, transparent);
   color: var(--color-muted-foreground);
   padding: 5px 9px;
-  transition: background-color 120ms var(--spring), border-color 120ms var(--spring), color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    border-color 120ms var(--spring),
+    color 120ms var(--spring);
 }
 
 .code-search-scope-pill:hover {
@@ -323,7 +336,7 @@
 .code-search-scope-pill-hint {
   max-width: 86px;
   color: color-mix(in srgb, currentColor 76%, transparent);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 9.5px;
   font-weight: 600;
   line-height: 1;
@@ -368,7 +381,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-foreground);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
   font-weight: 600;
 }
@@ -409,7 +422,7 @@
   border-radius: 5px;
   background: color-mix(in srgb, var(--color-card) 84%, transparent);
   color: var(--color-foreground);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   padding: 0 3px;
 }
 
@@ -472,7 +485,10 @@
   line-height: 1;
   padding: 5px 8px;
   white-space: nowrap;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring), border-color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring),
+    border-color 120ms var(--spring);
 }
 
 .code-search-meta-action:hover {
@@ -540,7 +556,7 @@
   font-size: 12px;
   line-height: 1.35;
   color: var(--color-foreground);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -584,7 +600,7 @@
   font-size: 11px;
   line-height: 1.2;
   color: var(--color-muted-foreground);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
 .code-content-search-line {
@@ -595,7 +611,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 }
 
 .code-panel-empty {
@@ -617,9 +633,7 @@
   padding: 20px 18px;
   border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
   border-radius: 20px;
-  background:
-    radial-gradient(circle at top, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 58%),
-    color-mix(in srgb, var(--color-card) 94%, transparent);
+  background: radial-gradient(circle at top, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 58%), color-mix(in srgb, var(--color-card) 94%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, white 50%, transparent);
 }
 
@@ -678,7 +692,10 @@
   color: var(--color-primary);
   font-size: 11.5px;
   font-weight: 700;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring), transform 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring),
+    transform 120ms var(--spring);
 }
 
 .code-large-project-empty-action:hover,
@@ -714,7 +731,9 @@
   font-size: 12px;
   text-align: left;
   overflow: hidden;
-  transition: background-color 120ms var(--spring), color 120ms var(--spring);
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring);
 }
 
 .code-tree-row:hover {
@@ -724,4 +743,13 @@
 .code-tree-row--active {
   background: color-mix(in srgb, var(--color-primary) 13%, transparent);
   color: var(--color-foreground);
+}
+
+.code-tree-row--excluded {
+  color: var(--color-muted-foreground);
+  font-style: italic;
+}
+
+.code-tree-row--excluded svg {
+  opacity: 0.72;
 }

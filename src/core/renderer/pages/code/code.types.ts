@@ -16,8 +16,6 @@ export interface FileTreeState {
   isRefreshingRoot: boolean
   lastRootLoadedAtMs: number | null
   lastRootRefreshStartedAtMs: number | null
-  skippedDirectories: number
-  skippedFiles: number
   autoLoadBlocked: boolean
   autoLoadFileCountSample: number
   autoLoadLimit: number

@@ -224,7 +224,15 @@ async function listProjectDirectoryChildren(rootRealPath: string, directoryRelat
 
     if (entry.isDirectory()) {
       if (isExcludedDirectory(entry.name, exclusions)) {
-        counters.skippedDirectories += 1
+        // 被排除的目录仍以占位节点出现在原位置，点击后进入解释视图而非展开。
+        nodes.push({
+          name: entry.name,
+          relativePath,
+          kind: 'directory',
+          hasChildren: false,
+          isExcluded: true,
+        })
+        includedEntries += 1
         continue
       }
 
@@ -245,7 +253,13 @@ async function listProjectDirectoryChildren(rootRealPath: string, directoryRelat
     if (!entry.isFile()) continue
 
     if (isExcludedFile(entry.name, exclusions)) {
-      counters.skippedFiles += 1
+      nodes.push({
+        name: entry.name,
+        relativePath,
+        kind: 'file',
+        isExcluded: true,
+      })
+      includedEntries += 1
       continue
     }
 

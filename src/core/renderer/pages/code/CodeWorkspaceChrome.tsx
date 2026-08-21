@@ -4,6 +4,7 @@ import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
+import { Tooltip } from '../../components/ui/tooltip'
 import type { UrlPopoverItem } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
 import { fileNameFromRelativePath } from './code.markdownShared'
@@ -13,15 +14,12 @@ type CodeWorkspaceChromeProps = {
   activeRelativePath: string | null
   activePane: 'code' | 'aicommit'
   discardUnsavedConfirm: DiscardUnsavedConfirmState
-  hasExternalChange: boolean
   isActiveFileFavorite: boolean
   isDirty: boolean
   isExplorerOpen: boolean
   isNarrowViewport: boolean
-  isReloadingFromDisk: boolean
   onCloseOpenTab: (relativePath: string) => void
   onHandleSave: () => void
-  onKeepMyChanges: () => void
   onOpenEditorSearch: (mode: 'find' | 'replace') => void
   onOpenFileFromTab: (relativePath: string) => void
   onOpenFirstProjectLink?: () => void
@@ -30,7 +28,6 @@ type CodeWorkspaceChromeProps = {
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
-  onReloadFromDisk: () => void
   onResolveDiscardUnsavedConfirm: (proceed: boolean) => void
   onSetExplorerOpen: React.Dispatch<React.SetStateAction<boolean>>
   onSetQuickDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -47,15 +44,11 @@ type CodeWorkspaceChromeProps = {
   hasProjectDocLinks?: boolean
   projectLinkTagOptions?: ReadonlyArray<{ value: string; label: string }>
   projectName?: string
-  readError: string | null
-  saveError: string | null
   saveIndicatorText: string
   saveIndicatorToneClass: string
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
   saveText: string
   showEditorSearchActions: boolean
-  skippedDirectories: number
-  skippedFiles: number
   viewMode: 'files' | 'search'
 }
 
@@ -87,15 +80,12 @@ export function CodeWorkspaceChrome({
   activeRelativePath,
   activePane,
   discardUnsavedConfirm,
-  hasExternalChange,
   isActiveFileFavorite,
   isDirty,
   isExplorerOpen,
   isNarrowViewport,
-  isReloadingFromDisk,
   onCloseOpenTab,
   onHandleSave,
-  onKeepMyChanges,
   onOpenEditorSearch,
   onOpenFileFromTab,
   onOpenFirstProjectLink,
@@ -104,7 +94,6 @@ export function CodeWorkspaceChrome({
   onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
-  onReloadFromDisk,
   onResolveDiscardUnsavedConfirm,
   onSetExplorerOpen,
   onSetQuickDrawerOpen,
@@ -121,15 +110,11 @@ export function CodeWorkspaceChrome({
   hasProjectDocLinks = false,
   projectLinkTagOptions = [],
   projectName,
-  readError,
-  saveError,
   saveIndicatorText,
   saveIndicatorToneClass,
   saveStatus,
   saveText,
   showEditorSearchActions,
-  skippedDirectories,
-  skippedFiles,
   viewMode,
 }: CodeWorkspaceChromeProps) {
   const { t } = useI18n()
@@ -267,59 +252,38 @@ export function CodeWorkspaceChrome({
           {openTabs.map((path) => {
             const isActive = activeRelativePath === path
             return (
-              <button
-                key={path}
-                type="button"
-                className={`code-open-tab ${isActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  onOpenFileFromTab(path)
-                }}
-                title={path}
-              >
-                <span className="code-open-tab-label">{fileNameFromRelativePath(path)}</span>
-                <span className="code-open-tab-path">{path}</span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="code-open-tab-close"
-                  aria-label={t('codeWorkspace.closeTab', { path })}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onCloseOpenTab(path)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter' && event.key !== ' ') return
-                    event.preventDefault()
-                    event.stopPropagation()
-                    onCloseOpenTab(path)
+              <Tooltip key={path} content={path} align="start" interactive={false} contentClassName="font-mono text-[10.5px] leading-[1.4]" className="code-open-tab-trigger">
+                <button
+                  type="button"
+                  className={`code-open-tab ${isActive ? 'is-active' : ''}`}
+                  onClick={() => {
+                    onOpenFileFromTab(path)
                   }}
                 >
-                  <X className="h-3.5 w-3.5" />
-                </span>
-              </button>
+                  <span className="code-open-tab-label">{fileNameFromRelativePath(path)}</span>
+                  <span className="code-open-tab-path">{path}</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="code-open-tab-close"
+                    aria-label={t('codeWorkspace.closeTab', { path })}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCloseOpenTab(path)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onCloseOpenTab(path)
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </span>
+                </button>
+              </Tooltip>
             )
           })}
-        </div>
-      )}
-
-      {activeRelativePath && hasExternalChange && (
-        <div
-          className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border px-3 py-2 text-xs"
-          style={{
-            borderColor: 'color-mix(in srgb, var(--color-warning) 40%, transparent)',
-            background: 'var(--color-warning-background)',
-            color: 'var(--color-foreground)',
-          }}
-        >
-          <span>{t('codeWorkspace.externalChange')}</span>
-          <div className="flex shrink-0 items-center gap-2">
-            <button type="button" className="inline-flex items-center rounded-full border border-[color:var(--color-border)] px-3 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={onKeepMyChanges}>
-              {t('codeWorkspace.keepMyChanges')}
-            </button>
-            <button type="button" className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary-hover" onClick={onReloadFromDisk}>
-              {t('codeWorkspace.reloadFromDisk')}
-            </button>
-          </div>
         </div>
       )}
 
@@ -346,17 +310,6 @@ export function CodeWorkspaceChrome({
           </button>
         </div>
       </ModalShell>
-
-      <div className="min-h-[21px] px-1 pb-1 pt-2">
-        {(readError || saveError || isReloadingFromDisk || skippedDirectories > 0 || skippedFiles > 0) && (
-          <div className="flex flex-wrap items-center gap-3 text-[11px] leading-[16px] text-[color:var(--color-muted-foreground)]">
-            {isReloadingFromDisk && <span>{t('codeWorkspace.reloadingChangedFile')}</span>}
-            {readError && <span className="text-[color:var(--color-destructive)]">{readError}</span>}
-            {saveError && <span className="text-[color:var(--color-destructive)]">{saveError}</span>}
-            {(skippedDirectories > 0 || skippedFiles > 0) && <span>{t('codeWorkspace.skippedListing', { directories: skippedDirectories, files: skippedFiles })}</span>}
-          </div>
-        )}
-      </div>
     </>
   )
 }

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Folder, FolderOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, FileX2, Folder, FolderOpen, FolderX } from 'lucide-react'
 import { Tree } from 'react-arborist'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
 import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
@@ -16,6 +16,7 @@ interface CodeFileTreeProps {
   expandedDirectories: Set<string>
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -30,6 +31,7 @@ interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   flatFileListMode: boolean
   onToggleDirectory: (relativePath: string) => void
   onSelectFile: (relativePath: string) => void
+  onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onOpenFileContextMenu: (payload: CodeTreeContextMenuPayload) => void
 }
 
@@ -145,12 +147,13 @@ function centerTreeNodeInViewport(tree: TreeApi<ProjectFileNode>, relativePath: 
   return true
 }
 
-function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onToggleDirectory, onSelectFile, onOpenFileContextMenu }: FileTreeNodeRendererProps) {
+function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onToggleDirectory, onSelectFile, onSelectExcluded, onOpenFileContextMenu }: FileTreeNodeRendererProps) {
   const data = node.data
   if (isPlaceholderNode(data)) {
     return <div style={style} aria-hidden="true" />
   }
-  const isDirectory = !flatFileListMode && data.kind === 'directory'
+  const isExcluded = data.isExcluded === true
+  const isDirectory = !flatFileListMode && data.kind === 'directory' && !isExcluded
   const isExpanded = isDirectory && node.isOpen
   const isActive = data.kind === 'file' && activeRelativePath === data.relativePath
   const hasChildren = isDirectory && Boolean(data.hasChildren || (data.children?.length ?? 0) > 0)
@@ -160,10 +163,14 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
     <div ref={dragHandle} style={style}>
       <button
         type="button"
-        className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''}`}
+        className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} ${isExcluded ? 'code-tree-row--excluded' : ''}`}
         style={{ paddingLeft: 10 }}
         onClick={(event) => {
           event.stopPropagation()
+          if (isExcluded) {
+            onSelectExcluded(data.relativePath, data.kind)
+            return
+          }
           if (isDirectory) {
             onToggleDirectory(data.relativePath)
             return
@@ -196,7 +203,21 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
           <span className="inline-block h-3.5 w-3.5 shrink-0" />
         )}
 
-        {isDirectory ? isExpanded ? <FolderOpen className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" /> : <Folder className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" /> : <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+        {isExcluded ? (
+          data.kind === 'directory' ? (
+            <FolderX className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+          ) : (
+            <FileX2 className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+          )
+        ) : isDirectory ? (
+          isExpanded ? (
+            <FolderOpen className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
+          ) : (
+            <Folder className="h-4 w-4 shrink-0 text-[color:var(--color-warning)]" />
+          )
+        ) : (
+          <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+        )}
         <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="w-0 min-w-0 flex-1" contentClassName="font-mono text-[10.5px] leading-[1.4]">
           <span className="block min-w-0 truncate">{rowLabel}</span>
         </Tooltip>
@@ -211,6 +232,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   expandedDirectories,
   onToggleDirectory,
   onSelectFile,
+  onSelectExcluded,
   onOpenNodeFolder,
   onOpenNodeTerminal,
   onCopyNodeName,
@@ -341,7 +363,7 @@ export const CodeFileTree = memo(function CodeFileTree({
           disableEdit
           disableMultiSelection
         >
-          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={onToggleDirectory} onSelectFile={onSelectFile} onOpenFileContextMenu={handleOpenFileContextMenu} />}
+          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={onToggleDirectory} onSelectFile={onSelectFile} onSelectExcluded={onSelectExcluded} onOpenFileContextMenu={handleOpenFileContextMenu} />}
         </Tree>
       )}
       {contextMenu && (
