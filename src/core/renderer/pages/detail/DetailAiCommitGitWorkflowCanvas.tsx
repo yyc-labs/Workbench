@@ -1,7 +1,9 @@
-import { ReactFlowProvider, type Connection } from '@xyflow/react'
-import { Trash2 } from 'lucide-react'
+import { type Connection, ReactFlowProvider } from '@xyflow/react'
+import { Check, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { type DragEvent, useCallback, useRef } from 'react'
 import { Combobox } from '../../components/ui/combobox'
+import { Input } from '../../components/ui/input'
+import { Select } from '../../components/ui/select'
 import { Textarea } from '../../components/ui/textarea'
 import { useI18n } from '../../i18n'
 import { DetailAiCommitGitWorkflowSurface, type WorkflowSurfaceHandle } from './DetailAiCommitGitWorkflowSurface'
@@ -32,6 +34,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
               : runner.runState.status
 
   const canEdit = runner.runState.status === 'idle' || runner.runState.status === 'paused' || runner.runState.status === 'completed'
+
+  const isSaving = runner.saveState === 'saving'
+  const isSaved = runner.saveState === 'saved' && !runner.isDirty
+  const saveStatusText = isSaving ? t('common.saving') : runner.isDirty ? t('detail.gitWorkflowUnsavedChanges') : t('detail.gitWorkflowSaved')
+  const saveStatusDotClass = isSaving ? 'bg-[color:var(--color-primary)] animate-pulse' : runner.isDirty ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-success)]'
+  const saveStatusTextClass = isSaving ? 'text-[color:var(--color-primary)]' : runner.isDirty ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-success)]'
 
   const handleSaveGraph = useCallback(() => {
     const nextGraph = surfaceRef.current?.getGraphSnapshot()
@@ -79,9 +87,14 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
             )
           })}
           <div className="pt-2">
-            <button type="button" className="quiet-control flex w-full items-center justify-center gap-1 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
-              <span>{t('detail.gitWorkflowSave')}</span>
+            <button type="button" className="quiet-control flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
+              {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isSaved ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <Save className="h-3.5 w-3.5" />}
+              {isSaving ? t('common.saving') : isSaved ? t('detail.gitWorkflowSaved') : t('detail.gitWorkflowSave')}
             </button>
+            <div className="mt-1.5 flex items-center justify-center gap-1.5">
+              <span className={`h-1.5 w-1.5 rounded-full ${saveStatusDotClass}`} />
+              <span className={`text-[10px] ${saveStatusTextClass}`}>{saveStatusText}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -112,12 +125,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
               </div>
               <label htmlFor="git-workflow-node-label" className="block">
                 <span className="mb-1 block text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowNodeLabel')}</span>
-                <input
+                <Input
                   id="git-workflow-node-label"
                   type="text"
                   value={selectedNode.data.label || ''}
                   onChange={(event) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, label: event.target.value || undefined }))}
-                  className="h-9 w-full rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 text-[12px] text-[color:var(--color-foreground)] outline-none"
+                  className="h-9 rounded-[12px] px-3 text-[12px]"
                   placeholder={t('detail.gitWorkflowNodeLabelPlaceholder')}
                 />
               </label>
@@ -242,17 +255,21 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                 </label>
               )}
 
-              <label className="block">
+              <div className="block">
                 <span className="mb-1 block text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowFailurePolicy')}</span>
-                <select
+                <Select
+                  ariaLabel={t('detail.gitWorkflowFailurePolicy')}
                   value={selectedNode.data.failurePolicy}
-                  onChange={(event) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, failurePolicy: event.target.value as GitWorkflowNodeData['failurePolicy'] }))}
-                  className="h-9 w-full rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 text-[12px] text-[color:var(--color-foreground)] outline-none"
-                >
-                  <option value="pause">{t('detail.gitWorkflowFailurePause')}</option>
-                  <option value="follow-failure-edge">{t('detail.gitWorkflowFailureFollowEdge')}</option>
-                </select>
-              </label>
+                  options={[
+                    { value: 'pause', label: t('detail.gitWorkflowFailurePause') },
+                    { value: 'follow-failure-edge', label: t('detail.gitWorkflowFailureFollowEdge') },
+                  ]}
+                  onChange={(value) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, failurePolicy: value as GitWorkflowNodeData['failurePolicy'] }))}
+                  triggerClassName="h-9 rounded-[12px] px-3 text-[12px]"
+                  contentClassName="surface-card rounded-[12px] p-1"
+                  optionClassName="rounded-[8px] px-2 py-1.5 text-[12px]"
+                />
+              </div>
 
               <button type="button" className="quiet-control inline-flex w-full items-center justify-center gap-1 rounded-[12px] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]" onClick={() => runner.deleteNode(selectedNode.id)}>
                 <Trash2 className="h-3.5 w-3.5" />
@@ -279,8 +296,9 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
         </div>
 
         <div className="flex items-center gap-2">
-          <button type="button" className="quiet-control flex-1 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
-            {t('detail.gitWorkflowSave')}
+          <button type="button" className="quiet-control flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
+            {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isSaved ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <Save className="h-3.5 w-3.5" />}
+            {isSaving ? t('common.saving') : isSaved ? t('detail.gitWorkflowSaved') : t('detail.gitWorkflowSave')}
           </button>
           <button
             type="button"

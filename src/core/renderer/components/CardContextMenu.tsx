@@ -4,7 +4,7 @@ import { BookOpen, Bot, Check, ChevronRight, Code2, FolderOpen, Pin, Play, Refre
 import type { AiRuntimeProfile, CliTool } from '../../shared/types'
 import { getAiRuntimeProfileCli, getAiRuntimeProfileLabel } from '../../shared/aiRuntimeProfiles'
 import { useI18n } from '../i18n'
-import { UrlPopover, type UrlPopoverItem } from './UrlPopover'
+import { openUrlPopoverItem, UrlPopover, type UrlPopoverItem } from './UrlPopover'
 
 export type CardContextMenuInfo = {
   /** 项目文档链接,与 Home 卡片上的链接展示一致。 */
@@ -679,6 +679,13 @@ export function CardContextMenu({
                 style={{ borderColor: 'color-mix(in srgb, var(--color-border) 82%, transparent)' }}
                 aria-label={t('common.projectInfo')}
                 title={t('common.projectInfo')}
+                onClick={() => {
+                  const first = infoItems?.[0]
+                  if (!first) return
+                  void handleClick(async () => {
+                    await openUrlPopoverItem(first)
+                  })
+                }}
               >
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[color:var(--color-card)]/80">
                   <BookOpen className="h-4 w-4" />

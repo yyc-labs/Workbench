@@ -5,6 +5,11 @@ import { classifyGitOperationResult, commitGitWorkflowNodePositions, createGitWo
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
 import type { GitWorkflowEdge, GitWorkflowEdgeKind, GitWorkflowExecutionContext, GitWorkflowNode, GitWorkflowNodeData, GitWorkflowNodeOutcome, GitWorkflowRunState, GitWorkflowValidationContext, GitWorkflowValidationResult, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 
+type GitWorkflowSaveState = 'idle' | 'saving' | 'saved'
+
+/** 保存反馈动画的展示时长（ms），localStorage 写入为同步操作，需要短暂停留让用户感知保存过程。 */
+const SAVE_FEEDBACK_MS = 450
+
 type UseGitWorkflowRunnerOptions = {
   projectId: string
   gitSnapshot: {
@@ -133,10 +138,16 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
   const [runtimeTargetValue, setRuntimeTargetValue] = useState('')
   const [runtimeCommitMessage, setRuntimeCommitMessage] = useState('')
   const [validationResult, setValidationResult] = useState<GitWorkflowValidationResult>({ ok: true, issues: [] })
+  const [saveState, setSaveState] = useState<GitWorkflowSaveState>('idle')
+  const lastSavedUpdatedAtRef = useRef<number | null>(null)
+  const saveTimerRef = useRef<number | null>(null)
   const runNodeRef = useRef<((nodeId: string) => Promise<void>) | null>(null)
 
   useEffect(() => {
-    setGraph(loadGitWorkflowGraph(projectId))
+    const loaded = loadGitWorkflowGraph(projectId)
+    setGraph(loaded)
+    lastSavedUpdatedAtRef.current = loaded.updatedAt
+    setSaveState('idle')
     setRunState(createInitialGitWorkflowRunState())
     setSelectedNodeId(null)
     setPendingConfirmation(null)
@@ -145,6 +156,12 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     setRuntimeTargetValue('')
     setRuntimeCommitMessage('')
   }, [projectId])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     const result = validateGitWorkflowGraph(graph, getValidationContext(gitSnapshot))
@@ -273,10 +290,20 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
 
   const saveGraph = useCallback(
     (nextGraph?: PersistedGitWorkflowGraph) => {
-      saveGitWorkflowGraph(projectId, nextGraph ?? graph)
+      const target = nextGraph ?? graph
+      saveGitWorkflowGraph(projectId, target)
+      lastSavedUpdatedAtRef.current = target.updatedAt
+      setSaveState('saving')
+      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = window.setTimeout(() => {
+        setSaveState('saved')
+        saveTimerRef.current = null
+      }, SAVE_FEEDBACK_MS)
     },
     [graph, projectId],
   )
+
+  const isDirty = lastSavedUpdatedAtRef.current != null && graph.updatedAt !== lastSavedUpdatedAtRef.current
 
   const clearPending = useCallback(() => {
     setPendingConfirmation(null)
@@ -570,6 +597,8 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     connect,
     commitNodePositions,
     saveGraph,
+    saveState,
+    isDirty,
     startWorkflow,
     abortWorkflow,
     confirmPendingConfirmation,
