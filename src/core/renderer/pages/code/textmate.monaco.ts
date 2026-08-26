@@ -1,6 +1,7 @@
 import type * as Monaco from 'monaco-editor'
 import { loadWASM, OnigScanner, OnigString } from 'vscode-oniguruma'
 import { Registry, INITIAL, type IGrammar, type IRawGrammar, type IRawTheme, type StateStack } from 'vscode-textmate'
+import type { MonacoThemeName } from '../../lib/monacoEnvironment'
 import { buildTextmateRegistry, resolveRootScopeForLanguage, type TextmateLanguageDescriptor } from './textmate.registry'
 
 const registryData = buildTextmateRegistry()
@@ -65,10 +66,7 @@ async function getTextmateRegistry(): Promise<Registry> {
   return textmateRegistryPromise
 }
 
-function resolveEmbeddedLanguageMap(
-  monaco: typeof Monaco,
-  descriptor: TextmateLanguageDescriptor,
-): Record<string, number> {
+function resolveEmbeddedLanguageMap(monaco: typeof Monaco, descriptor: TextmateLanguageDescriptor): Record<string, number> {
   const result: Record<string, number> = {}
   const scopeToLanguageId = descriptor.embeddedScopeToLanguage ?? {}
 
@@ -154,10 +152,7 @@ function setRegistryTheme(theme: IRawTheme): void {
   })
 }
 
-export async function ensureTextmateForLanguage(
-  monaco: typeof Monaco,
-  languageId: string,
-): Promise<void> {
+export async function ensureTextmateForLanguage(monaco: typeof Monaco, languageId: string): Promise<void> {
   if (!languageId) return
 
   const existingPromise = installStateByLanguage.get(languageId)
@@ -178,8 +173,8 @@ export async function ensureTextmateForLanguage(
   await installPromise
 }
 
-export function syncTextmateTheme(monacoTheme: 'vs' | 'vs-dark'): void {
-  if (monacoTheme === 'vs-dark') {
+export function syncTextmateTheme(monacoTheme: MonacoThemeName): void {
+  if (monacoTheme === 'vs-dark' || monacoTheme === 'hc-black') {
     setRegistryTheme(registryData.themes.dark)
     return
   }

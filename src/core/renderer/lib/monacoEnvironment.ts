@@ -5,7 +5,7 @@ import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
 
-export type MonacoThemeName = 'vs' | 'vs-dark'
+export type MonacoThemeName = 'vs' | 'vs-dark' | 'hc-black' | 'hc-light'
 
 interface MonacoEnvironmentShape {
   getWorker: (_workerId: string, label: string) => Worker

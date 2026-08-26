@@ -1,8 +1,9 @@
+import type { editor as MonacoEditor, Selection } from 'monaco-editor'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import type { editor as MonacoEditor } from 'monaco-editor'
-import { installMonacoFindWidgetHoverGuard } from '../../lib/monacoEnvironment'
+import { installMonacoFindWidgetHoverGuard, type MonacoThemeName } from '../../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
+import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
 import { createMonacoModelUri, evictStaleMonacoModels, toMonacoModelCacheKey, touchMonacoModelCacheEntry } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
@@ -37,7 +38,7 @@ interface PendingHighlightLine {
 interface MonacoCodeEditorProps {
   value: string
   language: string
-  theme: 'vs' | 'vs-dark'
+  theme: MonacoThemeName
   filePath: string | null
   isReadOnly?: boolean
   onChange: (value: string) => void
@@ -49,6 +50,18 @@ interface MonacoCodeEditorProps {
 }
 
 const REVEAL_HIGHLIGHT_DURATION_MS = 2200
+
+// Languages with built-in Monaco formatters (json/css/html/ts 及变体)。
+const FORMATTABLE_LANGUAGES = new Set(['json', 'jsonc', 'json5', 'css', 'scss', 'less', 'html', 'handlebars', 'razor', 'typescript', 'javascript'])
+
+interface EditorContextMenuSnapshot {
+  x: number
+  y: number
+  selection: Selection | null
+  isReadOnly: boolean
+  canComment: boolean
+  canFormat: boolean
+}
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({ value, language, theme, filePath, isReadOnly = false, onChange, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -94,6 +107,21 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     setSearchRegex,
     setSearchWholeWord,
   } = useMonacoSearchWidget({ editorRef })
+
+  const [activeTheme, setActiveTheme] = useState<MonacoThemeName>(theme)
+  const activeThemeRef = useRef(activeTheme)
+  const [editorContextMenu, setEditorContextMenu] = useState<EditorContextMenuSnapshot | null>(null)
+
+  const runEditorContextMenuAction = (actionId: string) => {
+    const editor = editorRef.current
+    editor?.trigger('editor-context-menu', actionId, null)
+    editor?.focus()
+    setEditorContextMenu(null)
+  }
+
+  const handleThemeChange = (nextTheme: MonacoThemeName) => {
+    setActiveTheme(nextTheme)
+  }
 
   const revealPositionInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number, column = 1) => {
     const model = editor.getModel()
@@ -249,7 +277,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       if (disposed) return
 
       monacoRef.current = monaco
-      syncTextmateTheme(theme)
+      syncTextmateTheme(activeThemeRef.current)
       await ensureTextmateForLanguage(monaco, language)
       if (disposed) return
 
@@ -283,9 +311,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         overtypeOnPaste: false,
         matchBrackets: 'near',
         roundedSelection: false,
+        contextmenu: false,
         padding: { top: 14, bottom: 14 },
         readOnly: isReadOnly,
-        theme,
+        theme: activeThemeRef.current,
       })
       editorRef.current = editor
       activeModelKeyRef.current = initialKey
@@ -437,6 +466,38 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editor.trigger('keyboard', 'editor.action.deleteLines', null)
       })
 
+      const handleEditorContextMenu = (e: MonacoEditor.IEditorMouseEvent) => {
+        const targetType = e.target.type
+        if (targetType === monaco.editor.MouseTargetType.OVERLAY_WIDGET || targetType === monaco.editor.MouseTargetType.CONTENT_WIDGET || targetType === monaco.editor.MouseTargetType.SCROLLBAR) {
+          return
+        }
+        e.event.preventDefault()
+        e.event.stopPropagation()
+        const model = editor.getModel()
+        if (!model) return
+
+        // 复刻 VS Code 右键行为：点击位置不在当前选区内时移动光标过去。
+        const position = e.target.position
+        if (position) {
+          const selections = editor.getSelections()
+          const inSelection = selections ? selections.some((selection) => selection.containsPosition(position)) : false
+          if (!inSelection) editor.setPosition(position)
+        }
+        editor.focus()
+
+        const languageId = model.getLanguageId()
+        const languageConfiguration = (monaco.languages as unknown as { getLanguageConfiguration?: (languageId: string) => { comments?: unknown } | undefined }).getLanguageConfiguration?.(languageId)
+        setEditorContextMenu({
+          x: e.event.browserEvent.clientX,
+          y: e.event.browserEvent.clientY,
+          selection: editor.getSelection(),
+          isReadOnly: editor.getOption(monaco.editor.EditorOption.readOnly),
+          canComment: Boolean(languageConfiguration?.comments),
+          canFormat: FORMATTABLE_LANGUAGES.has(languageId),
+        })
+      }
+      const contextMenuDisposable = editor.onContextMenu(handleEditorContextMenu)
+
       const refreshFontMetrics = () => {
         monaco.editor.remeasureFonts()
         editor.layout()
@@ -486,6 +547,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         container.removeEventListener('paste', handleCapturePaste, true)
         removeFindWidgetHoverGuard()
         removeFontListener?.()
+        contextMenuDisposable.dispose()
       }
     }
 
@@ -515,11 +577,16 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    setActiveTheme(theme)
+  }, [theme])
+
+  useEffect(() => {
+    activeThemeRef.current = activeTheme
     const monaco = monacoRef.current
     if (!monaco) return
-    monaco.editor.setTheme(theme)
-    syncTextmateTheme(theme)
-  }, [theme])
+    monaco.editor.setTheme(activeTheme)
+    syncTextmateTheme(activeTheme)
+  }, [activeTheme])
 
   useEffect(() => {
     const editor = editorRef.current
@@ -531,6 +598,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const monaco = monacoRef.current
     const editor = editorRef.current
     if (!monaco || !editor) return
+
+    // 切换文件/语言/内容同步时关闭可能打开的自定义右键菜单。
+    setEditorContextMenu(null)
 
     const currentModel = modelRef.current
     const nextKey = toMonacoModelCacheKey(filePath)
@@ -595,6 +665,20 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         />
       )}
       <div ref={containerRef} className="h-full w-full" />
+      {editorContextMenu ? (
+        <MonacoEditorContextMenu
+          x={editorContextMenu.x}
+          y={editorContextMenu.y}
+          selection={editorContextMenu.selection}
+          isReadOnly={editorContextMenu.isReadOnly}
+          canComment={editorContextMenu.canComment}
+          canFormat={editorContextMenu.canFormat}
+          currentTheme={activeTheme}
+          onThemeChange={handleThemeChange}
+          onAction={runEditorContextMenuAction}
+          onClose={() => setEditorContextMenu(null)}
+        />
+      ) : null}
     </div>
   )
 })
