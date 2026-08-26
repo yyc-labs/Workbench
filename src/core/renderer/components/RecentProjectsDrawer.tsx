@@ -6,6 +6,7 @@ import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { CardContextMenu, type CardContextMenuInfo } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
+import { RunCommandConfigPopover } from './RunCommandConfigPopover'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
@@ -42,6 +43,8 @@ type RecentProjectsContextMenuProps = {
   onClose: () => void
   onRequestCloseDrawer: () => void
   onEditMetadata: (projectId: string) => void
+  /** 右键"启动/停止项目"按钮时打开运行命令配置弹窗;由抽屉层持有弹窗状态,避免菜单关闭卸载组件导致弹窗消失。 */
+  onOpenRunConfig: () => void
 }
 
 export type RecentProjectsMetaDialogHostProps = {
@@ -85,7 +88,7 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project,
   )
 })
 
-const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ contextMenu, project, onClose, onRequestCloseDrawer, onEditMetadata }: RecentProjectsContextMenuProps) {
+const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ contextMenu, project, onClose, onRequestCloseDrawer, onEditMetadata, onOpenRunConfig }: RecentProjectsContextMenuProps) {
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const startRuntime = useAppStore((s) => s.startRuntime)
@@ -238,6 +241,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
         onEditMetadata(project.id)
         onRequestCloseDrawer()
       }}
+      onEditRunCommandConfig={onOpenRunConfig}
       info={info}
     />
   )
@@ -263,6 +267,8 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [runConfigOpen, setRunConfigOpen] = useState(false)
+  const [runConfigProject, setRunConfigProject] = useState<ProjectInfo | null>(null)
   const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
   const recentProjects = useAppStore((s) => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
@@ -317,6 +323,8 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   useEffect(() => {
     if (open) return
     setContextMenu(null)
+    setRunConfigOpen(false)
+    setRunConfigProject(null)
   }, [open])
 
   useEffect(() => {
@@ -367,7 +375,22 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
         </div>
       </aside>
 
-      {contextMenu && contextMenuProject && <RecentProjectsContextMenu contextMenu={contextMenu} project={contextMenuProject} onClose={handleCloseContextMenu} onRequestCloseDrawer={onClose} onEditMetadata={onEditProjectMetadata} />}
+      {contextMenu && contextMenuProject && (
+        <RecentProjectsContextMenu
+          contextMenu={contextMenu}
+          project={contextMenuProject}
+          onClose={handleCloseContextMenu}
+          onRequestCloseDrawer={onClose}
+          onEditMetadata={onEditProjectMetadata}
+          onOpenRunConfig={() => {
+            if (!contextMenuProject) return
+            setRunConfigProject(contextMenuProject)
+            setRunConfigOpen(true)
+          }}
+        />
+      )}
+
+      {runConfigProject && <RunCommandConfigPopover project={runConfigProject} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} baseZIndex={20010} />}
     </>
   )
 }

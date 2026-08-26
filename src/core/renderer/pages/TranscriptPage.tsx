@@ -10,6 +10,7 @@ import { ModalShell } from '../components/ModalShell'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
+import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
 import { Button } from '../components/ui/button'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
@@ -74,6 +75,7 @@ export function TranscriptPage() {
       customType: found.customType,
       command: found.command,
       customCommand: found.customCommand,
+      runWorkingDirectory: found.runWorkingDirectory,
       runStartupMode: found.runStartupMode,
       packageManager: found.packageManager,
       pinned: found.pinned,
@@ -177,6 +179,7 @@ export function TranscriptPage() {
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
+  const [runConfigOpen, setRunConfigOpen] = useState(false)
   const { projectHeaderCollapsed, setProjectHeaderCollapsed, effectiveTheme, isNarrowViewport } = useTranscriptPageChromeState()
   const [isTranscriptListCollapsed, setIsTranscriptListCollapsed] = useState(readTranscriptListSidebarCollapsed)
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
@@ -908,12 +911,15 @@ export function TranscriptPage() {
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
+          onEditRunCommandConfig={() => setRunConfigOpen(true)}
         />
       )}
 
       {metaDialogOpen && (
         <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
       )}
+
+      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
 
       <TranscriptReferenceDrawer
         open={Boolean(session && activeReference)}

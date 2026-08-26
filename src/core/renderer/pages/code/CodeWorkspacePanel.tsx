@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import type { ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
+import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
@@ -17,6 +17,7 @@ import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
+import { resolveTreeNodeSearchScope } from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
 import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
 import { useCodeFileState } from './useCodeFileState'
@@ -433,6 +434,27 @@ export function CodeWorkspacePanel({
       setIsContentSearchAdvancedOpen(false)
     }
   }, [])
+  const handleSearchInFolder = useCallback(
+    (relativePath: string, nodeKind: ProjectFileNodeKind) => {
+      const scopeInput = resolveTreeNodeSearchScope(relativePath, nodeKind)
+      setContentSearchScopeInput(scopeInput)
+
+      // 已在搜索视图时输入框已挂载，直接聚焦；否则借助 pendingSearchInputFocusModeRef 在视图切换渲染后聚焦。
+      if (viewMode === 'search') {
+        window.setTimeout(() => {
+          contentSearchInputRef.current?.focus()
+          contentSearchInputRef.current?.select()
+        }, 0)
+        return
+      }
+      pendingSearchInputFocusModeRef.current = 'search'
+      setViewMode('search')
+      if (isNarrowViewport && !isExplorerOpen) {
+        setIsExplorerOpen(true)
+      }
+    },
+    [contentSearchInputRef, isExplorerOpen, isNarrowViewport, viewMode],
+  )
 
   useEffect(() => {
     window.localStorage.setItem(CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, isLeftSidebarCollapsed ? '1' : '0')
@@ -835,6 +857,7 @@ export function CodeWorkspacePanel({
                 onOpenContentSearchResult={handleOpenContentSearchResult}
                 onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
                 onOpenTreeNodeTerminal={handleOpenTreeNodeTerminal}
+                onSearchInTreeNodeFolder={handleSearchInFolder}
                 onReloadTree={handleReloadTree}
                 onSelectTreeFile={handleSelectTreeFile}
                 onSelectExcluded={handleSelectExcluded}

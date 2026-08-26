@@ -11,6 +11,8 @@ interface RunCommandConfigPopoverProps {
   project: ProjectInfo
   open: boolean
   onClose: () => void
+  /** Modal 层级,在高层级容器(如最近项目抽屉)内打开时需要调高。 */
+  baseZIndex?: number
 }
 
 type ConfigTab = 'command' | 'template'
@@ -293,11 +295,7 @@ function parsePackageScripts(content: string): string[] {
   return []
 }
 
-export function RunCommandConfigPopover({
-  project,
-  open,
-  onClose,
-}: RunCommandConfigPopoverProps) {
+export function RunCommandConfigPopover({ project, open, onClose, baseZIndex = 1100 }: RunCommandConfigPopoverProps) {
   const { t } = useI18n()
   const setProjectCustomCommand = useAppStore((s) => s.setProjectCustomCommand)
   const setProjectRunWorkingDirectory = useAppStore((s) => s.setProjectRunWorkingDirectory)
@@ -317,12 +315,7 @@ export function RunCommandConfigPopover({
   const packageScriptListRef = useRef<HTMLDivElement | null>(null)
 
   const environment = detectProjectEnvironment(resolveWorkingDirectoryPreview(project.path, draftWorkingDirectory))
-  const environmentHint =
-    environment === 'windows'
-      ? t('runCommand.environmentHintWindows')
-      : environment === 'ubuntu'
-        ? t('runCommand.environmentHintUbuntu')
-        : t('runCommand.environmentHintOther')
+  const environmentHint = environment === 'windows' ? t('runCommand.environmentHintWindows') : environment === 'ubuntu' ? t('runCommand.environmentHintUbuntu') : t('runCommand.environmentHintOther')
 
   const isUsingDefault = !project.customCommand?.trim() && !project.runWorkingDirectory?.trim()
   const resolvedWorkingDirectory = resolveWorkingDirectoryPreview(project.path, draftWorkingDirectory)
@@ -331,11 +324,7 @@ export function RunCommandConfigPopover({
     const original = (project.customCommand ?? project.command).trim()
     const originalWorkingDirectory = project.runWorkingDirectory?.trim() || ''
     const originalMode = project.runStartupMode || 'silent'
-    return (
-      draftCommand.trim() !== original
-      || draftWorkingDirectory.trim() !== originalWorkingDirectory
-      || runStartupMode !== originalMode
-    )
+    return draftCommand.trim() !== original || draftWorkingDirectory.trim() !== originalWorkingDirectory || runStartupMode !== originalMode
   }, [draftCommand, draftWorkingDirectory, project.command, project.customCommand, project.runStartupMode, project.runWorkingDirectory, runStartupMode])
 
   const deferredPackageScriptQuery = useDeferredValue(packageScriptQuery.trim().toLowerCase())
@@ -346,16 +335,18 @@ export function RunCommandConfigPopover({
     return packageScripts.filter((script) => script.toLowerCase().includes(normalizedQuery))
   }, [deferredPackageScriptQuery, packageScripts])
 
-  const filteredPackageScriptTemplates = useMemo<RunCommandTemplate[]>(() => (
-    filteredPackageScripts.map((script) => ({
-      id: `package-script:${script}`,
-      label: script,
-      command: scriptCommand(project.packageManager, script),
-      workingDirectory: '',
-      hint: t('runCommand.packageScriptHint'),
-      source: 'package-script',
-    }))
-  ), [filteredPackageScripts, project.packageManager, t])
+  const filteredPackageScriptTemplates = useMemo<RunCommandTemplate[]>(
+    () =>
+      filteredPackageScripts.map((script) => ({
+        id: `package-script:${script}`,
+        label: script,
+        command: scriptCommand(project.packageManager, script),
+        workingDirectory: '',
+        hint: t('runCommand.packageScriptHint'),
+        source: 'package-script',
+      })),
+    [filteredPackageScripts, project.packageManager, t],
+  )
 
   const templates = useMemo<RunCommandTemplate[]>(() => {
     const devCommand = scriptCommand(project.packageManager, 'dev')
@@ -512,15 +503,16 @@ export function RunCommandConfigPopover({
       },
     ]
 
-    const prioritized = project.type === 'android'
-      ? [...platformTemplates.slice(1), ...packageTemplates, ...directoryTemplates, ...scriptTemplates, platformTemplates[0], ...pythonTemplates]
-      : project.type === 'python' || project.type === 'django' || project.type === 'flask' || project.type === 'fastapi'
-        ? [...pythonTemplates, ...packageTemplates, ...directoryTemplates, ...scriptTemplates, ...platformTemplates]
-        : environment === 'windows'
-          ? [...scriptTemplates.slice(1), ...packageTemplates, ...directoryTemplates, ...platformTemplates, scriptTemplates[0], ...pythonTemplates]
-          : environment === 'ubuntu'
-            ? [scriptTemplates[0], ...packageTemplates, ...directoryTemplates, ...pythonTemplates, ...platformTemplates, ...scriptTemplates.slice(1)]
-            : [...packageTemplates, ...directoryTemplates, ...scriptTemplates, ...pythonTemplates, ...platformTemplates]
+    const prioritized =
+      project.type === 'android'
+        ? [...platformTemplates.slice(1), ...packageTemplates, ...directoryTemplates, ...scriptTemplates, platformTemplates[0], ...pythonTemplates]
+        : project.type === 'python' || project.type === 'django' || project.type === 'flask' || project.type === 'fastapi'
+          ? [...pythonTemplates, ...packageTemplates, ...directoryTemplates, ...scriptTemplates, ...platformTemplates]
+          : environment === 'windows'
+            ? [...scriptTemplates.slice(1), ...packageTemplates, ...directoryTemplates, ...platformTemplates, scriptTemplates[0], ...pythonTemplates]
+            : environment === 'ubuntu'
+              ? [scriptTemplates[0], ...packageTemplates, ...directoryTemplates, ...pythonTemplates, ...platformTemplates, ...scriptTemplates.slice(1)]
+              : [...packageTemplates, ...directoryTemplates, ...scriptTemplates, ...pythonTemplates, ...platformTemplates]
 
     return prioritized.filter(Boolean)
   }, [environment, project.packageManager, project.type, t])
@@ -528,46 +520,30 @@ export function RunCommandConfigPopover({
   const packageScriptTemplateIdentitySet = useMemo(() => {
     const set = new Set<string>()
     for (const script of packageScripts) {
-      set.add(templateIdentityKey({
-        command: scriptCommand(project.packageManager, script),
-        workingDirectory: '',
-      }))
+      set.add(
+        templateIdentityKey({
+          command: scriptCommand(project.packageManager, script),
+          workingDirectory: '',
+        }),
+      )
     }
     return set
   }, [packageScripts, project.packageManager])
 
-  const builtInTemplates = useMemo(() => (
-    templates.filter((item) => !packageScriptTemplateIdentitySet.has(templateIdentityKey(item)))
-  ), [packageScriptTemplateIdentitySet, templates])
+  const builtInTemplates = useMemo(() => templates.filter((item) => !packageScriptTemplateIdentitySet.has(templateIdentityKey(item))), [packageScriptTemplateIdentitySet, templates])
 
   const filteredBuiltInTemplates = useMemo(() => {
     const normalizedQuery = deferredPackageScriptQuery
     if (!normalizedQuery) return builtInTemplates
-    return builtInTemplates.filter((item) => (
-      item.label.toLowerCase().includes(normalizedQuery)
-      || item.command.toLowerCase().includes(normalizedQuery)
-      || item.hint.toLowerCase().includes(normalizedQuery)
-      || item.workingDirectory.toLowerCase().includes(normalizedQuery)
-    ))
+    return builtInTemplates.filter((item) => item.label.toLowerCase().includes(normalizedQuery) || item.command.toLowerCase().includes(normalizedQuery) || item.hint.toLowerCase().includes(normalizedQuery) || item.workingDirectory.toLowerCase().includes(normalizedQuery))
   }, [builtInTemplates, deferredPackageScriptQuery])
 
-  const allTemplates = useMemo(() => (
-    [...filteredPackageScriptTemplates, ...filteredBuiltInTemplates]
-  ), [filteredBuiltInTemplates, filteredPackageScriptTemplates])
+  const allTemplates = useMemo(() => [...filteredPackageScriptTemplates, ...filteredBuiltInTemplates], [filteredBuiltInTemplates, filteredPackageScriptTemplates])
 
   const totalTemplateRows = Math.ceil(allTemplates.length / 2)
-  const templateVisibleRowCount = Math.max(
-    1,
-    Math.ceil(packageScriptViewportHeight / PACKAGE_SCRIPT_ROW_HEIGHT) + (PACKAGE_SCRIPT_LIST_OVERSCAN * 2)
-  )
-  const templateStartRowIndex = Math.max(
-    0,
-    Math.floor(packageScriptScrollTop / PACKAGE_SCRIPT_ROW_HEIGHT) - PACKAGE_SCRIPT_LIST_OVERSCAN
-  )
-  const templateEndRowIndex = Math.min(
-    totalTemplateRows,
-    templateStartRowIndex + templateVisibleRowCount
-  )
+  const templateVisibleRowCount = Math.max(1, Math.ceil(packageScriptViewportHeight / PACKAGE_SCRIPT_ROW_HEIGHT) + PACKAGE_SCRIPT_LIST_OVERSCAN * 2)
+  const templateStartRowIndex = Math.max(0, Math.floor(packageScriptScrollTop / PACKAGE_SCRIPT_ROW_HEIGHT) - PACKAGE_SCRIPT_LIST_OVERSCAN)
+  const templateEndRowIndex = Math.min(totalTemplateRows, templateStartRowIndex + templateVisibleRowCount)
   const virtualTemplateRows = useMemo(() => {
     const rows: RunCommandTemplate[][] = []
     for (let rowIndex = templateStartRowIndex; rowIndex < templateEndRowIndex; rowIndex += 1) {
@@ -597,7 +573,8 @@ export function RunCommandConfigPopover({
     setPackageScripts([])
     setPackageScriptQuery('')
 
-    void window.electronAPI.readProjectFile(project.path, 'package.json')
+    void window.electronAPI
+      .readProjectFile(project.path, 'package.json')
       .then((result) => {
         if (cancelled) return
         setPackageScripts(parsePackageScripts(result.content))
@@ -738,65 +715,31 @@ export function RunCommandConfigPopover({
   }
 
   return (
-    <ModalShell
-      open={open}
-      onClose={onClose}
-      widthClassName="max-w-[760px]"
-      baseZIndex={1100}
-      ariaLabel={t('runCommand.title')}
-      panelClassName="max-h-[calc(100vh-116px)] overflow-hidden p-0"
-    >
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[760px]" baseZIndex={baseZIndex} ariaLabel={t('runCommand.title')} panelClassName="max-h-[calc(100vh-116px)] overflow-hidden p-0">
       <div className="flex max-h-[calc(100vh-116px)] min-h-0 flex-col">
         <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-border)] px-5 py-3.5">
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <p className="text-base font-semibold text-[color:var(--color-foreground)]">{t('runCommand.title')}</p>
-              <span className="rounded-full px-2 py-0.5 text-[10px] quiet-control">
-                {isUsingDefault ? t('runCommand.defaultState') : t('runCommand.customState')}
-              </span>
+              <span className="rounded-full px-2 py-0.5 text-[10px] quiet-control">{isUsingDefault ? t('runCommand.defaultState') : t('runCommand.customState')}</span>
             </div>
             <p className="mt-1 truncate text-[12px] text-[color:var(--color-muted-foreground)]" title={project.path}>
               {projectDisplayName(project)}
             </p>
           </div>
-          <button
-            className="quiet-control inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]"
-            onClick={onClose}
-            disabled={saving}
-            aria-label={t('runCommand.close')}
-          >
+          <button className="quiet-control inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:text-[color:var(--color-foreground)]" onClick={onClose} disabled={saving} aria-label={t('runCommand.close')}>
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="flex h-[380px] min-h-0 flex-col overflow-hidden px-5 py-3.5">
-          {error && (
-            <div className="mb-3 shrink-0 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">
-              {error}
-            </div>
-          )}
+          {error && <div className="mb-3 shrink-0 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{error}</div>}
 
           <div className="mb-3 inline-flex w-fit shrink-0 self-start rounded-full p-1 quiet-control">
-            <button
-              className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                activeTab === 'command'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => setActiveTab('command')}
-              disabled={saving}
-            >
+            <button className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${activeTab === 'command' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`} onClick={() => setActiveTab('command')} disabled={saving}>
               {t('runCommand.commandTab')}
             </button>
-            <button
-              className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                activeTab === 'template'
-                  ? 'bg-primary text-white'
-                  : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
-              onClick={() => setActiveTab('template')}
-              disabled={saving}
-            >
+            <button className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${activeTab === 'template' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`} onClick={() => setActiveTab('template')} disabled={saving}>
               {t('runCommand.templateTab')}
             </button>
           </div>
@@ -855,26 +798,10 @@ export function RunCommandConfigPopover({
                 <div>
                   <p className="mb-1.5 text-[11px] text-[color:var(--color-muted-foreground)]">{t('runCommand.startupMode')}</p>
                   <div className="inline-flex rounded-full p-1 quiet-control">
-                    <button
-                      className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                        runStartupMode === 'silent'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                      }`}
-                      onClick={() => setRunStartupMode('silent')}
-                      disabled={saving}
-                    >
+                    <button className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${runStartupMode === 'silent' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`} onClick={() => setRunStartupMode('silent')} disabled={saving}>
                       {t('runCommand.startupModeSilent')}
                     </button>
-                    <button
-                      className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-                        runStartupMode === 'terminal'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-                      }`}
-                      onClick={() => setRunStartupMode('terminal')}
-                      disabled={saving}
-                    >
+                    <button className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${runStartupMode === 'terminal' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`} onClick={() => setRunStartupMode('terminal')} disabled={saving}>
                       {t('runCommand.startupModeTerminal')}
                     </button>
                   </div>
@@ -883,9 +810,7 @@ export function RunCommandConfigPopover({
               </div>
             ) : (
               <div className="flex h-full min-h-0 flex-col space-y-1.5">
-                <p className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  {t('runCommand.templateHint')}
-                </p>
+                <p className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">{t('runCommand.templateHint')}</p>
                 <input
                   ref={packageScriptInputRef}
                   value={packageScriptQuery}
@@ -895,31 +820,15 @@ export function RunCommandConfigPopover({
                   spellCheck={false}
                   disabled={saving}
                 />
-                <p className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  {allTemplates.length > 0
-                    ? t('runCommand.templateMatchCount', { count: allTemplates.length })
-                    : t('runCommand.templateNoMatches')}
-                </p>
-                <div
-                  ref={packageScriptListRef}
-                  className="min-h-0 flex-1 overflow-y-auto pr-1"
-                  onScroll={(event) => setPackageScriptScrollTop(event.currentTarget.scrollTop)}
-                >
+                <p className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">{allTemplates.length > 0 ? t('runCommand.templateMatchCount', { count: allTemplates.length }) : t('runCommand.templateNoMatches')}</p>
+                <div ref={packageScriptListRef} className="min-h-0 flex-1 overflow-y-auto pr-1" onScroll={(event) => setPackageScriptScrollTop(event.currentTarget.scrollTop)}>
                   {allTemplates.length <= 0 ? (
-                    <div className="code-panel-empty text-[11px] text-[color:var(--color-muted-foreground)]">
-                      {t('runCommand.templateNoMatches')}
-                    </div>
+                    <div className="code-panel-empty text-[11px] text-[color:var(--color-muted-foreground)]">{t('runCommand.templateNoMatches')}</div>
                   ) : (
                     <div style={{ height: `${totalTemplateHeight}px`, position: 'relative' }}>
-                      <div
-                        className="space-y-1.5"
-                        style={{ transform: `translateY(${templateStartRowIndex * PACKAGE_SCRIPT_ROW_HEIGHT}px)` }}
-                      >
+                      <div className="space-y-1.5" style={{ transform: `translateY(${templateStartRowIndex * PACKAGE_SCRIPT_ROW_HEIGHT}px)` }}>
                         {virtualTemplateRows.map((row, rowIndex) => (
-                          <div
-                            key={`row-${templateStartRowIndex + rowIndex}`}
-                            className="grid grid-cols-2 gap-1.5"
-                          >
+                          <div key={`row-${templateStartRowIndex + rowIndex}`} className="grid grid-cols-2 gap-1.5">
                             {row.map((item) => (
                               <button
                                 key={item.id}
@@ -931,16 +840,10 @@ export function RunCommandConfigPopover({
                               >
                                 <span className="min-w-0">
                                   <span className="block truncate text-[12px] font-medium text-[color:var(--color-foreground)]">{item.label}</span>
-                                  <span className="mt-0.5 block truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]">
-                                    {item.command}
-                                  </span>
+                                  <span className="mt-0.5 block truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]">{item.command}</span>
                                 </span>
                                 <span className="max-w-[40%] shrink-0 text-right">
-                                  <span className={`block truncate text-[10px] ${
-                                    item.source === 'package-script'
-                                      ? 'text-[color:var(--color-primary)]'
-                                      : 'text-[color:var(--color-muted-foreground)]'
-                                  }`}>{item.hint}</span>
+                                  <span className={`block truncate text-[10px] ${item.source === 'package-script' ? 'text-[color:var(--color-primary)]' : 'text-[color:var(--color-muted-foreground)]'}`}>{item.hint}</span>
                                   <span className="mt-0.5 block truncate text-[10px] text-[color:var(--color-muted-foreground)]">
                                     {t('runCommand.cwdShort')}: {item.workingDirectory || t('runCommand.projectRoot')}
                                   </span>
@@ -986,11 +889,7 @@ export function RunCommandConfigPopover({
               <Save className="h-3.5 w-3.5" />
               {t('common.save')}
             </button>
-            <button
-              className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60"
-              onClick={() => void handleSaveAndRun()}
-              disabled={saving}
-            >
+            <button className="inline-flex h-8 items-center gap-1 rounded-full bg-primary px-3 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:opacity-60" onClick={() => void handleSaveAndRun()} disabled={saving}>
               <Play className="h-3.5 w-3.5" />
               {t('runCommand.saveAndRun')}
             </button>

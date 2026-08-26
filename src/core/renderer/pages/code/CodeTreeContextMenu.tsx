@@ -1,4 +1,4 @@
-import { Copy, FileText, Folder, FolderOpen, Terminal } from 'lucide-react'
+import { Copy, FileText, Folder, FolderOpen, Search, Terminal } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useCallback, useEffect } from 'react'
 import type { ProjectFileNodeKind } from '../../../shared/types'
@@ -19,16 +19,17 @@ interface CodeTreeContextMenuProps {
   nodeKind: ProjectFileNodeKind
   onOpenFolder: () => void | Promise<void>
   onOpenTerminal: () => void | Promise<void>
+  onSearchInFolder: () => void | Promise<void>
   onCopyName: () => void | Promise<void>
   onCopyRelativePath: () => void | Promise<void>
   onCopyRelativePathWithoutSlashes: () => void | Promise<void>
   onClose: () => void
 }
 
-export function CodeTreeContextMenu({ x, y, nodeName, nodeKind, onOpenFolder, onOpenTerminal, onCopyName, onCopyRelativePath, onCopyRelativePathWithoutSlashes, onClose }: CodeTreeContextMenuProps) {
+export function CodeTreeContextMenu({ x, y, nodeName, nodeKind, onOpenFolder, onOpenTerminal, onSearchInFolder, onCopyName, onCopyRelativePath, onCopyRelativePathWithoutSlashes, onClose }: CodeTreeContextMenuProps) {
   const { t } = useI18n()
   const width = 210
-  const height = 228
+  const height = 250
   const padding = 8
   const left = Math.min(Math.max(padding, x), window.innerWidth - width - padding)
   const top = Math.min(Math.max(padding, y), window.innerHeight - height - padding)
@@ -60,9 +61,17 @@ export function CodeTreeContextMenu({ x, y, nodeName, nodeKind, onOpenFolder, on
     }
   }, [onClose])
 
+  // 任意滚动容器（包括文件树虚拟滚动）触发滚动即关闭，与链接账号密码弹层卡片行为一致；scroll 不冒泡，需在 window 捕获阶段监听。
+  useEffect(() => {
+    const onScroll = () => onClose()
+    window.addEventListener('scroll', onScroll, true)
+    return () => window.removeEventListener('scroll', onScroll, true)
+  }, [onClose])
+
   const itemTypeLabel = nodeKind === 'directory' ? t('codeFileTree.directory') : t('codeFileTree.file')
   const openFolderLabel = nodeKind === 'directory' ? t('codeFileTree.openDirectory') : t('codeFileTree.openCurrentFolder')
   const openTerminalLabel = t('codeFileTree.openCurrentTerminal')
+  const searchInFolderLabel = nodeKind === 'directory' ? t('codeFileTree.searchDirectory') : t('codeFileTree.searchCurrentFolder')
   const copyNameLabel = nodeKind === 'directory' ? t('codeFileTree.copyDirectoryName') : t('codeFileTree.copyFileName')
   const copyRelativePathLabel = t('codeFileTree.copyRelativePath')
   const copyRelativePathWithoutSlashesLabel = t('codeFileTree.copyRelativePathWithoutSlashes')
@@ -101,6 +110,16 @@ export function CodeTreeContextMenu({ x, y, nodeName, nodeKind, onOpenFolder, on
       >
         <Terminal className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
         {openTerminalLabel}
+      </button>
+      <button
+        type="button"
+        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+        onClick={() => {
+          void handleAction(onSearchInFolder)
+        }}
+      >
+        <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+        {searchInFolderLabel}
       </button>
       <button
         type="button"

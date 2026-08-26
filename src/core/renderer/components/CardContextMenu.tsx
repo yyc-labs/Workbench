@@ -40,6 +40,8 @@ interface CardContextMenuProps {
   onSwitchAndUseAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
   onStartProject: () => void | Promise<unknown>
   onStopProject: () => void | Promise<unknown>
+  /** 右键点击"启动/停止项目"按钮时打开运行命令配置弹窗的回调;传入后该按钮支持右键配置。 */
+  onEditRunCommandConfig?: () => void | Promise<unknown>
   onAiAutoCommit?: () => void | Promise<unknown>
   aiCommitStatus?: 'idle' | 'running' | 'success' | 'error'
   onOpenFolder: () => void | Promise<unknown>
@@ -65,6 +67,10 @@ interface MenuAction {
   action: () => void | Promise<unknown>
   disabled?: boolean
   tone?: MenuTone
+  /** 附加到按钮上的 title 提示文案。 */
+  title?: string
+  /** 右键行为;传入后按钮支持右键触发。 */
+  contextMenu?: () => void | Promise<unknown>
 }
 
 interface AiProfileSubmenuLayout {
@@ -205,6 +211,7 @@ export function CardContextMenu({
   onSwitchAndUseAiRuntimeProfile,
   onStartProject,
   onStopProject,
+  onEditRunCommandConfig,
   onAiAutoCommit,
   aiCommitStatus = 'idle',
   onOpenFolder,
@@ -391,6 +398,12 @@ export function CardContextMenu({
       action: isDevRunning || isDevStopping ? onStopProject : onStartProject,
       disabled: isDevStopping,
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
+      title: onEditRunCommandConfig ? t('common.leftClickRunRightClickConfig') : undefined,
+      contextMenu: onEditRunCommandConfig
+        ? () => {
+            void onEditRunCommandConfig()
+          }
+        : undefined,
     },
     {
       key: 'ai-commit',
@@ -658,9 +671,20 @@ export function CardContextMenu({
               disabled={item.disabled}
               className={`group min-w-0 rounded-[17px] border px-3 py-2.5 text-left transition-colors ${getPrimaryActionClass(item.tone)} ${item.disabled ? 'cursor-not-allowed opacity-60 hover:bg-transparent' : ''}`}
               style={{ borderColor: getToneBorderColor(item.tone) }}
+              title={item.title}
               onClick={() => {
                 void handleClick(item.action)
               }}
+              onContextMenu={
+                item.contextMenu
+                  ? (event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onClose()
+                      void item.contextMenu?.()
+                    }
+                  : undefined
+              }
             >
               <span className="flex min-w-0 items-center gap-2.5">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[11px] bg-[color:var(--color-card)]/80">{item.icon}</span>

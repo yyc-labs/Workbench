@@ -34,9 +34,7 @@ export function joinProjectPath(projectRootPath: string, relativePath: string): 
   const separator = normalizedRoot.includes('\\') ? '\\' : '/'
   const joined = segments.join(separator)
   if (!normalizedRoot) return joined
-  return normalizedRoot.endsWith(separator)
-    ? `${normalizedRoot}${joined}`
-    : `${normalizedRoot}${separator}${joined}`
+  return normalizedRoot.endsWith(separator) ? `${normalizedRoot}${joined}` : `${normalizedRoot}${separator}${joined}`
 }
 
 export function resolveFileParentFolderPath(projectRootPath: string, relativePath: string): string {
@@ -45,12 +43,16 @@ export function resolveFileParentFolderPath(projectRootPath: string, relativePat
   return joinProjectPath(projectRootPath, segments.slice(0, -1).join('/'))
 }
 
-export function resolveTreeNodeFolderPath(
-  projectRootPath: string,
-  relativePath: string,
-  nodeKind: ProjectFileNodeKind
-): string {
-  return nodeKind === 'directory'
-    ? joinProjectPath(projectRootPath, relativePath)
-    : resolveFileParentFolderPath(projectRootPath, relativePath)
+export function resolveTreeNodeFolderPath(projectRootPath: string, relativePath: string, nodeKind: ProjectFileNodeKind): string {
+  return nodeKind === 'directory' ? joinProjectPath(projectRootPath, relativePath) : resolveFileParentFolderPath(projectRootPath, relativePath)
+}
+
+// 生成全局内容搜索的范围输入：目录节点搜索其自身，文件节点搜索其所在文件夹；根目录下的文件回退为全项目搜索。
+export function resolveTreeNodeSearchScope(relativePath: string, nodeKind: ProjectFileNodeKind): string {
+  const segments = splitRelativePath(relativePath)
+  if (nodeKind === 'directory') {
+    return segments.length > 0 ? `${segments.join('/')}/` : ''
+  }
+  if (segments.length <= 1) return ''
+  return `${segments.slice(0, -1).join('/')}/`
 }

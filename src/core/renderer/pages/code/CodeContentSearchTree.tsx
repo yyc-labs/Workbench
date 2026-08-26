@@ -19,6 +19,7 @@ interface CodeContentSearchTreeProps {
   onOpenMatch: (relativePath: string, lineNumber: number, column: number) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onSearchInFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -204,7 +205,7 @@ function ContentSearchNodeRenderer({ node, style, dragHandle, activeLocation, on
 }
 
 const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeContentSearchTreeProps>(function CodeContentSearchTreeInner(
-  { files, activeLocation, onOpenMatch, onOpenNodeFolder, onOpenNodeTerminal, onCopyNodeName, onCopyNodeRelativePath, onCopyNodeRelativePathWithoutSlashes, autoCollapseMatchThreshold = 10 },
+  { files, activeLocation, onOpenMatch, onOpenNodeFolder, onOpenNodeTerminal, onSearchInFolder, onCopyNodeName, onCopyNodeRelativePath, onCopyNodeRelativePathWithoutSlashes, autoCollapseMatchThreshold = 10 },
   ref,
 ) {
   const treeRef = useRef<TreeApi<ContentSearchTreeNode> | null>(null)
@@ -274,6 +275,7 @@ const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeC
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
+          onSearchInFolder={() => onSearchInFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}

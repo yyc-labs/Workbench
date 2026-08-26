@@ -467,6 +467,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={menuAllowRemove ? () => removeProject(project.id) : undefined}
           onEditMetadata={() => setMetaDialogOpen(true)}
+          onEditRunCommandConfig={() => setRunConfigOpen(true)}
         />
       )}
 

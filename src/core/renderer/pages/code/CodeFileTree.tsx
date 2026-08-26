@@ -19,6 +19,7 @@ interface CodeFileTreeProps {
   onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onSearchInFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -235,6 +236,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   onSelectExcluded,
   onOpenNodeFolder,
   onOpenNodeTerminal,
+  onSearchInFolder,
   onCopyNodeName,
   onCopyNodeRelativePath,
   onCopyNodeRelativePathWithoutSlashes,
@@ -374,6 +376,7 @@ export const CodeFileTree = memo(function CodeFileTree({
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
+          onSearchInFolder={() => onSearchInFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}

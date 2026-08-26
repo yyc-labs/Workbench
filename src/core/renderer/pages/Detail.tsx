@@ -553,6 +553,7 @@ export function DetailPage() {
           onOpenVsCode={() => window.electronAPI.openInVsCode(resolvedProjectPath)}
           onTogglePin={() => togglePin(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
+          onEditRunCommandConfig={() => setRunConfigOpen(true)}
         />
       )}
 
