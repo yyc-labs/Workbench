@@ -916,6 +916,7 @@ export function CodeWorkspacePanel({
                 onSetPreviewSearchQuery={setPreviewSearchQuery}
                 onOpenSmartEmptyFile={handleOpenSmartEmptyFile}
                 onOpenTranscriptReference={handleOpenTranscriptReference}
+                onOpenFile={openFileWithTreeLocate}
                 parsedMarkdownDoc={parsedMarkdownDoc}
                 previewRootRef={previewScrollRef}
                 previewScrollRef={previewScrollRef}

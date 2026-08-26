@@ -4,6 +4,7 @@ import { installMonacoFindWidgetHoverGuard, type MonacoThemeName } from '../../l
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
+import { extractRelativeImportRanges, resolveImportCandidatePaths, resolveFilePathFromModelUri, resolveImportTarget } from './code.importLink'
 import { createMonacoModelUri, evictStaleMonacoModels, toMonacoModelCacheKey, touchMonacoModelCacheEntry } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
@@ -40,8 +41,10 @@ interface MonacoCodeEditorProps {
   language: string
   theme: MonacoThemeName
   filePath: string | null
+  projectPath?: string | null
   isReadOnly?: boolean
   onChange: (value: string) => void
+  onOpenFile?: (relativePath: string) => void
   onPasteImage?: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
   onSave: () => void
   onFocusSearch?: () => void
@@ -54,6 +57,78 @@ const REVEAL_HIGHLIGHT_DURATION_MS = 2200
 // Languages with built-in Monaco formatters (json/css/html/ts 及变体)。
 const FORMATTABLE_LANGUAGES = new Set(['json', 'jsonc', 'json5', 'css', 'scss', 'less', 'html', 'handlebars', 'razor', 'typescript', 'javascript'])
 
+const CODE_OPEN_SCHEME = 'codeopen'
+
+let importLinkSupportInstalled = false
+let activeImportLinkProjectPath: string | null = null
+let activeImportLinkOpenHandler: ((relativePath: string) => void) | null = null
+
+function parseCodeOpenQuery(query: string): { from: string; importPath: string } | null {
+  const params = new URLSearchParams(query)
+  const from = params.get('from')
+  const importPath = params.get('import')
+  if (!from || !importPath) return null
+  return { from, importPath }
+}
+
+function ensureImportLinkSupport(monaco: typeof import('monaco-editor')): void {
+  if (importLinkSupportInstalled) return
+  importLinkSupportInstalled = true
+
+  monaco.languages.registerLinkProvider('*', {
+    provideLinks(model) {
+      const projectPath = activeImportLinkProjectPath
+      if (!projectPath) return { links: [] }
+      const currentFilePath = resolveFilePathFromModelUri(model.uri)
+      if (!currentFilePath) return { links: [] }
+
+      const links: import('monaco-editor').languages.ILink[] = []
+      const lineCount = model.getLineCount()
+      for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
+        const lineText = model.getLineContent(lineNumber)
+        for (const match of extractRelativeImportRanges(lineText)) {
+          const target = resolveImportTarget(currentFilePath, match.importPath)
+          links.push({
+            range: {
+              startLineNumber: lineNumber,
+              startColumn: match.startColumn,
+              endLineNumber: lineNumber,
+              endColumn: match.endColumn,
+            },
+            url: `${CODE_OPEN_SCHEME}://open?from=${encodeURIComponent(currentFilePath)}&import=${encodeURIComponent(match.importPath)}`,
+            tooltip: target,
+          })
+        }
+      }
+      return { links }
+    },
+  })
+
+  monaco.editor.registerLinkOpener({
+    open: async (resource) => {
+      if (resource.scheme !== CODE_OPEN_SCHEME) return false
+      const handler = activeImportLinkOpenHandler
+      const projectPath = activeImportLinkProjectPath
+      if (!handler || !projectPath) return false
+
+      const query = parseCodeOpenQuery(resource.query)
+      if (!query) return false
+
+      const candidates = resolveImportCandidatePaths(query.from, query.importPath)
+      for (const candidate of candidates) {
+        try {
+          await window.electronAPI.statProjectFile(projectPath, candidate)
+          handler(candidate)
+          return true
+        } catch {
+          // 尝试下一个候选后缀
+        }
+      }
+      return false
+    },
+  })
+}
+
 interface EditorContextMenuSnapshot {
   x: number
   y: number
@@ -63,7 +138,7 @@ interface EditorContextMenuSnapshot {
   canFormat: boolean
 }
 
-export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({ value, language, theme, filePath, isReadOnly = false, onChange, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange }, ref) {
+export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({ value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
@@ -122,6 +197,15 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const handleThemeChange = (nextTheme: MonacoThemeName) => {
     setActiveTheme(nextTheme)
   }
+
+  useEffect(() => {
+    activeImportLinkProjectPath = projectPath ?? null
+    activeImportLinkOpenHandler = onOpenFile ?? null
+    return () => {
+      activeImportLinkProjectPath = null
+      activeImportLinkOpenHandler = null
+    }
+  }, [projectPath, onOpenFile])
 
   const revealPositionInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number, column = 1) => {
     const model = editor.getModel()
@@ -277,6 +361,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       if (disposed) return
 
       monacoRef.current = monaco
+      ensureImportLinkSupport(monaco)
       syncTextmateTheme(activeThemeRef.current)
       await ensureTextmateForLanguage(monaco, language)
       if (disposed) return

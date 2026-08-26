@@ -7,6 +7,7 @@ import type { ProjectFileNodeKind } from '../../../shared/types'
 import type { TranscriptFileReference } from '../../../shared/types'
 import type { ProjectFilePreviewKind } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
+import { Tooltip } from '../../components/ui/tooltip'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
@@ -111,6 +112,7 @@ type CodeWorkspaceEditorPaneProps = {
   onSetPreviewSearchQuery: React.Dispatch<React.SetStateAction<string>>
   onOpenSmartEmptyFile: (relativePath: string) => void
   onOpenTranscriptReference: (item: TranscriptFileReference) => void
+  onOpenFile?: (relativePath: string) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
   previewRootRef: RefObject<Element | null>
   previewScrollRef: Ref<HTMLDivElement>
@@ -167,6 +169,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   onSetPreviewSearchQuery,
   onOpenSmartEmptyFile,
   onOpenTranscriptReference,
+  onOpenFile,
   parsedMarkdownDoc,
   previewRootRef,
   previewScrollRef,
@@ -245,24 +248,52 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         </div>
       )}
       {transcriptReferences.length > 0 && (
-        <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/78 px-3 py-2">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
+        <div className="mb-2 flex shrink-0 flex-nowrap items-center gap-2 overflow-hidden rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/78 px-3 py-2">
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
             <MessageSquareText className="h-3.5 w-3.5" />
             {t('codeWorkspace.transcriptRefs', { count: transcriptReferences.length })}
           </span>
-          {transcriptReferences.slice(0, 3).map((item) => (
-            <button
-              key={`${item.transcriptId}:${item.reference.id}`}
-              type="button"
-              className="inline-flex max-w-[240px] items-center gap-1.5 truncate rounded-full border border-[color:var(--color-border)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={() => onOpenTranscriptReference(item)}
-              title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
-            >
-              <span className="truncate">{item.transcriptTitle}</span>
-              <span className="shrink-0 text-[color:var(--color-muted-foreground)]">:{item.reference.lineNumber ?? 1}</span>
-            </button>
-          ))}
-          {transcriptReferences.length > 3 && <span className="text-[11px] text-[color:var(--color-muted-foreground)]">+{transcriptReferences.length - 3}</span>}
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
+            {transcriptReferences.slice(0, 3).map((item) => (
+              <button
+                key={`${item.transcriptId}:${item.reference.id}`}
+                type="button"
+                className="inline-flex max-w-[240px] items-center gap-1.5 truncate rounded-full border border-[color:var(--color-border)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                onClick={() => onOpenTranscriptReference(item)}
+                title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
+              >
+                <span className="truncate">{item.transcriptTitle}</span>
+                <span className="shrink-0 text-[color:var(--color-muted-foreground)]">:{item.reference.lineNumber ?? 1}</span>
+              </button>
+            ))}
+            {transcriptReferences.length > 3 && (
+              <Tooltip
+                side="bottom"
+                align="end"
+                interactive
+                delayMs={120}
+                className="inline-flex w-11 shrink-0 justify-center"
+                contentClassName="p-1.5"
+                content={
+                  <div className="flex max-h-[60vh] min-w-[64px] flex-col gap-0.5 overflow-y-auto">
+                    {transcriptReferences.slice(3).map((item) => (
+                      <button
+                        key={`${item.transcriptId}:${item.reference.id}`}
+                        type="button"
+                        className="rounded-md px-2 py-1 text-center text-[12px] text-[color:var(--color-popover-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                        onClick={() => onOpenTranscriptReference(item)}
+                        title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
+                      >
+                        {item.reference.lineNumber ?? 1}
+                      </button>
+                    ))}
+                  </div>
+                }
+              >
+                <span className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">…+{transcriptReferences.length - 3}</span>
+              </Tooltip>
+            )}
+          </div>
         </div>
       )}
       {isMarkdownFile && (
@@ -338,9 +369,11 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               <MonacoCodeEditor
                 ref={editorRef}
                 filePath={activeRelativePath}
+                projectPath={projectPath}
                 value={editorValue}
                 language={activeLanguage || 'plaintext'}
                 theme={monacoTheme}
+                onOpenFile={onOpenFile}
                 onPasteImage={handlePasteImage}
                 onChange={onChangeEditorValue}
                 onScrollStateChange={onEditorScrollStateChange}
