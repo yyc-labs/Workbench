@@ -45,6 +45,8 @@ export type RegisterIpcHandlersDependencies = {
   getBrowserScreenshotViewerData: () => BrowserScreenshotViewerPayload | null
   toggleBrowserScreenshotWindow: () => Promise<boolean>
   markBrowserScreenshotViewerReady: (senderId: number) => Promise<boolean>
+  openAppViewWindow: (viewPath: string) => Promise<boolean>
+  hasAppViewWindow: (viewPath: string) => Promise<boolean>
   agentHookGateway: AgentHookGateway
   gitService: GitService
   runtimeService: RuntimeService
@@ -55,6 +57,7 @@ export type RegisterIpcHandlersDependencies = {
   transcriptShareService: TranscriptShareService
   markdownDocumentService: MarkdownDocumentService
   markdownDocumentOpenRequestStore: MarkdownDocumentOpenRequestStore
+  routeMarkdownDocumentOpen: (markdownPath: string) => void
 }
 
 type GitRequestWithRepoRoot = {

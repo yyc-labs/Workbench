@@ -128,7 +128,6 @@ export interface AppState {
   processUrls: Record<string, string[]>
   config: AppConfig
   searchQuery: string
-  homeEnvFilter: 'all' | 'ubuntu' | 'windows'
   homeClassifierFilter: StartupDefaultFilter
   homeDefaultFilterApplied: boolean
   capability: Capability | null
@@ -204,7 +203,6 @@ export interface AppState {
   handleProcessExit: (projectId: string, code: number | null) => void
   sendInput: (projectId: string, data: string) => void
   setSearchQuery: (query: string) => void
-  setHomeEnvFilter: (filter: AppState['homeEnvFilter']) => void
   setHomeClassifierFilter: (filter: StartupDefaultFilter) => void
   markHomeDefaultFilterApplied: () => void
   loadBrowserAi: () => Promise<BrowserAiSnapshot>

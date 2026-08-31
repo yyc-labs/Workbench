@@ -699,7 +699,13 @@ export function LearningCenterPage() {
       <LearningSidebarGestureController pageRootRef={pageRootRef} onBeforeToggle={closeEditorContextMenu} onToggleLeftSidebar={() => setLeftSidebarCollapsed((current) => !current)} onToggleRightSidebar={() => setRightSidebarCollapsed((current) => !current)} />
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[1480px] flex-col gap-4">
         <LearningCenterHeader
-          onBack={() => navigate('/')}
+          onBack={() => {
+            if (window.location.hash === '#learning-center') {
+              void window.electronAPI.closeWindow()
+              return
+            }
+            navigate('/')
+          }}
           onCreateNote={openCreateDialog}
           onCreateSkill={() => {
             setActiveView('skills')

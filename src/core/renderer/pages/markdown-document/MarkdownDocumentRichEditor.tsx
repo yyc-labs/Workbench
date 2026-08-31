@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type MouseEvent, type PointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Editor, EditorStatus, commandsCtx, defaultValueCtx, editorStateCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/core'
+import { TextSelection } from '@milkdown/prose/state'
 import { history } from '@milkdown/plugin-history'
 import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import { $view } from '@milkdown/utils'
@@ -323,6 +324,44 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
     setTableInsertHandle(null)
   }
 
+  const handleRootClick = (event: MouseEvent<HTMLDivElement>) => {
+    const editor = editorRef.current
+    if (!editor || editor.status !== EditorStatus.Created) return
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      const state = view.state
+      const docEnd = state.doc.content.size
+
+      const endCoords = view.coordsAtPos(docEnd)
+      if (!endCoords) return
+
+      const belowContent = event.clientY > endCoords.bottom
+      if (!belowContent) return
+
+      const paragraphType = state.schema.nodes.paragraph
+      if (!paragraphType) return
+
+      const lastChild = state.doc.lastChild
+      const lastIsEmptyParagraph = lastChild != null && lastChild.type === paragraphType && lastChild.childCount === 0
+
+      let tr = state.tr
+      let targetPos: number
+
+      if (lastIsEmptyParagraph) {
+        targetPos = docEnd - 1
+      } else {
+        tr = tr.insert(docEnd, paragraphType.create())
+        targetPos = docEnd + 1
+      }
+
+      const selection = TextSelection.near(tr.doc.resolve(targetPos))
+      tr = tr.setSelection(selection).scrollIntoView()
+      view.dispatch(tr)
+      view.focus()
+    })
+  }
+
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
     const editor = editorRef.current
     if (!editor || editor.status !== EditorStatus.Created) return
@@ -365,6 +404,7 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
         onPointerMove={updateTableInsertHandle}
         onPointerLeave={scheduleTableInsertHide}
         onScroll={() => setTableInsertHandle(null)}
+        onClick={handleRootClick}
         onPaste={handlePaste}
         onContextMenu={(event) => {
           const editor = editorRef.current

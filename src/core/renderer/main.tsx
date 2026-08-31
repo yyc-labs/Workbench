@@ -26,6 +26,10 @@ async function loadRootComponent(): Promise<ComponentType> {
       return (await import('./BrowserScreenshotCaptureApp')).BrowserScreenshotCaptureApp
     case '#browser-screenshot-viewer':
       return (await import('./BrowserScreenshotViewerApp')).BrowserScreenshotViewerApp
+    case '#markdown-document':
+      return (await import('./AppViewWindowApp')).MarkdownDocumentWindowApp
+    case '#learning-center':
+      return (await import('./AppViewWindowApp')).LearningCenterWindowApp
     default:
       return (await import('./App')).App
   }

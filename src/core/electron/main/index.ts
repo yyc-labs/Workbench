@@ -21,6 +21,7 @@ import { type AppTrayController, createAppTray } from './tray'
 import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
 import { createBrowserScreenshotWindow, BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_WINDOW_HEIGHT, BROWSER_SCREENSHOT_WINDOW_WIDTH } from './window/createBrowserScreenshotWindow'
 import { createBrowserScreenshotViewerWindow } from './window/createBrowserScreenshotViewerWindow'
+import { createAppViewWindow, APP_VIEW_WINDOW_TITLES } from './window/createAppViewWindow'
 import { applyWindowBackground, createWindow } from './window/createWindow'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
 import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
@@ -31,6 +32,7 @@ let transcriptCaptureWindow: BrowserWindow | null = null
 let browserScreenshotWindow: BrowserWindow | null = null
 let browserScreenshotWindowPromise: Promise<void> | null = null
 let browserScreenshotViewerWindow: BrowserWindow | null = null
+const appViewWindows = new Map<string, BrowserWindow>()
 let latestBrowserScreenshotViewerPayload: BrowserScreenshotViewerPayload | null = null
 let browserScreenshotWindowCollapsed = false
 let browserScreenshotWindowExpandedBounds: Rectangle | null = null
@@ -397,6 +399,57 @@ function openBrowserScreenshotViewer(payload: BrowserScreenshotViewerPayload): P
   return Promise.resolve(true)
 }
 
+function openAppViewWindow(viewPath: string): Promise<boolean> {
+  if (!APP_VIEW_WINDOW_TITLES[viewPath]) return Promise.resolve(false)
+
+  const existing = appViewWindows.get(viewPath)
+  if (existing && !existing.isDestroyed()) {
+    ensureWindowVisible(existing)
+    return Promise.resolve(true)
+  }
+
+  const config = loadConfig()
+  const viewWindow = createAppViewWindow({ path: viewPath, theme: config.theme, shouldUseDarkColors: nativeTheme.shouldUseDarkColors })
+  appViewWindows.set(viewPath, viewWindow)
+  viewWindow.on('closed', () => {
+    if (appViewWindows.get(viewPath) === viewWindow) appViewWindows.delete(viewPath)
+  })
+  viewWindow.once('ready-to-show', () => {
+    if (!viewWindow.isDestroyed()) viewWindow.show()
+  })
+  return Promise.resolve(true)
+}
+
+function hasAppViewWindow(viewPath: string): Promise<boolean> {
+  const viewWindow = appViewWindows.get(viewPath)
+  return Promise.resolve(Boolean(viewWindow && !viewWindow.isDestroyed()))
+}
+
+/**
+ * 全局 Markdown 文档打开请求的路由:优先送到已存在的 Markdown 独立窗口,否则回落到主窗口。
+ * 事件定向送达后立即清空待处理路径,避免主窗口后续挂载 markdown 页面时重复消费造成双开编辑。
+ */
+function routeMarkdownDocumentOpenRequest(markdownPath: string): void {
+  if (!parseMarkdownDocumentOpenRequest([markdownPath])) return
+  markdownDocumentOpenRequestStore.setFromArgv([markdownPath])
+
+  const markdownViewWindow = appViewWindows.get('/markdown')
+  if (markdownViewWindow && !markdownViewWindow.isDestroyed() && !markdownViewWindow.webContents.isLoading()) {
+    ensureWindowVisible(markdownViewWindow)
+    markdownViewWindow.webContents.send(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, { path: markdownPath })
+    markdownDocumentOpenRequestStore.consume()
+    return
+  }
+
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createMainWindow()
+  }
+  showMainWindowFromTray()
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.send(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, { path: markdownPath })
+  }
+}
+
 function beginTranscriptCaptureInitialText(): Promise<TranscriptCaptureInitialText> {
   return transcriptCaptureController.begin({
     capture: captureTranscriptCaptureInitialText,
@@ -537,10 +590,8 @@ registerAppLifecycle(app, {
     if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
     const markdownPath = parseMarkdownDocumentOpenRequest(argv)
     if (markdownPath) {
-      markdownDocumentOpenRequestStore.setFromArgv(argv)
-      if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.isLoading() === false) {
-        mainWindow.webContents.send(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED, { path: markdownPath })
-      }
+      routeMarkdownDocumentOpenRequest(markdownPath)
+      return
     }
     showMainWindowFromTray()
   },
@@ -641,6 +692,8 @@ app.whenReady().then(async () => {
               getBrowserScreenshotViewerData: () => latestBrowserScreenshotViewerPayload,
               toggleBrowserScreenshotWindow,
               markBrowserScreenshotViewerReady,
+              openAppViewWindow,
+              hasAppViewWindow,
               agentHookGateway,
               gitService,
               runtimeService,
@@ -651,6 +704,7 @@ app.whenReady().then(async () => {
               transcriptShareService,
               markdownDocumentService,
               markdownDocumentOpenRequestStore,
+              routeMarkdownDocumentOpen: routeMarkdownDocumentOpenRequest,
             })
           },
         },

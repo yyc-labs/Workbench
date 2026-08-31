@@ -38,5 +38,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerAiConnectionIpcHandlers(deps)
   registerBrowserAiIpcHandlers(deps)
   registerBrowserScreenshotIpcHandlers(deps)
-  registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore)
+  registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore, deps.routeMarkdownDocumentOpen)
 }

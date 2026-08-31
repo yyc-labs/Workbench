@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useState } from 'react'
-import { Clock3, Trash2, X } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Clock3, Search, Trash2, X } from 'lucide-react'
 import { shallow } from 'zustand/shallow'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
@@ -7,6 +7,7 @@ import { useAppStore } from '../stores/appStore'
 import { CardContextMenu, type CardContextMenuInfo } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
 import { RunCommandConfigPopover } from './RunCommandConfigPopover'
+import { Input } from './ui/input'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
 import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
@@ -15,6 +16,8 @@ import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLa
 type RecentProjectDrawerCardProps = {
   project: RecentProjectListItem
   isContextActive: boolean
+  isKeyboardActive: boolean
+  onHoverProject: (projectId: string) => void
   onSelectProject: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
   onOpenContextMenu: (projectId: string, x: number, y: number) => void
@@ -61,12 +64,34 @@ function getProjectById(projects: ProjectInfo[], projectId?: string | null): Pro
   return projects.find((project) => project.id === projectId)
 }
 
-const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project, isContextActive, onSelectProject, onRemoveProject, onOpenContextMenu }: RecentProjectDrawerCardProps) {
+/** 模糊匹配:先做字段子串匹配,再做子序列匹配(名称/路径按顺序包含查询字符)。 */
+function fuzzyMatchProject(project: RecentProjectListItem, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return true
+  const fields = [project.customName ?? '', project.name ?? '', project.path]
+  if (fields.some((field) => field.toLowerCase().includes(normalizedQuery))) return true
+  const targets = [projectDisplayName(project), project.path]
+  return targets.some((target) => {
+    const normalizedTarget = target.toLowerCase()
+    let cursor = 0
+    for (const char of normalizedTarget) {
+      if (char === normalizedQuery[cursor]) cursor += 1
+      if (cursor === normalizedQuery.length) return true
+    }
+    return false
+  })
+}
+
+const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project, isContextActive, isKeyboardActive, onHoverProject, onSelectProject, onRemoveProject, onOpenContextMenu }: RecentProjectDrawerCardProps) {
   const { t, formatDateTime } = useI18n()
 
   return (
     <div
-      className={`recent-project-drawer-item ${isContextActive ? 'is-context-active' : ''}`}
+      id={`recent-project-option-${project.id}`}
+      role="option"
+      aria-selected={isKeyboardActive}
+      className={`recent-project-drawer-item ${isContextActive ? 'is-context-active' : ''} ${isKeyboardActive ? 'is-keyboard-active' : ''}`}
+      onMouseEnter={() => onHoverProject(project.id)}
       onContextMenu={(event) => {
         event.preventDefault()
         event.stopPropagation()
@@ -269,14 +294,22 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [runConfigOpen, setRunConfigOpen] = useState(false)
   const [runConfigProject, setRunConfigProject] = useState<ProjectInfo | null>(null)
+  const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const shouldScrollToActiveRef = useRef(false)
+  const mouseXRef = useRef<number | null>(null)
   const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
   const recentProjects = useAppStore((s) => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
-    return s.projects
-      .filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number')
-      .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
-      .slice(0, 20)
+    return s.projects.filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number').sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
   }, shallow)
+  const trimmedQuery = query.trim()
+  const visibleProjects = useMemo(() => {
+    if (!trimmedQuery) return recentProjects.slice(0, 20)
+    return recentProjects.filter((project) => fuzzyMatchProject(project, trimmedQuery))
+  }, [recentProjects, trimmedQuery])
+  const activeProjectId = visibleProjects[activeIndex]?.id
   const contextMenuProjectId = contextMenu?.projectId
   const contextMenuProject = useAppStore((s) => getProjectById(s.projects, contextMenuProjectId))
 
@@ -287,6 +320,53 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null)
   }, [])
+
+  const handleHoverProject = useCallback(
+    (projectId: string) => {
+      // 鼠标悬浮接管高亮时,丢弃可能残留的键盘滚动意图,避免触发一次意外滚动
+      shouldScrollToActiveRef.current = false
+      setActiveIndex((current) => {
+        if (visibleProjects[current]?.id === projectId) return current
+        const nextIndex = visibleProjects.findIndex((project) => project.id === projectId)
+        return nextIndex === -1 ? current : nextIndex
+      })
+    },
+    [visibleProjects],
+  )
+
+  const handleSearchKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        shouldScrollToActiveRef.current = true
+        setActiveIndex((current) => Math.min(current + 1, Math.max(visibleProjects.length - 1, 0)))
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        shouldScrollToActiveRef.current = true
+        setActiveIndex((current) => Math.max(current - 1, 0))
+        return
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        const project = visibleProjects[activeIndex]
+        if (!project) return
+        const rect = document.getElementById(`recent-project-option-${project.id}`)?.getBoundingClientRect()
+        if (!rect) return
+        // 等效右键菜单:优先用鼠标当前 x 作为起始位置(鼠标未经过抽屉时回退到激活项位置),y 取激活项底部;CardContextMenu 内部会做视口边界钳制
+        const x = mouseXRef.current ?? rect.left + 12
+        setContextMenu({ projectId: project.id, x, y: rect.bottom + 4 })
+        return
+      }
+      if (event.key === 'Enter') {
+        if (event.nativeEvent.isComposing) return
+        const project = visibleProjects[activeIndex]
+        if (project) onSelectProject(project.id)
+      }
+    },
+    [activeIndex, onSelectProject, visibleProjects],
+  )
 
   useEffect(() => {
     if (open) {
@@ -308,6 +388,17 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   }, [open])
 
   useEffect(() => {
+    // 组件常驻,全局记录最近鼠标 x,保证抽屉首次打开时就有可用的菜单起始位置;仅写 ref,无渲染开销
+    const onMouseMove = (event: MouseEvent) => {
+      mouseXRef.current = event.clientX
+    }
+    window.addEventListener('mousemove', onMouseMove, { passive: true })
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!shouldRender) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -325,7 +416,30 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
     setContextMenu(null)
     setRunConfigOpen(false)
     setRunConfigProject(null)
+    setQuery('')
+    setActiveIndex(0)
+    shouldScrollToActiveRef.current = false
   }, [open])
+
+  useEffect(() => {
+    if (!open || !shouldRender) return
+    searchInputRef.current?.focus()
+  }, [open, shouldRender])
+
+  useEffect(() => {
+    shouldScrollToActiveRef.current = false
+    setActiveIndex(0)
+  }, [trimmedQuery])
+
+  useEffect(() => {
+    setActiveIndex((current) => Math.min(current, Math.max(visibleProjects.length - 1, 0)))
+  }, [visibleProjects.length])
+
+  useEffect(() => {
+    if (!activeProjectId || !shouldScrollToActiveRef.current) return
+    shouldScrollToActiveRef.current = false
+    document.getElementById(`recent-project-option-${activeProjectId}`)?.scrollIntoView({ block: 'nearest' })
+  }, [activeProjectId])
 
   useEffect(() => {
     if (!contextMenuProjectId || contextMenuProject) return
@@ -358,16 +472,42 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
             </button>
           </div>
 
+          <div className="recent-project-drawer-search">
+            <Search className="recent-project-drawer-search-icon" />
+            <Input
+              ref={searchInputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={t('common.searchProjects')}
+              className="recent-project-drawer-search-input h-8 px-3 pl-9 text-xs"
+              spellCheck={false}
+              role="combobox"
+              aria-expanded={visibleProjects.length > 0}
+              aria-controls="recent-project-drawer-list"
+              aria-activedescendant={activeProjectId ? `recent-project-option-${activeProjectId}` : undefined}
+            />
+          </div>
+
           <div className="recent-project-drawer-content">
-            {recentProjects.length === 0 ? (
+            {visibleProjects.length === 0 ? (
               <div className="recent-project-drawer-empty">
                 <Clock3 className="h-4 w-4" />
-                <span>{t('common.noRecentProjects')}</span>
+                <span>{trimmedQuery ? t('common.noRecentProjectMatches') : t('common.noRecentProjects')}</span>
               </div>
             ) : (
-              <div className="recent-project-drawer-list">
-                {recentProjects.map((project) => (
-                  <RecentProjectDrawerCard key={project.id} project={project} isContextActive={contextMenuProjectId === project.id} onSelectProject={onSelectProject} onRemoveProject={onRemoveProject} onOpenContextMenu={handleOpenContextMenu} />
+              <div id="recent-project-drawer-list" role="listbox" className="recent-project-drawer-list">
+                {visibleProjects.map((project, index) => (
+                  <RecentProjectDrawerCard
+                    key={project.id}
+                    project={project}
+                    isContextActive={contextMenuProjectId === project.id}
+                    isKeyboardActive={index === activeIndex}
+                    onHoverProject={handleHoverProject}
+                    onSelectProject={onSelectProject}
+                    onRemoveProject={onRemoveProject}
+                    onOpenContextMenu={handleOpenContextMenu}
+                  />
                 ))}
               </div>
             )}

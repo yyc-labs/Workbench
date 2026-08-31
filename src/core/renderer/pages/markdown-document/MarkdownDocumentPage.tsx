@@ -1,5 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ChevronLeft, ChevronRight, FileText, FolderOpen, Menu, Save, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, FileText, FolderOpen, Menu, Save, Search, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import type { Editor } from '@milkdown/core'
 import { Button } from '../../components/ui/button'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -40,6 +41,7 @@ function modeLabel(mode: MarkdownDocumentDisplayMode, t: ReturnType<typeof useI1
 
 export function MarkdownDocumentPage() {
   const { t, formatDateTime } = useI18n()
+  const navigate = useNavigate()
   const history = useAppStore((state) => state.markdownDocumentHistory)
   const active = useAppStore((state) => state.markdownDocumentActive)
   const value = useAppStore((state) => state.markdownDocumentValue)
@@ -64,6 +66,7 @@ export function MarkdownDocumentPage() {
   const richEditorRef = useRef<Editor | null>(null)
   const flushRichEditorRef = useRef<(() => string | null) | null>(null)
   const restoredHistoryRef = useRef(false)
+  const discardingRef = useRef(false)
   const [query, setQuery] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem(MARKDOWN_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1')
@@ -100,7 +103,7 @@ export function MarkdownDocumentPage() {
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty) return
+      if (!isDirty || discardingRef.current) return
       event.preventDefault()
       event.returnValue = ''
     }
@@ -117,6 +120,18 @@ export function MarkdownDocumentPage() {
   )
 
   const requestOpen = useCallback((filePath: string, options?: { refreshHistory?: boolean }) => runWithDirtyConfirmation(() => void openDocument(filePath, options)), [openDocument, runWithDirtyConfirmation])
+
+  const handleBack = useCallback(() => {
+    const hash = window.location.hash
+    if (hash === '#markdown-document' || hash === '#learning-center') {
+      runWithDirtyConfirmation(() => {
+        discardingRef.current = true
+        void window.electronAPI.closeWindow()
+      })
+      return
+    }
+    navigate('/')
+  }, [navigate, runWithDirtyConfirmation])
 
   useEffect(() => {
     void window.electronAPI.consumePendingMarkdownDocumentOpen().then((request) => {
@@ -189,6 +204,9 @@ export function MarkdownDocumentPage() {
   return (
     <div ref={pageRootRef} className="markdown-document-workspace">
       <header className="app-chrome markdown-document-header">
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={handleBack} title={t('common.back')} aria-label={t('common.back')}>
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
+        </Button>
         <div className="flex min-w-0 items-center gap-3">
           <FileText className="h-5 w-5 text-[color:var(--color-primary)]" />
           <span className="font-medium">{t('markdownDocument.title')}</span>
@@ -210,6 +228,10 @@ export function MarkdownDocumentPage() {
         <Button size="sm" disabled={!active || !isDirty || saving} onClick={() => void handleSave()}>
           <Save className="mr-1.5 h-4 w-4" />
           {saving ? t('common.saving') : t('common.save')}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={!active || saving} onClick={() => setPendingRemovePath(active?.path ?? null)} title={t('markdownDocument.removeHistory')}>
+          <Trash2 className="mr-1.5 h-4 w-4" />
+          {t('markdownDocument.removeHistory')}
         </Button>
       </header>
       <div className={sidebarCollapsed ? 'markdown-document-body is-sidebar-collapsed' : 'markdown-document-body'}>

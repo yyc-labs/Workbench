@@ -2,27 +2,22 @@ import { Search, Settings, Plus, Zap, SlidersHorizontal, X, BookOpenText, FileTy
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
-import type { EnvFilter } from './home.types'
+import type { AppViewPath } from '../../../shared/types'
 
 type HomeToolbarProps = {
   searchQuery: string
   onSearchChange: (value: string) => void
-  envFilter: EnvFilter
-  onEnvFilterChange: (value: EnvFilter) => void
   onAddFolder: () => void
   onLearningCenterClick: () => void
   onMarkdownClick: () => void
   onSettingsClick: () => void
   onManageWorkspace: () => void
+  onOpenInSeparateWindow: (viewPath: AppViewPath) => void
   searchRef: React.RefObject<HTMLInputElement>
 }
 
-function HomeToolbar({ searchQuery, onSearchChange, envFilter, onEnvFilterChange, onAddFolder, onLearningCenterClick, onMarkdownClick, onSettingsClick, onManageWorkspace, searchRef }: HomeToolbarProps) {
+function HomeToolbar({ searchQuery, onSearchChange, onAddFolder, onLearningCenterClick, onMarkdownClick, onSettingsClick, onManageWorkspace, onOpenInSeparateWindow, searchRef }: HomeToolbarProps) {
   const { t } = useI18n()
-  const filterButtonClass = (active: boolean): string =>
-    active
-      ? 'h-7 px-3 rounded-full text-xs font-medium text-[color:var(--color-foreground)] bg-[color:var(--color-card)] shadow-sm border border-[color:var(--color-border)]'
-      : 'h-7 px-3 rounded-full text-xs font-medium text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)] border border-transparent'
 
   return (
     <header className="app-chrome h-auto min-h-[68px] flex items-center px-8 py-3 gap-5 shrink-0">
@@ -60,25 +55,31 @@ function HomeToolbar({ searchQuery, onSearchChange, envFilter, onEnvFilterChange
       </div>
 
       <div className="quiet-control ml-auto flex items-center rounded-full px-1.5 py-1 gap-2.5">
-        <div className="flex items-center gap-1.5">
-          <button className={filterButtonClass(envFilter === 'all')} onClick={() => onEnvFilterChange('all')} type="button">
-            {t('common.allProjects')}
-          </button>
-          <button className={filterButtonClass(envFilter === 'ubuntu')} onClick={() => onEnvFilterChange('ubuntu')} type="button">
-            {t('common.ubuntu')}
-          </button>
-          <button className={filterButtonClass(envFilter === 'windows')} onClick={() => onEnvFilterChange('windows')} type="button">
-            {t('common.windows')}
-          </button>
-        </div>
-
-        <div className="h-6 w-px" style={{ background: 'var(--color-border)' }} />
-
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onLearningCenterClick} title={t('common.learningCenter')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            onClick={onLearningCenterClick}
+            title={t('common.learningCenter')}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onOpenInSeparateWindow('/learning')
+            }}
+          >
             <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onMarkdownClick} title={t('markdownDocument.title')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]"
+            onClick={onMarkdownClick}
+            title={t('markdownDocument.title')}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              onOpenInSeparateWindow('/markdown')
+            }}
+          >
             <FileType2 className="w-4 h-4" strokeWidth={1.8} />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onManageWorkspace} title={t('common.manageFoldersAndTags')}>

@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { existsSync } from 'node:fs'
-import { isMarkdownDocumentPath } from './markdownDocumentPath'
+import { isMarkdownDocumentPath, normalizeMarkdownDocumentPath } from './markdownDocumentPath'
 
 const IGNORED_FLAGS = new Set(['--hidden', '--silent', '--autostart', '--no-sandbox'])
 
@@ -27,5 +27,13 @@ export class MarkdownDocumentOpenRequestStore {
     const path = this.pendingPath
     this.pendingPath = null
     return { path }
+  }
+
+  /** 当待处理路径与给定路径一致时清除,避免历史移除后重新进入页面又把它加载回来。 */
+  clearForPath(filePath: string): void {
+    if (!this.pendingPath || typeof filePath !== 'string' || !filePath) return
+    if (normalizeMarkdownDocumentPath(this.pendingPath) === normalizeMarkdownDocumentPath(filePath)) {
+      this.pendingPath = null
+    }
   }
 }

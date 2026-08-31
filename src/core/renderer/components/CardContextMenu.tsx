@@ -84,6 +84,8 @@ const AI_PROFILE_SUBMENU_WIDTH = 360
 const AI_PROFILE_SUBMENU_MAX_HEIGHT = 280
 const AI_PROFILE_SUBMENU_MIN_HEIGHT = 96
 const AI_PROFILE_SUBMENU_GAP = 8
+/** 菜单卡片距离视口底部的最小间距(底线)。 */
+const MENU_MIN_BOTTOM_GAP = 15
 
 function clamp(value: number, min: number, max: number): number {
   if (value < min) return min
@@ -134,14 +136,14 @@ function getToneBorderColor(tone: MenuTone = 'default') {
   }
 }
 
-function getClampedMenuPosition({ x, y, menuWidth, menuHeight, viewportPadding, pointerGap }: { x: number; y: number; menuWidth: number; menuHeight: number; viewportPadding: number; pointerGap: number }) {
+function getClampedMenuPosition({ x, y, menuWidth, menuHeight, viewportPadding, bottomPadding, pointerGap }: { x: number; y: number; menuWidth: number; menuHeight: number; viewportPadding: number; bottomPadding: number; pointerGap: number }) {
   const maxLeft = Math.max(viewportPadding, window.innerWidth - menuWidth - viewportPadding)
   const menuLeft = Math.min(Math.max(viewportPadding, x), maxLeft)
-  const spaceBelow = window.innerHeight - y - viewportPadding - pointerGap
+  const spaceBelow = window.innerHeight - y - bottomPadding - pointerGap
   const spaceAbove = y - viewportPadding - pointerGap
   const opensUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow
   const preferredTop = opensUpward ? y - menuHeight - pointerGap : y + pointerGap
-  const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
+  const maxTop = Math.max(viewportPadding, window.innerHeight - menuHeight - bottomPadding)
   const menuTop = Math.min(Math.max(viewportPadding, preferredTop), maxTop)
 
   return { menuLeft, menuTop, opensUpward }
@@ -227,6 +229,7 @@ export function CardContextMenu({
   const [actionError, setActionError] = useState<string | null>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [profileSubmenuLayout, setProfileSubmenuLayout] = useState<AiProfileSubmenuLayout | null>(null)
+  const [measuredMenuHeight, setMeasuredMenuHeight] = useState<number | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const profileMenuTriggerRef = useRef<HTMLButtonElement | null>(null)
   const profileSubmenuRef = useRef<HTMLDivElement | null>(null)
@@ -497,13 +500,22 @@ export function CardContextMenu({
   const pointerGap = 8
   const menuWidth = Math.min(372, Math.max(300, window.innerWidth - viewportPadding * 2))
   const estimatedMenuHeight = 218 + (utilityActions.length > 0 ? 44 : 0) + (dangerActions.length > 0 ? 44 : 0)
+  const menuHeight = measuredMenuHeight ?? estimatedMenuHeight
   const { menuLeft, menuTop, opensUpward } = getClampedMenuPosition({
     x,
     y,
     menuWidth,
-    menuHeight: estimatedMenuHeight,
+    menuHeight,
     viewportPadding,
+    bottomPadding: MENU_MIN_BOTTOM_GAP,
     pointerGap,
+  })
+
+  useLayoutEffect(() => {
+    const el = menuRef.current
+    if (!el) return
+    const height = el.offsetHeight
+    setMeasuredMenuHeight((prev) => (prev === height ? prev : height))
   })
 
   const dangerActionsBlock = dangerActions.length > 0 && (

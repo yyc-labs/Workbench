@@ -43,7 +43,6 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
     activeAiRuntimeProfileId: defaultAiRuntimeProfileIdForCli('claude'),
   },
   searchQuery: '',
-  homeEnvFilter: 'all',
   homeClassifierFilter: { type: 'all' },
   homeDefaultFilterApplied: false,
   capability: null,

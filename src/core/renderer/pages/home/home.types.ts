@@ -1,10 +1,8 @@
 import type { ProjectInfo, ProjectFolder, ProjectTag, StartupDefaultFilter } from '../../../shared/types'
 import type { ClassifierFilter } from '../../components/WorkspaceClassifierPanel'
 
-export type EnvFilter = 'all' | 'ubuntu' | 'windows'
-
 export interface EnvGroup {
-  key: EnvFilter | 'other'
+  key: EnvGroupKey
   label: string
   projects: ProjectInfo[]
 }
@@ -33,9 +31,8 @@ export type HomeProjectsContentProps = {
   pinnedProjects: ProjectInfo[]
   recentProjects: ProjectInfo[]
   groupedRecentProjects: EnvGroup[]
-  envFilteredProjectsCount: number
+  filteredProjectsCount: number
   runningCount: number
   onSelect: (id: string) => void
   searchQuery: string
-  envFilter: EnvFilter
 }

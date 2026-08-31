@@ -15,10 +15,6 @@
   background: var(--color-background);
 }
 
-.code-file-viewer--hidden {
-  display: none;
-}
-
 .code-file-viewer--fullscreen .transcript-preview-zoom-viewport {
   border: 0;
   border-radius: 0;

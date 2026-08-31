@@ -4,10 +4,9 @@ import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
-import { Tooltip } from '../../components/ui/tooltip'
 import type { UrlPopoverItem } from '../../components/UrlPopover'
 import type { DiscardUnsavedConfirmState } from './useCodeFileState'
-import { fileNameFromRelativePath } from './code.markdownShared'
+import { QuickDrawerTabsCard } from './QuickDrawerTabsCard'
 
 type CodeWorkspaceChromeProps = {
   activeLanguage: string | null
@@ -202,17 +201,19 @@ export function CodeWorkspaceChrome({
               </button>
             </>
           )}
-          <button
-            type="button"
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-              isExplorerOpen ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
-            }`}
-            onClick={() => onSetQuickDrawerOpen((prev) => !prev)}
-            title={t('codeWorkspace.quickFileDrawer')}
-          >
-            <PanelLeftOpen className="h-3.5 w-3.5" />
-            {t('codeWorkspace.files')}
-          </button>
+          <QuickDrawerTabsCard openTabs={openTabs} activeRelativePath={activeRelativePath} onOpenFile={onOpenFileFromTab} onCloseTab={onCloseOpenTab}>
+            <button
+              type="button"
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                isExplorerOpen ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]' : 'border-[color:var(--color-border)] text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]'
+              }`}
+              onClick={() => onSetQuickDrawerOpen((prev) => !prev)}
+              title={t('codeWorkspace.quickFileDrawer')}
+            >
+              <PanelLeftOpen className="h-3.5 w-3.5" />
+              {t('codeWorkspace.files')}
+            </button>
+          </QuickDrawerTabsCard>
           <div className="code-view-mode-switch" role="tablist" aria-label={t('codeWorkspace.modeAria')}>
             <button type="button" role="tab" aria-selected={viewMode === 'files'} className={`code-view-mode-btn ${viewMode === 'files' ? 'is-active' : ''}`} onClick={() => onSetViewMode('files')} title={t('codeWorkspace.fileExplorerAndEditor')}>
               <Files className="h-3.5 w-3.5" />
@@ -246,46 +247,6 @@ export function CodeWorkspaceChrome({
           </button>
         </div>
       </div>
-
-      {openTabs.length > 0 && (
-        <div className="code-open-tabs mb-3">
-          {openTabs.map((path) => {
-            const isActive = activeRelativePath === path
-            return (
-              <Tooltip key={path} content={path} align="start" interactive={false} contentClassName="font-mono text-[10.5px] leading-[1.4]" className="code-open-tab-trigger">
-                <button
-                  type="button"
-                  className={`code-open-tab ${isActive ? 'is-active' : ''}`}
-                  onClick={() => {
-                    onOpenFileFromTab(path)
-                  }}
-                >
-                  <span className="code-open-tab-label">{fileNameFromRelativePath(path)}</span>
-                  <span className="code-open-tab-path">{path}</span>
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="code-open-tab-close"
-                    aria-label={t('codeWorkspace.closeTab', { path })}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onCloseOpenTab(path)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return
-                      event.preventDefault()
-                      event.stopPropagation()
-                      onCloseOpenTab(path)
-                    }}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </span>
-                </button>
-              </Tooltip>
-            )
-          })}
-        </div>
-      )}
 
       <ModalShell open={Boolean(discardUnsavedConfirm)} onClose={() => onResolveDiscardUnsavedConfirm(false)} widthClassName="max-w-[440px]" baseZIndex={1100} ariaLabel={t('codeWorkspace.unsavedAria')}>
         <div className="mb-3 flex items-start justify-between gap-3">

@@ -118,15 +118,28 @@ export const createMarkdownDocumentActionsSlice: StateCreator<AppState, [], [], 
       set({ markdownDocumentSaving: false, markdownDocumentConflict: (error as { code?: string }).code === 'conflict', markdownDocumentError: error instanceof Error ? error.message : String(error) })
     }
   },
-  removeMarkdownDocumentHistory: async (filePath: string) => {
-    if (get().markdownDocumentActive?.path === filePath) return
-    const history = await window.electronAPI.removeMarkdownDocumentHistory(filePath)
-    set({ markdownDocumentHistory: history })
-  },
   clearMarkdownDocumentHistory: async () => {
     const active = get().markdownDocumentActive
     const activeHistoryEntry = active ? get().markdownDocumentHistory.find((entry) => entry.path === active.path) : null
     await window.electronAPI.clearMarkdownDocumentHistory()
     set({ markdownDocumentHistory: active ? [activeHistoryEntry ?? createMarkdownDocumentHistoryEntry(active)] : [] })
+  },
+  removeMarkdownDocumentHistory: async (filePath: string) => {
+    const history = await window.electronAPI.removeMarkdownDocumentHistory(filePath)
+    set({
+      markdownDocumentHistory: history,
+      ...(get().markdownDocumentActive?.path === filePath
+        ? {
+            markdownDocumentActive: null,
+            markdownDocumentValue: '',
+            markdownDocumentMode: 'preview',
+            markdownDocumentDirty: false,
+            markdownDocumentCompatibility: null,
+            markdownDocumentComplexity: null,
+            markdownDocumentConflict: false,
+            markdownDocumentError: null,
+          }
+        : {}),
+    })
   },
 })

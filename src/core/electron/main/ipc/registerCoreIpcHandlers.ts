@@ -257,6 +257,14 @@ export function registerCoreIpcHandlers(deps: RegisterIpcHandlersDependencies): 
     return true
   })
 
+  ipcMain.handle(IPC.WINDOW_OPEN_APP_VIEW, (_event, viewPath: string) => {
+    return deps.openAppViewWindow(viewPath)
+  })
+
+  ipcMain.handle(IPC.WINDOW_HAS_APP_VIEW, (_event, viewPath: string) => {
+    return deps.hasAppViewWindow(viewPath)
+  })
+
   ipcMain.handle(IPC.TRAY_PANEL_SHOW_MAIN, () => {
     deps.getMainWindow()?.show()
     deps.getMainWindow()?.focus()

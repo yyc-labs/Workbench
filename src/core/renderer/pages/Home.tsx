@@ -8,6 +8,7 @@ import { HomeEmptyState } from './home/HomeEmptyState'
 import { HomeProjectsContent } from './home/HomeProjectsContent'
 import { HomeToolbar } from './home/HomeToolbar'
 import { useLocale } from '../i18n'
+import type { AppViewPath } from '../../shared/types'
 import type { EnvGroup, EnvGroupKey } from './home/home.types'
 
 export function HomePage() {
@@ -21,11 +22,9 @@ export function HomePage() {
   const sessions = useAppStore((s) => s.sessions)
   const processes = useAppStore((s) => s.processes)
   const searchQuery = useAppStore((s) => s.searchQuery)
-  const envFilter = useAppStore((s) => s.homeEnvFilter)
   const classifierFilter = useAppStore((s) => s.homeClassifierFilter)
   const homeDefaultFilterApplied = useAppStore((s) => s.homeDefaultFilterApplied)
   const setSearchQuery = useAppStore((s) => s.setSearchQuery)
-  const setEnvFilter = useAppStore((s) => s.setHomeEnvFilter)
   const setClassifierFilter = useAppStore((s) => s.setHomeClassifierFilter)
   const markHomeDefaultFilterApplied = useAppStore((s) => s.markHomeDefaultFilterApplied)
   const addProject = useAppStore((s) => s.addProject)
@@ -93,7 +92,6 @@ export function HomePage() {
     lastGestureResetAtRef.current = marker
 
     setSearchQuery('')
-    setEnvFilter('all')
 
     const defaultFilter = config.startupDefaultFilter
     if (!defaultFilter) {
@@ -114,7 +112,7 @@ export function HomePage() {
     }
 
     setClassifierFilter(defaultFilter)
-  }, [config.startupDefaultFilter, folders, location.state, setClassifierFilter, setEnvFilter, setSearchQuery, tags])
+  }, [config.startupDefaultFilter, folders, location.state, setClassifierFilter, setSearchQuery, tags])
 
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects
@@ -130,32 +128,27 @@ export function HomePage() {
     return map
   }, [filteredProjects])
 
-  const envFilteredProjects = useMemo(() => {
-    if (envFilter === 'all') return filteredProjects
-    return filteredProjects.filter((p) => envByPath.get(p.path) === envFilter)
-  }, [filteredProjects, envFilter, envByPath])
-
   const filteredByClassifier = useMemo(() => {
     switch (classifierFilter.type) {
       case 'all':
-        return envFilteredProjects
+        return filteredProjects
       case 'pinned':
-        return envFilteredProjects.filter((p) => Boolean(p.pinned))
+        return filteredProjects.filter((p) => Boolean(p.pinned))
       case 'running':
-        return envFilteredProjects.filter((p) => {
+        return filteredProjects.filter((p) => {
           const status = processes[p.id]?.status
           return status === 'running' || status === 'stopping'
         })
       case 'uncategorized':
-        return envFilteredProjects.filter((p) => !p.folderId)
+        return filteredProjects.filter((p) => !p.folderId)
       case 'folder':
-        return envFilteredProjects.filter((p) => p.folderId === classifierFilter.folderId)
+        return filteredProjects.filter((p) => p.folderId === classifierFilter.folderId)
       case 'tag':
-        return envFilteredProjects.filter((p) => (p.tagIds ?? []).includes(classifierFilter.tagId))
+        return filteredProjects.filter((p) => (p.tagIds ?? []).includes(classifierFilter.tagId))
       default:
-        return envFilteredProjects
+        return filteredProjects
     }
-  }, [classifierFilter, envFilteredProjects, processes])
+  }, [classifierFilter, filteredProjects, processes])
 
   const pinnedProjects = useMemo(() => filteredByClassifier.filter((p) => p.pinned), [filteredByClassifier])
   const recentProjects = useMemo(() => filteredByClassifier.filter((p) => !p.pinned), [filteredByClassifier])
@@ -186,7 +179,7 @@ export function HomePage() {
     const byFolder: Record<string, number> = {}
     const byTag: Record<string, number> = {}
 
-    for (const p of envFilteredProjects) {
+    for (const p of filteredProjects) {
       if (p.folderId) {
         byFolder[p.folderId] = (byFolder[p.folderId] ?? 0) + 1
       }
@@ -196,17 +189,17 @@ export function HomePage() {
     }
 
     return {
-      all: envFilteredProjects.length,
-      pinned: envFilteredProjects.filter((p) => Boolean(p.pinned)).length,
-      running: envFilteredProjects.filter((p) => {
+      all: filteredProjects.length,
+      pinned: filteredProjects.filter((p) => Boolean(p.pinned)).length,
+      running: filteredProjects.filter((p) => {
         const status = processes[p.id]?.status
         return status === 'running' || status === 'stopping'
       }).length,
-      uncategorized: envFilteredProjects.filter((p) => !p.folderId).length,
+      uncategorized: filteredProjects.filter((p) => !p.folderId).length,
       byFolder,
       byTag,
     }
-  }, [envFilteredProjects, processes])
+  }, [filteredProjects, processes])
 
   const handleAddFolder = useCallback(async () => {
     const dirPath = await window.electronAPI.selectDirectory()
@@ -227,6 +220,21 @@ export function HomePage() {
     },
     [updateLastOpened, navigate],
   )
+
+  const openView = useCallback(
+    async (viewPath: AppViewPath) => {
+      if (await window.electronAPI.hasAppViewWindow(viewPath)) {
+        await window.electronAPI.openAppViewWindow(viewPath)
+        return
+      }
+      navigate(viewPath)
+    },
+    [navigate],
+  )
+
+  const openViewInSeparateWindow = useCallback(async (viewPath: AppViewPath) => {
+    await window.electronAPI.openAppViewWindow(viewPath)
+  }, [])
 
   if (!isAppReady) {
     return <div className="h-full" />
@@ -252,13 +260,18 @@ export function HomePage() {
       <HomeToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        envFilter={envFilter}
-        onEnvFilterChange={setEnvFilter}
         onAddFolder={() => {
           void handleAddFolder()
         }}
-        onLearningCenterClick={() => navigate('/learning')}
-        onMarkdownClick={() => navigate('/markdown')}
+        onLearningCenterClick={() => {
+          void openView('/learning')
+        }}
+        onMarkdownClick={() => {
+          void openView('/markdown')
+        }}
+        onOpenInSeparateWindow={(viewPath) => {
+          void openViewInSeparateWindow(viewPath)
+        }}
         onSettingsClick={() => navigate('/settings')}
         onManageWorkspace={() => setWorkspaceDialogOpen(true)}
         searchRef={searchRef}
@@ -277,11 +290,10 @@ export function HomePage() {
         pinnedProjects={pinnedProjects}
         recentProjects={recentProjects}
         groupedRecentProjects={groupedRecentProjects}
-        envFilteredProjectsCount={envFilteredProjects.length}
+        filteredProjectsCount={filteredProjects.length}
         runningCount={runningCount}
         onSelect={handleSelect}
         searchQuery={searchQuery}
-        envFilter={envFilter}
       />
 
       <WorkspaceManagerDialog open={workspaceDialogOpen} folders={folders} tags={tags} onClose={() => setWorkspaceDialogOpen(false)} onCreateFolder={createFolder} onRenameFolder={renameFolder} onRemoveFolder={removeFolder} onCreateTag={createTag} onRenameTag={renameTag} onRemoveTag={removeTag} />

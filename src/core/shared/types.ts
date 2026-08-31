@@ -98,6 +98,9 @@ export interface RuntimeEntrypointConfig {
 
 export type StartupDefaultFilter = { type: 'all' } | { type: 'pinned' } | { type: 'running' } | { type: 'uncategorized' } | { type: 'folder'; folderId: string } | { type: 'tag'; tagId: string }
 
+/** 支持在独立窗口中打开的 renderer 页面路径。 */
+export type AppViewPath = '/markdown' | '/learning'
+
 export interface AiCommitConfig {
   enabled?: boolean
   activeProfileId?: string

@@ -109,7 +109,7 @@ import type {
   MarkdownDocumentReadResult,
   MarkdownDocumentWriteResult,
 } from './types'
-import type { AiRuntimeProfile } from './types'
+import type { AiRuntimeProfile, AppViewPath } from './types'
 
 export type ElectronApiSubscription<T> = (cb: (data: T) => void) => () => void
 export type ElectronApiSignalSubscription = (cb: () => void) => () => void
@@ -192,6 +192,8 @@ export interface CoreElectronApi {
   toggleMaximizeWindow: () => Promise<boolean>
   closeWindow: () => Promise<boolean>
   isWindowMaximized: () => Promise<boolean>
+  openAppViewWindow: (viewPath: AppViewPath) => Promise<boolean>
+  hasAppViewWindow: (viewPath: AppViewPath) => Promise<boolean>
   trayPanelShowMainWindow: () => Promise<boolean>
   trayPanelHideMainWindow: () => Promise<boolean>
   trayPanelQuitApp: () => Promise<boolean>
@@ -264,6 +266,7 @@ export interface MarkdownDocumentElectronApi {
   clearMarkdownDocumentHistory: () => Promise<void>
   saveMarkdownDocumentPastedImageAs: (dataBase64: string, extension: string, suggestedName?: string) => Promise<MarkdownDocumentImageSaveResult | null>
   consumePendingMarkdownDocumentOpen: () => Promise<MarkdownDocumentOpenRequest | null>
+  routeMarkdownDocumentOpen: (filePath: string) => Promise<boolean>
 }
 
 export interface TranscriptElectronApi {

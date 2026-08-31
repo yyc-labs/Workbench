@@ -18,11 +18,10 @@ function HomeProjectsContent({
   pinnedProjects,
   recentProjects,
   groupedRecentProjects,
-  envFilteredProjectsCount,
+  filteredProjectsCount,
   runningCount,
   onSelect,
   searchQuery,
-  envFilter,
 }: HomeProjectsContentProps) {
   const { t } = useI18n()
 
@@ -35,7 +34,7 @@ function HomeProjectsContent({
             <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">{t('common.projects')}</h1>
           </div>
           <p className="mb-1 flex items-center gap-2 text-[13px] text-[color:var(--color-muted-foreground)]">
-            <span>{t('home.countProjects', { count: envFilteredProjectsCount })}</span>
+            <span>{t('home.countProjects', { count: filteredProjectsCount })}</span>
             {runningCount > 0 && (
               <>
                 <span className="text-[color:var(--color-muted-foreground)]/70">&middot;</span>
@@ -71,14 +70,7 @@ function HomeProjectsContent({
                 </div>
                 <div className="flex flex-col gap-2">
                   {pinnedProjects.map((project, index) => (
-                    <ProjectCard
-                      key={project.id}
-                      project={project}
-                      folders={folders}
-                      tags={tags}
-                      index={index}
-                      onSelect={onSelect}
-                    />
+                    <ProjectCard key={project.id} project={project} folders={folders} tags={tags} index={index} onSelect={onSelect} />
                   ))}
                 </div>
               </div>
@@ -87,9 +79,7 @@ function HomeProjectsContent({
             <div>
               <div className="flex items-center gap-2.5 mb-3">
                 <FolderOpen className="w-3.5 h-3.5 text-[color:var(--color-muted-foreground)]" strokeWidth={1.8} />
-                <h2 className="section-label">
-                  {pinnedProjects.length > 0 ? t('common.projects') : t('common.projectGroups')}
-                </h2>
+                <h2 className="section-label">{pinnedProjects.length > 0 ? t('common.projects') : t('common.projectGroups')}</h2>
                 <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{recentProjects.length}</span>
               </div>
               {groupedRecentProjects.length > 0 ? (
@@ -97,34 +87,19 @@ function HomeProjectsContent({
                   {groupedRecentProjects.map((group) => (
                     <section key={group.key}>
                       <div className="flex items-center gap-2 mb-3">
-                        <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">
-                          {group.label}
-                        </h3>
-                        <span className="text-[10px] text-[color:var(--color-muted-foreground)]">
-                          {group.projects.length}
-                        </span>
+                        <h3 className="text-[12px] font-medium text-[color:var(--color-muted-foreground)]">{group.label}</h3>
+                        <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{group.projects.length}</span>
                       </div>
                       <div className="flex flex-col gap-2">
                         {group.projects.map((project, index) => (
-                          <ProjectCard
-                            key={project.id}
-                            project={project}
-                            folders={folders}
-                            tags={tags}
-                            index={index}
-                            onSelect={onSelect}
-                          />
+                          <ProjectCard key={project.id} project={project} folders={folders} tags={tags} index={index} onSelect={onSelect} />
                         ))}
                       </div>
                     </section>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">
-                  {searchQuery || envFilter !== 'all'
-                    ? t('common.noProjectsMatch')
-                    : t('common.noProjectsYet')}
-                </div>
+                <div className="text-center py-16 text-sm text-[color:var(--color-muted-foreground)]">{searchQuery ? t('common.noProjectsMatch') : t('common.noProjectsYet')}</div>
               )}
             </div>
           </div>

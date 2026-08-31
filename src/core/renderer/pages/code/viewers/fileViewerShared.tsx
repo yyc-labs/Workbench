@@ -1,5 +1,4 @@
 import { type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { ExternalLink, Maximize2, Minimize2, RefreshCw } from 'lucide-react'
 import { Tooltip } from '../../../components/ui/tooltip'
@@ -82,23 +81,24 @@ type FileViewerShellProps = {
  * Shared shell for every non-text file preview: a compact toolbar (title + actions)
  * and a scrollable/fillable frame that hosts the actual viewer content.
  *
- * Fullscreen renders through a portal attached to `document.body`. The editor pane
- * sits inside `.surface-card` (backdrop-filter), which would otherwise act as the
- * containing block for `position: fixed` and keep the fullscreen layer pinned to the
- * pane instead of the whole Electron window — portaling out sidesteps that.
- *
- * The frame node itself is moved between the inline and fullscreen containers with
- * DOM APIs instead of being unmounted, so an iframe-based viewer (e.g. the PDF
- * preview) is not reloaded on every fullscreen toggle.
+ * Fullscreen keeps the viewer node exactly where it is and simply applies
+ * `position: fixed; inset: 0` to the shell itself — no portal, no DOM reparenting.
+ * Reparenting the frame (the previous approach) forces Chromium to reload any
+ * iframe/webview inside it, so HTML and PDF previews were rendered from scratch
+ * on every toggle. The editor pane sits inside `.surface-card` (backdrop-filter),
+ * which becomes the containing block for `position: fixed`; while fullscreen is
+ * active we neutralize such properties on the ancestor chain and restore them on
+ * exit, so the fixed layer covers the whole window. The fullscreen layer is
+ * opaque, so the temporarily lost blur on ancestors is never visible.
  */
+const FULLSCREEN_BLOCKING_PROPS = ['transform', 'translate', 'rotate', 'scale', 'filter', 'backdrop-filter', 'perspective', 'contain', 'will-change', 'content-visibility'] as const
+
 export function FileViewerShell({ title, actions, children, canFullscreen = true, isFullscreen: controlledFullscreen, onFullscreenChange }: FileViewerShellProps) {
   const { t } = useI18n()
   const location = useLocation()
   const [uncontrolledFullscreen, setUncontrolledFullscreen] = useState(false)
   const isFullscreen = controlledFullscreen ?? uncontrolledFullscreen
-  const inlineRef = useRef<HTMLDivElement>(null)
-  const fullscreenRef = useRef<HTMLDivElement>(null)
-  const frameRef = useRef<HTMLDivElement>(null)
+  const viewerRef = useRef<HTMLDivElement>(null)
 
   // Collapse the overlay when leaving the code route. The shell stays mounted
   // inside the always-present code pane (which is only hidden via CSS when
@@ -129,59 +129,63 @@ export function FileViewerShell({ title, actions, children, canFullscreen = true
     onFullscreenChange?.(isFullscreen)
   }, [isFullscreen, onFullscreenChange])
 
-  // Relocate the already-mounted frame (with any iframe inside it) without
-  // rebuilding it; toggling fullscreen must not reload the viewer content.
-  // useLayoutEffect keeps the swap inside the same paint, avoiding a blank
-  // frame where the viewer has left one container but not arrived in the other.
+  // `backdrop-filter` / `transform` / ... on ancestors turns them into the
+  // containing block for `position: fixed` and would trap the fullscreen layer
+  // inside the editor pane. Neutralize those while fullscreen, restore on exit.
   useLayoutEffect(() => {
-    const frame = frameRef.current
-    const target = isFullscreen ? fullscreenRef.current : inlineRef.current
-    if (frame && target && frame.parentElement !== target) {
-      target.appendChild(frame)
+    if (!isFullscreen) return
+    const viewer = viewerRef.current
+    if (!viewer) return
+    const restores: Array<() => void> = []
+    let el = viewer.parentElement
+    while (el && el !== document.body) {
+      const target = el as HTMLElement
+      const computed = window.getComputedStyle(target)
+      for (const prop of FULLSCREEN_BLOCKING_PROPS) {
+        const value = computed.getPropertyValue(prop)
+        if (!value || value === 'none' || value === 'auto' || value === 'visible') continue
+        const inlineValue = target.style.getPropertyValue(prop)
+        const inlinePriority = target.style.getPropertyPriority(prop)
+        target.style.setProperty(prop, 'none', 'important')
+        restores.push(() => {
+          if (inlineValue) target.style.setProperty(prop, inlineValue, inlinePriority)
+          else target.style.removeProperty(prop)
+        })
+      }
+      el = el.parentElement
+    }
+    return () => {
+      for (const restore of restores) restore()
     }
   }, [isFullscreen])
 
   const fullscreenLabel = isFullscreen ? t('codeWorkspace.previewExitFullscreen') : t('codeWorkspace.previewEnterFullscreen')
 
-  const toolbar = (
-    <div className="code-file-viewer-toolbar">
-      {title ? <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{title}</span> : null}
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        {actions}
-        {canFullscreen ? (
-          <Tooltip content={fullscreenLabel} interactive={false}>
-            <button
-              type="button"
-              className="code-file-viewer-fullscreen-btn"
-              onClick={() => {
-                const nextFullscreen = !isFullscreen
-                setUncontrolledFullscreen(nextFullscreen)
-                onFullscreenChange?.(nextFullscreen)
-              }}
-            >
-              {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-            </button>
-          </Tooltip>
-        ) : null}
-      </div>
-    </div>
-  )
-
   return (
-    <>
-      <div ref={inlineRef} className={`code-file-viewer ${isFullscreen ? 'code-file-viewer--hidden' : ''}`}>
-        {toolbar}
-        <div ref={frameRef} className="code-file-viewer-frame">
-          {children}
+    <div ref={viewerRef} className={`code-file-viewer ${isFullscreen ? 'code-file-viewer--fullscreen' : ''}`}>
+      <div className="code-file-viewer-toolbar">
+        {title ? <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{title}</span> : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          {actions}
+          {canFullscreen ? (
+            <Tooltip content={fullscreenLabel} interactive={false}>
+              <button
+                type="button"
+                className="code-file-viewer-fullscreen-btn"
+                onClick={() => {
+                  const nextFullscreen = !isFullscreen
+                  setUncontrolledFullscreen(nextFullscreen)
+                  onFullscreenChange?.(nextFullscreen)
+                }}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
+            </Tooltip>
+          ) : null}
         </div>
       </div>
-      {createPortal(
-        <div ref={fullscreenRef} className={`code-file-viewer code-file-viewer--fullscreen ${isFullscreen ? '' : 'code-file-viewer--hidden'}`}>
-          {toolbar}
-        </div>,
-        document.body,
-      )}
-    </>
+      <div className="code-file-viewer-frame">{children}</div>
+    </div>
   )
 }
 

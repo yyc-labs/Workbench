@@ -350,7 +350,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         {effectiveMarkdownPreviewMode !== 'preview' && (
           <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`}>
             {fileKind === 'image' && binaryDataUrl ? (
-              <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+              <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
             ) : fileKind === 'pdf' && binaryDataUrl ? (
               <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
             ) : fileKind === 'html' ? (

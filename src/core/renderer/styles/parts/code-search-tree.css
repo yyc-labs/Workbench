@@ -90,20 +90,6 @@
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
-.code-open-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.code-open-tab-trigger {
-  flex: 0 0 auto;
-  min-width: 0;
-  max-width: 200px;
-}
-
 .code-open-tab {
   width: 100%;
   min-width: 0;
@@ -133,6 +119,12 @@
 .code-open-tab.is-active {
   border-color: color-mix(in srgb, var(--color-primary) 50%, var(--color-border));
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-foreground);
+}
+
+.code-open-tab.is-key-active {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  background: var(--color-accent);
   color: var(--color-foreground);
 }
 

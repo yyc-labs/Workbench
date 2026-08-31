@@ -29,7 +29,6 @@ export type SettingsActionsSlice = Pick<
   | 'setDocLinkTags'
   | 'setStartupDefaultFilter'
   | 'setSearchQuery'
-  | 'setHomeEnvFilter'
   | 'setHomeClassifierFilter'
   | 'markHomeDefaultFilterApplied'
 >
@@ -274,10 +273,6 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
 
   setSearchQuery: (query) => {
     set({ searchQuery: query })
-  },
-
-  setHomeEnvFilter: (filter) => {
-    set({ homeEnvFilter: filter })
   },
 
   setHomeClassifierFilter: (filter) => {

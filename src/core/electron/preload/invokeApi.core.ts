@@ -7,6 +7,7 @@ import type {
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
+  AppViewPath,
   BrowserDataCleanupResult,
   BrowserDataMaintenanceInfo,
   LegacyUserDataMigrationInfo,
@@ -115,6 +116,10 @@ export function createCoreInvokeApi() {
     closeWindow: () => ipcRenderer.invoke(IPC.WINDOW_CLOSE),
 
     isWindowMaximized: () => ipcRenderer.invoke(IPC.WINDOW_IS_MAXIMIZED),
+
+    openAppViewWindow: (viewPath: AppViewPath) => ipcRenderer.invoke(IPC.WINDOW_OPEN_APP_VIEW, viewPath) as Promise<boolean>,
+
+    hasAppViewWindow: (viewPath: AppViewPath) => ipcRenderer.invoke(IPC.WINDOW_HAS_APP_VIEW, viewPath) as Promise<boolean>,
 
     trayPanelShowMainWindow: () => ipcRenderer.invoke(IPC.TRAY_PANEL_SHOW_MAIN),
 

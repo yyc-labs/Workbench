@@ -11,5 +11,6 @@ export function createMarkdownDocumentInvokeApi() {
     clearMarkdownDocumentHistory: () => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_HISTORY_CLEAR),
     saveMarkdownDocumentPastedImageAs: (dataBase64: string, extension: string, suggestedName?: string) => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_PASTED_IMAGE_SAVE_AS, dataBase64, extension, suggestedName),
     consumePendingMarkdownDocumentOpen: () => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_OPEN_REQUESTED),
+    routeMarkdownDocumentOpen: (filePath: string) => ipcRenderer.invoke(IPC.MARKDOWN_DOCUMENT_ROUTE_OPEN, filePath),
   }
 }
