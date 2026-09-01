@@ -1,6 +1,5 @@
 import type { RefObject } from 'react'
-import { SidebarGestureOverlay } from '../../../components/SidebarGestureOverlay'
-import { useSidebarGesture } from '../../../hooks/useSidebarGesture'
+import { SidebarGestureHost } from '../../../components/SidebarGestureHost'
 
 type LearningSidebarGestureControllerProps = {
   pageRootRef: RefObject<HTMLElement | null>
@@ -10,6 +9,5 @@ type LearningSidebarGestureControllerProps = {
 }
 
 export function LearningSidebarGestureController({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar }: LearningSidebarGestureControllerProps) {
-  const overlay = useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar })
-  return <SidebarGestureOverlay overlay={overlay} />
+  return <SidebarGestureHost pageRootRef={pageRootRef} onBeforeToggle={onBeforeToggle} onToggleLeftSidebar={onToggleLeftSidebar} onToggleRightSidebar={onToggleRightSidebar} />
 }

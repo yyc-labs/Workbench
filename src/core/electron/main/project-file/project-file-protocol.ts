@@ -41,7 +41,9 @@ export function registerYycWorkbenchHandler(): void {
         const contentType = mimeTypeFromPreviewPath(relativePath)
         if (isHtmlPreviewContentType(contentType)) {
           // Inject fallback CSS variables / icon font into standalone preview docs.
-          return new Response(injectHtmlPreviewBootstrap(buffer, previewTheme), {
+          // Wrap the Buffer in a Uint8Array so the bytes satisfy Response's BodyInit
+          // type under the genericized @types/node Buffer; runtime behavior is identical.
+          return new Response(new Uint8Array(injectHtmlPreviewBootstrap(buffer, previewTheme)), {
             headers: { 'content-type': `${contentType}; charset=utf-8`, 'cache-control': 'no-cache' },
           })
         }

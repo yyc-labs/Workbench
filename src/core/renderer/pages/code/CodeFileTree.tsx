@@ -272,6 +272,9 @@ export const CodeFileTree = memo(function CodeFileTree({
   const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
   const handledLocateRequestTokenRef = useRef(0)
   const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
+  const previousActivePathRef = useRef(activeRelativePath)
+  const suppressFollowScrollRef = useRef(false)
+  const suppressFollowScrollTimerRef = useRef<number | null>(null)
   const { containerRef, size } = useContainerSize()
   const [contextMenu, setContextMenu] = useState<CodeTreeContextMenuPayload | null>(null)
   const directoryPaths = useMemo(() => collectDirectoryPaths(nodes), [nodes])
@@ -319,6 +322,12 @@ export const CodeFileTree = memo(function CodeFileTree({
       return
     }
 
+    // 文件切换时重新定位，清除用户主动展开/折叠目录时的滚动抑制。
+    if (activeRelativePath !== previousActivePathRef.current) {
+      previousActivePathRef.current = activeRelativePath
+      suppressFollowScrollRef.current = false
+    }
+
     // 跟随当前文件：选中并确保高亮行可见（容器测量与 Tree 挂载晚于本 effect，
     // 因此树未就绪时也按帧重试，避免从全局搜索等视图切回文件树时定位失效）。
     let cancelled = false
@@ -341,6 +350,13 @@ export const CodeFileTree = memo(function CodeFileTree({
         mostRecent: activeRelativePath,
       })
       currentTree.focus(activeRelativePath, { scroll: false })
+
+      // 用户主动展开/折叠目录时抑制自动滚动，避免查看目录内容时视图被拉回当前文件位置。
+      // 目录懒加载期间 nodes/expandedDirectories 持续变化，通过续期抑制窗口保证加载完成前不跳回。
+      if (suppressFollowScrollRef.current) {
+        renewSuppressFollowScroll()
+        return
+      }
 
       if (ensureTreeNodeVisibleInViewport(currentTree, activeRelativePath)) return
 
@@ -386,6 +402,35 @@ export const CodeFileTree = memo(function CodeFileTree({
     setContextMenu(payload)
   }, [])
 
+  const renewSuppressFollowScroll = useCallback(() => {
+    if (suppressFollowScrollTimerRef.current != null) {
+      window.clearTimeout(suppressFollowScrollTimerRef.current)
+    }
+    suppressFollowScrollRef.current = true
+    suppressFollowScrollTimerRef.current = window.setTimeout(() => {
+      suppressFollowScrollRef.current = false
+      suppressFollowScrollTimerRef.current = null
+    }, 200)
+  }, [])
+
+  const handleToggleDirectory = useCallback(
+    (relativePath: string) => {
+      // 用户主动展开/折叠目录时，短暂抑制“跟随当前文件”的自动滚动，
+      // 避免查看目录内容时视图被拉回当前文件位置。
+      renewSuppressFollowScroll()
+      onToggleDirectory(relativePath)
+    },
+    [onToggleDirectory, renewSuppressFollowScroll],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (suppressFollowScrollTimerRef.current != null) {
+        window.clearTimeout(suppressFollowScrollTimerRef.current)
+      }
+    }
+  }, [])
+
   const closeContextMenu = useCallback(() => {
     setContextMenu(null)
   }, [])
@@ -418,7 +463,7 @@ export const CodeFileTree = memo(function CodeFileTree({
           disableEdit
           disableMultiSelection
         >
-          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={onToggleDirectory} onSelectFile={onSelectFile} onSelectExcluded={onSelectExcluded} onOpenFileContextMenu={handleOpenFileContextMenu} />}
+          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={handleToggleDirectory} onSelectFile={onSelectFile} onSelectExcluded={onSelectExcluded} onOpenFileContextMenu={handleOpenFileContextMenu} />}
         </Tree>
       )}
       {contextMenu && (

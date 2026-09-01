@@ -3,9 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
-import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
-import { useSidebarGesture } from '../../hooks/useSidebarGesture'
+import { SidebarGestureHost } from '../../components/SidebarGestureHost'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
@@ -407,20 +406,6 @@ export function CodeWorkspacePanel({
     setIsLeftSidebarCollapsed(false)
     refreshRootIfStale()
   }, [refreshRootIfStale])
-  const sidebarGestureOverlay = useSidebarGesture({
-    pageRootRef,
-    onToggleLeftSidebar: () => {
-      if (isNarrowViewport) {
-        setIsExplorerOpen((current) => !current)
-        return
-      }
-      if (isLeftSidebarCollapsed) {
-        handleExpandSidebar()
-        return
-      }
-      setIsLeftSidebarCollapsed(true)
-    },
-  })
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
@@ -749,7 +734,20 @@ export function CodeWorkspacePanel({
 
   return (
     <div ref={pageRootRef} className="relative flex h-full min-h-0 flex-col">
-      <SidebarGestureOverlay overlay={sidebarGestureOverlay} />
+      <SidebarGestureHost
+        pageRootRef={pageRootRef}
+        onToggleLeftSidebar={() => {
+          if (isNarrowViewport) {
+            setIsExplorerOpen((current) => !current)
+            return
+          }
+          if (isLeftSidebarCollapsed) {
+            handleExpandSidebar()
+            return
+          }
+          setIsLeftSidebarCollapsed(true)
+        }}
+      />
       <CodeWorkspaceChrome
         activeLanguage={activeLanguage}
         activeRelativePath={activeRelativePath}

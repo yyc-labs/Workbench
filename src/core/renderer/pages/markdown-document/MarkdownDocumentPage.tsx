@@ -5,8 +5,7 @@ import type { Editor } from '@milkdown/core'
 import { Button } from '../../components/ui/button'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Input } from '../../components/ui/input'
-import { SidebarGestureOverlay } from '../../components/SidebarGestureOverlay'
-import { useSidebarGesture } from '../../hooks/useSidebarGesture'
+import { SidebarGestureHost } from '../../components/SidebarGestureHost'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { MarkdownDocumentRichEditorLazy } from './MarkdownDocumentRichEditor.lazy'
@@ -78,14 +77,6 @@ export function MarkdownDocumentPage() {
   const isDirty = dirty || Boolean(active && value !== active.content)
   const scrollMode = mode === 'rich' ? 'preview' : mode === 'source' ? 'edit' : 'split'
   const { previewRef, handleEditorScroll } = useMarkdownDocumentScrollSync(scrollMode, editorRef, active?.path ?? null)
-  const sidebarGestureOverlay = useSidebarGesture({
-    pageRootRef,
-    onBeforeToggle: () => setFormatMenu(null),
-    onToggleLeftSidebar: () => {
-      setDrawerOpen(false)
-      setSidebarCollapsed((collapsed) => !collapsed)
-    },
-  })
 
   useEffect(() => {
     void loadHistory()
@@ -351,7 +342,14 @@ export function MarkdownDocumentPage() {
         </main>
       </div>
       {formatMenu ? <MarkdownFormatCascader x={formatMenu.x} y={formatMenu.y} editor={formatMenu.editor} selectionContext={formatMenu.selectionContext} onClose={() => setFormatMenu(null)} /> : null}
-      <SidebarGestureOverlay overlay={sidebarGestureOverlay} />
+      <SidebarGestureHost
+        pageRootRef={pageRootRef}
+        onBeforeToggle={() => setFormatMenu(null)}
+        onToggleLeftSidebar={() => {
+          setDrawerOpen(false)
+          setSidebarCollapsed((collapsed) => !collapsed)
+        }}
+      />
       <ConfirmDialog
         open={Boolean(pendingAction)}
         onClose={() => setPendingAction(null)}

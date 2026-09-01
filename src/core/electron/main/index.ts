@@ -415,7 +415,19 @@ function openAppViewWindow(viewPath: string): Promise<boolean> {
     if (appViewWindows.get(viewPath) === viewWindow) appViewWindows.delete(viewPath)
   })
   viewWindow.once('ready-to-show', () => {
-    if (!viewWindow.isDestroyed()) viewWindow.show()
+    if (viewWindow.isDestroyed()) return
+
+    // 独立窗口跟随主窗口的尺寸与窗口状态创建:主窗口全屏则同样全屏,最大化则同样最大化,否则沿用主窗口大小与位置。
+    const sourceWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
+    if (sourceWindow?.isFullScreen()) {
+      viewWindow.setFullScreen(true)
+    } else if (sourceWindow?.isMaximized()) {
+      viewWindow.maximize()
+    } else if (sourceWindow) {
+      viewWindow.setBounds(sourceWindow.getBounds())
+    }
+
+    viewWindow.show()
   })
   return Promise.resolve(true)
 }
