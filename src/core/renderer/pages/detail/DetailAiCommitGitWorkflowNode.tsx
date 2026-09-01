@@ -1,4 +1,4 @@
-import { GitBranch, GitCommitHorizontal, GitMerge, Shuffle, type LucideIcon } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, GitMerge, ShieldCheck, Shuffle, type LucideIcon } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useI18n } from '../../i18n'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
@@ -28,7 +28,15 @@ function getNodeSummary(data: GitWorkflowNodeData): string {
     return data.config.source.mode === 'fixed' ? `merge ${data.config.source.branch}` : 'merge prompt'
   }
   if (data.operation === 'commit') {
-    return data.config.message.preset ? data.config.message.preset : 'commit prompt'
+    if (data.config.message.mode === 'ai') {
+      if (data.config.execution === 'preset-direct') return 'commit · ai direct'
+      if (data.config.execution === 'skip-if-no-changes') return 'commit · ai, skip if clean'
+      return 'commit · ai confirm'
+    }
+    const preset = data.config.message.preset
+    if (data.config.execution === 'preset-direct') return preset ? `commit ${preset}` : 'commit preset'
+    if (data.config.execution === 'skip-if-no-changes') return preset ? `commit ${preset}` : 'commit · skip if clean'
+    return preset ? preset : 'commit prompt'
   }
   if (data.operation === 'push' && data.config.setUpstreamWhenMissing) return 'push + set upstream'
   if (data.operation === 'pull') return 'ff-only'
@@ -51,7 +59,7 @@ export function DetailAiCommitGitWorkflowNode(props: NodeProps<any>) {
   const stateTone = data.state?.status === 'succeeded' ? 'success' : data.state?.status === 'failed' ? 'failure' : data.state?.status === 'running' ? 'running' : 'idle'
 
   return (
-    <div className={`min-w-[220px] rounded-[18px] border px-3 py-3 shadow-[0_12px_28px_rgba(0,0,0,0.06)] ${data.active ? 'border-[color:var(--color-primary)]/45' : 'border-[color:var(--color-border)]'} bg-[color:var(--color-card)]`}>
+    <div className={`min-w-[220px] rounded-[18px] border px-3 py-3 shadow-[var(--shadow-card)] ${data.active ? 'border-[color:var(--color-primary)]/45' : 'border-[color:var(--color-border)]'} bg-[color:var(--color-card)]`}>
       <Handle type="target" position={Position.Left} id="input" className="!h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-primary)]" />
       <Handle type="source" position={Position.Right} id="success" className="!top-[28%] !h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-success)]" />
       <Handle type="source" position={Position.Right} id="failure" className="!top-[72%] !h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-destructive)]" />
@@ -72,7 +80,10 @@ export function DetailAiCommitGitWorkflowNode(props: NodeProps<any>) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="truncate text-[12px] font-semibold text-[color:var(--color-foreground)]">{t(definition.labelKey as never)}</p>
+              <p className="flex items-center gap-1 truncate text-[12px] font-semibold text-[color:var(--color-foreground)]">
+                <span className="truncate">{t(definition.labelKey as never)}</span>
+                {data.requiresConfirmation && <ShieldCheck className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" aria-label={t('detail.gitWorkflowRequiresConfirmation')} />}
+              </p>
               <p className="truncate text-[10.5px] text-[color:var(--color-muted-foreground)]">{data.label || getNodeSummary(data)}</p>
             </div>
             {data.state?.status && (

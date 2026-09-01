@@ -6,12 +6,15 @@ export type GitWorkflowEdgeKind = 'success' | 'failure'
 
 export type GitWorkflowFailurePolicy = 'follow-failure-edge' | 'pause'
 
-export type GitBranchTarget = { mode: 'prompt' } | { mode: 'fixed'; branch: string }
+export type GitBranchTarget = { mode: 'prompt'; branch?: string } | { mode: 'fixed'; branch: string }
+
+export type GitWorkflowCommitExecution = 'confirm-each-run' | 'skip-if-no-changes' | 'preset-direct'
 
 export type GitWorkflowNodeBase<TOperation extends GitWorkflowOperation, TConfig> = {
   schemaVersion: 1
   operation: TOperation
   label?: string
+  requiresConfirmation: boolean
   config: TConfig
   failurePolicy: GitWorkflowFailurePolicy
 }
@@ -57,9 +60,10 @@ export type CommitNodeData = GitWorkflowNodeBase<
   'commit',
   {
     message: {
-      mode: 'prompt'
+      mode: 'prompt' | 'ai'
       preset?: string
     }
+    execution: GitWorkflowCommitExecution
   }
 >
 

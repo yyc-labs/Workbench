@@ -3,12 +3,10 @@ import type { GitOperationResult } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import { classifyGitOperationResult, commitGitWorkflowNodePositions, createGitWorkflowEdgeId, createGitWorkflowNode, createInitialGitWorkflowRunState, loadGitWorkflowGraph, removeGitWorkflowNode, saveGitWorkflowGraph, validateGitWorkflowGraph } from './gitWorkflow.graph'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
+import type { AiCommitStatus } from './detail.types'
 import type { GitWorkflowEdge, GitWorkflowEdgeKind, GitWorkflowExecutionContext, GitWorkflowNode, GitWorkflowNodeData, GitWorkflowNodeOutcome, GitWorkflowRunState, GitWorkflowValidationContext, GitWorkflowValidationResult, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 
 type GitWorkflowSaveState = 'idle' | 'saving' | 'saved'
-
-/** 保存反馈动画的展示时长（ms），localStorage 写入为同步操作，需要短暂停留让用户感知保存过程。 */
-const SAVE_FEEDBACK_MS = 450
 
 type UseGitWorkflowRunnerOptions = {
   projectId: string
@@ -29,6 +27,11 @@ type UseGitWorkflowRunnerOptions = {
   } | null
   onRefreshGitSnapshot: () => void | Promise<void>
   onOperationResult?: (result: GitOperationResult) => void
+  aiCommit?: {
+    status: AiCommitStatus
+    onRun: () => void | Promise<void>
+    onCancel: () => void | Promise<void>
+  }
 }
 
 type PendingConfirmation = {
@@ -123,11 +126,10 @@ function buildExecutionRequest(node: GitWorkflowNode, snapshot: NonNullable<UseG
     ...resolved,
     repoRoot: snapshot.repoRoot,
     ...(commitMessage ? { message: commitMessage } : {}),
-    ...(targetValue ? { targetBranch: targetValue } : {}),
   }
 }
 
-export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnapshot, onOperationResult }: UseGitWorkflowRunnerOptions) {
+export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnapshot, onOperationResult, aiCommit }: UseGitWorkflowRunnerOptions) {
   const { t } = useI18n()
   const [graph, setGraph] = useState<PersistedGitWorkflowGraph>(() => loadGitWorkflowGraph(projectId))
   const [runState, setRunState] = useState<GitWorkflowRunState>(createInitialGitWorkflowRunState())
@@ -140,8 +142,9 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
   const [validationResult, setValidationResult] = useState<GitWorkflowValidationResult>({ ok: true, issues: [] })
   const [saveState, setSaveState] = useState<GitWorkflowSaveState>('idle')
   const lastSavedUpdatedAtRef = useRef<number | null>(null)
-  const saveTimerRef = useRef<number | null>(null)
+  const saveGraphTimerRef = useRef<number | null>(null)
   const runNodeRef = useRef<((nodeId: string) => Promise<void>) | null>(null)
+  const awaitingAiCommitNodeIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const loaded = loadGitWorkflowGraph(projectId)
@@ -155,13 +158,26 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     setRuntimeTarget(null)
     setRuntimeTargetValue('')
     setRuntimeCommitMessage('')
+    awaitingAiCommitNodeIdRef.current = null
   }, [projectId])
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
+      if (saveGraphTimerRef.current != null) window.clearTimeout(saveGraphTimerRef.current)
     }
   }, [])
+
+  useEffect(() => {
+    if (graph.updatedAt === lastSavedUpdatedAtRef.current) return
+    if (saveGraphTimerRef.current != null) window.clearTimeout(saveGraphTimerRef.current)
+    setSaveState('saving')
+    saveGraphTimerRef.current = window.setTimeout(() => {
+      saveGraphTimerRef.current = null
+      saveGitWorkflowGraph(projectId, graph)
+      lastSavedUpdatedAtRef.current = graph.updatedAt
+      setSaveState('saved')
+    }, 600)
+  }, [graph, projectId])
 
   useEffect(() => {
     const result = validateGitWorkflowGraph(graph, getValidationContext(gitSnapshot))
@@ -288,21 +304,6 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     setGraph((prev) => commitGitWorkflowNodePositions(prev, updates))
   }, [])
 
-  const saveGraph = useCallback(
-    (nextGraph?: PersistedGitWorkflowGraph) => {
-      const target = nextGraph ?? graph
-      saveGitWorkflowGraph(projectId, target)
-      lastSavedUpdatedAtRef.current = target.updatedAt
-      setSaveState('saving')
-      if (saveTimerRef.current != null) window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = window.setTimeout(() => {
-        setSaveState('saved')
-        saveTimerRef.current = null
-      }, SAVE_FEEDBACK_MS)
-    },
-    [graph, projectId],
-  )
-
   const isDirty = lastSavedUpdatedAtRef.current != null && graph.updatedAt !== lastSavedUpdatedAtRef.current
 
   const clearPending = useCallback(() => {
@@ -370,6 +371,34 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     [clearPending, graph, onRefreshGitSnapshot, updateRunNodeState],
   )
 
+  const executeAiCommitNode = useCallback(
+    async (nodeId: string) => {
+      if (!gitSnapshot) return
+      if (!aiCommit || aiCommit.status === 'running') {
+        const reason = t('detail.gitWorkflowAiCommitUnavailable')
+        const failedResult: GitOperationResult = {
+          repoRoot: gitSnapshot.repoRoot,
+          operation: 'commit',
+          ok: false,
+          checkedAt: Date.now(),
+          command: 'ai-commit',
+          output: reason,
+          exitCode: null,
+          error: reason,
+        }
+        onOperationResult?.(failedResult)
+        updateRunNodeState(nodeId, { status: 'failed', finishedAt: Date.now(), reason })
+        await finishWithOutcome(nodeId, { kind: 'failure', result: failedResult, reason })
+        return
+      }
+      updateRunNodeState(nodeId, { status: 'running', startedAt: Date.now(), reason: undefined })
+      setRunState((prev) => ({ ...prev, status: 'running', activeNodeId: nodeId, activeEdgeId: undefined }))
+      awaitingAiCommitNodeIdRef.current = nodeId
+      await aiCommit.onRun()
+    },
+    [aiCommit, finishWithOutcome, gitSnapshot, onOperationResult, t, updateRunNodeState],
+  )
+
   const executeNode = useCallback(
     async (nodeId: string, targetBranch?: string, commitMessage?: string, confirmed = false) => {
       if (!gitSnapshot?.isGitRepository) {
@@ -384,11 +413,47 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         return
       }
 
+      if (node.data.operation === 'commit' && node.data.config.message.mode === 'ai') {
+        const execution = node.data.config.execution ?? 'confirm-each-run'
+        if (execution === 'skip-if-no-changes' && gitSnapshot.changedFiles.length === 0) {
+          const skippedResult: GitOperationResult = {
+            repoRoot: gitSnapshot.repoRoot,
+            operation: 'commit',
+            ok: true,
+            checkedAt: Date.now(),
+            command: '',
+            output: '',
+            exitCode: null,
+            skipped: true,
+            skipReason: 'other',
+          }
+          updateRunNodeState(nodeId, { status: 'succeeded', startedAt: Date.now(), finishedAt: Date.now(), noOp: true })
+          await finishWithOutcome(nodeId, { kind: 'success', result: skippedResult, noOp: true })
+          return
+        }
+        if (node.data.requiresConfirmation && !confirmed) {
+          setPendingConfirmation({
+            nodeId,
+            title: `COMMIT ${t('detail.operationConfirmSuffix')}`,
+            message: t('detail.gitWorkflowAiCommitConfirmMessage'),
+            confirmLabel: t('detail.operationConfirmExecute'),
+            cancelLabel: t('common.cancel'),
+            helperText: t('detail.operationConfirmHelper'),
+            riskLevel: 'normal',
+          })
+          setRunState((prev) => ({ ...prev, status: 'waiting-for-confirmation', activeNodeId: nodeId }))
+          return
+        }
+        await executeAiCommitNode(nodeId)
+        return
+      }
+
       updateRunNodeState(nodeId, { status: 'running', startedAt: Date.now(), reason: undefined })
       setRunState((prev) => ({ ...prev, status: 'running', activeNodeId: nodeId, activeEdgeId: undefined }))
 
       const definition = getGitWorkflowOperationDefinition(node.data.operation)
-      const targetFromRuntime = node.data.operation === 'switch' || node.data.operation === 'merge' ? targetBranch || runtimeTargetValue || undefined : undefined
+      const configTarget = node.data.operation === 'switch' ? node.data.config.target : node.data.operation === 'merge' ? node.data.config.source : undefined
+      const targetFromRuntime = configTarget ? (configTarget.mode === 'fixed' ? configTarget.branch : targetBranch || runtimeTargetValue || undefined) : undefined
       const request = buildExecutionRequest(node, gitSnapshot, targetFromRuntime, (commitMessage ?? runtimeCommitMessage) || undefined)
       if (request === 'wait-for-input') {
         if (node.data.operation === 'commit') {
@@ -401,7 +466,7 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         return
       }
 
-      if (definition.confirmation !== 'none' && !confirmed) {
+      if (node.data.requiresConfirmation && !confirmed) {
         const message =
           node.data.operation === 'switch'
             ? t('detail.operationConfirmSwitchMessage', { targetBranch: request.targetBranch || targetFromRuntime || '' })
@@ -456,7 +521,7 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         await finishWithOutcome(nodeId, outcome)
       }
     },
-    [clearPending, finishWithOutcome, gitSnapshot, graphNodeMap, onOperationResult, runtimeCommitMessage, runtimeTargetValue, t, updateRunNodeState],
+    [clearPending, executeAiCommitNode, finishWithOutcome, gitSnapshot, graphNodeMap, onOperationResult, runtimeCommitMessage, runtimeTargetValue, t, updateRunNodeState],
   )
 
   const confirmPendingConfirmation = useCallback(async () => {
@@ -517,12 +582,41 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
       }
 
       if (node.data.operation === 'commit') {
-        setPendingCommit({ nodeId, presetMessage: node.data.config.message.preset ?? '' })
+        if (node.data.config.message.mode === 'ai') {
+          await executeNode(nodeId, undefined, undefined, false)
+          return
+        }
+        const execution = node.data.config.execution ?? 'confirm-each-run'
+        if (execution === 'skip-if-no-changes') {
+          const hasStagedChanges = gitSnapshot.changedFiles.some((file) => file.staged)
+          if (!hasStagedChanges) {
+            const skippedResult: GitOperationResult = {
+              repoRoot: gitSnapshot.repoRoot,
+              operation: 'commit',
+              ok: true,
+              checkedAt: Date.now(),
+              command: '',
+              output: '',
+              exitCode: null,
+              skipped: true,
+              skipReason: 'other',
+            }
+            updateRunNodeState(nodeId, { status: 'succeeded', startedAt: Date.now(), finishedAt: Date.now(), noOp: true })
+            await finishWithOutcome(nodeId, { kind: 'success', result: skippedResult, noOp: true })
+            return
+          }
+        }
+        const presetMessage = node.data.config.message.preset ?? ''
+        if (execution === 'preset-direct' && presetMessage.trim().length > 0) {
+          await executeNode(nodeId, undefined, presetMessage, true)
+          return
+        }
+        setPendingCommit({ nodeId, presetMessage })
         setRunState((prev) => ({ ...prev, status: 'waiting-for-confirmation', activeNodeId: nodeId }))
         return
       }
 
-      if (getGitWorkflowOperationDefinition(node.data.operation).confirmation !== 'none') {
+      if (node.data.requiresConfirmation) {
         setPendingConfirmation({
           nodeId,
           title: `${getGitWorkflowOperationDefinition(node.data.operation).operation.toUpperCase()} ${t('detail.operationConfirmSuffix')}`,
@@ -538,25 +632,29 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
 
       await executeNode(nodeId)
     },
-    [executeNode, gitSnapshot, graph, graphNodeMap, runtimeTargetValue, t, updateRunNodeState],
+    [executeNode, finishWithOutcome, gitSnapshot, graph, graphNodeMap, runtimeTargetValue, t, updateRunNodeState],
   )
 
-  const startWorkflow = useCallback(async () => {
-    if (!gitSnapshot) return
+  const startWorkflow = useCallback(async (): Promise<boolean> => {
+    if (!gitSnapshot) return false
+    if (runState.status === 'running' || runState.status === 'validating' || runState.status === 'waiting-for-confirmation' || runState.status === 'waiting-for-input') return false
     const validation = validateGitWorkflowGraph(graph, getValidationContext(gitSnapshot))
     setValidationResult(validation)
     if (!validation.ok) {
       setRunState({ status: 'failed', activeNodeId: graph.entryNodeId, nodeStates: {} })
-      return
+      return false
     }
     setRunState({ status: 'running', activeNodeId: graph.entryNodeId, nodeStates: {} })
     await runNode(graph.entryNodeId)
-  }, [gitSnapshot, graph, runNode])
+    return true
+  }, [gitSnapshot, graph, runNode, runState.status])
 
   const abortWorkflow = useCallback(() => {
+    if (awaitingAiCommitNodeIdRef.current && aiCommit) void aiCommit.onCancel()
+    awaitingAiCommitNodeIdRef.current = null
     setRunState((prev) => ({ ...prev, status: 'paused' }))
     clearPending()
-  }, [clearPending])
+  }, [aiCommit, clearPending])
 
   const setRuntimeTargetForNode = useCallback((nodeId: string, value: string) => {
     setRuntimeTargetValue(value)
@@ -573,6 +671,42 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
   useEffect(() => {
     runNodeRef.current = runNode
   }, [runNode])
+
+  useEffect(() => {
+    const nodeId = awaitingAiCommitNodeIdRef.current
+    if (!nodeId || !aiCommit) return
+    if (aiCommit.status !== 'success' && aiCommit.status !== 'error') return
+    awaitingAiCommitNodeIdRef.current = null
+    if (aiCommit.status === 'success') {
+      const result: GitOperationResult = {
+        repoRoot: gitSnapshot?.repoRoot ?? '',
+        operation: 'commit',
+        ok: true,
+        checkedAt: Date.now(),
+        command: 'ai-commit',
+        output: '',
+        exitCode: 0,
+      }
+      onOperationResult?.(result)
+      updateRunNodeState(nodeId, { status: 'succeeded', finishedAt: Date.now() })
+      void finishWithOutcome(nodeId, { kind: 'success', result })
+      return
+    }
+    const reason = t('detail.gitWorkflowAiCommitFailed')
+    const result: GitOperationResult = {
+      repoRoot: gitSnapshot?.repoRoot ?? '',
+      operation: 'commit',
+      ok: false,
+      checkedAt: Date.now(),
+      command: 'ai-commit',
+      output: reason,
+      exitCode: null,
+      error: reason,
+    }
+    onOperationResult?.(result)
+    updateRunNodeState(nodeId, { status: 'failed', finishedAt: Date.now(), reason })
+    void finishWithOutcome(nodeId, { kind: 'failure', result, reason })
+  }, [aiCommit, finishWithOutcome, gitSnapshot?.repoRoot, onOperationResult, t, updateRunNodeState])
 
   return {
     graph,
@@ -596,7 +730,6 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     deleteEdge,
     connect,
     commitNodePositions,
-    saveGraph,
     saveState,
     isDirty,
     startWorkflow,

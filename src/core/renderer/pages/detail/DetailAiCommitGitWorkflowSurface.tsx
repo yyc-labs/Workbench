@@ -1,9 +1,8 @@
 import '@xyflow/react/dist/style.css'
 import { applyEdgeChanges, applyNodeChanges, Background, type Connection, Controls, type Edge, type EdgeChange, type EdgeTypes, type Node, type NodeChange, type NodeTypes, ReactFlow, useReactFlow } from '@xyflow/react'
-import { type DragEvent, type ForwardedRef, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DetailAiCommitGitWorkflowEdge } from './DetailAiCommitGitWorkflowEdge'
 import { DetailAiCommitGitWorkflowNode } from './DetailAiCommitGitWorkflowNode'
-import { commitGitWorkflowNodePositions } from './gitWorkflow.graph'
 import type { GitWorkflowEdgeKind, GitWorkflowNodeData, GitWorkflowNodeState, GitWorkflowRunState, GitWorkflowValidationResult, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 
 type FlowNodeData = GitWorkflowNodeData & {
@@ -33,10 +32,6 @@ type WorkflowSurfaceProps = {
   onDeleteEdge: (edgeId: string) => void
   onSelectNode: (nodeId: string | null) => void
   onCommitNodePositions: (updates: Array<{ id: string; position: { x: number; y: number } }>) => void
-}
-
-export type WorkflowSurfaceHandle = {
-  getGraphSnapshot: () => PersistedGitWorkflowGraph | null
 }
 
 const nodeTypes = { gitOperation: DetailAiCommitGitWorkflowNode } as unknown as NodeTypes
@@ -108,6 +103,7 @@ function patchFlowNodes(currentNodes: FlowNode[], graph: PersistedGitWorkflowGra
     if (
       node.data.operation === nextData.operation &&
       node.data.label === nextData.label &&
+      node.data.requiresConfirmation === nextData.requiresConfirmation &&
       node.data.failurePolicy === nextData.failurePolicy &&
       node.data.config === nextData.config &&
       node.data.state === nextData.state &&
@@ -171,7 +167,7 @@ function getChangedNodePositions(graph: PersistedGitWorkflowGraph, nodes: FlowNo
   })
 }
 
-export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiCommitGitWorkflowSurface({ graph, runState, selectedNodeId, validationResult, canEdit, onAddNode, onConnect, onDeleteNode, onDeleteEdge, onSelectNode, onCommitNodePositions }: WorkflowSurfaceProps, ref: ForwardedRef<WorkflowSurfaceHandle>) {
+export function DetailAiCommitGitWorkflowSurface({ graph, runState, selectedNodeId, validationResult, canEdit, onAddNode, onConnect, onDeleteNode, onDeleteEdge, onSelectNode, onCommitNodePositions }: WorkflowSurfaceProps) {
   const { screenToFlowPosition } = useReactFlow()
   const validationMessagesByNodeId = useMemo(() => buildValidationMessagesByNodeId(validationResult), [validationResult])
   const [nodes, setNodes] = useState<FlowNode[]>(() => buildFlowNodes(graph, runState, selectedNodeId, validationMessagesByNodeId))
@@ -198,18 +194,6 @@ export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiComm
       setEdges((current) => patchFlowEdges(current, graph, runState))
     }
   }, [graph, runState, selectedNodeId, validationResult, validationMessagesByNodeId])
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      getGraphSnapshot: () => {
-        const updates = getChangedNodePositions(graph, nodesRef.current)
-        if (updates.length === 0) return graph
-        return commitGitWorkflowNodePositions(graph, updates)
-      },
-    }),
-    [graph],
-  )
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
@@ -299,4 +283,4 @@ export const DetailAiCommitGitWorkflowSurface = forwardRef(function DetailAiComm
       </ReactFlow>
     </section>
   )
-})
+}

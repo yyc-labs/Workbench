@@ -107,11 +107,13 @@ function normalizeNodeData(value: unknown): GitWorkflowNodeData | null {
   if (!isGitWorkflowOperation(value.operation)) return null
   const base = createGitWorkflowNodeData(value.operation)
   const label = typeof value.label === 'string' ? value.label : base.label
+  const requiresConfirmation = typeof value.requiresConfirmation === 'boolean' ? value.requiresConfirmation : base.requiresConfirmation
   const config = isRecord(value.config) ? { ...base.config, ...value.config } : base.config
   const failurePolicy = value.failurePolicy === 'follow-failure-edge' || value.failurePolicy === 'pause' ? value.failurePolicy : base.failurePolicy
   return {
     ...base,
     ...(label ? { label } : {}),
+    requiresConfirmation,
     config: config as GitWorkflowNodeData['config'],
     failurePolicy,
   } as GitWorkflowNodeData

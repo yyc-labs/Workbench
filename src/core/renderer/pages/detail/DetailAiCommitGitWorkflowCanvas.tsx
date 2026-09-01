@@ -1,14 +1,15 @@
 import { type Connection, ReactFlowProvider } from '@xyflow/react'
-import { Check, RefreshCw, Save, Trash2 } from 'lucide-react'
-import { type DragEvent, useCallback, useRef } from 'react'
+import { Trash2 } from 'lucide-react'
+import { type DragEvent, useCallback } from 'react'
+import { Checkbox } from '../../components/ui/checkbox'
 import { Combobox } from '../../components/ui/combobox'
 import { Input } from '../../components/ui/input'
 import { Select } from '../../components/ui/select'
 import { Textarea } from '../../components/ui/textarea'
 import { useI18n } from '../../i18n'
-import { DetailAiCommitGitWorkflowSurface, type WorkflowSurfaceHandle } from './DetailAiCommitGitWorkflowSurface'
+import { DetailAiCommitGitWorkflowSurface } from './DetailAiCommitGitWorkflowSurface'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
-import type { GitWorkflowNodeData } from './gitWorkflow.types'
+import type { GitWorkflowCommitExecution, GitWorkflowNodeData } from './gitWorkflow.types'
 import type { GitWorkflowRunnerApi } from './useGitWorkflowRunner'
 
 type WorkflowRunner = GitWorkflowRunnerApi
@@ -18,8 +19,10 @@ type CommitNodeData = Extract<GitWorkflowNodeData, { operation: 'commit' }>
 
 function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
   const { t } = useI18n()
-  const surfaceRef = useRef<WorkflowSurfaceHandle>(null)
   const selectedNode = runner.selectedNode
+  const selectedCommitMessageMode = selectedNode?.data.operation === 'commit' ? ((selectedNode.data as CommitNodeData).config.message.mode ?? 'prompt') : 'prompt'
+  const isAiCommit = selectedCommitMessageMode === 'ai'
+  const selectedExecution = (selectedNode?.data.operation === 'commit' ? ((selectedNode.data as CommitNodeData).config.execution ?? 'confirm-each-run') : 'confirm-each-run') as GitWorkflowCommitExecution
   const runStatusText =
     runner.runState.status === 'validating'
       ? t('detail.gitWorkflowRunValidating')
@@ -36,20 +39,9 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
   const canEdit = runner.runState.status === 'idle' || runner.runState.status === 'paused' || runner.runState.status === 'completed'
 
   const isSaving = runner.saveState === 'saving'
-  const isSaved = runner.saveState === 'saved' && !runner.isDirty
   const saveStatusText = isSaving ? t('common.saving') : runner.isDirty ? t('detail.gitWorkflowUnsavedChanges') : t('detail.gitWorkflowSaved')
   const saveStatusDotClass = isSaving ? 'bg-[color:var(--color-primary)] animate-pulse' : runner.isDirty ? 'bg-[color:var(--color-warning)]' : 'bg-[color:var(--color-success)]'
   const saveStatusTextClass = isSaving ? 'text-[color:var(--color-primary)]' : runner.isDirty ? 'text-[color:var(--color-warning)]' : 'text-[color:var(--color-success)]'
-
-  const handleSaveGraph = useCallback(() => {
-    const nextGraph = surfaceRef.current?.getGraphSnapshot()
-    if (nextGraph) {
-      runner.commitNodePositions(nextGraph.nodes.map((node) => ({ id: node.id, position: node.position })))
-      runner.saveGraph(nextGraph)
-      return
-    }
-    runner.saveGraph()
-  }, [runner.commitNodePositions, runner.saveGraph])
 
   const handleDragStart = useCallback((event: DragEvent<HTMLButtonElement>, operation: GitWorkflowNodeData['operation']) => {
     event.dataTransfer.effectAllowed = 'copy'
@@ -67,7 +59,7 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
   )
 
   return (
-    <div className="grid min-h-[72vh] grid-cols-[220px_minmax(0,1fr)_320px] gap-4 overflow-hidden">
+    <div className="grid h-[72vh] grid-cols-[220px_minmax(0,1fr)_320px] grid-rows-[minmax(0,1fr)] gap-4 overflow-hidden">
       <div className="flex min-h-0 flex-col rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3">
         <p className="section-label mb-2">{t('detail.gitWorkflowPaletteTitle')}</p>
         <div className="space-y-2 overflow-auto">
@@ -87,11 +79,7 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
             )
           })}
           <div className="pt-2">
-            <button type="button" className="quiet-control flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
-              {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isSaved ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <Save className="h-3.5 w-3.5" />}
-              {isSaving ? t('common.saving') : isSaved ? t('detail.gitWorkflowSaved') : t('detail.gitWorkflowSave')}
-            </button>
-            <div className="mt-1.5 flex items-center justify-center gap-1.5">
+            <div className="flex items-center justify-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${saveStatusDotClass}`} />
               <span className={`text-[10px] ${saveStatusTextClass}`}>{saveStatusText}</span>
             </div>
@@ -100,7 +88,6 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
       </div>
 
       <DetailAiCommitGitWorkflowSurface
-        ref={surfaceRef}
         graph={runner.graph}
         runState={runner.runState}
         selectedNodeId={runner.selectedNodeId}
@@ -114,9 +101,9 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
         onCommitNodePositions={runner.commitNodePositions}
       />
 
-      <div className="flex min-h-0 flex-col gap-3 overflow-auto rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3">
-        <div>
-          <p className="section-label mb-2">{t('detail.gitWorkflowInspectorTitle')}</p>
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden rounded-[18px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-3">
+        <p className="section-label mb-0 shrink-0">{t('detail.gitWorkflowInspectorTitle')}</p>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {selectedNode ? (
             <div className="space-y-3">
               <div>
@@ -135,17 +122,32 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                 />
               </label>
 
+              <div className="flex items-center justify-between gap-2 rounded-[12px] border border-[color:var(--color-border)] px-3 py-2">
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowRequiresConfirmation')}</span>
+                  <span className="block text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowRequiresConfirmationHint')}</span>
+                </span>
+                <Checkbox
+                  aria-label={t('detail.gitWorkflowRequiresConfirmation')}
+                  checked={selectedNode.data.requiresConfirmation}
+                  disabled={!canEdit}
+                  onChange={(event) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, requiresConfirmation: event.target.checked }))}
+                  className="h-4 w-4 accent-[color:var(--color-primary)]"
+                />
+              </div>
+
               {selectedNode.data.operation === 'switch' && (
                 <div className="space-y-2">
                   <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowSwitchTarget')}</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.target.mode === 'prompt' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
+                      className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedNode.data.config.target.mode === 'prompt' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
                       onClick={() =>
                         runner.updateNodeConfig(selectedNode.id, (data) => {
                           const next = data as SwitchNodeData
-                          return { ...next, config: { ...next.config, target: { mode: 'prompt' } } }
+                          const branch = next.config.target.branch
+                          return { ...next, config: { ...next.config, target: { mode: 'prompt', ...(branch ? { branch } : {}) } } }
                         })
                       }
                     >
@@ -153,11 +155,13 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                     </button>
                     <button
                       type="button"
-                      className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.target.mode === 'fixed' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
+                      className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedNode.data.config.target.mode === 'fixed' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
                       onClick={() =>
                         runner.updateNodeConfig(selectedNode.id, (data) => {
                           const next = data as SwitchNodeData
-                          return { ...next, config: { ...next.config, target: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' } } }
+                          const current = next.config.target
+                          const branch = current.branch || runner.branchTargetOptions[0] || ''
+                          return { ...next, config: { ...next.config, target: { mode: 'fixed', branch } } }
                         })
                       }
                     >
@@ -192,11 +196,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.source.mode === 'prompt' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
+                      className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedNode.data.config.source.mode === 'prompt' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
                       onClick={() =>
                         runner.updateNodeConfig(selectedNode.id, (data) => {
                           const next = data as MergeNodeData
-                          return { ...next, config: { ...next.config, source: { mode: 'prompt' }, noEdit: true } }
+                          const branch = next.config.source.branch
+                          return { ...next, config: { ...next.config, source: { mode: 'prompt', ...(branch ? { branch } : {}) }, noEdit: true } }
                         })
                       }
                     >
@@ -204,11 +209,12 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                     </button>
                     <button
                       type="button"
-                      className={`quiet-control rounded-[12px] px-3 py-2 text-left text-[11px] ${selectedNode.data.config.source.mode === 'fixed' ? 'bg-[color:var(--color-primary)]/10' : ''}`}
+                      className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedNode.data.config.source.mode === 'fixed' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
                       onClick={() =>
                         runner.updateNodeConfig(selectedNode.id, (data) => {
                           const next = data as MergeNodeData
-                          return { ...next, config: { ...next.config, source: { mode: 'fixed', branch: runner.branchTargetOptions[0] || '' }, noEdit: true } }
+                          const branch = next.config.source.branch || runner.branchTargetOptions[0] || ''
+                          return { ...next, config: { ...next.config, source: { mode: 'fixed', branch }, noEdit: true } }
                         })
                       }
                     >
@@ -238,21 +244,92 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
               )}
 
               {selectedNode.data.operation === 'commit' && (
-                <label htmlFor="git-workflow-commit-preset" className="block">
-                  <span className="mb-1 block text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowCommitPreset')}</span>
-                  <Textarea
-                    id="git-workflow-commit-preset"
-                    value={selectedNode.data.config.message.preset || ''}
-                    onChange={(event) =>
-                      runner.updateNodeConfig(selectedNode.id, (data) => {
-                        const next = data as CommitNodeData
-                        return { ...next, config: { ...next.config, message: { ...next.config.message, preset: event.target.value || undefined } } }
-                      })
-                    }
-                    placeholder={t('detail.gitWorkflowCommitPresetPlaceholder')}
-                    className="min-h-[96px] text-[12px]"
-                  />
-                </label>
+                <>
+                  <div className="space-y-2">
+                    <p className="text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowMessageSource')}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedCommitMessageMode === 'prompt' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
+                        onClick={() =>
+                          runner.updateNodeConfig(selectedNode.id, (data) => {
+                            const next = data as CommitNodeData
+                            return { ...next, config: { ...next.config, message: { ...next.config.message, mode: 'prompt' } } }
+                          })
+                        }
+                      >
+                        {t('detail.gitWorkflowMessageSourcePrompt')}
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-[12px] px-3 py-2 text-left text-[11px] transition-colors ${selectedCommitMessageMode === 'ai' ? 'bg-[color:var(--color-primary)] text-[color:var(--color-primary-foreground)]' : 'quiet-control text-[color:var(--color-muted-foreground)]'}`}
+                        onClick={() =>
+                          runner.updateNodeConfig(selectedNode.id, (data) => {
+                            const next = data as CommitNodeData
+                            return { ...next, config: { ...next.config, message: { ...next.config.message, mode: 'ai' } } }
+                          })
+                        }
+                      >
+                        {t('detail.gitWorkflowMessageSourceAi')}
+                      </button>
+                    </div>
+                  </div>
+                  {isAiCommit ? (
+                    <div className="flex items-center justify-between gap-2 rounded-[12px] border border-[color:var(--color-border)] px-3 py-2">
+                      <span className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowCommitExecutionSkipIfClean')}</span>
+                      <Checkbox
+                        aria-label={t('detail.gitWorkflowCommitExecutionSkipIfClean')}
+                        checked={selectedExecution === 'skip-if-no-changes'}
+                        onChange={(event) =>
+                          runner.updateNodeConfig(selectedNode.id, (data) => {
+                            const next = data as CommitNodeData
+                            return { ...next, config: { ...next.config, execution: event.target.checked ? ('skip-if-no-changes' as const) : ('confirm-each-run' as const) } }
+                          })
+                        }
+                        className="h-4 w-4 accent-[color:var(--color-primary)]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="block">
+                      <span className="mb-1 block text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowCommitExecution')}</span>
+                      <Select
+                        ariaLabel={t('detail.gitWorkflowCommitExecution')}
+                        value={selectedExecution}
+                        options={[
+                          { value: 'confirm-each-run', label: t('detail.gitWorkflowCommitExecutionConfirm') },
+                          { value: 'skip-if-no-changes', label: t('detail.gitWorkflowCommitExecutionSkipIfClean') },
+                          { value: 'preset-direct', label: t('detail.gitWorkflowCommitExecutionPresetDirect') },
+                        ]}
+                        onChange={(value) =>
+                          runner.updateNodeConfig(selectedNode.id, (data) => {
+                            const next = data as CommitNodeData
+                            return { ...next, config: { ...next.config, execution: value as GitWorkflowCommitExecution } }
+                          })
+                        }
+                        triggerClassName="h-9 rounded-[12px] px-3 text-[12px]"
+                        contentClassName="surface-card rounded-[12px] p-1"
+                        optionClassName="rounded-[8px] px-2 py-1.5 text-[12px]"
+                      />
+                    </div>
+                  )}
+                  <label htmlFor="git-workflow-commit-preset" className="block">
+                    <span className="mb-1 block text-[10.5px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowCommitPreset')}</span>
+                    <Textarea
+                      id="git-workflow-commit-preset"
+                      value={selectedNode.data.config.message.preset || ''}
+                      disabled={selectedNode.data.config.message.mode === 'ai'}
+                      onChange={(event) =>
+                        runner.updateNodeConfig(selectedNode.id, (data) => {
+                          const next = data as CommitNodeData
+                          return { ...next, config: { ...next.config, message: { ...next.config.message, preset: event.target.value || undefined } } }
+                        })
+                      }
+                      placeholder={t('detail.gitWorkflowCommitPresetPlaceholder')}
+                      className="min-h-[96px] text-[12px]"
+                    />
+                    {!isAiCommit && selectedExecution === 'preset-direct' && !(selectedNode.data.config.message.preset || '').trim() && <span className="mt-1 block text-[10px] text-[color:var(--color-warning)]">{t('detail.gitWorkflowCommitPresetRequired')}</span>}
+                  </label>
+                </>
               )}
 
               <div className="block">
@@ -281,7 +358,7 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
           )}
         </div>
 
-        <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/65 p-3">
+        <div className="shrink-0 rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/65 p-3">
           <p className="section-label mb-2">{t('detail.gitWorkflowStatusTitle')}</p>
           <p className="text-[12px] text-[color:var(--color-foreground)]">{runStatusText}</p>
           {runner.validationResult.issues.length > 0 && (
@@ -295,14 +372,10 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button type="button" className="quiet-control flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2 text-[11px]" onClick={handleSaveGraph}>
-            {isSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : isSaved ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <Save className="h-3.5 w-3.5" />}
-            {isSaving ? t('common.saving') : isSaved ? t('detail.gitWorkflowSaved') : t('detail.gitWorkflowSave')}
-          </button>
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            className="flex-1 rounded-full bg-primary px-3 py-2 text-[11px] font-medium text-white"
+            className="flex-1 rounded-full bg-primary px-3 py-2 text-[11px] font-medium text-[color:var(--color-primary-foreground)] transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => void runner.startWorkflow()}
             disabled={!runner.graph.entryNodeId || runner.runState.status === 'running' || runner.runState.status === 'waiting-for-confirmation' || runner.runState.status === 'waiting-for-input'}
           >
@@ -313,7 +386,7 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
           ? (() => {
               const runtimeTarget = runner.runtimeTarget
               return (
-                <div className="rounded-[14px] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]/45 p-3">
+                <div className="shrink-0 rounded-[14px] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-background)]/45 p-3">
                   <p className="mb-2 text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowChooseTarget')}</p>
                   <Combobox
                     ariaLabel={t('detail.gitWorkflowChooseTarget')}

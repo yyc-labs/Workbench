@@ -9,6 +9,7 @@ import { CodeTreeContextMenu, type CodeTreeContextMenuPayload } from './CodeTree
 
 const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
 const MAX_LOCATE_SCROLL_ATTEMPTS = 6
+const MAX_FOLLOW_SCROLL_ATTEMPTS = 6
 
 interface CodeFileTreeProps {
   nodes: ProjectFileNode[]
@@ -145,6 +146,29 @@ function centerTreeNodeInViewport(tree: TreeApi<ProjectFileNode>, relativePath: 
   if (Math.abs(currentScrollTop - roundedScrollTop) > 1) {
     scrollElement.scrollTop = roundedScrollTop
   }
+  return true
+}
+
+function ensureTreeNodeVisibleInViewport(tree: TreeApi<ProjectFileNode>, relativePath: string): boolean {
+  const index = tree.indexOf(relativePath)
+  const scrollElement = tree.listEl.current
+  if (index == null || !scrollElement) return false
+
+  const viewportHeight = scrollElement.clientHeight
+  if (viewportHeight <= 0) return false
+
+  const rowHeight = tree.rowHeight
+  const rowTop = index * rowHeight
+  const rowBottom = rowTop + rowHeight
+  const currentScrollTop = scrollElement.scrollTop
+
+  // 已在视口内则不做任何滚动，避免点击树节点时被无谓移动。
+  if (rowTop >= currentScrollTop && rowBottom <= currentScrollTop + viewportHeight) return true
+
+  // 不可见时滚动到居中位置，越界则钳制到滚动范围。
+  const centeredScrollTop = Math.round(rowTop - (viewportHeight - rowHeight) / 2)
+  const maxScrollTop = Math.max(0, scrollElement.scrollHeight - viewportHeight)
+  scrollElement.scrollTop = Math.min(maxScrollTop, Math.max(0, centeredScrollTop))
   return true
 }
 
@@ -290,25 +314,53 @@ export const CodeFileTree = memo(function CodeFileTree({
   }, [locateRequestToken, activeRelativePath])
 
   useEffect(() => {
-    const tree = treeRef.current
-    if (!tree) return
-
     if (!activeRelativePath) {
-      tree.deselectAll()
+      treeRef.current?.deselectAll()
       return
     }
 
-    tree.setSelection({
-      ids: [activeRelativePath],
-      anchor: activeRelativePath,
-      mostRecent: activeRelativePath,
-    })
-    tree.focus(activeRelativePath, { scroll: false })
-  }, [activeRelativePath, flatFileListMode, nodes])
+    // 跟随当前文件：选中并确保高亮行可见（容器测量与 Tree 挂载晚于本 effect，
+    // 因此树未就绪时也按帧重试，避免从全局搜索等视图切回文件树时定位失效）。
+    let cancelled = false
+    let frameId = 0
+    let attempts = 0
+
+    const followActiveFile = () => {
+      if (cancelled) return
+      const currentTree = treeRef.current
+      if (!currentTree) {
+        attempts += 1
+        if (attempts >= MAX_FOLLOW_SCROLL_ATTEMPTS) return
+        frameId = window.requestAnimationFrame(followActiveFile)
+        return
+      }
+
+      currentTree.setSelection({
+        ids: [activeRelativePath],
+        anchor: activeRelativePath,
+        mostRecent: activeRelativePath,
+      })
+      currentTree.focus(activeRelativePath, { scroll: false })
+
+      if (ensureTreeNodeVisibleInViewport(currentTree, activeRelativePath)) return
+
+      attempts += 1
+      if (attempts >= MAX_FOLLOW_SCROLL_ATTEMPTS) return
+      frameId = window.requestAnimationFrame(followActiveFile)
+    }
+
+    followActiveFile()
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [activeRelativePath, expandedDirectories, flatFileListMode, nodes])
 
   useEffect(() => {
     if (flatFileListMode) {
-      previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+      // 搜索模式退化为扁平列表，目录展开状态不会作用到 arborist。
+      // 同时保留进入搜索前的展开快照：否则搜索期间定位新增的父目录会在
+      // 切回树形模式时被 diff 误判为“已展开”，导致目录保持折叠、无法定位。
       return
     }
 
@@ -348,6 +400,7 @@ export const CodeFileTree = memo(function CodeFileTree({
         <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeFileTree.preparingFileTree')}</div>
       ) : (
         <Tree<ProjectFileNode>
+          key={flatFileListMode ? 'code-file-tree-flat' : 'code-file-tree-nested'}
           ref={treeRef}
           data={nodes}
           idAccessor={(item) => item.relativePath}

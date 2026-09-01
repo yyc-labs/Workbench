@@ -1,40 +1,22 @@
 import { CircleHelp, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
-import { DetailAiCommitCommitModal } from './DetailAiCommitCommitModal'
-import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationConfirmModal'
 import { DetailAiCommitGitWorkflowCanvas } from './DetailAiCommitGitWorkflowCanvas'
 import { getGitGuideSections, getGitGuideTitle } from './gitGuideContent'
-import { useGitWorkflowRunner } from './useGitWorkflowRunner'
-import type { GitOperationResult } from './detail.types'
-import type { DetailGitSnapshot } from './detail.types'
+import type { GitWorkflowRunnerApi } from './useGitWorkflowRunner'
 
 type DetailAiCommitGitGuideModalProps = {
   onClose: () => void
   open: boolean
-  projectId: string
-  gitSnapshot: DetailGitSnapshot | null
-  onRefreshGitSnapshot: () => void | Promise<void>
-  onOperationResult?: (result: GitOperationResult) => void
+  runner: GitWorkflowRunnerApi
 }
 
-export function DetailAiCommitGitGuideModal({ onClose, open, projectId, gitSnapshot, onRefreshGitSnapshot, onOperationResult }: DetailAiCommitGitGuideModalProps) {
+export function DetailAiCommitGitGuideModal({ onClose, open, runner }: DetailAiCommitGitGuideModalProps) {
   const { t } = useI18n()
   const [showGuide, setShowGuide] = useState(false)
-  const [operationConfirmInput, setOperationConfirmInput] = useState('')
-  const workflow = useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnapshot, onOperationResult })
   const guideTitle = getGitGuideTitle()
   const guideSections = getGitGuideSections()
-
-  useEffect(() => {
-    setOperationConfirmInput('')
-  }, [workflow.pendingConfirmation?.nodeId])
-
-  useEffect(() => {
-    if (!workflow.pendingCommit) return
-    workflow.setRuntimeCommitMessage(workflow.pendingCommit.presetMessage)
-  }, [workflow.pendingCommit?.nodeId, workflow.setRuntimeCommitMessage])
 
   return (
     <>
@@ -61,7 +43,7 @@ export function DetailAiCommitGitGuideModal({ onClose, open, projectId, gitSnaps
           </div>
         </div>
 
-        <DetailAiCommitGitWorkflowCanvas runner={workflow} />
+        <DetailAiCommitGitWorkflowCanvas runner={runner} />
       </ModalShell>
 
       <ModalShell open={showGuide} onClose={() => setShowGuide(false)} widthClassName="max-w-[520px]" baseZIndex={1140} ariaLabel={t('detail.gitGuideTeaching')}>
@@ -87,47 +69,6 @@ export function DetailAiCommitGitGuideModal({ onClose, open, projectId, gitSnaps
           ))}
         </div>
       </ModalShell>
-
-      <DetailAiCommitOperationConfirmModal
-        confirmExactMatch={workflow.pendingConfirmation?.exactMatch ?? ''}
-        confirmNeedsTypedMatch={Boolean(workflow.pendingConfirmation?.exactMatch)}
-        confirmTypedMatchPassed={!workflow.pendingConfirmation?.exactMatch || operationConfirmInput.trim() === workflow.pendingConfirmation.exactMatch}
-        onChangeOperationConfirmInput={setOperationConfirmInput}
-        onClose={() => {
-          setOperationConfirmInput('')
-          workflow.cancelPendingAction()
-        }}
-        onConfirm={() => {
-          setOperationConfirmInput('')
-          void workflow.confirmPendingConfirmation()
-        }}
-        open={Boolean(workflow.pendingConfirmation)}
-        operationConfirmInput={operationConfirmInput}
-        pendingOperationLabel={workflow.pendingConfirmation?.title ?? 'Git'}
-        pendingOperationMessage={workflow.pendingConfirmation?.message ?? ''}
-        riskLevel={workflow.pendingConfirmation?.riskLevel}
-        title={workflow.pendingConfirmation?.title}
-        confirmLabel={workflow.pendingConfirmation?.confirmLabel}
-        cancelLabel={workflow.pendingConfirmation?.cancelLabel}
-        helperText={workflow.pendingConfirmation?.helperText}
-      />
-
-      <DetailAiCommitCommitModal
-        blockedReason={null}
-        commitError={null}
-        commitMessage={workflow.runtimeCommitMessage}
-        committing={false}
-        onChangeCommitMessage={workflow.setRuntimeCommitMessage}
-        onClose={() => {
-          workflow.cancelPendingAction()
-        }}
-        onCommit={() => {
-          if (!workflow.pendingCommit) return
-          void workflow.confirmPendingCommit(workflow.runtimeCommitMessage || workflow.pendingCommit.presetMessage)
-        }}
-        open={Boolean(workflow.pendingCommit)}
-        stagedFileCount={0}
-      />
     </>
   )
 }

@@ -23,6 +23,7 @@ type DetailAiCommitBranchPanelProps = {
   onRequestUndoCommit: () => void
   onOpenCurrentBranchManager: () => void
   onOpenGitGuide: () => void
+  onRunWorkflow: () => void
   onOpenUpstreamManager: () => void
   onRequestGitOperation: (operation: PanelGitOperationKind) => void
   onSelectMergeTarget: (branchName: string) => void
@@ -93,6 +94,7 @@ export function DetailAiCommitBranchPanel({
   onRequestUndoCommit,
   onOpenCurrentBranchManager,
   onOpenGitGuide,
+  onRunWorkflow,
   onOpenUpstreamManager,
   onRequestGitOperation,
   onSelectMergeTarget,
@@ -138,7 +140,16 @@ export function DetailAiCommitBranchPanel({
         <>
           <div className="mb-3 flex items-center justify-between">
             <div className="inline-flex min-w-0 items-center gap-2">
-              <button type="button" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18" onClick={onOpenGitGuide} title={t('detail.branchPanelOpenGuide')}>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-primary)]/18"
+                onClick={onOpenGitGuide}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  onRunWorkflow()
+                }}
+                title={t('detail.branchPanelOpenGuide')}
+              >
                 <GitBranch className="h-4.5 w-4.5" />
               </button>
               <div className="min-w-0">

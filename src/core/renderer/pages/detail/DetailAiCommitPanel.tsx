@@ -1,6 +1,7 @@
 import { type Dispatch, type MouseEvent as ReactMouseEvent, type MutableRefObject, type SetStateAction } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
+import { toast } from '../../components/ui/toast'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
 import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerModal'
@@ -19,6 +20,7 @@ import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
 import type { AiCommitStatus, AiFlowNode, DetailGitRepositorySummary, DetailGitSnapshot, GitOperationResult, GitSetFileStageResult } from './detail.types'
 import { useDetailBranchManagerState } from './useDetailBranchManagerState'
 import { useDetailGitDiffState } from './useDetailGitDiffState'
+import { useGitWorkflowRunner } from './useGitWorkflowRunner'
 
 type DetailAiCommitPanelProps = {
   projectId: string
@@ -161,6 +163,7 @@ function DetailAiCommitPanel({
   const [commitUndo, setCommitUndo] = useState<CommitUndoState | null>(null)
   const [commitUndoRemainingMs, setCommitUndoRemainingMs] = useState(0)
   const [commitUndoRunning, setCommitUndoRunning] = useState(false)
+  const [workflowConfirmInput, setWorkflowConfirmInput] = useState('')
 
   const branch = gitSnapshot?.branch
   const changedFiles = gitSnapshot?.changedFiles ?? []
@@ -282,6 +285,34 @@ function DetailAiCommitPanel({
     onRefreshGitSnapshot,
     t,
   })
+  const gitWorkflowRunner = useGitWorkflowRunner({
+    projectId,
+    gitSnapshot,
+    onRefreshGitSnapshot,
+    onOperationResult: appendOperationLog,
+    aiCommit: {
+      status: aiCommitStatus,
+      onRun: onAiAutoCommit,
+      onCancel: onCancelAiCommit,
+    },
+  })
+
+  const handleRunWorkflowFromBranchIcon = useCallback(() => {
+    setMiddlePanelMode('workflow')
+    void gitWorkflowRunner.startWorkflow().then((started) => {
+      if (!started) toast.warning(t('detail.gitWorkflowRunFromBranchFailed'))
+    })
+  }, [gitWorkflowRunner, setMiddlePanelMode, t])
+
+  useEffect(() => {
+    setWorkflowConfirmInput('')
+  }, [gitWorkflowRunner.pendingConfirmation?.nodeId])
+
+  useEffect(() => {
+    if (!gitWorkflowRunner.pendingCommit) return
+    gitWorkflowRunner.setRuntimeCommitMessage(gitWorkflowRunner.pendingCommit.presetMessage)
+  }, [gitWorkflowRunner.pendingCommit?.nodeId, gitWorkflowRunner.pendingCommit?.presetMessage, gitWorkflowRunner.setRuntimeCommitMessage])
+
   const preflightItems = useMemo<PreflightItem[]>(() => {
     if (isGitSnapshotChecking) {
       return [
@@ -839,6 +870,7 @@ function DetailAiCommitPanel({
               operationLogs={operationLogs}
               setActiveCommitHash={setActiveCommitHash}
               showCommitHistoryLoading={showCommitHistoryLoading}
+              workflowView={{ graph: gitWorkflowRunner.graph, runState: gitWorkflowRunner.runState }}
             />
 
             <DetailAiCommitBranchPanel
@@ -857,6 +889,7 @@ function DetailAiCommitPanel({
               onChangeMergeSearchValue={setMergeSearchValue}
               onOpenCurrentBranchManager={() => setBranchManagerMode('current')}
               onOpenGitGuide={() => setGitGuideOpen(true)}
+              onRunWorkflow={handleRunWorkflowFromBranchIcon}
               onOpenUpstreamManager={() => setBranchManagerMode('upstream')}
               onRequestCommit={requestCommitStagedChanges}
               onRequestUndoCommit={requestUndoCommit}
@@ -958,7 +991,46 @@ function DetailAiCommitPanel({
         upstreamManagerDangerInput={upstreamManagerDangerInput}
         upstreamManagerRemoteName={upstreamManagerRemoteName}
       />
-      <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} projectId={projectId} gitSnapshot={gitSnapshot} onRefreshGitSnapshot={onRefreshGitSnapshot} onOperationResult={appendOperationLog} />
+      <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} runner={gitWorkflowRunner} />
+      <DetailAiCommitOperationConfirmModal
+        confirmExactMatch={gitWorkflowRunner.pendingConfirmation?.exactMatch ?? ''}
+        confirmNeedsTypedMatch={Boolean(gitWorkflowRunner.pendingConfirmation?.exactMatch)}
+        confirmTypedMatchPassed={!gitWorkflowRunner.pendingConfirmation?.exactMatch || workflowConfirmInput.trim() === gitWorkflowRunner.pendingConfirmation.exactMatch}
+        onChangeOperationConfirmInput={setWorkflowConfirmInput}
+        onClose={() => {
+          setWorkflowConfirmInput('')
+          gitWorkflowRunner.cancelPendingAction()
+        }}
+        onConfirm={() => {
+          setWorkflowConfirmInput('')
+          void gitWorkflowRunner.confirmPendingConfirmation()
+        }}
+        open={Boolean(gitWorkflowRunner.pendingConfirmation)}
+        operationConfirmInput={workflowConfirmInput}
+        pendingOperationLabel={gitWorkflowRunner.pendingConfirmation?.title ?? 'Git'}
+        pendingOperationMessage={gitWorkflowRunner.pendingConfirmation?.message ?? ''}
+        riskLevel={gitWorkflowRunner.pendingConfirmation?.riskLevel}
+        title={gitWorkflowRunner.pendingConfirmation?.title}
+        confirmLabel={gitWorkflowRunner.pendingConfirmation?.confirmLabel}
+        cancelLabel={gitWorkflowRunner.pendingConfirmation?.cancelLabel}
+        helperText={gitWorkflowRunner.pendingConfirmation?.helperText}
+      />
+      <DetailAiCommitCommitModal
+        blockedReason={null}
+        commitError={null}
+        commitMessage={gitWorkflowRunner.runtimeCommitMessage}
+        committing={false}
+        onChangeCommitMessage={gitWorkflowRunner.setRuntimeCommitMessage}
+        onClose={() => {
+          gitWorkflowRunner.cancelPendingAction()
+        }}
+        onCommit={() => {
+          if (!gitWorkflowRunner.pendingCommit) return
+          void gitWorkflowRunner.confirmPendingCommit(gitWorkflowRunner.runtimeCommitMessage || gitWorkflowRunner.pendingCommit.presetMessage)
+        }}
+        open={Boolean(gitWorkflowRunner.pendingCommit)}
+        stagedFileCount={0}
+      />
       <DetailGitDiffDrawer
         open={diffDrawerOpen}
         changedFiles={changedFiles}

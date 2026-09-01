@@ -1,12 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { GitBranch, GitCommitHorizontal, History } from 'lucide-react'
+import { GitBranch, GitCommitHorizontal, History, Workflow } from 'lucide-react'
 import { CommitHistoryItem, type CommitHistoryDisplayItem } from './detail.commitHistory'
-import {
-  formatLogTime,
-  getOperationLabel,
-  getOperationStatusClass,
-  getOperationStatusText,
-} from './detail.gitOperations'
+import { formatLogTime, getOperationLabel, getOperationStatusClass, getOperationStatusText } from './detail.gitOperations'
+import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
+import type { GitWorkflowRunState, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 import type { MiddlePanelMode } from './detail.aiCommitPanel.types'
 import type { GitOperationResult } from './detail.types'
 import { useI18n } from '../../i18n'
@@ -20,6 +17,79 @@ type DetailAiCommitMiddlePanelProps = {
   operationLogs: GitOperationResult[]
   setActiveCommitHash: Dispatch<SetStateAction<string | null>>
   showCommitHistoryLoading: boolean
+  workflowView?: {
+    graph: PersistedGitWorkflowGraph
+    runState: GitWorkflowRunState
+  }
+}
+
+type WorkflowFlowStep = {
+  nodeId: string
+  label: string
+  labelKey: string
+  failureTarget?: {
+    label: string
+    labelKey: string
+  }
+}
+
+function getWorkflowRunStatusText(status: GitWorkflowRunState['status'], t: ReturnType<typeof useI18n>['t']): string {
+  if (status === 'running') return t('detail.gitWorkflowRunRunning')
+  if (status === 'validating') return t('detail.gitWorkflowRunValidating')
+  if (status === 'waiting-for-input') return t('detail.gitWorkflowRunWaitingInput')
+  if (status === 'waiting-for-confirmation') return t('detail.gitWorkflowRunWaitingConfirmation')
+  if (status === 'paused') return t('detail.gitWorkflowRunPaused')
+  if (status === 'completed') return t('detail.gitWorkflowRunCompleted')
+  if (status === 'failed') return t('detail.gitWorkflowRunFailed')
+  return t('detail.gitWorkflowRunIdle')
+}
+
+function getWorkflowNodeStatusText(status: GitWorkflowRunState['nodeStates'][string]['status'], noOp: boolean | undefined, t: ReturnType<typeof useI18n>['t']): string {
+  if (status === 'running') return t('detail.gitWorkflowStateRunning')
+  if (status === 'succeeded') return noOp ? t('detail.gitWorkflowStateNoOp') : t('detail.gitWorkflowStateSucceeded')
+  if (status === 'failed') return t('detail.gitWorkflowStateFailed')
+  if (status === 'cancelled') return t('detail.gitWorkflowStateCancelled')
+  return t('detail.gitWorkflowStateIdle')
+}
+
+function buildWorkflowFlowSteps(graph: PersistedGitWorkflowGraph, t: ReturnType<typeof useI18n>['t']): WorkflowFlowStep[] {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node] as const))
+  const failureEdgeBySource = new Map(graph.edges.filter((edge) => edge.type === 'failure').map((edge) => [edge.source, edge] as const))
+  const steps: WorkflowFlowStep[] = []
+  const visited = new Set<string>()
+  const toStep = (node: NonNullable<ReturnType<typeof nodeById.get>>): WorkflowFlowStep => {
+    const definition = getGitWorkflowOperationDefinition(node.data.operation)
+    const failureEdge = failureEdgeBySource.get(node.id)
+    const failureTarget = failureEdge ? nodeById.get(failureEdge.target) : undefined
+    return {
+      nodeId: node.id,
+      label: node.data.label || '',
+      labelKey: definition.labelKey,
+      failureTarget: failureTarget
+        ? {
+            label: failureTarget.data.label || '',
+            labelKey: getGitWorkflowOperationDefinition(failureTarget.data.operation).labelKey,
+          }
+        : undefined,
+    }
+  }
+
+  let currentId = graph.entryNodeId
+  while (currentId && nodeById.has(currentId) && !visited.has(currentId)) {
+    visited.add(currentId)
+    const node = nodeById.get(currentId)
+    if (!node) break
+    steps.push(toStep(node))
+    currentId = graph.edges.find((edge) => edge.source === currentId && edge.type === 'success')?.target ?? ''
+  }
+
+  for (const node of graph.nodes) {
+    if (visited.has(node.id)) continue
+    visited.add(node.id)
+    steps.push(toStep(node))
+  }
+
+  return steps
 }
 
 function MiddlePanelLoadingState() {
@@ -54,87 +124,74 @@ function MiddlePanelLoadingState() {
 }
 
 function EmptyMiddlePanel({ text }: { text: string }) {
-  return (
-    <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">
-      {text}
-    </p>
-  )
+  return <p className="flex min-h-0 flex-1 items-center justify-center rounded-[16px] border border-dashed border-[color:var(--color-border)] px-3 py-5 text-center text-xs text-[color:var(--color-muted-foreground)]">{text}</p>
 }
 
-export function DetailAiCommitMiddlePanel({
-  activeCommitHash,
-  aiRawText,
-  commitHistoryItems,
-  middlePanelMode,
-  onSetMiddlePanelMode,
-  operationLogs,
-  setActiveCommitHash,
-  showCommitHistoryLoading,
-}: DetailAiCommitMiddlePanelProps) {
+export function DetailAiCommitMiddlePanel({ activeCommitHash, aiRawText, commitHistoryItems, middlePanelMode, onSetMiddlePanelMode, operationLogs, setActiveCommitHash, showCommitHistoryLoading, workflowView }: DetailAiCommitMiddlePanelProps) {
   const { t } = useI18n()
-  const middlePanelMeta = middlePanelMode === 'history'
-    ? {
-      title: t('detail.middlePanelHistoryTitle'),
-      description: t('detail.middlePanelHistoryDescription'),
-      icon: History,
-    }
-    : middlePanelMode === 'ai-log'
+  const middlePanelMeta =
+    middlePanelMode === 'history'
       ? {
-        title: t('detail.middlePanelAiLogTitle'),
-        description: t('detail.middlePanelAiLogDescription'),
-        icon: GitCommitHorizontal,
-      }
-      : {
-        title: t('detail.middlePanelGitLogTitle'),
-        description: t('detail.middlePanelGitLogDescription'),
-        icon: GitBranch,
-      }
+          title: t('detail.middlePanelHistoryTitle'),
+          description: t('detail.middlePanelHistoryDescription'),
+          icon: History,
+        }
+      : middlePanelMode === 'ai-log'
+        ? {
+            title: t('detail.middlePanelAiLogTitle'),
+            description: t('detail.middlePanelAiLogDescription'),
+            icon: GitCommitHorizontal,
+          }
+        : middlePanelMode === 'workflow'
+          ? {
+              title: t('detail.middlePanelWorkflowTitle'),
+              description: t('detail.middlePanelWorkflowDescription'),
+              icon: Workflow,
+            }
+          : {
+              title: t('detail.middlePanelGitLogTitle'),
+              description: t('detail.middlePanelGitLogDescription'),
+              icon: GitBranch,
+            }
   const MiddlePanelIcon = middlePanelMeta.icon
 
   return (
-    <div
-      className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4"
-      style={{ contain: 'layout paint', isolation: 'isolate' }}
-    >
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-[color:var(--color-border)] bg-[color:var(--color-card)] p-4" style={{ contain: 'layout paint', isolation: 'isolate' }}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="inline-flex min-w-0 items-center gap-2">
           <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]">
             <MiddlePanelIcon className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
-            <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">
-              {middlePanelMeta.title}
-            </p>
+            <p className="text-base font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">{middlePanelMeta.title}</p>
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{middlePanelMeta.description}</p>
           </div>
         </div>
         <div className="quiet-control flex shrink-0 items-center gap-1 rounded-full border-0 p-1">
           <button
             type="button"
-            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'history'
-              ? 'bg-primary text-white'
-              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'history' ? 'bg-primary text-[color:var(--color-primary-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
             onClick={() => onSetMiddlePanelMode('history')}
           >
             {t('detail.middlePanelHistoryTab')}
           </button>
           <button
             type="button"
-            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'ai-log'
-              ? 'bg-primary text-white'
-              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'ai-log' ? 'bg-primary text-[color:var(--color-primary-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
             onClick={() => onSetMiddlePanelMode('ai-log')}
           >
             {t('detail.middlePanelAiLogTab')}
           </button>
           <button
             type="button"
-            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'git-log'
-              ? 'bg-primary text-white'
-              : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
-              }`}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'workflow' ? 'bg-primary text-[color:var(--color-primary-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
+            onClick={() => onSetMiddlePanelMode('workflow')}
+          >
+            {t('detail.middlePanelWorkflowTab')}
+          </button>
+          <button
+            type="button"
+            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${middlePanelMode === 'git-log' ? 'bg-primary text-[color:var(--color-primary-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
             onClick={() => onSetMiddlePanelMode('git-log')}
           >
             {t('detail.middlePanelGitLogTab')}
@@ -149,12 +206,7 @@ export function DetailAiCommitMiddlePanel({
           ) : commitHistoryItems.length > 0 ? (
             <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
               {commitHistoryItems.map((commit) => (
-                <CommitHistoryItem
-                  key={commit.hash}
-                  commit={commit}
-                  activeCommitHash={activeCommitHash}
-                  setActiveCommitHash={setActiveCommitHash}
-                />
+                <CommitHistoryItem key={commit.hash} commit={commit} activeCommitHash={activeCommitHash} setActiveCommitHash={setActiveCommitHash} />
               ))}
             </div>
           ) : (
@@ -167,12 +219,58 @@ export function DetailAiCommitMiddlePanel({
         <>
           {aiRawText.trim() ? (
             <div className="min-h-0 flex-1 overflow-auto rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/60 p-3">
-              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/88">
-                {aiRawText}
-              </pre>
+              <pre className="whitespace-pre-wrap break-words text-[11px] leading-5 text-[color:var(--color-foreground)]/88">{aiRawText}</pre>
             </div>
           ) : (
             <EmptyMiddlePanel text={t('detail.middlePanelNoAiLog')} />
+          )}
+        </>
+      )}
+
+      {middlePanelMode === 'workflow' && (
+        <>
+          {!workflowView || workflowView.graph.nodes.length === 0 ? (
+            <EmptyMiddlePanel text={t('detail.middlePanelWorkflowNoGraph')} />
+          ) : (
+            <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
+              <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/60 px-3 py-2">
+                <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">
+                  {t('detail.gitWorkflowStatusTitle')} · {getWorkflowRunStatusText(workflowView.runState.status, t)}
+                </p>
+              </div>
+              {buildWorkflowFlowSteps(workflowView.graph, t).map((step, index) => {
+                const nodeState = workflowView.runState.nodeStates[step.nodeId]
+                const status = nodeState?.status ?? 'idle'
+                return (
+                  <div
+                    key={step.nodeId}
+                    className={`rounded-[14px] border px-3 py-2 ${status === 'failed' ? 'border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)]' : status === 'succeeded' ? 'border-[color:var(--color-success)]/25 bg-[color:var(--color-success-background)]' : status === 'running' ? 'border-[color:var(--color-primary)]/35 bg-[color:var(--color-card)]' : 'border-[color:var(--color-border)] bg-[color:var(--color-card)]'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 truncate text-[12px] font-semibold text-[color:var(--color-foreground)]">
+                        <span className="mr-1.5 text-[color:var(--color-muted-foreground)]">{index + 1}.</span>
+                        {step.label || t(step.labelKey as never)}
+                      </p>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                          status === 'succeeded'
+                            ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
+                            : status === 'failed'
+                              ? 'bg-[color:var(--color-destructive-background)] text-[color:var(--color-destructive)]'
+                              : status === 'running'
+                                ? 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]'
+                                : 'bg-[color:var(--color-background-sunken)] text-[color:var(--color-muted-foreground)]'
+                        }`}
+                      >
+                        {getWorkflowNodeStatusText(status, nodeState?.noOp, t)}
+                      </span>
+                    </div>
+                    {step.failureTarget && <p className="mt-1 text-[10.5px] text-[color:var(--color-warning)]">{t('detail.middlePanelWorkflowFailureEdge', { target: step.failureTarget.label || t(step.failureTarget.labelKey as never) })}</p>}
+                    {status === 'failed' && nodeState?.reason && <p className="mt-1 line-clamp-2 text-[10.5px] text-[color:var(--color-destructive)]">{nodeState.reason}</p>}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </>
       )}
@@ -182,31 +280,20 @@ export function DetailAiCommitMiddlePanel({
           {operationLogs.length > 0 ? (
             <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
               {operationLogs.map((result, index) => (
-                <div
-                  key={`${result.operation}-${result.checkedAt}-${index}`}
-                  className={`rounded-[14px] border px-3 py-2 ${getOperationStatusClass(result)}`}
-                >
+                <div key={`${result.operation}-${result.checkedAt}-${index}`} className={`rounded-[14px] border px-3 py-2 ${getOperationStatusClass(result)}`}>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[12px] font-semibold text-[color:var(--color-foreground)]">
                       {getOperationLabel(result.operation)} · {getOperationStatusText(result)}
                     </p>
-                    <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                      {formatLogTime(result.checkedAt)}
-                    </p>
+                    <p className="text-[10.5px] text-[color:var(--color-muted-foreground)]">{formatLogTime(result.checkedAt)}</p>
                   </div>
                   {result.targetBranch && (
                     <p className="mt-1 text-[10.5px] text-[color:var(--color-muted-foreground)]">
                       {t('detail.middlePanelTargetBranch')}: {result.targetBranch}
                     </p>
                   )}
-                  {result.command && (
-                    <p className="mt-1 font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]">
-                      {result.command}
-                    </p>
-                  )}
-                  <pre className="mt-1 max-h-[140px] overflow-auto whitespace-pre-wrap break-words text-[10.5px] leading-5 text-[color:var(--color-foreground)]/88">
-                    {result.output}
-                  </pre>
+                  {result.command && <p className="mt-1 font-mono text-[10.5px] text-[color:var(--color-muted-foreground)]">{result.command}</p>}
+                  <pre className="mt-1 max-h-[140px] overflow-auto whitespace-pre-wrap break-words text-[10.5px] leading-5 text-[color:var(--color-foreground)]/88">{result.output}</pre>
                 </div>
               ))}
             </div>

@@ -47,6 +47,7 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'fetch' as const,
+      requiresConfirmation: false,
       config: {},
       failurePolicy: 'pause' as const,
     }),
@@ -68,6 +69,7 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'pull' as const,
+      requiresConfirmation: true,
       config: { strategy: 'ff-only' as const },
       failurePolicy: 'pause' as const,
     }),
@@ -86,6 +88,7 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'push' as const,
+      requiresConfirmation: true,
       config: { setUpstreamWhenMissing: true as const },
       failurePolicy: 'pause' as const,
     }),
@@ -104,6 +107,7 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'switch' as const,
+      requiresConfirmation: true,
       config: { target: { mode: 'prompt' as const } },
       failurePolicy: 'pause' as const,
     }),
@@ -134,6 +138,7 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'merge' as const,
+      requiresConfirmation: true,
       config: { source: { mode: 'prompt' as const }, noEdit: true as const },
       failurePolicy: 'pause' as const,
     }),
@@ -166,10 +171,16 @@ export const GIT_WORKFLOW_OPERATION_DEFINITIONS = {
     createDefaultData: () => ({
       schemaVersion: 1 as const,
       operation: 'commit' as const,
-      config: { message: { mode: 'prompt' as const } },
+      requiresConfirmation: false,
+      config: { message: { mode: 'prompt' as const }, execution: 'confirm-each-run' as const },
       failurePolicy: 'pause' as const,
     }),
-    validateConfig: () => [],
+    validateConfig: (data) => {
+      if (data.config.message.mode === 'ai') return []
+      if (data.config.execution !== 'preset-direct') return []
+      if (data.config.message.preset && data.config.message.preset.trim().length > 0) return []
+      return [createDefaultValidationIssue('invalid-config', 'Commit message preset is required for direct execution.')]
+    },
     resolveRequest: () => 'wait-for-input',
     confirmation: 'normal' as const,
   },

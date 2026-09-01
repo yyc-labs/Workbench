@@ -18,9 +18,7 @@ function isMonacoCanceledError(error: unknown): boolean {
   return name === 'Canceled' || message === 'Canceled'
 }
 
-export function useMonacoSearchWidget({
-  editorRef,
-}: UseMonacoSearchWidgetOptions) {
+export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOptions) {
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchMode, setSearchMode] = useState<EditorSearchMode>('find')
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,6 +35,7 @@ export function useMonacoSearchWidget({
   const searchCaseSensitiveRef = useRef(false)
   const searchWholeWordRef = useRef(false)
   const searchRegexRef = useRef(false)
+  const searchMatchDecorationsRef = useRef<string[]>([])
 
   useEffect(() => {
     searchVisibleRef.current = searchVisible
@@ -62,27 +61,12 @@ export function useMonacoSearchWidget({
     searchRegexRef.current = searchRegex
   }, [searchRegex])
 
-  const computeSearchMatches = useCallback((
-    model: MonacoEditor.ITextModel,
-    query: string
-  ): MonacoEditor.FindMatch[] => {
+  const computeSearchMatches = useCallback((model: MonacoEditor.ITextModel, query: string): MonacoEditor.FindMatch[] => {
     if (!query) return []
-    return model.findMatches(
-      query,
-      false,
-      searchRegexRef.current,
-      searchCaseSensitiveRef.current,
-      searchWholeWordRef.current ? WHOLE_WORD_SEPARATORS : null,
-      true,
-      5000
-    )
+    return model.findMatches(query, false, searchRegexRef.current, searchCaseSensitiveRef.current, searchWholeWordRef.current ? WHOLE_WORD_SEPARATORS : null, true, 5000)
   }, [])
 
-  const selectSearchMatch = useCallback((
-    editor: MonacoEditor.IStandaloneCodeEditor,
-    matches: MonacoEditor.FindMatch[],
-    index: number
-  ) => {
+  const selectSearchMatch = useCallback((editor: MonacoEditor.IStandaloneCodeEditor, matches: MonacoEditor.FindMatch[], index: number) => {
     if (matches.length <= 0) {
       setActiveSearchMatchIndex(0)
       return
@@ -94,10 +78,7 @@ export function useMonacoSearchWidget({
     setActiveSearchMatchIndex(normalizedIndex + 1)
   }, [])
 
-  const syncSearchMatchIndexFromSelection = useCallback((
-    editor: MonacoEditor.IStandaloneCodeEditor,
-    matches: MonacoEditor.FindMatch[]
-  ) => {
+  const syncSearchMatchIndexFromSelection = useCallback((editor: MonacoEditor.IStandaloneCodeEditor, matches: MonacoEditor.FindMatch[]) => {
     setSearchMatchCount(matches.length)
     if (matches.length <= 0) {
       setActiveSearchMatchIndex(0)
@@ -121,24 +102,42 @@ export function useMonacoSearchWidget({
     setActiveSearchMatchIndex(normalizedIndex)
   }, [])
 
-  const refreshSearchResult = useCallback((
-    editor: MonacoEditor.IStandaloneCodeEditor,
-    mode: 'keep' | 'reset-to-first' = 'keep'
-  ) => {
-    const model = editor.getModel()
-    if (!model) return
-    const matches = computeSearchMatches(model, searchQueryRef.current)
-    if (mode === 'reset-to-first') {
-      setSearchMatchCount(matches.length)
-      if (matches.length <= 0) {
-        setActiveSearchMatchIndex(0)
+  const applySearchMatchDecorations = useCallback((editor: MonacoEditor.IStandaloneCodeEditor, matches: MonacoEditor.FindMatch[], currentIndex: number) => {
+    const decorations = matches.map((match, index) => ({
+      range: match.range,
+      options: {
+        inlineClassName: index === currentIndex ? 'code-editor-find-match-current' : 'code-editor-find-match',
+      },
+    }))
+    searchMatchDecorationsRef.current = editor.deltaDecorations(searchMatchDecorationsRef.current, decorations)
+  }, [])
+
+  const clearSearchMatchDecorations = useCallback((editor: MonacoEditor.IStandaloneCodeEditor) => {
+    searchMatchDecorationsRef.current = editor.deltaDecorations(searchMatchDecorationsRef.current, [])
+  }, [])
+
+  const refreshSearchResult = useCallback(
+    (editor: MonacoEditor.IStandaloneCodeEditor, mode: 'keep' | 'reset-to-first' = 'keep') => {
+      const model = editor.getModel()
+      if (!model) return
+      const matches = computeSearchMatches(model, searchQueryRef.current)
+      if (mode === 'reset-to-first') {
+        applySearchMatchDecorations(editor, matches, matches.length > 0 ? 0 : -1)
+        setSearchMatchCount(matches.length)
+        if (matches.length <= 0) {
+          setActiveSearchMatchIndex(0)
+          return
+        }
+        selectSearchMatch(editor, matches, 0)
         return
       }
-      selectSearchMatch(editor, matches, 0)
-      return
-    }
-    syncSearchMatchIndexFromSelection(editor, matches)
-  }, [computeSearchMatches, selectSearchMatch, syncSearchMatchIndexFromSelection])
+      const selection = editor.getSelection()
+      const currentIndex = selection && matches.length > 0 ? matches.findIndex((match) => selection.intersectRanges(match.range) !== null) : -1
+      applySearchMatchDecorations(editor, matches, currentIndex)
+      syncSearchMatchIndexFromSelection(editor, matches)
+    },
+    [applySearchMatchDecorations, computeSearchMatches, selectSearchMatch, syncSearchMatchIndexFromSelection],
+  )
 
   const getSelectedTextForSearch = useCallback((editor: MonacoEditor.IStandaloneCodeEditor): string => {
     const model = editor.getModel()
@@ -158,33 +157,34 @@ export function useMonacoSearchWidget({
     })
   }, [])
 
-  const openSearchPanel = useCallback((
-    mode: EditorSearchMode,
-    options?: { prefillFromSelection?: boolean }
-  ) => {
-    const editor = editorRef.current
-    if (!editor) return
-    const selectedQuery = options?.prefillFromSelection ? getSelectedTextForSearch(editor) : ''
-    if (selectedQuery) {
-      searchQueryRef.current = selectedQuery
-      setSearchQuery(selectedQuery)
-    }
-    setSearchMode(mode)
-    setSearchVisible(true)
-    closeMonacoFindWidget(editor)
-    window.setTimeout(() => {
-      searchInputRef.current?.focus()
-      searchInputRef.current?.select()
-      refreshSearchResult(editor)
-    }, 0)
-  }, [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult])
+  const openSearchPanel = useCallback(
+    (mode: EditorSearchMode, options?: { prefillFromSelection?: boolean }) => {
+      const editor = editorRef.current
+      if (!editor) return
+      const selectedQuery = options?.prefillFromSelection ? getSelectedTextForSearch(editor) : ''
+      if (selectedQuery) {
+        searchQueryRef.current = selectedQuery
+        setSearchQuery(selectedQuery)
+      }
+      setSearchMode(mode)
+      setSearchVisible(true)
+      closeMonacoFindWidget(editor)
+      window.setTimeout(() => {
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+        refreshSearchResult(editor)
+      }, 0)
+    },
+    [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult],
+  )
 
   const closeSearchPanel = useCallback(() => {
     setSearchVisible(false)
     const editor = editorRef.current
     editor?.focus()
+    if (editor) clearSearchMatchDecorations(editor)
     closeMonacoFindWidget(editor)
-  }, [closeMonacoFindWidget, editorRef])
+  }, [clearSearchMatchDecorations, closeMonacoFindWidget, editorRef])
 
   const goToNextMatch = useCallback(() => {
     const editor = editorRef.current

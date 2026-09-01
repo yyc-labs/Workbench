@@ -13,7 +13,7 @@ export type OperationConfirmState = {
 
 export type BranchManagerMode = 'current' | 'upstream'
 
-export type MiddlePanelMode = 'history' | 'ai-log' | 'git-log'
+export type MiddlePanelMode = 'history' | 'ai-log' | 'git-log' | 'workflow'
 
 export type IndexedBranchCandidate = {
   name: string
