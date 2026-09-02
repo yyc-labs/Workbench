@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CircleAlert, RefreshCw } from 'lucide-react'
+import { Check, CircleAlert, Copy, RefreshCw } from 'lucide-react'
 import type { AgentHookGatewayStatus, AppConfig } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -14,12 +14,25 @@ const feishuReceiveIdTypeOptions = [
   { value: 'chat_id', label: 'chat_id' },
 ]
 
+const GATEWAY_HOST_LAN = '0.0.0.0'
+const GATEWAY_HOST_LOCAL = '127.0.0.1'
+
+type GatewayHost = typeof GATEWAY_HOST_LAN | typeof GATEWAY_HOST_LOCAL
+
+function normalizeGatewayHost(value: string | undefined): GatewayHost {
+  return value === GATEWAY_HOST_LOCAL ? GATEWAY_HOST_LOCAL : GATEWAY_HOST_LAN
+}
+
 export function SettingsAgentHooksPanel() {
   const { t, tHtml } = useI18n()
   const [agentHookConfig, setAgentHookConfig] = useState<NonNullable<AppConfig['agentHooks']> | null>(null)
   const [status, setStatus] = useState<AgentHookGatewayStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [gatewayHost, setGatewayHost] = useState<GatewayHost>(GATEWAY_HOST_LAN)
+  const [savingGatewayHost, setSavingGatewayHost] = useState(false)
+  const [gatewayHostSaveError, setGatewayHostSaveError] = useState<string | null>(null)
+  const [skillPromptCopied, setSkillPromptCopied] = useState(false)
   const [savingTranscriptImport, setSavingTranscriptImport] = useState(false)
   const [transcriptImportSaveError, setTranscriptImportSaveError] = useState<string | null>(null)
   const [transcriptImportEnabled, setTranscriptImportEnabled] = useState(true)
@@ -55,6 +68,7 @@ export function SettingsAgentHooksPanel() {
   useEffect(() => {
     const feishu = agentHookConfig?.feishu
     const transcriptImport = agentHookConfig?.transcriptImport
+    setGatewayHost(normalizeGatewayHost(agentHookConfig?.host))
     setTranscriptImportEnabled(transcriptImport?.enabled ?? true)
     setTranscriptImportToken(transcriptImport?.token || '')
     setTranscriptImportOpenViewerByDefault(Boolean(transcriptImport?.openViewerByDefault))
@@ -64,6 +78,37 @@ export function SettingsAgentHooksPanel() {
     setFeishuReceiveId(feishu?.receiveId || '')
     setFeishuReceiveIdType(feishu?.receiveIdType || 'open_id')
   }, [agentHookConfig])
+
+  const handleSaveGatewayHost = async () => {
+    setSavingGatewayHost(true)
+    setGatewayHostSaveError(null)
+    try {
+      const updated = await window.electronAPI.setConfig({
+        agentHooks: {
+          ...(agentHookConfig || {}),
+          host: gatewayHost,
+        },
+      })
+      setAgentHookConfig(updated.agentHooks || null)
+      setStatus(await window.electronAPI.getAgentHookStatus())
+    } catch (saveError) {
+      setGatewayHostSaveError(saveError instanceof Error ? saveError.message : String(saveError))
+    } finally {
+      setSavingGatewayHost(false)
+    }
+  }
+
+  const handleCopySkillPrompt = async () => {
+    const skillUrl = status?.transcriptSkillUrl || 'http://127.0.0.1:17373/transcripts/skill'
+    const prompt = t('settings.agentHooks.agentSkillPrompt', { command: `curl -s ${skillUrl}` })
+    try {
+      await navigator.clipboard.writeText(prompt)
+      setSkillPromptCopied(true)
+      window.setTimeout(() => setSkillPromptCopied(false), 2000)
+    } catch {
+      // 剪贴板不可用时静默失败
+    }
+  }
 
   const handleSaveTranscriptImport = async () => {
     if (!agentHookConfig) return
@@ -154,10 +199,45 @@ export function SettingsAgentHooksPanel() {
             <div className="mt-2 text-sm text-[color:var(--color-foreground)]">{status?.recentEventCount ?? 0}</div>
           </div>
         </div>
-        {(error || status?.error) && (
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0 space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.listenScope')}</p>
+            <div className="flex items-center gap-3">
+              <Select
+                ariaLabel={t('settings.agentHooks.listenScope')}
+                value={gatewayHost}
+                options={[
+                  { value: GATEWAY_HOST_LAN, label: t('settings.agentHooks.listenScopeLan') },
+                  { value: GATEWAY_HOST_LOCAL, label: t('settings.agentHooks.listenScopeLocal') },
+                ]}
+                onChange={(value) => setGatewayHost(normalizeGatewayHost(value))}
+                triggerClassName="h-10 w-[240px]"
+              />
+              <Button onClick={() => void handleSaveGatewayHost()} loading={savingGatewayHost} className="rounded-full">
+                {savingGatewayHost ? t('common.saving') : t('common.save')}
+              </Button>
+            </div>
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.listenScopeDescription')}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-[16px] bg-[color:var(--color-card)] px-4 py-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.agentSkillPromptLabel')}</p>
+              <p className="truncate text-sm text-[color:var(--color-foreground)]">{`curl -s ${status?.transcriptSkillUrl || 'http://127.0.0.1:17373/transcripts/skill'}`}</p>
+            </div>
+            <Button variant="outline" onClick={() => void handleCopySkillPrompt()} className="shrink-0 rounded-full gap-2">
+              {skillPromptCopied ? <Check className="h-4 w-4 text-[color:var(--color-success)]" /> : <Copy className="h-4 w-4" />}
+              {skillPromptCopied ? t('common.copied') : t('settings.agentHooks.copySkillPrompt')}
+            </Button>
+          </div>
+        </div>
+
+        {(gatewayHostSaveError || error || status?.error) && (
           <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
             <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.8} />
-            <span>{error || status?.error}</span>
+            <span>{gatewayHostSaveError || error || status?.error}</span>
           </div>
         )}
       </section>
@@ -182,6 +262,14 @@ export function SettingsAgentHooksPanel() {
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.projectsEndpoint')}</p>
             <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">{status?.transcriptProjectsUrl || 'n/a'}</div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.projectIdEndpoint')}</p>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">{status?.transcriptProjectIdUrl || 'n/a'}</div>
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.skillEndpoint')}</p>
+            <div className="quiet-control rounded-full px-4 py-3 text-sm text-[color:var(--color-foreground)]">{status?.transcriptSkillUrl || 'n/a'}</div>
           </div>
           <div className="space-y-1.5">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.dedicatedToken')}</p>

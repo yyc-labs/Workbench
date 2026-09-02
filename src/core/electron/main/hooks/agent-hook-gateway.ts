@@ -1,23 +1,8 @@
 import { createHash, randomUUID } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
-import type {
-  AgentHookCanonicalEvent,
-  AgentHookEnvelope,
-  AgentHookGatewayConfig,
-  AgentHookLogDetail,
-  AgentHookGatewayStatus,
-  AgentHookProvider,
-  StructuredHttpRequestSnapshot,
-  TranscriptExternalImportPayload,
-  TranscriptImportedEvent,
-  TranscriptImportProjectTarget,
-} from '../../../shared/types'
-import {
-  buildJsonSnapshot,
-  buildRequestSnapshot,
-  hasStructuredTruncation,
-  maskUnknown,
-} from '../agent-logs/log-snapshots'
+import type { AgentHookCanonicalEvent, AgentHookEnvelope, AgentHookGatewayConfig, AgentHookLogDetail, AgentHookGatewayStatus, AgentHookProvider, StructuredHttpRequestSnapshot, TranscriptExternalImportPayload, TranscriptImportedEvent, TranscriptImportProjectTarget } from '../../../shared/types'
+import { buildJsonSnapshot, buildRequestSnapshot, hasStructuredTruncation, maskUnknown } from '../agent-logs/log-snapshots'
+import { buildTranscriptImportSkillMarkdown } from './transcript-import-skill'
 
 type AgentHookGatewayOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
@@ -25,6 +10,8 @@ type AgentHookGatewayOptions = {
   onEvent: (event: AgentHookEnvelope) => void
   listProjects?: () => TranscriptImportProjectTarget[]
   onTranscriptImport?: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
+  /** 读取仓库内 skills/transcript-import/SKILL.md 正文；读取失败时网关使用内置兜底指令。 */
+  transcriptSkillFileProvider?: () => string | undefined
 }
 
 const DEFAULT_HOST = '0.0.0.0'
@@ -88,9 +75,7 @@ function getString(value: unknown): string | undefined {
 }
 
 function getObject(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined
 }
 
 function getNestedString(source: Record<string, unknown>, keys: string[]): string | undefined {
@@ -108,14 +93,7 @@ function getBoolean(value: unknown): boolean | undefined {
 }
 
 function stableEventId(provider: AgentHookProvider, providerEvent: string, rawBody: string): string {
-  const digest = createHash('sha256')
-    .update(provider)
-    .update('\0')
-    .update(providerEvent)
-    .update('\0')
-    .update(rawBody)
-    .digest('hex')
-    .slice(0, 24)
+  const digest = createHash('sha256').update(provider).update('\0').update(providerEvent).update('\0').update(rawBody).digest('hex').slice(0, 24)
   return `${Date.now().toString(36)}-${digest}`
 }
 
@@ -124,37 +102,32 @@ function inferProviderEvent(payload: unknown, fallback: string): string {
   if (!object) return fallback
   const nestedPayload = getObject(object.payload) || {}
 
-  return getString(object.eventName)
-    || getString(object.event_name)
-    || getString(object.hookEventName)
-    || getString(object.hook_event_name)
-    || getString(object.hook_event)
-    || getString(object.event)
-    || getString(nestedPayload.eventName)
-    || getString(nestedPayload.event_name)
-    || getString(nestedPayload.hookEventName)
-    || getString(nestedPayload.hook_event_name)
-    || getString(nestedPayload.hook_event)
-    || getString(nestedPayload.event)
-    || fallback
+  return (
+    getString(object.eventName) ||
+    getString(object.event_name) ||
+    getString(object.hookEventName) ||
+    getString(object.hook_event_name) ||
+    getString(object.hook_event) ||
+    getString(object.event) ||
+    getString(nestedPayload.eventName) ||
+    getString(nestedPayload.event_name) ||
+    getString(nestedPayload.hookEventName) ||
+    getString(nestedPayload.hook_event_name) ||
+    getString(nestedPayload.hook_event) ||
+    getString(nestedPayload.event) ||
+    fallback
+  )
 }
 
 function toCanonicalEvent(providerEvent: string): AgentHookCanonicalEvent {
   if (EVENT_ALIASES[providerEvent]) return EVENT_ALIASES[providerEvent]
 
   const compact = providerEvent.replace(/[-_\s]+/g, '').toLowerCase()
-  const matched = Object.entries(EVENT_ALIASES).find(([eventName]) => (
-    eventName.toLowerCase() === compact
-  ))
+  const matched = Object.entries(EVENT_ALIASES).find(([eventName]) => eventName.toLowerCase() === compact)
   return matched?.[1] || 'unknown'
 }
 
-function normalizeEnvelope(
-  provider: AgentHookProvider,
-  rawBody: string,
-  payload: unknown,
-  fallbackEvent: string,
-): AgentHookEnvelope {
+function normalizeEnvelope(provider: AgentHookProvider, rawBody: string, payload: unknown, fallbackEvent: string): AgentHookEnvelope {
   const object = getObject(payload) || {}
   const providerEvent = inferProviderEvent(payload, fallbackEvent)
   const nestedPayload = getObject(object.payload) || {}
@@ -166,49 +139,15 @@ function normalizeEnvelope(
     provider,
     providerEvent,
     canonicalEvent: toCanonicalEvent(providerEvent),
-    eventId: getString(object.eventId)
-      || getString(object.event_id)
-      || getString(nestedPayload.eventId)
-      || getString(nestedPayload.event_id)
-      || stableEventId(provider, providerEvent, rawBody),
+    eventId: getString(object.eventId) || getString(object.event_id) || getString(nestedPayload.eventId) || getString(nestedPayload.event_id) || stableEventId(provider, providerEvent, rawBody),
     receivedAt: Date.now(),
-    sessionId: getString(object.sessionId)
-      || getString(object.session_id)
-      || getString(nestedPayload.sessionId)
-      || getString(nestedPayload.session_id)
-      || getNestedString(object, ['session', 'id']),
-    turnId: getString(object.turnId)
-      || getString(object.turn_id)
-      || getString(nestedPayload.turnId)
-      || getString(nestedPayload.turn_id)
-      || getNestedString(object, ['turn', 'id']),
-    cwd: getString(object.cwd)
-      || getString(object.currentWorkingDirectory)
-      || getString(object.current_working_directory)
-      || getString(nestedPayload.cwd)
-      || getString(nestedPayload.currentWorkingDirectory)
-      || getString(nestedPayload.current_working_directory)
-      || getNestedString(object, ['workspace', 'cwd']),
-    toolName: getString(object.toolName)
-      || getString(object.tool_name)
-      || getString(nestedPayload.toolName)
-      || getString(nestedPayload.tool_name)
-      || getString(toolObject.name)
-      || getString(toolObject.type),
-    agentId: getString(object.agentId)
-      || getString(object.agent_id)
-      || getString(nestedPayload.agentId)
-      || getString(nestedPayload.agent_id)
-      || getString(agentObject.id),
-    agentType: getString(object.agentType)
-      || getString(object.agent_type)
-      || getString(nestedPayload.agentType)
-      || getString(nestedPayload.agent_type)
-      || getString(agentObject.type),
-    permissionMode: getString(object.permissionMode)
-      || getString(object.permission_mode)
-      || getString(nestedPayload.permissionMode)
-      || getString(nestedPayload.permission_mode),
+    sessionId: getString(object.sessionId) || getString(object.session_id) || getString(nestedPayload.sessionId) || getString(nestedPayload.session_id) || getNestedString(object, ['session', 'id']),
+    turnId: getString(object.turnId) || getString(object.turn_id) || getString(nestedPayload.turnId) || getString(nestedPayload.turn_id) || getNestedString(object, ['turn', 'id']),
+    cwd: getString(object.cwd) || getString(object.currentWorkingDirectory) || getString(object.current_working_directory) || getString(nestedPayload.cwd) || getString(nestedPayload.currentWorkingDirectory) || getString(nestedPayload.current_working_directory) || getNestedString(object, ['workspace', 'cwd']),
+    toolName: getString(object.toolName) || getString(object.tool_name) || getString(nestedPayload.toolName) || getString(nestedPayload.tool_name) || getString(toolObject.name) || getString(toolObject.type),
+    agentId: getString(object.agentId) || getString(object.agent_id) || getString(nestedPayload.agentId) || getString(nestedPayload.agent_id) || getString(agentObject.id),
+    agentType: getString(object.agentType) || getString(object.agent_type) || getString(nestedPayload.agentType) || getString(nestedPayload.agent_type) || getString(agentObject.type),
+    permissionMode: getString(object.permissionMode) || getString(object.permission_mode) || getString(nestedPayload.permissionMode) || getString(nestedPayload.permission_mode),
     raw: payload,
   }
 }
@@ -233,12 +172,22 @@ function readRequestBody(req: IncomingMessage, maxBodyBytes: number): Promise<st
   })
 }
 
+function normalizeProjectPathForMatch(value: string): string {
+  return value.trim().replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
+}
+
+function findTranscriptImportProject(projects: TranscriptImportProjectTarget[], queryPath: string): TranscriptImportProjectTarget | undefined {
+  const trimmed = queryPath.trim()
+  return projects.find((project) => project.projectPath === trimmed) || projects.find((project) => normalizeProjectPathForMatch(project.projectPath) === normalizeProjectPathForMatch(trimmed))
+}
+
 export class AgentHookGateway {
   private readonly getConfig: AgentHookGatewayOptions['getConfig']
   private readonly isLogCaptureEnabled: () => boolean
   private readonly onEvent: AgentHookGatewayOptions['onEvent']
   private readonly listProjects?: AgentHookGatewayOptions['listProjects']
   private readonly onTranscriptImport?: AgentHookGatewayOptions['onTranscriptImport']
+  private readonly transcriptSkillFileProvider?: AgentHookGatewayOptions['transcriptSkillFileProvider']
   private server: Server | null = null
   private recentEvents: AgentHookEnvelope[] = []
   private recentLogDetails: AgentHookLogDetail[] = []
@@ -253,6 +202,7 @@ export class AgentHookGateway {
     this.onEvent = options.onEvent
     this.listProjects = options.listProjects
     this.onTranscriptImport = options.onTranscriptImport
+    this.transcriptSkillFileProvider = options.transcriptSkillFileProvider
   }
 
   start(): void {
@@ -288,9 +238,16 @@ export class AgentHookGateway {
     const server = this.server
     this.server = null
     this.running = false
+    // 强制断开存量连接，确保端口立即释放，便于重启换绑 host。
+    server.closeAllConnections()
     return new Promise((resolve) => {
       server.close(() => resolve())
     })
+  }
+
+  restart(): void {
+    this.stop()
+    this.start()
   }
 
   getRecentEvents(): AgentHookEnvelope[] {
@@ -322,6 +279,8 @@ export class AgentHookGateway {
       transcriptImportEnabled: config.transcriptImportEnabled,
       transcriptImportUrl: `${baseUrl}/transcripts/import`,
       transcriptProjectsUrl: `${baseUrl}/transcripts/projects`,
+      transcriptProjectIdUrl: `${baseUrl}/transcripts/project-id`,
+      transcriptSkillUrl: `${baseUrl}/transcripts/skill`,
       transcriptImportTokenConfigured: Boolean(config.transcriptImportToken),
       error: this.error,
     }
@@ -336,11 +295,7 @@ export class AgentHookGateway {
     }
   }
 
-  private beginHookTrace(
-    req: IncomingMessage,
-    provider: AgentHookProvider,
-    url: URL
-  ): HookRequestTrace {
+  private beginHookTrace(req: IncomingMessage, provider: AgentHookProvider, url: URL): HookRequestTrace {
     return {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -369,7 +324,7 @@ export class AgentHookGateway {
       maxBodyBytes: number
       parseError?: string
       bodyTruncated?: boolean
-    }
+    },
   ): void {
     const durationMs = Math.max(0, Date.now() - trace.startedAt)
     const providerEvent = envelope?.providerEvent || 'unknown'
@@ -409,19 +364,14 @@ export class AgentHookGateway {
         headers: trace.ingressRequest.headers,
         bodyText: options.bodyText,
         bodyValue: payload,
-        contentType: trace.ingressRequest.body?.contentType
-          ?? (typeof trace.ingressRequest.headers['content-type'] === 'string'
-            ? trace.ingressRequest.headers['content-type']
-            : undefined),
+        contentType: trace.ingressRequest.body?.contentType ?? (typeof trace.ingressRequest.headers['content-type'] === 'string' ? trace.ingressRequest.headers['content-type'] : undefined),
         maxBodyBytes: options.maxBodyBytes,
         bodyParseError: options.parseError,
         bodyTruncated: options.bodyTruncated,
       }),
       normalizedEnvelope: envelope ? maskUnknown(envelope) : undefined,
       payload: buildJsonSnapshot({
-        contentType: typeof trace.ingressRequest.headers['content-type'] === 'string'
-          ? trace.ingressRequest.headers['content-type']
-          : 'application/json; charset=utf-8',
+        contentType: typeof trace.ingressRequest.headers['content-type'] === 'string' ? trace.ingressRequest.headers['content-type'] : 'application/json; charset=utf-8',
         rawText: options.bodyText,
         parsedValue: payload,
         maxBytes: options.maxBodyBytes,
@@ -430,9 +380,9 @@ export class AgentHookGateway {
       }),
       error: options.errorMessage
         ? {
-          code: options.errorCode,
-          message: options.errorMessage,
-        }
+            code: options.errorCode,
+            message: options.errorMessage,
+          }
         : undefined,
     }
     this.appendRecentLogDetail(detail)
@@ -454,15 +404,12 @@ export class AgentHookGateway {
     const transcriptImport = config.transcriptImport || {}
     return {
       enabled: config.enabled ?? true,
-      host: configuredHost === '127.0.0.1' ? DEFAULT_HOST : configuredHost,
+      // host 按配置字面生效：0.0.0.0 = 局域网可访问，127.0.0.1 = 仅本机。
+      host: configuredHost,
       port: Number.isFinite(config.port) ? Number(config.port) : DEFAULT_PORT,
       token: config.token || '',
-      maxBodyBytes: Number.isFinite(config.maxBodyBytes)
-        ? Number(config.maxBodyBytes)
-        : DEFAULT_MAX_BODY_BYTES,
-      recentEventLimit: Number.isFinite(config.recentEventLimit)
-        ? Number(config.recentEventLimit)
-        : DEFAULT_RECENT_EVENT_LIMIT,
+      maxBodyBytes: Number.isFinite(config.maxBodyBytes) ? Number(config.maxBodyBytes) : DEFAULT_MAX_BODY_BYTES,
+      recentEventLimit: Number.isFinite(config.recentEventLimit) ? Number(config.recentEventLimit) : DEFAULT_RECENT_EVENT_LIMIT,
       transcriptImportEnabled: transcriptImport.enabled ?? true,
       transcriptImportToken: transcriptImport.token || '',
       transcriptImportOpenViewerByDefault: transcriptImport.openViewerByDefault ?? false,
@@ -486,11 +433,7 @@ export class AgentHookGateway {
     if (!object) {
       throw new Error('INVALID_TRANSCRIPT_IMPORT_PAYLOAD')
     }
-    const rawText = typeof object.rawText === 'string'
-      ? object.rawText
-      : typeof object.content === 'string'
-        ? object.content
-        : ''
+    const rawText = typeof object.rawText === 'string' ? object.rawText : typeof object.content === 'string' ? object.content : ''
     return {
       projectId: getString(object.projectId),
       projectPath: getString(object.projectPath),
@@ -518,10 +461,27 @@ export class AgentHookGateway {
         emptyResponse(res, 404)
         return
       }
-      if (!this.isAuthorized(req, config.transcriptImportToken, [
-        'x-ide-electron-transcript-token',
-        'x-ide-electron-token',
-      ])) {
+      // skill 下发接口：token 写在返回内容里，因此不能用转录 token 做前置鉴权（鸡生蛋问题）。
+      // 改为网关 token 或转录 token 任一命中即可；两者都未配置时开放（与导入接口的无 token 模式一致）。
+      if (req.method === 'GET' && url.pathname === '/transcripts/skill') {
+        const skillAuthorized = (!config.token && !config.transcriptImportToken) || this.isAuthorized(req, config.transcriptImportToken, ['x-ide-electron-transcript-token', 'x-ide-electron-token']) || this.isAuthorized(req, config.token, ['x-agent-hook-token', 'x-ide-electron-token'])
+        if (!skillAuthorized) {
+          emptyResponse(res, 401)
+          return
+        }
+        jsonResponse(res, 200, {
+          ok: true,
+          skill: buildTranscriptImportSkillMarkdown(
+            {
+              baseUrl: `http://127.0.0.1:${config.port}`,
+              token: config.transcriptImportToken || '',
+            },
+            this.transcriptSkillFileProvider?.(),
+          ),
+        })
+        return
+      }
+      if (!this.isAuthorized(req, config.transcriptImportToken, ['x-ide-electron-transcript-token', 'x-ide-electron-token'])) {
         emptyResponse(res, 401)
         return
       }
@@ -529,6 +489,28 @@ export class AgentHookGateway {
         jsonResponse(res, 200, {
           ok: true,
           projects: this.listProjects ? this.listProjects() : [],
+        })
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/transcripts/project-id') {
+        const queryPath = url.searchParams.get('path') || ''
+        if (!queryPath.trim()) {
+          jsonResponse(res, 400, { ok: false, error: 'missing "path" query parameter' })
+          return
+        }
+        const projects = this.listProjects ? this.listProjects() : []
+        const target = findTranscriptImportProject(projects, queryPath)
+        if (!target) {
+          jsonResponse(res, 404, { ok: false, error: 'project not found' })
+          return
+        }
+        jsonResponse(res, 200, {
+          ok: true,
+          projectId: target.projectId,
+          projectPath: target.projectPath,
+          name: target.name,
+          customName: target.customName,
+          displayName: target.displayName,
         })
         return
       }
@@ -572,8 +554,7 @@ export class AgentHookGateway {
       return
     }
 
-    const provider = PROVIDER_PATHS[url.pathname]
-      || (url.pathname.startsWith('/hooks/') ? 'unknown' : undefined)
+    const provider = PROVIDER_PATHS[url.pathname] || (url.pathname.startsWith('/hooks/') ? 'unknown' : undefined)
     if (!provider) {
       emptyResponse(res, 404)
       return
@@ -581,10 +562,7 @@ export class AgentHookGateway {
 
     const trace = this.beginHookTrace(req, provider, url)
 
-    if (!this.isAuthorized(req, config.token, [
-      'x-agent-hook-token',
-      'x-ide-electron-token',
-    ])) {
+    if (!this.isAuthorized(req, config.token, ['x-agent-hook-token', 'x-ide-electron-token'])) {
       this.finalizeHookTrace(trace, null, undefined, {
         level: 'warn',
         statusCode: 401,

@@ -103,6 +103,10 @@ export function registerCoreIpcHandlers(deps: RegisterIpcHandlersDependencies): 
     if (Object.prototype.hasOwnProperty.call(partial, 'cacheLocation')) {
       rememberAppCacheLocation(updated.cacheLocation)
     }
+    if (Object.prototype.hasOwnProperty.call(partial, 'agentHooks')) {
+      // agentHooks 配置（host/port/token/开关）变更后立即重启网关，无需重启应用。
+      deps.agentHookGateway.restart()
+    }
     return updated
   })
 

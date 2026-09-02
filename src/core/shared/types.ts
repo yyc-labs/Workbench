@@ -523,6 +523,8 @@ export interface AgentHookGatewayStatus {
   transcriptImportEnabled: boolean
   transcriptImportUrl: string
   transcriptProjectsUrl: string
+  transcriptProjectIdUrl: string
+  transcriptSkillUrl: string
   transcriptImportTokenConfigured: boolean
   error?: string
 }
@@ -1197,6 +1199,8 @@ export interface GitRepositorySummary {
   isNested: boolean
   parentRepoId?: string
   gitDirPath?: string
+  /** false 表示该条目是占位的根目录（未初始化 Git），真实 Git 仓库不设置该字段 */
+  isGitRepository?: boolean
 }
 
 export interface GitRepositoryListResult {

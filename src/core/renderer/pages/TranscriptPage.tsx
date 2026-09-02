@@ -658,6 +658,26 @@ export function TranscriptPage() {
     }
   }, [deleteConfirmTarget, deletingTranscriptId, projectId, removeTranscriptSession])
 
+  const handleRenameTranscript = useCallback(
+    async ({ id, title }: { id: string; title: string }) => {
+      if (!projectId) return
+      try {
+        const existing = await window.electronAPI.getTranscript(projectId, id)
+        if (!existing) return
+        const updated = await window.electronAPI.updateTranscript({
+          projectId,
+          transcriptId: id,
+          rawText: existing.rawText,
+          title,
+        })
+        useAppStore.getState().upsertTranscriptSession(updated, { activate: false })
+      } catch (error) {
+        console.error('[TranscriptPage.handleRenameTranscript] failed:', error)
+      }
+    },
+    [projectId],
+  )
+
   const handleOpenReferenceInCodeWorkspace = useCallback(
     async ({ relativePath, lineNumber, column }: { relativePath: string; lineNumber: number; column: number }) => {
       if (!projectId || !project) return
@@ -827,6 +847,9 @@ export function TranscriptPage() {
                     void loadProjectTranscripts(projectId)
                   }}
                   onSelectTranscript={handleSelectTranscript}
+                  onRenameTranscript={(payload) => {
+                    void handleRenameTranscript(payload)
+                  }}
                   onDeleteTranscript={(payload) => {
                     setDeleteConfirmTarget(payload)
                   }}

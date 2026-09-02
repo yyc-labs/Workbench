@@ -11,8 +11,6 @@
     "isolatedModules": true,
     "jsx": "react-jsx"
   },
-  "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.web.json" }
-  ]
+  "exclude": ["node_modules", "out", "release", "build", "dist", "logs"],
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
 }

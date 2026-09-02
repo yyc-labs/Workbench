@@ -15,6 +15,8 @@ import { createBrowserScreenshotService } from './screenshot/screenshotService'
 import { createGitService } from './git/git-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
+import { readTranscriptImportSkillFile } from './hooks/transcript-import-skill'
+import { resolveAppResourcePath } from './app-resource-path'
 import { IPC } from './ipc'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
@@ -225,6 +227,8 @@ export function createAppServices(options: AppServicesOptions) {
       options.emitTranscriptImported(imported)
       return imported
     },
+    // dev 读仓库根 skills/...，packaged 读 resources/skills/...（随 extraResources 打包），读取失败时网关用内置兜底指令。
+    transcriptSkillFileProvider: () => readTranscriptImportSkillFile([resolveAppResourcePath('skills', 'transcript-import', 'SKILL.md')]),
   })
   const agentLogService = createAgentLogService({
     getAiGatewayLogs: () => aiGatewayService.getRecentLogDetails(),

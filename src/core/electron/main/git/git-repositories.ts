@@ -6,24 +6,7 @@ import type { GitRepositoryListResult, GitRepositorySummary } from '../../../sha
 const MAX_GIT_REPOSITORY_SCAN_DEPTH = 6
 const MAX_GIT_REPOSITORIES = 50
 
-const GIT_REPOSITORY_SKIP_DIRECTORIES = new Set([
-  '.git',
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  'coverage',
-  '.next',
-  '.nuxt',
-  '.vite',
-  '.turbo',
-  '.cache',
-  '.venv',
-  'venv',
-  'target',
-  'vendor',
-  '__pycache__',
-])
+const GIT_REPOSITORY_SKIP_DIRECTORIES = new Set(['.git', 'node_modules', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', '.vite', '.turbo', '.cache', '.venv', 'venv', 'target', 'vendor', '__pycache__'])
 
 type DiscoveredGitRepository = {
   rootPath: string
@@ -73,10 +56,7 @@ async function resolveGitDirPath(repoRoot: string, gitPath: string): Promise<str
   }
 }
 
-function buildRepositorySummaries(
-  workspaceRoot: string,
-  discovered: DiscoveredGitRepository[]
-): GitRepositorySummary[] {
+function buildRepositorySummaries(workspaceRoot: string, discovered: DiscoveredGitRepository[]): GitRepositorySummary[] {
   const uniqueByRoot = new Map<string, DiscoveredGitRepository>()
   for (const repo of discovered) {
     uniqueByRoot.set(repo.rootPath, repo)
@@ -95,10 +75,22 @@ function buildRepositorySummaries(
     }
   })
 
+  // 根目录未初始化 Git 时也保留一个占位条目，避免列表只显示子仓库让用户误以为根目录是 Git 仓库。
+  if (!summaries.some((summary) => summary.relativePath === '.')) {
+    summaries.push({
+      id: workspaceRoot,
+      name: path.basename(workspaceRoot),
+      repoRoot: workspaceRoot,
+      relativePath: '.',
+      isNested: false,
+      isGitRepository: false,
+    })
+  }
+
   for (const summary of summaries) {
-    const parent = summaries
-      .filter((candidate) => isPathInside(candidate.repoRoot, summary.repoRoot))
-      .sort((a, b) => b.repoRoot.length - a.repoRoot.length)[0]
+    if (summary.isGitRepository === false) continue
+
+    const parent = summaries.filter((candidate) => candidate.isGitRepository !== false && isPathInside(candidate.repoRoot, summary.repoRoot)).sort((a, b) => b.repoRoot.length - a.repoRoot.length)[0]
 
     if (parent) {
       summary.isNested = true

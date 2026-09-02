@@ -14,6 +14,8 @@ extraResources:
     to: icon
   - from: script
     to: script
+  - from: skills
+    to: skills
 
 asarUnpack:
   - node_modules/node-pty/**

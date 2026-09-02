@@ -379,7 +379,8 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
       const result = await api.getGitRepositorySnapshot(selectedGitRepository.repoRoot)
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshot(result)
-      setGitSnapshotError(result.error ?? null)
+      // 占位的根仓库条目（未初始化 Git）不展示原始 git 报错，界面已有“非 Git 仓库”状态提示。
+      setGitSnapshotError(selectedGitRepository.isGitRepository === false ? null : (result.error ?? null))
       setActiveCommitHash((prev) => (result.recentCommits.some((item) => item.hash === prev) ? prev : null))
     } catch (error) {
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return

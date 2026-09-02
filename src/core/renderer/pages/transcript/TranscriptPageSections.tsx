@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Code2, Columns2, Eye, FileText, Folder, FolderOpen, RefreshCw, Share2, Trash2 } from 'lucide-react'
@@ -14,6 +14,7 @@ import { inferLanguageFromRelativePath } from '../code/code.helpers'
 import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { remarkBoxDrawingTables } from '../code/code.markdownBoxTables'
 import { MarkdownPreviewVisibilityProvider } from '../code/code.markdownVisibility'
+import { TranscriptTreeContextMenu, type TranscriptTreeContextMenuPayload } from './TranscriptTreeContextMenu'
 
 function TranscriptModeButton({ active, disabled = false, icon, label, onClick }: { active: boolean; disabled?: boolean; icon: JSX.Element; label: string; onClick: () => void }) {
   return (
@@ -285,11 +286,12 @@ type TranscriptListSidebarProps = {
   formatTranscriptSourceType: (locale: ResolvedLocale, value: string) => string
   onRefreshList: () => void
   onSelectTranscript: (transcriptId: string) => void
+  onRenameTranscript: (payload: { id: string; title: string }) => void
   onDeleteTranscript: (payload: { id: string; title: string }) => void
   t: (key: MessageKey | SettingsSectionMessageKey, values?: InterpolationValues) => string
 }
 
-export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTranscriptId, deletingTranscriptId, transcriptCountLabel, locale, formatDateTime, formatTranscriptSourceType, onRefreshList, onSelectTranscript, onDeleteTranscript, t }: TranscriptListSidebarProps) {
+export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTranscriptId, deletingTranscriptId, transcriptCountLabel, locale, formatDateTime, formatTranscriptSourceType, onRefreshList, onSelectTranscript, onRenameTranscript, onDeleteTranscript, t }: TranscriptListSidebarProps) {
   const sourceGroups = useMemo(() => {
     const groups = new Map<
       string,
@@ -345,6 +347,28 @@ export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTra
     })
   }
 
+  const [treeContextMenu, setTreeContextMenu] = useState<TranscriptTreeContextMenuPayload | null>(null)
+  const [renamingTranscriptId, setRenamingTranscriptId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const renameCancelRequestedRef = useRef(false)
+
+  const beginRename = (summary: TranscriptSessionSummary) => {
+    renameCancelRequestedRef.current = false
+    setRenamingTranscriptId(summary.id)
+    setRenameDraft(summary.title)
+  }
+
+  const finishRename = (summary: TranscriptSessionSummary, mode: 'commit' | 'cancel') => {
+    if (renamingTranscriptId !== summary.id) return
+    if (mode === 'commit') {
+      const nextTitle = renameDraft.trim()
+      if (nextTitle && nextTitle !== summary.title) {
+        onRenameTranscript({ id: summary.id, title: nextTitle })
+      }
+    }
+    setRenamingTranscriptId(null)
+  }
+
   return (
     <aside className="flex h-full w-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-[color:var(--color-border)] bg-[color:var(--color-card)]">
       <div className="border-b border-[color:var(--color-border)] px-5 py-4">
@@ -396,6 +420,7 @@ export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTra
                       {group.summaries.map((summary) => {
                         const isActive = summary.id === resolvedActiveTranscriptId
                         const isDeleting = deletingTranscriptId === summary.id
+                        const isRenaming = renamingTranscriptId === summary.id
                         const updatedLabel = formatDateTime(summary.updatedAt, {
                           month: '2-digit',
                           day: '2-digit',
@@ -406,24 +431,64 @@ export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTra
                         const rowTitle = `${summary.title}\n${t('transcript.updatedAt', { value: updatedLabel })}\n${t('transcript.refs', { count: summary.referenceCount })}`
 
                         return (
-                          <div key={summary.id} className="group relative min-w-0">
-                            <button type="button" className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} disabled:cursor-not-allowed disabled:opacity-60`} style={{ paddingLeft: 28, paddingRight: 36 }} onClick={() => onSelectTranscript(summary.id)} disabled={isDeleting} title={rowTitle}>
-                              <span className="inline-block h-3.5 w-3.5 shrink-0" />
-                              <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                              <span className="block min-w-0 flex-1 truncate">{summary.title}</span>
-                              <span className="shrink-0 font-mono text-[10px] text-[color:var(--color-muted-foreground)]">{updatedLabel}</span>
-                            </button>
-                            <button
-                              type="button"
-                              className={`absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 ${
-                                isActive || isDeleting ? 'opacity-100' : 'group-hover:opacity-100'
-                              }`}
-                              onClick={() => onDeleteTranscript({ id: summary.id, title: summary.title })}
-                              disabled={isDeleting || deletingTranscriptId !== null}
-                              title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
-                            >
-                              {isDeleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
+                          <div
+                            key={summary.id}
+                            className="group relative min-w-0"
+                            onContextMenu={(event) => {
+                              event.preventDefault()
+                              setTreeContextMenu({ x: event.clientX, y: event.clientY, summary })
+                            }}
+                          >
+                            {isRenaming ? (
+                              <input
+                                autoFocus
+                                className="code-tree-row rounded-[10px] shadow-[0_0_0_2px_color-mix(in_srgb,var(--color-primary)_18%,transparent)] outline-none"
+                                style={{ paddingLeft: 28, paddingRight: 36, minWidth: 0, border: '1px solid var(--color-border)', background: 'var(--color-card)', color: 'var(--color-foreground)' }}
+                                value={renameDraft}
+                                onChange={(event) => setRenameDraft(event.target.value)}
+                                onFocus={(event) => event.currentTarget.select()}
+                                onBlur={() => {
+                                  if (renameCancelRequestedRef.current) {
+                                    renameCancelRequestedRef.current = false
+                                    return
+                                  }
+                                  finishRename(summary, 'commit')
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    finishRename(summary, 'commit')
+                                  }
+                                  if (event.key === 'Escape') {
+                                    event.preventDefault()
+                                    renameCancelRequestedRef.current = true
+                                    setRenamingTranscriptId(null)
+                                  }
+                                }}
+                                aria-label={t('transcript.renameTranscript')}
+                                title={t('transcript.renameTranscript')}
+                              />
+                            ) : (
+                              <button type="button" className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} disabled:cursor-not-allowed disabled:opacity-60`} style={{ paddingLeft: 28, paddingRight: 36 }} onClick={() => onSelectTranscript(summary.id)} disabled={isDeleting} title={rowTitle}>
+                                <span className="inline-block h-3.5 w-3.5 shrink-0" />
+                                <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                                <span className="block min-w-0 flex-1 truncate">{summary.title}</span>
+                                <span className="shrink-0 font-mono text-[10px] text-[color:var(--color-muted-foreground)]">{updatedLabel}</span>
+                              </button>
+                            )}
+                            {!isRenaming && (
+                              <button
+                                type="button"
+                                className={`absolute right-1 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-[color:var(--color-muted-foreground)] opacity-0 transition-all hover:bg-[color:var(--color-destructive-background)] hover:text-[color:var(--color-destructive)] focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+                                  isActive || isDeleting ? 'opacity-100' : 'group-hover:opacity-100'
+                                }`}
+                                onClick={() => onDeleteTranscript({ id: summary.id, title: summary.title })}
+                                disabled={isDeleting || deletingTranscriptId !== null}
+                                title={isDeleting ? t('transcript.deletingTranscript') : t('transcript.deleteTranscript')}
+                              >
+                                {isDeleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            )}
                           </div>
                         )
                       })}
@@ -435,6 +500,10 @@ export function TranscriptListSidebar({ listStatus, summaries, resolvedActiveTra
           </div>
         )}
       </div>
+
+      {treeContextMenu && (
+        <TranscriptTreeContextMenu x={treeContextMenu.x} y={treeContextMenu.y} summary={treeContextMenu.summary} onRename={() => beginRename(treeContextMenu.summary)} onDelete={() => onDeleteTranscript({ id: treeContextMenu.summary.id, title: treeContextMenu.summary.title })} onClose={() => setTreeContextMenu(null)} />
+      )}
     </aside>
   )
 }
