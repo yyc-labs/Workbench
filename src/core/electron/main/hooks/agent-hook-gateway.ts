@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
+import { networkInterfaces } from 'os'
 import type { AgentHookCanonicalEvent, AgentHookEnvelope, AgentHookGatewayConfig, AgentHookLogDetail, AgentHookGatewayStatus, AgentHookProvider, StructuredHttpRequestSnapshot, TranscriptExternalImportPayload, TranscriptImportedEvent, TranscriptImportProjectTarget } from '../../../shared/types'
+import { resolveAdvertisedHost } from '../../../shared/lanHosts'
 import { buildJsonSnapshot, buildRequestSnapshot, hasStructuredTruncation, maskUnknown } from '../agent-logs/log-snapshots'
 import { buildTranscriptImportSkillMarkdown } from './transcript-import-skill'
 
@@ -263,11 +265,18 @@ export class AgentHookGateway {
     this.recentLogDetails = []
   }
 
+  // 对外公布的可访问 host：通配监听（0.0.0.0 / ::）时返回本机局域网 IPv4，供本机/局域网/WSL 的 agent 连接。
+  private resolveConnectableHost(): string {
+    const config = this.resolveConfig()
+    const host = this.server ? this.activeHost : config.host || DEFAULT_HOST
+    return resolveAdvertisedHost(host, networkInterfaces)
+  }
+
   getStatus(): AgentHookGatewayStatus {
     const config = this.resolveConfig()
     const host = this.server ? this.activeHost : config.host
     const port = this.server ? this.activePort : config.port
-    const baseUrl = `http://${host}:${port}`
+    const baseUrl = `http://${this.resolveConnectableHost()}:${port}`
     return {
       enabled: config.enabled,
       running: this.running,
@@ -473,7 +482,7 @@ export class AgentHookGateway {
           ok: true,
           skill: buildTranscriptImportSkillMarkdown(
             {
-              baseUrl: `http://127.0.0.1:${config.port}`,
+              baseUrl: `http://${this.resolveConnectableHost()}:${config.port}`,
               token: config.transcriptImportToken || '',
             },
             this.transcriptSkillFileProvider?.(),

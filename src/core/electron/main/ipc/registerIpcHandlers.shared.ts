@@ -100,7 +100,9 @@ export async function requestTranscriptImportViaGateway(payload: TranscriptGatew
     throw new Error('Transcript import API is disabled.')
   }
 
-  const host = (agentHooks.host && agentHooks.host !== '127.0.0.1' ? agentHooks.host : '127.0.0.1') || '127.0.0.1'
+  const configuredHost = agentHooks.host && agentHooks.host !== '127.0.0.1' ? agentHooks.host : '127.0.0.1'
+  // 通配监听（0.0.0.0 / ::）只用于绑定，内部出站连接用 127.0.0.1。
+  const host = configuredHost === '0.0.0.0' || configuredHost === '::' || configuredHost === '[::]' ? '127.0.0.1' : configuredHost
   const port = Number.isFinite(agentHooks.port) ? Number(agentHooks.port) : 17373
   const body = JSON.stringify({
     projectId: payload.projectId,

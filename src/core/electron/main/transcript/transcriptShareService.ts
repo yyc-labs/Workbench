@@ -3,15 +3,8 @@ import { promises as fs } from 'fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'http'
 import { networkInterfaces, type NetworkInterfaceInfo } from 'os'
 import { fileURLToPath } from 'url'
-import type {
-  TranscriptShareBindingMode,
-  TranscriptShareEntry,
-  TranscriptShareHost,
-  TranscriptShareHostKind,
-  TranscriptShareListResult,
-  TranscriptShareStartPayload,
-  TranscriptShareStartResult,
-} from '../../../shared/types'
+import type { TranscriptShareBindingMode, TranscriptShareEntry, TranscriptShareHost, TranscriptShareListResult, TranscriptShareStartPayload, TranscriptShareStartResult } from '../../../shared/types'
+import { listLanHosts, pickPrimaryLanAddress } from '../../../shared/lanHosts'
 
 const SHARE_PORT = 17374
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -20,10 +13,6 @@ const TOKEN_PATTERN = /^[a-f0-9-]{16,}$/i
 type StoredShare = {
   entry: TranscriptShareEntry
   html: string
-}
-
-type CandidateHost = TranscriptShareHost & {
-  score: number
 }
 
 type ShareHttpServerLike = {
@@ -41,11 +30,7 @@ type TranscriptShareServiceOptions = {
 }
 
 function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function imageMimeFromPath(filePath: string): string {
@@ -59,118 +44,7 @@ function imageMimeFromPath(filePath: string): string {
   return 'application/octet-stream'
 }
 
-function classifyInterface(name: string): TranscriptShareHostKind {
-  const lower = name.trim().toLowerCase()
-  if (/(hyper-v|vmware|virtualbox|vbox|docker|wsl|loopback|vethernet|virtual)/.test(lower)) return 'virtual'
-  if (/(wi-?fi|wlan|wireless)/.test(lower)) return 'wifi'
-  if (/(ethernet|en\d|lan)/.test(lower)) return 'ethernet'
-  if (/(vpn|tun|tap|tailscale|zerotier|wireguard)/.test(lower)) return 'vpn'
-  return 'other'
-}
-
-function isPreferredPrivateLanAddress(host: string): boolean {
-  return host.startsWith('192.168.')
-}
-
-function isHotspotOrSharedInterface(name: string): boolean {
-  const lower = name.trim().toLowerCase()
-  return (
-    /(wi-?fi direct|mobile hotspot|internet connection sharing|shared connection)/.test(lower)
-    || /^(local area connection|本地连接)\*/.test(lower)
-  )
-}
-
-function scoreHost(candidate: TranscriptShareHost): number {
-  let score = 0
-
-  // In the user's sharing setup, peers typically reach the machine through a
-  // 192.168.x.x private LAN address rather than a corporate/VPN 10.x.x.x one.
-  if (isPreferredPrivateLanAddress(candidate.host)) {
-    score += 1000
-  }
-
-  // Windows Mobile Hotspot / ICS adapters are still a strong hint when multiple
-  // 192.168.x.x addresses exist.
-  if (isHotspotOrSharedInterface(candidate.interfaceName)) {
-    score += 250
-  }
-
-  switch (candidate.kind) {
-    case 'wifi':
-      score += 400
-      break
-    case 'ethernet':
-      score += 350
-      break
-    case 'other':
-      score += 250
-      break
-    case 'vpn':
-      score += 150
-      break
-    case 'virtual':
-      score += 25
-      break
-  }
-
-  if (candidate.host.startsWith('192.168.')) score += 40
-  else if (candidate.host.startsWith('10.')) score += 35
-  else if (/^172\.(1[6-9]|2\d|3[01])\./.test(candidate.host)) score += 30
-
-  if (candidate.host.startsWith('169.254.')) score -= 500
-
-  return score
-}
-
-function listLanHosts(readNetworkInterfaces: () => NodeJS.Dict<NetworkInterfaceInfo[]>): TranscriptShareHost[] {
-  let interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>
-  try {
-    interfaces = readNetworkInterfaces()
-  } catch {
-    return [{ host: '127.0.0.1', interfaceName: 'loopback', kind: 'other' }]
-  }
-  const candidates: CandidateHost[] = []
-  const seen = new Set<string>()
-  for (const [interfaceName, list] of Object.entries(interfaces)) {
-    if (!list) continue
-    for (const net of list) {
-      if (net.family !== 'IPv4' || net.internal) continue
-      if (!net.address || seen.has(net.address)) continue
-      seen.add(net.address)
-
-      const candidate: TranscriptShareHost = {
-        host: net.address,
-        interfaceName,
-        kind: classifyInterface(interfaceName),
-      }
-      candidates.push({
-        ...candidate,
-        score: scoreHost(candidate),
-      })
-    }
-  }
-
-  const sorted = candidates
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score
-      if (a.kind !== b.kind) return a.kind.localeCompare(b.kind)
-      if (a.interfaceName !== b.interfaceName) return a.interfaceName.localeCompare(b.interfaceName)
-      return a.host.localeCompare(b.host)
-    })
-    .map(({ host, interfaceName, kind }) => ({ host, interfaceName, kind }))
-
-  if (sorted.length > 0) return sorted
-  return [{ host: '127.0.0.1', interfaceName: 'loopback', kind: 'other' }]
-}
-
-function pickPrimaryLanAddress(hosts: TranscriptShareHost[]): string {
-  return hosts[0]?.host || '127.0.0.1'
-}
-
-async function inlineImages(
-  html: string,
-  images: TranscriptShareStartPayload['images']
-): Promise<string> {
+async function inlineImages(html: string, images: TranscriptShareStartPayload['images']): Promise<string> {
   if (!images || images.length === 0) return html
   let result = html
   for (const image of images) {
@@ -243,9 +117,7 @@ export function createTranscriptShareService(options: TranscriptShareServiceOpti
     res.end(body)
   }
 
-  const preferredListenHosts = options.preferredListenHosts && options.preferredListenHosts.length > 0
-    ? options.preferredListenHosts
-    : ['0.0.0.0', '127.0.0.1']
+  const preferredListenHosts = options.preferredListenHosts && options.preferredListenHosts.length > 0 ? options.preferredListenHosts : ['0.0.0.0', '127.0.0.1']
 
   const setBoundHosts = (listenHost: string): void => {
     const hosts = listLanHosts(readNetworkInterfaces)
@@ -304,9 +176,7 @@ export function createTranscriptShareService(options: TranscriptShareServiceOpti
       }
     }
 
-    throw lastError instanceof Error
-      ? lastError
-      : new Error('Transcript share server failed to bind to any listen host.')
+    throw lastError instanceof Error ? lastError : new Error('Transcript share server failed to bind to any listen host.')
   }
 
   const toListResult = (): TranscriptShareListResult => ({
