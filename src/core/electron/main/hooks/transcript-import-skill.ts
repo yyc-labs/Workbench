@@ -48,7 +48,7 @@ function buildFallbackSkillMarkdown({ token }: TranscriptImportSkillConfig): str
 ## 步骤
 
 1. 解析 projectId：curl -s "{base_url}/transcripts/project-id?path={urlencoded(cwd)}"。查不到时立即暂停任务并向用户确认，严禁猜测 projectId。
-2. 撰写 Markdown 总结（title 一句话主题 + rawText 正文）。rawText 提到项目文件时，用「相对项目根目录 + 行号」格式（如 src/components/App.tsx:42）或「以项目根为前缀的绝对路径 + 行号」；相对路径一律以项目根为基准（当前目录在子目录也要写全），顶层根文件需带行号（package.json:1），禁止用 ..。解析器会按项目根拼接校验真实文件后转成可点击引用。
+2. 撰写 Markdown 总结（title 一句话主题 + rawText 正文）。rawText 提到项目文件时**不要用 Markdown 反引号或代码块包裹文件引用**（反引号内解析器识别不到），直接写成纯文本：用「相对项目根目录 + 行号」格式（如 src/components/App.tsx:42）或「以项目根为前缀的绝对路径 + 行号」；相对路径一律以项目根为基准（当前目录在子目录也要写全），顶层根文件需带行号（package.json:1），禁止用 ..。解析器会按项目根拼接校验真实文件后转成可点击引用。
 3. 写入：请求体写 payload.json（含 projectId、title、sourceType:"agent-hook"、rawText、openViewer:false；openViewer 默认 false 不打开转录页，用户要求查看时才改 true），发送方式见下。鉴权：${tokenHint}。
    发送：${methodHint}
 4. 成功向用户报告 title 与 sessionId；失败原样报告 error，最多重试一次。

@@ -90,6 +90,12 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
           descriptionKey: 'settings.shortcuts.items.globalBrowserScreenshot.description',
         },
         {
+          id: 'global-agent-skill-prompt',
+          trigger: 'Ctrl/Cmd+Shift+L',
+          titleKey: 'settings.shortcuts.items.globalAgentSkillPrompt.title',
+          descriptionKey: 'settings.shortcuts.items.globalAgentSkillPrompt.description',
+        },
+        {
           id: 'global-recent',
           trigger: 'Ctrl/Cmd+Shift+P',
           titleKey: 'settings.shortcuts.items.globalRecent.title',

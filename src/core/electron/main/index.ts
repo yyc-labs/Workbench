@@ -26,6 +26,8 @@ import { applyWindowBackground, createWindow } from './window/createWindow'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
 import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
 import { ensureWindowVisible } from './window/windowFocus'
+import { buildAgentSkillPrompt } from '../../shared/agentSkillPrompt'
+import { pasteTextToActiveWindow } from './window/activeWindowPaste'
 
 let mainWindow: BrowserWindow | null = null
 let transcriptCaptureWindow: BrowserWindow | null = null
@@ -42,6 +44,11 @@ const transcriptCaptureController = new TranscriptCaptureController()
 let processManager: ProcessManager | null = null
 let bootCapability: Capability | null = null
 let trayController: AppTrayController | null = null
+// Ctrl+Shift+L 全局粘贴 Agent Skill 提示词：去抖与互斥，避免按住重复触发或并发快照互相覆盖。
+const AGENT_SKILL_FALLBACK_URL = 'http://127.0.0.1:17373/transcripts/skill'
+const AGENT_SKILL_PASTE_DEBOUNCE_MS = 800
+let lastAgentSkillPromptPasteAt = 0
+let agentSkillPromptPasteInFlight = false
 const shouldStartHiddenToTray = isSilentAutostartLaunch(process.argv)
 const shouldUseTrayLifecycle = process.platform === 'win32'
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -239,6 +246,28 @@ function sendGlobalBrowserScreenshotShortcut(): void {
     } catch (error) {
       console.warn('[browser-screenshot] Failed to open the browser.', error)
       await showBrowserScreenshotWindow()
+    }
+  })()
+}
+
+// 把设置页「Agent Skill 提示词」组装后粘贴到当前聚焦窗口（Windows；语言跟随界面 locale）。
+function sendGlobalAgentSkillPromptShortcut(): void {
+  const now = Date.now()
+  if (now - lastAgentSkillPromptPasteAt < AGENT_SKILL_PASTE_DEBOUNCE_MS || agentSkillPromptPasteInFlight) {
+    return
+  }
+  lastAgentSkillPromptPasteAt = now
+  agentSkillPromptPasteInFlight = true
+  void (async () => {
+    try {
+      const locale = resolveMainLocale(loadConfig().locale, app.getLocale())
+      const skillUrl = agentHookGateway.getStatus()?.transcriptSkillUrl || AGENT_SKILL_FALLBACK_URL
+      const prompt = buildAgentSkillPrompt(locale, `curl -s ${skillUrl}`)
+      await pasteTextToActiveWindow(prompt)
+    } catch (error) {
+      console.warn('[global-shortcut] Agent skill prompt paste failed.', error)
+    } finally {
+      agentSkillPromptPasteInFlight = false
     }
   })()
 }
@@ -756,7 +785,7 @@ app.whenReady().then(async () => {
   }
 
   syncWindowsLaunchOnLogin(bootConfig)
-  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut, sendGlobalBrowserScreenshotShortcut)
+  registerGlobalShortcuts(sendGlobalHomeShortcut, sendGlobalThemeShortcut, sendGlobalTranscriptCaptureShortcut, sendGlobalBrowserScreenshotShortcut, sendGlobalAgentSkillPromptShortcut)
   agentHookGateway.start()
   void aiGatewayService.start(false).catch((error) => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)

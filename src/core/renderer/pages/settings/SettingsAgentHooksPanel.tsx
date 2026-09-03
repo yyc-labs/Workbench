@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Select } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
 
 const feishuReceiveIdTypeOptions = [
   { value: 'open_id', label: 'open_id' },
@@ -25,6 +26,7 @@ function normalizeGatewayHost(value: string | undefined): GatewayHost {
 
 export function SettingsAgentHooksPanel() {
   const { t, tHtml } = useI18n()
+  const capability = useAppStore((s) => s.capability)
   const [agentHookConfig, setAgentHookConfig] = useState<NonNullable<AppConfig['agentHooks']> | null>(null)
   const [status, setStatus] = useState<AgentHookGatewayStatus | null>(null)
   const [loading, setLoading] = useState(false)
@@ -233,6 +235,7 @@ export function SettingsAgentHooksPanel() {
             </Button>
           </div>
         </div>
+        {capability?.hostPlatform === 'windows' && <p className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.agentSkillPromptGlobalHint')}</p>}
 
         {(gatewayHostSaveError || error || status?.error) && (
           <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-600">

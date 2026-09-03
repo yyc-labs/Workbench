@@ -11,7 +11,7 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       rollupOptions: {
-        external: ['node-pty'],
+        external: ['node-pty', 'koffi'],
         input: {
           index: resolve(__dirname, 'src/core/electron/main/index.ts'),
         },

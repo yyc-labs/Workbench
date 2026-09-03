@@ -19,6 +19,7 @@ extraResources:
 
 asarUnpack:
   - node_modules/node-pty/**
+  - node_modules/koffi/**
 
 npmRebuild: false
 electronDist: C:/Users/yyc20/AppData/Local/electron/Cache/electron-v42.1.0-win32-x64.zip

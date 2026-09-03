@@ -1,3 +1,5 @@
+import { AGENT_SKILL_PROMPT_EN_TEMPLATE, AGENT_SKILL_PROMPT_ZH_TEMPLATE } from '../../../shared/agentSkillPrompt'
+
 export const settingsMessages = {
   'en-US': {
     settings: {
@@ -510,6 +512,10 @@ export const settingsMessages = {
             title: 'Browser Long Screenshot',
             description: 'Open the browser long screenshot dialog from anywhere.',
           },
+          globalAgentSkillPrompt: {
+            title: 'Paste Agent Skill Prompt',
+            description: 'From any app, paste the agent skill prompt into the focused window.',
+          },
           globalRecent: {
             title: 'Toggle Recent Projects',
             description: 'Open or close the recent projects drawer.',
@@ -991,8 +997,8 @@ export const settingsMessages = {
         listenScopeDescription: 'LAN allows other devices on the same network to call the gateway; localhost only allows access from this machine. Changes take effect immediately after saving.',
         agentSkillPromptLabel: 'Agent skill prompt (paste to your agent)',
         copySkillPrompt: 'Copy Prompt',
-        agentSkillPrompt:
-          'Summarize this session and save it into the IDE transcript library. First run {command} to fetch the skill, then strictly follow the returned JSON `skill` field (Markdown instructions including the <transcript-import-config> base_url / token): resolve the projectId for the current working directory (pause and ask me if not found), summarize this session into Markdown, then POST it to /transcripts/import. Requirements: mention files using "project-root-relative path + line number" (e.g. src/x.ts:12 — the parser joins the path onto the project root and checks it is a real file; write the full path from the root even when inside a subdirectory); on Windows send the POST with PowerShell Invoke-RestMethod instead of curl, on other environments (WSL/macOS/Linux) curl is fine. Finally report the result.',
+        agentSkillPromptGlobalHint: 'Tip: Press Ctrl+Shift+L in any app to paste the current prompt at the cursor.',
+        agentSkillPrompt: AGENT_SKILL_PROMPT_EN_TEMPLATE,
         transcriptImportTitle: 'Transcript Import API',
         transcriptImportDescription: 'Receive transcript text from other local applications and expose a project discovery endpoint.',
         enabled: 'Enabled',
@@ -1535,6 +1541,10 @@ export const settingsMessages = {
             title: '浏览器网页长截图',
             description: '从任意位置打开浏览器网页长截图窗口。',
           },
+          globalAgentSkillPrompt: {
+            title: '粘贴 Agent Skill 提示词',
+            description: '在任意应用里把 Agent skill 提示词粘贴到当前聚焦窗口。',
+          },
           globalRecent: {
             title: '开关最近项目抽屉',
             description: '打开或关闭最近项目抽屉。',
@@ -2014,8 +2024,8 @@ export const settingsMessages = {
         listenScopeDescription: '局域网允许同一网络内的其它设备访问网关；仅本机时只有本机可调用。保存后立即生效。',
         agentSkillPromptLabel: 'Agent Skill 提示词（复制后发给你的 agent）',
         copySkillPrompt: '复制提示词',
-        agentSkillPrompt:
-          '请把本次会话总结保存到 IDE 转录库。先执行 {command} 获取 skill，然后严格按返回 JSON 的 skill 字段（Markdown 指令，含 <transcript-import-config> 的 base_url / token）执行：解析当前工作目录对应的 projectId，查不到就先暂停询问我；再把本次会话总结成 Markdown 通过 POST /transcripts/import 写入。要求：提到文件时用「相对项目根目录 + 行号」格式（如 src/x.ts:12，解析器按项目根拼接校验、需项目内真实文件，当前在子目录也要从根写全）；POST 在 Windows 下用 PowerShell 的 Invoke-RestMethod，其它环境（WSL/macOS/Linux）用 curl。最后汇报结果。',
+        agentSkillPromptGlobalHint: '提示：在任意软件中按 Ctrl+Shift+L，即可把提示词直接粘贴到当前光标处。',
+        agentSkillPrompt: AGENT_SKILL_PROMPT_ZH_TEMPLATE,
         transcriptImportTitle: '转录导入 API',
         transcriptImportDescription: '接收其他本地应用传来的转录文本，并暴露项目发现接口。',
         enabled: '启用',

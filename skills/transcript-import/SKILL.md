@@ -25,21 +25,25 @@
 
 ### 2.1 文件路径写法（关系到能否解析成可点击引用）
 
-转录解析器只会把**项目内真实存在**的文件识别为引用（会用文件系统校验并转成点击链接）。提到文件时请按下列格式写：
+转录解析器只会把**项目内真实存在**的文件识别为引用（会用文件系统校验并转成点击链接）。
 
-- 相对路径 + 行号（推荐）：`src/components/App.tsx:42`
-- 绝对路径 + 行号：`/home/u/proj/src/main.ts:10` 或 `C:\repo\src\main.ts:10`
-- 相对路径独立成行（无行号时按第 1 行）：一行只写 `src/components/App.tsx`
+> **重要：文件引用必须写成正文里的纯文本，不要用 Markdown 反引号（`）包裹，也不要用代码块**。反引号或代码块里的路径会被当作普通行内代码，解析器识别不到，无法转成可点击引用。
+
+提到文件时请按下列格式写：
+
+- 相对路径 + 行号（推荐）：src/components/App.tsx:42
+- 绝对路径 + 行号：/home/u/proj/src/main.ts:10 或 C:\repo\src\main.ts:10
+- 相对路径独立成行（无行号时按第 1 行）：一行只写 src/components/App.tsx
 
 要求：
-- **相对路径一律以「项目根目录」为基准**来写，而不是当前所在目录：解析器会把路径直接拼到项目根上做文件校验。即使当前在 `src/components/` 里，也要写全 `src/components/App.tsx`，不能只写 `App.tsx` 或 `components/App.tsx`。
+- **相对路径一律以「项目根目录」为基准**来写，而不是当前所在目录：解析器会把路径直接拼到项目根上做文件校验。即使当前在 src/components/ 里，也要写全 src/components/App.tsx，不能只写 App.tsx 或 components/App.tsx。
 - 绝对路径必须以项目根路径为前缀（路径在项目内）；超出项目范围不会被识别。
-- 至少包含一层目录，且带扩展名。例外：**项目根下的顶层文件**只有用「路径+行号」形式才能识别（`package.json:1` 可以），单独一行 `package.json` 不行。
-- 相对路径不要用 `..` 上跳目录；`\` `/` 分隔符均可（解析后统一为正斜杠）。
+- 至少包含一层目录，且带扩展名。例外：**项目根下的顶层文件**只有用「路径+行号」形式才能识别（package.json:1 可以），单独一行 package.json 不行。
+- 相对路径不要用 .. 上跳目录；\ / 分隔符均可（解析后统一为正斜杠）。
 
 示例：
 
-    - 改动 `src/core/electron/main/hooks/agent-hook-gateway.ts:332`，新增 skill 下发端点
+    - 改动 src/core/electron/main/hooks/agent-hook-gateway.ts:332，新增 skill 下发端点
     - 调整 package.json:1 的 scripts
     - 新增文件 src/core/renderer/pages/transcript/TranscriptTreeContextMenu.tsx
 
