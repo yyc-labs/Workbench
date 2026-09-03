@@ -40,6 +40,7 @@ docs/*
 !docs/README.md
 !docs/images/
 !docs/images/*
+!docs/gifs/*
 !docs/guides/
 !docs/guides/**
 !docs/reference/
