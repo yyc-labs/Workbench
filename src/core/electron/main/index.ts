@@ -250,7 +250,7 @@ function sendGlobalBrowserScreenshotShortcut(): void {
   })()
 }
 
-// 把设置页「Agent Skill 提示词」组装后粘贴到当前聚焦窗口（Windows；语言跟随界面 locale）。
+// 把设置页「Agent Skill 提示词」组装后粘贴到当前聚焦窗口（Windows/macOS/Linux X11；语言跟随界面 locale）。
 function sendGlobalAgentSkillPromptShortcut(): void {
   const now = Date.now()
   if (now - lastAgentSkillPromptPasteAt < AGENT_SKILL_PASTE_DEBOUNCE_MS || agentSkillPromptPasteInFlight) {

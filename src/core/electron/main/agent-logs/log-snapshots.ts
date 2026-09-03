@@ -1,14 +1,7 @@
 import type { IncomingHttpHeaders } from 'http'
-import type {
-  StructuredHttpRequestSnapshot,
-  StructuredHttpResponseSnapshot,
-  StructuredJsonSnapshot,
-} from '../../../shared/types'
+import type { StructuredHttpRequestSnapshot, StructuredHttpResponseSnapshot, StructuredJsonSnapshot } from '../../../shared/types'
 
-type HeaderRecordInput =
-  | IncomingHttpHeaders
-  | Headers
-  | Record<string, string | string[] | undefined>
+type HeaderRecordInput = IncomingHttpHeaders | Headers | Record<string, string | string[] | undefined>
 
 type BuildJsonSnapshotOptions = {
   contentType?: string
@@ -49,7 +42,7 @@ const MASKED_VALUE = '[masked]'
 const SENSITIVE_NAME_RE = /(^|[-_])(authorization|token|secret|api[-_]?key)$/i
 const SENSITIVE_TEXT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/(Bearer\s+)([^\s",]+)/gi, `$1${MASKED_VALUE}`],
-  [/("?(?:authorization|token|secret|api[_-]?key|x-api-key|x-agent-hook-token|x-ide-electron-token|x-ide-electron-transcript-token)"?\s*:\s*")([^"]+)(")/gi, `$1${MASKED_VALUE}$3`],
+  [/("?(?:authorization|token|secret|api[_-]?key|x-api-key|x-agent-hook-token|x-ide-electron-token|x-workbench-transcript-token)"?\s*:\s*")([^"]+)(")/gi, `$1${MASKED_VALUE}$3`],
 ]
 
 function isSensitiveName(name: string): boolean {
@@ -61,10 +54,7 @@ function maskSensitiveString(value: string): string {
 }
 
 function maskTextValue(value: string): string {
-  return SENSITIVE_TEXT_REPLACEMENTS.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    value,
-  )
+  return SENSITIVE_TEXT_REPLACEMENTS.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), value)
 }
 
 function maskValueByName(name: string, value: string | string[]): string | string[] {
@@ -91,9 +81,7 @@ function toHeaderRecord(headers: HeaderRecordInput): Record<string, string | str
 }
 
 export function maskHeaders(headers: HeaderRecordInput): Record<string, string | string[]> {
-  return Object.fromEntries(
-    Object.entries(toHeaderRecord(headers)).map(([key, value]) => [key, maskValueByName(key, value)]),
-  )
+  return Object.fromEntries(Object.entries(toHeaderRecord(headers)).map(([key, value]) => [key, maskValueByName(key, value)]))
 }
 
 function truncateTextByBytes(value: string, maxBytes: number): { text: string; truncated: boolean } {
@@ -104,7 +92,9 @@ function truncateTextByBytes(value: string, maxBytes: number): { text: string; t
   }
 
   const suffix = '\n...<truncated>'
-  const truncatedText = Buffer.from(value).subarray(0, Math.max(0, max - Buffer.byteLength(suffix))).toString('utf8')
+  const truncatedText = Buffer.from(value)
+    .subarray(0, Math.max(0, max - Buffer.byteLength(suffix)))
+    .toString('utf8')
   return {
     text: `${truncatedText}${suffix}`,
     truncated: true,
@@ -118,22 +108,12 @@ export function maskUnknown(value: unknown, seen = new WeakSet<object>()): unkno
   if (value && typeof value === 'object') {
     if (seen.has(value as object)) return '[circular]'
     seen.add(value as object)
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, child]) => [
-        key,
-        isSensitiveName(key)
-          ? typeof child === 'string'
-            ? maskSensitiveString(child)
-            : MASKED_VALUE
-          : maskUnknown(child, seen),
-      ]),
-    )
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, isSensitiveName(key) ? (typeof child === 'string' ? maskSensitiveString(child) : MASKED_VALUE) : maskUnknown(child, seen)]))
   }
   return value
 }
 
-function normalizeQuery(query: URLSearchParams | Record<string, string | string[]> | undefined):
-  Record<string, string | string[]> | undefined {
+function normalizeQuery(query: URLSearchParams | Record<string, string | string[]> | undefined): Record<string, string | string[]> | undefined {
   if (!query) return undefined
   if (query instanceof URLSearchParams) {
     const entries = Array.from(query.keys()).sort()
@@ -148,14 +128,7 @@ function normalizeQuery(query: URLSearchParams | Record<string, string | string[
   return Object.keys(query).length > 0 ? query : undefined
 }
 
-export function buildJsonSnapshot({
-  contentType,
-  rawText,
-  parsedValue,
-  maxBytes = DEFAULT_MAX_SNAPSHOT_BYTES,
-  truncated = false,
-  parseError,
-}: BuildJsonSnapshotOptions): StructuredJsonSnapshot | undefined {
+export function buildJsonSnapshot({ contentType, rawText, parsedValue, maxBytes = DEFAULT_MAX_SNAPSHOT_BYTES, truncated = false, parseError }: BuildJsonSnapshotOptions): StructuredJsonSnapshot | undefined {
   if (typeof rawText === 'undefined' && typeof parsedValue === 'undefined' && !parseError) {
     return undefined
   }
@@ -178,15 +151,9 @@ export function buildJsonSnapshot({
     normalizedText = maskTextValue(normalizedText)
   }
 
-  const sizeSource = typeof rawText === 'string'
-    ? rawText
-    : typeof normalizedText === 'string'
-      ? normalizedText
-      : ''
+  const sizeSource = typeof rawText === 'string' ? rawText : typeof normalizedText === 'string' ? normalizedText : ''
   const sizeBytes = sizeSource ? Buffer.byteLength(sizeSource) : undefined
-  const limitedText = typeof normalizedText === 'string'
-    ? truncateTextByBytes(normalizedText, maxBytes)
-    : null
+  const limitedText = typeof normalizedText === 'string' ? truncateTextByBytes(normalizedText, maxBytes) : null
 
   return {
     contentType,
@@ -198,19 +165,7 @@ export function buildJsonSnapshot({
   }
 }
 
-export function buildRequestSnapshot({
-  method,
-  path,
-  url,
-  query,
-  headers,
-  bodyText,
-  bodyValue,
-  contentType,
-  maxBodyBytes,
-  bodyTruncated,
-  bodyParseError,
-}: BuildRequestSnapshotOptions): StructuredHttpRequestSnapshot {
+export function buildRequestSnapshot({ method, path, url, query, headers, bodyText, bodyValue, contentType, maxBodyBytes, bodyTruncated, bodyParseError }: BuildRequestSnapshotOptions): StructuredHttpRequestSnapshot {
   return {
     method,
     path,
@@ -228,16 +183,7 @@ export function buildRequestSnapshot({
   }
 }
 
-export function buildResponseSnapshot({
-  statusCode,
-  headers,
-  bodyText,
-  bodyValue,
-  contentType,
-  maxBodyBytes,
-  bodyTruncated,
-  bodyParseError,
-}: BuildResponseSnapshotOptions): StructuredHttpResponseSnapshot {
+export function buildResponseSnapshot({ statusCode, headers, bodyText, bodyValue, contentType, maxBodyBytes, bodyTruncated, bodyParseError }: BuildResponseSnapshotOptions): StructuredHttpResponseSnapshot {
   return {
     statusCode,
     headers: headers ? maskHeaders(headers) : undefined,

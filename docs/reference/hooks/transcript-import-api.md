@@ -364,7 +364,7 @@ Authorization: Bearer <token>
 或：
 
 ```text
-x-ide-electron-transcript-token: <token>
+x-workbench-transcript-token: <token>
 ```
 
 如果你的使用场景只是自己本机上的脚本，一般不需要启用这一层。

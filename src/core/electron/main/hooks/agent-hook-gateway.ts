@@ -473,7 +473,7 @@ export class AgentHookGateway {
       // skill 下发接口：token 写在返回内容里，因此不能用转录 token 做前置鉴权（鸡生蛋问题）。
       // 改为网关 token 或转录 token 任一命中即可；两者都未配置时开放（与导入接口的无 token 模式一致）。
       if (req.method === 'GET' && url.pathname === '/transcripts/skill') {
-        const skillAuthorized = (!config.token && !config.transcriptImportToken) || this.isAuthorized(req, config.transcriptImportToken, ['x-ide-electron-transcript-token', 'x-ide-electron-token']) || this.isAuthorized(req, config.token, ['x-agent-hook-token', 'x-ide-electron-token'])
+        const skillAuthorized = (!config.token && !config.transcriptImportToken) || this.isAuthorized(req, config.transcriptImportToken, ['x-workbench-transcript-token', 'x-ide-electron-token']) || this.isAuthorized(req, config.token, ['x-agent-hook-token', 'x-ide-electron-token'])
         if (!skillAuthorized) {
           emptyResponse(res, 401)
           return
@@ -490,7 +490,7 @@ export class AgentHookGateway {
         })
         return
       }
-      if (!this.isAuthorized(req, config.transcriptImportToken, ['x-ide-electron-transcript-token', 'x-ide-electron-token'])) {
+      if (!this.isAuthorized(req, config.transcriptImportToken, ['x-workbench-transcript-token', 'x-ide-electron-token'])) {
         emptyResponse(res, 401)
         return
       }

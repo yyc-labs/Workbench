@@ -33,7 +33,7 @@ function buildConfigBlock({ baseUrl, token }: TranscriptImportSkillConfig): stri
 
 // skill 文件缺失时的兜底指令（与 SKILL.md 保持同义）。
 function buildFallbackSkillMarkdown({ token }: TranscriptImportSkillConfig): string {
-  const tokenHint = token ? '请求必须携带鉴权头 -H "x-ide-electron-transcript-token: <transcript_import_token> 里的值"' : '未配置专用 token，无需携带鉴权头'
+  const tokenHint = token ? '请求必须携带鉴权头 -H "x-workbench-transcript-token: <transcript_import_token> 里的值"' : '未配置专用 token，无需携带鉴权头'
   const methodHint = `写入用 POST。Windows 下避免用 curl（防本地安全沙箱拦截），改用 PowerShell：
     $body = Get-Content -Raw payload.json
     Invoke-RestMethod -Uri "{base_url}/transcripts/import" -Method Post -ContentType "application/json; charset=utf-8" -Body $body
@@ -43,7 +43,7 @@ function buildFallbackSkillMarkdown({ token }: TranscriptImportSkillConfig): str
 
 ## 任务
 
-把「本次会话」的内容总结成一份 Markdown 转录，写入 IDE 的转录库。
+把「本次会话」的内容总结成一份 Markdown 转录，写入 Workbench 的转录库。
 
 ## 步骤
 

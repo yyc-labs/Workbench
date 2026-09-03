@@ -125,7 +125,7 @@ export async function requestTranscriptImportViaGateway(payload: TranscriptGatew
         headers: {
           'content-type': 'application/json; charset=utf-8',
           'content-length': Buffer.byteLength(body),
-          ...(transcriptImport.token ? { 'x-ide-electron-transcript-token': transcriptImport.token } : {}),
+          ...(transcriptImport.token ? { 'x-workbench-transcript-token': transcriptImport.token } : {}),
         },
       },
       (res) => {

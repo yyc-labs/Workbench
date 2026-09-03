@@ -235,7 +235,7 @@ export function SettingsAgentHooksPanel() {
             </Button>
           </div>
         </div>
-        {capability?.hostPlatform === 'windows' && <p className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.agentSkillPromptGlobalHint')}</p>}
+        {capability && <p className="mt-2 text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.agentSkillPromptGlobalHint')}</p>}
 
         {(gatewayHostSaveError || error || status?.error) && (
           <div className="mt-4 flex items-start gap-2 rounded-[14px] bg-rose-500/10 px-3 py-2 text-sm text-rose-600">
@@ -310,7 +310,7 @@ export function SettingsAgentHooksPanel() {
         )}
 
         <div className="mt-5 flex items-center justify-between gap-4">
-          <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.authHeaders')}: `Authorization: Bearer ...` or `x-ide-electron-transcript-token`</div>
+          <div className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.agentHooks.authHeaders')}: `Authorization: Bearer ...` or `x-workbench-transcript-token`</div>
           <Button onClick={() => void handleSaveTranscriptImport()} loading={savingTranscriptImport}>
             {savingTranscriptImport ? t('common.saving') : t('settings.agentHooks.saveTranscriptImportConfig')}
           </Button>

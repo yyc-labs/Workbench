@@ -1,297 +1,262 @@
 # Workbench
 
-> 面向 Windows 本地开发与 AI 辅助工作流的桌面工作台。
+> 为 AI 编程打造的本地开发工作台
 
-[English](./README.en-US.md) | 简体中文
 
-Workbench 是一个基于 Electron 的本地优先开发工作台，将项目导航、代码浏览与编辑、Git 操作、终端管理、本地 AI CLI Runtime、AI Gateway、会话记录、学习笔记、Markdown 文档和浏览器截图整合到一个 Windows 应用中。
+![Platform](https://img.shields.io/badge/platform-Windows-0078D4) ![Electron](https://img.shields.io/badge/Electron-42-47848F) ![License](https://img.shields.io/badge/license-MIT-green)
 
-Workbench 以“项目”为开发上下文，把代码、终端、Git、AI 会话和文档连接起来，帮助开发者减少工具切换，保留 AI 辅助开发过程中的完整上下文。
+![Workbench 主界面](./docs/images/workbench-home.png)
 
-> Workbench 仍在持续开发中，部分功能和界面可能会随版本演进而调整。
+**Workbench 不替代 Claude Code 或 Codex —— 它为它们提供一个运行的地方。**
 
-## 平台支持
+它是一个围绕本地项目组织的桌面工作台：AI Agent Runtime、终端、Git、会话记录和文档在同一界面中协作，让 AI 辅助开发拥有一个统一的工作上下文。
 
-项目目前仅提供 Windows 安装包，并支持 Windows 和 WSL。macOS 和 Linux 尚未经过充分验证，暂不保证稳定性。
+[架构文档](./docs/reference/architecture.md) · [Releases](https://github.com/yyc-labs/ide-electron/releases) · [反馈 Issue](https://github.com/yyc-labs/ide-electron/issues)
 
-## 核心功能
+---
 
-- 🗂️ **项目工作区** — 添加、切换和管理本地项目，保存最近打开记录。
-- 🧭 **代码工作区** — 浏览项目文件树，使用 Monaco 编辑源代码，查看差异并预览 Markdown。
-- 🌿 **Git 工作流** — 查看仓库状态、分支、提交、差异，执行暂存、常用操作和冲突处理。
-- 🖥️ **终端与运行管理** — 基于 node-pty 和 xterm.js 管理交互式终端与项目运行任务。
-- 🤖 **本地 AI Runtime** — 按项目配置并运行 Claude Code、OpenAI Codex 等本地 AI CLI。
-- 🔌 **AI Gateway** — 统一管理 Provider、模型路由、Gateway 绑定、流式响应和协议兼容。
-- 🧾 **Agent Hooks 与 Transcript** — 捕获 Agent 生命周期事件，导入、浏览和整理 AI CLI 会话记录。
-- 📚 **学习中心** — 维护结构化笔记、分类、技能和浏览器辅助学习资料。
-- 📝 **Markdown 工作区** — 支持 GFM、代码高亮、表格和 Mermaid 图表渲染。
-- 📸 **浏览器截图** — 捕获长网页、处理固定元素，并在独立窗口中预览或保存截图。
-- 🪟 **Windows 和 WSL 支持** — 在 Runtime 模型中明确区分 Windows Native 和 WSL 项目执行路径。
+## 什么是 Workbench?
 
-## ✨ 功能展示
+Claude Code、Codex 让 AI 直接参与编码，但它们运行时，你的注意力散落在各个窗口之间：
 
-### AI 工作台
+```text
+  终端窗口        编辑器         Git 客户端      文档 / 浏览器
+  Agent 输出      查看改动        提交代码        查资料
+       ↘             ↓              ↓            ↙
+       
+                       注意力被反复打断
+```
 
-Workbench 提供统一的 AI 工作台，可集中管理常用的 AI 工具、开发项目和工作环境。无需频繁切换不同应用，即可快速进入开发状态，为 AI 编程打造更加流畅、高效的工作流。
+真正的问题不是「窗口太多」，而是：
 
-![Workbench 首页](./docs/images/workbench-home.png)
+> **Agent 的工作过程没有统一的工作上下文。**
 
-### 一键启动项目
+Agent 改了哪些文件？哪次会话讨论过这个方案？开发服务起来了吗？答案分散在每个工具里。
 
-Workbench 能够自动识别项目根目录中的启动脚本，并提供一键启动能力。所有开发服务均由 Workbench 统一管理，同时支持多个项目并行管理，减少终端窗口对任务栏和桌面的占用。
+## Workbench 的答案
 
-![项目运行](./docs/images/project-runner.png)
+**围绕项目组织 AI 编程，而不是围绕终端。**
 
-### 集成开发工作区
+以「项目」为中心，把 AI 基础设施、开发环境和历史记录收敛到一个桌面应用：
 
-Workbench 提供轻量级集成开发工作区，将项目浏览、文件管理、代码编辑、终端以及 Markdown 阅读整合到同一界面，减少开发过程中在 IDE、资源管理器、终端和文档工具之间的切换。
+```text
+                     Workbench
+                         │
+       ┌─────────────────┼─────────────────┐
+       ↓                 ↓                 ↓
+   AI 基础设施        开发工作区          桌面集成
+       │                 │                 │
+   AI Runtime        编辑器 / 文件       系统托盘
+   AI Gateway        终端 / 运行         全局快捷键
+   Agent Hooks       Git / 提交         飞书通知
+   Transcript        Markdown / 浏览器   多窗口
+       │                 │
+       └────────┬────────┘
+                ↓
+           项目 Project
+                ↓
+         会话与项目历史
+```
 
-![集成开发工作区](./docs/images/workspace.png)
+## 它和 AI Code Editor 有什么不同？
 
-### Git 助手
+Workbench 不是另一个 Cursor，也不是又一个 AI CLI 封装：
 
-内置 Git 助手，帮助开发者快速完成日常版本管理工作，支持标准化 Commit 信息生成和快速提交代码，减少重复命令输入，使 Git 操作更加高效、规范。
+| | AI CLI<br>(Claude Code / Codex) | AI Code Editor<br>(Cursor 等) | Workbench |
+| --- | --- | --- | --- |
+| 形态 | 终端里的 Agent | 内嵌 AI 的编辑器 | 承载 Agent 的桌面工作台 |
+| Agent 在哪运行 | 你自己的终端 | 编辑器内置 | 独立 Runtime + 集成终端 |
+| 多个 CLI 共存 | 各自独立 | 通常单一内置 | 同一界面管理 Claude Code 与 Codex |
+| 会话沉淀 | 散落的本地文件 | 工具内会话 | Transcript 项目历史 |
+| 角色 | 引擎 | 引擎 + 编辑器 | **引擎的运行环境** |
 
-![Git 助手](./docs/images/git-assistant.png)
+> Workbench does not replace Claude Code or Codex — it gives them a place to run.
 
-### Markdown 阅读器
+---
 
-安装 Workbench 后，可直接关联并打开 Markdown 文件。内置高质量 Markdown 渲染引擎，支持快速浏览 README、项目文档、接口文档及开发笔记。
+## 核心能力
 
-![Markdown 阅读器](./docs/images/markdown-viewer.png)
+### AI 基础设施
 
-### 浏览器集成
+**AI Runtime** —— 按项目配置并一键启动本地 AI CLI。Runtime Profile 显式区分 Windows Native 与 WSL 执行路径；Agent 运行在集成终端面板中，支持 tmux 会话恢复、进程状态与运行诊断。
 
-完成浏览器配置后，可通过 **Ctrl + Shift + S** 快速启动浏览器。浏览器实例由 Workbench 统一管理，为开发页面、截图、自动化测试及页面调试提供统一入口。
+![AI Runtime](./docs/images/ai-runtime.png)
 
-![浏览器集成](./docs/images/browser-integration.png)
+**AI Gateway** —— 一个本地端点，接入所有模型：
 
-### 浏览器截图
+```text
+Claude Code ── Anthropic 协议 ──┐
+Codex CLI ─── OpenAI 协议 ──────┤
+                                ↓
+                      Workbench AI Gateway
+                      Provider 路由 · 模型映射
+                      流式响应 · 调用 Trace
+                                ↓
+                 OpenAI / Anthropic / 自定义 Provider
+```
 
-Workbench 内置浏览器截图能力，支持整页长截图以及指定元素截图。截图完成后既可以直接在 Workbench 内查看，也可以调用系统默认图片查看器打开，方便开发、测试、文档编写及 Bug 反馈。
+提供 Anthropic Messages、OpenAI Chat Completions、OpenAI Responses 三种协议入口，任意上游协议可转换为工具需要的格式——在 Claude Code、Codex 之间切换模型，无需改动工具配置。
 
-![浏览器截图](./docs/images/browser-screenshot.png)
+![AI Gateway](./docs/images/ai-gateway.png)
 
-### AI 网关与协议转换
+**Agent Hooks + Transcript** —— 把短暂的 Agent 会话变成可回溯的项目历史：
 
-Workbench 内置本地 AI 网关，可统一管理模型访问配置，并支持不同 AI 服务之间的协议转换。通过协议适配，可将不同模型接口统一为一致的调用方式，方便在 Claude Code、Codex 等 AI 编程工具之间切换。
+```text
+Agent 会话
+ ├── 进程输出 / tmux 捕获
+ ├── Hook 生命周期事件（会话开始/结束、权限请求等 20+ 种）
+ └── 手动 Markdown / 外部文件导入
+          ↓
+      Transcript
+          ↓
+    可回溯的项目历史
+```
 
-![AI 网关](./docs/images/ai-gateway.png)
+昨天让 Agent 干了什么、改了哪些地方、为什么这么改——按项目回溯，并可生成分享快照。
 
-### AI 消息通知
+也可以随时按下 **Ctrl + Shift + L**：Workbench 会向当前聚焦的 Agent 终端粘贴一条提示词，Agent 自动获取 skill、总结本次会话并导入转录库——无需手动整理，每个 Agent 都能自己完成会话沉淀。
 
-Workbench 支持接收 Claude Code、Codex 等 AI 编程工具的运行消息。通过简单配置，可将通知实时推送至手机飞书应用，在任务完成、需要用户确认或发生异常时第一时间收到提醒。
+![Transcript 会话记录](./docs/gifs/transcript.gif)
+
+配置 Hook 后，任务完成或需要确认时，飞书会实时收到通知。
 
 ![AI 消息通知](./docs/images/ai-notifications.png)
 
-## 架构
+### 开发工作区
 
-Workbench 遵循 Electron 的进程边界，将共享契约、平台能力和 UI 编排分离。
+**集成开发工作区** —— 文件树、Monaco 编辑器（TextMate 语法）、Markdown 预览（GFM / Mermaid / 滚动同步），图片、视频、CSV、HTML、PDF 直接预览。
 
-详细的产品模块、分层职责和典型 AI 工作流请参阅[模块与架构说明](./docs/reference/architecture.md)。
+![集成开发工作区](./docs/images/workspace.png)
 
-### 各层职责
+**终端与运行任务** —— 基于 node-pty 与 xterm.js 的交互式终端；自动识别项目启动脚本、一键启动；开发服务统一管理，支持多项目并行。
 
-- **Renderer**：页面、复用组件、应用状态、主题、编辑器和用户交互。
-- **Preload**：通过隔离的 Electron Bridge 暴露最小化、类型安全的 API。
-- **Main process**：文件系统、进程、Git、窗口、Runtime、Transcript 和 Windows 集成服务。
-- **Shared**：类型、配置模型、Runtime Profile、IPC 契约和跨层纯规则。
+![终端与运行任务](./docs/images/project-runner.png)
 
-## 技术栈
+**Git 与 AI Commit** —— 仓库状态、分支、fetch/pull/push/merge、冲突处理与 diff 审查；AI Commit 基于项目改动生成标准化提交信息，配合可视化 Git 工作流画布。
 
-- **语言**：TypeScript
-- **桌面框架**：Electron 42
-- **UI**：React 18、React Router、Tailwind CSS
-- **构建**：Vite、electron-vite、Electron Builder
-- **状态管理**：Zustand
-- **代码编辑器**：Monaco Editor
-- **终端**：node-pty、xterm.js
-- **内容渲染**：React Markdown、remark-gfm、Mermaid、代码高亮
-- **AI 集成**：Claude Code、OpenAI Codex CLI 工作流，以及本地模型协议 Gateway
-- **测试**：Node.js 内置测试运行器
+![Git 与 AI Commit](./docs/images/git-assistant.png)
 
-## 产品模块
+**浏览器集成与截图** —— Ctrl+Shift+S 启动统一管理的浏览器实例；整页长截图与指定元素截图，独立查看器中缩放浏览、复制或保存。
 
-Workbench 不是多个独立工具的简单集合，而是围绕项目上下文组织的一套本地开发流程：
+| ![浏览器集成](./docs/images/browser-integration.png) | ![浏览器截图](./docs/images/browser-screenshot.png) |
+| :---: | :---: |
 
-```text
-项目
- ├── 代码与文件
- ├── Git
- ├── 终端与运行任务
- ├── AI Runtime / AI Gateway
- ├── Agent Hooks / Transcript
- ├── Markdown 文档
- └── 学习资料与浏览器截图
-```
+### 桌面集成
 
-模块的详细职责、数据流和边界见 [`docs/reference/architecture.md`](./docs/reference/architecture.md)。
+系统托盘面板 · 全局快捷键（主题切换 / 会话捕获 / 浏览器截图 / Agent 会话总结）· 开机自启 · 多窗口 · 中英双语 · 深浅色主题
 
-## 环境要求
+---
 
-- Windows 10 或更高版本，推荐 Windows 11
-- Node.js 22 LTS 或更高版本
-- npm
-- Git
-- 可选：用于 WSL 项目的可用 WSL 发行版
-- 可选：用于 AI Runtime 功能的已安装并完成登录的 AI CLI
+## 快速开始
 
-内置 Runtime Profile 当前支持：
-
-- [Claude Code](https://www.npmjs.com/package/@anthropic-ai/claude-code)
-- [OpenAI Codex CLI](https://www.npmjs.com/package/@openai/codex)
-
-## 安装
+环境要求：Windows 10+（推荐 Windows 11）、Node.js 22 LTS、npm、Git。
 
 ```powershell
 git clone https://github.com/yyc-labs/ide-electron.git
 cd ide-electron
 npm install
-```
-
-`postinstall` 会为 Electron 重建 `node-pty`。如果安装后终端能力异常，可以手动执行：
-
-```powershell
-npm run rebuild:pty
-```
-
-需要使用 AI Runtime 时，可以安装对应 CLI：
-
-```powershell
-npm install -g @anthropic-ai/claude-code
-npm install -g @openai/codex
-```
-
-安装后请按照各 CLI 官方文档完成登录和 API 配置。
-
-## 本地开发
-
-启动 Electron 开发环境：
-
-```powershell
 npm run dev
 ```
 
-常用命令：
+`postinstall` 会为 Electron 重建 `node-pty`；如果安装后终端能力异常，可手动执行 `npm run rebuild:pty`。
+
+> **Workbench 不内置 AI Agent。** 需要使用 AI Runtime 时，单独安装你想使用的 CLI 并按官方文档完成登录：
 
 ```powershell
-# 文件监听模式
-npm run dev:watch
-
-# 类型检查
-npm run typecheck
-
-# 样式检查
-npm run check:style
-
-# 运行测试
-npm test
-
-# 完整验证
-npm run verify
+npm install -g @anthropic-ai/claude-code   # 可选
+npm install -g @openai/codex               # 可选
 ```
 
-## 配置说明
+## 平台支持
 
-Workbench 会在本地保存应用和 Runtime 配置。AI 凭据、Token 和 Provider Secret 应通过应用或对应 CLI 配置，禁止提交到仓库。
+Workbench 目前仅提供 **Windows** 安装包，并原生支持 **WSL** 项目（自动探测发行版，在 WSL 内通过 tmux 管理会话）。macOS 与 Linux 尚未经过充分验证，暂不保证稳定性。
 
-Runtime 配置可能包括：
+## 架构
 
-- Windows Native 或 WSL 执行目标
-- 项目级 AI Runtime Profile
-- Claude 与 Codex 设置
-- AI Provider 和模型路由
-- 本地 Gateway 设置
-- Git 与项目工作区偏好
+Workbench 遵循 Electron 进程边界，将共享契约、平台能力和 UI 编排分离：
 
-Workbench 将 Windows Native 和 WSL 视为不同的执行目标。Windows 项目使用 Windows 路径和进程环境，WSL 项目使用对应发行版中的路径和环境；Runtime 不依赖模糊的默认后端猜测。
+```mermaid
+graph TB
+    subgraph Renderer
+        UI[React 页面与组件 · Zustand Store]
+    end
+    Bridge[Preload Bridge<br>类型安全 contextBridge API]
+    subgraph Main [Electron Main Process]
+        IPC[IPC Handlers]
+        subgraph Core [Core Domains]
+            D1[Runtime · Git · Transcript]
+            D2[Agent Hooks · AI Commit · Learning]
+        end
+        subgraph Infra [Infrastructure]
+            I1[AI Gateway HTTP 服务]
+            I2[Agent Hook Gateway HTTP 服务]
+            I3[runner · node-pty<br>WSL Bridge · tmux · Playwright CDP]
+        end
+    end
 
-新增配置项时，请同步维护配置 Schema、持久化逻辑、IPC 契约和 Renderer 使用方。
-
-## 项目结构
-
-```text
-.
-├── src/core/
-│   ├── electron/     # 主进程、preload、IPC、Runtime、Git、文件和窗口
-│   ├── renderer/     # React 页面、组件、store、编辑器和样式
-│   └── shared/       # 共享类型、规则、Runtime Profile 和 API 契约
-├── docs/             # 架构说明、设计计划和发布文档
-├── script/           # 开发、发布和自动 Git 脚本
-├── test/             # Node.js 测试和测试夹具
-├── icon/             # Windows 应用图标
-├── electron-builder.yml
-├── package.json
-└── README.md
+    UI --> Bridge --> IPC --> Core
+    Core --> Infra
+    I2 --> D1
+    I1 --> Providers[AI Providers<br>OpenAI / Anthropic / 自定义]
 ```
 
-更完整的模块说明位于 [`docs/reference/architecture.md`](./docs/reference/architecture.md)。
+- **Renderer**：React 页面与组件、应用状态、主题、编辑器与交互
+- **Preload**：隔离的 contextBridge，暴露最小化、类型安全的 API
+- **Main · Core Domains**：Git、Runtime、Transcript、Hooks、Learning、AI Commit
+- **Main · Infrastructure**：AI Gateway、Hook Gateway、node-pty、WSL Bridge、tmux、Playwright
+- **Shared**：跨层类型、配置模型、Runtime Profile 与 IPC 契约
 
-## Windows 构建与发布
+**技术栈**：Electron 42 · React 18 · TypeScript · Zustand · Monaco Editor · xterm.js / node-pty · Playwright · Milkdown · Mermaid · pdfjs-dist
 
-构建应用资源：
+完整分层职责与数据流见 [`docs/reference/architecture.md`](./docs/reference/architecture.md)。
+
+## 开发
 
 ```powershell
-npm run build
+npm run typecheck      # 类型检查
+npm run check:style    # 样式检查
+npm test               # 运行测试
+npm run verify         # 完整验证
 ```
 
-生成 Windows x64 NSIS 安装包：
+构建 Windows 安装包：
 
 ```powershell
-npm run dist:win
+npm run build          # 构建应用资源
+npm run dist:win       # 生成 Windows x64 NSIS 安装包
 ```
 
-构建产物位于 `release/`。版本号、校验和及发布说明请参考 [`docs/release/release-process.md`](./docs/release/release-process.md)。
-
-当前安装包尚未配置 Windows 代码签名证书，安装时可能出现 SmartScreen 或“未知发布者”提示。
+构建产物位于 `release/`，发布流程见 [`docs/release/release-process.md`](./docs/release/release-process.md)。当前安装包尚未配置代码签名证书，安装时可能出现 SmartScreen 提示。
 
 ## 路线图
 
-详细计划维护在 [`docs/`](./docs/) 中。
+**近期**
 
-- [x] 本地项目与代码工作区
-- [x] Git 仓库查看与操作
-- [x] Claude 与 Codex Runtime Profile
-- [x] AI Provider Gateway 与模型路由
-- [x] Transcript 导入与浏览
-- [x] 支持 Mermaid 和 GFM 的 Markdown 渲染
-- [x] 浏览器截图捕获与查看
-- [x] 终端与项目运行任务管理
-- [x] Agent Hook Gateway 与 Transcript 导入
-- [x] 学习中心与技能管理基础能力
-- [ ] 扩展 Windows 之外的平台支持
-- [ ] 增加更多 Runtime Provider 和集成
-- [ ] 完善发布自动化和分发渠道
+- 更多 AI Runtime Provider 与集成
+- 完善发布自动化与分发渠道
+
+**长期**
+
+- macOS / Linux 平台支持
 
 ## 参与贡献
 
-欢迎提交 Issue、Pull Request 和针对性的改进。
+欢迎提交 Issue 和 Pull Request：
 
-1. Fork 仓库。
-2. 创建功能分支。
-3. 完成聚焦的代码修改，并在适当时补充测试。
-4. 运行相关检查。
-5. 提交 Pull Request，并说明背景和验证结果。
-
-```powershell
-git checkout -b feature/your-feature
-npm run typecheck
-npm test
-```
+1. Fork 仓库并创建功能分支
+2. 完成聚焦的代码修改，适当补充测试
+3. 运行 `npm run verify` 通过检查
+4. 提交 Pull Request 并说明背景和验证结果
 
 修改 Runtime 行为时，请保持 `renderer`、`preload`、`main` 和 `shared` 之间的进程边界，并同时评估 Windows Native 与 WSL 执行路径。
 
 ## 安全说明
 
-请勿在 Issue、Pull Request、截图或提交记录中包含 API Key、访问 Token、私人会话记录或其他敏感信息。
-
-涉及安全问题时，请在公开披露漏洞细节前先私下联系维护者。项目面向更广泛的公开发布后，将补充专门的安全策略。
+请勿在 Issue、Pull Request、截图或提交记录中包含 API Key、访问 Token、私人会话记录或其他敏感信息。涉及安全问题时，请在公开披露漏洞细节前先私下联系维护者。
 
 ## 许可证
 
-Workbench 使用 [MIT License](./LICENSE) 发布。
-
-Copyright © 2026 YYC Labs.
+[MIT License](./LICENSE) · Copyright © 2026 YYC Labs
 
 ## 作者
 
