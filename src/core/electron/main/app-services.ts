@@ -27,6 +27,7 @@ import { createRuntimeService } from './runtime/runtime-service'
 import { createSkillRepository } from './skill/skillRepository'
 import { createSkillService } from './skill/skillService'
 import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
+import { normalizeTranscriptProjectPath } from './transcript/transcriptPathMatch'
 import { createTranscriptRepository } from './transcript/transcriptRepository'
 import { createTranscriptService } from './transcript/transcriptService'
 import { createTranscriptShareService } from './transcript/transcriptShareService'
@@ -91,8 +92,8 @@ export function createAppServices(options: AppServicesOptions) {
   const transcriptService = createTranscriptService({
     repository: createTranscriptRepository(),
     getProjectIdByPath: (projectPath) => {
-      const normalizedTarget = path.resolve(projectPath)
-      const project = options.loadConfig().projects.find((item) => path.resolve(item.path) === normalizedTarget)
+      const normalizedTarget = normalizeTranscriptProjectPath(path.resolve(projectPath))
+      const project = options.loadConfig().projects.find((item) => normalizeTranscriptProjectPath(path.resolve(item.path)) === normalizedTarget)
       return project ? projectIdFromPath(project.path) : null
     },
     getProjectPathById: (projectId) => {

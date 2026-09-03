@@ -13,6 +13,8 @@ import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMa
 import { useI18n } from '../../i18n'
 import { ModalShell } from '../../components/ModalShell'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
+import { projectIdFromPath } from '../../../shared/rules'
+import { buildYycWorkbenchPreviewUrl } from './code.helpers'
 import { useMarkdownNearViewport } from './code.markdownVisibility'
 
 export type {
@@ -123,6 +125,37 @@ function stripMarkdownImageDestinationSuffix(rawDestination: string): string {
     return compact.slice(0, firstWhitespace)
   }
   return compact
+}
+
+function isDirectImageSrc(value: string): boolean {
+  const lower = value.toLowerCase()
+  return lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('yyc-workbench:')
+}
+
+/**
+ * Markdown 图片若落在项目根目录内，改用 yyc-workbench:// 协议流式加载，
+ * 避免 readLocalImageAsDataUrl 的体积上限和 base64 内存开销（大 GIF 必需）。
+ */
+function toProjectWorkbenchImageUrl(resolvedSrc: string, projectRootPath: string): string {
+  if (!projectRootPath || !/^file:\/\/\/[A-Za-z]:\//i.test(resolvedSrc)) return ''
+
+  const rootNormalized = projectRootPath.trim().replace(/\\/g, '/')
+  const rootMatch = /^([A-Za-z]:)\/(.+)$/.exec(rootNormalized)
+  if (!rootMatch) return ''
+
+  let imageBody: string
+  try {
+    imageBody = decodeURIComponent(resolvedSrc.replace(/^file:\/\/\/[A-Za-z]:\//i, ''))
+  } catch {
+    return ''
+  }
+
+  const rootBody = rootMatch[2].replace(/\/+$/, '')
+  if (!imageBody.toLowerCase().startsWith(`${rootBody.toLowerCase()}/`)) return ''
+
+  const relativePath = imageBody.slice(rootBody.length + 1)
+  if (!relativePath) return ''
+  return buildYycWorkbenchPreviewUrl(projectIdFromPath(projectRootPath), relativePath, 'light')
 }
 
 export function resolveMarkdownImageSrc(rawSrc: string, projectRootPath: string, activeFilePath: string | null): string {
@@ -343,17 +376,18 @@ function shouldOpenInSystemBrowser(href: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://') || value.startsWith('file://') || value.startsWith('mailto:') || value.startsWith('tel:')
 }
 
-function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; alt: string; props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'> }) {
+function AsyncMarkdownImage({ resolvedSrc, projectPath, alt, props }: { resolvedSrc: string; projectPath: string; alt: string; props: Omit<JSX.IntrinsicElements['img'], 'src' | 'alt'> }) {
   const { t } = useI18n()
   const [imageRef, isNearViewport] = useMarkdownNearViewport<HTMLElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
-  const [displaySrc, setDisplaySrc] = useState(() => (resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://') ? resolvedSrc : ''))
+  const [displaySrc, setDisplaySrc] = useState(() => toProjectWorkbenchImageUrl(resolvedSrc, projectPath) || (isDirectImageSrc(resolvedSrc) ? resolvedSrc : ''))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
 
-    if (resolvedSrc.startsWith('data:') || resolvedSrc.startsWith('blob:') || resolvedSrc.startsWith('http://') || resolvedSrc.startsWith('https://')) {
-      setDisplaySrc(resolvedSrc)
+    const workbenchSrc = toProjectWorkbenchImageUrl(resolvedSrc, projectPath)
+    if (workbenchSrc || isDirectImageSrc(resolvedSrc)) {
+      setDisplaySrc(workbenchSrc || resolvedSrc)
       return () => {
         cancelled = true
       }
@@ -387,7 +421,7 @@ function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; 
     return () => {
       cancelled = true
     }
-  }, [isNearViewport, resolvedSrc])
+  }, [isNearViewport, resolvedSrc, projectPath])
 
   if (!displaySrc) {
     return (
@@ -413,6 +447,9 @@ function AsyncMarkdownImage({ resolvedSrc, alt, props }: { resolvedSrc: string; 
         role="button"
         tabIndex={0}
         title={t('codeMarkdown.imageExpand')}
+        onError={() => {
+          setDisplaySrc('')
+        }}
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
@@ -451,7 +488,6 @@ type MarkdownCodeBlockProps = {
   language: string
   themeMode: 'light' | 'dark'
   enableSyntaxHighlight: boolean
-  forceRenderAllBlocks?: boolean
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
@@ -539,7 +575,7 @@ function StandardMarkdownCodeBlock({ codeText, language, themeMode, enableSyntax
 
 function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
   if (props.language === 'mermaid') {
-    return <MermaidBlock codeText={props.codeText} forceRenderAllBlocks={props.forceRenderAllBlocks} onStructuredBlockClick={props.onStructuredBlockClick} themeMode={props.themeMode} sourceLineProps={props.sourceLineProps} shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation} />
+    return <MermaidBlock codeText={props.codeText} onStructuredBlockClick={props.onStructuredBlockClick} themeMode={props.themeMode} sourceLineProps={props.sourceLineProps} shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation} />
   }
 
   return <StandardMarkdownCodeBlock {...props} />
@@ -549,7 +585,6 @@ type CreateMarkdownComponentsOptions = {
   activeRelativePath: string | null
   activeInternalHref?: string | null
   enableMarkdownSyntaxHighlight: boolean
-  forceRenderAllBlocks?: boolean
   lineOffset?: number
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
   onInternalLinkClick?: (href: string) => void
@@ -585,19 +620,7 @@ function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: st
   return segments.join('/') || null
 }
 
-export function createMarkdownComponents({
-  activeRelativePath,
-  activeInternalHref = null,
-  enableMarkdownSyntaxHighlight,
-  forceRenderAllBlocks = false,
-  lineOffset = 0,
-  onCodeBlockExpand,
-  onInternalLinkClick,
-  onProjectFileLinkClick,
-  onStructuredBlockClick,
-  projectPath,
-  themeMode,
-}: CreateMarkdownComponentsOptions): Components {
+export function createMarkdownComponents({ activeRelativePath, activeInternalHref = null, enableMarkdownSyntaxHighlight, lineOffset = 0, onCodeBlockExpand, onInternalLinkClick, onProjectFileLinkClick, onStructuredBlockClick, projectPath, themeMode }: CreateMarkdownComponentsOptions): Components {
   return {
     div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
     h1: createSourceTrackedBlockComponent('h1', lineOffset),
@@ -625,18 +648,7 @@ export function createMarkdownComponents({
         return <pre {...sourceLineProps}>{children}</pre>
       }
 
-      return (
-        <MarkdownCodeBlock
-          codeText={codeBlock.codeText}
-          language={codeBlock.language}
-          themeMode={themeMode}
-          enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
-          forceRenderAllBlocks={forceRenderAllBlocks}
-          onCodeBlockExpand={onCodeBlockExpand}
-          onStructuredBlockClick={onStructuredBlockClick}
-          sourceLineProps={sourceLineProps}
-        />
-      )
+      return <MarkdownCodeBlock codeText={codeBlock.codeText} language={codeBlock.language} themeMode={themeMode} enableSyntaxHighlight={enableMarkdownSyntaxHighlight} onCodeBlockExpand={onCodeBlockExpand} onStructuredBlockClick={onStructuredBlockClick} sourceLineProps={sourceLineProps} />
     },
     img({ src, alt, node: _node, ...props }) {
       const rawSrc = typeof src === 'string' ? src : ''
@@ -644,7 +656,7 @@ export function createMarkdownComponents({
       if (!resolvedSrc) {
         return null
       }
-      return <AsyncMarkdownImage resolvedSrc={resolvedSrc} alt={alt || ''} props={props} />
+      return <AsyncMarkdownImage resolvedSrc={resolvedSrc} projectPath={projectPath} alt={alt || ''} props={props} />
     },
     a({ href, children, className, ...props }) {
       const link = typeof href === 'string' ? href.trim() : ''

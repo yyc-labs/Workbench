@@ -1,17 +1,9 @@
 import { statSync } from 'fs'
 import path from 'path'
 import { buildTranscriptSession } from '../../../shared/transcript/transcript.parser'
-import type {
-  TranscriptExternalImportPayload,
-  TranscriptFileReference,
-  TranscriptImportedEvent,
-  TranscriptImportPayload,
-  TranscriptSession,
-  TranscriptSessionSummary,
-  TranscriptSourceType,
-  TranscriptUpdatePayload,
-} from '../../../shared/types'
+import type { TranscriptExternalImportPayload, TranscriptFileReference, TranscriptImportedEvent, TranscriptImportPayload, TranscriptSession, TranscriptSessionSummary, TranscriptSourceType, TranscriptUpdatePayload } from '../../../shared/types'
 import type { TranscriptRepository } from './transcriptRepository'
+import { normalizeTranscriptProjectPath } from './transcriptPathMatch'
 
 type TranscriptServiceDependencies = {
   repository: TranscriptRepository
@@ -38,28 +30,25 @@ function isProjectFilePath(projectPath: string, relativePath: string): boolean {
   }
 }
 
-function rebuildSessionIfNeeded(
-  session: TranscriptSession,
-  projectPath: string
-): TranscriptSession {
-  const rebuilt = buildTranscriptSession({
-    projectId: session.projectId,
-    sourceType: session.sourceType,
-    rawText: session.rawText,
-    title: session.title,
-  }, {
-    sessionId: session.id,
-    projectPath,
-    createdAt: session.createdAt,
-    updatedAt: session.updatedAt,
-    isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
-    title: session.title,
-  })
+function rebuildSessionIfNeeded(session: TranscriptSession, projectPath: string): TranscriptSession {
+  const rebuilt = buildTranscriptSession(
+    {
+      projectId: session.projectId,
+      sourceType: session.sourceType,
+      rawText: session.rawText,
+      title: session.title,
+    },
+    {
+      sessionId: session.id,
+      projectPath,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
+      title: session.title,
+    },
+  )
 
-  if (
-    rebuilt.markdownText === session.markdownText
-    && JSON.stringify(rebuilt.references) === JSON.stringify(session.references)
-  ) {
+  if (rebuilt.markdownText === session.markdownText && JSON.stringify(rebuilt.references) === JSON.stringify(session.references)) {
     return session
   }
 
@@ -84,11 +73,7 @@ function normalizeTimestamp(value: unknown): number {
 }
 
 function isTranscriptSourceType(value: unknown): value is TranscriptSourceType {
-  return value === 'process-output'
-    || value === 'tmux-capture'
-    || value === 'agent-hook'
-    || value === 'manual-markdown'
-    || value === 'imported-file'
+  return value === 'process-output' || value === 'tmux-capture' || value === 'agent-hook' || value === 'manual-markdown' || value === 'imported-file'
 }
 
 function normalizeTitle(payload: TranscriptImportPayload): string {
@@ -198,12 +183,8 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
 
     importExternalTranscript: async (inputPayload) => {
       const projectIdFromPayload = typeof inputPayload.projectId === 'string' ? inputPayload.projectId.trim() : ''
-      const projectPathFromPayload = typeof inputPayload.projectPath === 'string' && inputPayload.projectPath.trim()
-        ? normalizeFilesystemPath(inputPayload.projectPath)
-        : ''
-      const resolvedProjectId = projectIdFromPayload || (projectPathFromPayload
-        ? deps.getProjectIdByPath(projectPathFromPayload) ?? ''
-        : '')
+      const projectPathFromPayload = typeof inputPayload.projectPath === 'string' && inputPayload.projectPath.trim() ? normalizeFilesystemPath(inputPayload.projectPath) : ''
+      const resolvedProjectId = projectIdFromPayload || (projectPathFromPayload ? (deps.getProjectIdByPath(projectPathFromPayload) ?? '') : '')
       if (!resolvedProjectId) {
         throw new Error('Transcript import requires a valid projectId or registered projectPath.')
       }
@@ -211,15 +192,10 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
       if (!registeredProjectPath) {
         throw new Error(`Unknown project id: ${resolvedProjectId}`)
       }
-      if (
-        projectPathFromPayload
-        && normalizeFilesystemPath(registeredProjectPath) !== projectPathFromPayload
-      ) {
+      if (projectPathFromPayload && normalizeTranscriptProjectPath(normalizeFilesystemPath(registeredProjectPath)) !== normalizeTranscriptProjectPath(projectPathFromPayload)) {
         throw new Error('Provided projectPath does not match the registered project.')
       }
-      const sourceType = isTranscriptSourceType(inputPayload.sourceType)
-        ? inputPayload.sourceType
-        : 'imported-file'
+      const sourceType = isTranscriptSourceType(inputPayload.sourceType) ? inputPayload.sourceType : 'imported-file'
       const session = await importNormalizedTranscript({
         projectId: resolvedProjectId,
         sourceType,
@@ -286,19 +262,22 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
       }
 
       const nextTitle = payload.title || existing.title
-      const nextSession = buildTranscriptSession({
-        projectId: payload.projectId,
-        sourceType: existing.sourceType,
-        rawText: payload.rawText,
-        title: nextTitle,
-      }, {
-        sessionId: existing.id,
-        projectPath,
-        createdAt: existing.createdAt,
-        updatedAt: Date.now(),
-        isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
-        title: nextTitle,
-      })
+      const nextSession = buildTranscriptSession(
+        {
+          projectId: payload.projectId,
+          sourceType: existing.sourceType,
+          rawText: payload.rawText,
+          title: nextTitle,
+        },
+        {
+          sessionId: existing.id,
+          projectPath,
+          createdAt: existing.createdAt,
+          updatedAt: Date.now(),
+          isProjectFilePath: (relativePath) => isProjectFilePath(projectPath, relativePath),
+          title: nextTitle,
+        },
+      )
 
       await deps.repository.saveSession(nextSession)
       return nextSession

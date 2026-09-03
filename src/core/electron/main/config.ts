@@ -40,6 +40,9 @@ import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persis
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
 const MAX_CODE_SESSION_CURSOR_ENTRIES = 60
+export const DEFAULT_FILE_PREVIEW_LIMIT_MB = 50
+const MIN_FILE_PREVIEW_LIMIT_MB = 1
+const MAX_FILE_PREVIEW_LIMIT_MB = 1024
 const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
   enabled: true,
   host: '0.0.0.0',
@@ -121,6 +124,7 @@ const DEFAULT_CONFIG: AppConfig = {
   launchOnLoginDisplayMode: 'tray',
   closeWindowBehavior: 'quit',
   codeFileExclusions: DEFAULT_CODE_FILE_EXCLUSIONS,
+  filePreviewLimitMb: DEFAULT_FILE_PREVIEW_LIMIT_MB,
   cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
   folders: [],
@@ -726,6 +730,12 @@ function normalizeCacheLocationConfig(value: AppConfig['cacheLocation'] | unknow
   return { mode }
 }
 
+function normalizeFilePreviewLimitMb(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  if (!Number.isFinite(parsed)) return DEFAULT_FILE_PREVIEW_LIMIT_MB
+  return Math.min(MAX_FILE_PREVIEW_LIMIT_MB, Math.max(MIN_FILE_PREVIEW_LIMIT_MB, Math.round(parsed)))
+}
+
 function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | unknown): ShortcutPreferencesConfig {
   const raw = value && typeof value === 'object' ? (value as Partial<ShortcutPreferencesConfig>) : {}
 
@@ -854,6 +864,7 @@ export function loadConfig(): AppConfig {
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(parsed.codeFileExclusions),
+      filePreviewLimitMb: normalizeFilePreviewLimitMb(parsed.filePreviewLimitMb),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
         ...parsed,
@@ -906,6 +917,7 @@ export function loadConfig(): AppConfig {
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(DEFAULT_CONFIG.codeFileExclusions),
+      filePreviewLimitMb: normalizeFilePreviewLimitMb(DEFAULT_CONFIG.filePreviewLimitMb),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
       configRecovery,
     }
@@ -956,6 +968,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
+    filePreviewLimitMb: Object.prototype.hasOwnProperty.call(partial, 'filePreviewLimitMb') ? normalizeFilePreviewLimitMb(partial.filePreviewLimitMb) : normalizeFilePreviewLimitMb(current.filePreviewLimitMb),
   }
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false) : (current.launchOnLogin ?? false)
   updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode') ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode) : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)

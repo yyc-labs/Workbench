@@ -1,5 +1,5 @@
-import { GitBranch, GitCommitHorizontal, GitMerge, ShieldCheck, Shuffle, type LucideIcon } from 'lucide-react'
-import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Handle, type NodeProps, Position } from '@xyflow/react'
+import { GitBranch, GitCommitHorizontal, GitMerge, type LucideIcon, Play, ShieldCheck, Shuffle } from 'lucide-react'
 import { useI18n } from '../../i18n'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
 import type { GitWorkflowNodeData, GitWorkflowNodeState } from './gitWorkflow.types'
@@ -9,6 +9,7 @@ type NodeRenderData = GitWorkflowNodeData & {
   validationMessages?: string[]
   active?: boolean
   selected?: boolean
+  isEntry?: boolean
 }
 
 function getOperationIcon(operation: GitWorkflowNodeData['operation']): LucideIcon {
@@ -59,7 +60,13 @@ export function DetailAiCommitGitWorkflowNode(props: NodeProps<any>) {
   const stateTone = data.state?.status === 'succeeded' ? 'success' : data.state?.status === 'failed' ? 'failure' : data.state?.status === 'running' ? 'running' : 'idle'
 
   return (
-    <div className={`min-w-[220px] rounded-[18px] border px-3 py-3 shadow-[var(--shadow-card)] ${data.active ? 'border-[color:var(--color-primary)]/45' : 'border-[color:var(--color-border)]'} bg-[color:var(--color-card)]`}>
+    <div className={`relative min-w-[220px] rounded-[18px] border px-3 py-3 shadow-[var(--shadow-card)] ${data.active ? 'border-[color:var(--color-primary)]/45' : 'border-[color:var(--color-border)]'} bg-[color:var(--color-card)]`}>
+      {data.isEntry && (
+        <span className="absolute -top-2.5 left-3 z-10 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[9px] font-semibold text-[color:var(--color-primary-foreground)] shadow-[var(--shadow-popover)]">
+          <Play className="h-2.5 w-2.5 fill-current" />
+          {t('detail.gitWorkflowEntryBadge')}
+        </span>
+      )}
       <Handle type="target" position={Position.Left} id="input" className="!h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-primary)]" />
       <Handle type="source" position={Position.Right} id="success" className="!top-[28%] !h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-success)]" />
       <Handle type="source" position={Position.Right} id="failure" className="!top-[72%] !h-3.5 !w-3.5 !border-2 !border-[color:var(--color-card)] !bg-[color:var(--color-destructive)]" />

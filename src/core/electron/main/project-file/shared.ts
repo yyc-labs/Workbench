@@ -111,10 +111,6 @@ export const PREVIEW_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.flac', '.aac'
 export const PREVIEW_CSV_EXTENSIONS = new Set(['.csv', '.tsv'])
 export const PREVIEW_MARKDOWN_EXTENSIONS = new Set(['.md', '.markdown', '.mdx', '.mdc'])
 
-export const MAX_PREVIEW_IMAGE_BYTES = 8 * 1024 * 1024
-export const MAX_PREVIEW_PDF_BYTES = 50 * 1024 * 1024
-export const MAX_PREVIEW_MEDIA_BYTES = 50 * 1024 * 1024
-
 export function inferPreviewKindFromPath(relativePath: string): ProjectFilePreviewKind {
   const ext = path.extname(relativePath).toLowerCase()
   if (PREVIEW_IMAGE_EXTENSIONS.has(ext)) return 'image'

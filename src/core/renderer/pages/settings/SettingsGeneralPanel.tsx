@@ -2,6 +2,7 @@ import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginD
 import { useEffect, useState } from 'react'
 import { useI18n } from '../../i18n'
 import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
 import { Textarea } from '../../components/ui/textarea'
 import type { ThemeMode } from './settings.types'
 import { ThemeSegmentedControl } from './ThemeSegmentedControl'
@@ -13,6 +14,7 @@ type GeneralPanelProps = {
   launchOnLoginDisplayMode: LaunchOnLoginDisplayMode
   closeWindowBehavior: CloseWindowBehavior
   codeFileExclusions: ProjectFileExclusionsConfig
+  filePreviewLimitMb: number
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
   configRecovery?: ConfigRecoveryInfo
@@ -22,6 +24,7 @@ type GeneralPanelProps = {
   onLaunchOnLoginDisplayModeChange: (mode: LaunchOnLoginDisplayMode) => void | Promise<void>
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
   onCodeFileExclusionsChange: (exclusions: ProjectFileExclusionsConfig) => void | Promise<void>
+  onFilePreviewLimitMbChange: (limitMb: number) => void | Promise<void>
 }
 
 function SettingsGeneralPanel({
@@ -31,6 +34,7 @@ function SettingsGeneralPanel({
   launchOnLoginDisplayMode,
   closeWindowBehavior,
   codeFileExclusions,
+  filePreviewLimitMb,
   supportsLaunchOnLogin,
   supportsCloseWindowBehavior,
   configRecovery,
@@ -40,13 +44,28 @@ function SettingsGeneralPanel({
   onLaunchOnLoginDisplayModeChange,
   onCloseWindowBehaviorChange,
   onCodeFileExclusionsChange,
+  onFilePreviewLimitMbChange,
 }: GeneralPanelProps) {
   const { t } = useI18n()
   const [codeExclusionsDraft, setCodeExclusionsDraft] = useState(codeFileExclusions)
+  const [previewLimitDraft, setPreviewLimitDraft] = useState(String(filePreviewLimitMb))
 
   useEffect(() => {
     setCodeExclusionsDraft(codeFileExclusions)
   }, [codeFileExclusions])
+
+  useEffect(() => {
+    setPreviewLimitDraft(String(filePreviewLimitMb))
+  }, [filePreviewLimitMb])
+
+  const commitPreviewLimit = () => {
+    const parsed = Number(previewLimitDraft)
+    if (!Number.isFinite(parsed) || Math.round(parsed) === filePreviewLimitMb) {
+      setPreviewLimitDraft(String(filePreviewLimitMb))
+      return
+    }
+    void onFilePreviewLimitMbChange(Math.round(parsed))
+  }
 
   return (
     <div className="space-y-8">
@@ -102,6 +121,27 @@ function SettingsGeneralPanel({
         <Button className="mt-4" onClick={() => void onCodeFileExclusionsChange(codeExclusionsDraft)}>
           {t('settings.general.saveCodeExclusions')}
         </Button>
+
+        <div className="mt-6 max-w-xs space-y-1.5">
+          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitLabel')}</p>
+          <Input
+            type="number"
+            min={1}
+            max={1024}
+            step={1}
+            value={previewLimitDraft}
+            onChange={(event) => setPreviewLimitDraft(event.target.value)}
+            onBlur={commitPreviewLimit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+            placeholder="50"
+          />
+          <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitHint')}</p>
+        </div>
       </div>
 
       <div>

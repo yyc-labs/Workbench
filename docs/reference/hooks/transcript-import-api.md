@@ -78,10 +78,15 @@ curl -x '' http://127.0.0.1:17373/health
 
 推荐按下面顺序接入：
 
-1. 先调用 `GET /transcripts/projects` 获取当前可导入的项目列表
-2. 选定目标项目，拿到 `projectId` 或 `projectPath`
-3. 调用 `POST /transcripts/import` 发送 transcript 文本
-4. 如果请求体里传了 `openViewer: true`，应用会自动切到 Transcript 页面
+1. 目标项目已是应用「已注册项目」即可，不必先查列表（见下）
+2. 调用 `POST /transcripts/import` 发送 transcript 文本
+3. 如果请求体里传了 `openViewer: true`，应用会自动切到 Transcript 页面
+
+`projectId` 与 `projectPath` 二选一即可：
+
+- 只传 `projectPath`（推荐）：服务端按绝对路径宽松匹配注册项目，**无需先解析 id**。路径对盘符大小写、`/` 与 `\`、尾斜杠均不敏感。
+- 只传 `projectId`：直接定位注册项目。
+- 两者都传：必须指向同一项目，否则报错 `Provided projectPath does not match the registered project.`
 
 ## 1. 获取项目列表
 
@@ -127,6 +132,15 @@ POST /transcripts/import
 注意：`/transcripts/import` 只支持 `POST`。如果你用 `GET /transcripts/import` 测试，正确行为应该是 `404`，不是导入成功。
 
 ### 最小请求体
+
+`projectId` 与 `projectPath` 二选一；下面两种写法等价（推荐直接用路径）：
+
+```json
+{
+  "projectPath": "/mnt/d/tools/ide-electron",
+  "rawText": "src/core/renderer/App.tsx:138\nhello transcript"
+}
+```
 
 ```json
 {

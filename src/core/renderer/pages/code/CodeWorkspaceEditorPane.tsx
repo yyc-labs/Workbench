@@ -3,9 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
-import type { ProjectFileNodeKind } from '../../../shared/types'
-import type { TranscriptFileReference } from '../../../shared/types'
-import type { ProjectFilePreviewKind } from '../../../shared/types'
+import type { ProjectFileNodeKind, ProjectFilePreviewKind, ProjectFileUnsupportedReason, TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Tooltip } from '../../components/ui/tooltip'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
@@ -87,6 +85,7 @@ type CodeWorkspaceEditorPaneProps = {
   fileKind: ProjectFilePreviewKind
   fileMtimeMs: number | null
   fileSize: number
+  fileUnsupportedReason: ProjectFileUnsupportedReason | null
   handlePasteImage: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
   isInitialRestoring: boolean
   isMdcFile: boolean
@@ -144,6 +143,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   fileKind,
   fileMtimeMs,
   fileSize,
+  fileUnsupportedReason,
   handlePasteImage,
   isInitialRestoring,
   isMdcFile,
@@ -362,7 +362,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
             ) : fileKind === 'csv' ? (
               <FileCsvViewer sourceText={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
             ) : fileKind === 'unsupported' ? (
-              <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} />
+              <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} unsupportedReason={fileUnsupportedReason} />
             ) : fileKind === 'excluded' ? (
               <FileExcludedViewer nodeKind={excludedNodeKind} projectPath={projectPath} relativePath={activeRelativePath} />
             ) : (

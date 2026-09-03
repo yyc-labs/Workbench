@@ -1521,6 +1521,8 @@ export interface AppConfig {
   closeWindowBehavior?: CloseWindowBehavior
   /** Names of directories and files omitted from the Code workspace explorer. */
   codeFileExclusions?: ProjectFileExclusionsConfig
+  /** Automatic file preview size limit in MB for image / pdf / video / audio kinds. */
+  filePreviewLimitMb?: number
   /** Chromium session/cache storage location. Changes apply after restart. */
   cacheLocation?: AppCacheLocationConfig
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
@@ -1663,6 +1665,9 @@ export interface ProjectFileAutoLoadDecision {
 
 export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'video' | 'audio' | 'csv' | 'unsupported' | 'excluded'
 
+/** unsupported 结果的具体原因：类型本身不支持，或超过自动预览大小上限。 */
+export type ProjectFileUnsupportedReason = 'unsupported-kind' | 'size-limit'
+
 export interface ProjectFileReadResult {
   relativePath: string
   content: string
@@ -1672,6 +1677,7 @@ export interface ProjectFileReadResult {
   encoding: 'utf-8' | 'base64'
   kind: ProjectFilePreviewKind
   mimeType?: string
+  unsupportedReason?: ProjectFileUnsupportedReason
 }
 
 export interface ProjectFileWriteResult {

@@ -11,6 +11,8 @@
 
 它是一个围绕本地项目组织的桌面工作台：AI Agent Runtime、终端、Git、会话记录和文档在同一界面中协作，让 AI 辅助开发拥有一个统一的工作上下文。
 
+![Workbench 主界面](./docs/gifs/home.gif)
+
 [架构文档](./docs/reference/architecture.md) · [Releases](https://github.com/yyc-labs/ide-electron/releases) · [反馈 Issue](https://github.com/yyc-labs/ide-electron/issues)
 
 ---
@@ -134,12 +136,11 @@ Agent 会话
 
 **Git 与 AI Commit** —— 仓库状态、分支、fetch/pull/push/merge、冲突处理与 diff 审查；AI Commit 基于项目改动生成标准化提交信息，配合可视化 Git 工作流画布。
 
-![Git 与 AI Commit](./docs/images/git-assistant.png)
+![Git 与 AI Commit](./docs/gifs/git.gif)
 
 **浏览器集成与截图** —— Ctrl+Shift+S 启动统一管理的浏览器实例；整页长截图与指定元素截图，独立查看器中缩放浏览、复制或保存。
 
-| ![浏览器集成](./docs/images/browser-integration.png) | ![浏览器截图](./docs/images/browser-screenshot.png) |
-| :---: | :---: |
+![浏览器截图](./docs/gifs/browser-screenshot.gif) 
 
 ### 桌面集成
 

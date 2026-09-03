@@ -22,7 +22,6 @@ export function MarkdownDocumentReadOnlyPreview({ content, activePath, previewRo
         activeRelativePath: '',
         themeMode: effectiveTheme,
         enableMarkdownSyntaxHighlight: true,
-        forceRenderAllBlocks: true,
         onProjectFileLinkClick: (relativePath) => {
           const resolved = activePath ? resolveMarkdownDocumentLink(relativePath, activePath) : null
           if (resolved) onOpenPath(resolved)

@@ -59,6 +59,7 @@ function toActiveCodeFile(result: ProjectFileReadResult): ActiveCodeFile {
     language: result.language,
     kind: result.kind,
     mimeType: result.mimeType,
+    unsupportedReason: result.unsupportedReason,
   }
 }
 

@@ -9,6 +9,7 @@ type FlowNodeData = GitWorkflowNodeData & {
   state?: GitWorkflowNodeState
   active?: boolean
   selected?: boolean
+  isEntry?: boolean
   validationMessages?: string[]
 }
 
@@ -59,12 +60,13 @@ function buildValidationMessagesByNodeId(validationResult: GitWorkflowValidation
   return messages
 }
 
-function buildFlowNodeData(node: PersistedGitWorkflowGraph['nodes'][number], runState: GitWorkflowRunState, selectedNodeId: string | null, validationMessagesByNodeId: Map<string, string[]>): FlowNodeData {
+function buildFlowNodeData(node: PersistedGitWorkflowGraph['nodes'][number], entryNodeId: string, runState: GitWorkflowRunState, selectedNodeId: string | null, validationMessagesByNodeId: Map<string, string[]>): FlowNodeData {
   return {
     ...node.data,
     state: runState.nodeStates[node.id],
     active: runState.activeNodeId === node.id,
     selected: selectedNodeId === node.id,
+    isEntry: entryNodeId === node.id,
     validationMessages: validationMessagesByNodeId.get(node.id),
   }
 }
@@ -74,7 +76,7 @@ function buildFlowNodes(graph: PersistedGitWorkflowGraph, runState: GitWorkflowR
     id: node.id,
     type: 'gitOperation',
     position: node.position,
-    data: buildFlowNodeData(node, runState, selectedNodeId, validationMessagesByNodeId),
+    data: buildFlowNodeData(node, graph.entryNodeId, runState, selectedNodeId, validationMessagesByNodeId),
   }))
 }
 
@@ -99,7 +101,7 @@ function patchFlowNodes(currentNodes: FlowNode[], graph: PersistedGitWorkflowGra
   const nextNodes = currentNodes.map((node) => {
     const graphNode = nodesById.get(node.id)
     if (!graphNode) return node
-    const nextData = buildFlowNodeData(graphNode, runState, selectedNodeId, validationMessagesByNodeId)
+    const nextData = buildFlowNodeData(graphNode, graph.entryNodeId, runState, selectedNodeId, validationMessagesByNodeId)
     if (
       node.data.operation === nextData.operation &&
       node.data.label === nextData.label &&
@@ -109,6 +111,7 @@ function patchFlowNodes(currentNodes: FlowNode[], graph: PersistedGitWorkflowGra
       node.data.state === nextData.state &&
       node.data.active === nextData.active &&
       node.data.selected === nextData.selected &&
+      node.data.isEntry === nextData.isEntry &&
       areStringArraysEqual(node.data.validationMessages, nextData.validationMessages)
     ) {
       return node

@@ -889,6 +889,7 @@ export function CodeWorkspacePanel({
                 fileKind={activeKind}
                 fileMtimeMs={activeFile?.mtimeMs ?? null}
                 fileSize={activeFileSize}
+                fileUnsupportedReason={activeFile?.unsupportedReason ?? null}
                 handlePasteImage={handlePasteImage}
                 isInitialRestoring={isInitialRestoring}
                 isMdcFile={isMdcFile}

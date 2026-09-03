@@ -177,6 +177,7 @@ export interface AppState {
   setLaunchOnLoginDisplayMode: (mode: NonNullable<AppConfig['launchOnLoginDisplayMode']>) => Promise<void>
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
   setCodeFileExclusions: (exclusions: ProjectFileExclusionsConfig) => Promise<void>
+  setFilePreviewLimitMb: (limitMb: number) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>

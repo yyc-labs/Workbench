@@ -21,14 +21,7 @@ export function readTranscriptImportSkillFile(candidatePaths: string[]): string 
 }
 
 function buildConfigBlock({ baseUrl, token }: TranscriptImportSkillConfig): string {
-  return [
-    '<transcript-import-config>',
-    `<base_url>${baseUrl}</base_url>`,
-    `<transcript_import_token>${token}</transcript_import_token>`,
-    '<project_lookup_endpoint>/transcripts/project-id?path={cwd}</project_lookup_endpoint>',
-    '<import_endpoint>/transcripts/import</import_endpoint>',
-    '</transcript-import-config>',
-  ].join('\n')
+  return ['<transcript-import-config>', `<base_url>${baseUrl}</base_url>`, `<transcript_import_token>${token}</transcript_import_token>`, '<import_endpoint>/transcripts/import</import_endpoint>', '</transcript-import-config>'].join('\n')
 }
 
 // skill 文件缺失时的兜底指令（与 SKILL.md 保持同义）。
@@ -43,15 +36,18 @@ function buildFallbackSkillMarkdown({ token }: TranscriptImportSkillConfig): str
 
 ## 任务
 
-把「本次会话」的内容总结成一份 Markdown 转录，写入 Workbench 的转录库。
+把「本次会话」的内容总结成一份 Markdown 转录，写入 Workbench 转录库，用绝对路径定位目标项目。
 
 ## 步骤
 
-1. 解析 projectId：curl -s "{base_url}/transcripts/project-id?path={urlencoded(cwd)}"。查不到时立即暂停任务并向用户确认，严禁猜测 projectId。
-2. 撰写 Markdown 总结（title 一句话主题 + rawText 正文）。rawText 提到项目文件时**不要用 Markdown 反引号或代码块包裹文件引用**（反引号内解析器识别不到），直接写成纯文本：用「相对项目根目录 + 行号」格式（如 src/components/App.tsx:42）或「以项目根为前缀的绝对路径 + 行号」；相对路径一律以项目根为基准（当前目录在子目录也要写全），顶层根文件需带行号（package.json:1），禁止用 ..。解析器会按项目根拼接校验真实文件后转成可点击引用。
-3. 写入：请求体写 payload.json（含 projectId、title、sourceType:"agent-hook"、rawText、openViewer:false；openViewer 默认 false 不打开转录页，用户要求查看时才改 true），发送方式见下。鉴权：${tokenHint}。
+1. 定位目标项目：payload 里写 projectPath（本仓库/项目绝对路径）即可，服务端按路径匹配已注册项目。若报项目未注册，暂停并请用户确认路径。
+2. 撰写总结：title 一句话主题 + rawText 正文。rawText 提到项目文件时，一律用「项目根目录的相对路径 + 行号」写成纯文本（不要用反引号或代码块包住）：
+   正确示例：src/core/renderer/pages/detail/useGitWorkflowRunner.ts:307
+   错误示例（绝对路径）：C:\\repo\\src\\App.tsx:138；错误示例（只写文件名）：App.tsx:138
+   路径从项目根写全，不要用 ..；省略行号时路径独立成一行且至少含一层目录，顶层根文件必须带行号（package.json:1）。
+3. 写入：请求体写 payload.json（含 projectPath、title、sourceType:"agent-hook"、rawText、openViewer:false；openViewer 默认 false，用户要求查看时才改 true），发送方式见下。鉴权：${tokenHint}。
    发送：${methodHint}
-4. 成功向用户报告 title 与 sessionId；失败原样报告 error，最多重试一次。
+4. 成功向用户报告 title 与 sessionId；失败原样报告 error，最多重试一次，仍失败则停止并说明原因。
 `
 }
 

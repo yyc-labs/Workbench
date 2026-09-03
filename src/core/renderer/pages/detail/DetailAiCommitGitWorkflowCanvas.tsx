@@ -124,6 +124,22 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
 
               <div className="flex items-center justify-between gap-2 rounded-[12px] border border-[color:var(--color-border)] px-3 py-2">
                 <span className="min-w-0">
+                  <span className="block text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowEntryNode')}</span>
+                  <span className="block text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowEntryNodeHint')}</span>
+                </span>
+                <Checkbox
+                  aria-label={t('detail.gitWorkflowEntryNode')}
+                  checked={selectedNode.id === runner.graph.entryNodeId}
+                  disabled={!canEdit || selectedNode.id === runner.graph.entryNodeId}
+                  onChange={(event) => {
+                    if (event.target.checked) runner.setEntryNodeId(selectedNode.id)
+                  }}
+                  className="h-4 w-4 accent-[color:var(--color-primary)]"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-2 rounded-[12px] border border-[color:var(--color-border)] px-3 py-2">
+                <span className="min-w-0">
                   <span className="block text-[11px] font-medium text-[color:var(--color-foreground)]">{t('detail.gitWorkflowRequiresConfirmation')}</span>
                   <span className="block text-[10px] text-[color:var(--color-muted-foreground)]">{t('detail.gitWorkflowRequiresConfirmationHint')}</span>
                 </span>

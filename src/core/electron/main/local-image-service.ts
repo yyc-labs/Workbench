@@ -3,7 +3,7 @@ import { URL } from 'node:url'
 import { toHostAccessiblePath } from './host-path'
 import { wslBridge } from './wsl-bridge'
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const MAX_IMAGE_BYTES = 64 * 1024 * 1024
 
 function imageMimeFromPath(filePath: string): string {
   const lower = filePath.toLowerCase()

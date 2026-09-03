@@ -5,6 +5,7 @@ import type { AgentHookCanonicalEvent, AgentHookEnvelope, AgentHookGatewayConfig
 import { resolveAdvertisedHost } from '../../../shared/lanHosts'
 import { buildJsonSnapshot, buildRequestSnapshot, hasStructuredTruncation, maskUnknown } from '../agent-logs/log-snapshots'
 import { buildTranscriptImportSkillMarkdown } from './transcript-import-skill'
+import { findTranscriptImportProject } from '../transcript/transcriptPathMatch'
 
 type AgentHookGatewayOptions = {
   getConfig: () => AgentHookGatewayConfig | undefined
@@ -172,15 +173,6 @@ function readRequestBody(req: IncomingMessage, maxBodyBytes: number): Promise<st
     req.on('end', () => resolve(body))
     req.on('error', reject)
   })
-}
-
-function normalizeProjectPathForMatch(value: string): string {
-  return value.trim().replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase()
-}
-
-function findTranscriptImportProject(projects: TranscriptImportProjectTarget[], queryPath: string): TranscriptImportProjectTarget | undefined {
-  const trimmed = queryPath.trim()
-  return projects.find((project) => project.projectPath === trimmed) || projects.find((project) => normalizeProjectPathForMatch(project.projectPath) === normalizeProjectPathForMatch(trimmed))
 }
 
 export class AgentHookGateway {
@@ -532,6 +524,26 @@ export class AgentHookGateway {
           const rawBody = await readRequestBody(req, config.maxBodyBytes)
           const payload = rawBody.trim() ? JSON.parse(rawBody) : {}
           const normalizedPayload = this.normalizeTranscriptImportPayload(payload)
+          if (!normalizedPayload.rawText.trim()) {
+            jsonResponse(res, 400, { ok: false, error: 'Transcript import requires non-empty raw text.', requestId: randomUUID() })
+            return
+          }
+          // 未携带 projectId 时，允许用绝对路径直接定位注册项目（大小写/分隔符/尾斜杠宽容）。
+          // 命中后回填规范化的 projectId/projectPath，下游 service 只做精确匹配。
+          if (!normalizedPayload.projectId) {
+            if (!normalizedPayload.projectPath) {
+              jsonResponse(res, 400, { ok: false, error: 'Transcript import requires a valid projectId or projectPath.', requestId: randomUUID() })
+              return
+            }
+            const projects = this.listProjects ? this.listProjects() : []
+            const target = findTranscriptImportProject(projects, normalizedPayload.projectPath)
+            if (!target) {
+              jsonResponse(res, 400, { ok: false, error: 'Transcript import requires a registered projectPath.', requestId: randomUUID() })
+              return
+            }
+            normalizedPayload.projectId = target.projectId
+            normalizedPayload.projectPath = target.projectPath
+          }
           if (normalizedPayload.openViewer === undefined) {
             normalizedPayload.openViewer = config.transcriptImportOpenViewerByDefault
           }

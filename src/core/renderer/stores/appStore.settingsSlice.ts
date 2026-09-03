@@ -13,6 +13,7 @@ export type SettingsActionsSlice = Pick<
   | 'setLaunchOnLoginDisplayMode'
   | 'setCloseWindowBehavior'
   | 'setCodeFileExclusions'
+  | 'setFilePreviewLimitMb'
   | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
   | 'setRuntimeLauncherScript'
@@ -90,6 +91,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         codeFileExclusions: updated.codeFileExclusions,
+      },
+    }))
+  },
+
+  setFilePreviewLimitMb: async (filePreviewLimitMb: number) => {
+    const updated = await window.electronAPI.setConfig({ filePreviewLimitMb })
+    set((state) => ({
+      config: {
+        ...state.config,
+        filePreviewLimitMb: updated.filePreviewLimitMb,
       },
     }))
   },

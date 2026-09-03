@@ -195,9 +195,6 @@ export function TranscriptPage() {
   const [shareBindingMode, setShareBindingMode] = useState<TranscriptShareBindingMode>('lan')
   const [isGeneratingShare, setIsGeneratingShare] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
-  // When true, the preview forces every code block to its inline-styled
-  // SyntaxHighlighter DOM so the share snapshot clone is stable regardless of scroll.
-  const [forceRenderAllForShare, setForceRenderAllForShare] = useState(false)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const previewScrollPositionRef = useRef({ top: 0, left: 0 })
   const structuredPreviewCapture = useScrollableContentCapture()
@@ -453,7 +450,6 @@ export function TranscriptPage() {
       activeRelativePath: null,
       activeInternalHref: activeReference?.href ?? null,
       enableMarkdownSyntaxHighlight,
-      forceRenderAllBlocks: forceRenderAllForShare,
       onCodeBlockExpand: (payload) => {
         setCodePreview(payload)
       },
@@ -462,7 +458,7 @@ export function TranscriptPage() {
       projectPath: project.path,
       themeMode: effectiveTheme,
     })
-  }, [activeReference?.href, effectiveTheme, enableMarkdownSyntaxHighlight, forceRenderAllForShare, handleInternalLinkClick, handleStructuredBlockClick, project])
+  }, [activeReference?.href, effectiveTheme, enableMarkdownSyntaxHighlight, handleInternalLinkClick, handleStructuredBlockClick, project])
 
   const structuredPreviewComponents = useMemo(() => {
     if (!project) return {}
@@ -585,10 +581,6 @@ export function TranscriptPage() {
     }
     setIsGeneratingShare(true)
     setShareError(null)
-    // Force every code block into its inline-styled SyntaxHighlighter form before
-    // cloning. Without this, off-screen blocks are still the class-dependent plain
-    // fallback whose background/padding break once detached from the live document.
-    setForceRenderAllForShare(true)
     try {
       // Let React commit the forced render, then give SyntaxHighlighter a frame to
       // apply its inline styles before we snapshot the DOM.
@@ -613,7 +605,6 @@ export function TranscriptPage() {
       console.error('[TranscriptPage.handleGenerateShare] failed:', error)
       setShareError(error instanceof Error ? error.message : t('transcript.shareFailed'))
     } finally {
-      setForceRenderAllForShare(false)
       setIsGeneratingShare(false)
     }
   }, [isGeneratingShare, session, t])

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitOperationResult } from '../../../shared/types'
 import { useI18n } from '../../i18n'
+import type { AiCommitStatus } from './detail.types'
 import { classifyGitOperationResult, commitGitWorkflowNodePositions, createGitWorkflowEdgeId, createGitWorkflowNode, createInitialGitWorkflowRunState, loadGitWorkflowGraph, removeGitWorkflowNode, saveGitWorkflowGraph, validateGitWorkflowGraph } from './gitWorkflow.graph'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
-import type { AiCommitStatus } from './detail.types'
 import type { GitWorkflowEdge, GitWorkflowEdgeKind, GitWorkflowExecutionContext, GitWorkflowNode, GitWorkflowNodeData, GitWorkflowNodeOutcome, GitWorkflowRunState, GitWorkflowValidationContext, GitWorkflowValidationResult, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 
 type GitWorkflowSaveState = 'idle' | 'saving' | 'saved'
@@ -303,6 +303,21 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     if (updates.length === 0) return
     setGraph((prev) => commitGitWorkflowNodePositions(prev, updates))
   }, [])
+
+  const setEntryNodeId = useCallback(
+    (nodeId: string) => {
+      if (!editable) return
+      setGraph((prev) => {
+        if (prev.entryNodeId === nodeId || !prev.nodes.some((node) => node.id === nodeId)) return prev
+        return {
+          ...prev,
+          updatedAt: Date.now(),
+          entryNodeId: nodeId,
+        }
+      })
+    },
+    [editable],
+  )
 
   const isDirty = lastSavedUpdatedAtRef.current != null && graph.updatedAt !== lastSavedUpdatedAtRef.current
 
@@ -730,6 +745,7 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
     deleteEdge,
     connect,
     commitNodePositions,
+    setEntryNodeId,
     saveState,
     isDirty,
     startWorkflow,

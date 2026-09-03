@@ -1,7 +1,8 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { shell } from 'electron'
-import type { ProjectFileReadResult, ProjectFileStatResult, ProjectFileWriteImageResult, ProjectFileWriteResult } from '../../../shared/types'
+import type { ProjectFileReadResult, ProjectFileStatResult, ProjectFileUnsupportedReason, ProjectFileWriteImageResult, ProjectFileWriteResult } from '../../../shared/types'
+import { DEFAULT_FILE_PREVIEW_LIMIT_MB, loadConfig } from '../config'
 import { toHostAccessiblePath } from '../host-path'
 import { wslBridge } from '../wsl-bridge'
 import {
@@ -10,9 +11,6 @@ import {
   inferLanguageFromPath,
   inferPreviewKindFromPath,
   isLikelyBinaryByExtension,
-  MAX_PREVIEW_IMAGE_BYTES,
-  MAX_PREVIEW_MEDIA_BYTES,
-  MAX_PREVIEW_PDF_BYTES,
   MAX_TEXT_FILE_SIZE,
   mimeTypeFromPreviewPath,
   normalizeImageExtension,
@@ -24,7 +22,7 @@ import {
   validateRelativePathLooksSafe,
 } from './shared'
 
-function toUnsupportedReadResult(relativePath: string, stat: { size: number; mtimeMs: number }): ProjectFileReadResult {
+function toUnsupportedReadResult(relativePath: string, stat: { size: number; mtimeMs: number }, unsupportedReason: ProjectFileUnsupportedReason = 'unsupported-kind'): ProjectFileReadResult {
   return {
     relativePath,
     content: '',
@@ -33,6 +31,7 @@ function toUnsupportedReadResult(relativePath: string, stat: { size: number; mti
     language: inferLanguageFromPath(relativePath),
     encoding: 'utf-8',
     kind: 'unsupported',
+    unsupportedReason,
   }
 }
 
@@ -48,9 +47,10 @@ export async function readProjectFile(projectPath: string, relativePath: string)
     }
 
     if (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio') {
-      const limit = kind === 'image' ? MAX_PREVIEW_IMAGE_BYTES : kind === 'pdf' ? MAX_PREVIEW_PDF_BYTES : MAX_PREVIEW_MEDIA_BYTES
-      if (stat.size > limit) {
-        return toUnsupportedReadResult(normalizedRelativePath, stat)
+      // 上限可在设置页调整（filePreviewLimitMb），主进程按当前配置动态生效。
+      const previewLimitBytes = (loadConfig().filePreviewLimitMb ?? DEFAULT_FILE_PREVIEW_LIMIT_MB) * 1024 * 1024
+      if (stat.size > previewLimitBytes) {
+        return toUnsupportedReadResult(normalizedRelativePath, stat, 'size-limit')
       }
       const buffer = await fileHandle.readFile()
       return {
