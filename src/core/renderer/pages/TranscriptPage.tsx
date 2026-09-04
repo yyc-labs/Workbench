@@ -465,6 +465,7 @@ export function TranscriptPage() {
     return createMarkdownComponents({
       activeRelativePath: null,
       activeInternalHref: null,
+      enableMermaidInlineZoom: false,
       enableMarkdownSyntaxHighlight: structuredPreviewEnableSyntaxHighlight,
       lineOffset: structuredPreview ? structuredPreview.startLine - 1 : 0,
       onCodeBlockExpand: (payload) => {

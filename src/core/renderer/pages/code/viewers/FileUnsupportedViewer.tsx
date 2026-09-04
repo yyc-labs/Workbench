@@ -41,7 +41,7 @@ export function FileUnsupportedViewer({ size, mtimeMs, projectPath, relativePath
   return (
     <FileViewerShell title={relativePath} canFullscreen={Boolean(tempSrc)} actions={<FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />}>
       {tempSrc ? (
-        <ZoomPanViewport fitContentOnReset resetKey={tempSrc}>
+        <ZoomPanViewport resetKey={tempSrc}>
           <div className="code-file-viewer-image-canvas">
             <img
               src={tempSrc}

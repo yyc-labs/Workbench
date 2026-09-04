@@ -2,7 +2,8 @@ import { useMemo, type RefObject } from 'react'
 import { MarkdownPreviewSurface } from '../code/MarkdownPreviewSurface'
 import { createMarkdownComponents } from '../code/code.markdown'
 import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
-import { resolveMarkdownDocumentLink } from './markdownDocumentLinks'
+import { useAppStore } from '../../stores/appStore'
+import { resolveMarkdownDocumentBase } from './markdownDocumentLinks'
 
 type MarkdownDocumentReadOnlyPreviewProps = {
   content: string
@@ -12,22 +13,36 @@ type MarkdownDocumentReadOnlyPreviewProps = {
   className?: string
 }
 
+function toPosixAbsolutePath(value: string, relativePath: string): string {
+  const rootSegments = value.trim().replace(/\\/g, '/').split('/').filter(Boolean)
+  const relativeSegments = relativePath.trim().replace(/\\/g, '/').split('/').filter(Boolean)
+  return [...rootSegments, ...relativeSegments].join('/')
+}
+
+const MARKDOWN_LINK_EXTENSIONS = new Set(['.md', '.markdown'])
+
 export function MarkdownDocumentReadOnlyPreview({ content, activePath, previewRootRef, onOpenPath, className }: MarkdownDocumentReadOnlyPreviewProps) {
   const effectiveTheme = useEffectiveTheme()
+  const projects = useAppStore((state) => state.projects)
+
+  const base = useMemo(() => (activePath ? resolveMarkdownDocumentBase(activePath, projects) : { projectPath: '', activeRelativePath: '' }), [activePath, projects])
 
   const components = useMemo(
     () =>
       createMarkdownComponents({
-        projectPath: activePath ?? '',
-        activeRelativePath: '',
+        projectPath: base.projectPath,
+        activeRelativePath: base.activeRelativePath,
         themeMode: effectiveTheme,
         enableMarkdownSyntaxHighlight: true,
         onProjectFileLinkClick: (relativePath) => {
-          const resolved = activePath ? resolveMarkdownDocumentLink(relativePath, activePath) : null
-          if (resolved) onOpenPath(resolved)
+          if (!base.projectPath || !relativePath) return
+          const absolute = toPosixAbsolutePath(base.projectPath, relativePath)
+          const extension = absolute.slice(absolute.lastIndexOf('.')).toLowerCase()
+          if (!MARKDOWN_LINK_EXTENSIONS.has(extension)) return
+          onOpenPath(absolute)
         },
       }),
-    [activePath, effectiveTheme, onOpenPath],
+    [base, effectiveTheme, onOpenPath],
   )
 
   return (

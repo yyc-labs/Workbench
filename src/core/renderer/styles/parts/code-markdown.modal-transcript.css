@@ -11,6 +11,11 @@
 }
 
 .code-markdown-content img {
+  /* Undo the Tailwind preflight `img { display: block }`: inline flow is what
+   * standard Markdown rendering expects, otherwise rows of inline badges
+   * (shields.io) each break onto their own line. */
+  display: inline;
+  vertical-align: middle;
   max-width: min(100%, var(--code-markdown-block-max-inline-size, 100%));
   height: auto;
 }
@@ -58,12 +63,15 @@
   user-select: none;
 }
 
+.transcript-preview-zoom-viewport.is-text-select-mode {
+  cursor: text;
+  user-select: text;
+}
+
 .transcript-preview-zoom-canvas {
   display: grid;
   width: max-content;
   height: max-content;
-  min-width: 100%;
-  min-height: 100%;
   place-items: center;
   transform-origin: 0 0;
   will-change: transform;
@@ -429,13 +437,6 @@
 .transcript-markdown-preview-scroll-root .transcript-markdown-content ol > li,
 .transcript-structured-preview-modal .transcript-markdown-content ol > li {
   color: color-mix(in srgb, var(--color-foreground) 94%, var(--color-primary));
-}
-
-.transcript-markdown-preview-scroll-root .transcript-markdown-content .code-markdown-inline-code,
-.transcript-structured-preview-modal .transcript-markdown-content .code-markdown-inline-code {
-  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-accent));
-  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
-  color: color-mix(in srgb, var(--color-primary) 62%, var(--color-foreground));
 }
 
 .transcript-markdown-preview-scroll-root .transcript-markdown-content p,

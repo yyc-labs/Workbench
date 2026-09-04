@@ -1,21 +1,28 @@
 import { type MutableRefObject, type ReactNode, type Ref, useEffect, useRef } from 'react'
+import { computeFitZoom } from '../lib/computeFitZoom'
 
 type ZoomPanViewportProps = {
   captureTargetRef?: Ref<HTMLDivElement>
   children: ReactNode
-  fitContentOnReset?: boolean
   resetKey: string
 }
 
 function applyCanvasTransform(canvas: HTMLDivElement | null, zoom: number, offset: { x: number; y: number }): void {
   if (!canvas) return
-  canvas.style.transform = `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})`
+  // Use layout zoom instead of a composited `scale()`: layout zoom re-lays-out
+  // and re-rasterizes SVG/text at the final size, so zoomed diagrams stay
+  // sharp instead of being blown up from a 1x raster cache. `offset` is kept
+  // in viewport px; CSS zoom scales the canvas local coordinate space, so the
+  // translate has to be divided back into local px.
+  canvas.style.setProperty('zoom', String(zoom))
+  canvas.style.transform = `translate3d(${offset.x / zoom}px, ${offset.y / zoom}px, 0)`
 }
 
-export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset = false, resetKey }: ZoomPanViewportProps) {
+export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPanViewportProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const zoomRef = useRef(1)
+  const lastFitZoomRef = useRef(1)
   const offsetRef = useRef({ x: 0, y: 0 })
   const dragRef = useRef<{
     pointerId: number
@@ -35,8 +42,9 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
 
     const viewport = viewportRef.current
     const canvas = canvasRef.current
-    if (!fitContentOnReset || !viewport || !canvas) {
+    if (!viewport || !canvas) {
       zoomRef.current = 1
+      lastFitZoomRef.current = 1
       offsetRef.current = { x: 0, y: 0 }
       applyCanvasTransform(canvas, 1, offsetRef.current)
       return
@@ -49,11 +57,18 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
       const contentHeight = canvas.scrollHeight
       if (viewportWidth <= 0 || viewportHeight <= 0 || contentWidth <= 0 || contentHeight <= 0) return
 
-      const nextZoom = Math.min(1, viewportWidth / contentWidth, viewportHeight / contentHeight)
+      // Derive the zoom from the actual measured content instead of a fixed
+      // value: vector diagrams (svg) may grow past 100% to fill the viewport,
+      // raster content stays at or below 100% to avoid blur.
+      const nextZoom = computeFitZoom({
+        viewportWidth,
+        viewportHeight,
+        contentWidth,
+        contentHeight,
+        allowUpscale: Boolean(canvas.querySelector('svg')),
+      })
       zoomRef.current = nextZoom
-      // Center the canvas by its layout size (offsetWidth/Height), not the content
-      // size: the canvas is stretched by min-width/min-height:100% when the content
-      // is smaller than the viewport, and offset reflects the real painted box.
+      lastFitZoomRef.current = nextZoom
       offsetRef.current = {
         x: (viewportWidth - canvas.offsetWidth * nextZoom) / 2,
         y: (viewportHeight - canvas.offsetHeight * nextZoom) / 2,
@@ -62,7 +77,14 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
     }
 
     const animationFrame = window.requestAnimationFrame(fitContent)
-    const resizeObserver = new ResizeObserver(fitContent)
+    const resizeObserver = new ResizeObserver(() => {
+      // With layout zoom the canvas box reports local (zoom-invariant) px, but
+      // be defensive: ignore resize notifications triggered by zoom changes so
+      // refitting never fights the user's manual zoom. Refit only while the
+      // fitted zoom is still active (async content growth, viewport resize).
+      if (zoomRef.current !== lastFitZoomRef.current) return
+      fitContent()
+    })
     resizeObserver.observe(viewport)
     resizeObserver.observe(canvas)
 
@@ -70,7 +92,7 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
       window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
     }
-  }, [fitContentOnReset, resetKey])
+  }, [resetKey])
 
   useEffect(() => {
     const viewport = viewportRef.current
@@ -119,7 +141,7 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
       wheelIdleTimerRef.current = window.setTimeout(finishWheelInteraction, 120)
       const cursor = wheelAnchor ?? { x: event.clientX - wheelViewportOrigin.x, y: event.clientY - wheelViewportOrigin.y }
       const currentZoom = zoomRef.current
-      const nextZoom = Math.min(8, Math.max(0.25, currentZoom * 1.0015 ** -event.deltaY))
+      const nextZoom = Math.min(16, Math.max(0.25, currentZoom * 1.0015 ** -event.deltaY))
       const scale = nextZoom / currentZoom
       zoomRef.current = nextZoom
       offsetRef.current = { x: cursor.x - (cursor.x - offsetRef.current.x) * scale, y: cursor.y - (cursor.y - offsetRef.current.y) * scale }
@@ -128,6 +150,8 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
 
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return
+      // Ctrl + left button opts into native text selection instead of panning.
+      if (event.ctrlKey) return
       event.preventDefault()
       if (wheelIdleTimerRef.current !== null) window.clearTimeout(wheelIdleTimerRef.current)
       finishWheelInteraction()
@@ -179,6 +203,22 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
       didDragRef.current = false
     }
 
+    // Hold Ctrl to switch the viewport into text-selection mode: the cursor
+    // hint changes and pointer events stay native so the user can select text.
+    const setTextSelectMode = (enabled: boolean) => {
+      viewport.classList.toggle('is-text-select-mode', enabled)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Control') setTextSelectMode(true)
+    }
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Control') setTextSelectMode(false)
+    }
+    const onWindowBlur = () => setTextSelectMode(false)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onWindowBlur)
+
     viewport.addEventListener('wheel', onWheel, { passive: false })
     viewport.addEventListener('pointerdown', onPointerDown)
     viewport.addEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointerListener)
@@ -187,6 +227,10 @@ export function ZoomPanViewport({ captureTargetRef, children, fitContentOnReset 
     viewport.addEventListener('lostpointercapture', onPointerUp)
     viewport.addEventListener('click', onClickCapture, true)
     return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onWindowBlur)
+      viewport.classList.remove('is-text-select-mode')
       viewport.removeEventListener('wheel', onWheel)
       viewport.removeEventListener('pointerdown', onPointerDown)
       viewport.removeEventListener(supportsPointerRawUpdate ? 'pointerrawupdate' : 'pointermove', updatePendingPointerListener)

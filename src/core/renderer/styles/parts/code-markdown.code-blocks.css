@@ -64,11 +64,44 @@
     0 8px 24px rgba(15, 23, 42, 0.045);
 }
 
+.code-markdown-mermaid-wrap--zoomable {
+  touch-action: none;
+  cursor: grab;
+}
+
+.code-markdown-mermaid-wrap--zoomable.is-panning {
+  cursor: grabbing;
+}
+
 .code-markdown-mermaid-diagram {
+  --mermaid-diagram-padding: clamp(18px, 3vw, 32px);
   min-height: 120px;
-  padding: clamp(18px, 3vw, 32px);
+  padding: var(--mermaid-diagram-padding);
   overflow: auto;
   scrollbar-gutter: stable both-edges;
+}
+
+/* Zoomable mode: the canvas leaves the flow (absolute) and is zoomed/panned
+   inside the clipped region, so the diagram's own box never grows with the
+   zoomed content and the surrounding page layout stays untouched. */
+.code-markdown-mermaid-wrap--zoomable .code-markdown-mermaid-diagram {
+  position: relative;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.code-markdown-mermaid-wrap--zoomable .code-markdown-mermaid-canvas {
+  position: absolute;
+  inset: 0;
+  padding: var(--mermaid-diagram-padding);
+}
+
+/* The zoomable svg is sized by JS from its viewBox (fit), so the generic
+   compression rule must not clamp it. */
+.code-markdown-mermaid-wrap--zoomable .code-markdown-mermaid-canvas svg {
+  max-width: none;
 }
 
 .code-markdown-mermaid-diagram svg {

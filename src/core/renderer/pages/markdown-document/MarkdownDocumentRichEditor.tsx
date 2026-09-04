@@ -11,9 +11,12 @@ import { Plus } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
+import { isDirectImageSrc, resolveMarkdownImageSrc, toProjectWorkbenchImageUrl } from '../code/code.markdown'
 import type { MarkdownDocumentCompatibility, MarkdownDocumentComplexity } from './markdownDocumentTypes'
 import { classifyMarkdownDocumentCompatibility, classifyMarkdownDocumentComplexity } from './markdownDocumentCapabilities'
 import { getMarkdownDocumentSelectionContext, runMarkdownDocumentCommand } from './markdownDocumentCommands'
+import { resolveMarkdownDocumentBase } from './markdownDocumentLinks'
 
 type TableInsertHandle = {
   axis: 'row' | 'column'
@@ -53,6 +56,21 @@ type MarkdownDocumentRichEditorProps = {
   onFlushReady: (flush: (() => string | null) | null) => void
 }
 
+/**
+ * The image node view is created at module scope and cannot close over the
+ * component instance, so the component registers a resolver that maps a raw
+ * markdown image src (relative to the document/project) to a loadable source:
+ * a yyc-workbench:// streaming URL for project images, an absolute file URL
+ * for local images outside projects, or untouched http/data URLs.
+ */
+type MarkdownImageSourceResolver = (source: string) => string
+
+let resolveRichEditorImageSource: MarkdownImageSourceResolver | null = null
+
+export function setMarkdownDocumentRichEditorImageSourceResolver(resolver: MarkdownImageSourceResolver | null): void {
+  resolveRichEditorImageSource = resolver
+}
+
 const markdownDocumentImageView = $view(imageSchema.node, () => (node) => {
   const image = document.createElement('img')
   image.alt = String(node.attrs.alt ?? '')
@@ -67,10 +85,17 @@ const markdownDocumentImageView = $view(imageSchema.node, () => (node) => {
     generation += 1
     const currentGeneration = generation
 
-    if (isLocalImageSource(source)) {
+    const resolvedSource = resolveRichEditorImageSource?.(source) ?? source
+
+    if (isDirectImageSrc(resolvedSource)) {
+      image.src = resolvedSource
+      return
+    }
+
+    if (isLocalImageSource(resolvedSource)) {
       image.removeAttribute('src')
       void window.electronAPI
-        .readLocalImageAsDataUrl(source)
+        .readLocalImageAsDataUrl(resolvedSource)
         .then((dataUrl) => {
           if (generation !== currentGeneration) return
           image.src = dataUrl
@@ -82,7 +107,7 @@ const markdownDocumentImageView = $view(imageSchema.node, () => (node) => {
       return
     }
 
-    image.src = source
+    image.removeAttribute('src')
   }
 
   render(String(node.attrs.src ?? ''))
@@ -148,6 +173,22 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
       })
     })
   }, [])
+
+  const projects = useAppStore((state) => state.projects)
+  const imageSourceBase = useMemo(() => resolveMarkdownDocumentBase(documentPath, projects), [documentPath, projects])
+
+  const resolveImageSource = useCallback(
+    (source: string) => {
+      const resolvedSrc = resolveMarkdownImageSrc(source, imageSourceBase.projectPath, imageSourceBase.activeRelativePath)
+      return toProjectWorkbenchImageUrl(resolvedSrc, imageSourceBase.projectPath) || resolvedSrc
+    },
+    [imageSourceBase],
+  )
+
+  useEffect(() => {
+    setMarkdownDocumentRichEditorImageSourceResolver(resolveImageSource)
+    return () => setMarkdownDocumentRichEditorImageSourceResolver(null)
+  }, [resolveImageSource])
 
   useEffect(() => {
     const root = rootRef.current

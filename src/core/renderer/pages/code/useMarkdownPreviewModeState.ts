@@ -173,6 +173,7 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
     () =>
       createMarkdownComponents({
         activeRelativePath,
+        enableMermaidInlineZoom: false,
         enableMarkdownSyntaxHighlight,
         onProjectFileLinkClick: (relativePath) => {
           setStructuredPreview(null)

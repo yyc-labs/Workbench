@@ -31,6 +31,9 @@ body.structured-capture-active .transcript-structured-preview-modal .transcript-
 body.structured-capture-active .transcript-structured-preview-modal .transcript-preview-zoom-canvas {
   contain: none !important;
   transform: none !important;
+  /* Zoom is now layout-based (inline style.zoom), so reset it explicitly to
+   * keep the stitched capture at 1:1 like the old transform reset did. */
+  zoom: 1 !important;
   will-change: auto !important;
   align-items: start !important;
 }

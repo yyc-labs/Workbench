@@ -8,7 +8,7 @@ import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/pris
 import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
 import { MermaidBlock } from './code.markdownMermaid'
-import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps, shouldIgnoreStructuredBlockActivation } from './code.markdownStructuredBlocks'
+import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps } from './code.markdownStructuredBlocks'
 import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
 import { ModalShell } from '../../components/ModalShell'
@@ -127,7 +127,7 @@ function stripMarkdownImageDestinationSuffix(rawDestination: string): string {
   return compact
 }
 
-function isDirectImageSrc(value: string): boolean {
+export function isDirectImageSrc(value: string): boolean {
   const lower = value.toLowerCase()
   return lower.startsWith('data:') || lower.startsWith('blob:') || lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('yyc-workbench:')
 }
@@ -136,7 +136,7 @@ function isDirectImageSrc(value: string): boolean {
  * Markdown 图片若落在项目根目录内，改用 yyc-workbench:// 协议流式加载，
  * 避免 readLocalImageAsDataUrl 的体积上限和 base64 内存开销（大 GIF 必需）。
  */
-function toProjectWorkbenchImageUrl(resolvedSrc: string, projectRootPath: string): string {
+export function toProjectWorkbenchImageUrl(resolvedSrc: string, projectRootPath: string): string {
   if (!projectRootPath || !/^file:\/\/\/[A-Za-z]:\//i.test(resolvedSrc)) return ''
 
   const rootNormalized = projectRootPath.trim().replace(/\\/g, '/')
@@ -472,7 +472,7 @@ function AsyncMarkdownImage({ resolvedSrc, projectPath, alt, props }: { resolved
               <X className="h-4 w-4" />
             </button>
           </div>
-          <ZoomPanViewport fitContentOnReset resetKey={displaySrc}>
+          <ZoomPanViewport resetKey={displaySrc}>
             <div className="code-markdown-image-preview-canvas">
               <img src={displaySrc} alt={alt} draggable={false} />
             </div>
@@ -488,8 +488,8 @@ type MarkdownCodeBlockProps = {
   language: string
   themeMode: 'light' | 'dark'
   enableSyntaxHighlight: boolean
+  enableMermaidInlineZoom: boolean
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
-  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
 }
 
@@ -575,7 +575,7 @@ function StandardMarkdownCodeBlock({ codeText, language, themeMode, enableSyntax
 
 function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
   if (props.language === 'mermaid') {
-    return <MermaidBlock codeText={props.codeText} onStructuredBlockClick={props.onStructuredBlockClick} themeMode={props.themeMode} sourceLineProps={props.sourceLineProps} shouldIgnoreActivation={shouldIgnoreStructuredBlockActivation} />
+    return <MermaidBlock codeText={props.codeText} themeMode={props.themeMode} enableInlineZoom={props.enableMermaidInlineZoom} sourceLineProps={props.sourceLineProps} />
   }
 
   return <StandardMarkdownCodeBlock {...props} />
@@ -584,6 +584,8 @@ function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
 type CreateMarkdownComponentsOptions = {
   activeRelativePath: string | null
   activeInternalHref?: string | null
+  /** Inline mermaid wheel zoom; disable when the preview lives inside a viewport that zooms itself (structured preview modal). */
+  enableMermaidInlineZoom?: boolean
   enableMarkdownSyntaxHighlight: boolean
   lineOffset?: number
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
@@ -620,7 +622,19 @@ function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: st
   return segments.join('/') || null
 }
 
-export function createMarkdownComponents({ activeRelativePath, activeInternalHref = null, enableMarkdownSyntaxHighlight, lineOffset = 0, onCodeBlockExpand, onInternalLinkClick, onProjectFileLinkClick, onStructuredBlockClick, projectPath, themeMode }: CreateMarkdownComponentsOptions): Components {
+export function createMarkdownComponents({
+  activeRelativePath,
+  activeInternalHref = null,
+  enableMermaidInlineZoom = true,
+  enableMarkdownSyntaxHighlight,
+  lineOffset = 0,
+  onCodeBlockExpand,
+  onInternalLinkClick,
+  onProjectFileLinkClick,
+  onStructuredBlockClick,
+  projectPath,
+  themeMode,
+}: CreateMarkdownComponentsOptions): Components {
   return {
     div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
     h1: createSourceTrackedBlockComponent('h1', lineOffset),
@@ -648,7 +662,7 @@ export function createMarkdownComponents({ activeRelativePath, activeInternalHre
         return <pre {...sourceLineProps}>{children}</pre>
       }
 
-      return <MarkdownCodeBlock codeText={codeBlock.codeText} language={codeBlock.language} themeMode={themeMode} enableSyntaxHighlight={enableMarkdownSyntaxHighlight} onCodeBlockExpand={onCodeBlockExpand} onStructuredBlockClick={onStructuredBlockClick} sourceLineProps={sourceLineProps} />
+      return <MarkdownCodeBlock codeText={codeBlock.codeText} language={codeBlock.language} themeMode={themeMode} enableSyntaxHighlight={enableMarkdownSyntaxHighlight} enableMermaidInlineZoom={enableMermaidInlineZoom} onCodeBlockExpand={onCodeBlockExpand} sourceLineProps={sourceLineProps} />
     },
     img({ src, alt, node: _node, ...props }) {
       const rawSrc = typeof src === 'string' ? src : ''

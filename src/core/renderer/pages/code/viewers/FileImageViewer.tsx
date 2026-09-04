@@ -63,7 +63,7 @@ export function FileImageViewer({ src, projectPath, relativePath, monacoTheme }:
       ) : isSvg && mode === 'source' ? (
         <MonacoCodeEditor filePath={relativePath} value={sourceText ?? ''} language="xml" theme={monacoTheme} isReadOnly onChange={() => {}} onSave={() => {}} />
       ) : (
-        <ZoomPanViewport fitContentOnReset resetKey={`${src}:${loadedAt}`}>
+        <ZoomPanViewport resetKey={`${src}:${loadedAt}`}>
           <div className="code-file-viewer-image-canvas">
             <img src={src} alt={relativePath} draggable={false} className="code-file-viewer-image" onLoad={() => setLoadedAt((value) => value + 1)} onError={() => setError(t('codeWorkspace.imageLoadFailed'))} />
           </div>

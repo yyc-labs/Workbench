@@ -218,10 +218,10 @@ function loadLinuxBackend(): PlatformPasteBackend | null {
       return false
     },
     sendPasteShortcut() {
-      input.fakeKeyEvent(input.display, vkControl, 1, 0)
-      input.fakeKeyEvent(input.display, vkV, 1, 0)
-      input.fakeKeyEvent(input.display, vkV, 0, 0)
-      input.fakeKeyEvent(input.display, vkControl, 0, 0)
+      input.fakeKeyEvent(input.display, vkControl, true, 0)
+      input.fakeKeyEvent(input.display, vkV, true, 0)
+      input.fakeKeyEvent(input.display, vkV, false, 0)
+      input.fakeKeyEvent(input.display, vkControl, false, 0)
     },
   }
 }
