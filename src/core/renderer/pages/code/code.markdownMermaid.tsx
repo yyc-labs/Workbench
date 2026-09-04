@@ -58,8 +58,10 @@ type MermaidBlockProps = {
 
 // Same engine constants as ZoomPanViewport/computeFitZoom: layout zoom keeps
 // the SVG vector-sharp at any level, and the clamp range matches its wheel zoom.
+// Max is capped at 8x: layout zoom re-rasterizes the whole canvas per frame and
+// pixel cost grows ~zoom², so beyond 8x the viewport starts to stutter.
 const MERMAID_WHEEL_ZOOM_MIN = 0.25
-const MERMAID_WHEEL_ZOOM_MAX = 16
+const MERMAID_WHEEL_ZOOM_MAX = 8
 const MERMAID_WHEEL_ZOOM_STEP = 1.0015
 const MERMAID_DRAG_START_THRESHOLD_PX = 2
 

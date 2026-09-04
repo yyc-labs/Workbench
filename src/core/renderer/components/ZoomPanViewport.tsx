@@ -141,7 +141,11 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
       wheelIdleTimerRef.current = window.setTimeout(finishWheelInteraction, 120)
       const cursor = wheelAnchor ?? { x: event.clientX - wheelViewportOrigin.x, y: event.clientY - wheelViewportOrigin.y }
       const currentZoom = zoomRef.current
-      const nextZoom = Math.min(16, Math.max(0.25, currentZoom * 1.0015 ** -event.deltaY))
+      // Layout zoom re-rasterizes the whole canvas at the final size on every
+      // change, with pixel cost growing ~zoom². Cap at 8x: beyond that each
+      // wheel frame blows past the GPU texture/tile budget and the modal
+      // stutters. 8x is plenty to inspect vector content.
+      const nextZoom = Math.min(8, Math.max(0.25, currentZoom * 1.0015 ** -event.deltaY))
       const scale = nextZoom / currentZoom
       zoomRef.current = nextZoom
       offsetRef.current = { x: cursor.x - (cursor.x - offsetRef.current.x) * scale, y: cursor.y - (cursor.y - offsetRef.current.y) * scale }
