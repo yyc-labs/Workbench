@@ -1,9 +1,11 @@
 import { LoaderCircle } from 'lucide-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useI18n } from '../../i18n'
 import { computeFitZoom } from '../../lib/computeFitZoom'
 import { sanitizeMermaidSvgMarkup } from './code.markdownMermaid.sanitize'
-import type { SourceLineDataProps } from './code.markdown'
+import type { MarkdownStructuredBlockClickPayload, SourceLineDataProps } from './code.markdown'
+import { shouldIgnoreStructuredBlockActivation } from './code.markdownStructuredBlocks'
 import { createMermaidRenderConfig } from './code.markdownMermaid.config'
 
 const MARKDOWN_MERMAID_RENDER_ID_PREFIX = 'code-markdown-mermaid'
@@ -48,6 +50,8 @@ type MermaidBlockProps = {
   codeText: string
   /** Inline wheel zoom + drag-to-scroll inside the markdown flow (disabled inside modal viewports that zoom themselves). */
   enableInlineZoom: boolean
+  /** Right-click opens the structured preview modal (in-page previews only). */
+  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
   themeMode: 'light' | 'dark'
 }
@@ -59,7 +63,7 @@ const MERMAID_WHEEL_ZOOM_MAX = 16
 const MERMAID_WHEEL_ZOOM_STEP = 1.0015
 const MERMAID_DRAG_START_THRESHOLD_PX = 2
 
-export function MermaidBlock({ codeText, enableInlineZoom, sourceLineProps, themeMode }: MermaidBlockProps) {
+export function MermaidBlock({ codeText, enableInlineZoom, onStructuredBlockClick, sourceLineProps, themeMode }: MermaidBlockProps) {
   const { t } = useI18n()
   const diagramId = useId().replace(/:/g, '-')
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -71,6 +75,23 @@ export function MermaidBlock({ codeText, enableInlineZoom, sourceLineProps, them
   const [svgMarkup, setSvgMarkup] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isRendering, setIsRendering] = useState(false)
+
+  const canOpenStructuredPreview = Boolean(onStructuredBlockClick && sourceLineProps)
+  // Right-click opens the structured preview modal; left click stays free for drag-panning.
+  const handleContextMenu = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (!onStructuredBlockClick || !sourceLineProps) return
+      if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) return
+      event.preventDefault()
+      event.stopPropagation()
+      onStructuredBlockClick({
+        kind: 'mermaid',
+        startLine: sourceLineProps['data-source-start-line'],
+        endLine: sourceLineProps['data-source-end-line'],
+      })
+    },
+    [onStructuredBlockClick, sourceLineProps],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -182,6 +203,10 @@ export function MermaidBlock({ codeText, enableInlineZoom, sourceLineProps, them
     }
 
     const onWheel = (event: WheelEvent) => {
+      // Inline zoom requires Ctrl (⌘ on macOS) + wheel; a plain wheel keeps
+      // scrolling the page. Ctrl+wheel is also the browser page-zoom gesture,
+      // so it always needs preventDefault once accepted.
+      if (!(event.ctrlKey || event.metaKey)) return
       event.preventDefault()
       if (drag.pointerId !== -1) return
       if (!wheelViewportOrigin) {
@@ -283,7 +308,7 @@ export function MermaidBlock({ codeText, enableInlineZoom, sourceLineProps, them
   const wrapClassName = ['code-markdown-mermaid-wrap', enableInlineZoom ? 'code-markdown-mermaid-wrap--zoomable' : ''].filter(Boolean).join(' ')
 
   return (
-    <div ref={wrapRef} className={wrapClassName} {...sourceLineProps}>
+    <div ref={wrapRef} className={wrapClassName} title={canOpenStructuredPreview ? t('codeMarkdown.mermaidContextExpand') : undefined} onContextMenu={canOpenStructuredPreview ? handleContextMenu : undefined} {...sourceLineProps}>
       {svgMarkup ? (
         <div ref={diagramRef} className="code-markdown-mermaid-diagram">
           <div ref={canvasRef} className="code-markdown-mermaid-canvas" dangerouslySetInnerHTML={{ __html: svgMarkup }} />

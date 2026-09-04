@@ -490,6 +490,7 @@ type MarkdownCodeBlockProps = {
   enableSyntaxHighlight: boolean
   enableMermaidInlineZoom: boolean
   onCodeBlockExpand?: (payload: MarkdownCodeBlockExpandPayload) => void
+  onStructuredBlockClick?: (payload: MarkdownStructuredBlockClickPayload) => void
   sourceLineProps?: SourceLineDataProps
 }
 
@@ -575,7 +576,7 @@ function StandardMarkdownCodeBlock({ codeText, language, themeMode, enableSyntax
 
 function MarkdownCodeBlock(props: MarkdownCodeBlockProps) {
   if (props.language === 'mermaid') {
-    return <MermaidBlock codeText={props.codeText} themeMode={props.themeMode} enableInlineZoom={props.enableMermaidInlineZoom} sourceLineProps={props.sourceLineProps} />
+    return <MermaidBlock codeText={props.codeText} themeMode={props.themeMode} enableInlineZoom={props.enableMermaidInlineZoom} onStructuredBlockClick={props.onStructuredBlockClick} sourceLineProps={props.sourceLineProps} />
   }
 
   return <StandardMarkdownCodeBlock {...props} />
@@ -662,7 +663,18 @@ export function createMarkdownComponents({
         return <pre {...sourceLineProps}>{children}</pre>
       }
 
-      return <MarkdownCodeBlock codeText={codeBlock.codeText} language={codeBlock.language} themeMode={themeMode} enableSyntaxHighlight={enableMarkdownSyntaxHighlight} enableMermaidInlineZoom={enableMermaidInlineZoom} onCodeBlockExpand={onCodeBlockExpand} sourceLineProps={sourceLineProps} />
+      return (
+        <MarkdownCodeBlock
+          codeText={codeBlock.codeText}
+          language={codeBlock.language}
+          themeMode={themeMode}
+          enableSyntaxHighlight={enableMarkdownSyntaxHighlight}
+          enableMermaidInlineZoom={enableMermaidInlineZoom}
+          onCodeBlockExpand={onCodeBlockExpand}
+          onStructuredBlockClick={onStructuredBlockClick}
+          sourceLineProps={sourceLineProps}
+        />
+      )
     },
     img({ src, alt, node: _node, ...props }) {
       const rawSrc = typeof src === 'string' ? src : ''
