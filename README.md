@@ -13,7 +13,7 @@
 
 ![Workbench 主界面](./docs/gifs/home.gif)
 
-[架构文档](./docs/reference/architecture.md) · [Releases](https://github.com/yyc-labs/ide-electron/releases) · [反馈 Issue](https://github.com/yyc-labs/ide-electron/issues)
+[架构文档](./docs/reference/architecture.md) · [Releases](https://github.com/yyc-labs/Workbench/releases) · [反馈 Issue](https://github.com/yyc-labs/Workbench/issues)
 
 ---
 
@@ -53,11 +53,11 @@ Agent 改了哪些文件？哪次会话讨论过这个方案？开发服务起�
    Agent Hooks       Git / 提交         飞书通知
    Transcript        Markdown / 浏览器   多窗口
        │                 │
-       └────────┬────────┘
-                ↓
-           项目 Project
-                ↓
-         会话与项目历史
+       └─────────────────┬─────────────────┘
+                         ↓
+                    项目 Project
+                         ↓
+                   会话与项目历史
 ```
 
 ## 它和 AI Code Editor 有什么不同？
