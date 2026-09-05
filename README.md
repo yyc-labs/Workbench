@@ -153,7 +153,7 @@ Agent 会话
 环境要求：Windows 10+（推荐 Windows 11）、Node.js 22 LTS、npm、Git。
 
 ```powershell
-git clone https://github.com/yyc-labs/ide-electron.git
+git clone https://github.com/yyc-labs/Workbench.git
 cd ide-electron
 npm install
 npm run dev
