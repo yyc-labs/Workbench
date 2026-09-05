@@ -7,7 +7,7 @@
 
 ![Workbench 主界面](./docs/images/workbench-home.png)
 
-**Workbench 不替代 Claude Code 或 Codex —— 它为它们提供一个运行的地方。**
+**Workbench 不替代任何 AI Agent —— 它为所有 Agent 提供一个运行的地方。**
 
 它是一个围绕本地项目组织的桌面工作台：AI Agent Runtime、终端、Git、会话记录和文档在同一界面中协作，让 AI 辅助开发拥有一个统一的工作上下文。
 
@@ -19,7 +19,7 @@
 
 ## 什么是 Workbench?
 
-Claude Code、Codex 让 AI 直接参与编码，但它们运行时，你的注意力散落在各个窗口之间：
+AI Agent（无论是终端里的 CLI 还是桌面应用）让 AI 直接参与编码，但它们运行时，你的注意力散落在各个窗口之间：
 
 ```text
   终端窗口        编辑器         Git 客户端      文档 / 浏览器
@@ -62,17 +62,17 @@ Agent 改了哪些文件？哪次会话讨论过这个方案？开发服务起�
 
 ## 它和 AI Code Editor 有什么不同？
 
-Workbench 不是另一个 Cursor，也不是又一个 AI CLI 封装：
+Workbench 不是另一个 Cursor，也不是又一个 AI Agent 封装：
 
-| | AI CLI<br>(Claude Code / Codex) | AI Code Editor<br>(Cursor 等) | Workbench |
+| | AI Agent<br>(CLI / 桌面应用) | AI Code Editor<br>(Cursor 等) | Workbench |
 | --- | --- | --- | --- |
-| 形态 | 终端里的 Agent | 内嵌 AI 的编辑器 | 承载 Agent 的桌面工作台 |
-| Agent 在哪运行 | 你自己的终端 | 编辑器内置 | 独立 Runtime + 集成终端 |
-| 多个 CLI 共存 | 各自独立 | 通常单一内置 | 同一界面管理 Claude Code 与 Codex |
+| 形态 | 独立运行的 Agent | 内嵌 AI 的编辑器 | 承载 Agent 的桌面工作台 |
+| Agent 在哪运行 | 各自的终端或窗口 | 编辑器内置 | 独立 Runtime + 集成终端 |
+| 多个 Agent 共存 | 各自独立 | 通常单一内置 | 同一界面管理多种 AI Agent |
 | 会话沉淀 | 散落的本地文件 | 工具内会话 | Transcript 项目历史 |
 | 角色 | 引擎 | 引擎 + 编辑器 | **引擎的运行环境** |
 
-> Workbench does not replace Claude Code or Codex — it gives them a place to run.
+> Workbench 不替代你的 AI Agent —— 它为它们提供一个运行的地方。
 
 ---
 
@@ -80,15 +80,15 @@ Workbench 不是另一个 Cursor，也不是又一个 AI CLI 封装：
 
 ### AI 基础设施
 
-**AI Runtime** —— 按项目配置并一键启动本地 AI CLI。Runtime Profile 显式区分 Windows Native 与 WSL 执行路径；Agent 运行在集成终端面板中，支持 tmux 会话恢复、进程状态与运行诊断。
+**AI Runtime** —— 按项目配置并一键启动本地 AI Agent。Runtime Profile 显式区分 Windows Native 与 WSL 执行路径；Agent 运行在集成终端面板中，支持 tmux 会话恢复、进程状态与运行诊断。
 
 ![AI Runtime](./docs/images/ai-runtime.png)
 
 **AI Gateway** —— 一个本地端点，接入所有模型：
 
 ```text
-Claude Code ── Anthropic 协议 ──┐
-Codex CLI ─── OpenAI 协议 ──────┤
+AI Agent ── Anthropic 协议 ────┐
+AI Agent ─── OpenAI 协议 ──────┤
                                 ↓
                       Workbench AI Gateway
                       Provider 路由 · 模型映射
@@ -97,7 +97,7 @@ Codex CLI ─── OpenAI 协议 ──────┤
                  OpenAI / Anthropic / 自定义 Provider
 ```
 
-提供 Anthropic Messages、OpenAI Chat Completions、OpenAI Responses 三种协议入口，任意上游协议可转换为工具需要的格式——在 Claude Code、Codex 之间切换模型，无需改动工具配置。
+提供 Anthropic Messages、OpenAI Chat Completions、OpenAI Responses 三种协议入口，任意上游协议可转换为工具需要的格式——在不同 Agent 工具之间切换模型，无需改动工具配置。
 
 ![AI Gateway](./docs/images/ai-gateway.png)
 
@@ -161,7 +161,7 @@ npm run dev
 
 `postinstall` 会为 Electron 重建 `node-pty`；如果安装后终端能力异常，可手动执行 `npm run rebuild:pty`。
 
-> **Workbench 不内置 AI Agent。** 需要使用 AI Runtime 时，单独安装你想使用的 CLI 并按官方文档完成登录：
+> **Workbench 不内置 AI Agent。** 需要使用 AI Runtime 时，单独安装你想使用的 Agent CLI（下文以 Claude Code、Codex 为例）并按官方文档完成登录：
 
 ```powershell
 npm install -g @anthropic-ai/claude-code   # 可选
