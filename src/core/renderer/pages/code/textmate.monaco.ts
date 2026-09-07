@@ -146,10 +146,72 @@ async function installLanguageTokenizer(monaco: typeof Monaco, languageId: strin
   tokenProviderDisposableByLanguage.set(languageId, disposable)
 }
 
-function setRegistryTheme(theme: IRawTheme): void {
-  void getTextmateRegistry().then((tmRegistry) => {
-    tmRegistry.setTheme(theme)
-  })
+function resolveThemeSelection(monacoTheme: MonacoThemeName): { base: 'vs' | 'vs-dark' | 'hc-black' | 'hc-light'; rawTheme: IRawTheme } {
+  if (monacoTheme === 'vs-dark' || monacoTheme === 'hc-black') {
+    return { base: monacoTheme, rawTheme: registryData.themes.dark }
+  }
+  if (monacoTheme === 'hc-light') {
+    return { base: monacoTheme, rawTheme: registryData.themes.light }
+  }
+  return { base: 'vs', rawTheme: registryData.themes.light }
+}
+
+function isTextmateManagedLanguage(languageId: string): boolean {
+  return resolveRootScopeForLanguage(languageId, registryData) !== null
+}
+
+/**
+ * Encoded tokens carry a foreground color index (not a color), so the color
+ * map of the active Monaco theme must match the TextMate registry's color map
+ * position by position. Monaco's builtin "vs" / "vs-dark" maps are built from
+ * their own lexicographically sorted rules and do not align with TextMate
+ * indices at all — that mismatch is what rendered keywords like `interface`
+ * in a random color (e.g. red via `.mtk4`).
+ *
+ * Redefining the theme under the builtin name keeps every existing
+ * `setTheme('vs' | 'vs-dark')` call site working while aligning the maps.
+ * Monarch-tokenized languages still work because their rule colors are
+ * appended after the mirrored TextMate prefix.
+ */
+export async function syncTextmateTheme(monaco: typeof Monaco, monacoTheme: MonacoThemeName): Promise<void> {
+  const { base, rawTheme } = resolveThemeSelection(monacoTheme)
+
+  try {
+    const tmRegistry = await getTextmateRegistry()
+    tmRegistry.setTheme(rawTheme)
+
+    // getColorMap() returns a sparse array (index 0 is a hole). Array.map
+    // skips holes, so the hole must be filled explicitly — Monaco's internal
+    // for...of iteration would otherwise pass `undefined` into ColorMap.getId
+    // and crash the theme resolution.
+    const rawColorMap = tmRegistry.getColorMap()
+    const encodedTokensColors: (string | null)[] = new Array(rawColorMap.length)
+    for (let i = 0; i < rawColorMap.length; i++) {
+      encodedTokensColors[i] = rawColorMap[i] ?? null
+    }
+
+    monaco.editor.defineTheme(monacoTheme, {
+      base,
+      inherit: true,
+      rules: [],
+      colors: {},
+      encodedTokensColors: encodedTokensColors as unknown as string[],
+    })
+
+    // Encoded token metadata keeps the old color indices after a theme switch;
+    // re-tokenize TextMate-managed models so indices match the new color map.
+    for (const model of monaco.editor.getModels()) {
+      if (!isTextmateManagedLanguage(model.getLanguageId())) continue
+      const tokenizationPart = (
+        model as unknown as {
+          tokenization?: { resetTokenization?: () => void }
+        }
+      ).tokenization
+      tokenizationPart?.resetTokenization?.()
+    }
+  } catch (error) {
+    console.warn('[textmate] failed to sync theme:', error)
+  }
 }
 
 export async function ensureTextmateForLanguage(monaco: typeof Monaco, languageId: string): Promise<void> {
@@ -171,12 +233,4 @@ export async function ensureTextmateForLanguage(monaco: typeof Monaco, languageI
 
   installStateByLanguage.set(languageId, installPromise)
   await installPromise
-}
-
-export function syncTextmateTheme(monacoTheme: MonacoThemeName): void {
-  if (monacoTheme === 'vs-dark' || monacoTheme === 'hc-black') {
-    setRegistryTheme(registryData.themes.dark)
-    return
-  }
-  setRegistryTheme(registryData.themes.light)
 }

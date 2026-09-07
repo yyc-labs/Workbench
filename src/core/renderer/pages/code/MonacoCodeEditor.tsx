@@ -362,7 +362,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
       monacoRef.current = monaco
       ensureImportLinkSupport(monaco)
-      syncTextmateTheme(activeThemeRef.current)
+      await syncTextmateTheme(monaco, activeThemeRef.current)
       await ensureTextmateForLanguage(monaco, language)
       if (disposed) return
 
@@ -670,7 +670,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const monaco = monacoRef.current
     if (!monaco) return
     monaco.editor.setTheme(activeTheme)
-    syncTextmateTheme(activeTheme)
+    void syncTextmateTheme(monaco, activeTheme)
   }, [activeTheme])
 
   useEffect(() => {
