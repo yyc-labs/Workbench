@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Code2, Eye } from 'lucide-react'
 import { useI18n } from '../../../i18n'
 import { ZoomPanViewport } from '../../../components/ZoomPanViewport'
+import { pinSvgImageIntrinsicSize } from '../../../lib/svgImageIntrinsicSize'
 import { MonacoCodeEditor } from '../MonacoCodeEditor'
 import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
@@ -65,7 +66,19 @@ export function FileImageViewer({ src, projectPath, relativePath, monacoTheme }:
       ) : (
         <ZoomPanViewport resetKey={`${src}:${loadedAt}`}>
           <div className="code-file-viewer-image-canvas">
-            <img src={src} alt={relativePath} draggable={false} className="code-file-viewer-image" onLoad={() => setLoadedAt((value) => value + 1)} onError={() => setError(t('codeWorkspace.imageLoadFailed'))} />
+            <img
+              src={src}
+              alt={relativePath}
+              draggable={false}
+              className="code-file-viewer-image"
+              onLoad={(event) => {
+                setLoadedAt((value) => value + 1)
+                // Percentage-rooted svgs lay out at 0x0 in this max-content
+                // chain; pin intrinsic px from natural size when needed.
+                if (isSvg) pinSvgImageIntrinsicSize(event)
+              }}
+              onError={() => setError(t('codeWorkspace.imageLoadFailed'))}
+            />
           </div>
         </ZoomPanViewport>
       )}

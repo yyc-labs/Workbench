@@ -16,6 +16,7 @@ import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { projectIdFromPath } from '../../../shared/rules'
 import { buildYycWorkbenchPreviewUrl } from './code.helpers'
 import { useMarkdownNearViewport } from './code.markdownVisibility'
+import { isSvgImageSrc, pinSvgImageIntrinsicSize } from '../../lib/svgImageIntrinsicSize'
 
 export type {
   MarkdownStructuredBlockClickPayload,
@@ -381,6 +382,7 @@ function AsyncMarkdownImage({ resolvedSrc, projectPath, alt, props }: { resolved
   const [imageRef, isNearViewport] = useMarkdownNearViewport<HTMLElement>(MARKDOWN_CODE_BLOCK_PRELOAD_ROOT_MARGIN)
   const [displaySrc, setDisplaySrc] = useState(() => toProjectWorkbenchImageUrl(resolvedSrc, projectPath) || (isDirectImageSrc(resolvedSrc) ? resolvedSrc : ''))
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const isSvgImage = isSvgImageSrc(resolvedSrc) || isSvgImageSrc(displaySrc)
 
   useEffect(() => {
     let cancelled = false
@@ -447,6 +449,11 @@ function AsyncMarkdownImage({ resolvedSrc, projectPath, alt, props }: { resolved
         role="button"
         tabIndex={0}
         title={t('codeMarkdown.imageExpand')}
+        onLoad={(event) => {
+          // Percentage-rooted svgs collapse to 0x0 inside max-content preview
+          // chains (structured preview modal); pin intrinsic px when needed.
+          if (isSvgImage) pinSvgImageIntrinsicSize(event)
+        }}
         onError={() => {
           setDisplaySrc('')
         }}
@@ -474,7 +481,16 @@ function AsyncMarkdownImage({ resolvedSrc, projectPath, alt, props }: { resolved
           </div>
           <ZoomPanViewport resetKey={displaySrc}>
             <div className="code-markdown-image-preview-canvas">
-              <img src={displaySrc} alt={alt} draggable={false} />
+              <img
+                src={displaySrc}
+                alt={alt}
+                draggable={false}
+                onLoad={(event) => {
+                  // svg-as-img with percentage root dimensions lays out at 0x0
+                  // in this max-content chain; pin intrinsic px from natural size.
+                  if (isSvgImage) pinSvgImageIntrinsicSize(event)
+                }}
+              />
             </div>
           </ZoomPanViewport>
         </div>

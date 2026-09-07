@@ -18,6 +18,7 @@ release/
 AGENTS.md
 CLAUDE.md
 cache/
+.workbuddy/
 
 # Runtime output and temporary verification files
 logs/

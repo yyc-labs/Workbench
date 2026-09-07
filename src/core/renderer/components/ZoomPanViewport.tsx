@@ -1,5 +1,6 @@
 import { type MutableRefObject, type ReactNode, type Ref, useEffect, useRef } from 'react'
 import { computeFitZoom } from '../lib/computeFitZoom'
+import { isSvgImageSrc } from '../lib/svgImageIntrinsicSize'
 
 type ZoomPanViewportProps = {
   captureTargetRef?: Ref<HTMLDivElement>
@@ -16,6 +17,32 @@ function applyCanvasTransform(canvas: HTMLDivElement | null, zoom: number, offse
   // translate has to be divided back into local px.
   canvas.style.setProperty('zoom', String(zoom))
   canvas.style.transform = `translate3d(${offset.x / zoom}px, ${offset.y / zoom}px, 0)`
+}
+
+// Inline `<svg>` with a percentage width (mermaid renders `width="100%"`) has
+// no intrinsic size. Inside this canvas every ancestor sizes itself with
+// `width: max-content`, so the percentage resolves against an indefinite width
+// and Chromium collapses the whole chain to 0x0 (raster `<img>` is unaffected
+// because it has intrinsic pixel dimensions). Give viewBox-based svgs a
+// definite px size before measuring, same strategy as MermaidBlock's fit.
+function sizeSvgsFromViewBox(canvas: HTMLDivElement): void {
+  canvas.querySelectorAll<SVGSVGElement>('svg').forEach((svg) => {
+    if (svg.style.width && svg.style.height) return
+    const [, , viewBoxWidth, viewBoxHeight] = (svg.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number)
+    if (!Number.isFinite(viewBoxWidth) || !Number.isFinite(viewBoxHeight) || viewBoxWidth <= 0 || viewBoxHeight <= 0) return
+    svg.style.setProperty('width', `${viewBoxWidth}px`)
+    svg.style.setProperty('height', `${viewBoxHeight}px`)
+  })
+}
+
+// Vector content is either an inline `<svg>` (mermaid) or an svg delivered
+// through `<img>` (svg files in the file viewer, `![](x.svg)` in markdown).
+// The img case has no reliable intrinsic px either (percentage-rooted svgs
+// fall back to a small natural size), so the fit must be allowed to upscale
+// it — layout zoom keeps the vector sharp.
+function hasVectorContent(canvas: HTMLDivElement): boolean {
+  if (canvas.querySelector('svg')) return true
+  return Array.from(canvas.querySelectorAll('img')).some((img) => isSvgImageSrc(img.currentSrc || img.getAttribute('src') || ''))
 }
 
 export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPanViewportProps) {
@@ -51,6 +78,7 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
     }
 
     const fitContent = () => {
+      sizeSvgsFromViewBox(canvas)
       const viewportWidth = viewport.clientWidth
       const viewportHeight = viewport.clientHeight
       const contentWidth = canvas.scrollWidth
@@ -65,7 +93,7 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
         viewportHeight,
         contentWidth,
         contentHeight,
-        allowUpscale: Boolean(canvas.querySelector('svg')),
+        allowUpscale: hasVectorContent(canvas),
       })
       zoomRef.current = nextZoom
       lastFitZoomRef.current = nextZoom
