@@ -1,4 +1,5 @@
 import type { Uri } from 'monaco-editor'
+import { normalizeMonacoCachePath } from './monacoModelCache'
 
 export const IMPORT_EXTENSION_CANDIDATES = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.vue', '.json', '.css', '.scss', '.less', '.html', '.md', '.mdc'] as const
 
@@ -80,12 +81,23 @@ export function resolveImportCandidatePaths(currentFileRelativePath: string, imp
   return candidates
 }
 
-export function resolveFilePathFromModelUri(uri: Uri): string | null {
+export function resolveFilePathFromModelUri(uri: Uri, projectPath?: string | null): string | null {
   if (uri.scheme !== 'file') return null
+  let decodedPath: string
   try {
-    const path = decodeURIComponent(uri.path).replace(/^\/+/, '')
-    return path || null
+    decodedPath = decodeURIComponent(uri.path)
   } catch {
-    return uri.path.replace(/^\/+/, '') || null
+    decodedPath = uri.path
   }
+  let path = decodedPath.replace(/^\/+/, '')
+  if (!path) return null
+
+  // 模块级 Model 缓存的 URI 带有项目命名空间前缀，这里剥离后还原为项目内相对路径。
+  if (projectPath) {
+    const normalizedProject = normalizeMonacoCachePath(projectPath).replace(/\/+$/, '')
+    if (normalizedProject && path.toLowerCase().startsWith(`${normalizedProject.toLowerCase()}/`)) {
+      path = path.slice(normalizedProject.length + 1)
+    }
+  }
+  return path || null
 }

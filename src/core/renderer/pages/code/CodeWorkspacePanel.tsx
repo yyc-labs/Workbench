@@ -54,6 +54,7 @@ type CodeWorkspacePanelProps = {
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
+  onRequestProjectContextMenu?: (x: number, y: number) => void
 }
 
 type CodeViewMode = 'files' | 'search'
@@ -79,6 +80,7 @@ export function CodeWorkspacePanel({
   onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
+  onRequestProjectContextMenu,
 }: CodeWorkspacePanelProps) {
   const { t } = useI18n()
   const location = useLocation()
@@ -916,6 +918,7 @@ export function CodeWorkspacePanel({
                 onOpenSmartEmptyFile={handleOpenSmartEmptyFile}
                 onOpenTranscriptReference={handleOpenTranscriptReference}
                 onOpenFile={openFileWithTreeLocate}
+                onRequestProjectContextMenu={onRequestProjectContextMenu}
                 parsedMarkdownDoc={parsedMarkdownDoc}
                 previewRootRef={previewScrollRef}
                 previewScrollRef={previewScrollRef}

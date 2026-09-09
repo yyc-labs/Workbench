@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
 import { translate, useLocale } from '../i18n'
+import {
+  computeTrajectoryStats,
+  detectCircleGesture,
+  GESTURE_ACTIVATE_DISTANCE as ACTIVATE_DISTANCE,
+  GESTURE_ANGLE_RATIO as ANGLE_RATIO,
+  GESTURE_HORIZONTAL_THRESHOLD as HORIZONTAL_THRESHOLD,
+  GESTURE_JITTER_LOCK_DISTANCE,
+  GESTURE_MAX_POINTS as MAX_POINTS,
+  GESTURE_SAMPLE_MIN_DISTANCE as SAMPLE_MIN_DISTANCE,
+  GESTURE_VERTICAL_DOWN_THRESHOLD as VERTICAL_DOWN_THRESHOLD,
+  GESTURE_VERTICAL_UP_THRESHOLD as VERTICAL_UP_THRESHOLD,
+  isScribble,
+  isStraightSwipe,
+  type GesturePoint,
+} from '../lib/mouseGestureRecognition'
 import { resolveProjectDetailGestureTarget } from '../lib/projectPaneNavigation'
-
-type GesturePoint = { x: number; y: number }
 
 export type MouseGestureHint = {
   visible: boolean
@@ -31,33 +44,8 @@ const EMPTY_HINT: MouseGestureHint = {
   cursor: null,
 }
 
-const ACTIVATE_DISTANCE = 8
-const SAMPLE_MIN_DISTANCE = 6
-const MAX_POINTS = 96
-const HORIZONTAL_THRESHOLD = 72
-const VERTICAL_DOWN_THRESHOLD = 72
-const VERTICAL_UP_THRESHOLD = 72
-const ANGLE_RATIO = 1.25
-const CIRCLE_MIN_POINTS = 18
-const CIRCLE_MIN_DIAMETER = 44
-const CIRCLE_MAX_ASPECT_RATIO = 1.8
-const CIRCLE_MIN_RADIUS = 16
-const CIRCLE_MAX_RADIUS_STD_RATIO = 0.42
-const CIRCLE_CLOSURE_RATIO = 0.72
-const CIRCLE_MIN_SWEEP_RAD = Math.PI * 1.45
-const CIRCLE_MIN_PATH_RATIO = 0.65
-const CIRCLE_MAX_PATH_RATIO = 2.25
 const RECENT_GESTURE_ALLOW_SELECTOR = '[data-allow-recent-gesture="true"]'
-const RECENT_GESTURE_IGNORE_SELECTOR = [
-  'button',
-  'a',
-  'input',
-  'textarea',
-  'select',
-  '[contenteditable="true"]',
-  '.xterm',
-  '[role="dialog"]',
-].join(', ')
+const RECENT_GESTURE_IGNORE_SELECTOR = ['button', 'a', 'input', 'textarea', 'select', '[contenteditable="true"]', '.xterm', '[role="dialog"]'].join(', ')
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
 
@@ -92,91 +80,11 @@ function readProjectHeaderCollapsed(): boolean {
   }
 }
 
-function normalizeDeltaAngle(value: number): number {
-  let result = value
-  const fullTurn = Math.PI * 2
-  while (result > Math.PI) result -= fullTurn
-  while (result < -Math.PI) result += fullTurn
-  return result
-}
-
-function detectCircleGesture(rawPoints: GesturePoint[]): boolean {
-  if (rawPoints.length < CIRCLE_MIN_POINTS) return false
-
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const point of rawPoints) {
-    if (point.x < minX) minX = point.x
-    if (point.x > maxX) maxX = point.x
-    if (point.y < minY) minY = point.y
-    if (point.y > maxY) maxY = point.y
-  }
-
-  const width = maxX - minX
-  const height = maxY - minY
-  if (width < CIRCLE_MIN_DIAMETER || height < CIRCLE_MIN_DIAMETER) return false
-
-  const aspectRatio = width > height ? width / height : height / width
-  if (aspectRatio > CIRCLE_MAX_ASPECT_RATIO) return false
-
-  const centerX = (minX + maxX) / 2
-  const centerY = (minY + maxY) / 2
-  const radii = rawPoints.map((point) => Math.hypot(point.x - centerX, point.y - centerY))
-  const meanRadius = radii.reduce((sum, value) => sum + value, 0) / radii.length
-  if (meanRadius < CIRCLE_MIN_RADIUS) return false
-
-  const variance = radii.reduce((sum, value) => {
-    const delta = value - meanRadius
-    return sum + (delta * delta)
-  }, 0) / radii.length
-  const radiusStd = Math.sqrt(variance)
-  if (radiusStd / meanRadius > CIRCLE_MAX_RADIUS_STD_RATIO) return false
-
-  const first = rawPoints[0]
-  const last = rawPoints[rawPoints.length - 1]
-  const closureDistance = Math.hypot(last.x - first.x, last.y - first.y)
-  if (closureDistance > Math.max(width, height) * CIRCLE_CLOSURE_RATIO) return false
-
-  let sweep = 0
-  let previousAngle = Math.atan2(first.y - centerY, first.x - centerX)
-  for (let i = 1; i < rawPoints.length; i++) {
-    const current = rawPoints[i]
-    const angle = Math.atan2(current.y - centerY, current.x - centerX)
-    sweep += normalizeDeltaAngle(angle - previousAngle)
-    previousAngle = angle
-  }
-  if (Math.abs(sweep) < CIRCLE_MIN_SWEEP_RAD) return false
-
-  let pathLength = 0
-  for (let i = 1; i < rawPoints.length; i++) {
-    const prev = rawPoints[i - 1]
-    const curr = rawPoints[i]
-    pathLength += Math.hypot(curr.x - prev.x, curr.y - prev.y)
-  }
-  const expectedCircumference = Math.PI * (width + height) * 0.5
-  const pathRatio = pathLength / Math.max(expectedCircumference, 1)
-  if (pathRatio < CIRCLE_MIN_PATH_RATIO || pathRatio > CIRCLE_MAX_PATH_RATIO) return false
-
-  return true
-}
-
 function translateGesture(locale: GestureLocale, key: string): string {
   return translate(locale, key as never)
 }
 
-function toPreview(
-  locale: GestureLocale,
-  dx: number,
-  dy: number,
-  points: GesturePoint[],
-  allowRecentGesture: boolean,
-  recentDrawerOpen: boolean,
-  allowProjectHeaderGesture: boolean,
-  isDetailRoute: boolean,
-  projectHeaderCollapsed: boolean
-): GesturePreview {
+function toPreview(locale: GestureLocale, dx: number, dy: number, points: GesturePoint[], allowRecentGesture: boolean, recentDrawerOpen: boolean, allowProjectHeaderGesture: boolean, isDetailRoute: boolean, projectHeaderCollapsed: boolean): GesturePreview {
   if (detectCircleGesture(points)) {
     return {
       status: 'ready',
@@ -185,42 +93,41 @@ function toPreview(
     }
   }
 
+  const stats = computeTrajectoryStats(points)
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
+  const straight = isStraightSwipe(stats)
 
-  if (
-    allowProjectHeaderGesture
-    && isDetailRoute
-    && dy <= -VERTICAL_UP_THRESHOLD
-    && absY >= absX * ANGLE_RATIO
-  ) {
+  if (allowProjectHeaderGesture && isDetailRoute && straight && dy <= -VERTICAL_UP_THRESHOLD && absY >= absX * ANGLE_RATIO) {
     return {
       status: 'ready',
       action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed
-        ? translateGesture(locale, 'common.mouseGesture.releaseExpandProjectHeader')
-        : translateGesture(locale, 'common.mouseGesture.releaseCollapseProjectHeader'),
+      label: projectHeaderCollapsed ? translateGesture(locale, 'common.mouseGesture.releaseExpandProjectHeader') : translateGesture(locale, 'common.mouseGesture.releaseCollapseProjectHeader'),
     }
   }
 
-  if (allowRecentGesture && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
+  if (allowRecentGesture && straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
     return {
       status: 'ready',
       action: 'recent',
-      label: recentDrawerOpen
-        ? translateGesture(locale, 'common.mouseGesture.releaseCloseRecentProjects')
-        : translateGesture(locale, 'common.mouseGesture.releaseOpenRecentProjects'),
+      label: recentDrawerOpen ? translateGesture(locale, 'common.mouseGesture.releaseCloseRecentProjects') : translateGesture(locale, 'common.mouseGesture.releaseOpenRecentProjects'),
     }
   }
 
-  if (absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO) {
+  if (straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO) {
     const action = dx < 0 ? 'back' : 'forward'
     return {
       status: 'ready',
       action,
-      label: action === 'back'
-        ? translateGesture(locale, 'common.mouseGesture.releaseBack')
-        : translateGesture(locale, 'common.mouseGesture.releaseForward'),
+      label: action === 'back' ? translateGesture(locale, 'common.mouseGesture.releaseBack') : translateGesture(locale, 'common.mouseGesture.releaseForward'),
+    }
+  }
+
+  if (isScribble(stats)) {
+    return {
+      status: 'invalid',
+      action: null,
+      label: translateGesture(locale, 'common.mouseGesture.invalidScribble'),
     }
   }
 
@@ -228,9 +135,7 @@ function toPreview(
     return {
       status: 'pending',
       action: 'recent',
-      label: recentDrawerOpen
-        ? translateGesture(locale, 'common.mouseGesture.continueDownCloseRecentProjects')
-        : translateGesture(locale, 'common.mouseGesture.continueDownOpenRecentProjects'),
+      label: recentDrawerOpen ? translateGesture(locale, 'common.mouseGesture.continueDownCloseRecentProjects') : translateGesture(locale, 'common.mouseGesture.continueDownOpenRecentProjects'),
     }
   }
 
@@ -238,9 +143,7 @@ function toPreview(
     return {
       status: 'pending',
       action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed
-        ? translateGesture(locale, 'common.mouseGesture.continueUpExpandProjectHeader')
-        : translateGesture(locale, 'common.mouseGesture.continueUpCollapseProjectHeader'),
+      label: projectHeaderCollapsed ? translateGesture(locale, 'common.mouseGesture.continueUpExpandProjectHeader') : translateGesture(locale, 'common.mouseGesture.continueUpCollapseProjectHeader'),
     }
   }
 
@@ -249,12 +152,12 @@ function toPreview(
       status: 'invalid',
       action: null,
       label: allowRecentGesture
-        ? (allowProjectHeaderGesture && isDetailRoute
+        ? allowProjectHeaderGesture && isDetailRoute
           ? translateGesture(locale, 'common.mouseGesture.invalidUpDownHorizontalCircle')
-          : translateGesture(locale, 'common.mouseGesture.invalidDownHorizontalCircle'))
-        : (allowProjectHeaderGesture && isDetailRoute
+          : translateGesture(locale, 'common.mouseGesture.invalidDownHorizontalCircle')
+        : allowProjectHeaderGesture && isDetailRoute
           ? translateGesture(locale, 'common.mouseGesture.invalidUpHorizontalCircle')
-          : translateGesture(locale, 'common.mouseGesture.invalidHorizontalCircle')),
+          : translateGesture(locale, 'common.mouseGesture.invalidHorizontalCircle'),
     }
   }
 
@@ -282,10 +185,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     tracking: false,
     activated: false,
     moved: false,
+    startLocked: false,
     ignoreRecentInThisGesture: false,
     isDetailRouteAtStart: false,
     projectHeaderCollapsedAtStart: false,
     recentDrawerOpenAtStart: false,
+    rawStartX: 0,
+    rawStartY: 0,
     startX: 0,
     startY: 0,
     lastDx: 0,
@@ -350,10 +256,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.moved = false
+      stateRef.current.startLocked = false
       stateRef.current.ignoreRecentInThisGesture = shouldSkipRecentGesture(e.target)
       stateRef.current.isDetailRouteAtStart = detailRoute
       stateRef.current.projectHeaderCollapsedAtStart = detailRoute ? readProjectHeaderCollapsed() : false
       stateRef.current.recentDrawerOpenAtStart = isRecentProjectDrawerOpen()
+      stateRef.current.rawStartX = e.clientX
+      stateRef.current.rawStartY = e.clientY
       stateRef.current.startX = e.clientX
       stateRef.current.startY = e.clientY
       stateRef.current.lastDx = 0
@@ -374,6 +283,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.tracking = false
         state.activated = false
         state.moved = false
+        state.startLocked = false
         state.ignoreRecentInThisGesture = false
         state.isDetailRouteAtStart = false
         state.projectHeaderCollapsedAtStart = false
@@ -381,6 +291,17 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.points = []
         clearHint()
         return
+      }
+
+      if (!state.activated && !state.startLocked) {
+        const pressDrift = Math.hypot(e.clientX - state.rawStartX, e.clientY - state.rawStartY)
+        if (pressDrift >= GESTURE_JITTER_LOCK_DISTANCE) {
+          state.startX = e.clientX
+          state.startY = e.clientY
+          state.startLocked = true
+          state.lastSampleX = e.clientX
+          state.lastSampleY = e.clientY
+        }
       }
 
       state.lastDx = e.clientX - state.startX
@@ -398,10 +319,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.lastSampleX = e.clientX
         state.lastSampleY = e.clientY
       } else {
-        const deltaSinceSample = Math.hypot(
-          e.clientX - state.lastSampleX,
-          e.clientY - state.lastSampleY
-        )
+        const deltaSinceSample = Math.hypot(e.clientX - state.lastSampleX, e.clientY - state.lastSampleY)
         if (deltaSinceSample >= SAMPLE_MIN_DISTANCE) {
           state.points.push({ x: e.clientX, y: e.clientY })
           if (state.points.length > MAX_POINTS) {
@@ -414,17 +332,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (!state.activated) return
       const gesturePoints = [...state.points, { x: e.clientX, y: e.clientY }]
-      const preview = toPreview(
-        locale,
-        state.lastDx,
-        state.lastDy,
-        gesturePoints,
-        allowRecentGesture,
-        state.recentDrawerOpenAtStart,
-        allowProjectHeaderGesture,
-        state.isDetailRouteAtStart,
-        state.projectHeaderCollapsedAtStart
-      )
+      const preview = toPreview(locale, state.lastDx, state.lastDy, gesturePoints, allowRecentGesture, state.recentDrawerOpenAtStart, allowProjectHeaderGesture, state.isDetailRouteAtStart, state.projectHeaderCollapsedAtStart)
       scheduleHint({
         visible: true,
         label: preview.label,
@@ -448,25 +356,21 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       }
       state.moved = false
 
-      const dx = state.lastDx
-      const dy = state.lastDy
+      const dx = e.clientX - state.startX
+      const dy = e.clientY - state.startY
+      state.lastDx = dx
+      state.lastDy = dy
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
-      const passedHorizontal = absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
       const releasedPoint = { x: e.clientX, y: e.clientY }
-      const gesturePoints = state.points.length > 0
-        ? [...state.points, releasedPoint]
-        : [{ x: state.startX, y: state.startY }, releasedPoint]
+      const gesturePoints = state.points.length > 0 ? [...state.points, releasedPoint] : [{ x: state.startX, y: state.startY }, releasedPoint]
+      const straight = isStraightSwipe(computeTrajectoryStats(gesturePoints))
       const isCircle = detectCircleGesture(gesturePoints)
       const segments = location.pathname.split('/').filter(Boolean)
       const isDetailRoute = segments[0] === 'project' && segments.length >= 2
-      const passedUp = !state.ignoreRecentInThisGesture
-        && state.isDetailRouteAtStart
-        && dy <= -VERTICAL_UP_THRESHOLD
-        && absY >= absX * ANGLE_RATIO
-      const passedDown = !state.ignoreRecentInThisGesture
-        && dy >= VERTICAL_DOWN_THRESHOLD
-        && dy >= absX * ANGLE_RATIO
+      const passedUp = !state.ignoreRecentInThisGesture && state.isDetailRouteAtStart && straight && dy <= -VERTICAL_UP_THRESHOLD && absY >= absX * ANGLE_RATIO
+      const passedDown = !state.ignoreRecentInThisGesture && straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO
+      const passedHorizontal = straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
 
       if (hadGestureMovement && isCircle) {
         hideHintImmediately()
@@ -494,9 +398,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         const isBack = dx < 0
         const isForward = dx > 0
 
-        const gestureTarget = isDetailRoute
-          ? resolveProjectDetailGestureTarget(location.pathname, isForward ? 'forward' : 'back')
-          : null
+        const gestureTarget = isDetailRoute ? resolveProjectDetailGestureTarget(location.pathname, isForward ? 'forward' : 'back') : null
 
         if (gestureTarget) {
           navigate(gestureTarget, { replace: true })
@@ -531,6 +433,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.tracking = false
       stateRef.current.activated = false
       stateRef.current.moved = false
+      stateRef.current.startLocked = false
       stateRef.current.ignoreRecentInThisGesture = false
       stateRef.current.isDetailRouteAtStart = false
       stateRef.current.projectHeaderCollapsedAtStart = false

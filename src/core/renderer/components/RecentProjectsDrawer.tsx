@@ -123,6 +123,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const togglePin = useAppStore((s) => s.togglePin)
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
+  const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
@@ -148,13 +149,24 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const aiCommitStatus: AiCommitStatus = 'idle'
-  const { docMenuItems, docLinkTagOptions, handleOpenDocMenuItem } = useProjectDocLinks({ project })
+  const { docMenuItems, docLinkTagOptions, defaultDocLink, handleOpenDocMenuItem } = useProjectDocLinks({ project })
+  const isDevReady = isDevRunning && devUrls.length > 0
   const info: CardContextMenuInfo = {
-    items: docMenuItems.map((item) => ({
-      ...item,
-      onOpen: () => handleActionAndCloseDrawer(() => handleOpenDocMenuItem(item.linkId ?? '')),
-    })),
+    items: [
+      ...(isDevReady
+        ? devUrls.map((url) => ({
+            url,
+            label: `Dev: ${url}`,
+            onOpen: () => handleActionAndCloseDrawer(() => window.electronAPI.openExternal(url)),
+          }))
+        : []),
+      ...docMenuItems.map((item) => ({
+        ...item,
+        onOpen: () => handleActionAndCloseDrawer(() => handleOpenDocMenuItem(item.linkId ?? '')),
+      })),
+    ],
     tagOptions: docLinkTagOptions,
+    onOpenDefault: defaultDocLink ? () => handleActionAndCloseDrawer(() => handleOpenDocMenuItem(defaultDocLink.id)) : undefined,
   }
 
   const handleSelectAiRuntimeProfile = useCallback(

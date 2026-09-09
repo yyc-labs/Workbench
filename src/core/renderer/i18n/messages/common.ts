@@ -137,6 +137,7 @@ export const commonMessages = {
         invalidHorizontalCircle: 'Invalid gesture: drag sideways or draw a circle',
         continueHorizontalCircle: 'Keep dragging (sideways or circle)...',
         invalidTooShort: 'Invalid gesture: distance too short',
+        invalidScribble: 'Invalid gesture: release to cancel',
       },
       routeCatalog: {
         title: 'Route Catalog',
@@ -350,6 +351,7 @@ export const commonMessages = {
         invalidHorizontalCircle: '无效手势：请水平拖动或画圆',
         continueHorizontalCircle: '继续拖动（水平或圆圈）...',
         invalidTooShort: '无效手势：距离不足',
+        invalidScribble: '无效手势：松开取消',
       },
       routeCatalog: {
         title: '路由目录',

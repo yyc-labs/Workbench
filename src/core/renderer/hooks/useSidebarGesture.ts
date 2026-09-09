@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
+import {
+  computeTrajectoryStats,
+  GESTURE_ACTIVATE_DISTANCE as ACTIVATE_DISTANCE,
+  GESTURE_ANGLE_RATIO as ANGLE_RATIO,
+  GESTURE_HORIZONTAL_THRESHOLD as HORIZONTAL_THRESHOLD,
+  GESTURE_JITTER_LOCK_DISTANCE,
+  GESTURE_MAX_POINTS as MAX_POINTS,
+  GESTURE_SAMPLE_MIN_DISTANCE as SAMPLE_MIN_DISTANCE,
+  isStraightSwipe,
+  type GesturePoint,
+} from '../lib/mouseGestureRecognition'
 
-const SIDEBAR_GESTURE_ACTIVATE_DISTANCE = 8
-const SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE = 6
-const SIDEBAR_GESTURE_MAX_POINTS = 96
-const SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD = 72
-const SIDEBAR_GESTURE_ANGLE_RATIO = 1.25
 const GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
 
 export type SidebarGesturePoint = {
@@ -32,6 +38,9 @@ type SidebarGestureTracker = {
   tracking: boolean
   activated: boolean
   moved: boolean
+  startLocked: boolean
+  rawStartX: number
+  rawStartY: number
   startX: number
   startY: number
   lastDx: number
@@ -53,6 +62,9 @@ function createEmptyGestureTracker(): SidebarGestureTracker {
     tracking: false,
     activated: false,
     moved: false,
+    startLocked: false,
+    rawStartX: 0,
+    rawStartY: 0,
     startX: 0,
     startY: 0,
     lastDx: 0,
@@ -63,32 +75,27 @@ function createEmptyGestureTracker(): SidebarGestureTracker {
   }
 }
 
-function resolveSidebarGestureOverlay(
-  dx: number,
-  dy: number,
-  canToggleLeftSidebar: boolean,
-  canToggleRightSidebar: boolean
-): Pick<SidebarGestureOverlayState, 'status' | 'action'> {
+function resolveSidebarGestureOverlay(dx: number, dy: number, straight: boolean, canToggleLeftSidebar: boolean, canToggleRightSidebar: boolean): Pick<SidebarGestureOverlayState, 'status' | 'action'> {
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
   const action = dx < 0 ? 'right' : 'left'
   const canToggleSidebar = action === 'left' ? canToggleLeftSidebar : canToggleRightSidebar
 
-  if (absX >= SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD && absX >= absY * SIDEBAR_GESTURE_ANGLE_RATIO) {
+  if (straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO) {
     return {
       status: canToggleSidebar ? 'ready' : 'invalid',
       action,
     }
   }
 
-  if (absY > absX * 1.05 && absY >= SIDEBAR_GESTURE_ACTIVATE_DISTANCE * 2) {
+  if (absY > absX * 1.05 && absY >= ACTIVATE_DISTANCE * 2) {
     return {
       status: 'invalid',
       action: null,
     }
   }
 
-  if (absX < SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD * 0.45) {
+  if (absX < HORIZONTAL_THRESHOLD * 0.45) {
     return {
       status: 'pending',
       action,
@@ -101,15 +108,8 @@ function resolveSidebarGestureOverlay(
   }
 }
 
-export function useSidebarGesture({
-  pageRootRef,
-  onBeforeToggle,
-  onToggleLeftSidebar,
-  onToggleRightSidebar,
-}: UseSidebarGestureOptions): SidebarGestureOverlayState {
-  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<SidebarGestureOverlayState>(
-    EMPTY_SIDEBAR_GESTURE_OVERLAY
-  )
+export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar }: UseSidebarGestureOptions): SidebarGestureOverlayState {
+  const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<SidebarGestureOverlayState>(EMPTY_SIDEBAR_GESTURE_OVERLAY)
   const sidebarGestureRef = useRef<SidebarGestureTracker>(createEmptyGestureTracker())
   const suppressSidebarGestureContextMenuRef = useRef(false)
   const suppressSidebarGestureTimerRef = useRef<number | null>(null)
@@ -130,10 +130,7 @@ export function useSidebarGesture({
   }, [onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar])
 
   useEffect(() => {
-    const isEventInsidePage = (target: EventTarget | null) => (
-      target instanceof Node
-      && pageRootRef.current?.contains(target)
-    )
+    const isEventInsidePage = (target: EventTarget | null) => target instanceof Node && pageRootRef.current?.contains(target)
 
     const setGestureActive = (active: boolean) => {
       document.body.classList.toggle(GESTURE_ACTIVE_CLASS_NAME, active)
@@ -187,6 +184,9 @@ export function useSidebarGesture({
         tracking: true,
         activated: false,
         moved: false,
+        startLocked: false,
+        rawStartX: event.clientX,
+        rawStartY: event.clientY,
         startX: event.clientX,
         startY: event.clientY,
         lastDx: 0,
@@ -212,12 +212,23 @@ export function useSidebarGesture({
         return
       }
 
+      if (!gesture.activated && !gesture.startLocked) {
+        const pressDrift = Math.hypot(event.clientX - gesture.rawStartX, event.clientY - gesture.rawStartY)
+        if (pressDrift >= GESTURE_JITTER_LOCK_DISTANCE) {
+          gesture.startX = event.clientX
+          gesture.startY = event.clientY
+          gesture.startLocked = true
+          gesture.lastSampleX = event.clientX
+          gesture.lastSampleY = event.clientY
+        }
+      }
+
       gesture.lastDx = event.clientX - gesture.startX
       gesture.lastDy = event.clientY - gesture.startY
 
       if (!gesture.activated) {
         const movedDistance = Math.hypot(gesture.lastDx, gesture.lastDy)
-        if (movedDistance < SIDEBAR_GESTURE_ACTIVATE_DISTANCE) return
+        if (movedDistance < ACTIVATE_DISTANCE) return
         gesture.activated = true
         gesture.moved = true
         gesture.points = [
@@ -227,14 +238,11 @@ export function useSidebarGesture({
         gesture.lastSampleX = event.clientX
         gesture.lastSampleY = event.clientY
       } else {
-        const deltaSinceSample = Math.hypot(
-          event.clientX - gesture.lastSampleX,
-          event.clientY - gesture.lastSampleY
-        )
-        if (deltaSinceSample >= SIDEBAR_GESTURE_SAMPLE_MIN_DISTANCE) {
+        const deltaSinceSample = Math.hypot(event.clientX - gesture.lastSampleX, event.clientY - gesture.lastSampleY)
+        if (deltaSinceSample >= SAMPLE_MIN_DISTANCE) {
           gesture.points.push({ x: event.clientX, y: event.clientY })
-          if (gesture.points.length > SIDEBAR_GESTURE_MAX_POINTS) {
-            gesture.points.splice(0, gesture.points.length - SIDEBAR_GESTURE_MAX_POINTS)
+          if (gesture.points.length > MAX_POINTS) {
+            gesture.points.splice(0, gesture.points.length - MAX_POINTS)
           }
           gesture.lastSampleX = event.clientX
           gesture.lastSampleY = event.clientY
@@ -242,12 +250,9 @@ export function useSidebarGesture({
       }
 
       if (gesture.activated) {
-        const preview = resolveSidebarGestureOverlay(
-          gesture.lastDx,
-          gesture.lastDy,
-          Boolean(callbacksRef.current.onToggleLeftSidebar),
-          Boolean(callbacksRef.current.onToggleRightSidebar),
-        )
+        const gesturePoints: GesturePoint[] = [...gesture.points, { x: event.clientX, y: event.clientY }]
+        const straight = isStraightSwipe(computeTrajectoryStats(gesturePoints))
+        const preview = resolveSidebarGestureOverlay(gesture.lastDx, gesture.lastDy, straight, Boolean(callbacksRef.current.onToggleLeftSidebar), Boolean(callbacksRef.current.onToggleRightSidebar))
         scheduleOverlay({
           visible: true,
           status: preview.status,
@@ -267,16 +272,18 @@ export function useSidebarGesture({
       const gesture = sidebarGestureRef.current
       if (!gesture.tracking) return
 
-      const dx = gesture.lastDx
-      const dy = gesture.lastDy
+      const dx = event.clientX - gesture.startX
+      const dy = event.clientY - gesture.startY
+      gesture.lastDx = dx
+      gesture.lastDy = dy
       const absX = Math.abs(dx)
       const absY = Math.abs(dy)
-      const passedHorizontal = absX >= SIDEBAR_GESTURE_HORIZONTAL_THRESHOLD
-        && absX >= absY * SIDEBAR_GESTURE_ANGLE_RATIO
+      const releasedPoint = { x: event.clientX, y: event.clientY }
+      const gesturePoints: GesturePoint[] = gesture.points.length > 0 ? [...gesture.points, releasedPoint] : [{ x: gesture.startX, y: gesture.startY }, releasedPoint]
+      const straight = isStraightSwipe(computeTrajectoryStats(gesturePoints))
+      const passedHorizontal = straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
       const targetAction = dx < 0 ? 'right' : 'left'
-      const toggleSidebar = targetAction === 'left'
-        ? callbacksRef.current.onToggleLeftSidebar
-        : callbacksRef.current.onToggleRightSidebar
+      const toggleSidebar = targetAction === 'left' ? callbacksRef.current.onToggleLeftSidebar : callbacksRef.current.onToggleRightSidebar
 
       setGestureActive(false)
       if (gesture.moved) {
@@ -297,10 +304,7 @@ export function useSidebarGesture({
     }
 
     const handleContextMenu = (event: MouseEvent) => {
-      if (
-        !isEventInsidePage(event.target)
-        || (!suppressSidebarGestureContextMenuRef.current && !sidebarGestureRef.current.tracking)
-      ) {
+      if (!isEventInsidePage(event.target) || (!suppressSidebarGestureContextMenuRef.current && !sidebarGestureRef.current.tracking)) {
         return
       }
       event.preventDefault()

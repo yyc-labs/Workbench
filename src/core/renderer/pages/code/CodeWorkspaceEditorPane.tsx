@@ -112,6 +112,7 @@ type CodeWorkspaceEditorPaneProps = {
   onOpenSmartEmptyFile: (relativePath: string) => void
   onOpenTranscriptReference: (item: TranscriptFileReference) => void
   onOpenFile?: (relativePath: string) => void
+  onRequestProjectContextMenu?: (x: number, y: number) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
   previewRootRef: RefObject<Element | null>
   previewScrollRef: Ref<HTMLDivElement>
@@ -170,6 +171,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   onOpenSmartEmptyFile,
   onOpenTranscriptReference,
   onOpenFile,
+  onRequestProjectContextMenu,
   parsedMarkdownDoc,
   previewRootRef,
   previewScrollRef,
@@ -347,43 +349,46 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
       )}
 
       <div className={`code-editor-content ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-content--split' : 'code-editor-content--single'}`}>
-        {effectiveMarkdownPreviewMode !== 'preview' && (
-          <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`}>
-            {fileKind === 'image' && binaryDataUrl ? (
-              <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
-            ) : fileKind === 'pdf' && binaryDataUrl ? (
-              <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
-            ) : fileKind === 'html' ? (
-              <FileHtmlViewer previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')} sourceHtml={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} activeLanguage={activeLanguage} />
-            ) : fileKind === 'video' && binaryDataUrl ? (
-              <FileMediaViewer dataUrl={binaryDataUrl} kind="video" projectPath={projectPath} relativePath={activeRelativePath} />
-            ) : fileKind === 'audio' && binaryDataUrl ? (
-              <FileMediaViewer dataUrl={binaryDataUrl} kind="audio" projectPath={projectPath} relativePath={activeRelativePath} />
-            ) : fileKind === 'csv' ? (
-              <FileCsvViewer sourceText={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
-            ) : fileKind === 'unsupported' ? (
-              <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} unsupportedReason={fileUnsupportedReason} />
-            ) : fileKind === 'excluded' ? (
-              <FileExcludedViewer nodeKind={excludedNodeKind} projectPath={projectPath} relativePath={activeRelativePath} />
-            ) : (
-              <MonacoCodeEditor
-                ref={editorRef}
-                filePath={activeRelativePath}
-                projectPath={projectPath}
-                value={editorValue}
-                language={activeLanguage || 'plaintext'}
-                theme={monacoTheme}
-                onOpenFile={onOpenFile}
-                onPasteImage={handlePasteImage}
-                onChange={onChangeEditorValue}
-                onScrollStateChange={onEditorScrollStateChange}
-                onCursorPositionChange={onSetCursorPosition}
-                onFocusSearch={onFocusSearch}
-                onSave={onHandleSave}
-              />
-            )}
-          </div>
-        )}
+        {/*
+          预览模式下用 display:none 隐藏编辑器而不是卸载：
+          Monaco 编辑器与 Model 随挂载销毁重建会丢失撤销栈和滚动状态，隐藏可完整保留。
+        */}
+        <div className={`code-editor-pane ${effectiveMarkdownPreviewMode === 'split' ? 'code-editor-pane--split' : ''}`} style={effectiveMarkdownPreviewMode === 'preview' ? { display: 'none' } : undefined}>
+          {fileKind === 'image' && binaryDataUrl ? (
+            <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
+          ) : fileKind === 'pdf' && binaryDataUrl ? (
+            <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : fileKind === 'html' ? (
+            <FileHtmlViewer previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')} sourceHtml={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} activeLanguage={activeLanguage} />
+          ) : fileKind === 'video' && binaryDataUrl ? (
+            <FileMediaViewer dataUrl={binaryDataUrl} kind="video" projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : fileKind === 'audio' && binaryDataUrl ? (
+            <FileMediaViewer dataUrl={binaryDataUrl} kind="audio" projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : fileKind === 'csv' ? (
+            <FileCsvViewer sourceText={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
+          ) : fileKind === 'unsupported' ? (
+            <FileUnsupportedViewer size={fileSize} mtimeMs={fileMtimeMs ?? 0} projectPath={projectPath} relativePath={activeRelativePath} unsupportedReason={fileUnsupportedReason} />
+          ) : fileKind === 'excluded' ? (
+            <FileExcludedViewer nodeKind={excludedNodeKind} projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : (
+            <MonacoCodeEditor
+              ref={editorRef}
+              filePath={activeRelativePath}
+              projectPath={projectPath}
+              value={editorValue}
+              language={activeLanguage || 'plaintext'}
+              theme={monacoTheme}
+              onOpenFile={onOpenFile}
+              onPasteImage={handlePasteImage}
+              onRequestProjectContextMenu={onRequestProjectContextMenu}
+              onChange={onChangeEditorValue}
+              onScrollStateChange={onEditorScrollStateChange}
+              onCursorPositionChange={onSetCursorPosition}
+              onFocusSearch={onFocusSearch}
+              onSave={onHandleSave}
+            />
+          )}
+        </div>
 
         {(effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split') && (
           <div ref={previewScrollRef} className="code-editor-pane code-editor-pane--preview code-markdown-preview-scroll-root" onScroll={onPreviewScroll}>

@@ -10,6 +10,8 @@ export type CardContextMenuInfo = {
   /** 项目文档链接,与 Home 卡片上的链接展示一致。 */
   items: UrlPopoverItem[]
   tagOptions?: ReadonlyArray<{ value: string; label: string }>
+  /** 左键点击「链接」按钮时默认打开的条目回调;未传入时回退到 items[0]。 */
+  onOpenDefault?: () => void | Promise<unknown>
 }
 
 interface CardContextMenuProps {
@@ -716,10 +718,15 @@ export function CardContextMenu({
                 aria-label={t('common.projectInfo')}
                 title={t('common.projectInfo')}
                 onClick={() => {
+                  const openDefault = info?.onOpenDefault
                   const first = infoItems?.[0]
-                  if (!first) return
+                  if (!openDefault && !first) return
                   void handleClick(async () => {
-                    await openUrlPopoverItem(first)
+                    if (openDefault) {
+                      await openDefault()
+                      return
+                    }
+                    await openUrlPopoverItem(first!)
                   })
                 }}
               >

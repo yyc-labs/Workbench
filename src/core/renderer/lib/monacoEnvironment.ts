@@ -22,6 +22,16 @@ const FIND_WIDGET_CONTROL_SELECTOR = '.find-widget .button, .find-widget .monaco
 
 let monacoEnvironmentReady = false
 
+// Monaco 编辑器 dispose 时，内部 WordHighlighter 等组件的 Delayer.cancel 会以
+// name/message 均为 "Canceled" 的 Error 拒绝 pending promise，产生无害的
+// Uncaught (in promise) 报错。这里在全局做一次过滤，避免噪音。
+const MONACO_CANCELED_ERROR_NAME = 'Canceled'
+const MONACO_CANCELED_ERROR_MESSAGE = 'Canceled'
+
+function isMonacoCanceledRejection(reason: unknown): boolean {
+  return reason instanceof Error && reason.name === MONACO_CANCELED_ERROR_NAME && reason.message === MONACO_CANCELED_ERROR_MESSAGE
+}
+
 export function ensureMonacoEnvironmentConfigured(): void {
   if (monacoEnvironmentReady) return
   if (typeof window === 'undefined') return
@@ -35,6 +45,12 @@ export function ensureMonacoEnvironmentConfigured(): void {
       return new EditorWorker()
     },
   }
+
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isMonacoCanceledRejection(event.reason)) {
+      event.preventDefault()
+    }
+  })
 
   monacoEnvironmentReady = true
 }

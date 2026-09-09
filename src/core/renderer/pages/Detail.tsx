@@ -597,6 +597,7 @@ export function DetailPage() {
                       navigate(`/project/${projectId}/transcript`)
                     }}
                     onOpenProjectLinksManager={openProjectLinksManager}
+                    onRequestProjectContextMenu={(x, y) => setMenuPos({ x, y })}
                   />
                 )}
               </Suspense>

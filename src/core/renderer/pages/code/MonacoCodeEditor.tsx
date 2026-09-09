@@ -5,7 +5,7 @@ import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
 import { extractRelativeImportRanges, resolveImportCandidatePaths, resolveFilePathFromModelUri, resolveImportTarget } from './code.importLink'
-import { createMonacoModelUri, evictStaleMonacoModels, toMonacoModelCacheKey, touchMonacoModelCacheEntry } from './monacoModelCache'
+import { acquireMonacoModelCacheKey, getOrCreateMonacoModel, releaseMonacoModelCacheKey, toMonacoModelCacheKey } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
 
@@ -50,6 +50,8 @@ interface MonacoCodeEditorProps {
   onFocusSearch?: () => void
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
   onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
+  /** Ctrl + 右键时上抛坐标，由外层打开项目级通用右键卡片；不传时 Ctrl + 右键仍打开编辑器菜单。 */
+  onRequestProjectContextMenu?: (x: number, y: number) => void
 }
 
 const REVEAL_HIGHLIGHT_DURATION_MS = 2200
@@ -79,7 +81,7 @@ function ensureImportLinkSupport(monaco: typeof import('monaco-editor')): void {
     provideLinks(model) {
       const projectPath = activeImportLinkProjectPath
       if (!projectPath) return { links: [] }
-      const currentFilePath = resolveFilePathFromModelUri(model.uri)
+      const currentFilePath = resolveFilePathFromModelUri(model.uri, activeImportLinkProjectPath)
       if (!currentFilePath) return { links: [] }
 
       const links: import('monaco-editor').languages.ILink[] = []
@@ -138,14 +140,21 @@ interface EditorContextMenuSnapshot {
   canFormat: boolean
 }
 
-export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor({ value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange }, ref) {
+export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor(
+  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof import('monaco-editor') | null>(null)
   const modelRef = useRef<MonacoEditor.ITextModel | null>(null)
-  const modelCacheRef = useRef<Map<string, MonacoEditor.ITextModel>>(new Map())
+  // 模块级缓存持有的 Model 引用计数 key；卸载时只释放计数，Model 保留以维持撤销栈。
+  const acquiredModelKeysRef = useRef<Set<string>>(new Set())
+  // 无文件路径的临时 Model 不入模块缓存，由本实例持有并在卸载时 dispose。
+  const localModelsRef = useRef<MonacoEditor.ITextModel[]>([])
   const filePathRef = useRef(filePath)
-  const activeModelKeyRef = useRef(toMonacoModelCacheKey(filePath))
+  const projectPathRef = useRef(projectPath)
+  const activeModelKeyRef = useRef(toMonacoModelCacheKey(projectPath, filePath))
   const pendingRevealRef = useRef<PendingRevealPosition | null>(null)
   const pendingHighlightLineRef = useRef<PendingHighlightLine | null>(null)
   const revealHighlightDecorationsRef = useRef<string[]>([])
@@ -153,10 +162,23 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const syncGuardRef = useRef(false)
   const onSaveRef = useRef(onSave)
   const onPasteImageRef = useRef(onPasteImage)
+  const onRequestProjectContextMenuRef = useRef(onRequestProjectContextMenu)
   const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
   const onCursorPositionChangeRef = useRef(onCursorPositionChange)
   filePathRef.current = filePath
+  projectPathRef.current = projectPath
+
+  const acquireModelCacheKey = (key: string) => {
+    if (acquiredModelKeysRef.current.has(key)) return
+    acquiredModelKeysRef.current.add(key)
+    acquireMonacoModelCacheKey(key)
+  }
+
+  const releaseModelCacheKey = (key: string) => {
+    if (!acquiredModelKeysRef.current.delete(key)) return
+    releaseMonacoModelCacheKey(key)
+  }
   const {
     activeSearchMatchIndex,
     closeSearchPanel,
@@ -290,6 +312,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   }, [onPasteImage])
 
   useEffect(() => {
+    onRequestProjectContextMenuRef.current = onRequestProjectContextMenu
+  }, [onRequestProjectContextMenu])
+
+  useEffect(() => {
     onFocusSearchRef.current = onFocusSearch
   }, [onFocusSearch])
 
@@ -331,14 +357,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         pendingRevealRef.current = {
           lineNumber,
           column,
-          modelKey: toMonacoModelCacheKey(filePathRef.current),
+          modelKey: toMonacoModelCacheKey(projectPathRef.current, filePathRef.current),
         }
         flushPendingReveal()
       },
       highlightLine: (lineNumber: number) => {
         pendingHighlightLineRef.current = {
           lineNumber,
-          modelKey: toMonacoModelCacheKey(filePathRef.current),
+          modelKey: toMonacoModelCacheKey(projectPathRef.current, filePathRef.current),
         }
         flushPendingReveal()
       },
@@ -366,12 +392,15 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       await ensureTextmateForLanguage(monaco, language)
       if (disposed) return
 
-      const uri = monaco.Uri.parse(createMonacoModelUri(filePath))
-      const model = monaco.editor.createModel(value, language, uri)
+      const initialKey = toMonacoModelCacheKey(projectPath, filePath)
+      const createdLease = getOrCreateMonacoModel(monaco, projectPath, filePath, value, language)
+      const model = createdLease.model
       modelRef.current = model
-      const initialKey = toMonacoModelCacheKey(filePath)
-      touchMonacoModelCacheEntry(modelCacheRef.current, initialKey, model)
-      evictStaleMonacoModels(modelCacheRef.current, initialKey)
+      if (createdLease.cached) {
+        acquireModelCacheKey(initialKey)
+      } else {
+        localModelsRef.current.push(model)
+      }
 
       const editor = monaco.editor.create(container, {
         model,
@@ -558,6 +587,15 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         }
         e.event.preventDefault()
         e.event.stopPropagation()
+
+        // Ctrl + 右键：打开项目级通用右键卡片；普通右键继续使用编辑器封装菜单。
+        const browserEvent = e.event.browserEvent
+        if (browserEvent.ctrlKey && onRequestProjectContextMenuRef.current) {
+          setEditorContextMenu(null)
+          onRequestProjectContextMenuRef.current(browserEvent.clientX, browserEvent.clientY)
+          return
+        }
+
         const model = editor.getModel()
         if (!model) return
 
@@ -652,10 +690,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editor.dispose()
         editorRef.current = null
       }
-      for (const model of modelCacheRef.current.values()) {
-        model.dispose()
+      // 模块缓存中的 Model 保留（撤销栈跨挂载不丢失），只释放本实例的引用计数。
+      for (const key of Array.from(acquiredModelKeysRef.current)) {
+        releaseModelCacheKey(key)
       }
-      modelCacheRef.current.clear()
+      for (const localModel of localModelsRef.current) {
+        localModel.dispose()
+      }
+      localModelsRef.current = []
       modelRef.current = null
       monacoRef.current = null
     }
@@ -688,20 +730,21 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     setEditorContextMenu(null)
 
     const currentModel = modelRef.current
-    const nextKey = toMonacoModelCacheKey(filePath)
+    const nextKey = toMonacoModelCacheKey(projectPath, filePath)
     const previousKey = activeModelKeyRef.current
-    let nextModel = modelCacheRef.current.get(nextKey) ?? null
 
-    if (!nextModel) {
-      const nextUri = monaco.Uri.parse(createMonacoModelUri(filePath))
-      nextModel = monaco.editor.createModel(value, language, nextUri)
-    }
-    touchMonacoModelCacheEntry(modelCacheRef.current, nextKey, nextModel)
-    evictStaleMonacoModels(modelCacheRef.current, nextKey)
+    const hasFilePath = Boolean(filePath && filePath.trim())
+    const nextModel = hasFilePath ? getOrCreateMonacoModel(monaco, projectPath, filePath, value, language).model : currentModel
+    if (!nextModel) return
 
     if (previousKey !== nextKey) {
       clearRevealHighlight()
+      // 仅在真正切换 Model 时释放旧 key；临时模型复用当前 Model 时旧 key 仍被占用。
+      if (currentModel !== nextModel) {
+        releaseModelCacheKey(previousKey)
+      }
     }
+    acquireModelCacheKey(nextKey)
 
     if (currentModel !== nextModel) {
       modelRef.current = nextModel
@@ -721,7 +764,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
     activeModelKeyRef.current = nextKey
     flushPendingReveal()
-  }, [filePath, language, value])
+  }, [filePath, language, value, projectPath])
 
   return (
     <div className="relative h-full w-full">
