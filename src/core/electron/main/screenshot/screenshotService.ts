@@ -368,32 +368,20 @@ async function waitForPreciseCaptureReady(page: Page, target: PreciseContainerTa
           return bounds.right > initial.x && bounds.left < initial.x + initial.width && bounds.bottom > initial.y && bounds.top < initial.y + initial.height
         })
         await Promise.all(visibleImages.map((image) => Promise.race([image.decode?.().catch(() => undefined) ?? Promise.resolve(), new Promise<void>((resolve) => window.setTimeout(resolve, 200))])))
-        let changed = false
-        const mutationObserver = new MutationObserver(() => {
-          changed = true
-        })
-        const resizeObserver = new ResizeObserver(() => {
-          changed = true
-        })
-        mutationObserver.observe(element, { subtree: true, childList: true, attributes: true, characterData: true })
-        resizeObserver.observe(element)
+        const isSame = (a: ReturnType<typeof read>, b: ReturnType<typeof read>) => a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height && a.scrollTop === b.scrollTop && a.totalHeight === b.totalHeight
         let previous = read()
         let stableFrames = 0
         const deadline = performance.now() + timeoutMs
-        try {
-          while (performance.now() < deadline) {
-            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-            const current = read()
-            const unchanged = !changed && current.x === previous.x && current.y === previous.y && current.width === previous.width && current.height === previous.height && current.scrollTop === previous.scrollTop && current.totalHeight === previous.totalHeight
-            changed = false
-            stableFrames = unchanged ? stableFrames + 1 : 0
-            if (stableFrames >= 2) return current
-            previous = current
-          }
-        } finally {
-          mutationObserver.disconnect()
-          resizeObserver.disconnect()
+        while (performance.now() < deadline) {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          const current = read()
+          stableFrames = isSame(current, previous) ? stableFrames + 1 : 0
+          if (stableFrames >= 2) return current
+          previous = current
         }
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        const final = read()
+        if (isSame(final, previous)) return final
         throw new Error('滚动容器布局未在截图前稳定。')
       },
       { selector, requestedTop, timeoutMs },
@@ -434,7 +422,7 @@ async function preparePage(page: Page, policy: BrowserScreenshotFixedElementPoli
       const style = document.createElement('style')
       style.id = '__ide_browser_screenshot_style__'
       style.textContent =
-        '* { animation: none !important; transition: none !important; caret-color: transparent !important; } html { scroll-behavior: auto !important; overflow-anchor: none !important; } ::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; } [data-ide-screenshot-hidden] { visibility: hidden !important; }'
+        '* { animation: none !important; transition: none !important; caret-color: transparent !important; scroll-behavior: auto !important; overflow-anchor: none !important; } ::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; } [data-ide-screenshot-hidden] { visibility: hidden !important; }'
       document.documentElement.appendChild(style)
       document.querySelectorAll('video').forEach((video) => video.pause())
       if (policy === 'hide') {
@@ -469,7 +457,7 @@ async function preparePage(page: Page, policy: BrowserScreenshotFixedElementPoli
             const style = document.createElement('style')
             style.id = '__ide_browser_screenshot_style__'
             style.textContent =
-              '* { animation: none !important; transition: none !important; caret-color: transparent !important; } html { scroll-behavior: auto !important; overflow-anchor: none !important; } ::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; } [data-ide-screenshot-hidden] { visibility: hidden !important; }'
+              '* { animation: none !important; transition: none !important; caret-color: transparent !important; scroll-behavior: auto !important; overflow-anchor: none !important; } ::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; } [data-ide-screenshot-hidden] { visibility: hidden !important; }'
             document.documentElement.appendChild(style)
           })
           .catch(() => undefined),
