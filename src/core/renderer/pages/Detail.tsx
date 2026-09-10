@@ -107,6 +107,23 @@ export function DetailPage() {
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [projectHeaderCollapsed, setProjectHeaderCollapsed] = useState<boolean>(() => readProjectHeaderCollapsed())
 
+  // HTML/PDF preview guests forward their mouse sequence as synthetic events
+  // dispatched straight on `document` (target === document), which never reach
+  // the React onContextMenu below. Ctrl+right-click inside a preview therefore
+  // opens the project context menu card here; right-drag gestures are skipped
+  // because the gesture navigator already consumed (prevented) them.
+  useEffect(() => {
+    const onPreviewContextMenu = (event: MouseEvent) => {
+      if (event.target !== document) return
+      if (event.defaultPrevented) return
+      if (!event.ctrlKey) return
+      event.preventDefault()
+      setMenuPos({ x: event.clientX, y: event.clientY })
+    }
+    document.addEventListener('contextmenu', onPreviewContextMenu)
+    return () => document.removeEventListener('contextmenu', onPreviewContextMenu)
+  }, [])
+
   const projectPath = project?.path
   const environment = projectPath ? detectProjectEnvironment(projectPath) : 'unknown'
   const environmentLabel = project ? projectEnvironmentLabel(environment, locale) : t('common.unknown')

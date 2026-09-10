@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
-import type { BrowserScreenshotRequest, BrowserScreenshotResult, BrowserScreenshotTarget, BrowserScreenshotViewerPayload } from '../../shared/types'
+import type { BrowserScreenshotRequest, BrowserScreenshotResult, BrowserScreenshotTarget, BrowserScreenshotViewerPayload, PreviewPageCaptureRequest, PreviewPageCaptureResult } from '../../shared/types'
 
 export function createBrowserScreenshotInvokeApi() {
   return {
@@ -13,5 +13,7 @@ export function createBrowserScreenshotInvokeApi() {
     getBrowserScreenshotViewerData: () => ipcRenderer.invoke(IPC.BROWSER_SCREENSHOT_GET_VIEWER_DATA) as Promise<BrowserScreenshotViewerPayload | null>,
     toggleBrowserScreenshotWindow: () => ipcRenderer.invoke(IPC.BROWSER_SCREENSHOT_TOGGLE_WINDOW) as Promise<boolean>,
     markBrowserScreenshotViewerReady: () => ipcRenderer.invoke(IPC.BROWSER_SCREENSHOT_VIEWER_READY) as Promise<boolean>,
+    startPreviewPageCapture: (request: PreviewPageCaptureRequest) => ipcRenderer.invoke(IPC.BROWSER_SCREENSHOT_PREVIEW_CAPTURE_START, request) as Promise<PreviewPageCaptureResult>,
+    cancelPreviewPageCapture: () => ipcRenderer.invoke(IPC.BROWSER_SCREENSHOT_PREVIEW_CAPTURE_CANCEL) as Promise<boolean>,
   }
 }

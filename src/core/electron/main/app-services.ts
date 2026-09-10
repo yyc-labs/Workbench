@@ -12,6 +12,7 @@ import { AiEnvironmentController } from './ai-environment/environment-controller
 import { createAiGatewayService } from './ai-gateway/gateway-service'
 import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
 import { createBrowserScreenshotService } from './screenshot/screenshotService'
+import { createPreviewPageCaptureService } from './screenshot/previewCaptureService'
 import { createGitService } from './git/git-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
@@ -211,6 +212,12 @@ export function createAppServices(options: AppServicesOptions) {
       return true
     },
   })
+  // 本地整页截图：对预览 webview 的 guest WebContents 执行，不依赖外部浏览器。
+  const previewPageCaptureService = createPreviewPageCaptureService({
+    emitProgress: (event) => {
+      options.getMainWindow()?.webContents.send(IPC.BROWSER_SCREENSHOT_PROGRESS, event)
+    },
+  })
   const aiGatewayService = createAiGatewayService({
     getCapability: options.getCapability,
     isLogCaptureEnabled: () => options.loadConfig().agentLogs?.enabled !== false,
@@ -253,6 +260,7 @@ export function createAppServices(options: AppServicesOptions) {
     browserAiService,
     browserScreenshotAiService,
     browserScreenshotService,
+    previewPageCaptureService,
     aiGatewayService,
     agentHookGateway,
     agentLogService,

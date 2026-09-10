@@ -17,6 +17,7 @@ import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
 import type { BrowserAiService } from '../browser-ai/browserAiService'
 import type { BrowserScreenshotService } from '../screenshot/screenshotService'
+import type { PreviewPageCaptureService } from '../screenshot/previewCaptureService'
 import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent, TranscriptGatewayImportPayload } from '../../../shared/types'
 import type { BrowserScreenshotViewerPayload } from '../../../shared/types'
 import type { MarkdownDocumentService } from '../markdown-document/markdownDocumentService'
@@ -41,6 +42,7 @@ export type RegisterIpcHandlersDependencies = {
   aiGatewayService: AiGatewayService
   browserAiService: BrowserAiService
   browserScreenshotService: BrowserScreenshotService
+  previewPageCaptureService: PreviewPageCaptureService
   openBrowserScreenshotViewer: (payload: BrowserScreenshotViewerPayload) => Promise<boolean>
   getBrowserScreenshotViewerData: () => BrowserScreenshotViewerPayload | null
   toggleBrowserScreenshotWindow: () => Promise<boolean>

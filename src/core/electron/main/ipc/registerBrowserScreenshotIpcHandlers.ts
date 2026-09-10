@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import type { BrowserScreenshotRequest, BrowserScreenshotViewerPayload } from '../../../shared/types'
+import type { BrowserScreenshotRequest, BrowserScreenshotViewerPayload, PreviewPageCaptureRequest } from '../../../shared/types'
 import { IPC } from '../ipc'
 import type { RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
@@ -13,4 +13,6 @@ export function registerBrowserScreenshotIpcHandlers(deps: RegisterIpcHandlersDe
   ipcMain.handle(IPC.BROWSER_SCREENSHOT_GET_VIEWER_DATA, () => deps.getBrowserScreenshotViewerData())
   ipcMain.handle(IPC.BROWSER_SCREENSHOT_TOGGLE_WINDOW, () => deps.toggleBrowserScreenshotWindow())
   ipcMain.handle(IPC.BROWSER_SCREENSHOT_VIEWER_READY, (event) => deps.markBrowserScreenshotViewerReady(event.sender.id))
+  ipcMain.handle(IPC.BROWSER_SCREENSHOT_PREVIEW_CAPTURE_START, (_event, request: PreviewPageCaptureRequest) => deps.previewPageCaptureService.capture(request))
+  ipcMain.handle(IPC.BROWSER_SCREENSHOT_PREVIEW_CAPTURE_CANCEL, () => deps.previewPageCaptureService.cancel())
 }

@@ -36,10 +36,15 @@ function sendToHost(event: MouseEvent): void {
 window.addEventListener(
   'mousedown',
   (event) => {
-    if (event.button !== 2) return
-    rightDragActive = false
-    rightDragStartX = event.clientX
-    rightDragStartY = event.clientY
+    // Left clicks are forwarded so the host can run its outside-close logic
+    // (context menu cards, popovers) while a preview is focused.
+    if (event.button === 2) {
+      rightDragActive = false
+      rightDragStartX = event.clientX
+      rightDragStartY = event.clientY
+    } else if (event.button !== 0) {
+      return
+    }
     sendToHost(event)
   },
   true,

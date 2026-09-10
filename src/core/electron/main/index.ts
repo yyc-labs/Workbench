@@ -24,6 +24,7 @@ import { createBrowserScreenshotViewerWindow } from './window/createBrowserScree
 import { createAppViewWindow, APP_VIEW_WINDOW_TITLES } from './window/createAppViewWindow'
 import { applyWindowBackground, createWindow } from './window/createWindow'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
+import { registerWebContentsSecurityPolicy } from './window/webContentsSecurity'
 import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
 import { ensureWindowVisible } from './window/windowFocus'
 import { buildAgentSkillPrompt } from '../../shared/agentSkillPrompt'
@@ -60,6 +61,9 @@ if (!gotSingleInstanceLock) {
 }
 
 registerYycWorkbenchScheme()
+// Must be registered before any window/webview exists so every WebContents
+// gets the popup policy (window.open → system browser, never a new window).
+registerWebContentsSecurityPolicy()
 
 const services = createAppServices({
   getCapability: () => bootCapability,
@@ -83,7 +87,24 @@ const services = createAppServices({
   emitTranscriptImported,
 })
 const markdownDocumentService = new MarkdownDocumentService(new MarkdownDocumentRepository(app.getPath('userData')), () => mainWindow)
-const { gitService, runtimeService, processPortService, aiCommitService, aiConnectionService, transcriptService, transcriptShareService, learningService, skillService, browserAiService, browserScreenshotAiService, browserScreenshotService, aiGatewayService, agentHookGateway, agentLogService } = services
+const {
+  gitService,
+  runtimeService,
+  processPortService,
+  aiCommitService,
+  aiConnectionService,
+  transcriptService,
+  transcriptShareService,
+  learningService,
+  skillService,
+  browserAiService,
+  browserScreenshotAiService,
+  browserScreenshotService,
+  previewPageCaptureService,
+  aiGatewayService,
+  agentHookGateway,
+  agentLogService,
+} = services
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -729,6 +750,7 @@ app.whenReady().then(async () => {
               aiGatewayService,
               browserAiService,
               browserScreenshotService,
+              previewPageCaptureService,
               openBrowserScreenshotViewer,
               getBrowserScreenshotViewerData: () => latestBrowserScreenshotViewerPayload,
               toggleBrowserScreenshotWindow,

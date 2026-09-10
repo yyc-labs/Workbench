@@ -251,6 +251,9 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return
+      // Ctrl/Cmd + right-drag is reserved for the sidebar (file tree) gesture,
+      // whose capture-phase handler owns that sequence entirely.
+      if (e.ctrlKey || e.metaKey) return
       const detailRoute = isProjectDetailRoute(location.pathname)
       setGestureActive(true)
       stateRef.current.tracking = true

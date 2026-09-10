@@ -336,6 +336,8 @@ export interface BrowserScreenshotElectronApi {
   getBrowserScreenshotViewerData: () => Promise<import('./types').BrowserScreenshotViewerPayload | null>
   toggleBrowserScreenshotWindow: () => Promise<boolean>
   markBrowserScreenshotViewerReady: () => Promise<boolean>
+  startPreviewPageCapture: (request: import('./types').PreviewPageCaptureRequest) => Promise<import('./types').PreviewPageCaptureResult>
+  cancelPreviewPageCapture: () => Promise<boolean>
   onBrowserScreenshotTargetsChanged: ElectronApiSubscription<import('./types').BrowserScreenshotTargetsChanged>
 }
 

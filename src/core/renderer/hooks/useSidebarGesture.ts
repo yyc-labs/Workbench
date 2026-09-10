@@ -130,7 +130,14 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
   }, [onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar])
 
   useEffect(() => {
-    const isEventInsidePage = (target: EventTarget | null) => target instanceof Node && pageRootRef.current?.contains(target)
+    const isEventInsidePage = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return false
+      // Preview guests (webview/iframe) forward their mouse sequence as
+      // synthetic events dispatched directly on `document` (target ===
+      // document); they originate inside this page, so accept them.
+      if (target === document) return true
+      return Boolean(pageRootRef.current?.contains(target))
+    }
 
     const setGestureActive = (active: boolean) => {
       document.body.classList.toggle(GESTURE_ACTIVE_CLASS_NAME, active)

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
 import { useEffectiveTheme } from '../../../hooks/useEffectiveTheme'
 import { base64ToUint8Array } from '../../../lib/bytes'
@@ -29,6 +31,7 @@ export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerP
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
   usePreviewIframeMouseGestureBridge(iframeRef)
 
   const viewerSrc = useMemo(() => new URL('pdf-viewer.html', window.location.href).href, [])
@@ -39,11 +42,12 @@ export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerP
   }, [])
 
   // New document: reset state and (re)open it in the frame once loaded.
+  // Bumping refreshKey re-posts `pdf:open` so the frame rebuilds from scratch.
   useEffect(() => {
     setError(null)
     setIsLoading(true)
     postToFrame({ type: 'pdf:open', data: pdfData })
-  }, [pdfData, postToFrame])
+  }, [pdfData, postToFrame, refreshKey])
 
   // Keep the frame's theme in sync with the workbench.
   useEffect(() => {
@@ -76,7 +80,21 @@ export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerP
   }, [t])
 
   return (
-    <FileViewerShell title={relativePath} actions={<FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />} isFullscreen={isFullscreen} onFullscreenChange={setIsFullscreen}>
+    <FileViewerShell
+      title={relativePath}
+      isFullscreen={isFullscreen}
+      onFullscreenChange={setIsFullscreen}
+      actions={
+        <>
+          <Tooltip content={t('codeWorkspace.pdfRefresh')} interactive={false}>
+            <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={() => setRefreshKey((value) => value + 1)}>
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
+          <FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />
+        </>
+      }
+    >
       <div className="code-file-viewer-pdf-viewport">
         <iframe
           ref={iframeRef}

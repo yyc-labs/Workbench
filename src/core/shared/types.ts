@@ -942,6 +942,23 @@ export interface BrowserScreenshotResult {
   errorMessage?: string
 }
 
+/** 对预览 webview（guest WebContents）发起的本地整页截图请求。 */
+export interface PreviewPageCaptureRequest {
+  webContentsId: number
+  maxHeight?: number
+  maxDurationMs?: number
+}
+
+export interface PreviewPageCaptureResult {
+  taskId: string
+  status: 'completed' | 'failed' | 'cancelled'
+  pngBase64?: string
+  width?: number
+  height?: number
+  errorCode?: BrowserScreenshotErrorCode
+  errorMessage?: string
+}
+
 export interface BrowserAiTaskProgressEvent {
   taskId: string
   status: BrowserAiTaskStatus

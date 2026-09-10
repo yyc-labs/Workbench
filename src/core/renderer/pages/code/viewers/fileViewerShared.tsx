@@ -30,21 +30,24 @@ export function dispatchPreviewMouseGesture(message: Partial<PreviewMouseGesture
   )
     return
 
-  document.dispatchEvent(
-    new MouseEvent(message.eventType, {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-      clientX: bounds.left + message.clientX,
-      clientY: bounds.top + message.clientY,
-      button: message.button,
-      buttons: message.buttons,
-      ctrlKey: Boolean(message.ctrlKey),
-      metaKey: Boolean(message.metaKey),
-      shiftKey: Boolean(message.shiftKey),
-      altKey: Boolean(message.altKey),
-    }),
-  )
+  const eventInit: MouseEventInit = {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    clientX: bounds.left + message.clientX,
+    clientY: bounds.top + message.clientY,
+    button: message.button,
+    buttons: message.buttons,
+    ctrlKey: Boolean(message.ctrlKey),
+    metaKey: Boolean(message.metaKey),
+    shiftKey: Boolean(message.shiftKey),
+    altKey: Boolean(message.altKey),
+  }
+
+  // A plain left click inside a preview becomes a host `pointerdown` so that
+  // outside-close listeners (context menu cards, popovers) react to it; the
+  // right-button sequence keeps its original types for the gesture navigator.
+  document.dispatchEvent(message.eventType === 'mousedown' && message.button === 0 ? new PointerEvent('pointerdown', eventInit) : new MouseEvent(message.eventType, eventInit))
 }
 
 /**

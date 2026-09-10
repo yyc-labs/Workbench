@@ -57,6 +57,8 @@ export const IPC = {
   BROWSER_SCREENSHOT_PROGRESS: 'browser-screenshot:progress',
   BROWSER_SCREENSHOT_TARGETS_CHANGED: 'browser-screenshot:targets-changed',
   BROWSER_SCREENSHOT_VIEWER_DATA: 'browser-screenshot:viewer-data',
+  BROWSER_SCREENSHOT_PREVIEW_CAPTURE_START: 'browser-screenshot:preview-capture-start',
+  BROWSER_SCREENSHOT_PREVIEW_CAPTURE_CANCEL: 'browser-screenshot:preview-capture-cancel',
   AI_GATEWAY_APPLY_CLIENT_BINDING: 'ai-gateway:apply-client-binding',
   AI_GATEWAY_RESTORE_CLIENT_BINDING: 'ai-gateway:restore-client-binding',
   AI_GATEWAY_GET_CODEX_BINDING: 'ai-gateway:get-codex-binding',
