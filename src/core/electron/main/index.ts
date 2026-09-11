@@ -112,6 +112,7 @@ const {
 const runTaskService = new RunTaskService({
   getProcessManager: () => processManager,
   emitRunTaskProgress,
+  emitRunTaskConfigChanged,
   startInTerminal: (cwd, command) => openTerminalAtPath(cwd, bootCapability?.wslDistro || 'Ubuntu', command),
 })
 
@@ -228,6 +229,10 @@ function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; 
 
 function emitRunTaskProgress(event: RunTaskProgressEvent): void {
   mainWindow?.webContents.send(IPC.RUN_TASK_PROGRESS, event)
+}
+
+function emitRunTaskConfigChanged(projectPath: string): void {
+  mainWindow?.webContents.send(IPC.RUN_TASK_CONFIG_CHANGED, projectPath)
 }
 
 function emitTranscriptImported(payload: TranscriptImportedEvent): void {

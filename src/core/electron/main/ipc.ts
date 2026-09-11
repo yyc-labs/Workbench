@@ -107,6 +107,7 @@ export const IPC = {
   RUN_TASK_CHECK_DOCKER: 'run-task:check-docker',
   RUN_TASK_START_DOCKER: 'run-task:start-docker',
   RUN_TASK_PROGRESS: 'run-task:progress',
+  RUN_TASK_CONFIG_CHANGED: 'run-task:config-changed',
   RUNTIME_START: 'runtime:start',
   RUNTIME_DIAGNOSTICS: 'runtime:diagnostics',
   RUNTIME_LIST_SESSIONS: 'runtime:list-sessions',

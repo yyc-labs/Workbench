@@ -461,6 +461,10 @@ export const detailMessages = {
       deleteConfirmAction: 'Delete',
       openLogs: 'View output in startup logs',
       outputErrorHint: 'errors detected in output — the task may be failing',
+      nonAsciiPathWarningTitle: 'Path compatibility notice',
+      nonAsciiPathWarning:
+        'The project path contains non-ASCII characters (such as Chinese). On JDK 17 and earlier, Java tooling — e.g. the temporary argfile encoding of spring-boot:run — reads such paths with the legacy GBK codepage and fails; JDK 18+ defaults to UTF-8 (JEP 400) and is unaffected. Consider moving the project to an ASCII-only path, or upgrading the task JDK to 18+.',
+      secondaryUrl: 'Secondary link',
       dependsOn: 'Depends on',
       taskState: {
         idle: 'Idle',
@@ -507,6 +511,8 @@ export const detailMessages = {
         readiness: 'Readiness',
         readinessHint: 'how downstream tasks know this one is ready',
         urlPattern: 'URL pattern (optional)',
+        primaryUrlPattern: 'Primary URL match (optional)',
+        primaryUrlPatternHint: 'regex picking the primary link among several URLs; empty = first detected',
         httpUrl: 'HTTP URL',
         port: 'Port',
         delayMs: 'Delay (ms)',
@@ -997,6 +1003,9 @@ export const detailMessages = {
       deleteConfirmAction: '删除',
       openLogs: '在启动日志中查看输出',
       outputErrorHint: '输出中检测到错误，任务可能正在失败',
+      nonAsciiPathWarningTitle: '路径兼容性提示',
+      nonAsciiPathWarning: '项目路径包含非 ASCII 字符（如中文）。在 JDK 17 及更早版本上，Java 工具链（如 spring-boot:run 的临时 argfile 编码）会按系统 GBK 编码读取这类路径并失败；JDK 18+ 默认使用 UTF-8（JEP 400），不受影响。可把项目迁移到纯英文路径，或将任务的 JDK 升级到 18+。',
+      secondaryUrl: '次链接',
       dependsOn: '依赖',
       taskState: {
         idle: '空闲',
@@ -1043,6 +1052,8 @@ export const detailMessages = {
         readiness: '就绪判定',
         readinessHint: '下游任务据此判断本任务已就绪',
         urlPattern: 'URL 匹配（可选）',
+        primaryUrlPattern: '主链接匹配（可选）',
+        primaryUrlPatternHint: '多个 URL 中用正则选出主链接；留空取第一个',
         httpUrl: 'HTTP URL',
         port: '端口',
         delayMs: '延迟（毫秒）',

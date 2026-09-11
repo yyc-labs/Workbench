@@ -204,9 +204,12 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   }, [project.id, runTasksActive, stopAllRunTasks, stopProject])
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
+  // Dev links surfaced on the card: legacy bare-process URLs plus URLs
+  // published by run tasks (primary task/link first), deduped.
+  const devLinkUrls = useMemo(() => [...new Set([...(isDevReady ? devUrls : []), ...runTaskUrls])], [devUrls, isDevReady, runTaskUrls])
   const linkMenuItems = useMemo(
     () => [
-      ...(isDevReady ? devUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []),
+      ...devLinkUrls.map((url) => ({ url, label: `Dev: ${url}` })),
       ...docLinks.map((link) => {
         const normalizedTag = normalizeProjectDocLinkTag(link.tag, docLinkTagOptions)
         const isSsh = (link.kind ?? 'url') === 'ssh'
@@ -244,9 +247,10 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         }
       }),
     ],
-    [devUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, isDevReady, t],
+    [devLinkUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, t],
   )
   const hasProjectDocLinks = docLinks.length > 0
+  const hasProjectLinks = hasProjectDocLinks || devLinkUrls.length > 0
   const hoverDocLabel = defaultDocLink ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}` : docLinks.length > 0 ? t('project.docsCount', { count: docLinks.length }) : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -344,8 +348,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const handleOpenFirstLink = useCallback(async () => {
     if (defaultDocLink) {
       await handleOpenDocLink(defaultDocLink)
+      return
     }
-  }, [defaultDocLink, handleOpenDocLink])
+    const firstUrl = devLinkUrls[0]
+    if (firstUrl) await window.electronAPI.openExternal(firstUrl)
+  }, [defaultDocLink, devLinkUrls, handleOpenDocLink])
 
   const cancelPreloadDefaultProjectPane = useCallback(() => {
     projectPanePreloadHandleRef.current?.cancel()
@@ -556,7 +563,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             )}
           />
         </div>
-        {hasProjectDocLinks && <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" title={t('common.leftClickOpenFirstLink')} />}
+        {hasProjectLinks && <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" title={t('common.leftClickOpenFirstLink')} />}
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button
             className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${

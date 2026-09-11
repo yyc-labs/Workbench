@@ -9,6 +9,7 @@ export type RunTaskActionsSlice = Pick<
   | 'runTaskStates'
   | 'loadRunTaskConfig'
   | 'saveRunTaskConfig'
+  | 'handleRunTaskConfigChanged'
   | 'detectRunTaskCandidates'
   | 'startRunTask'
   | 'startAllRunTasks'
@@ -78,6 +79,18 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
       }))
     }
     return result
+  },
+
+  /**
+   * A project's run-task config file changed on disk (watcher event). Reload
+   * the cached config so cards, link popovers and the dialog reflect external
+   * edits (editor, agent, hand-written). The event carries the project path;
+   * the project must already be known to the store.
+   */
+  handleRunTaskConfigChanged: async (projectPath) => {
+    const project = get().projects.find((item) => item.path === projectPath)
+    if (!project) return
+    await get().loadRunTaskConfig(project.id, projectPath)
   },
 
   detectRunTaskCandidates: (projectPath, scanDirectories) => {
@@ -197,12 +210,22 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
   },
 
   updateRunTaskStates: (event: RunTaskProgressEvent) => {
-    set((state) => ({
-      runTaskStates: {
-        ...state.runTaskStates,
-        [event.projectId]: { ...(state.runTaskStates[event.projectId] ?? {}), ...event.tasks },
-      },
-    }))
+    set((state) => {
+      const current = state.runTaskStates[event.projectId] ?? {}
+      // Adopt each entry wholesale: the scheduler clears fields (e.g. urls
+      // after a task settles) by omitting them, so a spread merge would let
+      // stale values linger.
+      const next = { ...current }
+      for (const [taskId, taskState] of Object.entries(event.tasks)) {
+        next[taskId] = taskState
+      }
+      return {
+        runTaskStates: {
+          ...state.runTaskStates,
+          [event.projectId]: next,
+        },
+      }
+    })
   },
 
   /**

@@ -378,6 +378,7 @@ export interface RunTaskElectronApi {
 export interface SubscriptionElectronApi {
   onProcessOutput: ElectronApiSubscription<ProcessOutputEvent>
   onRunTaskProgress: ElectronApiSubscription<RunTaskProgressEvent>
+  onRunTaskConfigChanged: ElectronApiSubscription<string>
   onProcessStatus: ElectronApiSubscription<ProcessStatusEvent>
   onProcessExit: ElectronApiSubscription<ProcessExitEvent>
   onRuntimeStateChanged: ElectronApiSubscription<RuntimeStateChangedEvent>

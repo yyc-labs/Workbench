@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, ChevronDown, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2, TriangleAlert } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { useOpenStartupLogs } from '../../hooks/useOpenStartupLogs'
-import { getEffectiveRunTasks } from '../../../shared/runTasks'
+import { getEffectiveRunTasks, getRunTaskStateUrls } from '../../../shared/runTasks'
 import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
 import type { ProjectInfo } from '../../../shared/types'
 import type { RunTask } from '../../../shared/runTasks'
@@ -40,6 +40,7 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
   const [editOpen, setEditOpen] = useState(false)
   const [skillOpen, setSkillOpen] = useState(false)
   const [skillCopied, setSkillCopied] = useState(false)
+  const [pathWarningOpen, setPathWarningOpen] = useState(false)
   const [deletingTask, setDeletingTask] = useState<RunTask | null>(null)
   const [busy, setBusy] = useState(false)
   const skillCopiedTimerRef = useRef<number | null>(null)
@@ -62,6 +63,11 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
   }, [config, fromLegacy, project])
 
   const anyActive = tasks.some((task) => isRunTaskActive(taskStates?.[task.id]?.state))
+
+  // Non-ASCII (e.g. Chinese) project paths break Java tooling on Windows —
+  // most notably spring-boot:run's UTF-8 argfile read back as GBK, which kills
+  // main-class loading with a misleading error. Warn up front.
+  const hasNonAsciiPath = /[^\x00-\x7F]/.test(project.path) && navigator.userAgent.includes('Windows')
 
   const handleStartAll = async () => {
     if (busy) return
@@ -174,7 +180,8 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
             <ul className="flex flex-col gap-2">
               {tasks.map((task) => {
                 const state = taskStates?.[task.id]?.state
-                const url = taskStates?.[task.id]?.url
+                const urls = getRunTaskStateUrls(taskStates?.[task.id])
+                const primaryUrl = taskStates?.[task.id]?.url
                 const error = taskStates?.[task.id]?.error
                 const warning = taskStates?.[task.id]?.warning
                 const readiness = runTaskReadinessSummary(task)
@@ -202,11 +209,11 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
                             </span>
                           )}
                           {readiness && <span className="truncate font-mono">{readiness}</span>}
-                          {url && (
-                            <a href={url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline">
+                          {urls.map((url) => (
+                            <a key={url} href={url} target="_blank" rel="noreferrer" className={`truncate hover:underline ${url === primaryUrl ? 'text-primary' : 'text-[color:var(--color-muted-foreground)]'}`} title={url === primaryUrl ? undefined : t('runTasks.secondaryUrl')}>
                               {url}
                             </a>
-                          )}
+                          ))}
                         </div>
                         {error && (
                           <p className="mt-1 truncate text-[11px] text-[color:var(--color-destructive)]" title={error}>
@@ -330,6 +337,16 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              {hasNonAsciiPath && (
+                <div className="mb-3">
+                  <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-warning)]" onClick={() => setPathWarningOpen((value) => !value)}>
+                    <TriangleAlert className="h-3.5 w-3.5" />
+                    {t('runTasks.nonAsciiPathWarningTitle')}
+                    <ChevronDown className={`h-3 w-3 transition-transform ${pathWarningOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  {pathWarningOpen && <p className="mt-2 rounded-xl border border-[color:var(--color-warning)]/25 bg-[color:var(--color-warning-background)] px-3 py-2 text-xs leading-relaxed text-[color:var(--color-warning)]">{t('runTasks.nonAsciiPathWarning')}</p>}
+                </div>
+              )}
               <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[color:var(--color-foreground)]">{skillPrompt}</pre>
             </div>
           </div>

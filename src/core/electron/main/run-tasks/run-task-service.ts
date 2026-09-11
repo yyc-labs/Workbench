@@ -3,6 +3,7 @@ import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadRes
 import type { ProcessManager } from '../runner'
 import { ensureDockerDaemonRunning, isDockerDaemonRunning, taskRequiresDocker } from './docker-preflight'
 import { RunTaskConfigStore } from './run-task-config-store'
+import { RunTaskConfigWatcher } from './run-task-config-watcher'
 import { detectRunTaskCandidates } from './run-task-detector'
 import { resolveTaskUseWsl, RunTaskScheduler } from './run-task-scheduler'
 import type { EmitRunTaskProgress, StartTaskInTerminal } from './run-task-scheduler'
@@ -10,6 +11,8 @@ import type { EmitRunTaskProgress, StartTaskInTerminal } from './run-task-schedu
 export interface RunTaskServiceDependencies {
   getProcessManager: () => ProcessManager | null
   emitRunTaskProgress: EmitRunTaskProgress
+  /** Notifies the renderer that a project's run-task config file changed on disk. */
+  emitRunTaskConfigChanged?: (projectPath: string) => void
   /** Opens an external terminal window for tasks configured with startupMode=terminal. */
   startInTerminal?: StartTaskInTerminal
   /** Default WSL distro for daemon probes of WSL-resolved docker tasks. */
@@ -22,15 +25,20 @@ export interface RunTaskServiceDependencies {
  */
 export class RunTaskService {
   private readonly configStore = new RunTaskConfigStore()
+  private readonly configWatcher: RunTaskConfigWatcher | null
   private readonly scheduler: RunTaskScheduler
   private readonly getWslDistro: () => string
 
   constructor(deps: RunTaskServiceDependencies) {
     this.getWslDistro = deps.getWslDistro ?? (() => 'Ubuntu')
+    this.configWatcher = deps.emitRunTaskConfigChanged ? new RunTaskConfigWatcher(deps.emitRunTaskConfigChanged) : null
     this.scheduler = new RunTaskScheduler(deps.getProcessManager, deps.emitRunTaskProgress, deps.startInTerminal, this.getWslDistro)
   }
 
   getConfig(projectPath: string): RunTaskConfigReadResult {
+    // Watching piggybacks on reads: every renderer config load (re)arms the
+    // watcher, so projects get watched exactly when their config is used.
+    this.configWatcher?.ensureWatch(projectPath)
     return this.configStore.readConfig(projectPath)
   }
 

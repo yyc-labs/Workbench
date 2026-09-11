@@ -202,6 +202,8 @@ export interface AppState {
   runTaskStates: Record<string, RunTaskProgressEvent['tasks']>
   loadRunTaskConfig: (projectId: string, projectPath: string) => Promise<RunTaskConfigReadResult>
   saveRunTaskConfig: (projectId: string, projectPath: string, tasks: RunTask[], scanDirectories?: string[]) => Promise<RunTaskConfigReadResult>
+  /** Reload the cached config after the project's run-task config file changed on disk. */
+  handleRunTaskConfigChanged: (projectPath: string) => Promise<void>
   detectRunTaskCandidates: (projectPath: string, scanDirectories?: string[]) => Promise<RunTaskCandidate[]>
   startRunTask: (projectId: string, projectPath: string, task: RunTask) => Promise<boolean>
   startAllRunTasks: (projectId: string, projectPath: string) => Promise<{ started: boolean; error?: string }>

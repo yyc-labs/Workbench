@@ -50,6 +50,8 @@ export function createSubscriptionApi() {
 
     onRunTaskProgress: (cb: (data: RunTaskProgressEvent) => void) => subscribeIpcEvent(IPC.RUN_TASK_PROGRESS, cb),
 
+    onRunTaskConfigChanged: (cb: (projectPath: string) => void) => subscribeIpcEvent(IPC.RUN_TASK_CONFIG_CHANGED, cb),
+
     onProcessStatus: (cb: (data: { projectId: string; status: string }) => void) => subscribeIpcEvent(IPC.PROCESS_STATUS, cb),
 
     onProcessExit: (cb: (data: { projectId: string; code: number | null }) => void) => subscribeIpcEvent(IPC.PROCESS_EXIT, cb),

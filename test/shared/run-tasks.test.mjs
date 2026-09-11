@@ -9,7 +9,7 @@ const runTasks = loadTsModule('src/core/shared/runTasks.ts')
 const { RunTaskConfigStore, normalizeRunTasks, normalizeScanDirectories } = loadTsModule('src/core/electron/main/run-tasks/run-task-config-store.ts')
 const { detectRunTaskCandidates } = loadTsModule('src/core/electron/main/run-tasks/run-task-detector.ts')
 
-const { getEffectiveRunTasks, topoSortRunTasks, RunTaskCycleError, runTaskProcessKey, parseRunTaskProcessKey } = runTasks
+const { getEffectiveRunTasks, topoSortRunTasks, RunTaskCycleError, runTaskProcessKey, parseRunTaskProcessKey, getRunTaskStateUrls, getActiveRunTaskUrls, getPrimaryRunTaskUrl, isPrimaryRunTaskUrlPending } = runTasks
 
 // ── process key helpers ──────────────────────────────────
 
@@ -244,6 +244,78 @@ test('RunTaskConfigStore rejects cyclic graphs and empty task lists', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+// ── run task URL helpers ─────────────────────────────────
+
+test('getRunTaskStateUrls prefers urls and falls back to the legacy url field', () => {
+  assert.deepEqual(getRunTaskStateUrls(undefined), [])
+  assert.deepEqual(getRunTaskStateUrls({ state: 'ready', url: 'http://localhost:3000' }), ['http://localhost:3000'])
+  assert.deepEqual(getRunTaskStateUrls({ state: 'ready', url: 'http://localhost:3000', urls: ['http://localhost:3000', 'http://localhost:5173'] }), ['http://localhost:3000', 'http://localhost:5173'])
+  assert.deepEqual(getRunTaskStateUrls({ state: 'stopped' }), [])
+})
+
+test('getActiveRunTaskUrls flattens multi-URL tasks with the primary link first', () => {
+  const config = {
+    version: 1,
+    tasks: [
+      { id: 'web', name: 'Web', command: 'npm run dev', primaryUrl: true },
+      { id: 'api', name: 'API', command: 'npm run dev' },
+    ],
+  }
+  const states = {
+    api: { state: 'ready', url: 'http://localhost:4000', urls: ['http://localhost:4000', 'http://localhost:4001'] },
+    web: { state: 'running', url: 'http://localhost:3000', urls: ['http://localhost:3000', 'http://localhost:3001'] },
+    docker: { state: 'ready' },
+    stopped: { state: 'stopped', url: 'http://localhost:9999', urls: ['http://localhost:9999'] },
+  }
+  assert.deepEqual(getActiveRunTaskUrls(config, states), ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:4000', 'http://localhost:4001'])
+  assert.equal(getPrimaryRunTaskUrl(config, states), 'http://localhost:3000')
+})
+
+test('getActiveRunTaskUrls leads with the primary URL even when collected later', () => {
+  const config = {
+    version: 1,
+    tasks: [{ id: 'web', name: 'Web', command: 'pnpm run dev', primaryUrl: true }],
+  }
+  const states = {
+    web: { state: 'ready', url: 'http://localhost:5173', urls: ['http://192.168.1.5:5173', 'http://localhost:5173'] },
+  }
+  assert.deepEqual(getActiveRunTaskUrls(config, states), ['http://localhost:5173', 'http://192.168.1.5:5173'])
+})
+
+test('isPrimaryRunTaskUrlPending holds while the primary task is alive without a URL', () => {
+  const config = {
+    version: 1,
+    tasks: [
+      { id: 'web', name: 'Web', command: 'pnpm run dev', primaryUrl: true },
+      { id: 'api', name: 'API', command: 'npm run dev' },
+    ],
+  }
+
+  // Not started yet / ramping — pending.
+  assert.equal(isPrimaryRunTaskUrlPending(config, undefined), true)
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'waiting' }, api: { state: 'ready', url: 'http://localhost:4000' } }), true)
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'starting' } }), true)
+  // Session carry flips starting to running without a URL — still pending.
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'running' }, api: { state: 'ready', url: 'http://localhost:4000' } }), true)
+
+  // Published — released.
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'ready', url: 'http://localhost:5173' } }), false)
+  // Settled — stop waiting (task will never publish).
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'failed', error: 'x' } }), false)
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'stopped' } }), false)
+  // No primaryUrl task — never pending.
+  assert.equal(isPrimaryRunTaskUrlPending(null, undefined), false)
+  assert.equal(isPrimaryRunTaskUrlPending({ version: 1, tasks: [{ id: 'a', name: 'A', command: 'a' }] }, undefined), false)
+})
+
+test('getActiveRunTaskUrls falls back to the legacy single url field', () => {
+  const states = {
+    a: { state: 'ready', url: 'http://localhost:3000' },
+    b: { state: 'running', url: 'http://localhost:4000' },
+  }
+  assert.deepEqual(getActiveRunTaskUrls(null, states), ['http://localhost:3000', 'http://localhost:4000'])
 })
 
 // ── detectRunTaskCandidates ──────────────────────────────

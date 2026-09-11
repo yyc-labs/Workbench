@@ -17,13 +17,13 @@ export type ResolvedWindowsPowerShell = {
 
 export type WindowsTerminalShellLaunch =
   | {
-    shell: ResolvedWindowsTerminalShell
-    args: string[]
-  }
+      shell: ResolvedWindowsTerminalShell
+      args: string[]
+    }
   | {
-    shell?: undefined
-    args: string[]
-  }
+      shell?: undefined
+      args: string[]
+    }
 
 const WINDOWS_SHELL_COMMANDS: Record<WindowsShellKind, string> = {
   pwsh: 'pwsh.exe',
@@ -46,10 +46,15 @@ function normalizeWindowsPowerShellPreference(shell?: string): WindowsPowerShell
   return shell === 'powershell' ? 'powershell' : 'pwsh'
 }
 
+// Automation launches (run tasks / project run) default to PowerShell, not
+// cmd: the process is spawned with the whole command line as a single argv,
+// and the argv→commandline reassembly escapes embedded quotes to \" — cmd and
+// .cmd batch files do not honor that escaping, so quoted args (e.g.
+// mvn "-Dfoo=a b c") shatter at whitespace. PowerShell preserves them.
 function normalizeWindowsAutomationShellPreference(shell?: string): WindowsShellKind {
   if (shell === 'powershell') return 'powershell'
-  if (shell === 'pwsh') return 'pwsh'
-  return 'cmd'
+  if (shell === 'cmd') return 'cmd'
+  return 'pwsh'
 }
 
 function buildTerminalResolutionOrder(preferred: WindowsShellKind): WindowsShellKind[] {
@@ -64,9 +69,7 @@ function buildTerminalResolutionOrder(preferred: WindowsShellKind): WindowsShell
 }
 
 function buildPowerShellResolutionOrder(preferred: WindowsPowerShellKind): WindowsPowerShellKind[] {
-  return preferred === 'powershell'
-    ? ['powershell', 'pwsh']
-    : ['pwsh', 'powershell']
+  return preferred === 'powershell' ? ['powershell', 'pwsh'] : ['pwsh', 'powershell']
 }
 
 function buildAutomationResolutionOrder(preferred: WindowsShellKind): WindowsShellKind[] {
@@ -84,26 +87,17 @@ function probeWindowsShellAvailability(kind: WindowsShellKind): boolean {
   const cached = availabilityCache.get(kind)
   if (typeof cached === 'boolean') return cached
 
-  const result = spawnSync(
-    WINDOWS_SHELL_COMMANDS[kind],
-    kind === 'cmd'
-      ? ['/d', '/c', 'exit 0']
-      : ['-NoLogo', '-NoProfile', '-Command', 'exit 0'],
-    {
-      windowsHide: true,
-      stdio: 'ignore',
-      timeout: 3000,
-    }
-  )
+  const result = spawnSync(WINDOWS_SHELL_COMMANDS[kind], kind === 'cmd' ? ['/d', '/c', 'exit 0'] : ['-NoLogo', '-NoProfile', '-Command', 'exit 0'], {
+    windowsHide: true,
+    stdio: 'ignore',
+    timeout: 3000,
+  })
   const available = !result.error && result.status === 0
   availabilityCache.set(kind, available)
   return available
 }
 
-function resolveTerminalShellWith(
-  preferredShell: string | undefined,
-  availability: WindowsShellAvailabilityResolver,
-): ResolvedWindowsTerminalShell {
+function resolveTerminalShellWith(preferredShell: string | undefined, availability: WindowsShellAvailabilityResolver): ResolvedWindowsTerminalShell {
   const preferred = normalizeWindowsShellPreference(preferredShell)
   for (const kind of buildTerminalResolutionOrder(preferred)) {
     if (availability(kind)) {
@@ -120,10 +114,7 @@ function resolveTerminalShellWith(
   }
 }
 
-function resolvePowerShellWith(
-  preferredShell: string | undefined,
-  availability: WindowsShellAvailabilityResolver,
-): ResolvedWindowsPowerShell {
+function resolvePowerShellWith(preferredShell: string | undefined, availability: WindowsShellAvailabilityResolver): ResolvedWindowsPowerShell {
   const preferred = normalizeWindowsPowerShellPreference(preferredShell)
   for (const kind of buildPowerShellResolutionOrder(preferred)) {
     if (availability(kind)) {
@@ -140,10 +131,7 @@ function resolvePowerShellWith(
   }
 }
 
-function resolveAutomationShellWith(
-  preferredShell: string | undefined,
-  availability: WindowsShellAvailabilityResolver,
-): ResolvedWindowsTerminalShell {
+function resolveAutomationShellWith(preferredShell: string | undefined, availability: WindowsShellAvailabilityResolver): ResolvedWindowsTerminalShell {
   const preferred = normalizeWindowsAutomationShellPreference(preferredShell)
   for (const kind of buildAutomationResolutionOrder(preferred)) {
     if (availability(kind)) {
@@ -166,10 +154,7 @@ export function preferredWindowsShellForDiagnostics(shell?: string): WindowsShel
   return 'pwsh'
 }
 
-export function resolveWindowsTerminalShell(
-  preferredShell?: string,
-  availability?: WindowsShellAvailabilityResolver,
-): ResolvedWindowsTerminalShell {
+export function resolveWindowsTerminalShell(preferredShell?: string, availability?: WindowsShellAvailabilityResolver): ResolvedWindowsTerminalShell {
   if (availability) {
     return resolveTerminalShellWith(preferredShell, availability)
   }
@@ -183,10 +168,7 @@ export function resolveWindowsTerminalShell(
   return resolved
 }
 
-export function resolveWindowsPowerShell(
-  preferredShell?: string,
-  availability?: WindowsShellAvailabilityResolver,
-): ResolvedWindowsPowerShell {
+export function resolveWindowsPowerShell(preferredShell?: string, availability?: WindowsShellAvailabilityResolver): ResolvedWindowsPowerShell {
   if (availability) {
     return resolvePowerShellWith(preferredShell, availability)
   }
@@ -200,10 +182,7 @@ export function resolveWindowsPowerShell(
   return resolved
 }
 
-export function resolveWindowsAutomationShell(
-  preferredShell?: string,
-  availability?: WindowsShellAvailabilityResolver,
-): ResolvedWindowsTerminalShell {
+export function resolveWindowsAutomationShell(preferredShell?: string, availability?: WindowsShellAvailabilityResolver): ResolvedWindowsTerminalShell {
   if (availability) {
     return resolveAutomationShellWith(preferredShell, availability)
   }

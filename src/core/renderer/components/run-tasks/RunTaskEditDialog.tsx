@@ -34,6 +34,7 @@ export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onCl
   const [dependsOn, setDependsOn] = useState<string[]>([])
   const [strategy, setStrategy] = useState<RunTaskReadinessStrategy | 'none'>('none')
   const [urlPattern, setUrlPattern] = useState('')
+  const [primaryUrlPattern, setPrimaryUrlPattern] = useState('')
   const [httpUrl, setHttpUrl] = useState('')
   const [port, setPort] = useState('')
   const [delayMs, setDelayMs] = useState('')
@@ -60,6 +61,7 @@ export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onCl
     const readiness = source?.readiness
     setStrategy(readiness?.strategy ?? 'none')
     setUrlPattern(readiness?.urlPattern ?? '')
+    setPrimaryUrlPattern(readiness?.primaryUrlPattern ?? '')
     setHttpUrl(readiness?.httpUrl ?? '')
     setPort(readiness?.port != null ? String(readiness.port) : '')
     setDelayMs(readiness?.delayMs != null ? String(readiness.delayMs) : '')
@@ -113,6 +115,7 @@ export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onCl
     if (strategy !== 'none') {
       const readiness: RunTask['readiness'] = { strategy }
       if (strategy === 'url' && urlPattern.trim()) readiness.urlPattern = urlPattern.trim()
+      if (strategy === 'url' && primaryUrlPattern.trim()) readiness.primaryUrlPattern = primaryUrlPattern.trim()
       if (strategy === 'http' && httpUrl.trim()) readiness.httpUrl = httpUrl.trim()
       if (strategy === 'port' && port.trim()) readiness.port = Number(port)
       if (strategy === 'delay' && delayMs.trim()) readiness.delayMs = Number(delayMs)
@@ -268,6 +271,17 @@ export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onCl
                 value={urlPattern}
                 onChange={(event) => setUrlPattern(event.target.value)}
                 placeholder="http://localhost:3000"
+              />
+            </Field>
+          )}
+          {strategy === 'url' && (
+            <Field label={t('runTasks.field.primaryUrlPattern')} hint={t('runTasks.field.primaryUrlPatternHint')}>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-[color:var(--color-border)] bg-transparent px-3 py-1.5 font-mono text-xs text-[color:var(--color-foreground)] outline-none focus:border-[color:var(--color-primary)]"
+                value={primaryUrlPattern}
+                onChange={(event) => setPrimaryUrlPattern(event.target.value)}
+                placeholder=":3000"
               />
             </Field>
           )}

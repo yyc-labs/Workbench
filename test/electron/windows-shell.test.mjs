@@ -2,15 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  buildWindowsAutomationShellLaunch,
-  buildWindowsTerminalTabArgs,
-  buildWindowsTerminalShellLaunch,
-  preferredWindowsShellForDiagnostics,
-  resolveWindowsAutomationShell,
-  resolveWindowsPowerShell,
-  resolveWindowsTerminalShell,
-} = loadTsModule('src/core/electron/main/shell/windows-shell.ts')
+const { buildWindowsAutomationShellLaunch, buildWindowsTerminalTabArgs, buildWindowsTerminalShellLaunch, preferredWindowsShellForDiagnostics, resolveWindowsAutomationShell, resolveWindowsPowerShell, resolveWindowsTerminalShell } = loadTsModule('src/core/electron/main/shell/windows-shell.ts')
 
 test('resolveWindowsTerminalShell prefers pwsh and falls back to powershell then cmd', () => {
   const unavailablePwsh = (kind) => kind !== 'pwsh'
@@ -46,18 +38,24 @@ test('resolveWindowsPowerShell prefers pwsh and falls back to powershell', () =>
   })
 })
 
-test('resolveWindowsAutomationShell prefers cmd and only falls back when needed', () => {
+test('resolveWindowsAutomationShell prefers pwsh and falls back to powershell then cmd', () => {
   const resolved = resolveWindowsAutomationShell(undefined, (kind) => kind === 'cmd' || kind === 'pwsh')
 
   assert.deepEqual(resolved, {
-    kind: 'cmd',
-    command: 'cmd.exe',
-  })
-
-  const fallback = resolveWindowsAutomationShell(undefined, (kind) => kind === 'pwsh')
-  assert.deepEqual(fallback, {
     kind: 'pwsh',
     command: 'pwsh.exe',
+  })
+
+  const noPwsh = resolveWindowsAutomationShell(undefined, (kind) => kind === 'cmd' || kind === 'powershell')
+  assert.deepEqual(noPwsh, {
+    kind: 'powershell',
+    command: 'powershell.exe',
+  })
+
+  const fallback = resolveWindowsAutomationShell(undefined, (kind) => kind === 'cmd')
+  assert.deepEqual(fallback, {
+    kind: 'cmd',
+    command: 'cmd.exe',
   })
 })
 
@@ -81,18 +79,19 @@ test('buildWindowsTerminalShellLaunch omits shell args when no command is provid
   assert.deepEqual(buildWindowsTerminalTabArgs('D:\\repo', undefined), ['-d', 'D:\\repo'])
 })
 
-test('buildWindowsAutomationShellLaunch uses cmd semantics by default and PowerShell fallback when needed', () => {
+test('buildWindowsAutomationShellLaunch uses PowerShell semantics by default and cmd only when explicitly preferred', () => {
   const launch = buildWindowsAutomationShellLaunch('echo hi', {
     availability: (kind) => kind === 'cmd' || kind === 'pwsh',
   })
-  assert.equal(launch.shell.kind, 'cmd')
-  assert.deepEqual(launch.args, ['/d', '/c', 'echo hi'])
+  assert.equal(launch.shell.kind, 'pwsh')
+  assert.deepEqual(launch.args, ['-NoLogo', '-NoProfile', '-Command', 'echo hi'])
 
-  const fallbackLaunch = buildWindowsAutomationShellLaunch('echo hi', {
-    availability: (kind) => kind === 'pwsh',
+  const cmdLaunch = buildWindowsAutomationShellLaunch('echo hi', {
+    preferredShell: 'cmd',
+    availability: (kind) => kind === 'cmd' || kind === 'pwsh',
   })
-  assert.equal(fallbackLaunch.shell.kind, 'pwsh')
-  assert.deepEqual(fallbackLaunch.args, ['-NoLogo', '-NoProfile', '-Command', 'echo hi'])
+  assert.equal(cmdLaunch.shell.kind, 'cmd')
+  assert.deepEqual(cmdLaunch.args, ['/d', '/c', 'echo hi'])
 })
 
 test('preferredWindowsShellForDiagnostics reports pwsh-first default', () => {

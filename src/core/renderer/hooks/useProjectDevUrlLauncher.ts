@@ -40,9 +40,11 @@ export function useProjectDevUrlLauncher({ projectId, processStatus, processUrls
   const isDevRunning = processStatus === 'running'
   const isDevStopping = processStatus === 'stopping'
   const isDevReady = isDevRunning && processUrls.length > 0
-  // While the primary task is still ramping, hold back fallback URLs so the
-  // primary one (primaryUrl in config) is the link that gets opened.
-  const firstDevUrl = isDevReady ? processUrls[0] : primaryUrlPending ? null : (extraUrls[0] ?? null)
+  // While the primary task has not published its URL yet, hold back every
+  // fallback (legacy process URLs included) so the primary link is the one
+  // that gets opened. Run-task URLs are primary-first already, so they win
+  // over the legacy bare-process URLs.
+  const firstDevUrl = primaryUrlPending ? null : (extraUrls[0] ?? (isDevReady ? processUrls[0] : null))
 
   useEffect(() => {
     if (!pendingOpenDevUrl) {

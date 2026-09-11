@@ -3,7 +3,7 @@ import * as net from 'net'
 import { spawn } from 'child_process'
 import waitOn from 'wait-on'
 import { detectProjectEnvironment } from '../../../shared/projectEnvironment'
-import { findFirstUrl } from '../../../shared/urlExtract'
+import { collectUrlsFromText, findFirstUrl, stripAnsiEscapes } from '../../../shared/urlExtract'
 import { RunTaskCycleError, parseRunTaskProcessKey, runTaskProcessKey, topoSortRunTasks } from '../../../shared/runTasks'
 import type { RunTask, RunTaskProgressEvent, RunTaskState } from '../../../shared/runTasks'
 import type { ProcessManager } from '../runner'
@@ -15,6 +15,8 @@ export type StartTaskInTerminal = (cwd: string, command: string) => Promise<bool
 const DEFAULT_READINESS_TIMEOUT_MS = 60_000
 const WAIT_ON_INTERVAL_MS = 500
 const URL_OUTPUT_BUFFER_CHARS = 8_000
+/** Upper bound of URLs collected per task so noisy output cannot grow the state forever. */
+const MAX_TASK_URLS = 16
 /** While stopping, probe the task's listen port this often… */
 const STOP_PORT_POLL_INTERVAL_MS = 200
 /** …but give up after this long and let the process-exit event settle the state. */
@@ -38,6 +40,8 @@ const ERROR_HINT_SNIPPET_MAX_CHARS = 200
 interface RunTaskSessionState {
   state: RunTaskState
   url?: string
+  /** All URLs collected from the task output, in detection order. */
+  urls?: string[]
   error?: string
   /** Output hinted an error while starting; cleared once the task proves healthy. */
   warning?: string
@@ -58,6 +62,34 @@ interface RunTaskSession {
 
 function isProcessLikeState(state: RunTaskState): boolean {
   return state === 'starting' || state === 'ready' || state === 'running' || state === 'stopping'
+}
+
+/** Pick the primary URL: first match of readiness.primaryUrlPattern, else the first detected URL. */
+function selectPrimaryTaskUrl(readiness: RunTask['readiness'], urls: string[]): string | undefined {
+  const pattern = readiness?.primaryUrlPattern
+  if (pattern && urls.length > 0) {
+    try {
+      const regex = new RegExp(pattern, 'i')
+      return urls.find((url) => regex.test(url)) ?? urls[0]
+    } catch {
+      // Invalid user regex — fall back to the first detected URL.
+    }
+  }
+  return urls[0]
+}
+
+/** All URLs found in a chunk of output: custom pattern matches when configured, standard http URLs otherwise. */
+function collectTaskUrls(buffer: string, urlPattern?: string): string[] {
+  if (urlPattern) {
+    try {
+      const regex = new RegExp(urlPattern, 'gi')
+      const matches = stripAnsiEscapes(buffer).match(regex)
+      if (matches && matches.length > 0) return [...new Set(matches)]
+    } catch {
+      // Invalid user regex — fall through to default extraction.
+    }
+  }
+  return collectUrlsFromText(buffer)
 }
 
 /**
@@ -135,16 +167,29 @@ export class RunTaskScheduler {
 
     let session = this.sessions.get(projectId)
     if (!session) {
-      const ordered = topoSortRunTasks([task])
-      session = this.createSession(projectId, projectPath, [task], ordered)
+      // A single-task session needs no topological sort: its dependsOn list
+      // is ignored (dependency orchestration belongs to "start all"), and
+      // topoSort would misreport deps missing from this one-task array as a
+      // dependency cycle.
+      session = this.createSession(projectId, projectPath, [task], [task])
       this.sessions.set(projectId, session)
     } else if (!session.tasks.has(task.id)) {
       session.tasks.set(task.id, task)
       session.ordered.push(task)
+    } else {
+      // The session may still hold the definition from a previous start-all.
+      // An explicit single start uses the current config — otherwise fixing a
+      // broken command and retrying would run the stale one.
+      session.tasks.set(task.id, task)
     }
 
-    await this.dispatch(session, task)
-    return !session.failed
+    // Dependency orchestration ("waiting", dependency dispatch, blocked-dep
+    // checks) belongs to "start all" only. A single start launches the task
+    // right away — waiting on a full `mvn install` rebuild first made the
+    // start button look dead.
+    await this.startTaskNow(session, task)
+    const state = session.states.get(task.id)?.state
+    return state !== 'failed'
   }
 
   async stopTask(projectId: string, taskId: string): Promise<boolean> {
@@ -276,6 +321,39 @@ export class RunTaskScheduler {
       if (state.warning) return
       const snippet = extractErrorHintSnippet(buffer)
       if (snippet) this.setState(session, task.id, { warning: snippet })
+    })
+    session.disposers.push(removeOutput)
+  }
+
+  /**
+   * Keep watching the task output after readiness so URLs published later
+   * (a second dev server, a companion service, …) join the task's URL list.
+   * The primary link is recomputed from readiness.primaryUrlPattern on each
+   * new URL; the tap removes itself once the task settles.
+   */
+  private registerUrlCollectorTap(session: RunTaskSession, task: RunTask): void {
+    const processManager = this.getProcessManager()
+    if (!processManager) return
+    const key = runTaskProcessKey(session.projectId, task.id)
+    let buffer = ''
+    const removeOutput = processManager.addOutputTap((pid, data) => {
+      if (pid !== key) return
+      const state = session.states.get(task.id)
+      if (!state || (state.state !== 'ready' && state.state !== 'running')) {
+        removeOutput()
+        return
+      }
+      buffer = (buffer + data).slice(-URL_OUTPUT_BUFFER_CHARS)
+      const found = collectTaskUrls(buffer, task.readiness?.urlPattern)
+      const collected = [...(state.urls ?? (state.url ? [state.url] : []))]
+      let changed = false
+      for (const url of found) {
+        if (collected.includes(url) || collected.length >= MAX_TASK_URLS) continue
+        collected.push(url)
+        changed = true
+      }
+      if (!changed) return
+      this.setState(session, task.id, { url: selectPrimaryTaskUrl(task.readiness, collected), urls: [...collected] })
     })
     session.disposers.push(removeOutput)
   }
@@ -436,7 +514,7 @@ export class RunTaskScheduler {
       return
     }
 
-    this.setState(session, task.id, { state: 'starting', startedAt: Date.now(), url: undefined, error: undefined, warning: undefined })
+    this.setState(session, task.id, { state: 'starting', startedAt: Date.now(), url: undefined, urls: undefined, error: undefined, warning: undefined })
     this.registerStartingErrorHintTap(session, task)
 
     const cwd = this.resolveTaskCwd(session.projectPath, task)
@@ -474,7 +552,9 @@ export class RunTaskScheduler {
 
     try {
       const url = await this.waitReady(processManager, session, task, key)
-      this.setState(session, task.id, { state: 'ready', url, warning: undefined })
+      const urls = url ? [url] : undefined
+      this.setState(session, task.id, { state: 'ready', url, urls, warning: undefined })
+      if (url && task.readiness?.strategy === 'url') this.registerUrlCollectorTap(session, task)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.setState(session, task.id, { state: 'failed', error: message })
@@ -579,8 +659,9 @@ export class RunTaskScheduler {
     const current = session.states.get(taskId) ?? { state: 'idle' as RunTaskState }
     const next: RunTaskSessionState = { ...current, ...patch }
     // A settled task no longer serves its URL — drop it so consumers never see a stale link.
-    if ((next.state === 'stopped' || next.state === 'failed') && next.url) {
+    if (next.state === 'stopped' || next.state === 'failed') {
       delete next.url
+      delete next.urls
     }
     session.states.set(taskId, next)
     this.emitProgress(this.toProgressEvent(session))

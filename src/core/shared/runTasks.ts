@@ -30,6 +30,12 @@ export interface RunTaskReadiness {
    * process output; defaults to extracting the first http(s) URL.
    */
   urlPattern?: string
+  /**
+   * strategy=url: optional regex (string form) selecting which of the URLs
+   * collected from the process output is the primary link. When absent or
+   * when nothing matches, the first detected URL is primary.
+   */
+  primaryUrlPattern?: string
   /** strategy=http: URL to poll with HTTP GET until it returns 2xx. */
   httpUrl?: string
   /** strategy=port: wait until this TCP port on 127.0.0.1 is listening. */
@@ -113,7 +119,10 @@ export interface RunTaskProgressEvent {
     string,
     {
       state: RunTaskState
+      /** Primary link published by the task (backward-compatible single value). */
       url?: string
+      /** All URLs collected from the task output, in detection order. */
+      urls?: string[]
       error?: string
       /** Output looked like an error while starting — the task may be failing. */
       warning?: string
@@ -127,7 +136,17 @@ export function runTaskProcessKey(projectId: string, taskId: string): string {
 }
 
 /**
- * URL of the task marked with primaryUrl, if it has published one. Used to
+ * All URLs published by a single task state, in detection order. Falls back to
+ * the legacy single `url` field when `urls` is absent.
+ */
+export function getRunTaskStateUrls(state: RunTaskProgressEvent['tasks'][string] | undefined): string[] {
+  if (!state) return []
+  if (state.urls && state.urls.length > 0) return state.urls
+  return state.url ? [state.url] : []
+}
+
+/**
+ * URLs of the task marked with primaryUrl, if it has published any. Used to
  * decide which link the start-and-open action opens when several tasks are up.
  */
 export function getPrimaryRunTaskUrl(config: RunTaskConfigFile | null | undefined, states: RunTaskProgressEvent['tasks'] | undefined): string | null {
@@ -138,32 +157,52 @@ export function getPrimaryRunTaskUrl(config: RunTaskConfigFile | null | undefine
 }
 
 /**
- * URLs published by tasks that are currently ready/running (primary task
- * first). Stale URLs from tasks that already settled (stopped/failed) or are
- * still ramping are excluded, so consumers never open a dead link.
+ * URLs published by tasks that are currently ready/running. Ordering: the
+ * primary link of the primaryUrl task first, then that task's remaining URLs,
+ * then URLs of other tasks. Stale URLs from tasks that already settled
+ * (stopped/failed) or are still ramping are excluded, so consumers never open
+ * a dead link.
  */
 export function getActiveRunTaskUrls(config: RunTaskConfigFile | null | undefined, states: RunTaskProgressEvent['tasks'] | undefined): string[] {
   if (!states) return []
-  const urls = Object.values(states)
-    .filter((item) => item.state === 'ready' || item.state === 'running')
-    .map((item) => item.url)
-    .filter((url): url is string => Boolean(url))
-  const preferred = getPrimaryRunTaskUrl(config, states)
-  if (preferred && urls.includes(preferred)) return [preferred, ...urls.filter((url) => url !== preferred)]
+  const primary = config?.tasks.find((task) => task.primaryUrl === true)
+  const urls: string[] = []
+  const pushUnique = (url: string | undefined) => {
+    if (url && !urls.includes(url)) urls.push(url)
+  }
+  if (primary) {
+    const state = states[primary.id]
+    if (state && (state.state === 'ready' || state.state === 'running')) {
+      const taskUrls = getRunTaskStateUrls(state)
+      // The primary link (state.url) leads even when it was not the first
+      // URL collected from the task output (primaryUrlPattern may have
+      // picked a later one).
+      const ordered = state.url ? [state.url, ...taskUrls.filter((url) => url !== state.url)] : taskUrls
+      for (const url of ordered) pushUnique(url)
+    }
+  }
+  for (const [taskId, state] of Object.entries(states)) {
+    if (taskId === primary?.id) continue
+    if (state.state !== 'ready' && state.state !== 'running') continue
+    for (const url of getRunTaskStateUrls(state)) pushUnique(url)
+  }
   return urls
 }
 
 /**
- * True when the config declares a primaryUrl task that is still ramping and
- * has not published its URL yet. While pending, the start-and-open action
- * must keep waiting instead of opening whichever other task became ready
- * first.
+ * True when the config declares a primaryUrl task that has not published its
+ * URL yet. While pending, the start-and-open action must keep waiting instead
+ * of opening whichever other task became ready first. A task sitting in
+ * "running" without a URL still counts as pending (session carries flip
+ * "starting" to "running"); only a settled task releases the hold.
  */
 export function isPrimaryRunTaskUrlPending(config: RunTaskConfigFile | null | undefined, states: RunTaskProgressEvent['tasks'] | undefined): boolean {
   const primary = config?.tasks.find((task) => task.primaryUrl === true)
   if (!primary) return false
   const state = states?.[primary.id]
-  return !state || state.state === 'idle' || state.state === 'waiting' || state.state === 'starting'
+  if (!state) return true
+  if (state.url) return false
+  return state.state === 'idle' || state.state === 'waiting' || state.state === 'starting' || state.state === 'running'
 }
 
 export function parseRunTaskProcessKey(processId: string): { projectId: string; taskId: string } | null {
@@ -216,8 +255,8 @@ export function getEffectiveRunTasks(project: RunTaskProjectFields, config: RunT
 
 export class RunTaskCycleError extends Error {
   readonly cyclePath: string[]
-  constructor(cyclePath: string[]) {
-    super(`Dependency cycle detected: ${cyclePath.join(' -> ')}`)
+  constructor(cyclePath: string[], message?: string) {
+    super(message ?? `Dependency cycle detected: ${cyclePath.join(' -> ')}`)
     this.name = 'RunTaskCycleError'
     this.cyclePath = cyclePath
   }
@@ -243,7 +282,7 @@ export function topoSortRunTasks(tasks: RunTask[]): RunTask[] {
     const deps = (task.dependsOn ?? []).filter((dep) => dep !== task.id)
     for (const dep of deps) {
       if (!byId.has(dep)) {
-        throw new RunTaskCycleError([task.id, dep, task.id])
+        throw new RunTaskCycleError([task.id, dep, task.id], `Task '${task.id}' depends on '${dep}', which is not defined in the config.`)
       }
     }
     pendingDeps.set(task.id, deps.length)

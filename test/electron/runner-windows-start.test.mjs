@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { loadTsModule } from '../helpers/load-ts-module.mjs'
+import Module from 'node:module'
+import { loadTsModule, resolveFromRepo } from '../helpers/load-ts-module.mjs'
 
 const { ProcessManager } = loadTsModule('src/core/electron/main/runner.ts')
+// The automation-shell resolution probes real shells (machine-dependent, and
+// the default prefers PowerShell). The runner captured the shell module's
+// exports at require time — patch that instance in place, pinning cmd, so the
+// absolute-path assertion below stays deterministic.
+const windowsShellPath = resolveFromRepo('src/core/electron/main/shell/windows-shell.ts')
+const windowsShellModule = Module._cache[windowsShellPath].exports
+windowsShellModule.buildWindowsAutomationShellLaunch = (command) => ({
+  shell: { kind: 'cmd', command: 'cmd.exe' },
+  args: ['/d', '/c', command],
+})
 
 const windowsCapability = {
   hostPlatform: 'windows',

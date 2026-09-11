@@ -67,7 +67,7 @@ Configure runnable tasks for this project so the Workbench desktop app can start
 - stopCommand: optional; executed when the user stops this task and its process has already exited (one-shot tasks), e.g. "docker compose down" for a task running "docker compose up -d".
 - dependsOn: optional array of task ids; forms the startup DAG (dependencies start first, downstream tasks wait until dependencies are ready).
 - readiness: optional; how downstream tasks know this task is ready:
-  - { "strategy": "url" } — first http(s) URL found in the task output (default choice for dev servers). Optional "urlPattern" for a custom regex.
+  - { "strategy": "url" } — first http(s) URL found in the task output (default choice for dev servers). Optional "urlPattern" for a custom regex. Optional "primaryUrlPattern" selects the primary link when several URLs are collected from the output (fallback: the first detected URL).
   - { "strategy": "http", "httpUrl": "http://127.0.0.1:8080/health" } — poll until 2xx.
   - { "strategy": "port", "port": 8080 } — wait until the TCP port listens.
   - { "strategy": "delay", "delayMs": 3000 } — fixed delay.
@@ -84,6 +84,8 @@ Configure runnable tasks for this project so the Workbench desktop app can start
 - Use "scanDirectories" only for sub-projects living outside conventional directories (server/, apps/*, packages/*); paths must be project-relative and must not escape the project root.
 - Dev servers should use the exact package-manager command (pnpm run dev / yarn dev / npm run dev) derived from the lockfile in or above the task cwd.
 - Do not chain unrelated services with "&&"; model them as separate tasks with dependsOn.
+- Windows quoting: commands run through PowerShell, which splits any bareword containing "=" at its first dot — even without spaces, -Dkey=127.0.0.1 shatters into -Dkey=127 and .0.0.1, and Maven fails with a misleading "No plugin found for prefix" error. Single-quote every -D / system-property argument: mvn '-Dspring-boot.run.jvmArguments=-Xms256m -Xmx512m'. Prefer single quotes — double quotes get stripped when a "terminal" task opens an external terminal window.
+- Quoting-free alternative on Windows: pass JVM options through the environment instead, e.g. $env:JAVA_TOOL_OPTIONS='-Xms256m -Xmx512m'; mvn -pl service/app spring-boot:run — no -D arguments on the command line, immune to shell tokenization.
 - Keep the file human-editable JSON with 2-space indentation and a trailing newline.
 `
 
@@ -144,7 +146,7 @@ export const RUN_TASK_SKILL_PROMPT_ZH = `# Workbench 运行任务配置 skill
 - stopCommand：可选；当用户停止本任务且其进程已退出时执行（一次性任务适用），例如运行 "docker compose up -d" 的任务可配置 "docker compose down"。
 - dependsOn：可选，任务 id 数组；构成启动 DAG（依赖先启动，下游任务等待依赖就绪后再启动）。
 - readiness：可选；下游任务判断本任务已就绪的方式：
-  - { "strategy": "url" } —— 从任务输出中提取第一个 http(s) URL（开发服务器的默认选择）。可用 "urlPattern" 指定自定义正则。
+  - { "strategy": "url" } —— 从任务输出中提取第一个 http(s) URL（开发服务器的默认选择）。可用 "urlPattern" 指定自定义正则。可选 "primaryUrlPattern" 在收集到多个 URL 时指定主链接（缺省取第一个检测到的 URL）。
   - { "strategy": "http", "httpUrl": "http://127.0.0.1:8080/health" } —— 轮询直到返回 2xx。
   - { "strategy": "port", "port": 8080 } —— 等待 TCP 端口开始监听。
   - { "strategy": "delay", "delayMs": 3000 } —— 固定延迟。
@@ -161,6 +163,8 @@ export const RUN_TASK_SKILL_PROMPT_ZH = `# Workbench 运行任务配置 skill
 - 只有当子项目不在常规目录（server/、apps/*、packages/* 等）中时才使用 "scanDirectories"；路径必须相对项目根目录，且不能逃逸出项目根。
 - 开发服务器应使用由任务 cwd 处或其上层 lockfile 推导出的包管理器命令（pnpm run dev / yarn dev / npm run dev）。
 - 不要用 "&&" 把无关服务串在一条命令里；应拆成多个任务并用 dependsOn 表达先后关系。
+- Windows 引号：命令会经过 PowerShell 执行，而 PowerShell 会把含 "=" 的裸词在第一个点处拆开——即使没有空格，-Dkey=127.0.0.1 也会碎成 -Dkey=127 和 .0.0.1，Maven 会报出误导性的 "No plugin found for prefix" 错误。所有 -D / 系统属性参数必须加单引号：mvn '-Dspring-boot.run.jvmArguments=-Xms256m -Xmx512m'。优先单引号——"terminal" 任务把命令交给外部终端窗口时双引号会被吞掉。
+- Windows 免引号写法：改用环境变量传递 JVM 参数，例如 $env:JAVA_TOOL_OPTIONS='-Xms256m -Xmx512m'; mvn -pl service/app spring-boot:run——命令行上不含任何 -D 参数，天然不受 shell 分词影响。
 - 保持文件为便于人工编辑的 JSON：2 空格缩进，文件末尾带换行。
 `
 
