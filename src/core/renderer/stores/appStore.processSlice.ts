@@ -201,6 +201,8 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
       for (const item of inventory.managedProcesses) {
         if (item.processId.includes('::toolbox')) continue
+        // Run-task processes are owned by the run-task scheduler, never merged into project state.
+        if (item.processId.includes('::run::')) continue
         const resolvedProjectId = projectIdSet.has(item.processId) ? item.processId : projectIdSet.has(item.projectId) ? item.projectId : null
         if (!resolvedProjectId) continue
         if (item.backend === 'tmux') continue

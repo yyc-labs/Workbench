@@ -1,5 +1,7 @@
 import { app, BrowserWindow, nativeTheme, screen, type Rectangle } from 'electron'
 import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
+import type { RunTaskProgressEvent } from '../../shared/runTasks'
+import { RunTaskService } from './run-tasks/run-task-service'
 import { flushAiCommitRegistry } from './ai-commit-registry'
 import { registerAppLifecycle, runAppCleanupSteps, runAppStartupSteps } from './app-lifecycle'
 import { createAppServices } from './app-services'
@@ -8,6 +10,7 @@ import { capabilityManager } from './capability-manager'
 import { loadConfig, updateConfig } from './config'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
+import { openTerminalAtPath } from './shell/openers'
 import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
 import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
 import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
@@ -105,6 +108,12 @@ const {
   agentHookGateway,
   agentLogService,
 } = services
+
+const runTaskService = new RunTaskService({
+  getProcessManager: () => processManager,
+  emitRunTaskProgress,
+  startInTerminal: (cwd, command) => openTerminalAtPath(cwd, bootCapability?.wslDistro || 'Ubuntu', command),
+})
 
 function createMainWindow(): void {
   const config = loadConfig()
@@ -215,6 +224,10 @@ function showTranscriptCaptureWindow(options: { focus?: boolean } = {}): void {
 
 function emitRuntimeStateChanged(payload: { reason: string; projectId?: string; sessionName?: string }): void {
   mainWindow?.webContents.send(IPC.RUNTIME_STATE_CHANGED, payload)
+}
+
+function emitRunTaskProgress(event: RunTaskProgressEvent): void {
+  mainWindow?.webContents.send(IPC.RUN_TASK_PROGRESS, event)
 }
 
 function emitTranscriptImported(payload: TranscriptImportedEvent): void {
@@ -761,6 +774,8 @@ app.whenReady().then(async () => {
               gitService,
               runtimeService,
               processPortService,
+              runTaskService,
+              emitRunTaskProgress,
               learningService,
               skillService,
               transcriptService,

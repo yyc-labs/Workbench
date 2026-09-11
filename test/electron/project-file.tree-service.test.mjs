@@ -3,13 +3,14 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { stubElectronApp } from '../helpers/electron-app-stub.mjs'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  getProjectFileAutoLoadDecision,
-  listProjectDirectoryFiles,
-  listProjectFiles,
-} = loadTsModule('src/core/electron/main/project-file/tree-service.ts')
+// tree-service reads config for file exclusions, which touches
+// `app.getPath('userData')` — stub electron before the module graph loads.
+stubElectronApp(mkdtempSync(join(tmpdir(), 'project-file-electron-')))
+
+const { getProjectFileAutoLoadDecision, listProjectDirectoryFiles, listProjectFiles } = loadTsModule('src/core/electron/main/project-file/tree-service.ts')
 
 test('listProjectFiles keeps directories lazy without probing descendants', async () => {
   const projectPath = mkdtempSync(join(tmpdir(), 'project-file-tree-'))

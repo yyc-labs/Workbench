@@ -54,6 +54,8 @@ type CodeWorkspacePanelProps = {
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
+  onOpenRunTasks?: () => void
+  runTasksActive?: boolean
   onRequestProjectContextMenu?: (x: number, y: number) => void
 }
 
@@ -80,6 +82,8 @@ export function CodeWorkspacePanel({
   onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
+  onOpenRunTasks,
+  runTasksActive,
   onRequestProjectContextMenu,
 }: CodeWorkspacePanelProps) {
   const { t } = useI18n()
@@ -776,6 +780,8 @@ export function CodeWorkspacePanel({
         onOpenStartupLogs={onOpenStartupLogs}
         onOpenTranscript={onOpenTranscript}
         onOpenProjectLinksManager={onOpenProjectLinksManager}
+        onOpenRunTasks={onOpenRunTasks}
+        runTasksActive={runTasksActive}
         onResolveDiscardUnsavedConfirm={resolveDiscardUnsavedConfirm}
         onSetExplorerOpen={setIsExplorerOpen}
         onSetQuickDrawerOpen={setIsQuickDrawerOpen}

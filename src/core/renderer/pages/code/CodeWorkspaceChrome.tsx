@@ -1,4 +1,4 @@
-import { ArrowUpRight, Code2, Files, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
+import { ArrowUpRight, Code2, Files, ListTree, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ModalShell } from '../../components/ModalShell'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
@@ -27,6 +27,8 @@ type CodeWorkspaceChromeProps = {
   onOpenStartupLogs?: () => void
   onOpenTranscript?: () => void
   onOpenProjectLinksManager?: () => void
+  onOpenRunTasks?: () => void
+  runTasksActive?: boolean
   onResolveDiscardUnsavedConfirm: (proceed: boolean) => void
   onSetExplorerOpen: React.Dispatch<React.SetStateAction<boolean>>
   onSetQuickDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -93,6 +95,8 @@ export function CodeWorkspaceChrome({
   onOpenStartupLogs,
   onOpenTranscript,
   onOpenProjectLinksManager,
+  onOpenRunTasks,
+  runTasksActive = false,
   onResolveDiscardUnsavedConfirm,
   onSetExplorerOpen,
   onSetQuickDrawerOpen,
@@ -138,6 +142,18 @@ export function CodeWorkspaceChrome({
                 }}
               />
               {hasProjectDocLinks && <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={onOpenFirstProjectLink} onOpenManager={onOpenProjectLinksManager} size="icon" title={t('common.leftClickOpenFirstLink')} />}
+              {onOpenRunTasks && (
+                <button
+                  type="button"
+                  className="quiet-control relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+                  onClick={onOpenRunTasks}
+                  title={t('runTasks.title')}
+                  aria-label={t('runTasks.title')}
+                >
+                  <ListTree className="h-3.5 w-3.5 shrink-0" />
+                  {runTasksActive && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[color:var(--color-success)]" />}
+                </button>
+              )}
               {projectDevUrlActionVisible && onStartAndOpenDevUrl && (
                 <button
                   type="button"

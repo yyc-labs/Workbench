@@ -10,6 +10,7 @@ import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
 import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
 import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
 import { registerProcessPortsIpcHandlers } from './registerProcessPortsIpcHandlers'
+import { registerRunTaskIpcHandlers } from './registerRunTaskIpcHandlers'
 import { registerTranscriptIpcHandlers } from './registerTranscriptIpcHandlers'
 import { registerMarkdownDocumentIpcHandlers } from './registerMarkdownDocumentIpcHandlers'
 import type { RegisterIpcHandlersDependencies, RuntimeStateChangedPayload } from './registerIpcHandlers.shared'
@@ -34,6 +35,7 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerSkillIpcHandlers(deps)
   registerRuntimeIpcHandlers(deps)
   registerProcessPortsIpcHandlers(deps)
+  registerRunTaskIpcHandlers(deps)
   registerAiGatewayIpcHandlers(deps)
   registerAiConnectionIpcHandlers(deps)
   registerBrowserAiIpcHandlers(deps)

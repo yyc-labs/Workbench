@@ -24,6 +24,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
     { transcript: transcriptMessages[locale].transcript },
     { project: projectMessages[locale].project },
     { detail: detailMessages[locale].detail },
+    { runTasks: detailMessages[locale].runTasks },
     { learning: learningMessages[locale].learning },
     { markdownDocument: markdownDocumentMessages[locale].markdownDocument },
     {

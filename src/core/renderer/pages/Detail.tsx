@@ -1,13 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, Play, RefreshCw, Square } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square } from 'lucide-react'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
 import { UrlPopover } from '../components/UrlPopover'
-import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
+import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
 import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
@@ -20,6 +20,7 @@ import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preload
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
+import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
 
 const CodeWorkspacePanel = lazy(() => loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel })))
 const DetailAiCommitPaneHost = lazy(() => loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost })))
@@ -77,6 +78,11 @@ export function DetailPage() {
   const tags = useAppStore((s) => s.tags)
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
   const processUrls = projectId ? useAppStore((s) => s.processUrls[projectId] || []) : ([] as string[])
+  const runTaskStates = projectId ? useAppStore((s) => s.runTaskStates[projectId]) : undefined
+  const runTaskConfig = projectId ? useAppStore((s) => s.runTaskConfigs[projectId]) : undefined
+  const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
+  const runTaskUrls = useMemo(() => getActiveRunTaskUrls(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
+  const primaryUrlPending = useMemo(() => isPrimaryRunTaskUrlPending(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
   const session = projectId ? useAppStore((s) => s.sessions[projectId]) : undefined
   const runtimeEntry = projectId ? useAppStore((s) => s.runtimeEntries[projectId]) : undefined
   const aiCommitConfig = useAppStore((s) => s.config.aiCommit)
@@ -86,6 +92,8 @@ export function DetailPage() {
   const activeAiRuntimeProfileId = useAppStore((s) => s.config.activeAiRuntimeProfileId)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
+  const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
@@ -99,7 +107,7 @@ export function DetailPage() {
 
   const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
-  const [runConfigOpen, setRunConfigOpen] = useState(false)
+  const [runTasksOpen, setRunTasksOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
@@ -130,8 +138,26 @@ export function DetailPage() {
   const contentTopPaddingClass = projectHeaderCollapsed ? 'pt-5' : 'pt-[calc(var(--window-titlebar-height)+84px+8px)]'
   const isRunning = processStatus === 'running'
   const isStopping = processStatus === 'stopping'
-  const isActive = isRunning || isStopping
-  const isDevReady = isRunning && processUrls.length > 0
+  const hasActiveRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping'))
+  const isAnyRunTaskStopping = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'stopping'))
+  // The context menu reflects the unified run-task pipeline, not the legacy
+  // bare-process state alone.
+  const isMenuDevRunning = isRunning || hasActiveRunTasks
+  const isMenuDevStopping = isStopping || isAnyRunTaskStopping
+  // Starting always goes through the run-task pipeline (legacy commands are
+  // synthesized into a default task), so task activity counts as project activity.
+  const isActive = isRunning || isStopping || hasActiveRunTasks
+  // Ready = bare process with a URL, or run tasks that are active and no
+  // longer ramping (no task left in starting/waiting).
+  const hasStartingRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting'))
+  const isDevReady = (isRunning && processUrls.length > 0) || (hasActiveRunTasks && !hasStartingRunTasks)
+  const allProcessUrls = useMemo(() => {
+    const merged = [...processUrls]
+    for (const url of runTaskUrls) {
+      if (!merged.includes(url)) merged.push(url)
+    }
+    return merged
+  }, [processUrls, runTaskUrls])
   const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
   const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
   const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
@@ -152,6 +178,14 @@ export function DetailPage() {
     processUrls,
     runStartupMode: project?.runStartupMode,
     startProject,
+    extraUrls: runTaskUrls,
+    primaryUrlPending,
+    isStartPending: hasStartingRunTasks,
+    start: () =>
+      startAllRunTasks(projectId ?? '', projectPath ?? '').then((result) => {
+        if (!result.started && result.error) console.warn('[Detail] start all run tasks failed:', result.error)
+        return result.started
+      }),
   })
   const openStartupLogs = useOpenStartupLogs()
   const docLinkState = useProjectDocLinks({ project })
@@ -192,7 +226,7 @@ export function DetailPage() {
   const openProjectLinksManager = useCallback(() => {
     setLinkSettingsOpen(true)
   }, [setLinkSettingsOpen])
-  const collapsedProjectLinkItems = useMemo(() => [...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, processUrls])
+  const collapsedProjectLinkItems = useMemo(() => [...(isDevReady ? allProcessUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, allProcessUrls])
   const hasProjectDocLinks = docMenuItems.length > 0
 
   const handleSelectAiRuntimeProfile = useCallback(
@@ -277,6 +311,20 @@ export function DetailPage() {
     }
   }, [aiCommitStatus, project])
 
+  // Unified start/stop: everything goes through the run-task pipeline.
+  const handleStartProjectTasks = useCallback(() => {
+    if (!projectId) return
+    void startAllRunTasks(projectId, projectPath ?? '')
+  }, [projectId, projectPath, startAllRunTasks])
+
+  const handleStopProjectTasks = useCallback(() => {
+    if (!projectId) return
+    void (async () => {
+      await stopAllRunTasks(projectId)
+      await stopProject(projectId)
+    })()
+  }, [projectId, stopAllRunTasks, stopProject])
+
   useEffect(() => {
     if (!projectId) return
     if (pane === 'transcript') {
@@ -315,6 +363,13 @@ export function DetailPage() {
 
     return cleanup
   }, [projectId])
+
+  useEffect(() => {
+    // Lazily discover the project's run task config so primaryUrl ordering works.
+    if (projectId && runTaskConfig === undefined && projectPath) {
+      void loadRunTaskConfig(projectId, projectPath)
+    }
+  }, [projectId, runTaskConfig, projectPath, loadRunTaskConfig])
 
   useEffect(() => {
     try {
@@ -418,17 +473,11 @@ export function DetailPage() {
             {isActive ? (
               <div
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
-                  isRunning
-                    ? isDevReady
-                      ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
-                      : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                    : isStopping
-                      ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
-                      : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
+                  isStopping ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]' : isDevReady ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 }`}
               >
                 {isStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />}
-                {isRunning ? (isDevReady ? t('common.running') : t('common.starting')) : isStopping ? t('common.stopping') : usesTmuxRuntime ? t('detail.sessionAvailable') : t('detail.terminalReady')}
+                {isStopping ? t('common.stopping') : isDevReady ? t('common.running') : t('common.starting')}
               </div>
             ) : (
               <span className="shrink-0 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">{t('common.stop')}</span>
@@ -445,8 +494,19 @@ export function DetailPage() {
               }}
             />
 
+            <button
+              type="button"
+              className="quiet-control relative inline-flex items-center gap-1.5 rounded-full border-0 px-2.5 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
+              onClick={() => setRunTasksOpen(true)}
+              title={t('runTasks.title')}
+              aria-label={t('runTasks.title')}
+            >
+              <ListTree className="h-3.5 w-3.5" />
+              {hasActiveRunTasks && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[color:var(--color-success)]" />}
+            </button>
+
             {(isDevReady || pendingOpenDevUrl || !isActive) && (
-              <UrlPopover urls={processUrls}>
+              <UrlPopover urls={allProcessUrls}>
                 <button
                   className={`quiet-control inline-flex items-center gap-1.5 rounded-full border-0 py-1.5 text-xs transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
                     isDevReady ? 'text-primary hover:text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
@@ -482,12 +542,12 @@ export function DetailPage() {
                   : 'bg-primary text-white shadow-sm hover:bg-primary-hover'
               }`}
               style={isActive ? (isStopping ? { borderColor: 'color-mix(in srgb, var(--color-warning) 34%, transparent)' } : isDevReady ? { borderColor: 'color-mix(in srgb, var(--color-destructive) 32%, transparent)' } : { borderColor: 'color-mix(in srgb, var(--color-warning) 32%, transparent)' }) : undefined}
-              onClick={() => (isActive ? (isStopping ? undefined : stopProject(projectId)) : startProject(projectId))}
+              onClick={() => (isActive ? (isStopping ? undefined : handleStopProjectTasks()) : handleStartProjectTasks())}
               onContextMenu={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 setMenuPos(null)
-                setRunConfigOpen(true)
+                setRunTasksOpen(true)
               }}
               disabled={isStopping}
               title={t('common.leftClickRunRightClickConfig')}
@@ -537,8 +597,8 @@ export function DetailPage() {
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
           usesTmuxRuntime={usesTmuxRuntime}
-          isDevRunning={isRunning}
-          isDevStopping={isStopping}
+          isDevRunning={isMenuDevRunning}
+          isDevStopping={isMenuDevStopping}
           isOpeningTerminal={isOpeningTerminal}
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
@@ -557,8 +617,8 @@ export function DetailPage() {
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
           onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
-          onStartProject={() => startProject(project.id)}
-          onStopProject={() => stopProject(project.id)}
+          onStartProject={handleStartProjectTasks}
+          onStopProject={handleStopProjectTasks}
           onAiAutoCommit={() => {
             void handleAiAutoCommit()
           }}
@@ -570,7 +630,7 @@ export function DetailPage() {
           onOpenVsCode={() => window.electronAPI.openInVsCode(resolvedProjectPath)}
           onTogglePin={() => togglePin(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
-          onEditRunCommandConfig={() => setRunConfigOpen(true)}
+          onOpenRunTasks={() => setRunTasksOpen(true)}
         />
       )}
 
@@ -578,7 +638,8 @@ export function DetailPage() {
         <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
       )}
 
-      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
+      {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
 
       <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
         <div className="relative h-full min-h-0 w-full">
@@ -614,6 +675,8 @@ export function DetailPage() {
                       navigate(`/project/${projectId}/transcript`)
                     }}
                     onOpenProjectLinksManager={openProjectLinksManager}
+                    onOpenRunTasks={() => setRunTasksOpen(true)}
+                    runTasksActive={hasActiveRunTasks}
                     onRequestProjectContextMenu={(x, y) => setMenuPos({ x, y })}
                   />
                 )}

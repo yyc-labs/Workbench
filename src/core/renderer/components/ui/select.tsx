@@ -37,6 +37,8 @@ export interface SelectProps {
   className?: string
   triggerClassName?: string
   contentClassName?: string
+  /** Portal 层级;在 ModalShell 等高层级容器内使用时需高于面板 z-index(默认下拉层 z-[10010] 只适用于基础层)。 */
+  contentZIndex?: number
   optionClassName?: string
   floatingContentRef?: React.Ref<HTMLDivElement>
   renderValue?: (option: SelectOption | undefined) => React.ReactNode
@@ -94,6 +96,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
     className,
     triggerClassName,
     contentClassName,
+    contentZIndex,
     optionClassName,
     floatingContentRef,
     renderValue,
@@ -266,6 +269,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
               className={cn(dropdownSurfaceClassName, contentClassName)}
               style={{
                 ...dropdownSurfaceStyle,
+                ...(contentZIndex !== undefined ? { zIndex: contentZIndex } : {}),
                 top: layout?.top ?? fallbackRect.top,
                 left: layout?.left ?? fallbackRect.left,
                 width: layout?.width ?? fallbackRect.width,

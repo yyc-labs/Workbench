@@ -53,7 +53,7 @@ function ModalShell({ open, onClose, children, widthClassName = 'max-w-[760px]',
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 flex items-center justify-center px-4" style={{ zIndex: baseZIndex }}>
+    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: baseZIndex }}>
       <button
         type="button"
         className={`absolute inset-0 bg-black/25 backdrop-blur-[1px] ${overlayClassName}`.trim()}

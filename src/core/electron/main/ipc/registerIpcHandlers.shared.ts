@@ -12,6 +12,8 @@ import type { LearningService } from '../learning/learningService'
 import type { SkillService } from '../skill/skillService'
 import type { RuntimeService } from '../runtime/runtime-service'
 import type { ProcessPortService } from '../process-ports/process-port-service'
+import type { RunTaskService } from '../run-tasks/run-task-service'
+import type { RunTaskProgressEvent } from '../../../shared/runTasks'
 import type { ProcessManager } from '../runner'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
@@ -53,6 +55,8 @@ export type RegisterIpcHandlersDependencies = {
   gitService: GitService
   runtimeService: RuntimeService
   processPortService: ProcessPortService
+  runTaskService: RunTaskService
+  emitRunTaskProgress: (event: RunTaskProgressEvent) => void
   learningService: LearningService
   skillService: SkillService
   transcriptService: TranscriptService

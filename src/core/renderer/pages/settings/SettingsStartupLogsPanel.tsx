@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
+import { parseRunTaskProcessKey } from '../../../shared/runTasks'
 import { Terminal as AppTerminal } from '../../components/Terminal'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
 import { backendLabel } from './settings.helpers'
 
 type StartupLogsPanelProps = {
@@ -19,6 +21,17 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
   const appliedInitialProjectIdRef = useRef<string | null | undefined>(undefined)
 
   const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
+
+  const runTaskConfigNames = useAppStore((s) => {
+    const names = new Map<string, string>()
+    for (const [projectId, config] of Object.entries(s.runTaskConfigs)) {
+      if (!config) continue
+      for (const task of config.tasks) {
+        names.set(`${projectId}::${task.id}`, task.name)
+      }
+    }
+    return names
+  })
 
   const classifyManagedProcess = (item: ManagedProcessSnapshot): 'project' | 'other' => {
     if (item.processId.includes('::toolbox')) return 'other'
@@ -58,10 +71,10 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     }
     if (selectedProcessId && projectManaged.some((p) => p.processId === selectedProcessId)) return
 
-    // 优先选中 URL 指定的项目进程（首次加载或目标变化时）；否则回退到第一个
+    // Prefer the URL-specified project process (first load or target change); otherwise fall back to the first one.
     if (initialProjectId && appliedInitialProjectIdRef.current !== initialProjectId) {
       appliedInitialProjectIdRef.current = initialProjectId
-      const target = projectManaged.find((item) => item.processId === initialProjectId || item.processId === `${initialProjectId}::toolbox`)
+      const target = projectManaged.find((item) => item.processId === initialProjectId || item.processId === `${initialProjectId}::toolbox`) || projectManaged.find((item) => item.processId.startsWith(`${initialProjectId}::run::`))
       if (target) {
         setSelectedProcessId(target.processId)
         return
@@ -101,7 +114,9 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
             <div className="flex flex-wrap gap-1.5">
               {projectManaged.map((item) => {
                 const selected = selectedProcessId === item.processId
-                const label = `${projectNameMap.get(item.projectId) || item.projectId} · ${backendLabel(item.backend)}`
+                const runTask = parseRunTaskProcessKey(item.processId)
+                const taskName = runTask ? runTaskConfigNames.get(`${runTask.projectId}::${runTask.taskId}`) || runTask.taskId : null
+                const label = taskName ? `${projectNameMap.get(item.projectId) || item.projectId} · ${taskName}` : `${projectNameMap.get(item.projectId) || item.projectId} · ${backendLabel(item.backend)}`
                 return (
                   <button
                     key={`log-tab-${item.processId}`}

@@ -42,8 +42,8 @@ interface CardContextMenuProps {
   onSwitchAndUseAiRuntimeProfile?: (profileId: string) => void | Promise<unknown>
   onStartProject: () => void | Promise<unknown>
   onStopProject: () => void | Promise<unknown>
-  /** 右键点击"启动/停止项目"按钮时打开运行命令配置弹窗的回调;传入后该按钮支持右键配置。 */
-  onEditRunCommandConfig?: () => void | Promise<unknown>
+  /** 右键点击"启动/停止项目"按钮时打开运行任务弹窗的回调;传入后该按钮支持右键配置。 */
+  onOpenRunTasks?: () => void | Promise<unknown>
   onAiAutoCommit?: () => void | Promise<unknown>
   aiCommitStatus?: 'idle' | 'running' | 'success' | 'error'
   onOpenFolder: () => void | Promise<unknown>
@@ -215,7 +215,7 @@ export function CardContextMenu({
   onSwitchAndUseAiRuntimeProfile,
   onStartProject,
   onStopProject,
-  onEditRunCommandConfig,
+  onOpenRunTasks,
   onAiAutoCommit,
   aiCommitStatus = 'idle',
   onOpenFolder,
@@ -403,10 +403,10 @@ export function CardContextMenu({
       action: isDevRunning || isDevStopping ? onStopProject : onStartProject,
       disabled: isDevStopping,
       tone: isDevRunning || isDevStopping ? 'danger' : 'success',
-      title: onEditRunCommandConfig ? t('common.leftClickRunRightClickConfig') : undefined,
-      contextMenu: onEditRunCommandConfig
+      title: onOpenRunTasks ? t('common.leftClickRunRightClickConfig') : undefined,
+      contextMenu: onOpenRunTasks
         ? () => {
-            void onEditRunCommandConfig()
+            void onOpenRunTasks()
           }
         : undefined,
     },

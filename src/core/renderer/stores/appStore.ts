@@ -5,6 +5,7 @@ import { createInitActionsSlice } from './appStore.initSlice'
 import { createSettingsActionsSlice } from './appStore.settingsSlice'
 import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
+import { createRunTaskActionsSlice } from './appStore.runTasksSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
 import { createBrowserAiActionsSlice } from './appStore.browserAiSlice'
@@ -70,6 +71,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createSettingsActionsSlice(...args),
   ...createWorkspaceActionsSlice(...args),
   ...createProcessActionsSlice(...args),
+  ...createRunTaskActionsSlice(...args),
   ...createRuntimeActionsSlice(...args),
   ...createTranscriptActionsSlice(...args),
   ...createBrowserAiActionsSlice(...args),

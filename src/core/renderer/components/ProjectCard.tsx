@@ -6,7 +6,7 @@ import { ProjectLinksTrigger } from './ProjectLinksTrigger'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
-import { RunCommandConfigPopover } from './RunCommandConfigPopover'
+import { RunTasksDialog } from './run-tasks/RunTasksDialog'
 import { Select, type SelectOption } from './ui/select'
 import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
 import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../lib/projectDocLinks'
@@ -18,6 +18,7 @@ import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
 import { preloadProjectPane } from '../lib/projectPagePreload'
 import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
+import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -33,6 +34,11 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const { t } = useI18n()
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
+  const runTaskConfig = useAppStore((s) => s.runTaskConfigs[project.id])
+  const runTaskStates = useAppStore((s) => s.runTaskStates[project.id])
+  const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
+  const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
+  const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
   const startRuntime = useAppStore((s) => s.startRuntime)
@@ -149,7 +155,50 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const removeProject = useAppStore((s) => s.removeProject)
   const isDevRunning = devStatus === 'running'
   const isDevStopping = devStatus === 'stopping'
-  const isDevReady = isDevRunning && devUrls.length > 0
+  const activeRunTaskIds = useMemo(() => {
+    if (!runTaskStates) return [] as string[]
+    return Object.entries(runTaskStates)
+      .filter(([, item]) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping')
+      .map(([taskId]) => taskId)
+  }, [runTaskStates])
+  const isAnyRunTaskStopping = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'stopping'))
+  // Starting always goes through the run-task pipeline (legacy commands are
+  // synthesized into a default task), so task states alone decide "running".
+  const runTasksActive = activeRunTaskIds.length > 0
+  const hasSteadyRunTasks = useMemo(() => Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'ready' || item.state === 'running')), [runTaskStates])
+  const hasStartingRunTasks = useMemo(() => Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting')), [runTaskStates])
+  const runTaskUrls = useMemo(() => getActiveRunTaskUrls(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
+  const primaryUrlPending = useMemo(() => isPrimaryRunTaskUrlPending(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
+  // Ready = bare process with a URL, or any run task that reached steady state.
+  const isDevReady = (isDevRunning && devUrls.length > 0) || hasSteadyRunTasks
+  // Still ramping: at least one task is starting/waiting, so keep the "starting" UI.
+  const isProjectReady = isDevReady && !hasStartingRunTasks
+  // The context menu reflects the unified run-task pipeline, not the legacy
+  // bare-process state alone.
+  const isMenuDevRunning = isDevRunning || runTasksActive
+  const isMenuDevStopping = isDevStopping || isAnyRunTaskStopping
+
+  // Lazily discover whether the project has a .yworkbench.json so the card can
+  // switch its Run button to "start all tasks" when one exists.
+  useEffect(() => {
+    if (runTaskConfig === undefined) {
+      void loadRunTaskConfig(project.id, project.path)
+    }
+  }, [runTaskConfig, project.id, project.path, loadRunTaskConfig])
+
+  const handleCardRun = useCallback(() => {
+    // Unified start: config tasks, or the legacy command synthesized into a
+    // default task — plain startProject is no longer used for "Run".
+    void startAllRunTasks(project.id, project.path)
+  }, [project.id, project.path, startAllRunTasks])
+
+  const handleCardStop = useCallback(() => {
+    if (runTasksActive) {
+      void stopAllRunTasks(project.id)
+      return
+    }
+    void stopProject(project.id)
+  }, [project.id, runTasksActive, stopAllRunTasks, stopProject])
   const docLinks = project.docLinks ?? []
   const defaultDocLink = docLinks[0]
   const linkMenuItems = useMemo(
@@ -199,7 +248,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [menuAllowRemove, setMenuAllowRemove] = useState(false)
-  const [runConfigOpen, setRunConfigOpen] = useState(false)
+  const [runTasksOpen, setRunTasksOpen] = useState(false)
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
@@ -278,6 +327,14 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     processUrls: devUrls,
     runStartupMode: project.runStartupMode,
     startProject,
+    extraUrls: runTaskUrls,
+    primaryUrlPending,
+    isStartPending: hasStartingRunTasks,
+    start: () =>
+      startAllRunTasks(project.id, project.path).then((result) => {
+        if (!result.started && result.error) console.warn('[ProjectCard] start all run tasks failed:', result.error)
+        return result.started
+      }),
   })
   const openStartupLogs = useOpenStartupLogs()
 
@@ -435,8 +492,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
           usesTmuxRuntime={usesTmuxRuntime}
-          isDevRunning={isDevRunning}
-          isDevStopping={isDevStopping}
+          isDevRunning={isMenuDevRunning}
+          isDevStopping={isMenuDevStopping}
           isOpeningTerminal={isOpeningTerminal}
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
@@ -455,8 +512,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
           onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
-          onStartProject={() => startProject(project.id)}
-          onStopProject={() => stopProject(project.id)}
+          onStartProject={handleCardRun}
+          onStopProject={handleCardStop}
           onAiAutoCommit={handleAiAutoCommit}
           aiCommitStatus={aiCommitStatus}
           onOpenFolder={() => window.electronAPI.openFolder(project.path)}
@@ -467,7 +524,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           onTogglePin={() => togglePin(project.id)}
           onRemoveProject={menuAllowRemove ? () => removeProject(project.id) : undefined}
           onEditMetadata={() => setMetaDialogOpen(true)}
-          onEditRunCommandConfig={() => setRunConfigOpen(true)}
+          onOpenRunTasks={() => setRunTasksOpen(true)}
         />
       )}
 
@@ -475,7 +532,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
 
       {docLinksDialogOpen && <ProjectDocLinksDialog open={docLinksDialogOpen} project={project} onClose={() => setDocLinksDialogOpen(false)} />}
 
-      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
+      {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
 
       <div className="relative z-10 flex items-center gap-1.5 shrink-0">
         <div className="hidden min-w-0 shrink-0 md:block" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
@@ -517,34 +575,43 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             {pendingOpenDevUrl ? <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />}
           </button>
         )}
-        {isDevRunning || isDevStopping ? (
+        {isDevRunning || isDevStopping || runTasksActive ? (
           <button
             className={`h-8 px-3 text-xs rounded-full border flex items-center gap-1 font-medium transition-colors shrink-0 ${
-              isDevStopping ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' : isDevReady ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]' : 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+              isDevStopping || isAnyRunTaskStopping
+                ? 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
+                : isProjectReady
+                  ? 'text-[color:var(--color-destructive)] hover:bg-[color:var(--color-destructive-background)]'
+                  : 'text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]'
             }`}
             style={{
-              borderColor: isDevStopping || !isDevReady ? 'color-mix(in srgb, var(--color-warning) 34%, transparent)' : 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
+              borderColor: isDevStopping || isAnyRunTaskStopping || !isProjectReady ? 'color-mix(in srgb, var(--color-warning) 34%, transparent)' : 'color-mix(in srgb, var(--color-destructive) 34%, transparent)',
             }}
             onClick={(e) => {
               e.stopPropagation()
-              if (!isDevStopping) stopProject(project.id)
+              if (!isDevStopping && !isAnyRunTaskStopping) handleCardStop()
             }}
-            disabled={isDevStopping}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setRunTasksOpen(true)
+            }}
+            title={isDevStopping || isAnyRunTaskStopping ? undefined : t('common.leftClickStopRightClickConfig')}
           >
-            {isDevStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : isDevReady ? <Square className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
-            <span className="hidden sm:inline">{isDevStopping ? t('common.stopping') : isDevReady ? t('common.stop') : t('common.starting')}</span>
+            {isDevStopping || isAnyRunTaskStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : isProjectReady ? <Square className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
+            <span className="hidden sm:inline">{isDevStopping || isAnyRunTaskStopping ? t('common.stopping') : isProjectReady ? t('common.stop') : t('common.starting')}</span>
           </button>
         ) : (
           <button
             className="h-8 px-3.5 text-xs rounded-full bg-primary text-white hover:bg-primary-hover flex items-center gap-1 font-medium transition-colors shrink-0 shadow-sm"
             onClick={(e) => {
               e.stopPropagation()
-              startProject(project.id)
+              handleCardRun()
             }}
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              setRunConfigOpen(true)
+              setRunTasksOpen(true)
             }}
             title={t('common.leftClickRunRightClickConfig')}
           >

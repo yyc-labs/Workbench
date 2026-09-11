@@ -1,18 +1,11 @@
-import type {
-  ProjectInfo,
-  RemovedProjectSnapshot,
-  ProjectFolder,
-  ProjectTag,
-  RunStartupMode,
-} from '../../shared/types'
+import type { ProjectInfo, RemovedProjectSnapshot, ProjectFolder, ProjectTag, RunStartupMode } from '../../shared/types'
 import { projectIdFromPath } from '../../shared/rules'
+import { collectUrlsFromText as collectUrlsFromTextShared } from '../../shared/urlExtract'
 
 const MAX_TERMINAL_OUTPUT_CHARS = 120_000
-const URL_PATTERN = /https?:\/\/[\w.-]+:\d{2,5}/gi
 const PROCESS_URLS_STORAGE_KEY = 'launcher:process-urls:v1'
 
-export const initialThemeMode =
-  (document.documentElement.getAttribute('data-theme-mode') as 'system' | 'light' | 'dark' | null) ?? 'system'
+export const initialThemeMode = (document.documentElement.getAttribute('data-theme-mode') as 'system' | 'light' | 'dark' | null) ?? 'system'
 
 export function trimTerminalBuffer(text: string): string {
   if (text.length <= MAX_TERMINAL_OUTPUT_CHARS) return text
@@ -20,9 +13,7 @@ export function trimTerminalBuffer(text: string): string {
 }
 
 export function collectUrlsFromText(text: string): string[] {
-  const clean = text.replace(/\x1b\[[0-9;]*m/g, '')
-  const matches = clean.match(URL_PATTERN)
-  return matches ? [...new Set(matches)] : []
+  return collectUrlsFromTextShared(text)
 }
 
 function normalizeProcessUrls(value: unknown): Record<string, string[]> {
@@ -160,11 +151,9 @@ export function applySavedProjectSnapshot(
     lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
     codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
     codeSession?: ProjectInfo['codeSession']
-  }
+  },
 ): ProjectInfo {
-  const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => (
-    Object.prototype.hasOwnProperty.call(saved, key)
-  )
+  const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => Object.prototype.hasOwnProperty.call(saved, key)
 
   if (hasSavedField('customCommand')) project.customCommand = saved.customCommand
   if (hasSavedField('runWorkingDirectory')) project.runWorkingDirectory = saved.runWorkingDirectory
@@ -185,12 +174,7 @@ export function applySavedProjectSnapshot(
   return project
 }
 
-export async function persistWorkspace(
-  projects: ProjectInfo[],
-  folders: ProjectFolder[],
-  tags: ProjectTag[],
-  removedProjects?: RemovedProjectSnapshot[],
-): Promise<void> {
+export async function persistWorkspace(projects: ProjectInfo[], folders: ProjectFolder[], tags: ProjectTag[], removedProjects?: RemovedProjectSnapshot[]): Promise<void> {
   const payload: Record<string, unknown> = {
     projects: toSavedProjects(projects),
     folders,

@@ -1,5 +1,6 @@
 import { type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { WindowStateEvent } from '../../shared/electronApi'
+import type { RunTaskProgressEvent } from '../../shared/runTasks'
 import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, MarkdownDocumentOpenRequest, TranscriptImportedEvent } from '../../shared/types'
 import { IPC } from '../main/ipc'
 
@@ -46,6 +47,8 @@ const subscribeAiCommitStatus = createFanoutSubscription<AiCommitStatusData>(IPC
 export function createSubscriptionApi() {
   return {
     onProcessOutput: (cb: (data: { projectId: string; data: string }) => void) => subscribeIpcEvent(IPC.PROCESS_OUTPUT, cb),
+
+    onRunTaskProgress: (cb: (data: RunTaskProgressEvent) => void) => subscribeIpcEvent(IPC.RUN_TASK_PROGRESS, cb),
 
     onProcessStatus: (cb: (data: { projectId: string; status: string }) => void) => subscribeIpcEvent(IPC.PROCESS_STATUS, cb),
 

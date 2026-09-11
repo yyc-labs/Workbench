@@ -6,7 +6,7 @@ import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
 import { CardContextMenu, type CardContextMenuInfo } from './CardContextMenu'
 import { ProjectMetaDialog } from './ProjectMetaDialog'
-import { RunCommandConfigPopover } from './RunCommandConfigPopover'
+import { RunTasksDialog } from './run-tasks/RunTasksDialog'
 import { Input } from './ui/input'
 import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
 import { useI18n } from '../i18n'
@@ -114,8 +114,9 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project,
 })
 
 const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ contextMenu, project, onClose, onRequestCloseDrawer, onEditMetadata, onOpenRunConfig }: RecentProjectsContextMenuProps) {
-  const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
+  const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
@@ -124,6 +125,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const togglePin = useAppStore((s) => s.togglePin)
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
   const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
+  const runTaskStates = useAppStore((s) => s.runTaskStates[project.id])
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
@@ -144,6 +146,12 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const currentCli: CliTool = getAiRuntimeProfileCli(currentRuntimeProfile, project.cli)
   const isDevRunning = devStatus === 'running'
   const isDevStopping = devStatus === 'stopping'
+  const hasActiveRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping'))
+  const isAnyRunTaskStopping = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'stopping'))
+  // The context menu reflects the unified run-task pipeline, not the legacy
+  // bare-process state alone.
+  const isMenuDevRunning = isDevRunning || hasActiveRunTasks
+  const isMenuDevStopping = isDevStopping || isAnyRunTaskStopping
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
@@ -239,6 +247,18 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
     [onRequestCloseDrawer],
   )
 
+  // Unified start/stop: everything goes through the run-task pipeline.
+  const handleStartProjectTasks = useCallback(() => {
+    void startAllRunTasks(project.id, project.path)
+  }, [project.id, project.path, startAllRunTasks])
+
+  const handleStopProjectTasks = useCallback(() => {
+    void (async () => {
+      await stopAllRunTasks(project.id)
+      await stopProject(project.id)
+    })()
+  }, [project.id, stopAllRunTasks, stopProject])
+
   return (
     <CardContextMenu
       x={contextMenu.x}
@@ -247,8 +267,8 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
       onClose={onClose}
       isRuntimeActive={isRuntimeActive}
       usesTmuxRuntime={usesTmuxRuntime}
-      isDevRunning={isDevRunning}
-      isDevStopping={isDevStopping}
+      isDevRunning={isMenuDevRunning}
+      isDevStopping={isMenuDevStopping}
       isOpeningTerminal={isOpeningTerminal}
       isStartingRuntime={isStartingRuntime}
       isStoppingRuntime={isStoppingRuntime}
@@ -267,8 +287,8 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
       onSelectAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleSelectAiRuntimeProfile(profileId))}
       onUseAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleUseAiRuntimeProfileOnce(profileId))}
       onSwitchAndUseAiRuntimeProfile={(profileId) => handleActionAndCloseDrawer(() => handleSwitchAndUseAiRuntimeProfile(profileId))}
-      onStartProject={() => handleActionAndCloseDrawer(() => startProject(project.id))}
-      onStopProject={() => handleActionAndCloseDrawer(() => stopProject(project.id))}
+      onStartProject={() => handleActionAndCloseDrawer(handleStartProjectTasks)}
+      onStopProject={() => handleActionAndCloseDrawer(handleStopProjectTasks)}
       aiCommitStatus={aiCommitStatus}
       onOpenFolder={() => handleActionAndCloseDrawer(() => window.electronAPI.openFolder(project.path))}
       onOpenPathTerminal={() => handleActionAndCloseDrawer(() => window.electronAPI.openPathTerminal(project.path))}
@@ -278,7 +298,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
         onEditMetadata(project.id)
         onRequestCloseDrawer()
       }}
-      onEditRunCommandConfig={onOpenRunConfig}
+      onOpenRunTasks={onOpenRunConfig}
       info={info}
     />
   )
@@ -542,7 +562,7 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
         />
       )}
 
-      {runConfigProject && <RunCommandConfigPopover project={runConfigProject} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} baseZIndex={20010} />}
+      {runConfigOpen && runConfigProject && <RunTasksDialog project={runConfigProject} open onClose={() => setRunConfigOpen(false)} baseZIndex={20010} />}
     </>
   )
 }

@@ -16,8 +16,7 @@ function resolveWindowsSystemExecutable(command: string): string {
     return command
   }
 
-  const systemRoot = (process.env.SystemRoot || process.env.WINDIR || process.env.windir || 'C:\\Windows')
-    .replace(/[\\/]+$/, '')
+  const systemRoot = (process.env.SystemRoot || process.env.WINDIR || process.env.windir || 'C:\\Windows').replace(/[\\/]+$/, '')
   const system32 = `${systemRoot}\\System32`
 
   if (normalized === 'cmd.exe' || normalized === 'cmd') {
@@ -122,9 +121,42 @@ class ProcessManager {
   private resizeCtrls = new Map<string, ResizeController>()
   private outputWindow: BrowserWindow | null = null
   private capability: Capability
+  /** Direct output consumers (e.g. run-task scheduler) independent of the IPC window path. */
+  private outputTaps = new Set<(processId: string, data: string) => void>()
+  private exitTaps = new Set<(processId: string, code: number | null) => void>()
 
   constructor(capability: Capability) {
     this.capability = capability
+  }
+
+  addOutputTap(cb: (processId: string, data: string) => void): () => void {
+    this.outputTaps.add(cb)
+    return () => this.outputTaps.delete(cb)
+  }
+
+  addExitTap(cb: (processId: string, code: number | null) => void): () => void {
+    this.exitTaps.add(cb)
+    return () => this.exitTaps.delete(cb)
+  }
+
+  private emitOutput(processId: string, data: string): void {
+    for (const tap of this.outputTaps) {
+      try {
+        tap(processId, data)
+      } catch {
+        /* consumer error must not break the process path */
+      }
+    }
+  }
+
+  private emitExit(processId: string, code: number | null): void {
+    for (const tap of this.exitTaps) {
+      try {
+        tap(processId, code)
+      } catch {
+        /* consumer error must not break the process path */
+      }
+    }
   }
 
   updateCapability(capability: Capability): void {
@@ -168,10 +200,7 @@ class ProcessManager {
   private startResolved(projectId: string, command: string, cwd: string, useWsl?: boolean): boolean {
     // UNC WSL paths cannot be used as cwd for cmd.exe.
     // Force WSL backend even when UI requested host-native mode.
-    const forceWslForPath =
-      process.platform === 'win32' &&
-      this.capability.hasWsl &&
-      this.isWslUncPath(cwd)
+    const forceWslForPath = process.platform === 'win32' && this.capability.hasWsl && this.isWslUncPath(cwd)
 
     // Per-process environment override: Windows-native vs WSL
     if (forceWslForPath) {
@@ -359,9 +388,7 @@ class ProcessManager {
     // proxy settings etc. even though the shell is non-interactive.
     const hasCommand = command && command.trim().length > 0
     const wrappedCommand = hasCommand ? this.wslEnvPrefix() + command : command
-    const attachCmd = hasCommand
-      ? tmuxManager.attachOrCreateCommand(sessionName, wrappedCommand, wslPath)
-      : tmuxManager.attachOrCreateCommand(sessionName)
+    const attachCmd = hasCommand ? tmuxManager.attachOrCreateCommand(sessionName, wrappedCommand, wslPath) : tmuxManager.attachOrCreateCommand(sessionName)
 
     const pty = ptySpawn('wsl.exe', this.wslShellArgs(attachCmd), {
       name: 'xterm-color',
@@ -405,27 +432,27 @@ class ProcessManager {
       })
     }
 
-    const backendTag: 'wsl-pty' | 'direct-pty' =
-      process.platform === 'win32' && this.capability.hasWsl ? 'wsl-pty' : 'direct-pty'
+    const backendTag: 'wsl-pty' | 'direct-pty' = process.platform === 'win32' && this.capability.hasWsl ? 'wsl-pty' : 'direct-pty'
     return this.finalizePtyStart(projectId, pty, backendTag)
   }
 
-  private finalizePtyStart(
-    projectId: string,
-    pty: IPty,
-    backend: 'tmux' | 'wsl-pty' | 'direct-pty',
-  ): boolean {
+  private finalizePtyStart(projectId: string, pty: IPty, backend: 'tmux' | 'wsl-pty' | 'direct-pty'): boolean {
     const managed: PtyManagedProcess = { pty, projectId, startTime: Date.now(), backend }
     this.processes.set(projectId, managed)
 
     // Resize controller
     const resizeCtrl = new ResizeController()
     resizeCtrl.onResize((size: PtySize) => {
-      try { pty.resize(size.cols, size.rows) } catch { /* ignore */ }
+      try {
+        pty.resize(size.cols, size.rows)
+      } catch {
+        /* ignore */
+      }
     })
     this.resizeCtrls.set(projectId, resizeCtrl)
 
     pty.onData((data: string) => {
+      this.emitOutput(projectId, data)
       this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data })
     })
 
@@ -436,6 +463,7 @@ class ProcessManager {
       this.processes.delete(projectId)
       this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'stopped' })
       this.send(IPC_CHANNELS.PROCESS_EXIT, { projectId, code: exitCode })
+      this.emitExit(projectId, exitCode)
     })
 
     this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'running' })
@@ -445,9 +473,7 @@ class ProcessManager {
   // ── backend: spawn fallback ─────────────────────────────
 
   private startWithSpawn(projectId: string, command: string, cwd: string): boolean {
-    const hostCwd = process.platform === 'win32'
-      ? toHostAccessiblePath(cwd, this.getDefaultWslDistro())
-      : cwd
+    const hostCwd = process.platform === 'win32' ? toHostAccessiblePath(cwd, this.getDefaultWslDistro()) : cwd
     const child = spawnChild(command, {
       cwd: hostCwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -462,23 +488,36 @@ class ProcessManager {
 
     child.stdout?.on('data', (data: Buffer) => {
       const text = stdoutDecoder.decodeChunk(data)
-      if (text) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
+      if (text) {
+        this.emitOutput(projectId, text)
+        this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
+      }
     })
 
     child.stderr?.on('data', (data: Buffer) => {
       const text = stderrDecoder.decodeChunk(data)
-      if (text) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
+      if (text) {
+        this.emitOutput(projectId, text)
+        this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: text })
+      }
     })
 
     child.on('exit', (code) => {
       this.stopping.delete(projectId)
       const stdoutTail = stdoutDecoder.flush()
-      if (stdoutTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stdoutTail })
+      if (stdoutTail) {
+        this.emitOutput(projectId, stdoutTail)
+        this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stdoutTail })
+      }
       const stderrTail = stderrDecoder.flush()
-      if (stderrTail) this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stderrTail })
+      if (stderrTail) {
+        this.emitOutput(projectId, stderrTail)
+        this.send(IPC_CHANNELS.PROCESS_OUTPUT, { projectId, data: stderrTail })
+      }
       this.processes.delete(projectId)
       this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'stopped' })
       this.send(IPC_CHANNELS.PROCESS_EXIT, { projectId, code })
+      this.emitExit(projectId, code)
     })
 
     child.on('error', (err) => {
@@ -514,16 +553,32 @@ class ProcessManager {
       if (process.platform === 'win32') {
         const killer = spawnChild('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore' })
         killer.on('error', () => {
-          try { managed.child.kill() } catch { /* dead */ }
+          try {
+            managed.child.kill()
+          } catch {
+            /* dead */
+          }
         })
       } else {
-        try { process.kill(-pid, 'SIGTERM') } catch { /* already dead */ }
+        try {
+          process.kill(-pid, 'SIGTERM')
+        } catch {
+          /* already dead */
+        }
         setTimeout(() => {
-          try { process.kill(-pid, 'SIGKILL') } catch { /* already dead */ }
+          try {
+            process.kill(-pid, 'SIGKILL')
+          } catch {
+            /* already dead */
+          }
         }, 2000)
       }
     } catch {
-      try { managed.child.kill() } catch { /* already dead */ }
+      try {
+        managed.child.kill()
+      } catch {
+        /* already dead */
+      }
     }
     return true
   }
@@ -532,11 +587,19 @@ class ProcessManager {
     const { pty } = managed
 
     // Graceful Ctrl+C
-    try { pty.write('\x03') } catch { /* dead */ }
+    try {
+      pty.write('\x03')
+    } catch {
+      /* dead */
+    }
 
     // Force kill after grace period
     setTimeout(() => {
-      try { pty.kill('SIGTERM') } catch { /* already dead */ }
+      try {
+        pty.kill('SIGTERM')
+      } catch {
+        /* already dead */
+      }
     }, 1500)
 
     return true

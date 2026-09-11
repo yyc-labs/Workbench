@@ -11,6 +11,7 @@ import { createLearningInvokeApi } from './invokeApi.learning'
 import { createSkillInvokeApi } from './invokeApi.skill'
 import { createProjectFileInvokeApi } from './invokeApi.projectFiles'
 import { createProcessPortsInvokeApi } from './invokeApi.processPorts'
+import { createRunTaskInvokeApi } from './invokeApi.runTasks'
 import { createRuntimeInvokeApi } from './invokeApi.runtime'
 import { createTranscriptInvokeApi } from './invokeApi.transcript'
 import { createMarkdownDocumentInvokeApi } from './invokeApi.markdownDocument'
@@ -26,6 +27,7 @@ const api = {
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
   ...createProcessPortsInvokeApi(),
+  ...createRunTaskInvokeApi(),
   ...createTranscriptInvokeApi(),
   ...createLearningInvokeApi(),
   ...createSkillInvokeApi(),

@@ -10,7 +10,7 @@ import { ModalShell } from '../components/ModalShell'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
 import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
-import { RunCommandConfigPopover } from '../components/RunCommandConfigPopover'
+import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
 import { Button } from '../components/ui/button'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
@@ -28,6 +28,7 @@ import { remarkBoxDrawingTables } from './code/code.markdownBoxTables'
 import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
 import { useProjectDocLinks } from './detail/useProjectDocLinks'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
+import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
 import { ManualTranscriptImportModal } from './transcript/ManualTranscriptImportModal'
 import { TranscriptShareModal } from './transcript/TranscriptShareModal'
 import { buildTranscriptShareSnapshot } from './transcript/transcriptShareSnapshot'
@@ -91,6 +92,9 @@ export function TranscriptPage() {
   const tags = useAppStore((s) => s.tags)
   const processStatus = useAppStore((s) => (projectId ? (s.processes[projectId]?.status ?? 'stopped') : 'stopped'))
   const processUrls = useAppStore((s) => (projectId ? (s.processUrls[projectId] ?? []) : []))
+  const runTaskStates = useAppStore((s) => (projectId ? s.runTaskStates[projectId] : undefined))
+  const runTaskConfig = useAppStore((s) => (projectId ? s.runTaskConfigs[projectId] : undefined))
+  const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
   const runtimeSession = useAppStore((s) => (projectId ? s.sessions[projectId] : undefined))
   const runtimeEntry = useAppStore((s) => (projectId ? s.runtimeEntries[projectId] : undefined))
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
@@ -123,6 +127,8 @@ export function TranscriptPage() {
   const setProjectCodeSession = useAppStore((s) => s.setProjectCodeSession)
   const startProject = useAppStore((s) => s.startProject)
   const stopProject = useAppStore((s) => s.stopProject)
+  const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
+  const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
   const startRuntime = useAppStore((s) => s.startRuntime)
   const stopRuntime = useAppStore((s) => s.stopRuntime)
   const openTerminal = useAppStore((s) => s.openTerminal)
@@ -179,7 +185,7 @@ export function TranscriptPage() {
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
-  const [runConfigOpen, setRunConfigOpen] = useState(false)
+  const [runTasksOpen, setRunTasksOpen] = useState(false)
   const { projectHeaderCollapsed, setProjectHeaderCollapsed, effectiveTheme, isNarrowViewport } = useTranscriptPageChromeState()
   const [isTranscriptListCollapsed, setIsTranscriptListCollapsed] = useState(readTranscriptListSidebarCollapsed)
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
@@ -209,6 +215,13 @@ export function TranscriptPage() {
     if (!projectId) return
     void loadProjectTranscripts(projectId)
   }, [loadProjectTranscripts, projectId])
+
+  useEffect(() => {
+    // Lazily discover the project's run task config so primaryUrl ordering works.
+    if (projectId && runTaskConfig === undefined && project?.path) {
+      void loadRunTaskConfig(projectId, project.path)
+    }
+  }, [projectId, runTaskConfig, project?.path, loadRunTaskConfig])
 
   useEffect(() => {
     try {
@@ -263,7 +276,18 @@ export function TranscriptPage() {
   const usesTmuxRuntime = isTmuxRuntimeEntry(runtimeEntry, aiEnvironmentMode)
   const isDevRunning = processStatus === 'running'
   const isDevStopping = processStatus === 'stopping'
-  const isActive = isDevRunning || isDevStopping
+  const runTaskUrls = useMemo(() => getActiveRunTaskUrls(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
+  const primaryUrlPending = useMemo(() => isPrimaryRunTaskUrlPending(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
+  const hasActiveRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping'))
+  const hasStartingRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting'))
+  const isAnyRunTaskStopping = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'stopping'))
+  // Starting always goes through the run-task pipeline (legacy commands are
+  // synthesized into a default task), so task activity counts as project activity.
+  const isActive = isDevRunning || isDevStopping || hasActiveRunTasks
+  // The context menu reflects the unified run-task pipeline, not the legacy
+  // bare-process state alone.
+  const isMenuDevRunning = isDevRunning || hasActiveRunTasks
+  const isMenuDevStopping = isDevStopping || isAnyRunTaskStopping
   const aiRuntimeProfiles = aiRuntimeProfilesConfig.length > 0 ? aiRuntimeProfilesConfig : defaultAiRuntimeProfiles()
   const defaultRuntimeProfile = resolveAiRuntimeProfile(aiRuntimeProfiles, activeAiRuntimeProfileId)
   const defaultRuntimeProfileLabel = getAiRuntimeProfileLabel(defaultRuntimeProfile)
@@ -298,12 +322,34 @@ export function TranscriptPage() {
     },
     [defaultRuntimeProfile.id, project, setProjectAiRuntimeProfile, startRuntime],
   )
+
+  // Unified start/stop: everything goes through the run-task pipeline.
+  const handleStartProjectTasks = useCallback(() => {
+    if (!projectId) return
+    void startAllRunTasks(projectId, project?.path ?? '')
+  }, [projectId, project?.path, startAllRunTasks])
+
+  const handleStopProjectTasks = useCallback(() => {
+    if (!projectId) return
+    void (async () => {
+      await stopAllRunTasks(projectId)
+      await stopProject(projectId)
+    })()
+  }, [projectId, stopAllRunTasks, stopProject])
   const { isDevReady, pendingOpenDevUrl, startAndOpenDevUrl } = useProjectDevUrlLauncher({
     projectId: projectId ?? '',
     processStatus,
     processUrls,
     runStartupMode: project?.runStartupMode,
     startProject,
+    extraUrls: runTaskUrls,
+    primaryUrlPending,
+    isStartPending: hasStartingRunTasks,
+    start: () =>
+      startAllRunTasks(projectId ?? '', project?.path ?? '').then((result) => {
+        if (!result.started && result.error) console.warn('[TranscriptPage] start all run tasks failed:', result.error)
+        return result.started
+      }),
   })
   const openStartupLogs = useOpenStartupLogs()
   const projectLinkItems = useMemo(() => [...(isDevReady ? processUrls.map((url) => ({ url, label: `Dev: ${url}` })) : []), ...docMenuItems], [docMenuItems, isDevReady, processUrls])
@@ -893,8 +939,8 @@ export function TranscriptPage() {
           onClose={() => setMenuPos(null)}
           isRuntimeActive={isRuntimeActive}
           usesTmuxRuntime={usesTmuxRuntime}
-          isDevRunning={isDevRunning}
-          isDevStopping={isDevStopping}
+          isDevRunning={isMenuDevRunning}
+          isDevStopping={isMenuDevStopping}
           isOpeningTerminal={isOpeningTerminal}
           isStartingRuntime={isStartingRuntime}
           isStoppingRuntime={isStoppingRuntime}
@@ -913,8 +959,8 @@ export function TranscriptPage() {
           onSelectAiRuntimeProfile={handleSelectAiRuntimeProfile}
           onUseAiRuntimeProfile={handleUseAiRuntimeProfileOnce}
           onSwitchAndUseAiRuntimeProfile={handleSwitchAndUseAiRuntimeProfile}
-          onStartProject={() => startProject(project.id)}
-          onStopProject={() => stopProject(project.id)}
+          onStartProject={handleStartProjectTasks}
+          onStopProject={handleStopProjectTasks}
           onAiAutoCommit={() => {
             void handleAiAutoCommit()
           }}
@@ -926,7 +972,7 @@ export function TranscriptPage() {
           onOpenVsCode={() => window.electronAPI.openInVsCode(project.path)}
           onTogglePin={() => togglePin(project.id)}
           onEditMetadata={() => setMetaDialogOpen(true)}
-          onEditRunCommandConfig={() => setRunConfigOpen(true)}
+          onOpenRunTasks={() => setRunTasksOpen(true)}
         />
       )}
 
@@ -934,7 +980,8 @@ export function TranscriptPage() {
         <ProjectMetaDialog open={metaDialogOpen} project={project} folders={folders} tags={tags} onClose={() => setMetaDialogOpen(false)} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
       )}
 
-      <RunCommandConfigPopover project={project} open={runConfigOpen} onClose={() => setRunConfigOpen(false)} />
+      {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
 
       <TranscriptReferenceDrawer
         open={Boolean(session && activeReference)}

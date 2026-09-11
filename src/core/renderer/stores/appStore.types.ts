@@ -109,6 +109,7 @@ import type {
   SkillUpdatePayload,
 } from '../../shared/types'
 import type { ElectronApi } from '../../shared/electronApi'
+import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from '../../shared/runTasks'
 import type { MarkdownDocumentHistoryEntry, MarkdownDocumentReadResult } from '../../shared/types'
 import type { MarkdownDocumentCompatibility, MarkdownDocumentComplexity, MarkdownDocumentDisplayMode } from '../pages/markdown-document/markdownDocumentTypes'
 
@@ -197,6 +198,22 @@ export interface AppState {
   removeProject: (projectId: string) => Promise<void>
   startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean, cwdOverride?: string, runStartupModeOverride?: 'silent' | 'terminal') => Promise<boolean>
   stopProject: (projectId: string) => Promise<void>
+  runTaskConfigs: Record<string, RunTaskConfigFile | null>
+  runTaskStates: Record<string, RunTaskProgressEvent['tasks']>
+  loadRunTaskConfig: (projectId: string, projectPath: string) => Promise<RunTaskConfigReadResult>
+  saveRunTaskConfig: (projectId: string, projectPath: string, tasks: RunTask[], scanDirectories?: string[]) => Promise<RunTaskConfigReadResult>
+  detectRunTaskCandidates: (projectPath: string, scanDirectories?: string[]) => Promise<RunTaskCandidate[]>
+  startRunTask: (projectId: string, projectPath: string, task: RunTask) => Promise<boolean>
+  startAllRunTasks: (projectId: string, projectPath: string) => Promise<{ started: boolean; error?: string }>
+  stopRunTask: (projectId: string, taskId: string) => Promise<boolean>
+  stopAllRunTasks: (projectId: string) => Promise<boolean>
+  updateRunTaskStates: (event: RunTaskProgressEvent) => void
+  /** Global "Docker is not running — start it?" prompt state; null when hidden. */
+  dockerPrompt: { launching: boolean; error: string | null } | null
+  requestDockerLaunch: (projectPath: string, tasks: RunTask[]) => Promise<boolean>
+  cancelDockerLaunch: () => void
+  confirmDockerLaunch: () => Promise<void>
+  setDockerPrompt: (prompt: { launching: boolean; error: string | null }) => void
   loadRuntimeEntries: () => Promise<void>
   appendOutput: (projectId: string, data: string) => void
   clearOutput: (projectId: string) => void

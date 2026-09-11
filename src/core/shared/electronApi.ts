@@ -110,6 +110,7 @@ import type {
   MarkdownDocumentWriteResult,
 } from './types'
 import type { AiRuntimeProfile, AppViewPath } from './types'
+import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from './runTasks'
 
 export type ElectronApiSubscription<T> = (cb: (data: T) => void) => () => void
 export type ElectronApiSignalSubscription = (cb: () => void) => () => void
@@ -361,8 +362,22 @@ export interface ProcessPortsElectronApi {
   listProcessPorts: () => Promise<ProcessPortInventory>
 }
 
+export interface RunTaskElectronApi {
+  getRunTaskConfig: (projectPath: string) => Promise<RunTaskConfigReadResult>
+  saveRunTaskConfig: (projectPath: string, tasks: RunTaskConfigFile['tasks'], scanDirectories?: string[]) => Promise<RunTaskConfigReadResult>
+  detectRunTaskCandidates: (projectPath: string, scanDirectories?: string[]) => Promise<RunTaskCandidate[]>
+  startRunTask: (projectId: string, projectPath: string, task: RunTask) => Promise<boolean>
+  startAllRunTasks: (projectId: string, projectPath: string, tasks?: RunTask[]) => Promise<{ started: boolean; error?: string }>
+  stopRunTask: (projectId: string, taskId: string) => Promise<boolean>
+  stopAllRunTasks: (projectId: string) => Promise<boolean>
+  getRunTaskState: (projectId: string) => Promise<RunTaskProgressEvent | null>
+  checkRunTaskDocker: (projectPath: string, tasks: RunTask[]) => Promise<{ required: boolean; running: boolean }>
+  startDockerDaemon: (projectPath: string, tasks: RunTask[]) => Promise<{ ready: boolean; error?: string }>
+}
+
 export interface SubscriptionElectronApi {
   onProcessOutput: ElectronApiSubscription<ProcessOutputEvent>
+  onRunTaskProgress: ElectronApiSubscription<RunTaskProgressEvent>
   onProcessStatus: ElectronApiSubscription<ProcessStatusEvent>
   onProcessExit: ElectronApiSubscription<ProcessExitEvent>
   onRuntimeStateChanged: ElectronApiSubscription<RuntimeStateChangedEvent>
@@ -396,4 +411,5 @@ export type ElectronApi = CoreElectronApi &
   BrowserScreenshotElectronApi &
   RuntimeElectronApi &
   ProcessPortsElectronApi &
+  RunTaskElectronApi &
   SubscriptionElectronApi

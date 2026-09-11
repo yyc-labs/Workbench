@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Clock3, Map } from 'lucide-react'
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
+import { DockerLaunchPromptDialog } from '../components/run-tasks/DockerLaunchPromptDialog'
 import { ToastViewport } from '../components/ui/toast'
 import { useI18n } from '../i18n'
 import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
@@ -80,6 +81,18 @@ function ProcessOutputListener() {
       unsubExit()
     }
   }, [appendOutput, updateProcessStatus, handleProcessExit, refreshRuntimeState])
+
+  return null
+}
+
+function RunTaskProgressListener() {
+  const updateRunTaskStates = useAppStore((s) => s.updateRunTaskStates)
+
+  useEffect(() => {
+    return window.electronAPI.onRunTaskProgress((event) => {
+      updateRunTaskStates(event)
+    })
+  }, [updateRunTaskStates])
 
   return null
 }
@@ -391,6 +404,8 @@ export function AppGlobalEffects() {
       <ThemeSync />
       <LocaleSync />
       <ProcessOutputListener />
+      <RunTaskProgressListener />
+      <DockerLaunchPromptDialog />
       <TranscriptImportListener />
       <RuntimeStateListener />
       <SessionPoller />

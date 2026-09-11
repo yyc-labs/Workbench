@@ -1,0 +1,352 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2 } from 'lucide-react'
+import { ModalShell } from '../ModalShell'
+import { useI18n, useLocale } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
+import { useOpenStartupLogs } from '../../hooks/useOpenStartupLogs'
+import { getEffectiveRunTasks } from '../../../shared/runTasks'
+import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
+import type { ProjectInfo } from '../../../shared/types'
+import type { RunTask } from '../../../shared/runTasks'
+import { isRunTaskActive, runTaskDotClass, runTaskReadinessSummary, runTaskStateBadgeClass } from './runTasks.helpers'
+import { RunTaskDetectDialog } from './RunTaskDetectDialog'
+import { RunTaskEditDialog } from './RunTaskEditDialog'
+
+type RunTasksDialogProps = {
+  project: ProjectInfo
+  open: boolean
+  /** Modal 层级,在高层级容器(如最近项目抽屉)内打开时需要调高。 */
+  baseZIndex?: number
+  onClose: () => void
+}
+
+export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksDialogProps) {
+  const { t } = useI18n()
+  const locale = useLocale()
+  const skillPrompt = useMemo(() => buildRunTaskSkillPrompt(locale), [locale])
+  const config = useAppStore((s) => s.runTaskConfigs[project.id])
+  const taskStates = useAppStore((s) => s.runTaskStates[project.id])
+  const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
+  const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
+  const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
+  const startRunTask = useAppStore((s) => s.startRunTask)
+  const stopRunTask = useAppStore((s) => s.stopRunTask)
+  const saveRunTaskConfig = useAppStore((s) => s.saveRunTaskConfig)
+  const openStartupLogs = useOpenStartupLogs()
+
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [detectOpen, setDetectOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<RunTask | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [skillOpen, setSkillOpen] = useState(false)
+  const [skillCopied, setSkillCopied] = useState(false)
+  const [deletingTask, setDeletingTask] = useState<RunTask | null>(null)
+  const [busy, setBusy] = useState(false)
+  const skillCopiedTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setConfigError(null)
+    void loadRunTaskConfig(project.id, project.path).then((result) => {
+      if (result.error === 'invalid-json') setConfigError(t('runTasks.error.invalidJson'))
+      if (result.error === 'invalid-structure') setConfigError(t('runTasks.error.invalidStructure'))
+    })
+  }, [open, project.id, project.path, loadRunTaskConfig, t])
+
+  // Config-file tasks win; legacy single-command projects get a synthesized
+  // default task so the old run behavior keeps working through this dialog.
+  const fromLegacy = !config || config.tasks.length === 0
+  const tasks = useMemo(() => {
+    if (!fromLegacy) return config.tasks
+    return getEffectiveRunTasks(project, null).tasks.map((item) => item.task)
+  }, [config, fromLegacy, project])
+
+  const anyActive = tasks.some((task) => isRunTaskActive(taskStates?.[task.id]?.state))
+
+  const handleStartAll = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await startAllRunTasks(project.id, project.path)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleStopAll = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await stopAllRunTasks(project.id)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleSaveTasks = async (nextTasks: RunTask[], scanDirectories?: string[]) => {
+    const result = await saveRunTaskConfig(project.id, project.path, nextTasks, scanDirectories)
+    if (result.error === 'invalid-json') setConfigError(t('runTasks.error.invalidJson'))
+    return result
+  }
+
+  const handleCopySkillPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(skillPrompt)
+      setSkillCopied(true)
+      if (skillCopiedTimerRef.current !== null) window.clearTimeout(skillCopiedTimerRef.current)
+      skillCopiedTimerRef.current = window.setTimeout(() => {
+        setSkillCopied(false)
+        skillCopiedTimerRef.current = null
+      }, 1500)
+    } catch {
+      // clipboard unavailable — nothing to surface
+    }
+  }
+
+  const handleDeleteTask = async () => {
+    if (!deletingTask) return
+    const nextTasks = tasks.filter((item) => item.id !== deletingTask.id)
+    if (nextTasks.length > 0) await handleSaveTasks(nextTasks)
+    setDeletingTask(null)
+  }
+
+  const handleToggleEnabled = (task: RunTask) => {
+    const nextTasks = tasks.map((item) => {
+      if (item.id !== task.id) return item
+      if (item.enabled === false) {
+        const { enabled: _removed, ...rest } = item
+        return rest as RunTask
+      }
+      return { ...item, enabled: false }
+    })
+    void handleSaveTasks(nextTasks)
+  }
+
+  return (
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[720px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex items-center justify-between border-b border-[color:var(--color-border)] px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[color:var(--color-foreground)]">
+              <ListTree className="h-4 w-4 text-[color:var(--color-muted-foreground)]" />
+              {t('runTasks.title')}
+            </h2>
+            <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]">{fromLegacy ? t('runTasks.legacyHint') : t('runTasks.configHint')}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" className="quiet-control inline-flex h-[30px] w-[30px] items-center justify-center rounded-full text-[color:var(--color-foreground)]" onClick={() => setSkillOpen(true)} title={t('runTasks.skillDialog.title')} aria-label={t('runTasks.skillDialog.title')}>
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="quiet-control inline-flex h-[30px] w-[30px] items-center justify-center rounded-full text-[color:var(--color-foreground)]" onClick={() => void handleCopySkillPrompt()} title={t('runTasks.copySkillPrompt')} aria-label={t('runTasks.copySkillPrompt')}>
+              {skillCopied ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+            </button>
+            <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={() => setDetectOpen(true)}>
+              <Sparkles className="h-3.5 w-3.5" />
+              {t('runTasks.autoDetect')}
+            </button>
+            <button
+              type="button"
+              className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]"
+              onClick={() => {
+                setEditingTask(null)
+                setEditOpen(true)
+              }}
+            >
+              <FilePlus2 className="h-3.5 w-3.5" />
+              {t('runTasks.addTask')}
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          {configError && <p className="mb-3 rounded-xl border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{configError}</p>}
+
+          {tasks.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[color:var(--color-border)] px-6 py-10 text-center">
+              <SquareDashed className="h-6 w-6 text-[color:var(--color-muted-foreground)]" />
+              <p className="max-w-[420px] text-xs leading-relaxed text-[color:var(--color-muted-foreground)]">{t('runTasks.noTasksHint')}</p>
+              <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={() => setDetectOpen(true)}>
+                <Sparkles className="h-3.5 w-3.5" />
+                {t('runTasks.autoDetect')}
+              </button>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {tasks.map((task) => {
+                const state = taskStates?.[task.id]?.state
+                const url = taskStates?.[task.id]?.url
+                const error = taskStates?.[task.id]?.error
+                const readiness = runTaskReadinessSummary(task)
+                const active = isRunTaskActive(state)
+                const disabled = task.enabled === false
+                return (
+                  <li key={task.id} className={`surface-card rounded-2xl px-4 py-3 ${disabled ? 'opacity-60' : ''}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${runTaskDotClass(state)}`} />
+                          <span className="truncate text-sm font-medium text-[color:var(--color-foreground)]">{task.name}</span>
+                          {task.isDefault && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.defaultBadge')}</span>}
+                          {disabled && <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.disabledBadge')}</span>}
+                          {state && state !== 'idle' && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${runTaskStateBadgeClass(state)}`}>{t(`runTasks.taskState.${state}`)}</span>}
+                        </div>
+                        <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]" title={task.command}>
+                          {task.command}
+                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+                          {task.cwd && <span className="truncate">{task.cwd}</span>}
+                          {task.dependsOn && task.dependsOn.length > 0 && (
+                            <span className="truncate">
+                              {t('runTasks.dependsOn')}: {task.dependsOn.join(', ')}
+                            </span>
+                          )}
+                          {readiness && <span className="truncate font-mono">{readiness}</span>}
+                          {url && (
+                            <a href={url} target="_blank" rel="noreferrer" className="truncate text-primary hover:underline">
+                              {url}
+                            </a>
+                          )}
+                        </div>
+                        {error && (
+                          <p className="mt-1 truncate text-[11px] text-[color:var(--color-destructive)]" title={error}>
+                            {error}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          className={`quiet-control rounded-full p-1.5 ${disabled ? 'text-[color:var(--color-muted-foreground)]' : 'text-[color:var(--color-success)]'}`}
+                          onClick={() => handleToggleEnabled(task)}
+                          disabled={active}
+                          title={disabled ? t('runTasks.enableTask') : t('runTasks.disableTask')}
+                        >
+                          {disabled ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+                        </button>
+                        {active ? (
+                          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-destructive)] disabled:opacity-50" onClick={() => void stopRunTask(project.id, task.id)} disabled={state === 'stopping'} title={t('common.stop')}>
+                            <CircleStop className="h-3.5 w-3.5" />
+                          </button>
+                        ) : (
+                          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-success)]" onClick={() => void startRunTask(project.id, project.path, task)} title={t('common.run')}>
+                            <Play className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => openStartupLogs(project.id)} title={t('runTasks.openLogs')}>
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]"
+                          onClick={() => {
+                            setEditingTask(task)
+                            setEditOpen(true)
+                          }}
+                          title={t('runTasks.editTask')}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)]" onClick={() => setDeletingTask(task)} disabled={tasks.length <= 1} title={t('runTasks.deleteTask')}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-[color:var(--color-border)] px-5 py-3">
+          <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">.yworkbench/run-tasks.json</p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-success)] disabled:opacity-50" onClick={() => void handleStartAll()} disabled={busy || tasks.length === 0 || anyActive}>
+              <Play className="h-3.5 w-3.5" />
+              {t('runTasks.startAll')}
+            </button>
+            <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-destructive)] disabled:opacity-50" onClick={() => void handleStopAll()} disabled={busy || tasks.length === 0 || !anyActive}>
+              <CircleStop className="h-3.5 w-3.5" />
+              {t('runTasks.stopAll')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 条件挂载：关闭时不执行任何子弹窗的 hooks/JSX 构建。 */}
+      {detectOpen && (
+        <RunTaskDetectDialog
+          project={project}
+          open
+          existingTasks={tasks}
+          initialScanDirectories={config?.scanDirectories}
+          baseZIndex={baseZIndex}
+          onClose={() => setDetectOpen(false)}
+          onSave={async (nextTasks, scanDirectories) => {
+            await handleSaveTasks(nextTasks, scanDirectories)
+            setDetectOpen(false)
+          }}
+        />
+      )}
+
+      {editOpen && (
+        <RunTaskEditDialog
+          project={project}
+          open
+          tasks={tasks}
+          task={editingTask}
+          baseZIndex={baseZIndex}
+          onClose={() => setEditOpen(false)}
+          onStartTask={async (task) => {
+            await startRunTask(project.id, project.path, task)
+          }}
+          onSave={async (task) => {
+            const nextTasks = editingTask ? tasks.map((item) => (item.id === editingTask.id ? task : item)) : [...tasks, task]
+            await handleSaveTasks(nextTasks)
+            setEditOpen(false)
+          }}
+        />
+      )}
+
+      {skillOpen && (
+        <ModalShell open onClose={() => setSkillOpen(false)} widthClassName="max-w-[760px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.skillDialog.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-border)] px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('runTasks.skillDialog.title')}</h2>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-[color:var(--color-muted-foreground)]">{t('runTasks.skillDialog.hint')}</p>
+              </div>
+              <button type="button" className="quiet-control inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={() => void handleCopySkillPrompt()}>
+                {skillCopied ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
+                {skillCopied ? t('common.copied') : t('common.copy')}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[color:var(--color-foreground)]">{skillPrompt}</pre>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {deletingTask && (
+        <ModalShell open onClose={() => setDeletingTask(null)} widthClassName="max-w-[420px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.deleteTask')}>
+          <div className="flex flex-col gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('runTasks.deleteTask')}</h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-[color:var(--color-muted-foreground)]">{t('runTasks.deleteConfirm', { name: deletingTask.name })}</p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button type="button" className="quiet-control rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={() => setDeletingTask(null)}>
+                {t('common.cancel')}
+              </button>
+              <button type="button" className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--color-destructive)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90" onClick={() => void handleDeleteTask()}>
+                <Trash2 className="h-3.5 w-3.5" />
+                {t('runTasks.deleteConfirmAction')}
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+    </ModalShell>
+  )
+}

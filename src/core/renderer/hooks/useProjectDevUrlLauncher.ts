@@ -10,22 +10,39 @@ interface UseProjectDevUrlLauncherOptions {
   processUrls: string[]
   runStartupMode?: RunStartupMode
   startProject: AppState['startProject']
+  /** URLs published by run-task scheduler states (ready tasks). */
+  extraUrls?: string[]
+  /**
+   * True when the config declares a primaryUrl task that has not published
+   * its URL yet. While pending, no fallback URL is opened — the launcher
+   * keeps waiting for the primary task instead of opening whichever task
+   * became ready first.
+   */
+  primaryUrlPending?: boolean
+  /**
+   * True when run tasks are already ramping (starting/waiting). The open
+   * wait continues but `start` is not invoked again, so a re-click does not
+   * restart an in-flight session.
+   */
+  isStartPending?: boolean
+  /**
+   * Unified starter that goes through the run-task pipeline (start-all tasks,
+   * legacy command synthesized as a default task). When provided it wins over
+   * the legacy `startProject` call.
+   */
+  start?: () => Promise<boolean>
 }
 
-export function useProjectDevUrlLauncher({
-  projectId,
-  processStatus,
-  processUrls,
-  runStartupMode,
-  startProject,
-}: UseProjectDevUrlLauncherOptions) {
+export function useProjectDevUrlLauncher({ projectId, processStatus, processUrls, runStartupMode, startProject, extraUrls = [], primaryUrlPending = false, isStartPending = false, start }: UseProjectDevUrlLauncherOptions) {
   const [pendingOpenDevUrl, setPendingOpenDevUrl] = useState(false)
   const sawRunningWhilePendingRef = useRef(false)
 
   const isDevRunning = processStatus === 'running'
   const isDevStopping = processStatus === 'stopping'
   const isDevReady = isDevRunning && processUrls.length > 0
-  const firstDevUrl = isDevReady ? processUrls[0] : null
+  // While the primary task is still ramping, hold back fallback URLs so the
+  // primary one (primaryUrl in config) is the link that gets opened.
+  const firstDevUrl = isDevReady ? processUrls[0] : primaryUrlPending ? null : (extraUrls[0] ?? null)
 
   useEffect(() => {
     if (!pendingOpenDevUrl) {
@@ -75,17 +92,11 @@ export function useProjectDevUrlLauncher({
 
     setPendingOpenDevUrl(true)
 
-    if (isDevRunning) return
+    // Tasks already ramping — just wait for the URL, don't restart the session.
+    if (isDevRunning || isStartPending) return
 
     try {
-      const started = await startProject(
-        projectId,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        runStartupMode === 'terminal' ? 'silent' : undefined
-      )
+      const started = start ? await start() : await startProject(projectId, undefined, undefined, undefined, undefined, runStartupMode === 'terminal' ? 'silent' : undefined)
       if (!started) {
         setPendingOpenDevUrl(false)
       }
@@ -93,7 +104,7 @@ export function useProjectDevUrlLauncher({
       setPendingOpenDevUrl(false)
       throw error
     }
-  }, [firstDevUrl, isDevRunning, isDevStopping, pendingOpenDevUrl, projectId, runStartupMode, startProject])
+  }, [firstDevUrl, isDevRunning, isDevStopping, isStartPending, pendingOpenDevUrl, projectId, runStartupMode, start, startProject])
 
   return {
     firstDevUrl,
