@@ -115,6 +115,8 @@ export interface RunTaskProgressEvent {
       state: RunTaskState
       url?: string
       error?: string
+      /** Output looked like an error while starting — the task may be failing. */
+      warning?: string
       startedAt?: number
     }
   >

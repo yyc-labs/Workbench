@@ -208,6 +208,8 @@ export interface AppState {
   stopRunTask: (projectId: string, taskId: string) => Promise<boolean>
   stopAllRunTasks: (projectId: string) => Promise<boolean>
   updateRunTaskStates: (event: RunTaskProgressEvent) => void
+  /** Adopt scheduler-side run task states; settles stale active entries (missed progress events). */
+  reconcileRunTaskStates: () => Promise<void>
   /** Global "Docker is not running — start it?" prompt state; null when hidden. */
   dockerPrompt: { launching: boolean; error: string | null } | null
   requestDockerLaunch: (projectPath: string, tasks: RunTask[]) => Promise<boolean>

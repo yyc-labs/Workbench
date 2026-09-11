@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ChevronDown, ChevronRight, Folder, Terminal as TerminalIcon, TriangleAlert } from 'lucide-react'
 import { projectDisplayName } from '../../lib/projectDisplay'
 import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
 import { parseRunTaskProcessKey } from '../../../shared/runTasks'
@@ -13,14 +14,21 @@ type StartupLogsPanelProps = {
   initialProjectId?: string | null
 }
 
+interface ProcessTreeGroup {
+  projectId: string
+  name: string
+  processes: ManagedProcessSnapshot[]
+}
+
 function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPanelProps) {
   const { t } = useI18n()
   const [inventoryLoading, setInventoryLoading] = useState(false)
   const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(new Set())
   const appliedInitialProjectIdRef = useRef<string | null | undefined>(undefined)
 
-  const projectNameMap = new Map(projects.map((p) => [p.id, projectDisplayName(p)]))
+  const projectNameMap = useMemo(() => new Map(projects.map((p) => [p.id, projectDisplayName(p)])), [projects])
 
   const runTaskConfigNames = useAppStore((s) => {
     const names = new Map<string, string>()
@@ -32,6 +40,8 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     }
     return names
   })
+
+  const runTaskStates = useAppStore((s) => s.runTaskStates)
 
   const classifyManagedProcess = (item: ManagedProcessSnapshot): 'project' | 'other' => {
     if (item.processId.includes('::toolbox')) return 'other'
@@ -62,7 +72,21 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     }
   }, [])
 
-  const projectManaged = (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project')
+  const projectManaged = useMemo(() => (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project'), [inventory])
+
+  // Group processes by project so multi-process projects read as one tree node.
+  const processGroups = useMemo<ProcessTreeGroup[]>(() => {
+    const groups = new Map<string, ProcessTreeGroup>()
+    for (const item of projectManaged) {
+      let group = groups.get(item.projectId)
+      if (!group) {
+        group = { projectId: item.projectId, name: projectNameMap.get(item.projectId) || item.projectId, processes: [] }
+        groups.set(item.projectId, group)
+      }
+      group.processes.push(item)
+    }
+    return [...groups.values()]
+  }, [projectManaged, projectNameMap])
 
   useEffect(() => {
     if (projectManaged.length === 0) {
@@ -86,22 +110,48 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
 
   const selectedManagedProcess = selectedProcessId ? projectManaged.find((p) => p.processId === selectedProcessId) || null : null
 
+  const getProcessLabel = (item: ManagedProcessSnapshot): string => {
+    const runTask = parseRunTaskProcessKey(item.processId)
+    if (runTask) return runTaskConfigNames.get(`${runTask.projectId}::${runTask.taskId}`) || runTask.taskId
+    return backendLabel(item.backend)
+  }
+
+  const toggleProjectGroup = (projectId: string) => {
+    setCollapsedProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
+  }
+
+  const handleSelectProjectGroup = (group: ProcessTreeGroup) => {
+    setCollapsedProjectIds((current) => {
+      if (!current.has(group.projectId)) return current
+      const next = new Set(current)
+      next.delete(group.projectId)
+      return next
+    })
+    const target = group.processes.find((item) => item.processId === selectedProcessId) ?? group.processes[0]
+    if (target) setSelectedProcessId(target.processId)
+  }
+
   return (
-    <div className="space-y-8">
-      <div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-8 shrink-0">
         <p className="section-label mb-3">{t('startupLogs.kicker')}</p>
         <h2 className="text-[28px] font-semibold tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('startupLogs.title')}</h2>
-        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2 mb-6">{t('startupLogs.description')}</p>
+        <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)] mt-2">{t('startupLogs.description')}</p>
       </div>
 
-      <div className="rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex items-center justify-between mb-2 gap-3">
+      <div className="flex min-h-0 flex-1 flex-col rounded-[22px] border px-5 py-4 surface-card" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('startupLogs.sectionTitle')}</p>
             <p className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('startupLogs.sectionDescription')}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[color:var(--color-muted-foreground)] shrink-0">{projectManaged.length}</span>
+            <span className="shrink-0 text-xs text-[color:var(--color-muted-foreground)]">{t('startupLogs.treeSummary', { projects: processGroups.length, processes: projectManaged.length })}</span>
             <Button variant="outline" className="h-7 rounded-full px-2 text-[11px]" onClick={() => void refreshInventory()} disabled={inventoryLoading}>
               {inventoryLoading ? t('settingsRuntime.refreshing') : t('settingsRuntime.refresh')}
             </Button>
@@ -110,36 +160,60 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
         {projectManaged.length === 0 ? (
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('startupLogs.noRunningProcesses')}</p>
         ) : (
-          <div className="space-y-2.5">
-            <div className="flex flex-wrap gap-1.5">
-              {projectManaged.map((item) => {
-                const selected = selectedProcessId === item.processId
-                const runTask = parseRunTaskProcessKey(item.processId)
-                const taskName = runTask ? runTaskConfigNames.get(`${runTask.projectId}::${runTask.taskId}`) || runTask.taskId : null
-                const label = taskName ? `${projectNameMap.get(item.projectId) || item.projectId} · ${taskName}` : `${projectNameMap.get(item.projectId) || item.projectId} · ${backendLabel(item.backend)}`
+          <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+            <div className="w-full shrink-0 space-y-1 lg:w-64 lg:min-h-0 lg:overflow-y-auto">
+              {processGroups.map((group) => {
+                const collapsed = collapsedProjectIds.has(group.projectId)
+                const containsSelected = group.processes.some((item) => item.processId === selectedProcessId)
                 return (
-                  <button
-                    key={`log-tab-${item.processId}`}
-                    className={`button-interactive px-2.5 py-1 rounded-full border text-[11px] transition-colors ${selected ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'}`}
-                    style={{ borderColor: 'var(--color-border)' }}
-                    onClick={() => setSelectedProcessId(item.processId)}
-                    title={label}
-                  >
-                    {label}
-                  </button>
+                  <div key={`log-group-${group.projectId}`}>
+                    <div className={`flex items-center gap-0.5 rounded-[10px] pr-2 text-xs transition-colors ${containsSelected ? 'bg-[color:var(--color-accent)]/60' : 'hover:bg-[color:var(--color-accent)]/45'}`}>
+                      <button type="button" className="flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]" aria-expanded={!collapsed} onClick={() => toggleProjectGroup(group.projectId)}>
+                        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </button>
+                      <button type="button" className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left" onClick={() => handleSelectProjectGroup(group)} title={group.name}>
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                        <span className="min-w-0 flex-1 truncate font-medium text-[color:var(--color-foreground)]">{group.name}</span>
+                        <span className="shrink-0 text-[10px] text-[color:var(--color-muted-foreground)]">{group.processes.length}</span>
+                      </button>
+                    </div>
+                    {!collapsed && (
+                      <div className="ml-[22px] border-l pl-2" style={{ borderColor: 'var(--color-border)' }}>
+                        {group.processes.map((item) => {
+                          const selected = selectedProcessId === item.processId
+                          const label = getProcessLabel(item)
+                          const runTask = parseRunTaskProcessKey(item.processId)
+                          const errorHint = runTask ? runTaskStates[group.projectId]?.[runTask.taskId]?.warning : undefined
+                          return (
+                            <button
+                              key={`log-tab-${item.processId}`}
+                              className={`mb-0.5 flex w-full min-w-0 items-center gap-1.5 rounded-[9px] px-2 py-1 text-left text-[11px] transition-colors ${selected ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)]/50 hover:text-[color:var(--color-foreground)]'}`}
+                              onClick={() => setSelectedProcessId(item.processId)}
+                              title={errorHint ? `${label} — ${errorHint}` : label}
+                            >
+                              {errorHint ? <TriangleAlert className="h-3 w-3 shrink-0 text-[color:var(--color-warning)]" /> : <TerminalIcon className="h-3 w-3 shrink-0" />}
+                              <span className="min-w-0 flex-1 truncate">{label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
 
-            {selectedManagedProcess ? (
-              <div className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)]" style={{ borderColor: 'var(--color-border)' }}>
-                <AppTerminal projectId={selectedManagedProcess.processId} variant="soft" />
-              </div>
-            ) : (
-              <div className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
-                {t('startupLogs.selectProcess')}
-              </div>
-            )}
+            <div className="min-h-0 min-w-0 flex-1">
+              {selectedManagedProcess ? (
+                <div className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)] lg:h-full" style={{ borderColor: 'var(--color-border)' }}>
+                  <AppTerminal projectId={selectedManagedProcess.processId} variant="soft" />
+                </div>
+              ) : (
+                <div className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)] lg:h-full" style={{ borderColor: 'var(--color-border)' }}>
+                  {t('startupLogs.selectProcess')}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

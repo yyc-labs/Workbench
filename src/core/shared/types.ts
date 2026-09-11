@@ -1477,7 +1477,7 @@ export interface ProcessInfo {
 export interface ManagedProcessSnapshot {
   /** Internal process key used by renderer store (projectId, projectId::toolbox, or projectId::run::<taskId>). */
   processId: string
-  /** Project id passed from renderer startProcess call. */
+  /** Logical project id; run-task process keys (`${projectId}::run::<taskId>`) are normalized back to the bare projectId. */
   projectId: string
   backend: BackendMode
   pid: number | null

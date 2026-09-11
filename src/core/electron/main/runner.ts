@@ -3,6 +3,7 @@ import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
 import type { BackendMode, Capability, ManagedProcessSnapshot, PtySize } from '../../shared/types'
+import { parseRunTaskProcessKey } from '../../shared/runTasks'
 import { toHostAccessiblePath } from './host-path'
 import { wslBridge } from './wsl-bridge'
 import { tmuxManager, getSessionName } from './tmux-manager'
@@ -294,11 +295,14 @@ class ProcessManager {
     const result: ManagedProcessSnapshot[] = []
 
     for (const [processId, managed] of this.processes.entries()) {
+      // Run-task keys look like `${projectId}::run::<taskId>` — report the bare
+      // projectId so consumers can group a project's processes together.
+      const projectId = parseRunTaskProcessKey(processId)?.projectId ?? managed.projectId
       if (managed.backend === 'spawn') {
         const spawnManaged = managed as SpawnManagedProcess
         result.push({
           processId,
-          projectId: spawnManaged.projectId,
+          projectId,
           backend: spawnManaged.backend,
           pid: spawnManaged.child.pid ?? null,
           startTime: spawnManaged.startTime,
@@ -309,7 +313,7 @@ class ProcessManager {
       const ptyManaged = managed as PtyManagedProcess
       result.push({
         processId,
-        projectId: ptyManaged.projectId,
+        projectId,
         backend: ptyManaged.backend,
         pid: null,
         startTime: ptyManaged.startTime,

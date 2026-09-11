@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import type { AiCommitTaskSnapshot, CliTool, ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
-import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw, TriangleAlert } from 'lucide-react'
 import { ProjectLinksTrigger } from './ProjectLinksTrigger'
 import { CardContextMenu } from './CardContextMenu'
 import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
@@ -167,6 +167,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const runTasksActive = activeRunTaskIds.length > 0
   const hasSteadyRunTasks = useMemo(() => Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'ready' || item.state === 'running')), [runTaskStates])
   const hasStartingRunTasks = useMemo(() => Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting')), [runTaskStates])
+  // At least one task logged an error hint — badge the status button so the
+  // user notices a task may be failing without opening the logs.
+  const hasRunTaskWarning = useMemo(() => Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.warning && (item.state === 'starting' || item.state === 'waiting' || item.state === 'running'))), [runTaskStates])
   const runTaskUrls = useMemo(() => getActiveRunTaskUrls(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
   const primaryUrlPending = useMemo(() => isPrimaryRunTaskUrlPending(runTaskConfig, runTaskStates), [runTaskConfig, runTaskStates])
   // Ready = bare process with a URL, or any run task that reached steady state.
@@ -596,8 +599,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
               e.stopPropagation()
               setRunTasksOpen(true)
             }}
-            title={isDevStopping || isAnyRunTaskStopping ? undefined : t('common.leftClickStopRightClickConfig')}
+            title={hasRunTaskWarning ? `${t('runTasks.outputErrorHint')}` : isDevStopping || isAnyRunTaskStopping ? undefined : t('common.leftClickStopRightClickConfig')}
           >
+            {hasRunTaskWarning && !isDevStopping && !isAnyRunTaskStopping && <TriangleAlert className="h-3 w-3 shrink-0 text-[color:var(--color-warning)]" />}
             {isDevStopping || isAnyRunTaskStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : isProjectReady ? <Square className="h-3 w-3" /> : <RefreshCw className="h-3 w-3 animate-spin" />}
             <span className="hidden sm:inline">{isDevStopping || isAnyRunTaskStopping ? t('common.stopping') : isProjectReady ? t('common.stop') : t('common.starting')}</span>
           </button>

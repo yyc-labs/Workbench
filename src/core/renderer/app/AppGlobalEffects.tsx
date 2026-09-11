@@ -87,12 +87,22 @@ function ProcessOutputListener() {
 
 function RunTaskProgressListener() {
   const updateRunTaskStates = useAppStore((s) => s.updateRunTaskStates)
+  const reconcileRunTaskStates = useAppStore((s) => s.reconcileRunTaskStates)
 
   useEffect(() => {
     return window.electronAPI.onRunTaskProgress((event) => {
       updateRunTaskStates(event)
     })
   }, [updateRunTaskStates])
+
+  // Progress IPC events can be missed; periodically adopt the scheduler's
+  // authoritative snapshot so cards never stay stuck on a phantom state.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void reconcileRunTaskStates()
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [reconcileRunTaskStates])
 
   return null
 }

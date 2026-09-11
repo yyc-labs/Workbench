@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square } from 'lucide-react'
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square, TriangleAlert } from 'lucide-react'
 import { CardContextMenu } from '../components/CardContextMenu'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
@@ -151,6 +151,9 @@ export function DetailPage() {
   // longer ramping (no task left in starting/waiting).
   const hasStartingRunTasks = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.state === 'starting' || item.state === 'waiting'))
   const isDevReady = (isRunning && processUrls.length > 0) || (hasActiveRunTasks && !hasStartingRunTasks)
+  // At least one task logged an error hint — badge the status pill so the
+  // user notices a task may be failing without opening the logs.
+  const hasRunTaskWarning = Boolean(runTaskStates && Object.values(runTaskStates).some((item) => item.warning && (item.state === 'starting' || item.state === 'waiting' || item.state === 'running')))
   const allProcessUrls = useMemo(() => {
     const merged = [...processUrls]
     for (const url of runTaskUrls) {
@@ -475,8 +478,10 @@ export function DetailPage() {
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   isStopping ? 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]' : isDevReady ? 'bg-[color:var(--color-success-background)] text-[color:var(--color-success)]' : 'bg-[color:var(--color-warning-background)] text-[color:var(--color-warning)]'
                 }`}
+                title={hasRunTaskWarning ? t('runTasks.outputErrorHint') : undefined}
               >
                 {isStopping ? <RefreshCw className="h-3 w-3 animate-spin" /> : <span className={`h-1.5 w-1.5 rounded-full ${isDevReady ? 'bg-[color:var(--color-success)]' : 'bg-[color:var(--color-warning)]'}`} />}
+                {hasRunTaskWarning && !isStopping && <TriangleAlert className="h-3 w-3 shrink-0" />}
                 {isStopping ? t('common.stopping') : isDevReady ? t('common.running') : t('common.starting')}
               </div>
             ) : (

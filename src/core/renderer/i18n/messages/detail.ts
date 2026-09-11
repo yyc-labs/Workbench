@@ -460,6 +460,7 @@ export const detailMessages = {
       deleteConfirm: 'Remove task "{name}" from .yworkbench/run-tasks.json?',
       deleteConfirmAction: 'Delete',
       openLogs: 'View output in startup logs',
+      outputErrorHint: 'errors detected in output — the task may be failing',
       dependsOn: 'Depends on',
       taskState: {
         idle: 'Idle',
@@ -995,6 +996,7 @@ export const detailMessages = {
       deleteConfirm: '确定要从 .yworkbench/run-tasks.json 中删除任务「{name}」吗？',
       deleteConfirmAction: '删除',
       openLogs: '在启动日志中查看输出',
+      outputErrorHint: '输出中检测到错误，任务可能正在失败',
       dependsOn: '依赖',
       taskState: {
         idle: '空闲',

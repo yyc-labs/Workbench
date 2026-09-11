@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2 } from 'lucide-react'
+import { Check, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2, TriangleAlert } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
@@ -176,6 +176,7 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
                 const state = taskStates?.[task.id]?.state
                 const url = taskStates?.[task.id]?.url
                 const error = taskStates?.[task.id]?.error
+                const warning = taskStates?.[task.id]?.warning
                 const readiness = runTaskReadinessSummary(task)
                 const active = isRunTaskActive(state)
                 const disabled = task.enabled === false
@@ -210,6 +211,13 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
                         {error && (
                           <p className="mt-1 truncate text-[11px] text-[color:var(--color-destructive)]" title={error}>
                             {error}
+                          </p>
+                        )}
+                        {!error && warning && (state === 'starting' || state === 'waiting' || state === 'running') && (
+                          <p className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--color-warning)]" title={warning}>
+                            <TriangleAlert className="h-3 w-3 shrink-0" />
+                            <span className="truncate font-mono">{warning}</span>
+                            <span className="shrink-0">· {t('runTasks.outputErrorHint')}</span>
                           </p>
                         )}
                       </div>

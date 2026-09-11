@@ -5,7 +5,22 @@ import type { AppState } from './appStore.types'
 
 export type RunTaskActionsSlice = Pick<
   AppState,
-  'runTaskConfigs' | 'runTaskStates' | 'loadRunTaskConfig' | 'saveRunTaskConfig' | 'detectRunTaskCandidates' | 'startRunTask' | 'startAllRunTasks' | 'stopRunTask' | 'stopAllRunTasks' | 'updateRunTaskStates' | 'dockerPrompt' | 'requestDockerLaunch' | 'cancelDockerLaunch' | 'confirmDockerLaunch' | 'setDockerPrompt'
+  | 'runTaskConfigs'
+  | 'runTaskStates'
+  | 'loadRunTaskConfig'
+  | 'saveRunTaskConfig'
+  | 'detectRunTaskCandidates'
+  | 'startRunTask'
+  | 'startAllRunTasks'
+  | 'stopRunTask'
+  | 'stopAllRunTasks'
+  | 'updateRunTaskStates'
+  | 'reconcileRunTaskStates'
+  | 'dockerPrompt'
+  | 'requestDockerLaunch'
+  | 'cancelDockerLaunch'
+  | 'confirmDockerLaunch'
+  | 'setDockerPrompt'
 >
 
 // Pending "start Docker?" prompt kept out of the store (non-serializable).
@@ -95,7 +110,19 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         },
       },
     }))
-    return window.electronAPI.startRunTask(projectId, projectPath, task)
+    const started = await window.electronAPI.startRunTask(projectId, projectPath, task)
+    if (!started) {
+      // Start never took off — drop the optimistic entry instead of leaving a
+      // phantom task stuck on "starting".
+      set((state) => {
+        const current = state.runTaskStates[projectId]
+        if (!current?.[task.id]) return state
+        const next = { ...current }
+        delete next[task.id]
+        return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+      })
+    }
+    return started
   },
 
   startAllRunTasks: async (projectId, projectPath) => {
@@ -123,7 +150,22 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         [projectId]: Object.fromEntries(launchable.map((task) => [task.id, { state: task.dependsOn?.length ? 'waiting' : 'starting', startedAt: Date.now() }])),
       },
     }))
-    return window.electronAPI.startAllRunTasks(projectId, projectPath, tasks)
+    const result = await window.electronAPI.startAllRunTasks(projectId, projectPath, tasks)
+    if (!result.started) {
+      // The scheduler never created a session (cycle / manager missing / no
+      // tasks) — roll the optimistic marks back instead of leaving the card
+      // stuck on "starting" forever.
+      set((state) => {
+        const current = state.runTaskStates[projectId]
+        if (!current) return state
+        const next: AppState['runTaskStates'][string] = {}
+        for (const [taskId, taskState] of Object.entries(current)) {
+          next[taskId] = taskState.state === 'starting' || taskState.state === 'waiting' ? { state: 'stopped' as const } : { ...taskState }
+        }
+        return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+      })
+    }
+    return result
   },
 
   stopRunTask: async (projectId, taskId) => {
@@ -161,6 +203,43 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         [event.projectId]: { ...(state.runTaskStates[event.projectId] ?? {}), ...event.tasks },
       },
     }))
+  },
+
+  /**
+   * Heal renderer-side run task states against the scheduler. Progress IPC
+   * events can be missed (window transitions, dropped events), leaving a card
+   * stuck on "running/starting" while nothing actually runs. The scheduler's
+   * getState() reconciles missed exits on its side, so adopting its snapshot
+   * is authoritative.
+   */
+  reconcileRunTaskStates: async () => {
+    const projectIds = Object.keys(get().runTaskStates)
+    if (projectIds.length === 0) return
+    await Promise.all(
+      projectIds.map(async (projectId) => {
+        try {
+          const live = await window.electronAPI.getRunTaskState(projectId)
+          if (live && Object.keys(live.tasks).length > 0) {
+            get().updateRunTaskStates(live)
+            return
+          }
+          // No session on the scheduler side — anything still active here is stale.
+          set((state) => {
+            const current = state.runTaskStates[projectId]
+            if (!current) return state
+            const hasActive = Object.values(current).some((item) => item.state === 'starting' || item.state === 'waiting' || item.state === 'ready' || item.state === 'running' || item.state === 'stopping')
+            if (!hasActive) return state
+            const next: AppState['runTaskStates'][string] = {}
+            for (const [taskId, taskState] of Object.entries(current)) {
+              next[taskId] = taskState.state === 'stopped' || taskState.state === 'failed' ? { ...taskState } : { state: 'stopped' as const }
+            }
+            return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+          })
+        } catch {
+          // IPC hiccup — keep current states until the next tick.
+        }
+      }),
+    )
   },
 
   setDockerPrompt: (prompt: { launching: boolean; error: string | null }) => {

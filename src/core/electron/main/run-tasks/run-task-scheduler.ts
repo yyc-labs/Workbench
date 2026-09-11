@@ -20,11 +20,27 @@ const STOP_PORT_POLL_INTERVAL_MS = 200
 /** …but give up after this long and let the process-exit event settle the state. */
 const STOP_PORT_GRACE_MS = 5_000
 const PORT_PROBE_TIMEOUT_MS = 300
+/** Output patterns hinting a starting task is actually failing (hint only — never settles the task). */
+// Output patterns hinting a failing task (hint only — never settles the task).
+const TASK_ERROR_HINT_PATTERNS: RegExp[] = [
+  /Traceback \(most recent call last\)/,
+  /\bError:\s/,
+  // Python/JS style exception headers: ConnectionRefusedError:, OSError:, FileNotFoundError:, …
+  /\b[A-Z][A-Za-z\d]*(?:Error|Exception)\b:/,
+  // Log-level markers: "… ERROR: Application startup failed."
+  /\b(?:ERROR|CRITICAL|FATAL)\b/,
+  /\bEADDRINUSE\b/,
+  /\bECONNREFUSED\b/,
+  /npm ERR!/,
+]
+const ERROR_HINT_SNIPPET_MAX_CHARS = 200
 
 interface RunTaskSessionState {
   state: RunTaskState
   url?: string
   error?: string
+  /** Output hinted an error while starting; cleared once the task proves healthy. */
+  warning?: string
   startedAt?: number
 }
 
@@ -238,6 +254,33 @@ export class RunTaskScheduler {
   }
 
   /**
+   * Watch a task's output for error patterns and surface a warning hint to
+   * the renderer — the task may be failing even though no readiness timeout
+   * has fired yet. Active during 'starting' and 'running' (no-readiness tasks
+   * jump straight to 'running', which is still their startup window). Hint
+   * only: the state still settles via readiness/exit as usual.
+   */
+  private registerStartingErrorHintTap(session: RunTaskSession, task: RunTask): void {
+    const processManager = this.getProcessManager()
+    if (!processManager) return
+    const key = runTaskProcessKey(session.projectId, task.id)
+    let buffer = ''
+    const removeOutput = processManager.addOutputTap((pid, data) => {
+      if (pid !== key) return
+      const state = session.states.get(task.id)
+      if (!state || (state.state !== 'starting' && state.state !== 'running')) {
+        removeOutput()
+        return
+      }
+      buffer = (buffer + data).slice(-URL_OUTPUT_BUFFER_CHARS)
+      if (state.warning) return
+      const snippet = extractErrorHintSnippet(buffer)
+      if (snippet) this.setState(session, task.id, { warning: snippet })
+    })
+    session.disposers.push(removeOutput)
+  }
+
+  /**
    * Watch for process exit while in a steady state so the UI flips to stopped.
    * Exit-strategy tasks are excluded: their process exiting IS the expected
    * completion and waitReady() settles the state at 'ready'.
@@ -389,11 +432,12 @@ export class RunTaskScheduler {
 
     if (processManager.isRunning(key)) {
       // Leftover process from a previous session — treat as already running.
-      this.setState(session, task.id, { state: 'running', startedAt: Date.now() })
+      this.setState(session, task.id, { state: 'running', startedAt: Date.now(), warning: undefined })
       return
     }
 
-    this.setState(session, task.id, { state: 'starting', startedAt: Date.now(), url: undefined, error: undefined })
+    this.setState(session, task.id, { state: 'starting', startedAt: Date.now(), url: undefined, error: undefined, warning: undefined })
+    this.registerStartingErrorHintTap(session, task)
 
     const cwd = this.resolveTaskCwd(session.projectPath, task)
     const useWsl = resolveTaskUseWsl(cwd, task.useWsl)
@@ -424,13 +468,13 @@ export class RunTaskScheduler {
     }
 
     if (!task.readiness) {
-      this.setState(session, task.id, { state: 'running' })
+      this.setState(session, task.id, { state: 'running', warning: undefined })
       return
     }
 
     try {
       const url = await this.waitReady(processManager, session, task, key)
-      this.setState(session, task.id, { state: 'ready', url })
+      this.setState(session, task.id, { state: 'ready', url, warning: undefined })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.setState(session, task.id, { state: 'failed', error: message })
@@ -569,6 +613,17 @@ function parseUrlPort(url?: string): number | undefined {
   } catch {
     return undefined
   }
+}
+
+/** First output line matching a known error pattern, trimmed for display. */
+function extractErrorHintSnippet(buffer: string): string | undefined {
+  for (const line of buffer.split(/\r?\n/)) {
+    if (!TASK_ERROR_HINT_PATTERNS.some((pattern) => pattern.test(line))) continue
+    const snippet = line.trim()
+    if (!snippet) continue
+    return snippet.length > ERROR_HINT_SNIPPET_MAX_CHARS ? `${snippet.slice(0, ERROR_HINT_SNIPPET_MAX_CHARS)}…` : snippet
+  }
+  return undefined
 }
 
 /** The port this task is expected to listen on, if we can know one. */
