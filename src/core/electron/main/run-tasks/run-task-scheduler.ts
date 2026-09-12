@@ -670,6 +670,11 @@ export class RunTaskScheduler {
   private toProgressEvent(session: RunTaskSession): RunTaskProgressEvent {
     const tasks: RunTaskProgressEvent['tasks'] = {}
     for (const [taskId, state] of session.states.entries()) {
+      // 'idle' is a scheduler-internal placeholder (session created, task not
+      // dispatched yet). Exposing it would let progress adoption and renderer
+      // reconciling snap optimistic starting/waiting marks back to "not
+      // started" mid-launch, making the UI flicker between started/unstarted.
+      if (state.state === 'idle') continue
       tasks[taskId] = { ...state }
     }
     return { projectId: session.projectId, tasks }

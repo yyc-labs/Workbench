@@ -26,14 +26,18 @@ export type RunTaskActionsSlice = Pick<
 // Pending "start Docker?" prompt kept out of the store (non-serializable).
 let dockerPromptResolver: ((proceed: boolean) => void) | null = null
 let dockerPromptPayload: { projectPath: string; tasks: RunTask[] } | null = null
-// In-flight background Docker launch (from a confirmed prompt) and the project
-// whose tasks were optimistically marked starting while it runs.
+// Optimistic starting/waiting marks: set the moment the user clicks start
+// (before the docker preflight) so the UI never looks stuck. Protected from
+// reconciling until the scheduler actually advances the tasks, a rollback
+// happens, or the grace window expires.
+let optimisticStartProjectId: string | null = null
+let optimisticStartTaskIds: Set<string> | null = null
+const OPTIMISTIC_START_GRACE_MS = 30_000
+// In-flight background Docker launch (from a confirmed prompt).
 let dockerLaunchPromise: Promise<boolean> | null = null
-let dockerLaunchProjectId: string | null = null
 // After the launch settles the scheduler session still holds 'idle' task
-// placeholders until it actually advances a task; keep reconciling from
-// snapping the optimistic marks back to "not started" during that window.
-const DOCKER_LAUNCH_RECONCILE_GRACE_MS = 30_000
+// placeholders until it actually advances a task; the grace window keeps
+// reconciling from snapping the optimistic marks back meanwhile.
 let dockerLaunchGraceUntil = 0
 
 type RunTaskTaskState = NonNullable<RunTaskProgressEvent['tasks'][string]>
@@ -52,6 +56,12 @@ function isSameTaskState(a: RunTaskTaskState | undefined, b: RunTaskTaskState | 
   if (aUrls === bUrls) return true
   if (!aUrls || !bUrls || aUrls.length !== bUrls.length) return false
   return aUrls.every((url, index) => url === bUrls[index])
+}
+
+function clearOptimisticStart(projectId: string): void {
+  if (projectId !== optimisticStartProjectId) return
+  optimisticStartProjectId = null
+  optimisticStartTaskIds = null
 }
 
 /**
@@ -127,8 +137,33 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
   },
 
   startRunTask: async (projectId, projectPath, task) => {
+    // Mark starting immediately, before the docker preflight — whether or not
+    // the docker prompt interrupts, the click must show up in the UI at once.
+    optimisticStartProjectId = projectId
+    optimisticStartTaskIds = new Set([task.id])
+    dockerLaunchGraceUntil = Date.now() + OPTIMISTIC_START_GRACE_MS
+    set((state) => ({
+      runTaskStates: {
+        ...state.runTaskStates,
+        [projectId]: {
+          ...(state.runTaskStates[projectId] ?? {}),
+          [task.id]: { state: 'starting', startedAt: Date.now() },
+        },
+      },
+    }))
+
     const docker = await ensureDockerBeforeStart(get, projectPath, [task])
-    if (!docker.ok) return false
+    if (!docker.ok) {
+      set((state) => {
+        const current = state.runTaskStates[projectId]
+        if (!current?.[task.id]) return state
+        const next = { ...current }
+        delete next[task.id]
+        return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+      })
+      clearOptimisticStart(projectId)
+      return false
+    }
 
     const key = runTaskProcessKey(projectId, task.id)
     set((state) => ({
@@ -143,13 +178,6 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
       processUrls: {
         ...state.processUrls,
         [key]: state.processUrls[key] ?? [],
-      },
-      runTaskStates: {
-        ...state.runTaskStates,
-        [projectId]: {
-          ...(state.runTaskStates[projectId] ?? {}),
-          [task.id]: { state: 'starting', startedAt: Date.now() },
-        },
       },
     }))
     const started = await window.electronAPI.startRunTask(projectId, projectPath, task)
@@ -177,21 +205,35 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     if (tasks.length === 0) {
       return { started: false, error: 'No run tasks configured.' }
     }
-    // Optimistically mark every enabled task starting/waiting; the scheduler
-    // event stream refines states. Disabled tasks stay untouched.
+    // Optimistically mark every enabled task starting/waiting — before the
+    // docker preflight, so the click always shows up immediately. Disabled
+    // tasks stay untouched.
     const launchable = tasks.filter((task) => task.enabled !== false)
-
-    const docker = await ensureDockerBeforeStart(get, projectPath, launchable)
-    if (!docker.ok) {
-      return { started: false, error: docker.error }
-    }
-
+    optimisticStartProjectId = projectId
+    optimisticStartTaskIds = new Set(launchable.map((task) => task.id))
+    dockerLaunchGraceUntil = Date.now() + OPTIMISTIC_START_GRACE_MS
     set((state) => ({
       runTaskStates: {
         ...state.runTaskStates,
         [projectId]: Object.fromEntries(launchable.map((task) => [task.id, { state: task.dependsOn?.length ? 'waiting' : 'starting', startedAt: Date.now() }])),
       },
     }))
+
+    const docker = await ensureDockerBeforeStart(get, projectPath, launchable)
+    if (!docker.ok) {
+      set((state) => {
+        const current = state.runTaskStates[projectId]
+        if (!current) return state
+        const next: AppState['runTaskStates'][string] = {}
+        for (const [taskId, taskState] of Object.entries(current)) {
+          next[taskId] = taskState.state === 'starting' || taskState.state === 'waiting' ? { state: 'stopped' as const } : { ...taskState }
+        }
+        return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+      })
+      clearOptimisticStart(projectId)
+      return { started: false, error: docker.error }
+    }
+
     const result = await window.electronAPI.startAllRunTasks(projectId, projectPath, tasks)
     if (!result.started) {
       // The scheduler never created a session (cycle / manager missing / no
@@ -206,6 +248,7 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         }
         return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
       })
+      clearOptimisticStart(projectId)
     }
     return result
   },
@@ -262,6 +305,16 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         },
       }
     })
+    // Once every optimistically marked task has been advanced by the
+    // scheduler (event carries it non-idle), the real state stream owns the
+    // UI again — lift the reconcile protection.
+    if (event.projectId === optimisticStartProjectId && optimisticStartTaskIds) {
+      const allAdopted = [...optimisticStartTaskIds].every((taskId) => {
+        const taskState = event.tasks[taskId]
+        return taskState !== undefined && taskState.state !== 'idle'
+      })
+      if (allAdopted) clearOptimisticStart(event.projectId)
+    }
   },
 
   /**
@@ -276,19 +329,20 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     if (projectIds.length === 0) return
     await Promise.all(
       projectIds.map(async (projectId) => {
-        // While Docker is launching (or just settled and the scheduler session
-        // still holds 'idle' placeholders), adopting the snapshot would snap
-        // the optimistically marked tasks back to "not started". Skip until
-        // the scheduler actually advances a task or the grace window ends.
-        const dockerLaunchPending = projectId === dockerLaunchProjectId && (dockerLaunchPromise !== null || Date.now() < dockerLaunchGraceUntil)
+        // While the optimistic start marks are protected (docker prompt open,
+        // background docker launch in flight, or just settled and the
+        // scheduler session still holds 'idle' placeholders), adopting the
+        // snapshot — or the no-session cleanup — would snap the marked tasks
+        // back to "not started". Skip until the scheduler advances the tasks
+        // (updateRunTaskStates lifts the protection) or the grace expires.
+        const startProtectionActive = projectId === optimisticStartProjectId && (dockerLaunchPromise !== null || get().dockerPrompt || Date.now() < dockerLaunchGraceUntil)
+        if (startProtectionActive) return
         try {
           const live = await window.electronAPI.getRunTaskState(projectId)
           if (live && Object.keys(live.tasks).length > 0) {
-            if (dockerLaunchPending && Object.values(live.tasks).every((taskState) => taskState.state === 'idle')) return
             get().updateRunTaskStates(live)
             return
           }
-          if (dockerLaunchPending) return
           // No session on the scheduler side — anything still active here is stale.
           set((state) => {
             const current = state.runTaskStates[projectId]
@@ -333,13 +387,13 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     dockerPromptPayload = null
     set({ dockerPrompt: false })
 
-    // Mark the tasks starting/waiting immediately so cards and the dialog
-    // show them as launching from the moment the user confirms, not only
-    // after Docker becomes ready.
+    // Re-assert the starting/waiting marks (they were set at click time) so
+    // cards and the dialog keep showing the tasks as launching.
     const projectId = get().projects.find((item) => item.path === payload.projectPath)?.id ?? null
     const launchable = payload.tasks.filter((task) => task.enabled !== false)
     if (projectId) {
-      dockerLaunchProjectId = projectId
+      optimisticStartProjectId = projectId
+      optimisticStartTaskIds = new Set(launchable.map((task) => task.id))
       set((state) => ({
         runTaskStates: {
           ...state.runTaskStates,
@@ -354,11 +408,11 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
       .catch(() => false)
     const ready = await dockerLaunchPromise
     dockerLaunchPromise = null
-    dockerLaunchGraceUntil = ready ? Date.now() + DOCKER_LAUNCH_RECONCILE_GRACE_MS : 0
+    dockerLaunchGraceUntil = ready ? Date.now() + OPTIMISTIC_START_GRACE_MS : 0
     resolver(ready)
 
     if (!ready && projectId) {
-      dockerLaunchProjectId = null
+      clearOptimisticStart(projectId)
       // Docker launch failed — roll the optimistic marks back instead of
       // leaving the cards stuck on "starting" forever.
       set((state) => {
