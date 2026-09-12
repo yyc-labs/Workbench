@@ -1,6 +1,6 @@
 import type { editor as MonacoEditor, Selection } from 'monaco-editor'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { installMonacoFindWidgetHoverGuard, type MonacoThemeName } from '../../lib/monacoEnvironment'
+import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
@@ -405,6 +405,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       const editor = monaco.editor.create(container, {
         model,
         automaticLayout: true,
+        fixedOverflowWidgets: true,
+        overflowWidgetsDomNode: getMonacoOverflowWidgetsContainer(),
         minimap: { enabled: false },
         // Prefer CJK-capable monospace fonts to keep width metrics stable for mixed Chinese + numbers.
         fontFamily: "'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -430,6 +432,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         readOnly: isReadOnly,
         theme: activeThemeRef.current,
       })
+      syncMonacoOverflowWidgetsTheme(activeThemeRef.current)
       editorRef.current = editor
       activeModelKeyRef.current = initialKey
       flushPendingReveal()
@@ -712,6 +715,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     const monaco = monacoRef.current
     if (!monaco) return
     monaco.editor.setTheme(activeTheme)
+    syncMonacoOverflowWidgetsTheme(activeTheme)
     void syncTextmateTheme(monaco, activeTheme)
   }, [activeTheme])
 

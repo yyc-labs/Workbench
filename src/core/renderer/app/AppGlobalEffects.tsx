@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Clock3, Map } from 'lucide-react'
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
@@ -300,6 +300,25 @@ function GlobalRecentProjectsDrawerHost() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Stable callbacks: the host re-renders on every route change; memoized
+  // RecentProjectsDrawer / RecentProjectsMetaDialogHost must not follow.
+  const closeDrawer = useCallback(() => setOpen(false), [])
+  const handleSelectProject = useCallback(
+    (projectId: string) => {
+      updateLastOpened(projectId)
+      setOpen(false)
+      navigate(`/project/${projectId}/code`)
+    },
+    [updateLastOpened, navigate],
+  )
+  const handleRemoveProject = useCallback(
+    (projectId: string) => {
+      void clearProjectLastOpened(projectId)
+    },
+    [clearProjectLastOpened],
+  )
+  const closeMetaDialog = useCallback(() => setMetaDialogProjectId(null), [])
+
   return (
     <>
       <div className="fixed bottom-5 right-5 z-[91] flex items-center gap-2">
@@ -323,22 +342,9 @@ function GlobalRecentProjectsDrawerHost() {
         </button>
       </div>
 
-      <RecentProjectsDrawer
-        open={open}
-        currentProjectId={currentProjectId}
-        onClose={() => setOpen(false)}
-        onSelectProject={(projectId) => {
-          updateLastOpened(projectId)
-          setOpen(false)
-          navigate(`/project/${projectId}/code`)
-        }}
-        onRemoveProject={(projectId) => {
-          void clearProjectLastOpened(projectId)
-        }}
-        onEditProjectMetadata={setMetaDialogProjectId}
-      />
+      <RecentProjectsDrawer open={open} currentProjectId={currentProjectId} onClose={closeDrawer} onSelectProject={handleSelectProject} onRemoveProject={handleRemoveProject} onEditProjectMetadata={setMetaDialogProjectId} />
 
-      {metaDialogProjectId && <RecentProjectsMetaDialogHost projectId={metaDialogProjectId} onClose={() => setMetaDialogProjectId(null)} />}
+      {metaDialogProjectId && <RecentProjectsMetaDialogHost projectId={metaDialogProjectId} onClose={closeMetaDialog} />}
     </>
   )
 }

@@ -28,6 +28,9 @@ const DetailAiCommitPaneHost = lazy(() => loadDetailAiCommitPaneHostModule().the
 const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR = ['button', 'a', 'input', 'textarea', 'select', '[contenteditable="true"]', '.monaco-editor', '.xterm', '[role="dialog"]'].join(', ')
 
+// Stable fallback so the processUrls selector keeps its reference between store updates.
+const EMPTY_URLS: string[] = []
+
 function shouldSkipProjectPageContextMenu(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(PROJECT_PAGE_CONTEXT_MENU_IGNORE_SELECTOR))
 }
@@ -77,7 +80,7 @@ export function DetailPage() {
   const folders = useAppStore((s) => s.folders)
   const tags = useAppStore((s) => s.tags)
   const processStatus = projectId ? useAppStore((s) => s.processes[projectId]?.status ?? 'stopped') : 'stopped'
-  const processUrls = projectId ? useAppStore((s) => s.processUrls[projectId] || []) : ([] as string[])
+  const processUrls = projectId ? useAppStore((s) => s.processUrls[projectId] ?? EMPTY_URLS) : EMPTY_URLS
   const runTaskStates = projectId ? useAppStore((s) => s.runTaskStates[projectId]) : undefined
   const runTaskConfig = projectId ? useAppStore((s) => s.runTaskConfigs[projectId]) : undefined
   const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
@@ -108,6 +111,8 @@ export function DetailPage() {
   const activePane = pane === 'aicommit' || pane === 'git' ? 'aicommit' : 'code'
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [runTasksOpen, setRunTasksOpen] = useState(false)
+  // Stable callback so memoized RunTasksDialog doesn't re-render with the page.
+  const closeRunTasksDialog = useCallback(() => setRunTasksOpen(false), [])
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
@@ -644,7 +649,7 @@ export function DetailPage() {
       )}
 
       {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
-      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={closeRunTasksDialog} />}
 
       <div className={`min-h-0 flex-1 px-6 pb-6 sm:px-8 ${contentTopPaddingClass}`}>
         <div className="relative h-full min-h-0 w-full">

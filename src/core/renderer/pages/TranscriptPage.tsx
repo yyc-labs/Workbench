@@ -186,6 +186,8 @@ export function TranscriptPage() {
   const [aiCommitStatus, setAiCommitStatus] = useState<AiCommitStatus>('idle')
   const [metaDialogOpen, setMetaDialogOpen] = useState(false)
   const [runTasksOpen, setRunTasksOpen] = useState(false)
+  // Stable callback so memoized RunTasksDialog doesn't re-render with the page.
+  const closeRunTasksDialog = useCallback(() => setRunTasksOpen(false), [])
   const { projectHeaderCollapsed, setProjectHeaderCollapsed, effectiveTheme, isNarrowViewport } = useTranscriptPageChromeState()
   const [isTranscriptListCollapsed, setIsTranscriptListCollapsed] = useState(readTranscriptListSidebarCollapsed)
   const [structuredPreview, setStructuredPreview] = useState<TranscriptStructuredPreviewState | null>(null)
@@ -981,7 +983,7 @@ export function TranscriptPage() {
       )}
 
       {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
-      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={closeRunTasksDialog} />}
 
       <TranscriptReferenceDrawer
         open={Boolean(session && activeReference)}

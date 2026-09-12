@@ -1,10 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
-import {
-  installMonacoFindWidgetHoverGuard,
-  type MonacoThemeName,
-} from '../lib/monacoEnvironment'
+import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../lib/monacoPreload'
 
 export type MonacoTextViewerHiddenLineRange = {
@@ -61,7 +58,7 @@ type MonacoEditorWithHiddenAreas = MonacoEditor.IStandaloneCodeEditor & {
       endColumn: number
     }>,
     source?: unknown,
-    forceUpdate?: boolean
+    forceUpdate?: boolean,
   ) => void
 }
 
@@ -69,24 +66,27 @@ function createMonacoModelUri(modelNamespace: string, filePath: string): string 
   return `inmemory://${modelNamespace}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${filePath.replace(/[^\w./-]/g, '_')}`
 }
 
-export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextViewerProps>(function MonacoTextViewer({
-  value,
-  filePath,
-  language,
-  readOnly,
-  modelNamespace,
-  onChange,
-  onSave,
-  prepareMonaco,
-  fontFamily = "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
-  fontSize = 12.5,
-  lineHeight = 20,
-  padding = { top: 10, bottom: 10 },
-  stickyScroll = false,
-  focusOnReveal = true,
-  contentWidget = null,
-  hiddenLineRanges = [],
-}, ref) {
+export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextViewerProps>(function MonacoTextViewer(
+  {
+    value,
+    filePath,
+    language,
+    readOnly,
+    modelNamespace,
+    onChange,
+    onSave,
+    prepareMonaco,
+    fontFamily = "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+    fontSize = 12.5,
+    lineHeight = 20,
+    padding = { top: 10, bottom: 10 },
+    stickyScroll = false,
+    focusOnReveal = true,
+    contentWidget = null,
+    hiddenLineRanges = [],
+  },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const editorRuntimeRef = useRef({
     editor: null as MonacoEditor.IStandaloneCodeEditor | null,
@@ -172,11 +172,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
           lineNumber: Math.min(Math.max(1, spec.lineNumber), model.getLineCount()),
           column: Math.max(1, spec.column ?? 1),
         },
-        preference: [
-          spec.positionPreference === 'below'
-            ? monaco.editor.ContentWidgetPositionPreference.BELOW
-            : monaco.editor.ContentWidgetPositionPreference.ABOVE,
-        ],
+        preference: [spec.positionPreference === 'below' ? monaco.editor.ContentWidgetPositionPreference.BELOW : monaco.editor.ContentWidgetPositionPreference.ABOVE],
       }),
       allowEditorOverflow: true,
       suppressMouseDown: true,
@@ -194,14 +190,9 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     if (!editor || !monaco || typeof editor.setHiddenAreas !== 'function') return false
 
     editor.setHiddenAreas(
-      hiddenLineRanges.map((range) => new monaco.Range(
-        range.startLineNumber,
-        1,
-        range.endLineNumber,
-        1
-      )),
+      hiddenLineRanges.map((range) => new monaco.Range(range.startLineNumber, 1, range.endLineNumber, 1)),
       undefined,
-      true
+      true,
     )
     return true
   }
@@ -216,10 +207,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     editor.setPosition({ lineNumber: safeLine, column: safeColumn })
     if (typeof topLineOffset === 'number' && Number.isFinite(topLineOffset)) {
       const lineHeightPx = Math.max(1, latestPropsRef.current.lineHeight)
-      const scrollTop = Math.max(
-        0,
-        editor.getTopForLineNumber(safeLine) - Math.max(0, Math.floor(topLineOffset)) * lineHeightPx
-      )
+      const scrollTop = Math.max(0, editor.getTopForLineNumber(safeLine) - Math.max(0, Math.floor(topLineOffset)) * lineHeightPx)
       editor.setScrollTop(scrollTop)
     } else {
       editor.revealPositionInCenter({ lineNumber: safeLine, column: safeColumn })
@@ -241,13 +229,9 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     if (!editor || !model || !monaco) return false
 
     const safeStartLine = Math.min(Math.max(1, Math.floor(startLineNumber)), model.getLineCount())
-    const safeEndLine = Math.min(
-      Math.max(safeStartLine, Math.floor(endLineNumber)),
-      model.getLineCount()
-    )
-    editorRuntimeRef.current.highlightDecorations = editor.deltaDecorations(
-      editorRuntimeRef.current.highlightDecorations,
-      [{
+    const safeEndLine = Math.min(Math.max(safeStartLine, Math.floor(endLineNumber)), model.getLineCount())
+    editorRuntimeRef.current.highlightDecorations = editor.deltaDecorations(editorRuntimeRef.current.highlightDecorations, [
+      {
         range: new monaco.Range(safeStartLine, 1, safeEndLine, model.getLineMaxColumn(safeEndLine)),
         options: {
           isWholeLine: true,
@@ -255,8 +239,8 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
           linesDecorationsClassName: 'monaco-text-viewer-highlight-line-gutter',
           lineNumberClassName: 'monaco-text-viewer-highlight-line-number',
         },
-      }]
-    )
+      },
+    ])
     return true
   }
 
@@ -284,20 +268,24 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     }
   }
 
-  useImperativeHandle(ref, () => ({
-    revealPosition: (lineNumber: number, column = 1, topLineOffset) => {
-      if (revealPositionInEditor(lineNumber, column, topLineOffset)) return
-      editorRuntimeRef.current.pendingRevealPosition = { lineNumber, column, topLineOffset }
-    },
-    highlightLine: (lineNumber: number) => {
-      if (highlightLineInEditor(lineNumber)) return
-      editorRuntimeRef.current.pendingHighlightLine = lineNumber
-    },
-    highlightRange: (startLineNumber: number, endLineNumber = startLineNumber) => {
-      if (highlightRangeInEditor(startLineNumber, endLineNumber)) return
-      editorRuntimeRef.current.pendingHighlightRange = { startLineNumber, endLineNumber }
-    },
-  }), [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      revealPosition: (lineNumber: number, column = 1, topLineOffset) => {
+        if (revealPositionInEditor(lineNumber, column, topLineOffset)) return
+        editorRuntimeRef.current.pendingRevealPosition = { lineNumber, column, topLineOffset }
+      },
+      highlightLine: (lineNumber: number) => {
+        if (highlightLineInEditor(lineNumber)) return
+        editorRuntimeRef.current.pendingHighlightLine = lineNumber
+      },
+      highlightRange: (startLineNumber: number, endLineNumber = startLineNumber) => {
+        if (highlightRangeInEditor(startLineNumber, endLineNumber)) return
+        editorRuntimeRef.current.pendingHighlightRange = { startLineNumber, endLineNumber }
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -340,14 +328,12 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
 
       const initialProps = latestPropsRef.current
       const effectiveLanguage = initialProps.language || 'plaintext'
-      const model = monaco.editor.createModel(
-        initialProps.value,
-        effectiveLanguage,
-        monaco.Uri.parse(createMonacoModelUri(modelNamespace, initialProps.filePath))
-      )
+      const model = monaco.editor.createModel(initialProps.value, effectiveLanguage, monaco.Uri.parse(createMonacoModelUri(modelNamespace, initialProps.filePath)))
       const editor = monaco.editor.create(container, {
         model,
         automaticLayout: true,
+        fixedOverflowWidgets: true,
+        overflowWidgetsDomNode: getMonacoOverflowWidgetsContainer(),
         minimap: { enabled: false },
         fontFamily: initialProps.fontFamily,
         fontSize: initialProps.fontSize,
@@ -360,6 +346,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
         readOnly: initialProps.readOnly,
         stickyScroll: { enabled: initialProps.stickyScroll },
       })
+      syncMonacoOverflowWidgetsTheme(theme)
 
       let subscription: IDisposable | null = null
       if (onChangeRef.current) {
@@ -400,10 +387,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
       disposed = true
       removeHoverGuard()
       if (editorRuntimeRef.current.editor) {
-        editorRuntimeRef.current.editor.deltaDecorations(
-          editorRuntimeRef.current.highlightDecorations,
-          []
-        )
+        editorRuntimeRef.current.editor.deltaDecorations(editorRuntimeRef.current.highlightDecorations, [])
       }
       editorRuntimeRef.current.subscription?.dispose()
       if (editorRuntimeRef.current.contentWidget) {
@@ -427,6 +411,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
     const runtime = editorRuntimeRef.current
     if (!runtime.monaco) return
     runtime.monaco.editor.setTheme(theme)
+    syncMonacoOverflowWidgetsTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -472,10 +457,7 @@ export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextVie
 
   return (
     <div className="h-full w-full">
-      <div
-        ref={containerRef}
-        className="h-full w-full"
-      />
+      <div ref={containerRef} className="h-full w-full" />
     </div>
   )
 })

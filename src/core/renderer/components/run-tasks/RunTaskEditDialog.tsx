@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Play, Save, Sparkles } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { Select, type SelectOption } from '../ui/select'
@@ -25,7 +25,11 @@ const READINESS_STRATEGIES: RunTaskReadinessStrategy[] = ['url', 'http', 'port',
 
 type UseWslChoice = 'auto' | 'true' | 'false'
 
-export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onClose, onSave, onStartTask }: RunTaskEditDialogProps) {
+// Memoized: the edit dialog holds 30+ controlled inputs with local state only.
+// Keeping it memo'd (with stable callbacks from the parent) stops parent
+// re-renders — driven by run-task progress or terminal output churn — from
+// re-diffing the whole form while the user is typing.
+export const RunTaskEditDialog = memo(function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onClose, onSave, onStartTask }: RunTaskEditDialogProps) {
   const { t } = useI18n()
   const [name, setName] = useState('')
   const [command, setCommand] = useState('')
@@ -389,7 +393,7 @@ export function RunTaskEditDialog({ project, open, tasks, task, baseZIndex, onCl
       )}
     </ModalShell>
   )
-}
+})
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (

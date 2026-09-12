@@ -53,10 +53,13 @@ function ModalShell({ open, onClose, children, widthClassName = 'max-w-[760px]',
   if (!open) return null
 
   return createPortal(
-    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: baseZIndex }}>
+    // Portal 合成事件沿 React 树冒泡：不在容器上截断 contextmenu，弹窗内
+    // 右键会冒回宿主卡片/页面的右键处理器（如 ProjectCard 的卡片菜单）。
+    // 只 stopPropagation 不 preventDefault，保留默认行为与全局手势 capture。
+    <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: baseZIndex }} onContextMenu={(event) => event.stopPropagation()}>
       <button
         type="button"
-        className={`absolute inset-0 bg-black/25 backdrop-blur-[1px] ${overlayClassName}`.trim()}
+        className={`modal-overlay-backdrop absolute inset-0 bg-black/25 backdrop-blur-[1px] ${overlayClassName}`.trim()}
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation()

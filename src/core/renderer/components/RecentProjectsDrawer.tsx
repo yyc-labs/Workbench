@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Clock3, Search, Trash2, X } from 'lucide-react'
-import { shallow } from 'zustand/shallow'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
@@ -113,6 +112,8 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project,
   )
 })
 
+const EMPTY_URLS: string[] = []
+
 const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ contextMenu, project, onClose, onRequestCloseDrawer, onEditMetadata, onOpenRunConfig }: RecentProjectsContextMenuProps) {
   const stopProject = useAppStore((s) => s.stopProject)
   const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
@@ -124,7 +125,7 @@ const RecentProjectsContextMenu = memo(function RecentProjectsContextMenu({ cont
   const setProjectAiRuntimeProfile = useAppStore((s) => s.setProjectAiRuntimeProfile)
   const togglePin = useAppStore((s) => s.togglePin)
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
-  const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
+  const devUrls = useAppStore((s) => s.processUrls[project.id] ?? EMPTY_URLS)
   const runTaskStates = useAppStore((s) => s.runTaskStates[project.id])
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
@@ -318,13 +319,17 @@ export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDial
   return <ProjectMetaDialog open project={project} folders={folders} tags={tags} onClose={onClose} onAssignFolder={assignProjectFolder} onSetProjectTags={setProjectTags} onSetProjectCustomName={setProjectCustomName} onSetProjectCustomType={setProjectCustomType} />
 })
 
-export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelectProject, onRemoveProject, onEditProjectMetadata }: RecentProjectsDrawerProps) {
+// Memoized: the host re-renders on every route change; stable host callbacks
+// + memo keep the drawer (and its 20 cards) from re-rendering with it.
+export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelectProject, onRemoveProject, onEditProjectMetadata }: RecentProjectsDrawerProps) {
   const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
   const [visible, setVisible] = useState(open)
   const [contentVisible, setContentVisible] = useState(open)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [runConfigOpen, setRunConfigOpen] = useState(false)
+  // Stable callback so memoized RunTasksDialog doesn't re-render with the drawer.
+  const closeRunConfigDialog = useCallback(() => setRunConfigOpen(false), [])
   const [runConfigProject, setRunConfigProject] = useState<ProjectInfo | null>(null)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -332,10 +337,13 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   const shouldScrollToActiveRef = useRef(false)
   const mouseXRef = useRef<number | null>(null)
   const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
-  const recentProjects = useAppStore((s) => {
+  // Subscribe to the projects array reference only; deriving the sorted list
+  // in a selector would re-run filter+sort on every store notification.
+  const projects = useAppStore((s) => s.projects)
+  const recentProjects = useMemo(() => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
-    return s.projects.filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number').sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
-  }, shallow)
+    return projects.filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number').sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
+  }, [projects, currentProjectId, open, shouldRender])
   const trimmedQuery = query.trim()
   const visibleProjects = useMemo(() => {
     if (!trimmedQuery) return recentProjects.slice(0, 20)
@@ -352,6 +360,14 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
   const handleCloseContextMenu = useCallback(() => {
     setContextMenu(null)
   }, [])
+
+  // Stable prop for the memoized context menu; contextMenuProject is a store
+  // object whose reference only changes when the project itself is edited.
+  const handleOpenRunConfig = useCallback(() => {
+    if (!contextMenuProject) return
+    setRunConfigProject(contextMenuProject)
+    setRunConfigOpen(true)
+  }, [contextMenuProject])
 
   const handleHoverProject = useCallback(
     (projectId: string) => {
@@ -547,22 +563,9 @@ export function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelect
         </div>
       </aside>
 
-      {contextMenu && contextMenuProject && (
-        <RecentProjectsContextMenu
-          contextMenu={contextMenu}
-          project={contextMenuProject}
-          onClose={handleCloseContextMenu}
-          onRequestCloseDrawer={onClose}
-          onEditMetadata={onEditProjectMetadata}
-          onOpenRunConfig={() => {
-            if (!contextMenuProject) return
-            setRunConfigProject(contextMenuProject)
-            setRunConfigOpen(true)
-          }}
-        />
-      )}
+      {contextMenu && contextMenuProject && <RecentProjectsContextMenu contextMenu={contextMenu} project={contextMenuProject} onClose={handleCloseContextMenu} onRequestCloseDrawer={onClose} onEditMetadata={onEditProjectMetadata} onOpenRunConfig={handleOpenRunConfig} />}
 
-      {runConfigOpen && runConfigProject && <RunTasksDialog project={runConfigProject} open onClose={() => setRunConfigOpen(false)} baseZIndex={20010} />}
+      {runConfigOpen && runConfigProject && <RunTasksDialog project={runConfigProject} open onClose={closeRunConfigDialog} baseZIndex={20010} />}
     </>
   )
-}
+})

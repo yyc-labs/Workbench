@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronDown, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, Trash2, TriangleAlert } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, SquareTerminal, Trash2, TriangleAlert } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
@@ -7,7 +7,7 @@ import { useOpenStartupLogs } from '../../hooks/useOpenStartupLogs'
 import { getEffectiveRunTasks, getRunTaskStateUrls } from '../../../shared/runTasks'
 import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
 import type { ProjectInfo } from '../../../shared/types'
-import type { RunTask } from '../../../shared/runTasks'
+import type { RunTask, RunTaskProgressEvent } from '../../../shared/runTasks'
 import { isRunTaskActive, runTaskDotClass, runTaskReadinessSummary, runTaskStateBadgeClass } from './runTasks.helpers'
 import { RunTaskDetectDialog } from './RunTaskDetectDialog'
 import { RunTaskEditDialog } from './RunTaskEditDialog'
@@ -20,7 +20,10 @@ type RunTasksDialogProps = {
   onClose: () => void
 }
 
-export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksDialogProps) {
+// Memoized: hosts re-render on terminal output / runtime polling churn while
+// this dialog is open; stable host callbacks + memo keep the dialog (and the
+// edit dialog stacked on top of it) from re-rendering with them.
+export const RunTasksDialog = memo(function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksDialogProps) {
   const { t } = useI18n()
   const locale = useLocale()
   const skillPrompt = useMemo(() => buildRunTaskSkillPrompt(locale), [locale])
@@ -89,11 +92,41 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
     }
   }
 
-  const handleSaveTasks = async (nextTasks: RunTask[], scanDirectories?: string[]) => {
-    const result = await saveRunTaskConfig(project.id, project.path, nextTasks, scanDirectories)
-    if (result.error === 'invalid-json') setConfigError(t('runTasks.error.invalidJson'))
-    return result
-  }
+  // Stable callbacks for the stacked dialogs: with memo'd children these keep
+  // re-renders confined to the part of the tree that actually changed.
+  const handleSaveTasks = useCallback(
+    async (nextTasks: RunTask[], scanDirectories?: string[]) => {
+      const result = await saveRunTaskConfig(project.id, project.path, nextTasks, scanDirectories)
+      if (result.error === 'invalid-json') setConfigError(t('runTasks.error.invalidJson'))
+      return result
+    },
+    [project.id, project.path, saveRunTaskConfig, t],
+  )
+
+  const closeDetect = useCallback(() => setDetectOpen(false), [])
+  const handleDetectSave = useCallback(
+    async (nextTasks: RunTask[], scanDirectories?: string[]) => {
+      await handleSaveTasks(nextTasks, scanDirectories)
+      setDetectOpen(false)
+    },
+    [handleSaveTasks],
+  )
+
+  const closeEdit = useCallback(() => setEditOpen(false), [])
+  const handleEditStartTask = useCallback(
+    async (task: RunTask) => {
+      await startRunTask(project.id, project.path, task)
+    },
+    [project.id, project.path, startRunTask],
+  )
+  const handleEditSave = useCallback(
+    async (task: RunTask) => {
+      const nextTasks = editingTask ? tasks.map((item) => (item.id === editingTask.id ? task : item)) : [...tasks, task]
+      await handleSaveTasks(nextTasks)
+      setEditOpen(false)
+    },
+    [editingTask, tasks, handleSaveTasks],
+  )
 
   const handleCopySkillPrompt = async () => {
     try {
@@ -116,17 +149,29 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
     setDeletingTask(null)
   }
 
-  const handleToggleEnabled = (task: RunTask) => {
-    const nextTasks = tasks.map((item) => {
-      if (item.id !== task.id) return item
-      if (item.enabled === false) {
-        const { enabled: _removed, ...rest } = item
-        return rest as RunTask
-      }
-      return { ...item, enabled: false }
-    })
-    void handleSaveTasks(nextTasks)
-  }
+  const handleToggleEnabled = useCallback(
+    (task: RunTask) => {
+      const nextTasks = tasks.map((item) => {
+        if (item.id !== task.id) return item
+        if (item.enabled === false) {
+          const { enabled: _removed, ...rest } = item
+          return rest as RunTask
+        }
+        return { ...item, enabled: false }
+      })
+      void handleSaveTasks(nextTasks)
+    },
+    [tasks, handleSaveTasks],
+  )
+
+  const handleEditRequest = useCallback((task: RunTask) => {
+    setEditingTask(task)
+    setEditOpen(true)
+  }, [])
+
+  const handleDeleteRequest = useCallback((task: RunTask) => {
+    setDeletingTask(task)
+  }, [])
 
   return (
     <ModalShell open={open} onClose={onClose} widthClassName="max-w-[720px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
@@ -178,97 +223,9 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
             </div>
           ) : (
             <ul className="flex flex-col gap-2">
-              {tasks.map((task) => {
-                const state = taskStates?.[task.id]?.state
-                const urls = getRunTaskStateUrls(taskStates?.[task.id])
-                const primaryUrl = taskStates?.[task.id]?.url
-                const error = taskStates?.[task.id]?.error
-                const warning = taskStates?.[task.id]?.warning
-                const readiness = runTaskReadinessSummary(task)
-                const active = isRunTaskActive(state)
-                const disabled = task.enabled === false
-                return (
-                  <li key={task.id} className={`surface-card rounded-2xl px-4 py-3 ${disabled ? 'opacity-60' : ''}`}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${runTaskDotClass(state)}`} />
-                          <span className="truncate text-sm font-medium text-[color:var(--color-foreground)]">{task.name}</span>
-                          {task.isDefault && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.defaultBadge')}</span>}
-                          {disabled && <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.disabledBadge')}</span>}
-                          {state && state !== 'idle' && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${runTaskStateBadgeClass(state)}`}>{t(`runTasks.taskState.${state}`)}</span>}
-                        </div>
-                        <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]" title={task.command}>
-                          {task.command}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
-                          {task.cwd && <span className="truncate">{task.cwd}</span>}
-                          {task.dependsOn && task.dependsOn.length > 0 && (
-                            <span className="truncate">
-                              {t('runTasks.dependsOn')}: {task.dependsOn.join(', ')}
-                            </span>
-                          )}
-                          {readiness && <span className="truncate font-mono">{readiness}</span>}
-                          {urls.map((url) => (
-                            <a key={url} href={url} target="_blank" rel="noreferrer" className={`truncate hover:underline ${url === primaryUrl ? 'text-primary' : 'text-[color:var(--color-muted-foreground)]'}`} title={url === primaryUrl ? undefined : t('runTasks.secondaryUrl')}>
-                              {url}
-                            </a>
-                          ))}
-                        </div>
-                        {error && (
-                          <p className="mt-1 truncate text-[11px] text-[color:var(--color-destructive)]" title={error}>
-                            {error}
-                          </p>
-                        )}
-                        {!error && warning && (state === 'starting' || state === 'waiting' || state === 'running') && (
-                          <p className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--color-warning)]" title={warning}>
-                            <TriangleAlert className="h-3 w-3 shrink-0" />
-                            <span className="truncate font-mono">{warning}</span>
-                            <span className="shrink-0">· {t('runTasks.outputErrorHint')}</span>
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          className={`quiet-control rounded-full p-1.5 ${disabled ? 'text-[color:var(--color-muted-foreground)]' : 'text-[color:var(--color-success)]'}`}
-                          onClick={() => handleToggleEnabled(task)}
-                          disabled={active}
-                          title={disabled ? t('runTasks.enableTask') : t('runTasks.disableTask')}
-                        >
-                          {disabled ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
-                        </button>
-                        {active ? (
-                          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-destructive)] disabled:opacity-50" onClick={() => void stopRunTask(project.id, task.id)} disabled={state === 'stopping'} title={t('common.stop')}>
-                            <CircleStop className="h-3.5 w-3.5" />
-                          </button>
-                        ) : (
-                          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-success)]" onClick={() => void startRunTask(project.id, project.path, task)} title={t('common.run')}>
-                            <Play className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => openStartupLogs(project.id)} title={t('runTasks.openLogs')}>
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]"
-                          onClick={() => {
-                            setEditingTask(task)
-                            setEditOpen(true)
-                          }}
-                          title={t('runTasks.editTask')}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)]" onClick={() => setDeletingTask(task)} disabled={tasks.length <= 1} title={t('runTasks.deleteTask')}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                )
-              })}
+              {tasks.map((task) => (
+                <RunTaskListItem key={task.id} task={task} taskState={taskStates?.[task.id]} projectId={project.id} projectPath={project.path} canDelete={tasks.length > 1} onToggleEnabled={handleToggleEnabled} onEdit={handleEditRequest} onDelete={handleDeleteRequest} />
+              ))}
             </ul>
           )}
         </div>
@@ -289,39 +246,9 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
       </div>
 
       {/* 条件挂载：关闭时不执行任何子弹窗的 hooks/JSX 构建。 */}
-      {detectOpen && (
-        <RunTaskDetectDialog
-          project={project}
-          open
-          existingTasks={tasks}
-          initialScanDirectories={config?.scanDirectories}
-          baseZIndex={baseZIndex}
-          onClose={() => setDetectOpen(false)}
-          onSave={async (nextTasks, scanDirectories) => {
-            await handleSaveTasks(nextTasks, scanDirectories)
-            setDetectOpen(false)
-          }}
-        />
-      )}
+      {detectOpen && <RunTaskDetectDialog project={project} open existingTasks={tasks} initialScanDirectories={config?.scanDirectories} baseZIndex={baseZIndex} onClose={closeDetect} onSave={handleDetectSave} />}
 
-      {editOpen && (
-        <RunTaskEditDialog
-          project={project}
-          open
-          tasks={tasks}
-          task={editingTask}
-          baseZIndex={baseZIndex}
-          onClose={() => setEditOpen(false)}
-          onStartTask={async (task) => {
-            await startRunTask(project.id, project.path, task)
-          }}
-          onSave={async (task) => {
-            const nextTasks = editingTask ? tasks.map((item) => (item.id === editingTask.id ? task : item)) : [...tasks, task]
-            await handleSaveTasks(nextTasks)
-            setEditOpen(false)
-          }}
-        />
-      )}
+      {editOpen && <RunTaskEditDialog project={project} open tasks={tasks} task={editingTask} baseZIndex={baseZIndex} onClose={closeEdit} onStartTask={handleEditStartTask} onSave={handleEditSave} />}
 
       {skillOpen && (
         <ModalShell open onClose={() => setSkillOpen(false)} widthClassName="max-w-[760px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.skillDialog.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
@@ -374,4 +301,107 @@ export function RunTasksDialog({ project, open, baseZIndex, onClose }: RunTasksD
       )}
     </ModalShell>
   )
+})
+
+type RunTaskListItemProps = {
+  task: RunTask
+  taskState: RunTaskProgressEvent['tasks'][string] | undefined
+  projectId: string
+  projectPath: string
+  canDelete: boolean
+  onToggleEnabled: (task: RunTask) => void
+  onEdit: (task: RunTask) => void
+  onDelete: (task: RunTask) => void
 }
+
+// Memoized per row: run-task state churn (progress events, reconcile) then
+// re-renders only the row whose state actually changed instead of the whole
+// dialog and any dialog stacked on top of it.
+const RunTaskListItem = memo(function RunTaskListItem({ task, taskState, projectId, projectPath, canDelete, onToggleEnabled, onEdit, onDelete }: RunTaskListItemProps) {
+  const { t } = useI18n()
+  const startRunTask = useAppStore((s) => s.startRunTask)
+  const stopRunTask = useAppStore((s) => s.stopRunTask)
+  const openStartupLogs = useOpenStartupLogs()
+
+  const state = taskState?.state
+  const urls = getRunTaskStateUrls(taskState)
+  const primaryUrl = taskState?.url
+  const error = taskState?.error
+  const warning = taskState?.warning
+  const readiness = runTaskReadinessSummary(task)
+  const active = isRunTaskActive(state)
+  const disabled = task.enabled === false
+
+  return (
+    <li className="surface-card rounded-2xl px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${runTaskDotClass(state)}`} />
+            <span className="truncate text-sm font-medium text-[color:var(--color-foreground)]">{task.name}</span>
+            {task.isDefault && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.defaultBadge')}</span>}
+            {disabled && <span className="shrink-0 rounded-full border border-[color:var(--color-border)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('runTasks.disabledBadge')}</span>}
+            {state && state !== 'idle' && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${runTaskStateBadgeClass(state)}`}>{t(`runTasks.taskState.${state}`)}</span>}
+          </div>
+          <p className="mt-1 truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]" title={task.command}>
+            {task.command}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-[color:var(--color-muted-foreground)]">
+            {task.cwd && <span className="truncate">{task.cwd}</span>}
+            {task.dependsOn && task.dependsOn.length > 0 && (
+              <span className="truncate">
+                {t('runTasks.dependsOn')}: {task.dependsOn.join(', ')}
+              </span>
+            )}
+            {readiness && <span className="truncate font-mono">{readiness}</span>}
+            {urls.map((url) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className={`truncate hover:underline ${url === primaryUrl ? 'text-primary' : 'text-[color:var(--color-muted-foreground)]'}`} title={url === primaryUrl ? undefined : t('runTasks.secondaryUrl')}>
+                {url}
+              </a>
+            ))}
+          </div>
+          {error && (
+            <p className="mt-1 truncate text-[11px] text-[color:var(--color-destructive)]" title={error}>
+              {error}
+            </p>
+          )}
+          {!error && warning && (state === 'starting' || state === 'waiting' || state === 'running') && (
+            <p className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-[color:var(--color-warning)]" title={warning}>
+              <TriangleAlert className="h-3 w-3 shrink-0" />
+              <span className="truncate font-mono">{warning}</span>
+              <span className="shrink-0">· {t('runTasks.outputErrorHint')}</span>
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button type="button" className={`quiet-control rounded-full p-1.5 ${disabled ? 'text-[color:var(--color-muted-foreground)]' : 'text-[color:var(--color-success)]'}`} onClick={() => onToggleEnabled(task)} disabled={active} title={disabled ? t('runTasks.enableTask') : t('runTasks.disableTask')}>
+            {disabled ? <PowerOff className="h-3.5 w-3.5" /> : <Power className="h-3.5 w-3.5" />}
+          </button>
+          {active ? (
+            <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-destructive)] disabled:opacity-50" onClick={() => void stopRunTask(projectId, task.id)} disabled={state === 'stopping'} title={t('common.stop')}>
+              <CircleStop className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <>
+              <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-success)]" onClick={() => void startRunTask(projectId, projectPath, task)} title={t('common.run')}>
+                <Play className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => void startRunTask(projectId, projectPath, { ...task, startupMode: 'terminal' })} title={t('runTasks.startInTerminal')}>
+                <SquareTerminal className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => openStartupLogs(projectId)} title={t('runTasks.openLogs')}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => onEdit(task)} title={t('runTasks.editTask')}>
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-destructive)]" onClick={() => onDelete(task)} disabled={!canDelete} title={t('runTasks.deleteTask')}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </li>
+  )
+})

@@ -78,11 +78,13 @@ export async function readProjectFile(projectPath: string, relativePath: string)
       return toUnsupportedReadResult(normalizedRelativePath, stat)
     }
 
-    const content = await fileHandle.readFile({ encoding: 'utf-8' })
+    // 剥掉 UTF-8 BOM（U+FEFF），否则 Monaco 会把它渲染成可见的零宽字符。
+    const rawContent = await fileHandle.readFile({ encoding: 'utf-8' })
+    const content = rawContent.charCodeAt(0) === 0xfeff ? rawContent.slice(1) : rawContent
     return {
       relativePath: normalizedRelativePath,
       content,
-      size: Buffer.byteLength(content, 'utf-8'),
+      size: stat.size,
       mtimeMs: stat.mtimeMs,
       language: inferLanguageFromPath(normalizedRelativePath),
       encoding: 'utf-8',
@@ -129,7 +131,14 @@ export async function writeProjectFile(projectPath: string, relativePath: string
       }
     }
 
+    // 原文件若带 UTF-8 BOM，写回时保留，避免仅因编辑保存就悄悄改掉文件字节。
+    const bomProbe = Buffer.alloc(3)
+    const { bytesRead } = await fileHandle.read(bomProbe, 0, 3, 0)
+    const hadUtf8Bom = bytesRead === 3 && bomProbe[0] === 0xef && bomProbe[1] === 0xbb && bomProbe[2] === 0xbf
+
     await fileHandle.close()
+
+    const nextContent = hadUtf8Bom ? `\uFEFF${content}` : content
 
     const writeTargetPath = path.resolve(rootRealPath, normalizedRelativePath)
     const writeTargetRealPath = await fs.realpath(writeTargetPath)
@@ -138,12 +147,12 @@ export async function writeProjectFile(projectPath: string, relativePath: string
     }
     ensureWithinRoot(rootRealPath, writeTargetRealPath)
 
-    await fs.writeFile(writeTargetRealPath, content, { encoding: 'utf-8' })
+    await fs.writeFile(writeTargetRealPath, nextContent, { encoding: 'utf-8' })
     const afterStat = await fs.stat(writeTargetRealPath)
 
     return {
       relativePath: normalizedRelativePath,
-      size: Buffer.byteLength(content, 'utf-8'),
+      size: Buffer.byteLength(nextContent, 'utf-8'),
       mtimeMs: afterStat.mtimeMs,
     }
   } catch (error) {

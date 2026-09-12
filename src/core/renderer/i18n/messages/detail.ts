@@ -433,7 +433,6 @@ export const detailMessages = {
         title: 'Docker is not running',
         description: 'These tasks need Docker, but the Docker daemon is not running. Start Docker Desktop now? It may take a minute or two to become ready.',
         confirm: 'Start Docker',
-        launching: 'Starting Docker…',
       },
       copySkillPrompt: 'Copy agent prompt for generating the config',
       skillDialog: {
@@ -460,6 +459,7 @@ export const detailMessages = {
       deleteConfirm: 'Remove task "{name}" from .yworkbench/run-tasks.json?',
       deleteConfirmAction: 'Delete',
       openLogs: 'View output in startup logs',
+      startInTerminal: 'Start in terminal (one-off, not saved)',
       outputErrorHint: 'errors detected in output — the task may be failing',
       nonAsciiPathWarningTitle: 'Path compatibility notice',
       nonAsciiPathWarning:
@@ -975,7 +975,6 @@ export const detailMessages = {
         title: '检测到 Docker 未启动',
         description: '当前任务需要 Docker，但 Docker 守护进程未运行。是否现在启动 Docker Desktop？就绪可能需要一到两分钟。',
         confirm: '启动 Docker',
-        launching: '正在启动 Docker…',
       },
       copySkillPrompt: '复制生成配置的 Agent 提示词',
       skillDialog: {
@@ -1002,6 +1001,7 @@ export const detailMessages = {
       deleteConfirm: '确定要从 .yworkbench/run-tasks.json 中删除任务「{name}」吗？',
       deleteConfirmAction: '删除',
       openLogs: '在启动日志中查看输出',
+      startInTerminal: '在终端中启动（一次性，不保存）',
       outputErrorHint: '输出中检测到错误，任务可能正在失败',
       nonAsciiPathWarningTitle: '路径兼容性提示',
       nonAsciiPathWarning: '项目路径包含非 ASCII 字符（如中文）。在 JDK 17 及更早版本上，Java 工具链（如 spring-boot:run 的临时 argfile 编码）会按系统 GBK 编码读取这类路径并失败；JDK 18+ 默认使用 UTF-8（JEP 400），不受影响。可把项目迁移到纯英文路径，或将任务的 JDK 升级到 18+。',

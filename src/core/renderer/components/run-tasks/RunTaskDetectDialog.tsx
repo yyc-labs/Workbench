@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Save, X } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { useI18n } from '../../i18n'
@@ -27,7 +27,9 @@ const SOURCE_LABEL_KEYS: Record<RunTaskCandidateSource, string> = {
   'common-dir': 'runTasks.source.commonDir',
 }
 
-export function RunTaskDetectDialog({ project, open, existingTasks, initialScanDirectories, baseZIndex, onClose, onSave }: RunTaskDetectDialogProps) {
+// Memoized: stacked on top of RunTasksDialog; skip re-rendering its scan UI on
+// parent churn (stable parent callbacks keep this effective).
+export const RunTaskDetectDialog = memo(function RunTaskDetectDialog({ project, open, existingTasks, initialScanDirectories, baseZIndex, onClose, onSave }: RunTaskDetectDialogProps) {
   const { t } = useI18n()
   const detectRunTaskCandidates = useAppStore((s) => s.detectRunTaskCandidates)
   const [scanDirectories, setScanDirectories] = useState<string[]>([])
@@ -217,7 +219,7 @@ export function RunTaskDetectDialog({ project, open, existingTasks, initialScanD
       </div>
     </ModalShell>
   )
-}
+})
 
 function slugify(value: string): string {
   return value

@@ -21,12 +21,38 @@ export type RunTaskActionsSlice = Pick<
   | 'requestDockerLaunch'
   | 'cancelDockerLaunch'
   | 'confirmDockerLaunch'
-  | 'setDockerPrompt'
 >
 
 // Pending "start Docker?" prompt kept out of the store (non-serializable).
 let dockerPromptResolver: ((proceed: boolean) => void) | null = null
 let dockerPromptPayload: { projectPath: string; tasks: RunTask[] } | null = null
+// In-flight background Docker launch (from a confirmed prompt) and the project
+// whose tasks were optimistically marked starting while it runs.
+let dockerLaunchPromise: Promise<boolean> | null = null
+let dockerLaunchProjectId: string | null = null
+// After the launch settles the scheduler session still holds 'idle' task
+// placeholders until it actually advances a task; keep reconciling from
+// snapping the optimistic marks back to "not started" during that window.
+const DOCKER_LAUNCH_RECONCILE_GRACE_MS = 30_000
+let dockerLaunchGraceUntil = 0
+
+type RunTaskTaskState = NonNullable<RunTaskProgressEvent['tasks'][string]>
+
+/**
+ * Per-field equality for a single task state. Reconcile and progress events
+ * frequently repeat an unchanged snapshot; treating it as equal lets zustand
+ * keep the old reference so subscribed dialogs and pages skip re-rendering.
+ */
+function isSameTaskState(a: RunTaskTaskState | undefined, b: RunTaskTaskState | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.state !== b.state || a.url !== b.url || a.error !== b.error || a.warning !== b.warning || a.startedAt !== b.startedAt) return false
+  const aUrls = a.urls
+  const bUrls = b.urls
+  if (aUrls === bUrls) return true
+  if (!aUrls || !bUrls || aUrls.length !== bUrls.length) return false
+  return aUrls.every((url, index) => url === bUrls[index])
+}
 
 /**
  * Preflight for docker-based tasks: asks the main process to probe the daemon.
@@ -44,11 +70,14 @@ async function ensureDockerBeforeStart(get: () => AppState, projectPath: string,
   }
   if (!check.required || check.running) return { ok: true }
 
-  const proceed = await new Promise<boolean>((resolve) => {
-    dockerPromptResolver = resolve
-    dockerPromptPayload = { projectPath, tasks }
-    get().setDockerPrompt({ launching: false, error: null })
-  })
+  // A background launch from an earlier confirmed prompt may still be in
+  // flight — wait for it instead of prompting the user again.
+  if (dockerLaunchPromise) {
+    const ready = await dockerLaunchPromise
+    return ready ? { ok: true } : { ok: false, error: 'Docker is not running.' }
+  }
+
+  const proceed = await get().requestDockerLaunch(projectPath, tasks)
   if (!proceed) return { ok: false, error: 'Docker is not running.' }
   return { ok: true }
 }
@@ -56,7 +85,7 @@ async function ensureDockerBeforeStart(get: () => AppState, projectPath: string,
 export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskActionsSlice> = (set, get) => ({
   runTaskConfigs: {},
   runTaskStates: {},
-  dockerPrompt: null,
+  dockerPrompt: false,
 
   loadRunTaskConfig: async (projectId, projectPath) => {
     const result = await window.electronAPI.getRunTaskConfig(projectPath)
@@ -211,7 +240,14 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
 
   updateRunTaskStates: (event: RunTaskProgressEvent) => {
     set((state) => {
-      const current = state.runTaskStates[event.projectId] ?? {}
+      const current = state.runTaskStates[event.projectId]
+      // Skip the write entirely when every incoming task state matches what we
+      // already hold — repeated progress events and the periodic reconcile then
+      // keep the old reference and subscribers don't re-render.
+      if (current) {
+        const allSame = Object.entries(event.tasks).every(([taskId, taskState]) => isSameTaskState(current[taskId], taskState))
+        if (allSame) return state
+      }
       // Adopt each entry wholesale: the scheduler clears fields (e.g. urls
       // after a task settles) by omitting them, so a spread merge would let
       // stale values linger.
@@ -240,12 +276,19 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     if (projectIds.length === 0) return
     await Promise.all(
       projectIds.map(async (projectId) => {
+        // While Docker is launching (or just settled and the scheduler session
+        // still holds 'idle' placeholders), adopting the snapshot would snap
+        // the optimistically marked tasks back to "not started". Skip until
+        // the scheduler actually advances a task or the grace window ends.
+        const dockerLaunchPending = projectId === dockerLaunchProjectId && (dockerLaunchPromise !== null || Date.now() < dockerLaunchGraceUntil)
         try {
           const live = await window.electronAPI.getRunTaskState(projectId)
           if (live && Object.keys(live.tasks).length > 0) {
+            if (dockerLaunchPending && Object.values(live.tasks).every((taskState) => taskState.state === 'idle')) return
             get().updateRunTaskStates(live)
             return
           }
+          if (dockerLaunchPending) return
           // No session on the scheduler side — anything still active here is stale.
           set((state) => {
             const current = state.runTaskStates[projectId]
@@ -265,15 +308,11 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     )
   },
 
-  setDockerPrompt: (prompt: { launching: boolean; error: string | null }) => {
-    set({ dockerPrompt: prompt })
-  },
-
   requestDockerLaunch: (projectPath, tasks) => {
     return new Promise<boolean>((resolve) => {
       dockerPromptResolver = resolve
       dockerPromptPayload = { projectPath, tasks }
-      set({ dockerPrompt: { launching: false, error: null } })
+      set({ dockerPrompt: true })
     })
   },
 
@@ -281,27 +320,56 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
     dockerPromptResolver?.(false)
     dockerPromptResolver = null
     dockerPromptPayload = null
-    set({ dockerPrompt: null })
+    set({ dockerPrompt: false })
   },
 
+  // Confirming closes the prompt right away; Docker Desktop launches in the
+  // background and the awaiting start action resumes once the daemon is ready.
   confirmDockerLaunch: async () => {
     const payload = dockerPromptPayload
     const resolver = dockerPromptResolver
     if (!payload || !resolver) return
-    set({ dockerPrompt: { launching: true, error: null } })
-    let result: { ready: boolean; error?: string }
-    try {
-      result = await window.electronAPI.startDockerDaemon(payload.projectPath, payload.tasks)
-    } catch (err) {
-      result = { ready: false, error: err instanceof Error ? err.message : String(err) }
+    dockerPromptResolver = null
+    dockerPromptPayload = null
+    set({ dockerPrompt: false })
+
+    // Mark the tasks starting/waiting immediately so cards and the dialog
+    // show them as launching from the moment the user confirms, not only
+    // after Docker becomes ready.
+    const projectId = get().projects.find((item) => item.path === payload.projectPath)?.id ?? null
+    const launchable = payload.tasks.filter((task) => task.enabled !== false)
+    if (projectId) {
+      dockerLaunchProjectId = projectId
+      set((state) => ({
+        runTaskStates: {
+          ...state.runTaskStates,
+          [projectId]: Object.fromEntries(launchable.map((task) => [task.id, { state: task.dependsOn?.length ? 'waiting' : 'starting', startedAt: Date.now() } as RunTaskTaskState])),
+        },
+      }))
     }
-    if (result.ready) {
-      resolver(true)
-      dockerPromptResolver = null
-      dockerPromptPayload = null
-      set({ dockerPrompt: null })
-      return
+
+    dockerLaunchPromise = window.electronAPI
+      .startDockerDaemon(payload.projectPath, payload.tasks)
+      .then((result) => result.ready)
+      .catch(() => false)
+    const ready = await dockerLaunchPromise
+    dockerLaunchPromise = null
+    dockerLaunchGraceUntil = ready ? Date.now() + DOCKER_LAUNCH_RECONCILE_GRACE_MS : 0
+    resolver(ready)
+
+    if (!ready && projectId) {
+      dockerLaunchProjectId = null
+      // Docker launch failed — roll the optimistic marks back instead of
+      // leaving the cards stuck on "starting" forever.
+      set((state) => {
+        const current = state.runTaskStates[projectId]
+        if (!current) return state
+        const next: AppState['runTaskStates'][string] = {}
+        for (const [taskId, taskState] of Object.entries(current)) {
+          next[taskId] = taskState.state === 'starting' || taskState.state === 'waiting' ? { state: 'stopped' as const } : { ...taskState }
+        }
+        return { runTaskStates: { ...state.runTaskStates, [projectId]: next } }
+      })
     }
-    set({ dockerPrompt: { launching: false, error: result.error ?? 'Failed to start Docker.' } })
   },
 })

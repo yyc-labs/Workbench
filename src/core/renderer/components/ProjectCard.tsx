@@ -30,10 +30,12 @@ interface ProjectCardProps {
 
 const DEFAULT_AI_RUNTIME_PROFILE_OPTION_VALUE = '__default_ai_runtime_profile__'
 
+const EMPTY_URLS: string[] = []
+
 function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 0 }: ProjectCardProps) {
   const { t } = useI18n()
   const devStatus = useAppStore((s) => s.processes[project.id]?.status ?? 'stopped')
-  const devUrls = useAppStore((s) => s.processUrls[project.id] || [])
+  const devUrls = useAppStore((s) => s.processUrls[project.id] ?? EMPTY_URLS)
   const runTaskConfig = useAppStore((s) => s.runTaskConfigs[project.id])
   const runTaskStates = useAppStore((s) => s.runTaskStates[project.id])
   const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
@@ -256,6 +258,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [menuAllowRemove, setMenuAllowRemove] = useState(false)
   const [runTasksOpen, setRunTasksOpen] = useState(false)
+  // Stable callback so memoized RunTasksDialog doesn't re-render with the card.
+  const closeRunTasksDialog = useCallback(() => setRunTasksOpen(false), [])
   const [isOpeningTerminal, setIsOpeningTerminal] = useState(false)
   const [isStartingRuntime, setIsStartingRuntime] = useState(false)
   const [isStoppingRuntime, setIsStoppingRuntime] = useState(false)
@@ -543,7 +547,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
       {docLinksDialogOpen && <ProjectDocLinksDialog open={docLinksDialogOpen} project={project} onClose={() => setDocLinksDialogOpen(false)} />}
 
       {/* 条件挂载：关闭时零开销（不订阅 store、不执行任何弹窗渲染）。 */}
-      {runTasksOpen && <RunTasksDialog project={project} open onClose={() => setRunTasksOpen(false)} />}
+      {runTasksOpen && <RunTasksDialog project={project} open onClose={closeRunTasksDialog} />}
 
       <div className="relative z-10 flex items-center gap-1.5 shrink-0">
         <div className="hidden min-w-0 shrink-0 md:block" onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>

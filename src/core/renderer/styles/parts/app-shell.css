@@ -51,6 +51,14 @@ body.gesture-active .mouse-gesture-hint {
   box-shadow: none !important;
 }
 
+/* 手势轨迹 SVG 每帧重绘时，弹窗遮罩上的全屏 backdrop-filter 会强制整帧
+   重算 blur（编辑弹窗打开时是两层叠加）。手势激活期间直接关掉，与上面
+   .mouse-gesture-hint 的豁免同理。 */
+body.gesture-active .modal-overlay-backdrop {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 .route-catalog-overlay {
   background: radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 32%), color-mix(in srgb, #05060a 42%, transparent) !important;
 }

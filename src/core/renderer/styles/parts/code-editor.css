@@ -109,6 +109,12 @@
   top: 0px !important;
 }
 
+/* overflow widgets（hover/suggest）挂在 body 下的 fixed 容器（见 monacoEnvironment.ts）。
+   容器本身不拦截事件，widget 自身恢复可交互。 */
+.monaco-overflow-widgets-container > * {
+  pointer-events: auto;
+}
+
 /* We render a wrapped custom find/replace bar in the React layer. */
 .code-editor-pane .monaco-editor .find-widget {
   display: none !important;

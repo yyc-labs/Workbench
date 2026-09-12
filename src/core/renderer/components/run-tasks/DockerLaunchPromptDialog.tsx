@@ -1,12 +1,13 @@
-import { AlertTriangle, Loader2, Play } from 'lucide-react'
+import { AlertTriangle, Play } from 'lucide-react'
 import { ModalShell } from '../ModalShell'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 
 /**
  * Global prompt shown when a run-task start needs Docker but the daemon is not
- * running. Confirming launches Docker Desktop and waits (up to ~90s) for the
- * daemon; the awaiting start action resumes only after it becomes ready.
+ * running. Confirming closes the prompt immediately and launches Docker
+ * Desktop in the background; the awaiting start action resumes once the
+ * daemon becomes ready.
  */
 export function DockerLaunchPromptDialog() {
   const { t } = useI18n()
@@ -29,15 +30,13 @@ export function DockerLaunchPromptDialog() {
           </div>
         </div>
 
-        {prompt.error && <p className="rounded-xl border border-[color:var(--color-destructive)]/25 bg-[color:var(--color-destructive-background)] px-3 py-2 text-xs text-[color:var(--color-destructive)]">{prompt.error}</p>}
-
         <div className="flex items-center justify-end gap-2">
-          <button type="button" className="quiet-control rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={cancelDockerLaunch} disabled={prompt.launching}>
+          <button type="button" className="quiet-control rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={cancelDockerLaunch}>
             {t('common.cancel')}
           </button>
-          <button type="button" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-primary-hover disabled:opacity-60" onClick={() => void confirmDockerLaunch()} disabled={prompt.launching}>
-            {prompt.launching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-            {prompt.launching ? t('runTasks.dockerPrompt.launching') : t('runTasks.dockerPrompt.confirm')}
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:bg-primary-hover" onClick={() => void confirmDockerLaunch()}>
+            <Play className="h-3.5 w-3.5" />
+            {t('runTasks.dockerPrompt.confirm')}
           </button>
         </div>
       </div>

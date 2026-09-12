@@ -7,6 +7,8 @@ function normalizePathForJoin(value: string): string {
   return value.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
+const EMPTY_PROCESS_URLS: string[] = []
+
 function resolveRunWorkingDirectory(projectPath: string, runWorkingDirectory?: string): string {
   const raw = runWorkingDirectory?.trim()
   if (!raw) return projectPath
@@ -103,28 +105,41 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
   },
 
   appendOutput: (projectId, data) => {
+    let urlsChanged = false
     set((state) => {
       const normalized = data.replace(/\r?\n/g, '\r\n')
       const prevOutput = state.terminalOutputs[projectId] || ''
       const nextOutput = trimTerminalBuffer(prevOutput + normalized)
 
-      const prevUrls = state.processUrls[projectId] || []
+      const prevUrls = state.processUrls[projectId]
+      const knownUrls = prevUrls ?? EMPTY_PROCESS_URLS
       const chunkUrls = collectUrlsFromText(normalized)
-      let uniqueUrls = prevUrls
+      let nextUrls = prevUrls
       if (chunkUrls.length > 0) {
-        const merged = [...prevUrls, ...chunkUrls]
-        uniqueUrls = [...new Set(merged)]
-      }
-      if (uniqueUrls.length === 0 && nextOutput.length > 0) {
-        uniqueUrls = collectUrlsFromText(nextOutput)
+        const merged = [...knownUrls, ...chunkUrls]
+        const uniqueUrls = [...new Set(merged)]
+        // Keep the previous reference (including `undefined`) when nothing was
+        // added — per-chunk writes here would re-render every subscribed page
+        // on each output chunk.
+        if (uniqueUrls.length !== knownUrls.length || uniqueUrls.some((url, index) => url !== knownUrls[index])) {
+          nextUrls = uniqueUrls
+        }
+      } else if (knownUrls.length === 0 && nextOutput.length > 0) {
+        // URLs may appear anywhere in the buffer; rescan only while none are known.
+        const inferred = collectUrlsFromText(nextOutput)
+        if (inferred.length > 0) nextUrls = inferred
       }
 
-      return {
+      const partial: Partial<AppState> = {
         terminalOutputs: { ...state.terminalOutputs, [projectId]: nextOutput },
-        processUrls: { ...state.processUrls, [projectId]: uniqueUrls },
       }
+      if (nextUrls !== prevUrls) {
+        urlsChanged = true
+        partial.processUrls = { ...state.processUrls, [projectId]: nextUrls }
+      }
+      return partial
     })
-    persistProcessUrls(get().processUrls)
+    if (urlsChanged) persistProcessUrls(get().processUrls)
   },
 
   clearOutput: (projectId) => {
