@@ -8,7 +8,7 @@ import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeC
 import { CodeFileTree } from './CodeFileTree'
 import type { ProjectFileContentSearchResponse, ProjectFileNodeKind } from '../../../shared/types'
 import { contentSearchScopeKey, type ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
-import type { FileTreeState } from './code.types'
+import type { FileSearchLineTarget, FileTreeState } from './code.types'
 
 type CodeWorkspaceSidebarProps = {
   activeContentSearchLocation: {
@@ -34,6 +34,7 @@ type CodeWorkspaceSidebarProps = {
   expandedDirectories: Set<string>
   fileSearchError: string | null
   fileSearchInputRef: Ref<HTMLInputElement>
+  fileSearchLineTarget: FileSearchLineTarget | null
   hasContentSearchScope: boolean
   hasSearchQuery: boolean
   isContentSearchAdvancedOpen: boolean
@@ -51,7 +52,7 @@ type CodeWorkspaceSidebarProps = {
   onOpenTreeNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onSearchInTreeNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onReloadTree: () => void
-  onSelectTreeFile: (relativePath: string) => void
+  onSelectTreeFile: (relativePath: string, lineTarget?: FileSearchLineTarget) => void
   onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onSetContentSearchCaseSensitive: Dispatch<SetStateAction<boolean>>
   onSetContentSearchScopeInput: Dispatch<SetStateAction<string>>
@@ -87,6 +88,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   expandedDirectories,
   fileSearchError,
   fileSearchInputRef,
+  fileSearchLineTarget,
   hasContentSearchScope,
   hasSearchQuery,
   isContentSearchAdvancedOpen,
@@ -190,6 +192,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             activeRelativePath={activeRelativePath}
             expandedDirectories={expandedDirectories}
             flatFileListMode={hasSearchQuery}
+            flatListLineTarget={fileSearchLineTarget}
             locateRequestToken={locateRequestToken}
             onToggleDirectory={onToggleTreeDirectory}
             onSelectFile={onSelectTreeFile}

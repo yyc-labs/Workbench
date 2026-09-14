@@ -310,6 +310,23 @@ test('isPrimaryRunTaskUrlPending holds while the primary task is alive without a
   assert.equal(isPrimaryRunTaskUrlPending({ version: 1, tasks: [{ id: 'a', name: 'A', command: 'a' }] }, undefined), false)
 })
 
+test('isPrimaryRunTaskUrlPending releases the hold when a running task exceeds the grace window', () => {
+  const config = {
+    version: 1,
+    tasks: [{ id: 'web', name: 'Web', command: 'pnpm run dev', primaryUrl: true }],
+  }
+  const now = 1_000_000
+
+  // Terminal-mode / no-readiness tasks enter running immediately; the hold
+  // survives the grace window only.
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'running', startedAt: now - 1_000 } }, now), true)
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'running', startedAt: now } }, now), true)
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'running', startedAt: now - 60_000 } }, now), false)
+
+  // A URL at any point releases immediately, even within the grace window.
+  assert.equal(isPrimaryRunTaskUrlPending(config, { web: { state: 'running', startedAt: now, url: 'http://localhost:5173' } }, now), false)
+})
+
 test('getActiveRunTaskUrls falls back to the legacy single url field', () => {
   const states = {
     a: { state: 'ready', url: 'http://localhost:3000' },

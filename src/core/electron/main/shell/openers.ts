@@ -12,18 +12,10 @@ const WSL_SSH_DEFAULT_SETUP_TIMEOUT_MS = 5000
 const WSL_SSH_COLD_START_SETUP_TIMEOUT_MS = 30000
 const WSL_GB18030_DECODER = new TextDecoder('gb18030', { fatal: false })
 
-type WslSshSetupStep =
-  | 'verify-wsl-distro'
-  | 'verify-bash'
-  | 'verify-expect'
-  | 'create-temp-script-path'
-  | 'write-temp-script'
-  | 'inspect-temp-script-bytes'
+type WslSshSetupStep = 'verify-wsl-distro' | 'verify-bash' | 'verify-expect' | 'create-temp-script-path' | 'write-temp-script' | 'inspect-temp-script-bytes'
 
 export function getWslSshSetupTimeoutMs(step: WslSshSetupStep): number {
-  return step === 'verify-wsl-distro'
-    ? WSL_SSH_COLD_START_SETUP_TIMEOUT_MS
-    : WSL_SSH_DEFAULT_SETUP_TIMEOUT_MS
+  return step === 'verify-wsl-distro' ? WSL_SSH_COLD_START_SETUP_TIMEOUT_MS : WSL_SSH_DEFAULT_SETUP_TIMEOUT_MS
 }
 
 function appendSshTerminalDebugLog(event: string, details?: Record<string, unknown>): void {
@@ -35,7 +27,7 @@ function appendSshTerminalDebugLog(event: string, details?: Record<string, unkno
         event,
         ...details,
       })}\n`,
-      'utf8'
+      'utf8',
     )
   } catch {
     // Debug logging must never block terminal launch.
@@ -58,19 +50,13 @@ function previewSshTerminalDebugError(error: unknown): string {
 
 export function describeWslCommandForDebug(command: string): string {
   const normalized = command.trim()
-  if (
-    normalized.includes('ide-electron-ssh.')
-    && normalized.includes('base64 -d >')
-  ) {
+  if (normalized.includes('ide-electron-ssh.') && normalized.includes('base64 -d >')) {
     return '[redacted: write WSL SSH temp script via base64]'
   }
   return previewSshTerminalDebugText(normalized) ?? ''
 }
 
-export function resolveWslVsCodeTarget(
-  pathValue: string,
-  defaultDistro: string
-): { distro: string; linuxPath: string } | null {
+export function resolveWslVsCodeTarget(pathValue: string, defaultDistro: string): { distro: string; linuxPath: string } | null {
   const normalized = normalizePathValue(pathValue)
   if (!normalized) return null
 
@@ -157,7 +143,10 @@ function decodeWslProcessOutputChunk(buffer: Buffer): string {
   if (buffer.length === 0) return ''
 
   if (looksLikeUtf16Le(buffer)) {
-    return buffer.toString('utf16le').replace(/^\uFEFF/, '').replace(/\u0000/g, '')
+    return buffer
+      .toString('utf16le')
+      .replace(/^\uFEFF/, '')
+      .replace(/\u0000/g, '')
   }
 
   const utf8Text = buffer.toString('utf8')
@@ -183,7 +172,7 @@ function execWslBash(
   options?: {
     debugLabel?: string
     debugCommand?: string
-  }
+  },
 ): Promise<string> {
   const debugLabel = options?.debugLabel ?? 'wsl-command'
   const debugCommand = describeWslCommandForDebug(options?.debugCommand ?? cmd)
@@ -290,12 +279,7 @@ function execWslBash(
   })
 }
 
-export function buildWslSshRunnerScript(payload: {
-  host: string
-  port: number
-  username: string
-  password: string
-}): string {
+export function buildWslSshRunnerScript(payload: { host: string; port: number; username: string; password: string }): string {
   const escapedPassword = quoteBashSingle(payload.password)
   const escapedHost = quoteBashSingle(payload.host)
   const escapedUser = quoteBashSingle(payload.username)
@@ -304,8 +288,8 @@ export function buildWslSshRunnerScript(payload: {
   return [
     '#!/usr/bin/env bash',
     'rm -f -- "$0"',
-    "expect_script=$(mktemp /tmp/ide-electron-ssh-expect.XXXXXX.exp)",
-    "cleanup() {",
+    'expect_script=$(mktemp /tmp/ide-electron-ssh-expect.XXXXXX.exp)',
+    'cleanup() {',
     '  rm -f -- "$expect_script"',
     '}',
     'trap cleanup EXIT',
@@ -313,7 +297,7 @@ export function buildWslSshRunnerScript(payload: {
     `export IDE_ELECTRON_SSH_HOST='${escapedHost}'`,
     `export IDE_ELECTRON_SSH_PORT='${escapedPort}'`,
     `export IDE_ELECTRON_SSH_PASS='${escapedPassword}'`,
-    "cat > \"$expect_script\" <<'EOF_EXPECT'",
+    'cat > "$expect_script" <<\'EOF_EXPECT\'',
     'set timeout -1',
     'set ssh_user $env(IDE_ELECTRON_SSH_USER)',
     'set ssh_host $env(IDE_ELECTRON_SSH_HOST)',
@@ -343,11 +327,7 @@ export function buildWslTempScriptWriteCommand(scriptPath: string, scriptContent
   const escapedPath = quoteBashSingle(scriptPath)
   const quotedPath = `'${escapedPath}'`
 
-  return [
-    `printf %s '${escapedScript}' | base64 -d > ${quotedPath}`,
-    `chmod 700 ${quotedPath}`,
-    `test -s ${quotedPath} || { echo "WSL SSH temp script is empty: ${scriptPath}" >&2; exit 1; }`,
-  ].join(' && ')
+  return [`printf %s '${escapedScript}' | base64 -d > ${quotedPath}`, `chmod 700 ${quotedPath}`, `test -s ${quotedPath} || { echo "WSL SSH temp script is empty: ${scriptPath}" >&2; exit 1; }`].join(' && ')
 }
 
 async function writeWslTempScript(distro: string, scriptContent: string): Promise<string> {
@@ -368,10 +348,7 @@ export function buildWtWslExecArgs(distro: string, commandArgs: string[]): strin
 
 type RequestedSshRoute = 'wsl' | 'windows'
 
-export function resolveSshOpenRoute(
-  requestedRoute: RequestedSshRoute | null | undefined,
-  platform: NodeJS.Platform = process.platform
-): 'wsl' | 'native' {
+export function resolveSshOpenRoute(requestedRoute: RequestedSshRoute | null | undefined, platform: NodeJS.Platform = process.platform): 'wsl' | 'native' {
   if (platform === 'win32') {
     return requestedRoute === 'windows' ? 'native' : 'wsl'
   }
@@ -379,23 +356,12 @@ export function resolveSshOpenRoute(
   return 'native'
 }
 
-export function buildNativeSshCommand(payload: {
-  host: string
-  port: number
-  username: string
-}): string {
+export function buildNativeSshCommand(payload: { host: string; port: number; username: string }): string {
   const target = `${payload.username}@${payload.host}`
   return payload.port !== 22 ? `ssh -p ${payload.port} ${target}` : `ssh ${target}`
 }
 
-export type OpenSshTerminalFailureReason =
-  | 'invalid-input'
-  | 'windows-host-required'
-  | 'wsl-not-installed'
-  | 'wsl-distro-unavailable'
-  | 'wsl-bash-unavailable'
-  | 'wsl-expect-unavailable'
-  | 'terminal-launch-failed'
+export type OpenSshTerminalFailureReason = 'invalid-input' | 'windows-host-required' | 'wsl-not-installed' | 'wsl-distro-unavailable' | 'wsl-bash-unavailable' | 'wsl-expect-unavailable' | 'terminal-launch-failed'
 
 type OpenSshTerminalResult = {
   ok: boolean
@@ -413,16 +379,15 @@ async function openPosixSshTerminal(sshCommand: string): Promise<{ ok: boolean; 
   const interactiveCommand = `${sshCommand}; exec bash -i`
 
   if (process.platform === 'darwin') {
-    const appleScript = [
-      'tell application "Terminal"',
-      'activate',
-      `do script "${quoteAppleScriptString(interactiveCommand)}"`,
-      'end tell',
-    ]
-    const child = spawn('osascript', appleScript.flatMap((line) => ['-e', line]), {
-      detached: true,
-      stdio: 'ignore',
-    })
+    const appleScript = ['tell application "Terminal"', 'activate', `do script "${quoteAppleScriptString(interactiveCommand)}"`, 'end tell']
+    const child = spawn(
+      'osascript',
+      appleScript.flatMap((line) => ['-e', line]),
+      {
+        detached: true,
+        stdio: 'ignore',
+      },
+    )
 
     return await new Promise((resolve) => {
       child.on('error', (err) => {
@@ -489,12 +454,7 @@ async function verifyWslExpectReady(distro: string): Promise<void> {
     if (normalized.includes('failed to spawn wsl.exe') || normalized.includes('enoent')) {
       throw new Error('WSL_NOT_INSTALLED')
     }
-    if (
-      normalized.includes('there is no distribution with the supplied name')
-      || normalized.includes('distribution was not found')
-      || normalized.includes('specified distribution')
-      || ((raw.includes('分发') || raw.includes('发行版')) && (raw.includes('不存在') || raw.includes('找不到')))
-    ) {
+    if (normalized.includes('there is no distribution with the supplied name') || normalized.includes('distribution was not found') || normalized.includes('specified distribution') || ((raw.includes('分发') || raw.includes('发行版')) && (raw.includes('不存在') || raw.includes('找不到')))) {
       throw new Error('WSL_DISTRO_UNAVAILABLE')
     }
     throw error
@@ -537,7 +497,10 @@ async function verifyWslExpectReady(distro: string): Promise<void> {
   })
 }
 
-export function mapWslSshFailure(distro: string, error: unknown): {
+export function mapWslSshFailure(
+  distro: string,
+  error: unknown,
+): {
   reason: OpenSshTerminalFailureReason
   message: string
 } {
@@ -579,19 +542,13 @@ export function mapWslSshFailure(distro: string, error: unknown): {
     default:
       return {
         reason: 'terminal-launch-failed',
-        message: raw
-          ? `WSL SSH failed in distro "${distro}". ${raw}`
-          : `WSL SSH failed in distro "${distro}".`,
+        message: raw ? `WSL SSH failed in distro "${distro}". ${raw}` : `WSL SSH failed in distro "${distro}".`,
       }
   }
 }
 
 function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
-  const spawnWith = (
-    cmd: string,
-    spawnArgs: string[],
-    fallback?: () => void
-  ) => {
+  const spawnWith = (cmd: string, spawnArgs: string[], fallback?: () => void) => {
     const child = spawn(cmd, spawnArgs, {
       detached: true,
       shell: false,
@@ -612,11 +569,7 @@ function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
   }
 
   if (process.platform === 'win32') {
-    spawnWith(
-      'cmd.exe',
-      ['/d', '/s', '/c', 'code.cmd', ...args],
-      () => spawnWith('code', args)
-    )
+    spawnWith('cmd.exe', ['/d', '/s', '/c', 'code.cmd', ...args], () => spawnWith('code', args))
     return
   }
 
@@ -626,15 +579,11 @@ function spawnVsCode(args: string[], onError?: (err: Error) => void): void {
 function spawnVsCodeViaWsl(distro: string, linuxFolder: string): void {
   const escapedPath = quoteBashSingle(linuxFolder)
   const command = `cd '${escapedPath}' && code .`
-  const child = spawn(
-    'wsl.exe',
-    ['-d', distro, '--', 'bash', '-lc', command],
-    {
-      detached: true,
-      windowsHide: true,
-      stdio: 'ignore',
-    }
-  )
+  const child = spawn('wsl.exe', ['-d', distro, '--', 'bash', '-lc', command], {
+    detached: true,
+    windowsHide: true,
+    stdio: 'ignore',
+  })
   child.on('error', (err) => {
     console.error(`[open-vscode] wsl fallback failed distro="${distro}" path="${linuxFolder}" error=${err.message}`)
   })
@@ -657,6 +606,38 @@ export function openVsCode(folderPath: string, defaultDistro: string): void {
   spawnVsCode([localPath])
 }
 
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    await shell.openExternal(url)
+    return
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[open-external] shell.openExternal failed url="${url}" error=${message}`)
+    if (process.platform !== 'win32') {
+      throw error
+    }
+  }
+
+  // Windows 上默认浏览器冷启动时，shell.openExternal 底层的 ShellExecute/DDE
+  // 握手可能失败（浏览器未运行时尤其常见）。回退到 explorer.exe 直接走系统
+  // 文件关联启动，不经过 shell 解析层，对含 `&` 的 URL 也安全（无 cmd 解析）。
+  await new Promise<void>((resolve) => {
+    const child = spawn('explorer.exe', [url], {
+      detached: true,
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    child.on('error', (err) => {
+      console.error(`[open-external] explorer fallback failed url="${url}" error=${err.message}`)
+      resolve()
+    })
+    child.on('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
+}
+
 export function openFolder(folderPath: string, revealPath?: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const normalizedRevealPath = typeof revealPath === 'string' ? revealPath.trim() : ''
@@ -668,7 +649,8 @@ export function openFolder(folderPath: string, revealPath?: string): Promise<voi
           return
         }
 
-        shell.openPath(folderPath)
+        shell
+          .openPath(folderPath)
           .then((err) => {
             if (err) {
               reject(new Error(`Failed to open folder: ${err}`))
@@ -681,7 +663,8 @@ export function openFolder(folderPath: string, revealPath?: string): Promise<voi
       return
     }
 
-    shell.openPath(folderPath)
+    shell
+      .openPath(folderPath)
       .then((err) => {
         if (err) {
           reject(new Error(`Failed to open folder: ${err}`))
@@ -693,36 +676,16 @@ export function openFolder(folderPath: string, revealPath?: string): Promise<voi
   })
 }
 
-export function openTerminalAtPath(
-  folderPath: string,
-  defaultDistro: string,
-  command?: string
-): Promise<boolean> {
+export function openTerminalAtPath(folderPath: string, defaultDistro: string, command?: string): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const trimmedCommand = command?.trim()
     const wslTarget = resolveWslVsCodeTarget(folderPath, defaultDistro)
     if (process.platform === 'win32' && wslTarget) {
-      const wslArgs = trimmedCommand
-        ? [
-          'wsl',
-          '-d',
-          wslTarget.distro,
-          '--cd',
-          wslTarget.linuxPath,
-          '--',
-          'bash',
-          '-lc',
-          `${trimmedCommand}; exec bash -i`,
-        ]
-        : ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath]
-      const child = spawn(
-        'wt.exe',
-        wslArgs,
-        {
-          detached: true,
-          stdio: 'ignore',
-        }
-      )
+      const wslArgs = trimmedCommand ? ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath, '--', 'bash', '-lc', `${trimmedCommand}; exec bash -i`] : ['wsl', '-d', wslTarget.distro, '--cd', wslTarget.linuxPath]
+      const child = spawn('wt.exe', wslArgs, {
+        detached: true,
+        stdio: 'ignore',
+      })
 
       child.on('error', (err) => {
         console.error('[path-terminal] spawn wsl terminal failed:', err.message)
@@ -759,7 +722,7 @@ export async function openSshTerminal(
     username: string
     password?: string | null
     route?: 'wsl' | 'windows'
-  }
+  },
 ): Promise<OpenSshTerminalResult> {
   const host = payload.host.trim()
   const username = payload.username.trim()
@@ -822,18 +785,10 @@ export async function openSshTerminal(
         scriptBytesUtf8: Buffer.byteLength(runnerScript, 'utf8'),
         scriptLineCount: runnerScript.split('\n').length,
       })
-      const scriptPath = await writeWslTempScript(
-        defaultDistro,
-        runnerScript
-      )
-      const scriptBytes = await execWslBash(
-        defaultDistro,
-        `wc -c < '${quoteBashSingle(scriptPath)}'`,
-        getWslSshSetupTimeoutMs('inspect-temp-script-bytes'),
-        {
-          debugLabel: 'inspect-temp-script-bytes',
-        }
-      ).catch(() => '')
+      const scriptPath = await writeWslTempScript(defaultDistro, runnerScript)
+      const scriptBytes = await execWslBash(defaultDistro, `wc -c < '${quoteBashSingle(scriptPath)}'`, getWslSshSetupTimeoutMs('inspect-temp-script-bytes'), {
+        debugLabel: 'inspect-temp-script-bytes',
+      }).catch(() => '')
       const wtArgs = buildWtWslExecArgs(defaultDistro, ['bash', scriptPath])
       appendSshTerminalDebugLog('openSshTerminal:script-written', {
         defaultDistro,
@@ -841,14 +796,10 @@ export async function openSshTerminal(
         scriptBytes,
         wtArgs,
       })
-      const child = spawn(
-        'wt.exe',
-        wtArgs,
-        {
-          detached: true,
-          stdio: 'ignore',
-        }
-      )
+      const child = spawn('wt.exe', wtArgs, {
+        detached: true,
+        stdio: 'ignore',
+      })
 
       return await new Promise((resolve) => {
         child.on('error', (err) => {

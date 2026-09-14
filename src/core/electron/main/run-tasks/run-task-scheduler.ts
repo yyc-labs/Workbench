@@ -511,6 +511,7 @@ export class RunTaskScheduler {
     if (processManager.isRunning(key)) {
       // Leftover process from a previous session — treat as already running.
       this.setState(session, task.id, { state: 'running', startedAt: Date.now(), warning: undefined })
+      this.registerUrlCollectorTap(session, task)
       return
     }
 
@@ -547,6 +548,10 @@ export class RunTaskScheduler {
 
     if (!task.readiness) {
       this.setState(session, task.id, { state: 'running', warning: undefined })
+      // No-readiness tasks (including the legacy default task) never go
+      // through waitReady, so without this tap their output URLs would never
+      // be published and start-and-open would have nothing to open.
+      this.registerUrlCollectorTap(session, task)
       return
     }
 

@@ -24,6 +24,8 @@ type RevealLocation = {
   relativePath: string
   lineNumber: number
   column: number
+  /** 可选区间高亮结束行（start-end 跳转场景），缺省时只高亮起始行。 */
+  endLine?: number
 }
 
 export function useCodeWorkspaceRestoreState({
@@ -49,28 +51,34 @@ export function useCodeWorkspaceRestoreState({
   const pendingRevealRetryTimerRef = useRef<number | null>(null)
   const pendingRevealRetryCountRef = useRef(0)
   const lastAutoRevealedCursorKeyRef = useRef<string | null>(null)
-  const revealInEditor = useCallback((location: RevealLocation | null, highlight = false): boolean => {
-    if (!location) return false
-    const editor = editorRef.current
-    if (!editor) return false
-    editor.revealPosition(location.lineNumber, location.column)
-    if (highlight) {
-      editor.highlightLine(location.lineNumber)
-    }
-    return true
-  }, [editorRef])
-  const revealPendingLocation = useCallback((location: RevealLocation | null): boolean => {
-    if (!location) return false
+  const revealInEditor = useCallback(
+    (location: RevealLocation | null, highlight = false): boolean => {
+      if (!location) return false
+      const editor = editorRef.current
+      if (!editor) return false
+      editor.revealPosition(location.lineNumber, location.column)
+      if (highlight) {
+        editor.highlightLine(location.lineNumber, location.endLine)
+      }
+      return true
+    },
+    [editorRef],
+  )
+  const revealPendingLocation = useCallback(
+    (location: RevealLocation | null): boolean => {
+      if (!location) return false
 
-    let handled = false
-    if (isShowingPreview) {
-      handled = revealPreviewPosition(location.lineNumber, location.column) || handled
-    }
-    if (isShowingEditor) {
-      handled = revealInEditor(location, true) || handled
-    }
-    return handled
-  }, [isShowingEditor, isShowingPreview, revealInEditor, revealPreviewPosition])
+      let handled = false
+      if (isShowingPreview) {
+        handled = revealPreviewPosition(location.lineNumber, location.column) || handled
+      }
+      if (isShowingEditor) {
+        handled = revealInEditor(location, true) || handled
+      }
+      return handled
+    },
+    [isShowingEditor, isShowingPreview, revealInEditor, revealPreviewPosition],
+  )
 
   const clearPendingRevealRetry = useCallback(() => {
     if (pendingRevealRetryTimerRef.current != null) {
@@ -143,15 +151,8 @@ export function useCodeWorkspaceRestoreState({
     if (hasAttemptedInitialRestore) return
     setHasAttemptedInitialRestore(true)
 
-    const sanitizedSession = sanitizeProjectCodeSessionByPaths(
-      persistedProjectCodeSession,
-      allProjectFilePathSet
-    )
-    const restoreCandidates = Array.from(new Set([
-      persistedLastCodeFile?.trim() || '',
-      sanitizedSession?.activePath?.trim() || '',
-      sanitizedSession?.tabs[sanitizedSession.tabs.length - 1]?.trim() || '',
-    ].filter(Boolean)))
+    const sanitizedSession = sanitizeProjectCodeSessionByPaths(persistedProjectCodeSession, allProjectFilePathSet)
+    const restoreCandidates = Array.from(new Set([persistedLastCodeFile?.trim() || '', sanitizedSession?.activePath?.trim() || '', sanitizedSession?.tabs[sanitizedSession.tabs.length - 1]?.trim() || ''].filter(Boolean)))
 
     if (restoreCandidates.length <= 0) {
       isRestoringCodeSessionRef.current = false
@@ -169,48 +170,44 @@ export function useCodeWorkspaceRestoreState({
           continue
         }
       }
-    })()
-      .finally(() => {
-        isRestoringCodeSessionRef.current = false
-        setIsRestoringCodeSession(false)
-      })
-  }, [
-    allProjectFilePathSet,
-    ensureTreePathLoaded,
-    hasAttemptedInitialRestore,
-    isRestoringCodeSessionRef,
-    openFile,
-    persistedLastCodeFile,
-    persistedProjectCodeSession,
-    treeStatus,
-  ])
+    })().finally(() => {
+      isRestoringCodeSessionRef.current = false
+      setIsRestoringCodeSession(false)
+    })
+  }, [allProjectFilePathSet, ensureTreePathLoaded, hasAttemptedInitialRestore, isRestoringCodeSessionRef, openFile, persistedLastCodeFile, persistedProjectCodeSession, treeStatus])
 
-  const handleOpenedCodeFile = useCallback((relativePath: string) => {
-    const normalizedPath = relativePath.trim()
-    if (!normalizedPath) return
+  const handleOpenedCodeFile = useCallback(
+    (relativePath: string) => {
+      const normalizedPath = relativePath.trim()
+      if (!normalizedPath) return
 
-    if (isRestoringCodeSessionRef.current) {
-      const persistedCursor = persistedProjectCodeSession?.cursorPositions?.[normalizedPath]
-      if (persistedCursor) {
-        pendingCursorRevealRef.current = {
-          relativePath: normalizedPath,
-          lineNumber: persistedCursor.lineNumber,
-          column: persistedCursor.column,
+      if (isRestoringCodeSessionRef.current) {
+        const persistedCursor = persistedProjectCodeSession?.cursorPositions?.[normalizedPath]
+        if (persistedCursor) {
+          pendingCursorRevealRef.current = {
+            relativePath: normalizedPath,
+            lineNumber: persistedCursor.lineNumber,
+            column: persistedCursor.column,
+          }
+          schedulePendingRevealFlush()
         }
-        schedulePendingRevealFlush()
+        return
       }
-      return
-    }
 
-    pendingCursorRevealRef.current = null
-  }, [isRestoringCodeSessionRef, persistedProjectCodeSession?.cursorPositions, schedulePendingRevealFlush])
+      pendingCursorRevealRef.current = null
+    },
+    [isRestoringCodeSessionRef, persistedProjectCodeSession?.cursorPositions, schedulePendingRevealFlush],
+  )
 
-  const openContentSearchMatch = useCallback(async (relativePath: string, lineNumber: number, column: number) => {
-    const opened = await openFile(relativePath)
-    if (!opened) return
-    pendingRevealRef.current = { relativePath, lineNumber, column }
-    schedulePendingRevealFlush()
-  }, [openFile, schedulePendingRevealFlush])
+  const openContentSearchMatch = useCallback(
+    async (relativePath: string, lineNumber: number, column: number, endLine?: number) => {
+      const opened = await openFile(relativePath)
+      if (!opened) return
+      pendingRevealRef.current = { relativePath, lineNumber, column, endLine }
+      schedulePendingRevealFlush()
+    },
+    [openFile, schedulePendingRevealFlush],
+  )
 
   useEffect(() => {
     if (!pendingRevealRef.current && !pendingCursorRevealRef.current) return
@@ -233,10 +230,10 @@ export function useCodeWorkspaceRestoreState({
 
     const handled = isShowingEditor
       ? revealInEditor({
-        relativePath: activeRelativePath,
-        lineNumber: persistedCursor.lineNumber,
-        column: persistedCursor.column,
-      })
+          relativePath: activeRelativePath,
+          lineNumber: persistedCursor.lineNumber,
+          column: persistedCursor.column,
+        })
       : isShowingPreview
         ? revealPreviewPosition(persistedCursor.lineNumber, persistedCursor.column)
         : false
@@ -244,15 +241,7 @@ export function useCodeWorkspaceRestoreState({
     if (handled) {
       lastAutoRevealedCursorKeyRef.current = revealKey
     }
-  }, [
-    activeRelativePath,
-    isShowingEditor,
-    isShowingPreview,
-    isRestoringCodeSessionRef,
-    persistedProjectCodeSession?.cursorPositions,
-    revealInEditor,
-    revealPreviewPosition,
-  ])
+  }, [activeRelativePath, isShowingEditor, isShowingPreview, isRestoringCodeSessionRef, persistedProjectCodeSession?.cursorPositions, revealInEditor, revealPreviewPosition])
 
   return {
     handleOpenedCodeFile,

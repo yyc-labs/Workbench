@@ -25,3 +25,9 @@ export interface CodeFileDrawerState {
   favorites: string[]
   recents: string[]
 }
+
+/** 文件搜索查询中 `path:N` / `path:N-M` 携带的行区间定位目标。 */
+export interface FileSearchLineTarget {
+  startLine: number
+  endLine: number
+}

@@ -1,4 +1,5 @@
-import { app, shell } from 'electron'
+import { app } from 'electron'
+import { openExternalUrlWithBrowserPreflight } from '../shell/browser-preflight'
 
 const APP_SCHEME = 'yyc-workbench://'
 
@@ -30,7 +31,7 @@ export function registerWebContentsSecurityPolicy(): void {
     contents.setWindowOpenHandler(({ url }) => {
       const decision = resolveWindowOpenDecision(url)
       if (decision.action === 'deny' && decision.openExternally) {
-        void shell.openExternal(url).catch(() => undefined)
+        void openExternalUrlWithBrowserPreflight(url).catch(() => undefined)
       }
       return { action: decision.action }
     })

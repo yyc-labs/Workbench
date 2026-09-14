@@ -1,4 +1,4 @@
-import { AlignLeft, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Contrast, FoldVertical, MessageSquarePlus, MessageSquareQuote, Moon, Palette, ScanText, Scissors, Sun, UnfoldVertical } from 'lucide-react'
+import { AlignLeft, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Contrast, FoldVertical, ListOrdered, MessageSquarePlus, MessageSquareQuote, Moon, Palette, ScanText, Scissors, Sun, UnfoldVertical } from 'lucide-react'
 import type { Selection } from 'monaco-editor'
 import type { ReactNode } from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -27,9 +27,11 @@ interface MonacoEditorContextMenuProps {
   isReadOnly: boolean
   canComment: boolean
   canFormat: boolean
+  currentLineNumber: number
   currentTheme: MonacoThemeName
   onThemeChange: (theme: MonacoThemeName) => void
   onAction: (actionId: string) => void
+  onGoToLine: (lineNumber: number) => void
   onClose: () => void
 }
 
@@ -58,9 +60,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canComment, canFormat, currentTheme, onThemeChange, onAction, onClose }: MonacoEditorContextMenuProps) {
+export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canComment, canFormat, currentLineNumber, currentTheme, onThemeChange, onAction, onGoToLine, onClose }: MonacoEditorContextMenuProps) {
   const { t } = useI18n()
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [isGoToLineInputOpen, setIsGoToLineInputOpen] = useState(false)
+  const [goToLineValue, setGoToLineValue] = useState('')
+  const goToLineInputRef = useRef<HTMLInputElement | null>(null)
+
+  const openGoToLineInput = () => {
+    setGoToLineValue(String(currentLineNumber))
+    setIsGoToLineInputOpen(true)
+    // 菜单先渲染再聚焦，保证输入框拿到焦点后可直接输入行号。
+    window.setTimeout(() => {
+      goToLineInputRef.current?.focus()
+      goToLineInputRef.current?.select()
+    }, 0)
+  }
+
+  const submitGoToLine = () => {
+    const parsed = Number.parseInt(goToLineValue.trim(), 10)
+    if (!Number.isFinite(parsed) || parsed < 1) return
+    onGoToLine(parsed)
+    onClose()
+  }
 
   const themeOptions = useMemo<ThemeOption[]>(() => {
     const themeIds = isDarkTheme(currentTheme) ? DARK_THEME_IDS : LIGHT_THEME_IDS
@@ -162,23 +184,36 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
       })
     }
 
-    groups.push({
-      id: 'folding',
-      items: [
-        {
-          id: 'fold',
-          label: t('codeWorkspace.editorContextMenu.fold'),
-          icon: <FoldVertical className={iconClassName} />,
-          actionId: 'editor.fold',
-        },
-        {
-          id: 'unfold',
-          label: t('codeWorkspace.editorContextMenu.unfold'),
-          icon: <UnfoldVertical className={iconClassName} />,
-          actionId: 'editor.unfold',
-        },
-      ],
-    })
+    groups.push(
+      {
+        id: 'navigation',
+        items: [
+          {
+            id: 'goToLine',
+            label: t('codeWorkspace.editorContextMenu.goToLine'),
+            icon: <ListOrdered className={iconClassName} />,
+            actionId: 'goto-line',
+          },
+        ],
+      },
+      {
+        id: 'folding',
+        items: [
+          {
+            id: 'fold',
+            label: t('codeWorkspace.editorContextMenu.fold'),
+            icon: <FoldVertical className={iconClassName} />,
+            actionId: 'editor.fold',
+          },
+          {
+            id: 'unfold',
+            label: t('codeWorkspace.editorContextMenu.unfold'),
+            icon: <UnfoldVertical className={iconClassName} />,
+            actionId: 'editor.unfold',
+          },
+        ],
+      },
+    )
 
     if (canFormat) {
       groups.push({
@@ -261,43 +296,75 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
     <>
       {createPortal(
         <div ref={menuRef} className={dropdownSurfaceClassName} style={{ ...dropdownSurfaceStyle, left, top, width: MENU_WIDTH }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
-          {sections.map((section, index) => (
-            <div key={section.id}>
-              {index > 0 ? <div className="mx-2 my-1 h-px bg-[color:var(--color-border)]/60" /> : null}
-              {section.items.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  disabled={item.disabled}
-                  className={['flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors', item.disabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-[color:var(--color-accent)]'].filter(Boolean).join(' ')}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    if (item.disabled) return
-                    onAction(item.actionId)
-                  }}
-                >
-                  {item.icon}
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                </button>
-              ))}
+          {isGoToLineInputOpen ? (
+            <div className="px-2 py-1.5">
+              <input
+                ref={goToLineInputRef}
+                type="text"
+                inputMode="numeric"
+                value={goToLineValue}
+                onChange={(event) => setGoToLineValue(event.target.value.replace(/[^\d]/g, ''))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    submitGoToLine()
+                    return
+                  }
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    onClose()
+                  }
+                }}
+                placeholder={t('codeWorkspace.editorContextMenu.goToLinePlaceholder')}
+                className="code-search-input w-full font-mono text-[12px]"
+                spellCheck={false}
+              />
             </div>
-          ))}
-          <div className="mx-2 my-1 h-px bg-[color:var(--color-border)]/60" />
-          <button
-            ref={themeTriggerRef}
-            type="button"
-            className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-            onMouseDown={(event) => event.preventDefault()}
-            onMouseEnter={() => {
-              cancelThemeMenuClose()
-              setThemeMenuOpen(true)
-            }}
-            onMouseLeave={scheduleThemeMenuClose}
-          >
-            <Palette className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
-            <span className="min-w-0 flex-1 truncate">{t('codeWorkspace.editorContextMenu.colorTheme')}</span>
-            <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          </button>
+          ) : (
+            <>
+              {sections.map((section, index) => (
+                <div key={section.id}>
+                  {index > 0 ? <div className="mx-2 my-1 h-px bg-[color:var(--color-border)]/60" /> : null}
+                  {section.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={item.disabled}
+                      className={['flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors', item.disabled ? 'cursor-not-allowed opacity-45' : 'hover:bg-[color:var(--color-accent)]'].filter(Boolean).join(' ')}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        if (item.disabled) return
+                        if (item.id === 'goToLine') {
+                          openGoToLineInput()
+                          return
+                        }
+                        onAction(item.actionId)
+                      }}
+                    >
+                      {item.icon}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+              <div className="mx-2 my-1 h-px bg-[color:var(--color-border)]/60" />
+              <button
+                ref={themeTriggerRef}
+                type="button"
+                className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => {
+                  cancelThemeMenuClose()
+                  setThemeMenuOpen(true)
+                }}
+                onMouseLeave={scheduleThemeMenuClose}
+              >
+                <Palette className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                <span className="min-w-0 flex-1 truncate">{t('codeWorkspace.editorContextMenu.colorTheme')}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+              </button>
+            </>
+          )}
         </div>,
         document.body,
       )}

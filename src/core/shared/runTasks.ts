@@ -193,16 +193,25 @@ export function getActiveRunTaskUrls(config: RunTaskConfigFile | null | undefine
  * True when the config declares a primaryUrl task that has not published its
  * URL yet. While pending, the start-and-open action must keep waiting instead
  * of opening whichever other task became ready first. A task sitting in
- * "running" without a URL still counts as pending (session carries flip
- * "starting" to "running"); only a settled task releases the hold.
+ * "running" without a URL counts as pending for a short grace window only:
+ * no-readiness tasks (and terminal-mode tasks, whose output the scheduler
+ * cannot see) enter "running" immediately and may never publish a URL —
+ * without the grace release the hold would block start-and-open forever.
  */
-export function isPrimaryRunTaskUrlPending(config: RunTaskConfigFile | null | undefined, states: RunTaskProgressEvent['tasks'] | undefined): boolean {
+const PRIMARY_URL_RUNNING_GRACE_MS = 10_000
+
+export function isPrimaryRunTaskUrlPending(config: RunTaskConfigFile | null | undefined, states: RunTaskProgressEvent['tasks'] | undefined, now: number = Date.now()): boolean {
   const primary = config?.tasks.find((task) => task.primaryUrl === true)
   if (!primary) return false
   const state = states?.[primary.id]
   if (!state) return true
   if (state.url) return false
-  return state.state === 'idle' || state.state === 'waiting' || state.state === 'starting' || state.state === 'running'
+  if (state.state === 'idle' || state.state === 'waiting' || state.state === 'starting') return true
+  if (state.state === 'running') {
+    if (typeof state.startedAt !== 'number') return true
+    return now - state.startedAt < PRIMARY_URL_RUNNING_GRACE_MS
+  }
+  return false
 }
 
 export function parseRunTaskProcessKey(processId: string): { projectId: string; taskId: string } | null {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { collectParentDirectories } from './code.helpers'
 import { collectTopLevelDirectories, expandTreePath, findDirectoryNode, mergeKnownFilePaths, replaceDirectoryNodes, sortProjectNodes } from './code.tree'
-import type { FileTreeState } from './code.types'
+import type { FileSearchLineTarget, FileTreeState } from './code.types'
 import { shouldRefreshLoadedDirectory, shouldRefreshRootOnSidebarReveal, type DirectoryLoadReason, type RootLoadReason } from './code.treeRefresh'
 
 export type ContentSearchScopePreset = {
@@ -16,6 +16,22 @@ export type ContentSearchScopePreset = {
 const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
 const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
 const CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES = ['src', 'app', 'packages', 'docs', 'test', 'tests', 'spec', 'scripts']
+// 文件搜索行号后缀：`path:2032` 或 `path:2032-2087`，冒号前必须有非空路径。
+const FILE_SEARCH_LINE_TARGET_RE = /^(.+):(\d+)(?:-(\d+))?$/
+
+export function parseFileSearchLineTarget(query: string): { lineTarget: FileSearchLineTarget | null; searchQuery: string } {
+  const normalized = query.trim()
+  const match = FILE_SEARCH_LINE_TARGET_RE.exec(normalized)
+  if (!match) return { lineTarget: null, searchQuery: normalized }
+
+  const startLine = Number.parseInt(match[2], 10)
+  const endLine = match[3] ? Number.parseInt(match[3], 10) : startLine
+  if (!Number.isFinite(startLine) || startLine < 1) return { lineTarget: null, searchQuery: normalized }
+  return {
+    lineTarget: { startLine: Math.min(startLine, endLine), endLine: Math.max(startLine, endLine) },
+    searchQuery: match[1].trim(),
+  }
+}
 const CONTENT_SEARCH_ROOT_SCOPE_LABELS: Record<string, string> = {
   src: 'Source',
   app: 'App',
@@ -487,7 +503,8 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   }, [activePane, blockTreeAutoLoad, loadTree, projectPath, tree.autoLoadBlocked, tree.status, treeAutoLoadPaused])
 
   useEffect(() => {
-    const normalizedQuery = fileSearchQuery.trim()
+    const { lineTarget, searchQuery } = parseFileSearchLineTarget(fileSearchQuery)
+    const normalizedQuery = searchQuery
     if (!normalizedQuery) {
       setIsSearchingFiles(false)
       setFileSearchError(null)
@@ -646,6 +663,7 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   const contentSearchToggleLabel = isContentSearchAllExpanded ? 'Collapse all' : 'Expand all'
   const hasSearchQuery = fileSearchQuery.trim().length > 0
   const treeNodesForView = hasSearchQuery ? searchResultNodes : tree.nodes
+  const fileSearchLineTarget = useMemo(() => parseFileSearchLineTarget(fileSearchQuery).lineTarget, [fileSearchQuery])
 
   // 被排除条目不应进入 tab / session / 最近打开等普通文件链路，收集其路径与类型供上层拦截。
   const excludedPathKinds = useMemo(() => {
@@ -681,6 +699,7 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     excludedPathKinds,
     expandedDirectories,
     fileSearchError,
+    fileSearchLineTarget,
     fileSearchQuery,
     hasContentSearchQuery,
     hasContentSearchScope,

@@ -70,7 +70,9 @@ export function useProjectDevUrlLauncher({ projectId, processStatus, processUrls
   useEffect(() => {
     if (!pendingOpenDevUrl || !firstDevUrl) return
 
-    void window.electronAPI.openExternal(firstDevUrl)
+    window.electronAPI.openExternal(firstDevUrl).catch((error) => {
+      console.warn('[devUrlLauncher] openExternal failed:', firstDevUrl, error)
+    })
     setPendingOpenDevUrl(false)
   }, [firstDevUrl, pendingOpenDevUrl])
 
@@ -86,7 +88,11 @@ export function useProjectDevUrlLauncher({ projectId, processStatus, processUrls
 
   const startAndOpenDevUrl = useCallback(async () => {
     if (firstDevUrl) {
-      await window.electronAPI.openExternal(firstDevUrl)
+      try {
+        await window.electronAPI.openExternal(firstDevUrl)
+      } catch (error) {
+        console.warn('[devUrlLauncher] openExternal failed:', firstDevUrl, error)
+      }
       return
     }
 

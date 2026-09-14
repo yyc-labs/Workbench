@@ -184,6 +184,7 @@ export function CodeWorkspacePanel({
     excludedPathKinds,
     expandedDirectories,
     fileSearchError,
+    fileSearchLineTarget,
     hasContentSearchScope,
     hasSearchQuery,
     isContentSearchAdvancedOpen,
@@ -848,6 +849,7 @@ export function CodeWorkspacePanel({
                 expandedDirectories={expandedDirectories}
                 fileSearchError={fileSearchError}
                 fileSearchInputRef={fileSearchInputRef}
+                fileSearchLineTarget={fileSearchLineTarget}
                 hasContentSearchScope={hasContentSearchScope}
                 hasSearchQuery={hasSearchQuery}
                 isContentSearchAdvancedOpen={isContentSearchAdvancedOpen}

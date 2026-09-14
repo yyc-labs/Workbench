@@ -6,6 +6,7 @@ import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types
 import { Tooltip } from '../../components/ui/tooltip'
 import { useI18n } from '../../i18n'
 import { CodeTreeContextMenu, type CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
+import type { FileSearchLineTarget } from './code.types'
 
 const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
 const MAX_LOCATE_SCROLL_ATTEMPTS = 6
@@ -16,7 +17,7 @@ interface CodeFileTreeProps {
   activeRelativePath: string | null
   expandedDirectories: Set<string>
   onToggleDirectory: (relativePath: string) => void
-  onSelectFile: (relativePath: string) => void
+  onSelectFile: (relativePath: string, lineTarget?: FileSearchLineTarget) => void
   onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onOpenNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -25,14 +26,17 @@ interface CodeFileTreeProps {
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   flatFileListMode?: boolean
+  /** 扁平搜索模式下查询携带的行区间目标（`path:N` / `path:N-M`），点击结果时透传给 onSelectFile。 */
+  flatListLineTarget?: FileSearchLineTarget | null
   locateRequestToken?: number
 }
 
 interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   activeRelativePath: string | null
   flatFileListMode: boolean
+  flatListLineTarget: FileSearchLineTarget | null
   onToggleDirectory: (relativePath: string) => void
-  onSelectFile: (relativePath: string) => void
+  onSelectFile: (relativePath: string, lineTarget?: FileSearchLineTarget) => void
   onSelectExcluded: (relativePath: string, nodeKind: ProjectFileNodeKind) => void
   onOpenFileContextMenu: (payload: CodeTreeContextMenuPayload) => void
 }
@@ -172,7 +176,7 @@ function ensureTreeNodeVisibleInViewport(tree: TreeApi<ProjectFileNode>, relativ
   return true
 }
 
-function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onToggleDirectory, onSelectFile, onSelectExcluded, onOpenFileContextMenu }: FileTreeNodeRendererProps) {
+function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, flatListLineTarget, onToggleDirectory, onSelectFile, onSelectExcluded, onOpenFileContextMenu }: FileTreeNodeRendererProps) {
   const data = node.data
   if (isPlaceholderNode(data)) {
     return <div style={style} aria-hidden="true" />
@@ -200,7 +204,7 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
             onToggleDirectory(data.relativePath)
             return
           }
-          onSelectFile(data.relativePath)
+          onSelectFile(data.relativePath, flatFileListMode ? (flatListLineTarget ?? undefined) : undefined)
         }}
         onContextMenu={(event) => {
           event.preventDefault()
@@ -265,6 +269,7 @@ export const CodeFileTree = memo(function CodeFileTree({
   onCopyNodeRelativePath,
   onCopyNodeRelativePathWithoutSlashes,
   flatFileListMode = false,
+  flatListLineTarget = null,
   locateRequestToken = 0,
 }: CodeFileTreeProps) {
   const { t } = useI18n()
@@ -463,7 +468,9 @@ export const CodeFileTree = memo(function CodeFileTree({
           disableEdit
           disableMultiSelection
         >
-          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onToggleDirectory={handleToggleDirectory} onSelectFile={onSelectFile} onSelectExcluded={onSelectExcluded} onOpenFileContextMenu={handleOpenFileContextMenu} />}
+          {(props) => (
+            <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} flatListLineTarget={flatListLineTarget} onToggleDirectory={handleToggleDirectory} onSelectFile={onSelectFile} onSelectExcluded={onSelectExcluded} onOpenFileContextMenu={handleOpenFileContextMenu} />
+          )}
         </Tree>
       )}
       {contextMenu && (

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, type IpcMainInvokeEvent, nativeImage, nativeTheme } from 'electron'
 import { detectProject } from '../detector'
 import { loadConfig, updateConfig } from '../config'
 import { getLegacyUserDataMigrationInfo, migrateLegacyUserData } from '../legacy-user-data-migration'
@@ -9,6 +9,7 @@ import { normalizeCodexConfig, resolveCodexEnvironmentScope, readCodexSettings, 
 import { applyWindowsUserEnvToCurrentProcess, writeWindowsUserEnv } from '../windows-env'
 import { deleteDocLinkSecret, getDocLinkSecret, setDocLinkSecret } from '../doc-link-secret-store'
 import { applyWindowBackground } from '../window/createWindow'
+import { openExternalUrlWithBrowserPreflight } from '../shell/browser-preflight'
 import { openFolder, openVsCode } from '../shell/openers'
 import { buildInteractiveRelaunchArgs } from '../launchArgs'
 import { syncWindowsLaunchOnLogin } from '../launchOnLogin'
@@ -229,7 +230,7 @@ export function registerCoreIpcHandlers(deps: RegisterIpcHandlersDependencies): 
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_EXTERNAL, (_event, url: string) => {
-    return shell.openExternal(url)
+    return openExternalUrlWithBrowserPreflight(url)
   })
 
   ipcMain.handle(IPC.SHELL_OPEN_FOLDER, async (_event, folderPath: string, revealPath?: string) => {

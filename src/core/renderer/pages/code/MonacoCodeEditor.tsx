@@ -21,7 +21,7 @@ export interface MonacoCodeEditorHandle {
   setScrollTop: (scrollTop: number) => void
   setScrollTopForLine: (lineNumber: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
-  highlightLine: (lineNumber: number) => void
+  highlightLine: (lineNumber: number, endLine?: number) => void
   openSearch: (mode?: 'find' | 'replace') => void
 }
 
@@ -33,6 +33,7 @@ interface PendingRevealPosition {
 
 interface PendingHighlightLine {
   lineNumber: number
+  endLine?: number
   modelKey: string
 }
 
@@ -138,6 +139,7 @@ interface EditorContextMenuSnapshot {
   isReadOnly: boolean
   canComment: boolean
   canFormat: boolean
+  currentLineNumber: number
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor(
@@ -220,6 +222,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     setActiveTheme(nextTheme)
   }
 
+  // 右键菜单"跳转到行"：revealPositionInEditor 内部会把行号钳制到 [1, 最后一行]。
+  const runGoToLine = (lineNumber: number) => {
+    const editor = editorRef.current
+    if (!editor) return
+    revealPositionInEditor(editor, lineNumber, 1)
+    highlightLineInEditor(editor, lineNumber)
+  }
+
   useEffect(() => {
     activeImportLinkProjectPath = projectPath ?? null
     activeImportLinkOpenHandler = onOpenFile ?? null
@@ -256,15 +266,17 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     revealHighlightDecorationsRef.current = editor.deltaDecorations(revealHighlightDecorationsRef.current, [])
   }
 
-  const highlightLineInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number) => {
+  const highlightLineInEditor = (editor: MonacoEditor.IStandaloneCodeEditor, lineNumber: number, endLine?: number) => {
     const monaco = monacoRef.current
     const model = editor.getModel()
     if (!monaco || !model) return false
 
     const safeLine = Math.min(Math.max(1, Math.floor(lineNumber)), model.getLineCount())
+    const rawEndLine = endLine != null ? Math.floor(endLine) : safeLine
+    const safeEndLine = Math.min(Math.max(safeLine, rawEndLine), model.getLineCount())
     revealHighlightDecorationsRef.current = editor.deltaDecorations(revealHighlightDecorationsRef.current, [
       {
-        range: new monaco.Range(safeLine, 1, safeLine, model.getLineMaxColumn(safeLine)),
+        range: new monaco.Range(safeLine, 1, safeEndLine, model.getLineMaxColumn(safeEndLine)),
         options: {
           isWholeLine: true,
           className: 'monaco-code-editor-reveal-line',
@@ -297,7 +309,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
     const pendingHighlight = pendingHighlightLineRef.current
     if (pendingHighlight && activeModelKeyRef.current === pendingHighlight.modelKey) {
-      if (highlightLineInEditor(editor, pendingHighlight.lineNumber)) {
+      if (highlightLineInEditor(editor, pendingHighlight.lineNumber, pendingHighlight.endLine)) {
         pendingHighlightLineRef.current = null
       }
     }
@@ -361,9 +373,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         }
         flushPendingReveal()
       },
-      highlightLine: (lineNumber: number) => {
+      highlightLine: (lineNumber: number, endLine?: number) => {
         pendingHighlightLineRef.current = {
           lineNumber,
+          endLine,
           modelKey: toMonacoModelCacheKey(projectPathRef.current, filePathRef.current),
         }
         flushPendingReveal()
@@ -620,6 +633,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           isReadOnly: editor.getOption(monaco.editor.EditorOption.readOnly),
           canComment: Boolean(languageConfiguration?.comments),
           canFormat: FORMATTABLE_LANGUAGES.has(languageId),
+          currentLineNumber: editor.getPosition()?.lineNumber ?? 1,
         })
       }
       const contextMenuDisposable = editor.onContextMenu(handleEditorContextMenu)
@@ -805,9 +819,11 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           isReadOnly={editorContextMenu.isReadOnly}
           canComment={editorContextMenu.canComment}
           canFormat={editorContextMenu.canFormat}
+          currentLineNumber={editorContextMenu.currentLineNumber}
           currentTheme={activeTheme}
           onThemeChange={handleThemeChange}
           onAction={runEditorContextMenuAction}
+          onGoToLine={runGoToLine}
           onClose={() => setEditorContextMenu(null)}
         />
       ) : null}

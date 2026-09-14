@@ -2,10 +2,11 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { ProjectFileNodeKind } from '../../../shared/types'
 import { copyTextToClipboard } from './code.clipboard'
 import { joinProjectPath, normalizeRelativePathForCopy, removeRelativePathSlashes, resolveTreeNodeFolderPath } from './code.pathActions'
+import type { FileSearchLineTarget } from './code.types'
 
 type UseCodeTreePathActionsArgs = {
   isNarrowViewport: boolean
-  openContentSearchMatch: (relativePath: string, lineNumber: number, column: number) => Promise<void> | void
+  openContentSearchMatch: (relativePath: string, lineNumber: number, column: number, endLine?: number) => Promise<void> | void
   openFile: (relativePath: string) => Promise<boolean> | void
   openExcludedEntry: (relativePath: string, nodeKind: ProjectFileNodeKind) => Promise<boolean> | void
   openFileWithTreeLocate: (relativePath: string) => Promise<boolean> | void
@@ -23,11 +24,16 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
   }, [isNarrowViewport, setIsExplorerOpen])
 
   const handleSelectTreeFile = useCallback(
-    (relativePath: string) => {
-      void openFile(relativePath)
+    (relativePath: string, lineTarget?: FileSearchLineTarget) => {
+      if (lineTarget) {
+        // 文件搜索查询携带行号（path:N / path:N-M）时复用内容搜索的跳转链路。
+        void openContentSearchMatch(relativePath, lineTarget.startLine, 1, lineTarget.endLine)
+      } else {
+        void openFile(relativePath)
+      }
       collapseExplorerIfNeeded()
     },
-    [collapseExplorerIfNeeded, openFile],
+    [collapseExplorerIfNeeded, openContentSearchMatch, openFile],
   )
 
   const handleSelectExcluded = useCallback(
