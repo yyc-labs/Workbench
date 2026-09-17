@@ -1,9 +1,24 @@
 .code-markdown-content table {
-  width: max-content;
-  border-collapse: collapse;
-  border: 1px solid color-mix(in srgb, var(--color-foreground) 14%, var(--color-border));
+  width: auto;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
   background: var(--color-card);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-foreground) 6%, transparent);
+}
+
+.code-markdown-content th,
+.code-markdown-content td {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.code-markdown-content tbody tr:hover {
+  background: var(--color-accent);
 }
 
 .code-markdown-box-flow {
@@ -32,9 +47,7 @@
 .code-markdown-flow-inline-shell {
   border-radius: 26px;
   border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 34%),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 98%, white 2%), color-mix(in srgb, var(--color-card) 92%, transparent));
+  background: radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 34%), linear-gradient(180deg, color-mix(in srgb, var(--color-card) 98%, white 2%), color-mix(in srgb, var(--color-card) 92%, transparent));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 24%, transparent),
     0 14px 32px rgba(15, 23, 42, 0.06);
@@ -76,8 +89,7 @@
   justify-content: center;
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 12%, var(--color-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 97%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 97%, transparent));
   padding: 14px 16px;
 }
 
@@ -206,8 +218,7 @@
   gap: 14px;
   border-radius: 20px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 10%, var(--color-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, white 12%, var(--color-card)), color-mix(in srgb, var(--color-card) 98%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, white 12%, var(--color-card)), color-mix(in srgb, var(--color-card) 98%, transparent));
   padding: 16px 18px;
 }
 
@@ -355,8 +366,7 @@
   padding: 0 14px 0 10px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 14%, var(--color-border));
-  background:
-    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
 }
 
@@ -391,7 +401,7 @@
 }
 
 .code-markdown-zoomable-structure::after {
-  content: '放大';
+  content: "放大";
   position: absolute;
   top: 12px;
   right: 12px;
@@ -489,7 +499,7 @@
 
 .code-markdown-box-diagram-text {
   fill: var(--color-foreground);
-  font-family: 'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: "Sarasa Mono SC", "Noto Sans Mono CJK SC", "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0;
@@ -503,9 +513,7 @@
   gap: 14px;
   border-radius: 28px;
   border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-card) 95%, white 5%), color-mix(in srgb, var(--color-card) 88%, transparent)),
-    radial-gradient(circle at top center, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 52%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-card) 95%, white 5%), color-mix(in srgb, var(--color-card) 88%, transparent)), radial-gradient(circle at top center, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 52%);
   padding: 18px;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
@@ -581,8 +589,7 @@
   gap: 10px;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--color-border) 84%, transparent);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, white 14%, var(--color-card)), color-mix(in srgb, var(--color-card) 96%, transparent));
   padding: 16px;
 }
 
@@ -709,12 +716,7 @@
   gap: 10px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
   border-radius: 16px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-card) 96%, white 4%) 0%,
-      color-mix(in srgb, var(--color-card) 100%, transparent) 100%
-    );
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-card) 96%, white 4%) 0%, color-mix(in srgb, var(--color-card) 100%, transparent) 100%);
   padding: 14px 16px;
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.05),
@@ -727,7 +729,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.65;
 }
@@ -819,12 +821,7 @@
   gap: 6px;
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
   border-radius: 16px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-card) 97%, white 3%) 0%,
-      color-mix(in srgb, var(--color-card) 100%, transparent) 100%
-    );
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-card) 97%, white 3%) 0%, color-mix(in srgb, var(--color-card) 100%, transparent) 100%);
   padding: 14px 16px;
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.05),
@@ -833,7 +830,7 @@
 
 .code-markdown-vertical-flow-step-title {
   color: var(--color-foreground);
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -858,7 +855,7 @@
 
 .code-markdown-vertical-flow-step-detail {
   color: color-mix(in srgb, var(--color-foreground) 84%, var(--color-muted-foreground));
-  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   font-size: 11.5px;
   line-height: 1.72;
   white-space: pre-wrap;

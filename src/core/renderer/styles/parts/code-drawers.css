@@ -352,6 +352,7 @@
 }
 
 .recent-project-drawer-content {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -377,10 +378,25 @@
 }
 
 .recent-project-drawer-list {
+  position: relative;
   display: grid;
   gap: 6px;
-  content-visibility: auto;
-  contain-intrinsic-size: 360px;
+}
+
+/* 虚拟滚动模式:仅渲染可见窗口内的条目,按 index 绝对定位撑开总高度 */
+.recent-project-drawer-list.is-virtual .recent-project-drawer-item {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+/* 隐藏探针卡片:渲染一份与列表项相同的结构,供布局阶段测量单项高度;用双类选择器压过 .recent-project-drawer-item 的 position: relative,绝对定位脱离文档流不占空间 */
+.recent-project-drawer-item.recent-project-drawer-probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .recent-project-drawer-item {

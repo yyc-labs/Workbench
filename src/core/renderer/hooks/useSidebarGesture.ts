@@ -55,6 +55,8 @@ type UseSidebarGestureOptions = {
   onBeforeToggle?: () => void
   onToggleLeftSidebar?: () => void
   onToggleRightSidebar?: () => void
+  /** When provided, a pull-down swipe (Ctrl + right button) toggles the header. */
+  onToggleHeader?: () => void
 }
 
 function createEmptyGestureTracker(): SidebarGestureTracker {
@@ -75,7 +77,7 @@ function createEmptyGestureTracker(): SidebarGestureTracker {
   }
 }
 
-function resolveSidebarGestureOverlay(dx: number, dy: number, straight: boolean, canToggleLeftSidebar: boolean, canToggleRightSidebar: boolean): Pick<SidebarGestureOverlayState, 'status' | 'action'> {
+function resolveSidebarGestureOverlay(dx: number, dy: number, straight: boolean, canToggleLeftSidebar: boolean, canToggleRightSidebar: boolean, canToggleHeader: boolean): Pick<SidebarGestureOverlayState, 'status' | 'action'> {
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
   const action = dx < 0 ? 'right' : 'left'
@@ -88,10 +90,19 @@ function resolveSidebarGestureOverlay(dx: number, dy: number, straight: boolean,
     }
   }
 
-  if (absY > absX * 1.05 && absY >= ACTIVATE_DISTANCE * 2) {
-    return {
-      status: 'invalid',
-      action: null,
+  if (dy > 0 && absY > absX * 1.05) {
+    if (canToggleHeader) {
+      const ready = straight && absY >= HORIZONTAL_THRESHOLD && absY >= absX * ANGLE_RATIO
+      return {
+        status: ready ? 'ready' : 'pending',
+        action: null,
+      }
+    }
+    if (absY >= ACTIVATE_DISTANCE * 2) {
+      return {
+        status: 'invalid',
+        action: null,
+      }
     }
   }
 
@@ -108,7 +119,7 @@ function resolveSidebarGestureOverlay(dx: number, dy: number, straight: boolean,
   }
 }
 
-export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar }: UseSidebarGestureOptions): SidebarGestureOverlayState {
+export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar, onToggleHeader }: UseSidebarGestureOptions): SidebarGestureOverlayState {
   const [sidebarGestureOverlay, setSidebarGestureOverlay] = useState<SidebarGestureOverlayState>(EMPTY_SIDEBAR_GESTURE_OVERLAY)
   const sidebarGestureRef = useRef<SidebarGestureTracker>(createEmptyGestureTracker())
   const suppressSidebarGestureContextMenuRef = useRef(false)
@@ -119,6 +130,7 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
     onBeforeToggle,
     onToggleLeftSidebar,
     onToggleRightSidebar,
+    onToggleHeader,
   })
 
   useEffect(() => {
@@ -126,8 +138,9 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
       onBeforeToggle,
       onToggleLeftSidebar,
       onToggleRightSidebar,
+      onToggleHeader,
     }
-  }, [onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar])
+  }, [onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar, onToggleHeader])
 
   useEffect(() => {
     const isEventInsidePage = (target: EventTarget | null) => {
@@ -259,7 +272,7 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
       if (gesture.activated) {
         const gesturePoints: GesturePoint[] = [...gesture.points, { x: event.clientX, y: event.clientY }]
         const straight = isStraightSwipe(computeTrajectoryStats(gesturePoints))
-        const preview = resolveSidebarGestureOverlay(gesture.lastDx, gesture.lastDy, straight, Boolean(callbacksRef.current.onToggleLeftSidebar), Boolean(callbacksRef.current.onToggleRightSidebar))
+        const preview = resolveSidebarGestureOverlay(gesture.lastDx, gesture.lastDy, straight, Boolean(callbacksRef.current.onToggleLeftSidebar), Boolean(callbacksRef.current.onToggleRightSidebar), Boolean(callbacksRef.current.onToggleHeader))
         scheduleOverlay({
           visible: true,
           status: preview.status,
@@ -291,6 +304,8 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
       const passedHorizontal = straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
       const targetAction = dx < 0 ? 'right' : 'left'
       const toggleSidebar = targetAction === 'left' ? callbacksRef.current.onToggleLeftSidebar : callbacksRef.current.onToggleRightSidebar
+      const passedVerticalDown = dy > 0 && straight && absY >= HORIZONTAL_THRESHOLD && absY >= absX * ANGLE_RATIO
+      const toggleHeader = callbacksRef.current.onToggleHeader
 
       setGestureActive(false)
       if (gesture.moved) {
@@ -304,7 +319,13 @@ export function useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSid
       event.stopPropagation()
       event.stopImmediatePropagation()
 
-      if (!passedHorizontal || !toggleSidebar) return
+      if (!passedHorizontal || !toggleSidebar) {
+        if (passedVerticalDown && toggleHeader) {
+          callbacksRef.current.onBeforeToggle?.()
+          toggleHeader()
+        }
+        return
+      }
 
       callbacksRef.current.onBeforeToggle?.()
       toggleSidebar()

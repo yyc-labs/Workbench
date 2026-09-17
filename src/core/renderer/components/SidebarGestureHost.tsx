@@ -7,6 +7,8 @@ type SidebarGestureHostProps = {
   onBeforeToggle?: () => void
   onToggleLeftSidebar?: () => void
   onToggleRightSidebar?: () => void
+  /** When provided, a pull-down swipe (Ctrl + right button) toggles the header. */
+  onToggleHeader?: () => void
 }
 
 /**
@@ -18,7 +20,7 @@ type SidebarGestureHostProps = {
  * tree that React still has to reconcile every frame — which made the gesture
  * animation stutter. Hosting the hook here limits re-renders to the overlay.
  */
-export function SidebarGestureHost({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar }: SidebarGestureHostProps) {
-  const overlay = useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar })
+export function SidebarGestureHost({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar, onToggleHeader }: SidebarGestureHostProps) {
+  const overlay = useSidebarGesture({ pageRootRef, onBeforeToggle, onToggleLeftSidebar, onToggleRightSidebar, onToggleHeader })
   return <SidebarGestureOverlay overlay={overlay} />
 }

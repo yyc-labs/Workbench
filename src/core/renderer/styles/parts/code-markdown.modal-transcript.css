@@ -1,13 +1,25 @@
 .code-markdown-content th {
-  background: color-mix(in srgb, var(--color-foreground) 4%, var(--color-card));
+  background: var(--color-accent);
   font-weight: 700;
 }
 
 .code-markdown-content th,
 .code-markdown-content td {
-  border: 1px solid color-mix(in srgb, var(--color-foreground) 14%, var(--color-border));
-  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  padding: 12px 16px;
+  line-height: 1.6;
   text-align: left;
+}
+
+.code-markdown-content th:last-child,
+.code-markdown-content td:last-child {
+  border-right: 0;
+}
+
+.code-markdown-content tr:last-child td,
+.code-markdown-content tr:last-child th {
+  border-bottom: 0;
 }
 
 .code-markdown-content img {

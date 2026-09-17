@@ -6,11 +6,58 @@
   background: var(--color-background);
 }
 .markdown-document-header {
+  position: relative;
   display: flex;
   min-height: 58px;
   align-items: center;
   gap: 12px;
   padding: 10px clamp(16px, 3vw, 32px);
+}
+.markdown-document-header.is-collapsed {
+  height: 0;
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  overflow: visible;
+  /* app-chrome's backdrop-filter creates a stacking context, so the rail
+     button would be painted under the following .markdown-document-body. */
+  z-index: 5;
+}
+.markdown-document-header.is-collapsed > *:not(.markdown-document-header-rail) {
+  display: none;
+}
+.markdown-document-header.is-collapsed .markdown-document-header-rail {
+  bottom: auto;
+  top: 10px;
+}
+.markdown-document-header-rail {
+  position: absolute;
+  z-index: 4;
+  bottom: -14px;
+  left: 50%;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-popover) 96%, var(--color-background));
+  color: var(--color-muted-foreground);
+  box-shadow: var(--shadow-popover);
+  transform: translateX(-50%);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+.markdown-document-header-rail:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+.markdown-document-header-rail:active {
+  transform: translateX(-50%) scale(0.94);
 }
 .markdown-document-body {
   position: relative;
@@ -168,8 +215,21 @@
   margin-inline: 0;
   padding: 28px clamp(18px, 4vw, 56px) 40px;
 }
+/* 预览区不应受基础 markdown 宽度限制：去掉最大宽度，左对齐铺满整宽。 */
+.markdown-document-preview-content.code-markdown-content {
+  max-width: none;
+  margin-inline: 0;
+}
+.markdown-document-preview-content.code-markdown-content--viewport-scroll {
+  min-width: 0;
+  width: 100%;
+}
+.markdown-document-preview-content.code-markdown-content--viewport-scroll > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-box-diagram):not(.code-markdown-mermaid-wrap) {
+  inline-size: auto;
+  max-inline-size: 100%;
+}
 .markdown-document-preview-content > * {
-  margin-inline: auto;
+  margin-inline: 0;
 }
 .markdown-document-preview-content {
   width: 100%;

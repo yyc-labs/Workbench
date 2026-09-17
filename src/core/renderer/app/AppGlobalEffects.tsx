@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Clock3, Map } from 'lucide-react'
+import { FolderOpen, Map } from 'lucide-react'
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { DockerLaunchPromptDialog } from '../components/run-tasks/DockerLaunchPromptDialog'
@@ -337,7 +337,7 @@ function GlobalRecentProjectsDrawerHost() {
           onClick={() => setOpen(true)}
           title={`${t('common.recentProjects')} (${t('common.recentProjectsHint')})`}
         >
-          <Clock3 className="h-3.5 w-3.5" />
+          <FolderOpen className="h-3.5 w-3.5" />
           {t('common.recentProjects')}
         </button>
       </div>

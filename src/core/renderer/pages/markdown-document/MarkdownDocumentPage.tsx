@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, FileText, FolderOpen, Menu, Save, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, FileText, FolderOpen, Menu, Save, Search, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import type { Editor } from '@milkdown/core'
 import { Button } from '../../components/ui/button'
@@ -30,6 +30,7 @@ type RichEditorSession = {
 }
 
 const MARKDOWN_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:markdown-left-sidebar-collapsed'
+const MARKDOWN_HEADER_COLLAPSED_STORAGE_KEY = 'app:markdown-header-collapsed'
 
 function modeLabel(mode: MarkdownDocumentDisplayMode, t: ReturnType<typeof useI18n>['t']): string {
   if (mode === 'rich') return t('markdownDocument.rich')
@@ -69,6 +70,7 @@ export function MarkdownDocumentPage() {
   const [query, setQuery] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.localStorage.getItem(MARKDOWN_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1')
+  const [headerCollapsed, setHeaderCollapsed] = useState(() => window.localStorage.getItem(MARKDOWN_HEADER_COLLAPSED_STORAGE_KEY) === '1')
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const [pendingRemovePath, setPendingRemovePath] = useState<string | null>(null)
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
@@ -85,6 +87,10 @@ export function MarkdownDocumentPage() {
   useEffect(() => {
     window.localStorage.setItem(MARKDOWN_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY, sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    window.localStorage.setItem(MARKDOWN_HEADER_COLLAPSED_STORAGE_KEY, headerCollapsed ? '1' : '0')
+  }, [headerCollapsed])
 
   useEffect(() => {
     if (restoredHistoryRef.current || active || loading || history.length === 0) return
@@ -152,6 +158,8 @@ export function MarkdownDocumentPage() {
     if (selected) runWithDirtyConfirmation(() => void openDocument(selected, { refreshHistory: true }))
   }
 
+  const toggleHeader = useCallback(() => setHeaderCollapsed((collapsed) => !collapsed), [])
+
   const handleModeChange = useCallback(
     (nextMode: MarkdownDocumentDisplayMode) => {
       if (mode === 'rich' && nextMode !== 'rich' && flushRichEditorRef.current) {
@@ -194,7 +202,7 @@ export function MarkdownDocumentPage() {
 
   return (
     <div ref={pageRootRef} className="markdown-document-workspace">
-      <header className="app-chrome markdown-document-header">
+      <header className={headerCollapsed ? 'app-chrome markdown-document-header is-collapsed' : 'app-chrome markdown-document-header'}>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={handleBack} title={t('common.back')} aria-label={t('common.back')}>
           <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
         </Button>
@@ -224,6 +232,9 @@ export function MarkdownDocumentPage() {
           <Trash2 className="mr-1.5 h-4 w-4" />
           {t('markdownDocument.removeHistory')}
         </Button>
+        <button type="button" className="markdown-document-header-rail" onClick={toggleHeader} aria-label={headerCollapsed ? t('markdownDocument.expandHeader') : t('markdownDocument.collapseHeader')} title={headerCollapsed ? t('markdownDocument.expandHeader') : t('markdownDocument.collapseHeader')}>
+          {headerCollapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+        </button>
       </header>
       <div className={sidebarCollapsed ? 'markdown-document-body is-sidebar-collapsed' : 'markdown-document-body'}>
         {!sidebarCollapsed || drawerOpen ? (
@@ -345,6 +356,7 @@ export function MarkdownDocumentPage() {
       <SidebarGestureHost
         pageRootRef={pageRootRef}
         onBeforeToggle={() => setFormatMenu(null)}
+        onToggleHeader={toggleHeader}
         onToggleLeftSidebar={() => {
           setDrawerOpen(false)
           setSidebarCollapsed((collapsed) => !collapsed)

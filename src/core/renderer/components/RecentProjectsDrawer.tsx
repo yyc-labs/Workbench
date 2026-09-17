@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Clock3, Search, Trash2, X } from 'lucide-react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { FolderOpen, Search, Trash2, X } from 'lucide-react'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import type { AiCommitStatus, CliTool, ProjectInfo } from '../../shared/types'
 import { useAppStore } from '../stores/appStore'
@@ -16,6 +16,8 @@ type RecentProjectDrawerCardProps = {
   project: RecentProjectListItem
   isContextActive: boolean
   isKeyboardActive: boolean
+  /** 虚拟滚动定位:由抽屉按可见窗口计算并传入(top 绝对定位),非虚拟渲染时不传。 */
+  style?: CSSProperties
   onHoverProject: (projectId: string) => void
   onSelectProject: (projectId: string) => void
   onRemoveProject: (projectId: string) => void
@@ -57,6 +59,10 @@ export type RecentProjectsMetaDialogHostProps = {
 const DRAWER_TRANSITION_MS = 220
 const DRAWER_CONTENT_REVEAL_MS = 70
 const EMPTY_RECENT_PROJECTS: RecentProjectListItem[] = []
+/** 列表项间距,与 styles/parts/code-drawers.css 中 .recent-project-drawer-list 的 gap 保持一致。 */
+const LIST_GAP_PX = 6
+/** 虚拟滚动上下各多渲染的条数,保证键盘/滚动切换时高亮项始终已渲染。 */
+const VIRTUAL_OVERSCAN = 6
 
 function getProjectById(projects: ProjectInfo[], projectId?: string | null): ProjectInfo | undefined {
   if (!projectId) return undefined
@@ -81,7 +87,7 @@ function fuzzyMatchProject(project: RecentProjectListItem, query: string): boole
   })
 }
 
-const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project, isContextActive, isKeyboardActive, onHoverProject, onSelectProject, onRemoveProject, onOpenContextMenu }: RecentProjectDrawerCardProps) {
+const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project, isContextActive, isKeyboardActive, style, onHoverProject, onSelectProject, onRemoveProject, onOpenContextMenu }: RecentProjectDrawerCardProps) {
   const { t, formatDateTime } = useI18n()
 
   return (
@@ -89,6 +95,7 @@ const RecentProjectDrawerCard = memo(function RecentProjectDrawerCard({ project,
       id={`recent-project-option-${project.id}`}
       role="option"
       aria-selected={isKeyboardActive}
+      style={style}
       className={`recent-project-drawer-item ${isContextActive ? 'is-context-active' : ''} ${isKeyboardActive ? 'is-keyboard-active' : ''}`}
       onMouseEnter={() => onHoverProject(project.id)}
       onContextMenu={(event) => {
@@ -320,7 +327,7 @@ export const RecentProjectsMetaDialogHost = memo(function RecentProjectsMetaDial
 })
 
 // Memoized: the host re-renders on every route change; stable host callbacks
-// + memo keep the drawer (and its 20 cards) from re-rendering with it.
+// + memo keep the drawer (and its project cards) from re-rendering with it.
 export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, currentProjectId, onClose, onSelectProject, onRemoveProject, onEditProjectMetadata }: RecentProjectsDrawerProps) {
   const { t } = useI18n()
   const [shouldRender, setShouldRender] = useState(open)
@@ -336,22 +343,35 @@ export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, c
   const searchInputRef = useRef<HTMLInputElement>(null)
   const shouldScrollToActiveRef = useRef(false)
   const mouseXRef = useRef<number | null>(null)
+  // 虚拟滚动:滚动容器/视口高度/滚动偏移,以及由隐藏探针卡片测出的单项高度
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const probeRef = useRef<HTMLDivElement | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(0)
+  const [itemHeight, setItemHeight] = useState(0)
   const currentProject = useAppStore((s) => getProjectById(s.projects, currentProjectId))
   // Subscribe to the projects array reference only; deriving the sorted list
   // in a selector would re-run filter+sort on every store notification.
   const projects = useAppStore((s) => s.projects)
-  const recentProjects = useMemo(() => {
+  const allProjects = useMemo(() => {
     if (!open && !shouldRender) return EMPTY_RECENT_PROJECTS
-    return projects.filter((project) => project.id !== currentProjectId && typeof project.lastOpened === 'number').sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
+    return projects.filter((project) => project.id !== currentProjectId).sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0))
   }, [projects, currentProjectId, open, shouldRender])
   const trimmedQuery = query.trim()
   const visibleProjects = useMemo(() => {
-    if (!trimmedQuery) return recentProjects.slice(0, 20)
-    return recentProjects.filter((project) => fuzzyMatchProject(project, trimmedQuery))
-  }, [recentProjects, trimmedQuery])
+    if (!trimmedQuery) return allProjects
+    return allProjects.filter((project) => fuzzyMatchProject(project, trimmedQuery))
+  }, [allProjects, trimmedQuery])
   const activeProjectId = visibleProjects[activeIndex]?.id
   const contextMenuProjectId = contextMenu?.projectId
   const contextMenuProject = useAppStore((s) => getProjectById(s.projects, contextMenuProjectId))
+  const slotHeight = itemHeight > 0 ? itemHeight + LIST_GAP_PX : 0
+  const virtualRange = useMemo(() => {
+    if (slotHeight <= 0 || viewportHeight <= 0 || visibleProjects.length === 0) return null
+    const start = Math.max(0, Math.floor(scrollTop / slotHeight) - VIRTUAL_OVERSCAN)
+    const end = Math.min(visibleProjects.length, start + Math.ceil(viewportHeight / slotHeight) + VIRTUAL_OVERSCAN * 2)
+    return { start, end }
+  }, [slotHeight, viewportHeight, scrollTop, visibleProjects.length])
 
   const handleOpenContextMenu = useCallback((projectId: string, x: number, y: number) => {
     setContextMenu({ projectId, x, y })
@@ -446,6 +466,30 @@ export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, c
     }
   }, [])
 
+  // 虚拟滚动测量:布局阶段读取视口高度与探针卡片高度,保证首帧即按虚拟窗口渲染
+  useLayoutEffect(() => {
+    if (!shouldRender) return
+    const container = scrollContainerRef.current
+    if (container) setViewportHeight(container.clientHeight)
+    const probe = probeRef.current
+    if (probe) setItemHeight(probe.getBoundingClientRect().height)
+  }, [shouldRender])
+
+  // 监听滚动与容器尺寸变化,驱动虚拟窗口重算
+  useEffect(() => {
+    if (!shouldRender) return
+    const container = scrollContainerRef.current
+    if (!container) return
+    const onScroll = () => setScrollTop(container.scrollTop)
+    container.addEventListener('scroll', onScroll, { passive: true })
+    const resizeObserver = new ResizeObserver(() => setViewportHeight(container.clientHeight))
+    resizeObserver.observe(container)
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      resizeObserver.disconnect()
+    }
+  }, [shouldRender])
+
   useEffect(() => {
     if (!shouldRender) return
     const onKeyDown = (event: KeyboardEvent) => {
@@ -467,6 +511,9 @@ export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, c
     setQuery('')
     setActiveIndex(0)
     shouldScrollToActiveRef.current = false
+    const container = scrollContainerRef.current
+    if (container) container.scrollTop = 0
+    setScrollTop(0)
   }, [open])
 
   useEffect(() => {
@@ -537,11 +584,40 @@ export const RecentProjectsDrawer = memo(function RecentProjectsDrawer({ open, c
             />
           </div>
 
-          <div className="recent-project-drawer-content">
+          <div ref={scrollContainerRef} className="recent-project-drawer-content">
+            {visibleProjects.length > 0 && (
+              <div ref={probeRef} aria-hidden="true" className="recent-project-drawer-item recent-project-drawer-probe">
+                <div className="recent-project-drawer-open">
+                  <span className="recent-project-drawer-name">Me</span>
+                  <span className="recent-project-drawer-meta">
+                    <span>0</span>
+                  </span>
+                </div>
+              </div>
+            )}
             {visibleProjects.length === 0 ? (
               <div className="recent-project-drawer-empty">
-                <Clock3 className="h-4 w-4" />
+                <FolderOpen className="h-4 w-4" />
                 <span>{trimmedQuery ? t('common.noRecentProjectMatches') : t('common.noRecentProjects')}</span>
+              </div>
+            ) : virtualRange ? (
+              <div id="recent-project-drawer-list" role="listbox" className="recent-project-drawer-list is-virtual" style={{ height: visibleProjects.length * slotHeight - LIST_GAP_PX }}>
+                {visibleProjects.slice(virtualRange.start, virtualRange.end).map((project, offset) => {
+                  const index = virtualRange.start + offset
+                  return (
+                    <RecentProjectDrawerCard
+                      key={project.id}
+                      project={project}
+                      style={{ top: index * slotHeight }}
+                      isContextActive={contextMenuProjectId === project.id}
+                      isKeyboardActive={index === activeIndex}
+                      onHoverProject={handleHoverProject}
+                      onSelectProject={onSelectProject}
+                      onRemoveProject={onRemoveProject}
+                      onOpenContextMenu={handleOpenContextMenu}
+                    />
+                  )
+                })}
               </div>
             ) : (
               <div id="recent-project-drawer-list" role="listbox" className="recent-project-drawer-list">

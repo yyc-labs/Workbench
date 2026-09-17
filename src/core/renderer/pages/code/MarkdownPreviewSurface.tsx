@@ -1,12 +1,16 @@
 import { type ComponentProps, type ComponentType, memo, Profiler, type RefObject, useDeferredValue, useEffect, useMemo } from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import { transformMarkdownUrl } from './code.markdownUrls'
 import { MarkdownPreviewVisibilityProvider } from './code.markdownVisibility'
 import { isMarkdownPreviewPerformanceDebugEnabled, markMarkdownPreviewPerformance, observeMarkdownPreviewLongTasks, reportMarkdownPreviewCommit } from './markdownPreviewPerformance'
+import 'katex/dist/katex.min.css'
 
-const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBoxDrawingTables]
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBoxDrawingTables, remarkMath]
+const MARKDOWN_REHYPE_PLUGINS = [rehypeKatex]
 
 type MarkdownPreviewSurfaceProps = {
   components: Components
@@ -39,7 +43,7 @@ export const MarkdownPreviewSurface = memo(function MarkdownPreviewSurface({ com
   return (
     <Profiler id="code-markdown-preview" onRender={reportMarkdownPreviewCommit}>
       <MarkdownPreviewVisibilityProvider forceRenderAllBlocks={forceRenderAllBlocks} rootRef={previewRootRef}>
-        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} components={previewComponents} urlTransform={transformMarkdownUrl}>
+        <ReactMarkdown remarkPlugins={MARKDOWN_REMARK_PLUGINS} rehypePlugins={MARKDOWN_REHYPE_PLUGINS} components={previewComponents} urlTransform={transformMarkdownUrl}>
           {deferredContent}
         </ReactMarkdown>
       </MarkdownPreviewVisibilityProvider>

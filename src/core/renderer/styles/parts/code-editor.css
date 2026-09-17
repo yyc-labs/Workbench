@@ -276,10 +276,18 @@
 }
 
 .code-editor-pane--preview > .code-markdown-content--viewport-scroll {
-  width: min(100%, 860px);
+  width: 100%;
   min-width: 0;
-  max-width: 860px;
+  max-width: none;
+  margin: 0;
+  padding: 16px 20px 22px;
   overflow-x: hidden;
+}
+
+/* 文章已铺满面板宽度，取消基础规则里 860px 的块级最大宽度限制，让子元素填满。 */
+.code-editor-pane--preview > .code-markdown-content--viewport-scroll > :not(pre):not(table):not(.code-markdown-box-flow):not(.code-markdown-vertical-flow):not(.code-markdown-box-diagram):not(.code-markdown-mermaid-wrap) {
+  inline-size: auto;
+  max-inline-size: 100%;
 }
 
 .code-editor-pane--preview .code-markdown-table-scroll,

@@ -519,8 +519,8 @@ export const settingsMessages = {
             description: 'From any app, paste the agent skill prompt into the focused window.',
           },
           globalRecent: {
-            title: 'Toggle Recent Projects',
-            description: 'Open or close the recent projects drawer.',
+            title: 'Toggle All Projects',
+            description: 'Open or close the all-projects drawer.',
           },
           globalRoutes: {
             title: 'Toggle Route Catalog',
@@ -615,8 +615,8 @@ export const settingsMessages = {
             description: 'Right-drag horizontally to go back or forward. On project detail pages, this also switches among Code, AI Commit, and Transcript in order.',
           },
           gestureRecent: {
-            title: 'Toggle Recent Projects',
-            description: 'Right-drag downward to open or close the recent projects drawer.',
+            title: 'Toggle All Projects',
+            description: 'Right-drag downward to open or close the all-projects drawer.',
           },
           gestureHome: {
             title: 'Go Home',
@@ -1550,8 +1550,8 @@ export const settingsMessages = {
             description: '在任意应用里把 Agent skill 提示词粘贴到当前聚焦窗口。',
           },
           globalRecent: {
-            title: '开关最近项目抽屉',
-            description: '打开或关闭最近项目抽屉。',
+            title: '开关全部项目抽屉',
+            description: '打开或关闭全部项目抽屉。',
           },
           globalRoutes: {
             title: '开关路由目录',
@@ -1646,8 +1646,8 @@ export const settingsMessages = {
             description: '右键水平拖动可执行后退或前进。在项目详情页里，也会按顺序切换代码、AI Commit、转录这几个面板。',
           },
           gestureRecent: {
-            title: '开关最近项目抽屉',
-            description: '右键向下拖动可打开或关闭最近项目抽屉。',
+            title: '开关全部项目抽屉',
+            description: '右键向下拖动可打开或关闭全部项目抽屉。',
           },
           gestureHome: {
             title: '回到首页',

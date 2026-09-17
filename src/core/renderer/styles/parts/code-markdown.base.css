@@ -278,3 +278,24 @@
   overflow-x: auto;
   overflow-y: hidden;
 }
+
+/* KaTeX 公式渲染：块级公式铺满整宽并支持横向滚动，行内公式与正文基线对齐。 */
+.code-markdown-content .katex-display {
+  inline-size: auto;
+  max-inline-size: 100%;
+  margin: 1em 0;
+  padding-block: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.code-markdown-content .katex {
+  font-size: 1.05em;
+}
+.code-markdown-content .katex-error {
+  display: inline-block;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+  border-radius: 6px;
+  background: var(--color-warning-background);
+  padding: 0.1em 0.4em;
+  color: var(--color-foreground);
+}
