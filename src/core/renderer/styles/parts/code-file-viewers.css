@@ -209,7 +209,7 @@
 }
 
 .code-file-viewer-unsupported-path {
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   word-break: break-all;
 }
 

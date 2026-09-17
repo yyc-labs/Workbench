@@ -841,7 +841,7 @@ code,
 pre,
 kbd,
 samp {
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .surface-card {

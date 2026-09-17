@@ -1,6 +1,7 @@
 import type { editor as MonacoEditor, Selection } from 'monaco-editor'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../../lib/monacoEnvironment'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
@@ -421,8 +422,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         fixedOverflowWidgets: true,
         overflowWidgetsDomNode: getMonacoOverflowWidgetsContainer(),
         minimap: { enabled: false },
-        // Prefer CJK-capable monospace fonts to keep width metrics stable for mixed Chinese + numbers.
-        fontFamily: "'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        fontFamily: MONO_FONT_STACK,
         fontSize: 13,
         lineHeight: 20,
         tabSize: 2,

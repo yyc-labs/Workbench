@@ -85,7 +85,21 @@ export function shouldIgnoreStructuredBlockActivation(target: EventTarget | null
 
 function buildStructuredBlockInteractiveProps(structuredBlockKind: MarkdownStructuredBlockKind, title: string | undefined, activate: () => void) {
   const ariaLabel = `Open larger ${structuredBlockKind} preview`
-  const resolvedTitle = [title, 'Click to enlarge'].filter(Boolean).join('\n')
+  // 表格改用右键打开大预览：左键点击常被误触（例如只想选中表格文本），
+  // 其余结构块（流程图等）保留左键点击触发。
+  const useContextMenuActivation = structuredBlockKind === 'table'
+  const resolvedTitle = [title, useContextMenuActivation ? 'Right-click to enlarge' : 'Click to enlarge'].filter(Boolean).join('\n')
+
+  const handleActivationEvent = (event: ReactMouseEvent<HTMLElement>) => {
+    if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) return
+    if (useContextMenuActivation) {
+      event.preventDefault()
+      // 阻止冒泡到项目页根容器的 contextmenu（Detail.tsx），否则会同时
+      // 打开项目右键菜单卡片。
+      event.stopPropagation()
+    }
+    activate()
+  }
 
   return {
     ariaLabel,
@@ -93,10 +107,8 @@ function buildStructuredBlockInteractiveProps(structuredBlockKind: MarkdownStruc
     sharedProps: {
       tabIndex: 0,
       'data-structured-block-kind': structuredBlockKind,
-      onClick: (event: ReactMouseEvent<HTMLElement>) => {
-        if (shouldIgnoreStructuredBlockActivation(event.target, event.currentTarget)) return
-        activate()
-      },
+      onContextMenu: useContextMenuActivation ? handleActivationEvent : undefined,
+      onClick: useContextMenuActivation ? undefined : handleActivationEvent,
       onKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => {
         if (event.key !== 'Enter' && event.key !== ' ') return
         event.preventDefault()

@@ -1,10 +1,12 @@
-import { memo, type Ref, type RefObject } from 'react'
+import { memo, type CSSProperties, type Ref, type RefObject } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
 import type { ProjectFileNodeKind, ProjectFilePreviewKind, ProjectFileUnsupportedReason, TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
+import { StructuredPreviewTableWidthControl, useStructuredPreviewTableWidth } from '../../components/StructuredPreviewTableWidth'
 import { Tooltip } from '../../components/ui/tooltip'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
@@ -191,6 +193,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   const { t } = useI18n()
   const structuredPreviewCapture = useScrollableContentCapture()
   const codePreviewCapture = useScrollableContentCapture()
+  const [structuredPreviewTableWidth, setStructuredPreviewTableWidth] = useStructuredPreviewTableWidth()
   const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
 
   const structuredPreviewCaptureLabel =
@@ -507,7 +510,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         overlayClassName="backdrop-blur-0 bg-black/18"
         panelClassName="transcript-structured-preview-modal p-4 sm:p-5"
       >
-        <div className="relative flex h-full min-h-0 flex-col">
+        <div className={`relative flex h-full min-h-0 flex-col${structuredPreviewTableWidth > 0 ? ' has-structured-preview-table-limit' : ''}`} style={{ '--structured-preview-table-max-width': structuredPreviewTableWidth > 0 ? `${structuredPreviewTableWidth}px` : 'none' } as CSSProperties}>
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="section-label mb-1">{t('codeWorkspace.markdown')}</p>
@@ -518,6 +521,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('transcript.structuredPreviewHint')}</p>
             </div>
             <div className="flex items-center gap-2">
+              <StructuredPreviewTableWidthControl value={structuredPreviewTableWidth} onChange={setStructuredPreviewTableWidth} />
               <button
                 type="button"
                 className={`quiet-control inline-flex h-8 items-center gap-1.5 rounded-full border-0 px-3 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -588,7 +592,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                   customStyle={{ margin: 0, borderRadius: 16, paddingTop: 16 }}
                   codeTagProps={{
                     style: {
-                      fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+                      fontFamily: MONO_FONT_STACK,
                     },
                   }}
                 >

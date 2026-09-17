@@ -1,6 +1,7 @@
 import type { CSSProperties, ComponentPropsWithoutRef, SVGProps } from 'react'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 
-const BOX_DIAGRAM_FONT_STACK = "'Sarasa Mono SC', 'Noto Sans Mono CJK SC', 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace"
+const BOX_DIAGRAM_FONT_STACK = MONO_FONT_STACK
 const BOX_DIAGRAM_BASE_CELL_WIDTH = 18
 const BOX_DIAGRAM_BASE_ROW_HEIGHT = 28
 const BOX_DIAGRAM_TEXT_BASELINE_RATIO = 0.7
@@ -109,16 +110,16 @@ const ARROW_DIRECTION_MAP: Record<string, BoxDiagramArrowDirection> = {
   '⟵': 'left',
   '⟸': 'left',
   '<': 'left',
-  'v': 'down',
-  'V': 'down',
+  v: 'down',
+  V: 'down',
   '^': 'up',
 }
 const ARROW_CHARS = new Set(Object.keys(ARROW_DIRECTION_MAP))
 
 function isFullwidthCodePoint(codePoint: number): boolean {
   return (
-    codePoint >= 0x1100 && (
-      codePoint <= 0x115f ||
+    codePoint >= 0x1100 &&
+    (codePoint <= 0x115f ||
       codePoint === 0x2329 ||
       codePoint === 0x232a ||
       (codePoint >= 0x2e80 && codePoint <= 0xa4cf && codePoint !== 0x303f) ||
@@ -128,8 +129,7 @@ function isFullwidthCodePoint(codePoint: number): boolean {
       (codePoint >= 0xfe30 && codePoint <= 0xfe6f) ||
       (codePoint >= 0xff00 && codePoint <= 0xff60) ||
       (codePoint >= 0xffe0 && codePoint <= 0xffe6) ||
-      (codePoint >= 0x20000 && codePoint <= 0x3fffd)
-    )
+      (codePoint >= 0x20000 && codePoint <= 0x3fffd))
   )
 }
 
@@ -296,12 +296,7 @@ export function parseBoxDiagramLinesProp(value: unknown): string[] {
   }
 }
 
-export function BoxDiagramBlock({
-  className,
-  lines,
-  children: _children,
-  ...props
-}: BoxDiagramBlockProps) {
+export function BoxDiagramBlock({ className, lines, children: _children, ...props }: BoxDiagramBlockProps) {
   const normalizedLines = lines.filter((line) => line.length > 0)
   const rows = normalizedLines.length
   const columns = normalizedLines.reduce((max, line) => {
@@ -319,25 +314,12 @@ export function BoxDiagramBlock({
   return (
     <div className={className} {...props}>
       <div className="code-markdown-box-diagram-body" style={diagramStyleVariables(columns, rows)}>
-        <svg
-          className="code-markdown-box-diagram-svg"
-          viewBox={`0 0 ${width} ${height}`}
-          aria-hidden="true"
-        >
+        <svg className="code-markdown-box-diagram-svg" viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
           <g className="code-markdown-box-diagram-strokes">
             {normalizedLines.map((line, rowIndex) => {
               const cells = buildDisplayCells(line)
               const segments = buildSegments(cells, rowIndex)
-              return segments.map((segment, segmentIndex) => (
-                <line
-                  key={`segment-${rowIndex}-${segmentIndex}`}
-                  className="code-markdown-box-diagram-stroke"
-                  x1={segment.x1}
-                  y1={segment.y1}
-                  x2={segment.x2}
-                  y2={segment.y2}
-                />
-              ))
+              return segments.map((segment, segmentIndex) => <line key={`segment-${rowIndex}-${segmentIndex}`} className="code-markdown-box-diagram-stroke" x1={segment.x1} y1={segment.y1} x2={segment.x2} y2={segment.y2} />)
             })}
           </g>
 
@@ -345,13 +327,7 @@ export function BoxDiagramBlock({
             {normalizedLines.map((line, rowIndex) => {
               const cells = buildDisplayCells(line)
               const arrows = buildArrows(cells, rowIndex)
-              return arrows.map((arrow, arrowIndex) => (
-                <path
-                  key={`arrow-${rowIndex}-${arrowIndex}`}
-                  className="code-markdown-box-diagram-arrow"
-                  d={buildArrowPath(arrow)}
-                />
-              ))
+              return arrows.map((arrow, arrowIndex) => <path key={`arrow-${rowIndex}-${arrowIndex}`} className="code-markdown-box-diagram-arrow" d={buildArrowPath(arrow)} />)
             })}
           </g>
 
@@ -361,11 +337,7 @@ export function BoxDiagramBlock({
               const runs = buildTextRuns(cells)
               const y = rowIndex * BOX_DIAGRAM_BASE_ROW_HEIGHT + BOX_DIAGRAM_BASE_ROW_HEIGHT * BOX_DIAGRAM_TEXT_BASELINE_RATIO
               return runs.map((run, runIndex) => (
-                <text
-                  key={`text-${rowIndex}-${runIndex}`}
-                  className="code-markdown-box-diagram-text"
-                  {...svgTextProps(run.startColumn * BOX_DIAGRAM_BASE_CELL_WIDTH, y)}
-                >
+                <text key={`text-${rowIndex}-${runIndex}`} className="code-markdown-box-diagram-text" {...svgTextProps(run.startColumn * BOX_DIAGRAM_BASE_CELL_WIDTH, y)}>
                   {run.text}
                 </text>
               ))

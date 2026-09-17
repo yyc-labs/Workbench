@@ -1,6 +1,7 @@
 import { useEffect, useRef, memo } from 'react'
 import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { MONO_FONT_STACK } from '../lib/fonts'
 import '@xterm/xterm/css/xterm.css'
 import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
 import { useAppStore } from '../stores/appStore'
@@ -91,7 +92,7 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
       letterSpacing: 0.2,
       fontWeight: 450,
       fontWeightBold: 650,
-      fontFamily: "'JetBrains Mono', 'Cascadia Code', monospace",
+      fontFamily: MONO_FONT_STACK,
       allowProposedApi: true,
       convertEol: true,
       rightClickSelectsWord: true,
@@ -189,20 +190,18 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
     let buf = ''
     let raf = 0
 
-    const cleanup = window.electronAPI.onProcessOutput(
-      ({ projectId: pid, data }) => {
-        if (pid === projectId) {
-          buf += data
-          if (!raf) {
-            raf = requestAnimationFrame(() => {
-              xtermRef.current?.write(buf)
-              buf = ''
-              raf = 0
-            })
-          }
+    const cleanup = window.electronAPI.onProcessOutput(({ projectId: pid, data }) => {
+      if (pid === projectId) {
+        buf += data
+        if (!raf) {
+          raf = requestAnimationFrame(() => {
+            xtermRef.current?.write(buf)
+            buf = ''
+            raf = 0
+          })
         }
       }
-    )
+    })
     return () => {
       cancelAnimationFrame(raf)
       cleanup()
@@ -211,21 +210,13 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
 
   // ── Status messages ───────────────────────────────────────
   useEffect(() => {
-    const cleanup = window.electronAPI.onProcessStatus(
-      ({ projectId: pid, status }) => {
-        if (pid === projectId && xtermRef.current) {
-          xtermRef.current.write(`\r\n\x1b[2m*** ${status} ***\x1b[0m\r\n`)
-        }
+    const cleanup = window.electronAPI.onProcessStatus(({ projectId: pid, status }) => {
+      if (pid === projectId && xtermRef.current) {
+        xtermRef.current.write(`\r\n\x1b[2m*** ${status} ***\x1b[0m\r\n`)
       }
-    )
+    })
     return cleanup
   }, [projectId])
 
-  return (
-    <div
-      ref={containerRef}
-      className="h-full w-full xterm-container"
-      onClick={() => xtermRef.current?.focus()}
-    />
-  )
+  return <div ref={containerRef} className="h-full w-full xterm-container" onClick={() => xtermRef.current?.focus()} />
 })

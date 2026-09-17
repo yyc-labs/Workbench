@@ -1,6 +1,7 @@
 import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check, Copy, Maximize2, X } from 'lucide-react'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 import ReactMarkdown from 'react-markdown'
 import type { Components, ExtraProps } from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -575,7 +576,7 @@ function StandardMarkdownCodeBlock({ codeText, language, themeMode, enableSyntax
           customStyle={{ margin: 0, borderRadius: 10, paddingTop: 44 }}
           codeTagProps={{
             style: {
-              fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+              fontFamily: MONO_FONT_STACK,
             },
           }}
         >

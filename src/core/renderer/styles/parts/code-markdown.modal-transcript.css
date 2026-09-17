@@ -90,12 +90,13 @@
   backface-visibility: hidden;
 }
 
+/* 截图/缩放表面：必须保持单向尺寸链（canvas ← capture ← article），
+ * 不能用 min-width/min-height: 100% 或 width: max-content 自引用画布，
+ * 否则 layout zoom 的分数重排会与 ResizeObserver 的 fitContent 形成
+ * 反馈循环，zoom 持续漂移。capture 作为 grid item 自动拉伸填满 canvas，
+ * 内容居中交给 flex，画布尺寸由 article 的 max-content + padding 决定。 */
 .transcript-preview-zoom-capture {
   display: flex;
-  width: max-content;
-  height: max-content;
-  min-width: 100%;
-  min-height: 100%;
   box-sizing: border-box;
   align-items: center;
   justify-content: center;
@@ -371,7 +372,6 @@
 
 .transcript-structured-preview-modal .transcript-preview-zoom-capture .transcript-markdown-content.code-markdown-content--modal {
   width: max-content;
-  min-width: 100%;
   max-width: none;
   box-sizing: border-box;
   container-type: normal;
@@ -580,4 +580,14 @@ body.gesture-active .transcript-structured-preview-modal .code-markdown-transcri
 body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:hover,
 body.gesture-active .transcript-structured-preview-modal .code-markdown-transcript-ref:focus-visible {
   box-shadow: none !important;
+}
+
+/* 表格弹窗宽度偏好：变量由弹窗 header 的宽度控件注入（none = 不限制）。 */
+.transcript-structured-preview-modal .code-markdown-content--modal > table,
+.transcript-structured-preview-modal .code-markdown-table-scroll {
+  max-width: var(--structured-preview-table-max-width, none);
+}
+
+.transcript-structured-preview-modal.has-structured-preview-table-limit .code-markdown-content--modal > table {
+  overflow-x: auto;
 }

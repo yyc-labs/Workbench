@@ -92,7 +92,8 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
   max-inline-size: none !important;
 }
 
-body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal table,
+/* 表格不在此列：用户设置了最大表格宽度（--structured-preview-table-max-width）
+ * 后，截图也要按该宽度输出，受限溢出部分随 overflow-x 裁剪。 */
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal pre,
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-box-flow,
 body.structured-capture-active .transcript-structured-preview-modal .code-markdown-content--modal .code-markdown-vertical-flow,
@@ -210,7 +211,7 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
 }
 
 .code-mdc-meta-value--mono {
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 

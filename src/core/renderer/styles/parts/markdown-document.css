@@ -281,7 +281,7 @@
   border-radius: 6px;
   background: color-mix(in srgb, var(--color-accent) 82%, transparent);
   padding: 0.12em 0.34em;
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

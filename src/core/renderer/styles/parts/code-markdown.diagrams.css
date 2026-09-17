@@ -429,13 +429,19 @@
     0 6px 18px rgba(15, 23, 42, 0.05);
 }
 
-.code-markdown-zoomable-structure:hover,
-.code-markdown-zoomable-structure:focus-visible {
+/* 表格已改为右键打开预览：整体 hover 不再做上移/高亮/"放大"徽章提示，
+   避免误导左键点击；表格内部（行、单元格）样式不受影响。 */
+.code-markdown-content table.code-markdown-zoomable-structure {
+  cursor: auto;
+}
+
+.code-markdown-zoomable-structure:not(table):hover,
+.code-markdown-zoomable-structure:not(table):focus-visible {
   transform: translateY(-1px);
 }
 
-.code-markdown-zoomable-structure:hover::after,
-.code-markdown-zoomable-structure:focus-visible::after {
+.code-markdown-zoomable-structure:not(table):hover::after,
+.code-markdown-zoomable-structure:not(table):focus-visible::after {
   opacity: 1;
   transform: translateY(0);
 }
@@ -456,9 +462,7 @@
 .code-markdown-box-diagram.code-markdown-zoomable-structure:hover .code-markdown-box-diagram-body,
 .code-markdown-box-diagram.code-markdown-zoomable-structure:focus-visible .code-markdown-box-diagram-body,
 .code-markdown-mermaid-wrap.code-markdown-zoomable-structure:hover,
-.code-markdown-mermaid-wrap.code-markdown-zoomable-structure:focus-visible,
-.code-markdown-content table.code-markdown-zoomable-structure:hover,
-.code-markdown-content table.code-markdown-zoomable-structure:focus-visible {
+.code-markdown-mermaid-wrap.code-markdown-zoomable-structure:focus-visible {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--color-primary) 22%, transparent),
     0 12px 28px rgba(15, 23, 42, 0.08);
@@ -499,7 +503,7 @@
 
 .code-markdown-box-diagram-text {
   fill: var(--color-foreground);
-  font-family: "Sarasa Mono SC", "Noto Sans Mono CJK SC", "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 400;
   letter-spacing: 0;
@@ -729,7 +733,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.65;
 }
@@ -830,7 +834,7 @@
 
 .code-markdown-vertical-flow-step-title {
   color: var(--color-foreground);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -855,7 +859,7 @@
 
 .code-markdown-vertical-flow-step-detail {
   color: color-mix(in srgb, var(--color-foreground) 84%, var(--color-muted-foreground));
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   line-height: 1.72;
   white-space: pre-wrap;

@@ -146,7 +146,7 @@
   min-width: 0;
   font-size: 10px;
   line-height: 1.2;
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--color-muted-foreground);
   white-space: nowrap;
   overflow: hidden;
@@ -328,7 +328,7 @@
 .code-search-scope-pill-hint {
   max-width: 86px;
   color: color-mix(in srgb, currentColor 76%, transparent);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 600;
   line-height: 1;
@@ -373,7 +373,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-foreground);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
 }
@@ -414,7 +414,7 @@
   border-radius: 5px;
   background: color-mix(in srgb, var(--color-card) 84%, transparent);
   color: var(--color-foreground);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   padding: 0 3px;
 }
 
@@ -548,7 +548,7 @@
   font-size: 12px;
   line-height: 1.35;
   color: var(--color-foreground);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -592,7 +592,7 @@
   font-size: 11px;
   line-height: 1.2;
   color: var(--color-muted-foreground);
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code-content-search-line {
@@ -603,7 +603,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code-panel-empty {

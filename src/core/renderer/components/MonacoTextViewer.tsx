@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { IDisposable, editor as MonacoEditor } from 'monaco-editor'
 import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
+import { MONO_FONT_STACK } from '../lib/fonts'
 import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../lib/monacoEnvironment'
 import { loadMonacoEditorModule } from '../lib/monacoPreload'
 
@@ -67,24 +68,7 @@ function createMonacoModelUri(modelNamespace: string, filePath: string): string 
 }
 
 export const MonacoTextViewer = forwardRef<MonacoTextViewerHandle, MonacoTextViewerProps>(function MonacoTextViewer(
-  {
-    value,
-    filePath,
-    language,
-    readOnly,
-    modelNamespace,
-    onChange,
-    onSave,
-    prepareMonaco,
-    fontFamily = "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
-    fontSize = 12.5,
-    lineHeight = 20,
-    padding = { top: 10, bottom: 10 },
-    stickyScroll = false,
-    focusOnReveal = true,
-    contentWidget = null,
-    hiddenLineRanges = [],
-  },
+  { value, filePath, language, readOnly, modelNamespace, onChange, onSave, prepareMonaco, fontFamily = MONO_FONT_STACK, fontSize = 12.5, lineHeight = 20, padding = { top: 10, bottom: 10 }, stickyScroll = false, focusOnReveal = true, contentWidget = null, hiddenLineRanges = [] },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)

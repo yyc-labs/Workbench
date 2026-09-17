@@ -34,6 +34,30 @@ const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
 const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
 const CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:code-left-sidebar-collapsed'
+const CODE_LEFT_SIDEBAR_WIDTH_STORAGE_KEY = 'app:code-left-sidebar-width'
+// 文件树宽度约束（px）：保留最小树宽与最小编辑器可用宽度，避免拖拽到不可用比例
+const CODE_TREE_MIN_WIDTH = 200
+const CODE_TREE_MAX_WIDTH = 560
+const CODE_TREE_MIN_EDITOR_WIDTH = 360
+const CODE_TREE_DEFAULT_WIDTH = 280
+const CODE_TREE_RESIZE_LONG_PRESS_MS = 48
+
+function readPersistedTreeWidth(): number | null {
+  try {
+    const raw = window.localStorage.getItem(CODE_LEFT_SIDEBAR_WIDTH_STORAGE_KEY)
+    if (!raw) return null
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return null
+    return Math.min(CODE_TREE_MAX_WIDTH, Math.max(CODE_TREE_MIN_WIDTH, value))
+  } catch {
+    return null
+  }
+}
+
+function clampTreeWidth(width: number): number {
+  const maxWidth = Math.min(CODE_TREE_MAX_WIDTH, window.innerWidth - CODE_TREE_MIN_EDITOR_WIDTH)
+  return Math.min(maxWidth, Math.max(CODE_TREE_MIN_WIDTH, width))
+}
 const SMART_EMPTY_FILE_CANDIDATES = ['README.md', 'readme.md', 'AGENTS.md', 'AGENT.md', 'package.json', 'src/main.tsx', 'src/main.ts', 'src/index.tsx', 'src/index.ts', 'src/App.tsx', 'src/App.ts', 'app/page.tsx', 'pages/index.tsx', 'main.py']
 type CodeWorkspacePanelProps = {
   projectId: string
@@ -120,6 +144,8 @@ export function CodeWorkspacePanel({
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'
   })
+  const [leftSidebarWidth, setLeftSidebarWidth] = useState<number | null>(() => readPersistedTreeWidth())
+  const [isResizingTree, setIsResizingTree] = useState(false)
   const [isQuickDrawerOpen, setIsQuickDrawerOpen] = useState(false)
   const [viewMode, setViewMode] = useState<CodeViewMode>('files')
   const [contentSearchScopeInput, setContentSearchScopeInput] = useState(() => persistedProjectCodeSession?.contentSearchScope ?? '')
@@ -135,6 +161,9 @@ export function CodeWorkspacePanel({
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const layoutGridRef = useRef<HTMLDivElement | null>(null)
+  // 拖拽过程中的临时状态，全部走 ref，避免 pointermove 触发的 React 重渲染
+  const treeResizeRef = useRef<{ startX: number; startWidth: number; rafId: number | null; latestX: number } | null>(null)
   const captureCurrentModeScrollRef = useRef<() => void>(() => {})
   const markOpenedFileInExplorerRef = useRef<(relativePath: string) => void>(() => {})
   const handleOpenedCodeFileRef = useRef<(relativePath: string) => void>(() => {})
@@ -413,6 +442,80 @@ export function CodeWorkspacePanel({
     setIsLeftSidebarCollapsed(false)
     refreshRootIfStale()
   }, [refreshRootIfStale])
+
+  // 文件树宽度拖拽：长按折叠按钮进入，松手时一次性写入 state 与 localStorage。
+  // 拖拽过程中只通过 rAF 直写 grid 的 inline style，不触发 React 重渲染。
+  const applyTreeWidthStyle = useCallback((width: number) => {
+    const grid = layoutGridRef.current
+    if (grid) grid.style.gridTemplateColumns = `${width}px minmax(0, 1fr)`
+  }, [])
+
+  const handleTreeResizeMove = useCallback(
+    (event: PointerEvent) => {
+      const state = treeResizeRef.current
+      if (!state) return
+      state.latestX = event.clientX
+      if (state.rafId === null) {
+        state.rafId = window.requestAnimationFrame(() => {
+          const current = treeResizeRef.current
+          if (!current) return
+          current.rafId = null
+          applyTreeWidthStyle(clampTreeWidth(current.startWidth + (current.latestX - current.startX)))
+        })
+      }
+    },
+    [applyTreeWidthStyle],
+  )
+
+  const endTreeResize = useCallback(() => {
+    const state = treeResizeRef.current
+    window.removeEventListener('pointermove', handleTreeResizeMove)
+    window.removeEventListener('pointerup', endTreeResize)
+    window.removeEventListener('pointercancel', endTreeResize)
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    setIsResizingTree(false)
+    if (!state) return
+    if (state.rafId !== null) window.cancelAnimationFrame(state.rafId)
+    const finalWidth = clampTreeWidth(state.startWidth + (state.latestX - state.startX))
+    treeResizeRef.current = null
+    applyTreeWidthStyle(finalWidth)
+    setLeftSidebarWidth(finalWidth)
+    try {
+      window.localStorage.setItem(CODE_LEFT_SIDEBAR_WIDTH_STORAGE_KEY, String(finalWidth))
+    } catch {
+      // 隐私模式等场景下 localStorage 不可写，忽略即可
+    }
+  }, [applyTreeWidthStyle, handleTreeResizeMove])
+
+  const startTreeResize = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const grid = layoutGridRef.current
+      if (!grid) return
+      // 读取 grid 实际解析后的第一列像素宽度（文件树列），而非容器总宽；
+      // 否则未存宽度时 startWidth 会取到整个内容区宽度，被 clamp 直接顶到上限。
+      let startWidth = CODE_TREE_DEFAULT_WIDTH
+      if (leftSidebarWidth) {
+        startWidth = leftSidebarWidth
+      } else {
+        const trackWidths = window
+          .getComputedStyle(grid)
+          .gridTemplateColumns.split(' ')
+          .map((value) => Number.parseFloat(value))
+        if (trackWidths.length > 0 && Number.isFinite(trackWidths[0]) && trackWidths[0] > 0) {
+          startWidth = trackWidths[0]
+        }
+      }
+      treeResizeRef.current = { startX: event.clientX, startWidth, rafId: null, latestX: event.clientX }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      window.addEventListener('pointermove', handleTreeResizeMove)
+      window.addEventListener('pointerup', endTreeResize)
+      window.addEventListener('pointercancel', endTreeResize)
+      setIsResizingTree(true)
+    },
+    [applyTreeWidthStyle, endTreeResize, handleTreeResizeMove, leftSidebarWidth],
+  )
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
@@ -611,7 +714,7 @@ export function CodeWorkspacePanel({
   const showEditorPanel = !isNarrowViewport || !isExplorerOpen
   const showExplorerPanelForMode = viewMode === 'files' ? showExplorerPanel : isNarrowViewport ? true : !isLeftSidebarCollapsed
   const showEditorPanelForMode = viewMode === 'files' ? showEditorPanel : true
-  const layoutGridStyle = isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : isLeftSidebarCollapsed ? { gridTemplateColumns: '44px minmax(0, 1fr)' } : undefined
+  const layoutGridStyle = isNarrowViewport ? { gridTemplateColumns: 'minmax(0, 1fr)' } : isLeftSidebarCollapsed ? { gridTemplateColumns: '44px minmax(0, 1fr)' } : leftSidebarWidth ? { gridTemplateColumns: `${leftSidebarWidth}px minmax(0, 1fr)` } : undefined
   const handleToggleTreeDirectory = useCallback(
     (relativePath: string) => {
       if (hasSearchQuery) return
@@ -820,7 +923,7 @@ export function CodeWorkspacePanel({
       />
 
       <div className="min-h-0 flex-1">
-        <div className="code-layout-grid h-full" style={layoutGridStyle}>
+        <div ref={layoutGridRef} className={`code-layout-grid h-full${isResizingTree ? ' is-resizing-tree' : ''}`} style={layoutGridStyle}>
           {!isNarrowViewport && isLeftSidebarCollapsed ? (
             <div className="relative flex h-full min-h-0 items-center justify-center">
               <CodeSidebarRailButton side="left" collapsed onClick={handleExpandSidebar} className="z-20" ariaLabel={t('codeWorkspace.expandSidebar')} />
@@ -879,7 +982,18 @@ export function CodeWorkspacePanel({
                 treeNodesForView={treeNodesForView}
                 viewMode={viewMode}
               />
-              {!isNarrowViewport && <CodeSidebarRailButton side="left" collapsed={false} onClick={() => setIsLeftSidebarCollapsed(true)} className="absolute -right-4 top-1/2 z-20 -translate-y-1/2" ariaLabel={t('codeWorkspace.collapseSidebar')} />}
+              {!isNarrowViewport && (
+                <CodeSidebarRailButton
+                  side="left"
+                  collapsed={false}
+                  onClick={() => setIsLeftSidebarCollapsed(true)}
+                  onLongPress={startTreeResize}
+                  resizing={isResizingTree}
+                  longPressMs={CODE_TREE_RESIZE_LONG_PRESS_MS}
+                  className="absolute -right-4 top-1/2 z-20 -translate-y-1/2"
+                  ariaLabel={t('codeWorkspace.collapseSidebar')}
+                />
+              )}
             </div>
           )}
 

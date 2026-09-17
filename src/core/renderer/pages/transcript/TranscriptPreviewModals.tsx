@@ -1,10 +1,12 @@
-import { memo, type Ref } from 'react'
+import { memo, type CSSProperties, type Ref } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 import { Check, Copy, RefreshCw, X } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ModalShell } from '../../components/ModalShell'
+import { StructuredPreviewTableWidthControl, useStructuredPreviewTableWidth } from '../../components/StructuredPreviewTableWidth'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import type { InterpolationValues, MessageKey, ResolvedLocale, SettingsSectionMessageKey } from '../../i18n/messages'
 import { type MarkdownCodeBlockExpandPayload, type MarkdownStructuredBlockClickPayload } from '../code/code.markdown'
@@ -92,10 +94,11 @@ export function TranscriptPreviewModals({
   onCloseStructuredPreview,
   onCloseCodePreview,
 }: TranscriptPreviewModalsProps) {
+  const [structuredPreviewTableWidth, setStructuredPreviewTableWidth] = useStructuredPreviewTableWidth()
   return (
     <>
       <ModalShell open={Boolean(structuredPreview)} onClose={onCloseStructuredPreview} widthClassName="max-w-[min(1280px,calc(100vw-40px))]" baseZIndex={1180} ariaLabel={t('transcript.structuredPreview')} overlayClassName="backdrop-blur-0 bg-black/18" panelClassName="transcript-structured-preview-modal p-4 sm:p-5">
-        <div className="relative flex h-full min-h-0 flex-col">
+        <div className={`relative flex h-full min-h-0 flex-col${structuredPreviewTableWidth > 0 ? ' has-structured-preview-table-limit' : ''}`} style={{ '--structured-preview-table-max-width': structuredPreviewTableWidth > 0 ? `${structuredPreviewTableWidth}px` : 'none' } as CSSProperties}>
           <div className="mb-4 flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="section-label mb-1">{t('transcript.listTitle')}</p>
@@ -106,6 +109,7 @@ export function TranscriptPreviewModals({
               <p className="mt-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('transcript.structuredPreviewHint')}</p>
             </div>
             <div className="flex items-center gap-2">
+              <StructuredPreviewTableWidthControl value={structuredPreviewTableWidth} onChange={setStructuredPreviewTableWidth} />
               <CaptureButton
                 label={structuredPreviewCaptureLabel}
                 status={structuredPreviewCapture.status}
@@ -162,7 +166,7 @@ export function TranscriptPreviewModals({
                   customStyle={{ margin: 0, borderRadius: 16, paddingTop: 16 }}
                   codeTagProps={{
                     style: {
-                      fontFamily: "'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace",
+                      fontFamily: MONO_FONT_STACK,
                     },
                   }}
                 >

@@ -173,7 +173,7 @@
 }
 
 .code-markdown-plain-block code {
-  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre;

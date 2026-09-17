@@ -79,6 +79,12 @@ export function ZoomPanViewport({ captureTargetRef, children, resetKey }: ZoomPa
 
     const fitContent = () => {
       sizeSvgsFromViewBox(canvas)
+      // Layout zoom 会污染测量：zoom ≠ 1 时 padding/百分比在重排中按分数
+      // 像素取整，capture/canvas 的 scrollWidth/offsetHeight 随 zoom 漂移
+      // （例如 capture 的 padding 被放大取整后"超出"画布原始高度），于是
+      // fit → 重排 → 再测量得到不同结果 → zoom 在两个值之间来回冲突。
+      // 测量前把 zoom 归一，测得的是 zoom 无关的 local 尺寸，反馈环断开。
+      canvas.style.setProperty('zoom', '1')
       const viewportWidth = viewport.clientWidth
       const viewportHeight = viewport.clientHeight
       const contentWidth = canvas.scrollWidth

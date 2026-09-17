@@ -15,3 +15,8 @@
   min-height: 0;
 }
 
+.code-layout-grid.is-resizing-tree {
+  cursor: col-resize;
+  user-select: none;
+}
+

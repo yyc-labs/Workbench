@@ -1,4 +1,7 @@
 @theme {
+  /* Fonts */
+  --font-mono: Consolas, 'Courier New', monospace;
+
   /* Base */
   --color-background: #f5f5f7;
   --color-background-sunken: #ececf0;
