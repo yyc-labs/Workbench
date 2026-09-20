@@ -625,6 +625,14 @@ export function CodeWorkspacePanel({
     }
   }, [isExplorerOpen, isNarrowViewport])
 
+  // 文件名过滤输入为非受控组件，视图切换时会重挂载并显示为空；
+  // 保留旧 query 会导致状态与 UI 失同步，切回 files 后文件树被
+  // 残留搜索结果（可能为空）占据，观感即“文件树丢失”。
+  useEffect(() => {
+    if (viewMode !== 'files') return
+    setFileSearchQuery('')
+  }, [setFileSearchQuery, viewMode])
+
   useEffect(() => {
     if (pendingSearchInputFocusModeRef.current !== viewMode) return
     pendingSearchInputFocusModeRef.current = null

@@ -57,3 +57,26 @@ test('getProjectFileAutoLoadDecision keeps auto-load for small projects', async 
   assert.equal(decision.reason, 'ok')
   assert.equal(decision.fileCountSample, 2)
 })
+
+test('getProjectFileAutoLoadDecision rescans after cache TTL expiry', async () => {
+  const projectPath = mkdtempSync(join(tmpdir(), 'project-file-autoload-ttl-'))
+  writeFileSync(join(projectPath, 'index.ts'), 'export {}', 'utf8')
+
+  const first = await getProjectFileAutoLoadDecision(projectPath)
+  assert.equal(first.fileCountSample, 1)
+
+  // 缓存 TTL 内的第二次决策应命中缓存，看不到新增文件。
+  writeFileSync(join(projectPath, 'extra.ts'), 'export {}', 'utf8')
+  const cached = await getProjectFileAutoLoadDecision(projectPath)
+  assert.equal(cached.fileCountSample, 1)
+
+  // 快进系统时间越过 TTL（PROJECT_FILE_LIST_CACHE_TTL_MS = 15s）后应重新扫描。
+  const realNow = Date.now
+  try {
+    Date.now = () => realNow() + 20_000
+    const rescanned = await getProjectFileAutoLoadDecision(projectPath)
+    assert.equal(rescanned.fileCountSample, 2)
+  } finally {
+    Date.now = realNow
+  }
+})

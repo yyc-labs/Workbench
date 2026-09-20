@@ -68,7 +68,7 @@ function getProjectFileListFromCache(rootRealPath: string, exclusions: ProjectFi
   const cached = projectFileListCache.get(projectFileCacheKey(rootRealPath, exclusions))
   if (!cached) return null
   if (Date.now() - cached.updatedAtMs > PROJECT_FILE_LIST_CACHE_TTL_MS) {
-    projectFileListCache.delete(rootRealPath)
+    projectFileListCache.delete(projectFileCacheKey(rootRealPath, exclusions))
     return null
   }
   return cached.paths

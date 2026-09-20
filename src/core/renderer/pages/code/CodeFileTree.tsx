@@ -276,7 +276,10 @@ export const CodeFileTree = memo(function CodeFileTree({
   const hasNodes = useMemo(() => nodes.length > 0, [nodes])
   const treeRef = useRef<TreeApi<ProjectFileNode> | null>(null)
   const handledLocateRequestTokenRef = useRef(0)
-  const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set(expandedDirectories))
+  // 展开快照只记录「目录节点已存在于 nodes 且在 expandedDirectories 中」的路径：
+  // markFilePathKnown/expandTreePath 可能在目录节点就绪前提前写入 expandedDirectories，
+  // 若快照照抄 expandedDirectories，节点到达时 diff 会误判“已展开”而不调用 tree.open()。
+  const previousExpandedDirectoriesRef = useRef<Set<string>>(new Set<string>())
   const previousActivePathRef = useRef(activeRelativePath)
   const suppressFollowScrollRef = useRef(false)
   const suppressFollowScrollTimerRef = useRef<number | null>(null)
@@ -387,7 +390,7 @@ export const CodeFileTree = memo(function CodeFileTree({
 
     const tree = treeRef.current
     if (!tree) {
-      previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+      previousExpandedDirectoriesRef.current = new Set<string>()
       return
     }
 
@@ -400,7 +403,11 @@ export const CodeFileTree = memo(function CodeFileTree({
       else tree.close(path)
     }
 
-    previousExpandedDirectoriesRef.current = new Set(expandedDirectories)
+    const nextSnapshot = new Set<string>()
+    for (const path of directoryPaths) {
+      if (expandedDirectories.has(path)) nextSnapshot.add(path)
+    }
+    previousExpandedDirectoriesRef.current = nextSnapshot
   }, [directoryPaths, expandedDirectories, flatFileListMode])
 
   const handleOpenFileContextMenu = useCallback((payload: CodeTreeContextMenuPayload) => {

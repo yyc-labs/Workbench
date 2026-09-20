@@ -130,8 +130,60 @@ type UseCodeWorkspaceExplorerStateOptions = {
   treeAutoLoadPaused?: boolean
 }
 
-export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, contentSearchScopeInput, projectPath, treeAutoLoadPaused = false }: UseCodeWorkspaceExplorerStateOptions) {
-  const [tree, setTree] = useState<FileTreeState>({
+type TreeSnapshot = {
+  nodes: ProjectFileNode[]
+  expandedDirectories: Set<string>
+  lastRootLoadedAtMs: number | null
+  savedAtMs: number
+}
+
+// 同会话内的树快照（仅内存，不落盘）：转录页等路由往返会整棵重挂载 CodeWorkspacePanel，
+// 树状态全部归零；快照让返回时即时呈现上次的树，而不是重新走 rg 决策空窗。
+// 新鲜度由 refreshRootIfStale（sidebar reveal 15s TTL）与手动刷新兜底。
+const TREE_SNAPSHOT_TTL_MS = 5 * 60_000
+const TREE_SNAPSHOT_CACHE_LIMIT = 8
+const treeSnapshotCacheByProjectPath = new Map<string, TreeSnapshot>()
+
+function readTreeSnapshot(projectPath: string): TreeSnapshot | null {
+  const snapshot = treeSnapshotCacheByProjectPath.get(projectPath)
+  if (!snapshot) return null
+  if (Date.now() - snapshot.savedAtMs > TREE_SNAPSHOT_TTL_MS) {
+    treeSnapshotCacheByProjectPath.delete(projectPath)
+    return null
+  }
+  return snapshot
+}
+
+function saveTreeSnapshot(projectPath: string, snapshot: TreeSnapshot): void {
+  if (treeSnapshotCacheByProjectPath.has(projectPath)) {
+    treeSnapshotCacheByProjectPath.delete(projectPath)
+  }
+  treeSnapshotCacheByProjectPath.set(projectPath, snapshot)
+  while (treeSnapshotCacheByProjectPath.size > TREE_SNAPSHOT_CACHE_LIMIT) {
+    const oldestKey = treeSnapshotCacheByProjectPath.keys().next().value
+    if (oldestKey === undefined) break
+    treeSnapshotCacheByProjectPath.delete(oldestKey)
+  }
+}
+
+function createInitialTreeState(projectPath: string): FileTreeState {
+  const snapshot = readTreeSnapshot(projectPath)
+  if (snapshot && snapshot.nodes.length > 0) {
+    return {
+      status: 'ready',
+      nodes: snapshot.nodes,
+      error: null,
+      knownFilePaths: mergeKnownFilePaths(new Set(), snapshot.nodes),
+      loadingDirectories: new Set(),
+      isRefreshingRoot: false,
+      lastRootLoadedAtMs: snapshot.lastRootLoadedAtMs,
+      lastRootRefreshStartedAtMs: null,
+      autoLoadBlocked: false,
+      autoLoadFileCountSample: 0,
+      autoLoadLimit: 0,
+    }
+  }
+  return {
     status: 'idle',
     nodes: [],
     error: null,
@@ -143,8 +195,12 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     autoLoadBlocked: false,
     autoLoadFileCountSample: 0,
     autoLoadLimit: 0,
-  })
-  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(new Set())
+  }
+}
+
+export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, contentSearchScopeInput, projectPath, treeAutoLoadPaused = false }: UseCodeWorkspaceExplorerStateOptions) {
+  const [tree, setTree] = useState<FileTreeState>(() => createInitialTreeState(projectPath))
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => readTreeSnapshot(projectPath)?.expandedDirectories ?? new Set())
   const [fileSearchQuery, setFileSearchQuery] = useState('')
   const [searchResultNodes, setSearchResultNodes] = useState<ProjectFileNode[]>([])
   const [fileSearchRefreshRequest, setFileSearchRefreshRequest] = useState(0)
@@ -501,6 +557,20 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         void loadTree()
       })
   }, [activePane, blockTreeAutoLoad, loadTree, projectPath, tree.autoLoadBlocked, tree.status, treeAutoLoadPaused])
+
+  // 卸载（如跳转转录页）时保存树快照，返回工作区时即时恢复，避免重新决策扫描空窗。
+  useEffect(() => {
+    return () => {
+      const current = treeStateRef.current
+      if (current.status !== 'ready' || current.autoLoadBlocked || current.nodes.length <= 0) return
+      saveTreeSnapshot(projectPath, {
+        nodes: current.nodes,
+        expandedDirectories: new Set(expandedDirectoriesRef.current),
+        lastRootLoadedAtMs: current.lastRootLoadedAtMs,
+        savedAtMs: Date.now(),
+      })
+    }
+  }, [projectPath])
 
   useEffect(() => {
     const { lineTarget, searchQuery } = parseFileSearchLineTarget(fileSearchQuery)

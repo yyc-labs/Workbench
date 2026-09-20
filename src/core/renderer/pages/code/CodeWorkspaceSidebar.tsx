@@ -176,7 +176,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
               </button>
             </div>
           </div>
-        ) : tree.status === 'loading' ? (
+        ) : tree.status === 'loading' || tree.status === 'idle' ? (
           <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.loadingFiles')}</div>
         ) : tree.status === 'error' ? (
           <div className="code-panel-empty text-xs text-[color:var(--color-destructive)]">{tree.error ?? t('codeWorkspace.failedToLoadFileTree')}</div>

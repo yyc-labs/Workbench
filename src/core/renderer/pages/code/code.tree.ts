@@ -241,7 +241,9 @@ export async function expandTreePath(
   },
 ): Promise<void> {
   for (const parent of [...parentDirectories].reverse()) {
-    await options.loadDirectory(parent)
+    const loaded = await options.loadDirectory(parent)
+    // 加载失败或被代际取消（stale）时跳过，避免产生“已展开但从未加载”的幽灵目录。
+    if (!loaded) continue
     options.setExpandedDirectories((prev) => {
       if (prev.has(parent)) return prev
       const next = new Set(prev)

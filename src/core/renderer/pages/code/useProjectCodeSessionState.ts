@@ -62,6 +62,9 @@ export function useProjectCodeSessionState({
   const saveCodeSessionTimerRef = useRef<number | null>(null)
   const lastPersistedCodeSessionJsonRef = useRef<string>('')
   const isRestoringCodeSessionRef = useRef(true)
+  // 仅在首次挂载/切换项目时视为“恢复中”；自身的持久化回写回声不应重新置 true，
+  // 否则恢复完成后 isRestoring 永远为 true，污染后续打开文件的定位/回放链路。
+  const firstSeenProjectIdRef = useRef<string | null>(null)
 
   const visibleOpenTabs = useMemo(() => openTabPaths.filter((path) => effectiveKnownFilePaths.has(path)).slice(0, MAX_PROJECT_CODE_SESSION_TABS), [effectiveKnownFilePaths, openTabPaths])
 
@@ -71,6 +74,8 @@ export function useProjectCodeSessionState({
   }, [persistedCodeFileDrawerState, projectId])
 
   useEffect(() => {
+    const isFirstSeenForProject = firstSeenProjectIdRef.current !== projectId
+    firstSeenProjectIdRef.current = projectId
     const normalizedSession = normalizeProjectCodeSession(persistedProjectCodeSession)
     setOpenTabPaths(normalizedSession?.tabs ?? [])
     setCursorPositionsByPath(normalizedSession?.cursorPositions ?? {})
@@ -80,7 +85,9 @@ export function useProjectCodeSessionState({
       window.clearTimeout(saveCodeSessionTimerRef.current)
       saveCodeSessionTimerRef.current = null
     }
-    isRestoringCodeSessionRef.current = true
+    if (isFirstSeenForProject) {
+      isRestoringCodeSessionRef.current = true
+    }
   }, [persistedProjectCodeSession, projectId, setContentSearchScopeInput])
 
   useEffect(() => {
