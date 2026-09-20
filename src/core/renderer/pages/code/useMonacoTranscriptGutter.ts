@@ -2,8 +2,6 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TranscriptFileReference } from '../../../shared/types'
 
-const HOVER_HIDE_DELAY_MS = 160
-
 export type TranscriptGutterHover = {
   x: number
   y: number
@@ -35,7 +33,11 @@ function groupReferencesByLine(references: TranscriptFileReference[]): Map<numbe
 export function useMonacoTranscriptGutter({ editorRef, monacoRef, references, onOpenReference }: UseMonacoTranscriptGutterOptions) {
   // editor 实例版本信号：MonacoCodeEditor 异步创建编辑器，就绪后调用 syncEditorInstance 触发装饰同步。
   const [editorInstance, setEditorInstance] = useState<MonacoEditor.IStandaloneCodeEditor | null>(null)
-  const [hover, setHover] = useState<TranscriptGutterHover | null>(null)
+  // 悬浮标记即固定卡片（无论单条还是多条引用），用户点选后打开对应转录。
+  // 收起方式：点选条目、点击卡片外区域、滚动或切换文件。
+  const [pinnedHover, setPinnedHover] = useState<TranscriptGutterHover | null>(null)
+  const pinnedHoverRef = useRef(pinnedHover)
+  pinnedHoverRef.current = pinnedHover
 
   const referencesByLine = useMemo(() => groupReferencesByLine(references), [references])
   const referencesByLineRef = useRef(referencesByLine)
@@ -47,27 +49,14 @@ export function useMonacoTranscriptGutter({ editorRef, monacoRef, references, on
   // 装饰 id 按 model uri 记账：model 是跨文件缓存的，重同步前先移除旧装饰，避免切回旧文件时叠加。
   const decorationsByModelRef = useRef(new Map<string, string[]>())
 
-  const hideHoverTimerRef = useRef<number | null>(null)
-
-  const clearHoverHideTimer = useCallback(() => {
-    if (hideHoverTimerRef.current != null) {
-      window.clearTimeout(hideHoverTimerRef.current)
-      hideHoverTimerRef.current = null
-    }
+  const dismissPinned = useCallback(() => {
+    setPinnedHover(null)
   }, [])
 
-  const hideHover = useCallback(() => {
-    clearHoverHideTimer()
-    setHover(null)
-  }, [clearHoverHideTimer])
-
-  const scheduleHoverHide = useCallback(() => {
-    clearHoverHideTimer()
-    hideHoverTimerRef.current = window.setTimeout(() => {
-      hideHoverTimerRef.current = null
-      setHover(null)
-    }, HOVER_HIDE_DELAY_MS)
-  }, [clearHoverHideTimer])
+  const openReference = useCallback((item: TranscriptFileReference) => {
+    setPinnedHover(null)
+    onOpenReferenceRef.current(item)
+  }, [])
 
   const syncDecorations = useCallback(
     (grouped: Map<number, TranscriptFileReference[]>) => {
@@ -136,46 +125,50 @@ export function useMonacoTranscriptGutter({ editorRef, monacoRef, references, on
 
     disposables.push(
       editor.onDidChangeModel(() => {
-        hideHover()
+        setPinnedHover(null)
         syncDecorationsRef.current(referencesByLineRef.current)
       }),
     )
 
     disposables.push(
       editor.onMouseDown((event) => {
-        if (event.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) return
-        const items = findReferencesAtLine(event.target.position?.lineNumber)
-        if (items.length <= 0) return
-        hideHover()
-        onOpenReferenceRef.current(items[0])
-      }),
-    )
-
-    disposables.push(
-      editor.onMouseMove((event) => {
-        const inMarker = event.target.type === monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS && findReferencesAtLine(event.target.position?.lineNumber).length > 0
-        if (!inMarker) {
-          if (hideHoverTimerRef.current == null) setHover((current) => (current ? null : current))
+        if (event.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) {
+          // 点击编辑器其他区域时收起选择卡片。
+          if (pinnedHoverRef.current) setPinnedHover(null)
           return
         }
-        clearHoverHideTimer()
-        setHover({
+        const items = findReferencesAtLine(event.target.position?.lineNumber)
+        if (items.length <= 0) {
+          if (pinnedHoverRef.current) setPinnedHover(null)
+          return
+        }
+        setPinnedHover({
           x: event.event.browserEvent.clientX,
           y: event.event.browserEvent.clientY,
-          items: findReferencesAtLine(event.target.position?.lineNumber),
+          items,
         })
       }),
     )
 
     disposables.push(
-      editor.onMouseLeave(() => {
-        scheduleHoverHide()
+      editor.onMouseMove((event) => {
+        if (event.target.type !== monaco.editor.MouseTargetType.GUTTER_LINE_DECORATIONS) return
+        const items = findReferencesAtLine(event.target.position?.lineNumber)
+        if (items.length <= 0) return
+        // 已固定在同一组引用上时不重复 setState，避免定位重算与重渲染。
+        const current = pinnedHoverRef.current
+        if (current && current.items.length === items.length && current.items[0]?.reference.id === items[0]?.reference.id) return
+        setPinnedHover({
+          x: event.event.browserEvent.clientX,
+          y: event.event.browserEvent.clientY,
+          items,
+        })
       }),
     )
 
     disposables.push(
       editor.onDidScrollChange(() => {
-        hideHover()
+        setPinnedHover(null)
       }),
     )
 
@@ -183,13 +176,14 @@ export function useMonacoTranscriptGutter({ editorRef, monacoRef, references, on
       for (const disposable of disposables) {
         disposable.dispose()
       }
-      hideHover()
+      setPinnedHover(null)
     }
-  }, [clearHoverHideTimer, editorInstance, hideHover, monacoRef, scheduleHoverHide])
+  }, [editorInstance, monacoRef])
 
   return {
-    hover,
+    hover: pinnedHover,
     syncEditorInstance,
-    cancelHoverHide: clearHoverHideTimer,
+    dismissPinned,
+    openReference,
   }
 }

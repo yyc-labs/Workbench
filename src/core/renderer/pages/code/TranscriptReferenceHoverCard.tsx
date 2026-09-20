@@ -2,16 +2,18 @@ import { FileCode2, MessageSquareText } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TranscriptFileReference } from '../../../shared/types'
+import { useI18n } from '../../i18n'
 import type { TranscriptGutterHover } from './useMonacoTranscriptGutter'
 
 const HOVER_CARD_Z_INDEX = 1140
+const HOVER_BACKDROP_Z_INDEX = 1139
 const HOVER_CARD_OFFSET_Y = 12
 const HOVER_CARD_MARGIN = 8
 
 type TranscriptReferenceHoverCardProps = {
   hover: TranscriptGutterHover
-  onMouseEnter: () => void
   onOpenReference: (item: TranscriptFileReference) => void
+  onDismiss: () => void
 }
 
 function formatReferencePosition(item: TranscriptFileReference): string {
@@ -43,33 +45,38 @@ function useHoverCardPosition(hover: TranscriptGutterHover) {
   return { cardRef, position }
 }
 
-export function TranscriptReferenceHoverCard({ hover, onMouseEnter, onOpenReference }: TranscriptReferenceHoverCardProps) {
+/** 转录引用选择卡片：悬浮 gutter 标记即固定显示，用户点选要打开的转录，点击空白处关闭。 */
+export function TranscriptReferenceHoverCard({ hover, onOpenReference, onDismiss }: TranscriptReferenceHoverCardProps) {
+  const { t } = useI18n()
   const { cardRef, position } = useHoverCardPosition(hover)
 
   return createPortal(
-    <div
-      ref={cardRef}
-      className="pointer-events-auto fixed max-h-[50vh] max-w-[320px] overflow-y-auto rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/95 shadow-[var(--shadow-popover)] backdrop-blur"
-      style={{ left: position.left, top: position.top, zIndex: HOVER_CARD_Z_INDEX }}
-      onMouseEnter={onMouseEnter}
-      role="tooltip"
-    >
-      <div className="flex flex-col py-1.5">
-        {hover.items.map((item) => (
-          <button key={`${item.transcriptId}:${item.reference.id}`} type="button" className="flex min-w-0 max-w-[320px] flex-col gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => onOpenReference(item)}>
-            <span className="flex min-w-0 items-center gap-1.5">
-              <MessageSquareText className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
-              <span className="truncate text-[12px] font-medium text-[color:var(--color-foreground)]">{item.transcriptTitle}</span>
-            </span>
-            <span className="flex min-w-0 items-center gap-1.5 pl-[18px]">
-              <FileCode2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
-              <span className="truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]">{formatReferencePosition(item)}</span>
-            </span>
-            {item.reference.label && <span className="truncate pl-[18px] text-[11px] text-[color:var(--color-muted-foreground)]">{item.reference.label}</span>}
-          </button>
-        ))}
+    <>
+      <button type="button" className="fixed inset-0 cursor-default" style={{ zIndex: HOVER_BACKDROP_Z_INDEX }} aria-label={t('common.close')} onClick={onDismiss} />
+      <div
+        ref={cardRef}
+        className="pointer-events-auto fixed max-h-[50vh] max-w-[320px] overflow-y-auto rounded-[12px] border border-[color:var(--color-primary)]/45 bg-[color:var(--color-popover)]/95 shadow-[var(--shadow-popover)] backdrop-blur"
+        style={{ left: position.left, top: position.top, zIndex: HOVER_CARD_Z_INDEX }}
+        role="dialog"
+        aria-label={t('codeWorkspace.transcriptRefPickerTitle')}
+      >
+        <div className="flex flex-col py-1.5">
+          {hover.items.map((item) => (
+            <button key={`${item.transcriptId}:${item.reference.id}`} type="button" className="flex min-w-0 max-w-[320px] flex-col gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => onOpenReference(item)}>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <MessageSquareText className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                <span className="truncate text-[12px] font-medium text-[color:var(--color-foreground)]">{item.transcriptTitle}</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1.5 pl-[18px]">
+                <FileCode2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                <span className="truncate font-mono text-[11px] text-[color:var(--color-muted-foreground)]">{formatReferencePosition(item)}</span>
+              </span>
+              {item.reference.label && <span className="truncate pl-[18px] text-[11px] text-[color:var(--color-muted-foreground)]">{item.reference.label}</span>}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>,
+    </>,
     document.body,
   )
 }

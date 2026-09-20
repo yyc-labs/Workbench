@@ -415,6 +415,13 @@
       }
     },
     {
+      "name": "Function call sites (Python)",
+      "scope": "meta.function-call.generic.python",
+      "settings": {
+        "foreground": "#DCDCAA"
+      }
+    },
+    {
       "scope": [
         "support.class",
         "support.type",

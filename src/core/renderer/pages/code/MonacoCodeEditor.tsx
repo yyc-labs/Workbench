@@ -831,16 +831,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
   return (
     <div className="relative h-full w-full">
-      {transcriptGutter.hover && (
-        <TranscriptReferenceHoverCard
-          hover={transcriptGutter.hover}
-          onMouseEnter={transcriptGutter.cancelHoverHide}
-          onOpenReference={(item) => {
-            transcriptGutter.cancelHoverHide()
-            onOpenTranscriptReferenceRef.current?.(item)
-          }}
-        />
-      )}
+      {transcriptGutter.hover && <TranscriptReferenceHoverCard hover={transcriptGutter.hover} onOpenReference={transcriptGutter.openReference} onDismiss={transcriptGutter.dismissPinned} />}
       {searchVisible && (
         <MonacoCodeEditorFindBar
           activeSearchMatchIndex={activeSearchMatchIndex}
