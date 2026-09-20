@@ -7,12 +7,7 @@ export interface CursorRuleFrontmatterMeta {
   ruleType: CursorRuleType
 }
 
-export interface MarkdownFrontmatterMeta {
-  title?: string
-  description?: string
-}
-
-export interface MarkdownCustomFrontmatterMeta {
+export interface MarkdownFrontmatterEntry {
   key: string
   value: string
 }
@@ -22,8 +17,7 @@ export interface ParsedMarkdownDocument {
   markdownBodyLineOffset: number
   markdownBody: string
   ruleMetadata: CursorRuleFrontmatterMeta | null
-  markdownMetadata: MarkdownFrontmatterMeta | null
-  customMetadata: MarkdownCustomFrontmatterMeta[]
+  frontmatterEntries: MarkdownFrontmatterEntry[]
 }
 
 type FrontmatterKv = Record<string, string>
@@ -56,9 +50,20 @@ function parseInlineList(value: string): string[] {
   return [stripWrappingQuotes(trimmed)].filter(Boolean)
 }
 
-function parseFrontmatter(rawFrontmatter: string): { kv: FrontmatterKv; globs: string[] } {
+function upsertFrontmatterEntry(entries: MarkdownFrontmatterEntry[], originalKey: string, value: string): void {
+  const lowerKey = originalKey.toLowerCase()
+  const existingIndex = entries.findIndex((entry) => entry.key.toLowerCase() === lowerKey)
+  if (existingIndex >= 0) {
+    entries[existingIndex] = { key: originalKey, value }
+    return
+  }
+  entries.push({ key: originalKey, value })
+}
+
+function parseFrontmatter(rawFrontmatter: string): { kv: FrontmatterKv; globs: string[]; entries: MarkdownFrontmatterEntry[] } {
   const lines = rawFrontmatter.replace(/\r/g, '').split('\n')
   const kv: FrontmatterKv = {}
+  const entries: MarkdownFrontmatterEntry[] = []
   let globs: string[] = []
 
   for (let i = 0; i < lines.length; i += 1) {
@@ -74,6 +79,7 @@ function parseFrontmatter(rawFrontmatter: string): { kv: FrontmatterKv; globs: s
     if (key === 'globs') {
       if (value) {
         globs = parseInlineList(value)
+        upsertFrontmatterEntry(entries, keyValue[1], stripWrappingQuotes(value))
         continue
       }
 
@@ -96,21 +102,16 @@ function parseFrontmatter(rawFrontmatter: string): { kv: FrontmatterKv; globs: s
         break
       }
       globs = collected
+      upsertFrontmatterEntry(entries, keyValue[1], collected.join(', '))
       i = Math.max(i, j - 1)
       continue
     }
 
     kv[key] = stripWrappingQuotes(value)
+    upsertFrontmatterEntry(entries, keyValue[1], kv[key])
   }
 
-  return { kv, globs }
-}
-
-function parseCustomMetadata(kv: FrontmatterKv): MarkdownCustomFrontmatterMeta[] {
-  const knownKeys = new Set(['description', 'globs', 'alwaysapply', 'title'])
-  return Object.entries(kv)
-    .filter(([key]) => !knownKeys.has(key))
-    .map(([key, value]) => ({ key, value }))
+  return { kv, globs, entries }
 }
 
 function resolveRuleType(meta: Omit<CursorRuleFrontmatterMeta, 'ruleType'>): CursorRuleType {
@@ -131,13 +132,6 @@ function parseRuleMetadata(kv: FrontmatterKv, globs: string[]): CursorRuleFrontm
   }
 }
 
-function parseMarkdownMetadata(kv: FrontmatterKv): MarkdownFrontmatterMeta | null {
-  const title = kv.title?.trim() || undefined
-  const description = kv.description?.trim() || undefined
-  if (!title && !description) return null
-  return { title, description }
-}
-
 function countLines(value: string): number {
   if (!value) return 0
   return value.split('\n').length
@@ -152,19 +146,17 @@ export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
       markdownBodyLineOffset: 0,
       markdownBody: source,
       ruleMetadata: null,
-      markdownMetadata: null,
-      customMetadata: [],
+      frontmatterEntries: [],
     }
   }
 
   const frontmatterRaw = frontmatterMatch[1]
-  const { kv, globs } = parseFrontmatter(frontmatterRaw)
+  const { kv, globs, entries } = parseFrontmatter(frontmatterRaw)
   return {
     hasFrontmatter: true,
     markdownBodyLineOffset: Math.max(0, countLines(frontmatterMatch[0]) - 1),
     markdownBody: normalized.slice(frontmatterMatch[0].length),
     ruleMetadata: parseRuleMetadata(kv, globs),
-    markdownMetadata: parseMarkdownMetadata(kv),
-    customMetadata: parseCustomMetadata(kv),
+    frontmatterEntries: entries,
   }
 }

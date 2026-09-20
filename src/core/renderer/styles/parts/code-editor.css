@@ -104,6 +104,21 @@
   font-weight: 700;
 }
 
+/* 转录引用 gutter 标记：渲染在行号数字右侧的 lines decorations 区。
+   装饰元素由 Monaco 撑满整个 gutter 单元格，圆点用背景绘制，不依赖元素自身尺寸。 */
+.monaco-transcript-ref-gutter {
+  cursor: pointer;
+  background-image: radial-gradient(circle closest-side, color-mix(in srgb, var(--color-primary) 62%, transparent) 99%, transparent);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 7px 7px;
+  transition: background-size 120ms ease;
+}
+
+.monaco-transcript-ref-gutter:hover {
+  background-size: 9px 9px;
+}
+
 /* Keep Monaco find widget away from the panel edge so its content isn't clipped. */
 .code-editor-pane .monaco-editor .find-widget {
   top: 0px !important;
@@ -113,6 +128,13 @@
    容器本身不拦截事件，widget 自身恢复可交互。 */
 .monaco-overflow-widgets-container > * {
   pointer-events: auto;
+}
+
+/* Ctrl+点击符号打开的引用 peek 视图：左侧代码预览继承主编辑器字号（13px），
+   右侧匹配列表（.ref-tree）无显式字号、直接继承应用基础字号，观感偏大。
+   对齐为 13px，行高仍由 Monaco 的 .ref-tree 规则（23px）控制。 */
+.monaco-editor .reference-zone-widget .peekview-widget .ref-tree {
+  font-size: 13px;
 }
 
 /* We render a wrapped custom find/replace bar in the React layer. */

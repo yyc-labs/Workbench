@@ -31,7 +31,7 @@ export interface TranscriptReference {
 export interface TranscriptFileReference {
   transcriptId: string
   transcriptTitle: string
-  reference: Pick<TranscriptReference, 'id' | 'relativePath' | 'lineNumber' | 'column'>
+  reference: Pick<TranscriptReference, 'id' | 'relativePath' | 'lineNumber' | 'column' | 'label'>
 }
 
 export interface TranscriptSession {

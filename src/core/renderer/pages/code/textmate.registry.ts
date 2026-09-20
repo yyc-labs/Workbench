@@ -7,6 +7,7 @@ import sourceJsonGrammar from './tm-grammars/source.json.tmLanguage.json'
 import sourceJsoncGrammar from './tm-grammars/source.json.comments.tmLanguage.json'
 import sourceJson5Grammar from './tm-grammars/source.json5.tmLanguage.json'
 import sourceCssGrammar from './tm-grammars/source.css.tmLanguage.json'
+import sourcePythonGrammar from './tm-grammars/source.python.tmLanguage.json'
 import sourceHtmlGrammar from './tm-grammars/text.html.basic.tmLanguage.json'
 import sourceHtmlDerivativeGrammar from './tm-grammars/text.html.derivative.tmLanguage.json'
 import sourceMarkdownGrammar from './tm-grammars/text.html.markdown.tmLanguage.json'
@@ -68,6 +69,7 @@ const GRAMMAR_ITEMS: TextmateGrammarItem[] = [
   { scopeName: 'source.json.comments', grammar: sourceJsoncGrammar },
   { scopeName: 'source.json5', grammar: sourceJson5Grammar },
   { scopeName: 'source.css', grammar: sourceCssGrammar },
+  { scopeName: 'source.python', grammar: sourcePythonGrammar },
   { scopeName: 'text.html.basic', grammar: sourceHtmlGrammar },
   { scopeName: 'text.html.derivative', grammar: sourceHtmlDerivativeGrammar },
   { scopeName: 'text.html.markdown', grammar: sourceMarkdownGrammar },
@@ -143,6 +145,13 @@ const TEXTMATE_LANGUAGES: TextmateLanguageDescriptor[] = [
       'source.css': 'css',
       'source.css.scss': 'scss',
       'source.css.less': 'less',
+    },
+  },
+  {
+    languageId: 'python',
+    rootScopeName: 'source.python',
+    embeddedScopeToLanguage: {
+      'source.python': 'python',
     },
   },
   {
@@ -223,7 +232,7 @@ export function buildTextmateRegistry(): TextmateRegistryData {
     const grammar = normalizeRawGrammar(item.scopeName, item.grammar)
     grammarsByScope.set(item.scopeName, grammar)
 
-    const injectTargets = item.injectTo ?? (((item.grammar as { injectTo?: string[] })?.injectTo) ?? [])
+    const injectTargets = item.injectTo ?? (item.grammar as { injectTo?: string[] })?.injectTo ?? []
     for (const targetScope of injectTargets) {
       if (!targetScope) continue
       const current = injectionsByTargetScope.get(targetScope) ?? []
@@ -273,10 +282,7 @@ export function buildTextmateRegistry(): TextmateRegistryData {
   }
 }
 
-export function resolveRootScopeForLanguage(
-  languageId: string,
-  registry: TextmateRegistryData,
-): string | null {
+export function resolveRootScopeForLanguage(languageId: string, registry: TextmateRegistryData): string | null {
   const descriptor = registry.languageById.get(languageId)
   if (descriptor) return descriptor.rootScopeName
 

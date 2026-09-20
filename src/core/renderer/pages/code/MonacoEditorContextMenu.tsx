@@ -1,4 +1,4 @@
-import { AlignLeft, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Contrast, FoldVertical, ListOrdered, MessageSquarePlus, MessageSquareQuote, Moon, Palette, ScanText, Scissors, Sun, UnfoldVertical } from 'lucide-react'
+import { AlignLeft, Check, ChevronRight, ClipboardCopy, ClipboardPaste, Contrast, FoldVertical, ListOrdered, MessageSquarePlus, MessageSquareQuote, Moon, Palette, ScanText, Scissors, Sun, Type, UnfoldVertical } from 'lucide-react'
 import type { Selection } from 'monaco-editor'
 import type { ReactNode } from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -30,6 +30,8 @@ interface MonacoEditorContextMenuProps {
   currentLineNumber: number
   currentTheme: MonacoThemeName
   onThemeChange: (theme: MonacoThemeName) => void
+  currentFontSize: number
+  onFontSizeChange: (fontSize: number) => void
   onAction: (actionId: string) => void
   onGoToLine: (lineNumber: number) => void
   onClose: () => void
@@ -39,9 +41,11 @@ const MENU_WIDTH = 200
 const MENU_ESTIMATED_HEIGHT = 300
 const MENU_BOTTOM_MARGIN = 34
 const VIEWPORT_PADDING = 8
-const THEME_PANEL_WIDTH = 200
-const THEME_PANEL_GAP = 8
-const THEME_PANEL_ESTIMATED_HEIGHT = 96
+const SUBMENU_PANEL_WIDTH = 200
+const SUBMENU_PANEL_GAP = 8
+// 二级面板行高与纵向内边距，用于按选项数量估算面板高度。
+const SUBMENU_PANEL_ROW_HEIGHT = 34
+const SUBMENU_PANEL_VERTICAL_PADDING = 12
 
 type ThemeOption = {
   id: MonacoThemeName
@@ -52,6 +56,8 @@ type ThemeOption = {
 const LIGHT_THEME_IDS: MonacoThemeName[] = ['vs', 'hc-light']
 const DARK_THEME_IDS: MonacoThemeName[] = ['vs-dark', 'hc-black']
 
+const FONT_SIZE_OPTIONS = [11, 12, 13, 14, 16, 18, 20]
+
 function isDarkTheme(theme: MonacoThemeName): boolean {
   return theme === 'vs-dark' || theme === 'hc-black'
 }
@@ -60,9 +66,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canComment, canFormat, currentLineNumber, currentTheme, onThemeChange, onAction, onGoToLine, onClose }: MonacoEditorContextMenuProps) {
+export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canComment, canFormat, currentLineNumber, currentTheme, onThemeChange, currentFontSize, onFontSizeChange, onAction, onGoToLine, onClose }: MonacoEditorContextMenuProps) {
   const { t } = useI18n()
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [submenuOpen, setSubmenuOpen] = useState<'theme' | 'font' | null>(null)
   const [isGoToLineInputOpen, setIsGoToLineInputOpen] = useState(false)
   const [goToLineValue, setGoToLineValue] = useState('')
   const goToLineInputRef = useRef<HTMLInputElement | null>(null)
@@ -95,27 +101,33 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
 
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [menuHeight, setMenuHeight] = useState(MENU_ESTIMATED_HEIGHT)
-  const themeCloseTimerRef = useRef<number | null>(null)
+  const submenuCloseTimerRef = useRef<number | null>(null)
   const themeTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const fontTriggerRef = useRef<HTMLButtonElement | null>(null)
 
-  const cancelThemeMenuClose = () => {
-    if (themeCloseTimerRef.current != null) {
-      window.clearTimeout(themeCloseTimerRef.current)
-      themeCloseTimerRef.current = null
+  const cancelSubmenuClose = () => {
+    if (submenuCloseTimerRef.current != null) {
+      window.clearTimeout(submenuCloseTimerRef.current)
+      submenuCloseTimerRef.current = null
     }
   }
 
-  const scheduleThemeMenuClose = () => {
-    cancelThemeMenuClose()
-    themeCloseTimerRef.current = window.setTimeout(() => {
-      setThemeMenuOpen(false)
+  const scheduleSubmenuClose = () => {
+    cancelSubmenuClose()
+    submenuCloseTimerRef.current = window.setTimeout(() => {
+      setSubmenuOpen(null)
     }, 120)
+  }
+
+  const openSubmenu = (id: 'theme' | 'font') => {
+    cancelSubmenuClose()
+    setSubmenuOpen(id)
   }
 
   useEffect(() => {
     return () => {
-      if (themeCloseTimerRef.current != null) {
-        window.clearTimeout(themeCloseTimerRef.current)
+      if (submenuCloseTimerRef.current != null) {
+        window.clearTimeout(submenuCloseTimerRef.current)
       }
     }
   }, [])
@@ -252,20 +264,27 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
   const left = clamp(x, VIEWPORT_PADDING, Math.max(VIEWPORT_PADDING, window.innerWidth - MENU_WIDTH - VIEWPORT_PADDING))
   const top = clamp(y, VIEWPORT_PADDING, Math.max(VIEWPORT_PADDING, window.innerHeight - menuHeight - MENU_BOTTOM_MARGIN))
 
+  const computeSubmenuPosition = (triggerRect: DOMRect, optionCount: number) => {
+    const left = (() => {
+      const rightLeft = triggerRect.right + SUBMENU_PANEL_GAP
+      const leftLeft = triggerRect.left - SUBMENU_PANEL_WIDTH - SUBMENU_PANEL_GAP
+      const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - SUBMENU_PANEL_WIDTH - VIEWPORT_PADDING)
+      const rightFits = rightLeft + SUBMENU_PANEL_WIDTH <= window.innerWidth - VIEWPORT_PADDING
+      const leftFits = leftLeft >= VIEWPORT_PADDING
+      return clamp(rightFits || !leftFits ? rightLeft : leftLeft, VIEWPORT_PADDING, maxLeft)
+    })()
+    // 面板高度随选项数量变化（字体面板 7 项远高于主题面板 2 项），
+    // top 必须按实际高度钳制，保证面板底边不超出可视区域。
+    const panelEstimatedHeight = optionCount * SUBMENU_PANEL_ROW_HEIGHT + SUBMENU_PANEL_VERTICAL_PADDING
+    const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - panelEstimatedHeight - VIEWPORT_PADDING)
+    const top = clamp(triggerRect.top, VIEWPORT_PADDING, maxTop)
+    return { left, top }
+  }
+
   const themeTriggerRect = themeTriggerRef.current?.getBoundingClientRect() ?? null
-  const themePanelPos = themeTriggerRect
-    ? {
-        left: (() => {
-          const rightLeft = themeTriggerRect.right + THEME_PANEL_GAP
-          const leftLeft = themeTriggerRect.left - THEME_PANEL_WIDTH - THEME_PANEL_GAP
-          const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - THEME_PANEL_WIDTH - VIEWPORT_PADDING)
-          const rightFits = rightLeft + THEME_PANEL_WIDTH <= window.innerWidth - VIEWPORT_PADDING
-          const leftFits = leftLeft >= VIEWPORT_PADDING
-          return clamp(rightFits || !leftFits ? rightLeft : leftLeft, VIEWPORT_PADDING, maxLeft)
-        })(),
-        top: clamp(themeTriggerRect.top, VIEWPORT_PADDING, Math.max(VIEWPORT_PADDING, window.innerHeight - THEME_PANEL_ESTIMATED_HEIGHT - VIEWPORT_PADDING)),
-      }
-    : null
+  const fontTriggerRect = fontTriggerRef.current?.getBoundingClientRect() ?? null
+  const themePanelPos = themeTriggerRect ? computeSubmenuPosition(themeTriggerRect, themeOptions.length) : null
+  const fontPanelPos = fontTriggerRect ? computeSubmenuPosition(fontTriggerRect, FONT_SIZE_OPTIONS.length) : null
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -353,14 +372,24 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
                 type="button"
                 className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
                 onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => {
-                  cancelThemeMenuClose()
-                  setThemeMenuOpen(true)
-                }}
-                onMouseLeave={scheduleThemeMenuClose}
+                onMouseEnter={() => openSubmenu('theme')}
+                onMouseLeave={scheduleSubmenuClose}
               >
                 <Palette className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
                 <span className="min-w-0 flex-1 truncate">{t('codeWorkspace.editorContextMenu.colorTheme')}</span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+              </button>
+              <button
+                ref={fontTriggerRef}
+                type="button"
+                className="flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => openSubmenu('font')}
+                onMouseLeave={scheduleSubmenuClose}
+              >
+                <Type className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                <span className="min-w-0 flex-1 truncate">{t('codeWorkspace.editorContextMenu.fontSize')}</span>
+                <span className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">{currentFontSize}px</span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
               </button>
             </>
@@ -368,19 +397,16 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
         </div>,
         document.body,
       )}
-      {themeMenuOpen
+      {submenuOpen === 'theme'
         ? createPortal(
             <div
               className={dropdownSurfaceClassName}
-              style={{ ...dropdownSurfaceStyle, left: themePanelPos?.left ?? left + MENU_WIDTH + THEME_PANEL_GAP, top: themePanelPos?.top ?? top, width: THEME_PANEL_WIDTH }}
+              style={{ ...dropdownSurfaceStyle, left: themePanelPos?.left ?? left + MENU_WIDTH + SUBMENU_PANEL_GAP, top: themePanelPos?.top ?? top, width: SUBMENU_PANEL_WIDTH }}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}
               onContextMenu={(event) => event.preventDefault()}
-              onMouseEnter={() => {
-                cancelThemeMenuClose()
-                setThemeMenuOpen(true)
-              }}
-              onMouseLeave={scheduleThemeMenuClose}
+              onMouseEnter={() => openSubmenu('theme')}
+              onMouseLeave={scheduleSubmenuClose}
             >
               {themeOptions.map((option) => {
                 const active = option.id === currentTheme
@@ -397,6 +423,39 @@ export function MonacoEditorContextMenu({ x, y, selection, isReadOnly, canCommen
                   >
                     <span className="text-[color:var(--color-muted-foreground)]">{option.icon}</span>
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {active ? <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" /> : null}
+                  </button>
+                )
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
+      {submenuOpen === 'font'
+        ? createPortal(
+            <div
+              className={dropdownSurfaceClassName}
+              style={{ ...dropdownSurfaceStyle, left: fontPanelPos?.left ?? left + MENU_WIDTH + SUBMENU_PANEL_GAP, top: fontPanelPos?.top ?? top, width: SUBMENU_PANEL_WIDTH }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.preventDefault()}
+              onMouseEnter={() => openSubmenu('font')}
+              onMouseLeave={scheduleSubmenuClose}
+            >
+              {FONT_SIZE_OPTIONS.map((size) => {
+                const active = size === currentFontSize
+                return (
+                  <button
+                    key={size}
+                    type="button"
+                    className={['flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors', active ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]'].filter(Boolean).join(' ')}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      onFontSizeChange(size)
+                      onClose()
+                    }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{size}px</span>
                     {active ? <Check className="h-4 w-4 shrink-0 text-[color:var(--color-primary)]" /> : null}
                   </button>
                 )

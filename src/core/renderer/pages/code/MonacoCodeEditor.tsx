@@ -1,14 +1,18 @@
 import type { editor as MonacoEditor, Selection } from 'monaco-editor'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import type { TranscriptFileReference } from '../../../shared/types'
 import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../../lib/monacoEnvironment'
 import { MONO_FONT_STACK } from '../../lib/fonts'
+import { monacoLineHeightForFontSize, readMonacoEditorFontSizePreference, writeMonacoEditorFontSizePreference } from '../../lib/monacoFontPreference'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
+import { TranscriptReferenceHoverCard } from './TranscriptReferenceHoverCard'
 import { extractRelativeImportRanges, resolveImportCandidatePaths, resolveFilePathFromModelUri, resolveImportTarget } from './code.importLink'
 import { acquireMonacoModelCacheKey, getOrCreateMonacoModel, releaseMonacoModelCacheKey, toMonacoModelCacheKey } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
+import { useMonacoTranscriptGutter } from './useMonacoTranscriptGutter'
 
 export interface MonacoEditorScrollState {
   firstVisibleLine: number
@@ -54,7 +58,12 @@ interface MonacoCodeEditorProps {
   onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
   /** Ctrl + 右键时上抛坐标，由外层打开项目级通用右键卡片；不传时 Ctrl + 右键仍打开编辑器菜单。 */
   onRequestProjectContextMenu?: (x: number, y: number) => void
+  /** 转录文件引用：在行号右侧渲染 gutter 标记，点击打开转录内容抽屉。 */
+  transcriptReferences?: TranscriptFileReference[]
+  onOpenTranscriptReference?: (item: TranscriptFileReference) => void
 }
+
+const EMPTY_TRANSCRIPT_FILE_REFERENCES: TranscriptFileReference[] = []
 
 const REVEAL_HIGHLIGHT_DURATION_MS = 2200
 
@@ -144,7 +153,7 @@ interface EditorContextMenuSnapshot {
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor(
-  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu },
+  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu, transcriptReferences, onOpenTranscriptReference },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -169,6 +178,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const onFocusSearchRef = useRef(onFocusSearch)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
   const onCursorPositionChangeRef = useRef(onCursorPositionChange)
+  const onOpenTranscriptReferenceRef = useRef(onOpenTranscriptReference)
   filePathRef.current = filePath
   projectPathRef.current = projectPath
 
@@ -208,9 +218,24 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     setSearchWholeWord,
   } = useMonacoSearchWidget({ editorRef })
 
+  const transcriptGutter = useMonacoTranscriptGutter({
+    editorRef,
+    monacoRef,
+    references: transcriptReferences ?? EMPTY_TRANSCRIPT_FILE_REFERENCES,
+    onOpenReference: (item) => onOpenTranscriptReferenceRef.current?.(item),
+  })
+
   const [activeTheme, setActiveTheme] = useState<MonacoThemeName>(theme)
   const activeThemeRef = useRef(activeTheme)
+  // 字号偏好存 localStorage（见 monacoFontPreference.ts），跨会话生效于所有代码编辑器。
+  const [fontSize, setFontSize] = useState(() => readMonacoEditorFontSizePreference())
+  const fontSizeRef = useRef(fontSize)
+  fontSizeRef.current = fontSize
   const [editorContextMenu, setEditorContextMenu] = useState<EditorContextMenuSnapshot | null>(null)
+
+  const handleFontSizeChange = (nextFontSize: number) => {
+    setFontSize(nextFontSize)
+  }
 
   const runEditorContextMenuAction = (actionId: string) => {
     const editor = editorRef.current
@@ -340,6 +365,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     onCursorPositionChangeRef.current = onCursorPositionChange
   }, [onCursorPositionChange])
 
+  useEffect(() => {
+    onOpenTranscriptReferenceRef.current = onOpenTranscriptReference
+  }, [onOpenTranscriptReference])
+
   useImperativeHandle(
     ref,
     () => ({
@@ -423,8 +452,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         overflowWidgetsDomNode: getMonacoOverflowWidgetsContainer(),
         minimap: { enabled: false },
         fontFamily: MONO_FONT_STACK,
-        fontSize: 13,
-        lineHeight: 20,
+        fontSize: fontSizeRef.current,
+        lineHeight: monacoLineHeightForFontSize(fontSizeRef.current),
         tabSize: 2,
         scrollBeyondLastLine: false,
         smoothScrolling: true,
@@ -447,6 +476,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       })
       syncMonacoOverflowWidgetsTheme(activeThemeRef.current)
       editorRef.current = editor
+      transcriptGutter.syncEditorInstance(editor)
       activeModelKeyRef.current = initialKey
       flushPendingReveal()
 
@@ -707,6 +737,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editor.dispose()
         editorRef.current = null
       }
+      transcriptGutter.syncEditorInstance(null)
       // 模块缓存中的 Model 保留（撤销栈跨挂载不丢失），只释放本实例的引用计数。
       for (const key of Array.from(acquiredModelKeysRef.current)) {
         releaseModelCacheKey(key)
@@ -738,6 +769,15 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     if (!editor) return
     editor.updateOptions({ readOnly: isReadOnly })
   }, [isReadOnly])
+
+  // 字号变更：立即热更新编辑器并持久化到 localStorage；首次挂载时编辑器尚未
+  // 创建完成，初始字号已在 setup 内通过 fontSizeRef 应用。
+  useEffect(() => {
+    writeMonacoEditorFontSizePreference(fontSize)
+    const editor = editorRef.current
+    if (!editor) return
+    editor.updateOptions({ fontSize, lineHeight: monacoLineHeightForFontSize(fontSize) })
+  }, [fontSize])
 
   useEffect(() => {
     const monaco = monacoRef.current
@@ -786,6 +826,16 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
   return (
     <div className="relative h-full w-full">
+      {transcriptGutter.hover && (
+        <TranscriptReferenceHoverCard
+          hover={transcriptGutter.hover}
+          onMouseEnter={transcriptGutter.cancelHoverHide}
+          onOpenReference={(item) => {
+            transcriptGutter.cancelHoverHide()
+            onOpenTranscriptReferenceRef.current?.(item)
+          }}
+        />
+      )}
       {searchVisible && (
         <MonacoCodeEditorFindBar
           activeSearchMatchIndex={activeSearchMatchIndex}
@@ -822,6 +872,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           currentLineNumber={editorContextMenu.currentLineNumber}
           currentTheme={activeTheme}
           onThemeChange={handleThemeChange}
+          currentFontSize={fontSize}
+          onFontSizeChange={handleFontSizeChange}
           onAction={runEditorContextMenuAction}
           onGoToLine={runGoToLine}
           onClose={() => setEditorContextMenu(null)}

@@ -236,6 +236,7 @@ export function createTranscriptService(deps: TranscriptServiceDependencies): Tr
               relativePath: reference.relativePath,
               lineNumber: reference.lineNumber,
               column: reference.column,
+              label: reference.label,
             },
           })
         }

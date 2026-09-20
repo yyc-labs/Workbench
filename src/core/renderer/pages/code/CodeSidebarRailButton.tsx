@@ -10,18 +10,24 @@ type CodeSidebarRailButtonProps = {
   ariaLabel: string
   /** 拖拽进行中：用于高亮反馈，不改变点击语义 */
   resizing?: boolean
-  /** 长按进入宽度拖拽调节；长按后的松开不会触发普通点击（避免误折叠） */
+  /** 按住后拖动进入宽度调节；位移未超过阈值时松开仍视为普通点击（避免误触发拖拽） */
   onLongPress?: (event: React.PointerEvent<HTMLButtonElement>) => void
   longPressMs?: number
 }
 
 const DEFAULT_LONG_PRESS_MS = 380
+/** 位移小于该距离时不视为拖拽，松开后仍触发点击 */
+const DRAG_THRESHOLD_PX = 12
 
 export function CodeSidebarRailButton({ side, collapsed, onClick, className, ariaLabel, resizing = false, onLongPress, longPressMs = DEFAULT_LONG_PRESS_MS }: CodeSidebarRailButtonProps) {
   const Icon = side === 'left' ? (collapsed ? ChevronRight : ChevronLeft) : collapsed ? ChevronLeft : ChevronRight
 
   const longPressTimerRef = useRef<number | null>(null)
-  const didLongPressRef = useRef(false)
+  /** 长按计时已到，等待位移达到阈值后进入拖拽 */
+  const dragArmedRef = useRef(false)
+  /** 拖拽已实际开始：松开后的 click 需要被抑制 */
+  const didDragRef = useRef(false)
+  const pointerStartRef = useRef({ x: 0, y: 0 })
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
@@ -32,6 +38,9 @@ export function CodeSidebarRailButton({ side, collapsed, onClick, className, ari
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!onLongPress) return
+    pointerStartRef.current = { x: event.clientX, y: event.clientY }
+    dragArmedRef.current = false
+    didDragRef.current = false
     // 捕获指针：按下后即使指针移出按钮范围也不会触发 pointerleave 取消长按，
     // 让「按住即拖拽」更可靠地触发。
     try {
@@ -42,17 +51,29 @@ export function CodeSidebarRailButton({ side, collapsed, onClick, className, ari
     clearLongPressTimer()
     longPressTimerRef.current = window.setTimeout(() => {
       longPressTimerRef.current = null
-      didLongPressRef.current = true
-      onLongPress(event)
+      dragArmedRef.current = true
     }, longPressMs)
   }
 
+  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!dragArmedRef.current || didDragRef.current) return
+    const dx = event.clientX - pointerStartRef.current.x
+    const dy = event.clientY - pointerStartRef.current.y
+    // 位移达到阈值才真正进入拖拽，避免轻微抖动误触发
+    if (Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+      didDragRef.current = true
+      dragArmedRef.current = false
+      onLongPress(event)
+    }
+  }
+
   const handleClick = () => {
-    if (didLongPressRef.current) {
-      // 长按已进入拖拽，抑制紧随其后的 click，避免误折叠
-      didLongPressRef.current = false
+    if (didDragRef.current) {
+      // 拖拽已发生，抑制紧随其后的 click，避免误折叠
+      didDragRef.current = false
       return
     }
+    dragArmedRef.current = false
     onClick()
   }
 
@@ -68,6 +89,7 @@ export function CodeSidebarRailButton({ side, collapsed, onClick, className, ari
       style={{ touchAction: 'none' }}
       onClick={handleClick}
       onPointerDown={onLongPress ? handlePointerDown : undefined}
+      onPointerMove={onLongPress ? handlePointerMove : undefined}
       onPointerUp={onLongPress ? clearLongPressTimer : undefined}
       onPointerLeave={onLongPress ? clearLongPressTimer : undefined}
       aria-label={ariaLabel}

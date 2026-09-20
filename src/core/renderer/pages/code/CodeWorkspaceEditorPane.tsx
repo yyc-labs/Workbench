@@ -3,11 +3,10 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MONO_FONT_STACK } from '../../lib/fonts'
 import type { Components } from 'react-markdown'
-import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, MessageSquareText, RefreshCw, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, RefreshCw, X } from 'lucide-react'
 import type { ProjectFileNodeKind, ProjectFilePreviewKind, ProjectFileUnsupportedReason, TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { StructuredPreviewTableWidthControl, useStructuredPreviewTableWidth } from '../../components/StructuredPreviewTableWidth'
-import { Tooltip } from '../../components/ui/tooltip'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
@@ -29,6 +28,9 @@ import { FilePdfViewer } from './viewers/FilePdfViewer'
 import { FileUnsupportedViewer } from './viewers/FileUnsupportedViewer'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
+// mdc 文件的 Agent 规则元数据卡片已结构化展示这三个键。
+const RULE_FRONTMATTER_KEYS = new Set(['description', 'globs', 'alwaysapply'])
 
 type MarkdownStructuredPreviewState = {
   kind: 'table' | 'box-flow' | 'vertical-flow' | 'box-diagram' | 'mermaid' | 'architecture-diagram'
@@ -112,7 +114,7 @@ type CodeWorkspaceEditorPaneProps = {
   onSetMarkdownPreviewMode: React.Dispatch<React.SetStateAction<MarkdownPreviewMode>>
   onSetPreviewSearchQuery: React.Dispatch<React.SetStateAction<string>>
   onOpenSmartEmptyFile: (relativePath: string) => void
-  onOpenTranscriptReference: (item: TranscriptFileReference) => void
+  onOpenTranscriptContentReference: (item: TranscriptFileReference) => void
   onOpenFile?: (relativePath: string) => void
   onRequestProjectContextMenu?: (x: number, y: number) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
@@ -171,7 +173,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   onSetMarkdownPreviewMode,
   onSetPreviewSearchQuery,
   onOpenSmartEmptyFile,
-  onOpenTranscriptReference,
+  onOpenTranscriptContentReference,
   onOpenFile,
   onRequestProjectContextMenu,
   parsedMarkdownDoc,
@@ -195,6 +197,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   const codePreviewCapture = useScrollableContentCapture()
   const [structuredPreviewTableWidth, setStructuredPreviewTableWidth] = useStructuredPreviewTableWidth()
   const codePreviewLanguageLabel = codePreview ? formatCodeLanguageLabel(codePreview.language, t) : ''
+  // mdc 规则卡片已结构化展示 description/globs/alwaysApply，统一元数据列表不再重复这三个键。
+  const frontmatterMetaEntries = parsedMarkdownDoc ? (isMdcFile ? parsedMarkdownDoc.frontmatterEntries.filter((item) => !RULE_FRONTMATTER_KEYS.has(item.key.toLowerCase())) : parsedMarkdownDoc.frontmatterEntries) : []
 
   const structuredPreviewCaptureLabel =
     structuredPreviewCapture.status === 'running'
@@ -250,55 +254,6 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         <div className="pointer-events-none absolute right-3 top-2 z-20 flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-background)]/85 px-2.5 py-1 text-[11px] text-[color:var(--color-muted-foreground)] backdrop-blur-sm">
           <RefreshCw className="h-3 w-3 animate-spin" />
           {t('codeWorkspace.readingFile')}
-        </div>
-      )}
-      {transcriptReferences.length > 0 && (
-        <div className="mb-2 flex shrink-0 flex-nowrap items-center gap-2 overflow-hidden rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background)]/78 px-3 py-2">
-          <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-[color:var(--color-muted-foreground)]">
-            <MessageSquareText className="h-3.5 w-3.5" />
-            {t('codeWorkspace.transcriptRefs', { count: transcriptReferences.length })}
-          </span>
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
-            {transcriptReferences.slice(0, 3).map((item) => (
-              <button
-                key={`${item.transcriptId}:${item.reference.id}`}
-                type="button"
-                className="inline-flex max-w-[240px] items-center gap-1.5 truncate rounded-full border border-[color:var(--color-border)] px-2.5 py-1 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-                onClick={() => onOpenTranscriptReference(item)}
-                title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
-              >
-                <span className="truncate">{item.transcriptTitle}</span>
-                <span className="shrink-0 text-[color:var(--color-muted-foreground)]">:{item.reference.lineNumber ?? 1}</span>
-              </button>
-            ))}
-            {transcriptReferences.length > 3 && (
-              <Tooltip
-                side="bottom"
-                align="end"
-                interactive
-                delayMs={120}
-                className="inline-flex w-11 shrink-0 justify-center"
-                contentClassName="p-1.5"
-                content={
-                  <div className="flex max-h-[60vh] min-w-[64px] flex-col gap-0.5 overflow-y-auto">
-                    {transcriptReferences.slice(3).map((item) => (
-                      <button
-                        key={`${item.transcriptId}:${item.reference.id}`}
-                        type="button"
-                        className="rounded-md px-2 py-1 text-center text-[12px] text-[color:var(--color-popover-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-                        onClick={() => onOpenTranscriptReference(item)}
-                        title={`${item.transcriptTitle} · ${item.reference.relativePath}:${item.reference.lineNumber ?? 1}`}
-                      >
-                        {item.reference.lineNumber ?? 1}
-                      </button>
-                    ))}
-                  </div>
-                }
-              >
-                <span className="shrink-0 text-[11px] text-[color:var(--color-muted-foreground)]">…+{transcriptReferences.length - 3}</span>
-              </Tooltip>
-            )}
-          </div>
         </div>
       )}
       {isMarkdownFile && (
@@ -381,6 +336,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               value={editorValue}
               language={activeLanguage || 'plaintext'}
               theme={monacoTheme}
+              transcriptReferences={transcriptReferences}
+              onOpenTranscriptReference={onOpenTranscriptContentReference}
               onOpenFile={onOpenFile}
               onPasteImage={handlePasteImage}
               onRequestProjectContextMenu={onRequestProjectContextMenu}
@@ -467,29 +424,14 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                   </div>
                 </section>
               )}
-              {!isMdcFile && parsedMarkdownDoc?.markdownMetadata && (
+              {frontmatterMetaEntries.length > 0 && (
                 <section className="code-mdc-meta-card">
                   <h3 className="code-mdc-meta-title">{t('codeWorkspace.documentMetadata')}</h3>
                   <div className="code-mdc-meta-grid">
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataTitle')}</span>
-                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.title?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
-                    </div>
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
-                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.markdownMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
-                    </div>
-                  </div>
-                </section>
-              )}
-              {parsedMarkdownDoc && parsedMarkdownDoc.customMetadata.length > 0 && (
-                <section className="code-mdc-meta-card">
-                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.customMetadata')}</h3>
-                  <div className="code-mdc-meta-grid">
-                    {parsedMarkdownDoc.customMetadata.map((item) => (
+                    {frontmatterMetaEntries.map((item) => (
                       <div className="code-mdc-meta-row" key={item.key}>
                         <span className="code-mdc-meta-key">{item.key}</span>
-                        <span className="code-mdc-meta-value code-mdc-meta-value--mono">{item.value}</span>
+                        <span className="code-mdc-meta-value code-mdc-meta-value--mono">{item.value || t('codeWorkspace.metadataNotAvailable')}</span>
                       </div>
                     ))}
                   </div>

@@ -29,6 +29,7 @@ import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import { appendProjectCodeTab, CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, normalizeProjectCodeSession } from './useProjectCodeSession'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { useTranscriptFileReferences } from './useTranscriptFileReferences'
+import { TranscriptContentDrawer, type TranscriptContentDrawerTarget } from './TranscriptContentDrawer'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
@@ -764,14 +765,25 @@ export function CodeWorkspacePanel({
     navigate(location.pathname, { replace: true, state: null })
   }, [location.pathname, location.state, navigate, openContentSearchMatch])
 
-  const handleOpenTranscriptReference = useCallback(
-    (item: TranscriptFileReference) => {
+  const [transcriptContentDrawer, setTranscriptContentDrawer] = useState<TranscriptContentDrawerTarget | null>(null)
+
+  const handleOpenTranscriptContentReference = useCallback((item: TranscriptFileReference) => {
+    setTranscriptContentDrawer({
+      transcriptId: item.transcriptId,
+      referenceId: item.reference.id,
+      transcriptTitle: item.transcriptTitle,
+    })
+  }, [])
+
+  const handleOpenTranscriptPageReference = useCallback(
+    (target: TranscriptContentDrawerTarget) => {
+      setTranscriptContentDrawer(null)
       void openTranscript({
         projectId,
-        transcriptId: item.transcriptId,
+        transcriptId: target.transcriptId,
         initialMode: 'preview',
       }).then(() => {
-        openTranscriptReference(item.transcriptId, item.reference.id)
+        openTranscriptReference(target.transcriptId, target.referenceId)
       })
       onOpenTranscript?.()
     },
@@ -1038,7 +1050,7 @@ export function CodeWorkspacePanel({
                 onSetMarkdownPreviewMode={setMarkdownPreviewMode}
                 onSetPreviewSearchQuery={setPreviewSearchQuery}
                 onOpenSmartEmptyFile={handleOpenSmartEmptyFile}
-                onOpenTranscriptReference={handleOpenTranscriptReference}
+                onOpenTranscriptContentReference={handleOpenTranscriptContentReference}
                 onOpenFile={openFileWithTreeLocate}
                 onRequestProjectContextMenu={onRequestProjectContextMenu}
                 parsedMarkdownDoc={parsedMarkdownDoc}
@@ -1061,6 +1073,7 @@ export function CodeWorkspacePanel({
           )}
         </div>
       </div>
+      <TranscriptContentDrawer open={Boolean(transcriptContentDrawer)} target={transcriptContentDrawer} projectId={projectId} projectPath={projectPath} onClose={() => setTranscriptContentDrawer(null)} onOpenInTranscriptPage={handleOpenTranscriptPageReference} />
     </div>
   )
 }
