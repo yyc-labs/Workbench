@@ -228,6 +228,16 @@ export function useCodeWorkspaceRestoreState({
     const revealKey = `${activeRelativePath}:${persistedCursor.lineNumber}:${persistedCursor.column}:${isShowingEditor ? 'editor' : 'preview'}`
     if (lastAutoRevealedCursorKeyRef.current === revealKey) return
 
+    // 编辑器当前光标已与持久化位置一致时跳过 reveal：该位置通常来自用户刚刚移动光标
+    // 后写回的持久化回声，再执行 setPosition 会折叠已有选区，导致选中高亮丢失。
+    if (isShowingEditor) {
+      const currentPosition = editorRef.current?.getPosition()
+      if (currentPosition && currentPosition.lineNumber === persistedCursor.lineNumber && currentPosition.column === persistedCursor.column) {
+        lastAutoRevealedCursorKeyRef.current = revealKey
+        return
+      }
+    }
+
     const handled = isShowingEditor
       ? revealInEditor({
           relativePath: activeRelativePath,
@@ -241,7 +251,7 @@ export function useCodeWorkspaceRestoreState({
     if (handled) {
       lastAutoRevealedCursorKeyRef.current = revealKey
     }
-  }, [activeRelativePath, isShowingEditor, isShowingPreview, isRestoringCodeSessionRef, persistedProjectCodeSession?.cursorPositions, revealInEditor, revealPreviewPosition])
+  }, [activeRelativePath, editorRef, isShowingEditor, isShowingPreview, isRestoringCodeSessionRef, persistedProjectCodeSession?.cursorPositions, revealInEditor, revealPreviewPosition])
 
   return {
     handleOpenedCodeFile,

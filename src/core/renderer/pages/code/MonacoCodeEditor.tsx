@@ -23,6 +23,7 @@ export interface MonacoEditorScrollState {
 
 export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
+  getPosition: () => { lineNumber: number; column: number } | null
   setScrollTop: (scrollTop: number) => void
   setScrollTopForLine: (lineNumber: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
@@ -382,6 +383,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           scrollHeight: editor.getScrollHeight(),
           viewportHeight: Math.max(1, layout.height - layout.horizontalScrollbarHeight),
         }
+      },
+      getPosition: () => {
+        const position = editorRef.current?.getPosition()
+        return position ? { lineNumber: position.lineNumber, column: position.column } : null
       },
       setScrollTop: (scrollTop: number) => {
         const editor = editorRef.current
