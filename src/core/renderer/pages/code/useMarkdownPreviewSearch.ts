@@ -1,22 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 type PreviewSearchMatch = {
-  mark: HTMLElement
+  range: Range
+}
+
+const PREVIEW_SEARCH_HIGHLIGHT_NAME = 'code-markdown-search-highlight'
+const PREVIEW_SEARCH_ACTIVE_HIGHLIGHT_NAME = 'code-markdown-search-highlight-active'
+
+type SearchHighlightRegistry = {
+  set: (name: string, highlight: unknown) => void
+  delete: (name: string) => void
+}
+
+type SearchHighlightConstructor = new (...ranges: Range[]) => unknown
+
+function getSearchHighlightApi(): { registry: SearchHighlightRegistry; Highlight: SearchHighlightConstructor } | null {
+  const css = (globalThis as typeof globalThis & { CSS?: { highlights?: SearchHighlightRegistry } }).CSS
+  const Highlight = (globalThis as typeof globalThis & { Highlight?: SearchHighlightConstructor }).Highlight
+  if (!css?.highlights || !Highlight) return null
+  return { registry: css.highlights, Highlight }
 }
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function clearPreviewSearchMarks(container: HTMLElement): void {
-  const marks = container.querySelectorAll('mark.code-markdown-search-highlight')
-  marks.forEach((markNode) => {
-    const parent = markNode.parentNode
-    if (!parent) return
-    const text = document.createTextNode(markNode.textContent ?? '')
-    parent.replaceChild(text, markNode)
-    parent.normalize()
-  })
+function clearPreviewSearchHighlights(): void {
+  const api = getSearchHighlightApi()
+  if (!api) return
+  api.registry.delete(PREVIEW_SEARCH_HIGHLIGHT_NAME)
+  api.registry.delete(PREVIEW_SEARCH_ACTIVE_HIGHLIGHT_NAME)
 }
 
 function computePreviewSearchMatches(container: HTMLElement, query: string): PreviewSearchMatch[] {
@@ -26,24 +39,23 @@ function computePreviewSearchMatches(container: HTMLElement, query: string): Pre
   const escapedQuery = escapeRegExp(normalizedQuery)
   const matcher = new RegExp(escapedQuery, 'gi')
   const textNodes: Text[] = []
-  const walker = document.createTreeWalker(
-    container,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode(node) {
-        if (!node.nodeValue || node.nodeValue.trim().length === 0) {
-          return NodeFilter.FILTER_REJECT
-        }
-        if (!(node.parentElement instanceof HTMLElement)) {
-          return NodeFilter.FILTER_ACCEPT
-        }
-        if (node.parentElement.closest('mark.code-markdown-search-highlight')) {
-          return NodeFilter.FILTER_REJECT
-        }
-        return NodeFilter.FILTER_ACCEPT
-      },
-    }
-  )
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (!node.nodeValue || node.nodeValue.trim().length === 0) {
+        return NodeFilter.FILTER_REJECT
+      }
+      const parentElement = node.parentElement
+      if (!parentElement) {
+        return NodeFilter.FILTER_REJECT
+      }
+      // Mermaid renders its labels as SVG text nodes. Search ranges must not
+      // cross into that tree because SVG text is not regular page content.
+      if (parentElement.closest('svg')) {
+        return NodeFilter.FILTER_REJECT
+      }
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
 
   while (walker.nextNode()) {
     if (walker.currentNode instanceof Text) {
@@ -55,10 +67,7 @@ function computePreviewSearchMatches(container: HTMLElement, query: string): Pre
   textNodes.forEach((textNode) => {
     const value = textNode.nodeValue ?? ''
     matcher.lastIndex = 0
-    let currentOffset = 0
-    let remainderNode: Text = textNode
-
-    while (currentOffset <= value.length) {
+    while (matcher.lastIndex <= value.length) {
       const next = matcher.exec(value)
       if (!next) break
       const rawMatched = next[0] ?? ''
@@ -69,41 +78,34 @@ function computePreviewSearchMatches(container: HTMLElement, query: string): Pre
 
       const start = next.index
       const end = start + rawMatched.length
-      const relativeStart = start - currentOffset
-      const relativeEnd = end - currentOffset
+      if (end <= start || end > value.length) continue
 
-      if (relativeStart < 0 || relativeEnd <= relativeStart || relativeStart > remainderNode.length) {
-        currentOffset = end
-        continue
-      }
-
-      if (relativeStart > 0) {
-        remainderNode = remainderNode.splitText(relativeStart)
-      }
-
-      const tailLength = relativeEnd - relativeStart
-      const tailNode = remainderNode.splitText(tailLength)
-      const matchedNode = remainderNode
-      remainderNode = tailNode
-
-      const markNode = document.createElement('mark')
-      markNode.className = 'code-markdown-search-highlight'
-      markNode.textContent = matchedNode.nodeValue ?? ''
-      matchedNode.parentNode?.replaceChild(markNode, matchedNode)
-
-      matches.push({ mark: markNode })
-      currentOffset = end
+      const range = document.createRange()
+      range.setStart(textNode, start)
+      range.setEnd(textNode, end)
+      matches.push({ range })
     }
   })
 
   return matches
 }
 
-export function useMarkdownPreviewSearch(
-  previewScrollRef: React.RefObject<HTMLDivElement>,
-  shouldHandleFindInPreview: boolean,
-  markdownPreviewContent: string
-) {
+function applyPreviewSearchHighlights(matches: PreviewSearchMatch[], activeIndex: number): void {
+  const api = getSearchHighlightApi()
+  if (!api) return
+
+  const ranges = matches.map((match) => match.range)
+  api.registry.set(PREVIEW_SEARCH_HIGHLIGHT_NAME, new api.Highlight(...ranges))
+
+  const activeRange = matches[activeIndex]?.range
+  if (activeRange) {
+    api.registry.set(PREVIEW_SEARCH_ACTIVE_HIGHLIGHT_NAME, new api.Highlight(activeRange))
+  } else {
+    api.registry.delete(PREVIEW_SEARCH_ACTIVE_HIGHLIGHT_NAME)
+  }
+}
+
+export function useMarkdownPreviewSearch(previewScrollRef: React.RefObject<HTMLDivElement>, shouldHandleFindInPreview: boolean, markdownPreviewContent: string) {
   const [previewSearchVisible, setPreviewSearchVisible] = useState(false)
   const [previewSearchQuery, setPreviewSearchQuery] = useState('')
   const [activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex] = useState(0)
@@ -111,15 +113,18 @@ export function useMarkdownPreviewSearch(
   const previewSearchInputRef = useRef<HTMLInputElement | null>(null)
 
   const closePreviewSearch = useCallback(() => {
-    const previewPane = previewScrollRef.current
-    if (previewPane) {
-      clearPreviewSearchMarks(previewPane)
-    }
+    clearPreviewSearchHighlights()
     setPreviewSearchVisible(false)
     setPreviewSearchQuery('')
     setPreviewSearchMatches([])
     setActivePreviewSearchMatchIndex(0)
-  }, [previewScrollRef])
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      clearPreviewSearchHighlights()
+    }
+  }, [])
 
   const openPreviewSearch = useCallback(() => {
     if (!shouldHandleFindInPreview) return
@@ -132,20 +137,18 @@ export function useMarkdownPreviewSearch(
     }, 0)
   }, [shouldHandleFindInPreview])
 
-  const goToPreviewSearchMatchByIndex = useCallback((index: number) => {
-    if (previewSearchMatches.length === 0) return
-    const normalizedIndex = ((index % previewSearchMatches.length) + previewSearchMatches.length) % previewSearchMatches.length
-    const match = previewSearchMatches[normalizedIndex]
-    setActivePreviewSearchMatchIndex(normalizedIndex)
-    previewSearchMatches.forEach((item, itemIndex) => {
-      if (itemIndex === normalizedIndex) {
-        item.mark.classList.add('is-active')
-      } else {
-        item.mark.classList.remove('is-active')
-      }
-    })
-    match.mark.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
-  }, [previewSearchMatches])
+  const goToPreviewSearchMatchByIndex = useCallback(
+    (index: number) => {
+      if (previewSearchMatches.length === 0) return
+      const normalizedIndex = ((index % previewSearchMatches.length) + previewSearchMatches.length) % previewSearchMatches.length
+      const match = previewSearchMatches[normalizedIndex]
+      setActivePreviewSearchMatchIndex(normalizedIndex)
+      applyPreviewSearchHighlights(previewSearchMatches, normalizedIndex)
+      const target = match.range.startContainer.parentElement
+      target?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+    },
+    [previewSearchMatches],
+  )
 
   const goToNextPreviewSearchMatch = useCallback(() => {
     if (previewSearchMatches.length === 0) return
@@ -169,7 +172,7 @@ export function useMarkdownPreviewSearch(
     const previewPane = previewScrollRef.current
     if (!previewPane) return
 
-    clearPreviewSearchMarks(previewPane)
+    clearPreviewSearchHighlights()
     const nextMatches = computePreviewSearchMatches(previewPane, previewSearchQuery)
     setPreviewSearchMatches(nextMatches)
 
@@ -190,10 +193,9 @@ export function useMarkdownPreviewSearch(
       return
     }
     const match = previewSearchMatches[normalizedIndex]
-    previewSearchMatches.forEach((item, itemIndex) => {
-      item.mark.classList.toggle('is-active', itemIndex === normalizedIndex)
-    })
-    match.mark.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
+    applyPreviewSearchHighlights(previewSearchMatches, normalizedIndex)
+    const target = match.range.startContainer.parentElement
+    target?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' })
   }, [activePreviewSearchMatchIndex, previewSearchMatches, previewSearchVisible])
 
   return {

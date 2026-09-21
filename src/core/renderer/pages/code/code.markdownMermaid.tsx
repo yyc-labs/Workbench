@@ -15,12 +15,25 @@ type MermaidModule = typeof import('mermaid')
 
 let mermaidModulePromise: Promise<MermaidModule> | null = null
 const mermaidSvgMarkupCache = new Map<string, Promise<string>>()
+let mermaidRenderQueue: Promise<void> = Promise.resolve()
+let mermaidRenderSequence = 0
 
 async function loadMermaid(): Promise<MermaidModule> {
   if (!mermaidModulePromise) {
     mermaidModulePromise = import('mermaid')
   }
   return mermaidModulePromise
+}
+
+function cleanupMermaidRenderArtifacts(id: string): void {
+  if (typeof document === 'undefined') return
+
+  // Mermaid creates temporary nodes using both the requested id and d<id>.
+  // Failed parses do not remove them, leaving the red "Syntax error in text"
+  // SVG attached to document.body.
+  for (const artifactId of [id, `d${id}`]) {
+    document.getElementById(artifactId)?.remove()
+  }
 }
 
 export async function renderMermaidDiagram(id: string, codeText: string, themeMode: 'light' | 'dark'): Promise<string> {
@@ -37,13 +50,29 @@ export async function renderMermaidDiagram(id: string, codeText: string, themeMo
 }
 
 async function renderMermaidDiagramUncached(id: string, codeText: string, themeMode: 'light' | 'dark'): Promise<string> {
-  const mermaidModule = await loadMermaid()
-  const mermaid = mermaidModule.default
+  // Mermaid keeps parser and DOM state in a module-level singleton. Serialize
+  // initialize/render pairs so opening or searching a document with multiple
+  // diagrams cannot interleave two renders and produce a false syntax error.
+  const renderTask = mermaidRenderQueue.then(async () => {
+    const mermaidModule = await loadMermaid()
+    const mermaid = mermaidModule.default
+    const renderId = `${id}-${++mermaidRenderSequence}`
 
-  mermaid.initialize(createMermaidRenderConfig(themeMode))
+    mermaid.initialize(createMermaidRenderConfig(themeMode))
 
-  const { svg } = await mermaid.render(id, codeText)
-  return sanitizeMermaidSvgMarkup(svg)
+    try {
+      const { svg } = await mermaid.render(renderId, codeText)
+      return sanitizeMermaidSvgMarkup(svg)
+    } catch (error) {
+      cleanupMermaidRenderArtifacts(renderId)
+      throw error
+    }
+  })
+  mermaidRenderQueue = renderTask.then(
+    () => undefined,
+    () => undefined,
+  )
+  return renderTask
 }
 
 type MermaidBlockProps = {
@@ -74,6 +103,7 @@ export function MermaidBlock({ codeText, enableInlineZoom, onStructuredBlockClic
   const zoomRef = useRef(1)
   const lastFitZoomRef = useRef(1)
   const offsetRef = useRef({ x: 0, y: 0 })
+  const lastSuccessfulRenderKeyRef = useRef<string | null>(null)
   const [svgMarkup, setSvgMarkup] = useState<string>('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isRendering, setIsRendering] = useState(false)
@@ -97,6 +127,7 @@ export function MermaidBlock({ codeText, enableInlineZoom, onStructuredBlockClic
 
   useEffect(() => {
     let cancelled = false
+    const renderKey = `${themeMode}\u0000${codeText}`
 
     setErrorMessage(null)
     setIsRendering(true)
@@ -105,11 +136,17 @@ export function MermaidBlock({ codeText, enableInlineZoom, onStructuredBlockClic
       .then((svg) => {
         if (cancelled) return
         setSvgMarkup(svg)
+        lastSuccessfulRenderKeyRef.current = renderKey
         setErrorMessage(null)
         setIsRendering(false)
       })
       .catch((error: unknown) => {
         if (cancelled) return
+        if (lastSuccessfulRenderKeyRef.current === renderKey) {
+          setErrorMessage(null)
+          setIsRendering(false)
+          return
+        }
         const message = error instanceof Error ? error.message : t('codeMarkdown.unknownRenderError')
         setSvgMarkup('')
         setErrorMessage(message)

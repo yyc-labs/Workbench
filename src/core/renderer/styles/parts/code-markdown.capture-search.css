@@ -142,16 +142,14 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
   min-width: max-content !important;
 }
 
-.code-markdown-search-highlight {
-  border-radius: 4px;
-  padding: 0 1px;
+::highlight(code-markdown-search-highlight) {
   background: color-mix(in srgb, var(--color-warning) 28%, transparent);
   color: inherit;
 }
 
-.code-markdown-search-highlight.is-active {
+::highlight(code-markdown-search-highlight-active) {
   background: color-mix(in srgb, var(--color-primary) 28%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent);
+  color: inherit;
 }
 
 .code-markdown-source-reveal {
