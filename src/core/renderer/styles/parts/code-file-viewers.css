@@ -191,6 +191,24 @@
   display: none;
 }
 
+/* 元数据就绪前的加载占位：由 frame 居中，避免 video 以默认尺寸先渲染造成跳动。 */
+.code-media-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--color-muted-foreground);
+}
+
+@keyframes code-media-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .code-file-viewer-media {
   max-width: 100%;
   max-height: 100%;
@@ -199,6 +217,7 @@
   background: var(--color-card);
   box-shadow: var(--shadow-popover);
   cursor: pointer;
+  animation: code-media-fade-in 200ms var(--spring);
 }
 
 /* 媒体控制条：popover 质感悬浮层，扁平图标按钮 + token 化进度条。 */

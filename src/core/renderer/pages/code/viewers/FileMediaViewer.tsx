@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
-import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { Loader2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { useI18n } from '../../../i18n'
 import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
@@ -115,26 +115,48 @@ export function FileMediaViewer({ dataUrl, kind, projectPath, relativePath }: Fi
   const { t } = useI18n()
   const mediaRef = useRef<HTMLMediaElement | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     let createdUrl: string | null = null
+    let probe: HTMLVideoElement | null = null
+    const handleProbeReady = () => {
+      if (active) setReady(true)
+    }
     try {
       const { blobUrl: nextUrl } = decodeDataUrlToBlobUrl(dataUrl)
       createdUrl = nextUrl
       if (active) {
         setBlobUrl(nextUrl)
         setError(null)
+        if (kind === 'video') {
+          // 先用离屏探针读取元数据，拿到真实尺寸后再挂载 video 容器，避免 300x150 默认占位导致 UI 跳动。
+          setReady(false)
+          probe = document.createElement('video')
+          probe.preload = 'metadata'
+          probe.muted = true
+          probe.addEventListener('loadeddata', handleProbeReady)
+          probe.src = nextUrl
+        } else {
+          setReady(true)
+        }
       }
     } catch (err) {
       if (active) {
         setBlobUrl(null)
+        setReady(false)
         setError(t(kind === 'video' ? 'codeWorkspace.videoNotPlayable' : 'codeWorkspace.audioNotPlayable'))
       }
     }
     return () => {
       active = false
+      if (probe) {
+        probe.removeEventListener('loadeddata', handleProbeReady)
+        probe.removeAttribute('src')
+        probe.load()
+      }
       if (createdUrl) URL.revokeObjectURL(createdUrl)
       setBlobUrl(null)
     }
@@ -152,7 +174,12 @@ export function FileMediaViewer({ dataUrl, kind, projectPath, relativePath }: Fi
   return (
     <FileViewerShell title={relativePath} actions={<FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />}>
       {error ? <div className="code-file-viewer-error">{error}</div> : null}
-      {!error && blobUrl ? (
+      {!error && blobUrl && kind === 'video' && !ready ? (
+        <div className="code-media-loading">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </div>
+      ) : null}
+      {!error && blobUrl && ready ? (
         <div className={`code-file-viewer-media-shell${kind === 'audio' ? ' is-audio' : ''}`}>
           {kind === 'video' ? (
             <video
