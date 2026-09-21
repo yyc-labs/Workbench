@@ -272,11 +272,8 @@ export function CodeWorkspacePanel({
   })
   const activeLanguage = activeFile?.language ?? inferLanguageFromRelativePath(activeRelativePath ?? '')
   const activeFileSize = activeFile?.size ?? 0
-  const { previewSearchVisible, previewSearchQuery, setPreviewSearchQuery, activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex, previewSearchMatches, previewSearchInputRef, closePreviewSearch, openPreviewSearch, goToNextPreviewSearchMatch, goToPreviousPreviewSearchMatch } = useMarkdownPreviewSearch(
-    previewScrollRef,
-    shouldHandleFindInPreview,
-    markdownPreviewContent,
-  )
+  const { previewSearchVisible, previewSearchQuery, setPreviewSearchQuery, cyclePreviewSearchHistory, activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex, previewSearchMatches, previewSearchInputRef, closePreviewSearch, openPreviewSearch, goToNextPreviewSearchMatch, goToPreviousPreviewSearchMatch } =
+    useMarkdownPreviewSearch(previewScrollRef, shouldHandleFindInPreview, markdownPreviewContent)
   const excludedPaths = useMemo(() => new Set(excludedPathKinds.keys()), [excludedPathKinds])
   const { codeFileDrawerState, cursorPositionsByPath, isRestoringCodeSessionRef, openTabPaths, setCodeFileDrawerState, setCursorPositionsByPath, setOpenTabPaths, visibleOpenTabs } = useProjectCodeSessionState({
     projectId,
@@ -1054,6 +1051,7 @@ export function CodeWorkspacePanel({
                 onHandleSave={handleSaveFromEditor}
                 onPreviewScroll={handlePreviewScroll}
                 onSetActivePreviewSearchMatchIndex={setActivePreviewSearchMatchIndex}
+                onCyclePreviewSearchHistory={cyclePreviewSearchHistory}
                 onSetCursorPosition={handleEditorCursorPositionChange}
                 onSetMarkdownPreviewMode={setMarkdownPreviewMode}
                 onSetPreviewSearchQuery={setPreviewSearchQuery}

@@ -110,9 +110,10 @@ type CodeWorkspaceEditorPaneProps = {
   onHandleSave: () => void
   onPreviewScroll: () => void
   onSetActivePreviewSearchMatchIndex: React.Dispatch<React.SetStateAction<number>>
+  onCyclePreviewSearchHistory: (direction: 'older' | 'newer') => void
   onSetCursorPosition: (position: { lineNumber: number; column: number }) => void
   onSetMarkdownPreviewMode: React.Dispatch<React.SetStateAction<MarkdownPreviewMode>>
-  onSetPreviewSearchQuery: React.Dispatch<React.SetStateAction<string>>
+  onSetPreviewSearchQuery: (query: string) => void
   onOpenSmartEmptyFile: (relativePath: string) => void
   onOpenTranscriptContentReference: (item: TranscriptFileReference) => void
   onOpenFile?: (relativePath: string) => void
@@ -169,6 +170,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   onHandleSave,
   onPreviewScroll,
   onSetActivePreviewSearchMatchIndex,
+  onCyclePreviewSearchHistory,
   onSetCursorPosition,
   onSetMarkdownPreviewMode,
   onSetPreviewSearchQuery,
@@ -351,7 +353,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
         </div>
 
         {(effectiveMarkdownPreviewMode === 'preview' || effectiveMarkdownPreviewMode === 'split') && (
-          <div ref={previewScrollRef} className="code-editor-pane code-editor-pane--preview code-markdown-preview-scroll-root" onScroll={onPreviewScroll}>
+          <div className="code-editor-preview-shell">
             {previewSearchVisible && effectiveMarkdownPreviewMode === 'preview' && (
               <div className="code-editor-findbar code-editor-findbar--preview">
                 <div className="code-editor-findbar-row">
@@ -367,6 +369,16 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                     className="code-editor-findbar-input"
                     spellCheck={false}
                     onKeyDown={(event) => {
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault()
+                        onCyclePreviewSearchHistory('older')
+                        return
+                      }
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault()
+                        onCyclePreviewSearchHistory('newer')
+                        return
+                      }
                       if (event.key === 'Enter' && event.shiftKey) {
                         event.preventDefault()
                         onGoToPreviousPreviewSearchMatch()
@@ -396,49 +408,51 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
                 </div>
               </div>
             )}
-            <article className="code-markdown-content code-markdown-content--viewport-scroll code-markdown-content--performance">
-              {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
-                <section className="code-mdc-meta-card">
-                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.agentRuleMetadata')}</h3>
-                  <div className="code-mdc-meta-grid">
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataType')}</span>
-                      <span className="code-mdc-meta-value">
-                        <span className="code-mdc-meta-badge">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
-                      </span>
-                    </div>
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataAlwaysApply')}</span>
-                      <span className="code-mdc-meta-value">
-                        <span className="code-mdc-meta-badge code-mdc-meta-badge--boolean">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
-                      </span>
-                    </div>
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
-                      <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
-                    </div>
-                    <div className="code-mdc-meta-row">
-                      <span className="code-mdc-meta-key">{t('codeWorkspace.metadataGlobs')}</span>
-                      <span className="code-mdc-meta-value code-mdc-meta-value--mono">{parsedMarkdownDoc.ruleMetadata.globs.length > 0 ? parsedMarkdownDoc.ruleMetadata.globs.join(', ') : t('codeWorkspace.metadataNotAvailable')}</span>
-                    </div>
-                  </div>
-                </section>
-              )}
-              {frontmatterMetaEntries.length > 0 && (
-                <section className="code-mdc-meta-card">
-                  <h3 className="code-mdc-meta-title">{t('codeWorkspace.documentMetadata')}</h3>
-                  <div className="code-mdc-meta-grid">
-                    {frontmatterMetaEntries.map((item) => (
-                      <div className="code-mdc-meta-row" key={item.key}>
-                        <span className="code-mdc-meta-key">{item.key}</span>
-                        <span className="code-mdc-meta-value code-mdc-meta-value--mono">{item.value || t('codeWorkspace.metadataNotAvailable')}</span>
+            <div ref={previewScrollRef} className="code-editor-pane code-editor-pane--preview code-markdown-preview-scroll-root" onScroll={onPreviewScroll}>
+              <article className="code-markdown-content code-markdown-content--viewport-scroll code-markdown-content--performance">
+                {isMdcFile && parsedMarkdownDoc?.ruleMetadata && (
+                  <section className="code-mdc-meta-card">
+                    <h3 className="code-mdc-meta-title">{t('codeWorkspace.agentRuleMetadata')}</h3>
+                    <div className="code-mdc-meta-grid">
+                      <div className="code-mdc-meta-row">
+                        <span className="code-mdc-meta-key">{t('codeWorkspace.metadataType')}</span>
+                        <span className="code-mdc-meta-value">
+                          <span className="code-mdc-meta-badge">{parsedMarkdownDoc.ruleMetadata.ruleType}</span>
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-              <MarkdownPreviewSurface components={markdownComponents} content={markdownPreviewContent} previewRootRef={previewRootRef} />
-            </article>
+                      <div className="code-mdc-meta-row">
+                        <span className="code-mdc-meta-key">{t('codeWorkspace.metadataAlwaysApply')}</span>
+                        <span className="code-mdc-meta-value">
+                          <span className="code-mdc-meta-badge code-mdc-meta-badge--boolean">{parsedMarkdownDoc.ruleMetadata.alwaysApply ? 'true' : 'false'}</span>
+                        </span>
+                      </div>
+                      <div className="code-mdc-meta-row">
+                        <span className="code-mdc-meta-key">{t('codeWorkspace.metadataDescription')}</span>
+                        <span className="code-mdc-meta-value">{parsedMarkdownDoc.ruleMetadata.description?.trim() || t('codeWorkspace.metadataNotAvailable')}</span>
+                      </div>
+                      <div className="code-mdc-meta-row">
+                        <span className="code-mdc-meta-key">{t('codeWorkspace.metadataGlobs')}</span>
+                        <span className="code-mdc-meta-value code-mdc-meta-value--mono">{parsedMarkdownDoc.ruleMetadata.globs.length > 0 ? parsedMarkdownDoc.ruleMetadata.globs.join(', ') : t('codeWorkspace.metadataNotAvailable')}</span>
+                      </div>
+                    </div>
+                  </section>
+                )}
+                {frontmatterMetaEntries.length > 0 && (
+                  <section className="code-mdc-meta-card">
+                    <h3 className="code-mdc-meta-title">{t('codeWorkspace.documentMetadata')}</h3>
+                    <div className="code-mdc-meta-grid">
+                      {frontmatterMetaEntries.map((item) => (
+                        <div className="code-mdc-meta-row" key={item.key}>
+                          <span className="code-mdc-meta-key">{item.key}</span>
+                          <span className="code-mdc-meta-value code-mdc-meta-value--mono">{item.value || t('codeWorkspace.metadataNotAvailable')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+                <MarkdownPreviewSurface components={markdownComponents} content={markdownPreviewContent} previewRootRef={previewRootRef} />
+              </article>
+            </div>
           </div>
         )}
       </div>

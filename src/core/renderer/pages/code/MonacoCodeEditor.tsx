@@ -196,6 +196,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const {
     activeSearchMatchIndex,
     closeSearchPanel,
+    cycleSearchHistory,
     goToNextMatch,
     goToPreviousMatch,
     handleEditorCursorSelectionChange,
@@ -837,6 +838,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
           activeSearchMatchIndex={activeSearchMatchIndex}
           onChangeReplaceQuery={setReplaceQuery}
           onChangeSearchQuery={setSearchQuery}
+          onCycleSearchHistory={cycleSearchHistory}
           onClose={closeSearchPanel}
           onGoToNextMatch={goToNextMatch}
           onGoToPreviousMatch={goToPreviousMatch}

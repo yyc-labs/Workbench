@@ -6,6 +6,7 @@ type PreviewSearchMatch = {
 
 const PREVIEW_SEARCH_HIGHLIGHT_NAME = 'code-markdown-search-highlight'
 const PREVIEW_SEARCH_ACTIVE_HIGHLIGHT_NAME = 'code-markdown-search-highlight-active'
+const PREVIEW_SEARCH_HISTORY_LIMIT = 20
 
 type SearchHighlightRegistry = {
   set: (name: string, highlight: unknown) => void
@@ -107,18 +108,34 @@ function applyPreviewSearchHighlights(matches: PreviewSearchMatch[], activeIndex
 
 export function useMarkdownPreviewSearch(previewScrollRef: React.RefObject<HTMLDivElement>, shouldHandleFindInPreview: boolean, markdownPreviewContent: string) {
   const [previewSearchVisible, setPreviewSearchVisible] = useState(false)
-  const [previewSearchQuery, setPreviewSearchQuery] = useState('')
+  const [previewSearchQuery, setPreviewSearchQueryState] = useState('')
   const [activePreviewSearchMatchIndex, setActivePreviewSearchMatchIndex] = useState(0)
   const [previewSearchMatches, setPreviewSearchMatches] = useState<PreviewSearchMatch[]>([])
   const previewSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const previewSearchHistoryRef = useRef<string[]>([])
+  const previewSearchHistoryIndexRef = useRef(-1)
+  const previewSearchHistoryDraftRef = useRef('')
+
+  const rememberPreviewSearchQuery = useCallback((query: string) => {
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return
+    previewSearchHistoryRef.current = [normalizedQuery, ...previewSearchHistoryRef.current.filter((item) => item !== normalizedQuery)].slice(0, PREVIEW_SEARCH_HISTORY_LIMIT)
+  }, [])
+
+  const setPreviewSearchQuery = useCallback((query: string) => {
+    previewSearchHistoryIndexRef.current = -1
+    previewSearchHistoryDraftRef.current = ''
+    setPreviewSearchQueryState(query)
+  }, [])
 
   const closePreviewSearch = useCallback(() => {
+    rememberPreviewSearchQuery(previewSearchQuery)
     clearPreviewSearchHighlights()
     setPreviewSearchVisible(false)
     setPreviewSearchQuery('')
     setPreviewSearchMatches([])
     setActivePreviewSearchMatchIndex(0)
-  }, [])
+  }, [previewSearchQuery, rememberPreviewSearchQuery])
 
   useEffect(() => {
     return () => {
@@ -128,6 +145,15 @@ export function useMarkdownPreviewSearch(previewScrollRef: React.RefObject<HTMLD
 
   const openPreviewSearch = useCallback(() => {
     if (!shouldHandleFindInPreview) return
+    rememberPreviewSearchQuery(previewSearchQuery)
+
+    const previewPane = previewScrollRef.current
+    const selection = window.getSelection()
+    const selectedText = selection && !selection.isCollapsed && previewPane && selection.anchorNode && selection.focusNode && previewPane.contains(selection.anchorNode) && previewPane.contains(selection.focusNode) ? selection.toString().trim() : ''
+    const nextQuery = selectedText || previewSearchQuery || previewSearchHistoryRef.current[0] || ''
+    previewSearchHistoryIndexRef.current = -1
+    previewSearchHistoryDraftRef.current = ''
+    setPreviewSearchQueryState(nextQuery)
     setPreviewSearchVisible(true)
     window.setTimeout(() => {
       const input = previewSearchInputRef.current
@@ -135,7 +161,24 @@ export function useMarkdownPreviewSearch(previewScrollRef: React.RefObject<HTMLD
       input.focus()
       input.select()
     }, 0)
-  }, [shouldHandleFindInPreview])
+  }, [previewScrollRef, previewSearchQuery, rememberPreviewSearchQuery, shouldHandleFindInPreview])
+
+  const cyclePreviewSearchHistory = useCallback(
+    (direction: 'older' | 'newer') => {
+      const history = previewSearchHistoryRef.current
+      if (history.length === 0) return
+
+      const currentIndex = previewSearchHistoryIndexRef.current
+      if (currentIndex === -1) {
+        previewSearchHistoryDraftRef.current = previewSearchQuery
+      }
+
+      const nextIndex = direction === 'older' ? (currentIndex === -1 ? 0 : Math.min(history.length - 1, currentIndex + 1)) : currentIndex === -1 ? -1 : currentIndex - 1
+      previewSearchHistoryIndexRef.current = nextIndex
+      setPreviewSearchQueryState(nextIndex === -1 ? previewSearchHistoryDraftRef.current : history[nextIndex])
+    },
+    [previewSearchQuery],
+  )
 
   const goToPreviewSearchMatchByIndex = useCallback(
     (index: number) => {
@@ -202,6 +245,7 @@ export function useMarkdownPreviewSearch(previewScrollRef: React.RefObject<HTMLD
     previewSearchVisible,
     previewSearchQuery,
     setPreviewSearchQuery,
+    cyclePreviewSearchHistory,
     activePreviewSearchMatchIndex,
     setActivePreviewSearchMatchIndex,
     previewSearchMatches,

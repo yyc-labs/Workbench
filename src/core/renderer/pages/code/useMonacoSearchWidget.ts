@@ -3,6 +3,7 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 
 export type EditorSearchMode = 'find' | 'replace'
 
+const SEARCH_HISTORY_LIMIT = 20
 const WHOLE_WORD_SEPARATORS = ' \t\n\r`~!@#$%^&*()-=+[{]}\\|;:\'",.<>/?'
 
 type UseMonacoSearchWidgetOptions = {
@@ -21,7 +22,7 @@ function isMonacoCanceledError(error: unknown): boolean {
 export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOptions) {
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchMode, setSearchMode] = useState<EditorSearchMode>('find')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQueryState] = useState('')
   const [replaceQuery, setReplaceQuery] = useState('')
   const [searchMatchCount, setSearchMatchCount] = useState(0)
   const [activeSearchMatchIndex, setActiveSearchMatchIndex] = useState(0)
@@ -36,6 +37,22 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
   const searchWholeWordRef = useRef(false)
   const searchRegexRef = useRef(false)
   const searchMatchDecorationsRef = useRef<string[]>([])
+  const searchHistoryRef = useRef<string[]>([])
+  const searchHistoryIndexRef = useRef(-1)
+  const searchHistoryDraftRef = useRef('')
+
+  const rememberSearchQuery = useCallback((query: string) => {
+    const normalizedQuery = query.trim()
+    if (!normalizedQuery) return
+    searchHistoryRef.current = [normalizedQuery, ...searchHistoryRef.current.filter((item) => item !== normalizedQuery)].slice(0, SEARCH_HISTORY_LIMIT)
+  }, [])
+
+  const setSearchQuery = useCallback((query: string) => {
+    searchHistoryIndexRef.current = -1
+    searchHistoryDraftRef.current = ''
+    searchQueryRef.current = query
+    setSearchQueryState(query)
+  }, [])
 
   useEffect(() => {
     searchVisibleRef.current = searchVisible
@@ -163,9 +180,16 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
       if (!editor) return
       const selectedQuery = options?.prefillFromSelection ? getSelectedTextForSearch(editor) : ''
       if (selectedQuery) {
+        rememberSearchQuery(searchQueryRef.current)
         searchQueryRef.current = selectedQuery
-        setSearchQuery(selectedQuery)
+        setSearchQueryState(selectedQuery)
       }
+      if (!selectedQuery && !searchQueryRef.current && searchHistoryRef.current[0]) {
+        searchQueryRef.current = searchHistoryRef.current[0]
+        setSearchQueryState(searchHistoryRef.current[0])
+      }
+      searchHistoryIndexRef.current = -1
+      searchHistoryDraftRef.current = ''
       setSearchMode(mode)
       setSearchVisible(true)
       closeMonacoFindWidget(editor)
@@ -175,16 +199,33 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
         refreshSearchResult(editor)
       }, 0)
     },
-    [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult],
+    [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult, rememberSearchQuery],
   )
 
   const closeSearchPanel = useCallback(() => {
+    rememberSearchQuery(searchQueryRef.current)
     setSearchVisible(false)
     const editor = editorRef.current
     editor?.focus()
     if (editor) clearSearchMatchDecorations(editor)
     closeMonacoFindWidget(editor)
-  }, [clearSearchMatchDecorations, closeMonacoFindWidget, editorRef])
+  }, [clearSearchMatchDecorations, closeMonacoFindWidget, editorRef, rememberSearchQuery])
+
+  const cycleSearchHistory = useCallback((direction: 'older' | 'newer') => {
+    const history = searchHistoryRef.current
+    if (history.length === 0) return
+
+    const currentIndex = searchHistoryIndexRef.current
+    if (currentIndex === -1) {
+      searchHistoryDraftRef.current = searchQueryRef.current
+    }
+
+    const nextIndex = direction === 'older' ? (currentIndex === -1 ? 0 : Math.min(history.length - 1, currentIndex + 1)) : currentIndex === -1 ? -1 : currentIndex - 1
+    searchHistoryIndexRef.current = nextIndex
+    const nextQuery = nextIndex === -1 ? searchHistoryDraftRef.current : history[nextIndex]
+    searchQueryRef.current = nextQuery
+    setSearchQueryState(nextQuery)
+  }, [])
 
   const goToNextMatch = useCallback(() => {
     const editor = editorRef.current
@@ -266,6 +307,7 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
   return {
     activeSearchMatchIndex,
     closeSearchPanel,
+    cycleSearchHistory,
     goToNextMatch,
     goToPreviousMatch,
     handleEditorCursorSelectionChange,

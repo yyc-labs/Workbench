@@ -7,6 +7,7 @@ type MonacoCodeEditorFindBarProps = {
   activeSearchMatchIndex: number
   onChangeReplaceQuery: (value: string) => void
   onChangeSearchQuery: (value: string) => void
+  onCycleSearchHistory: (direction: 'older' | 'newer') => void
   onClose: () => void
   onGoToNextMatch: () => void
   onGoToPreviousMatch: () => void
@@ -30,6 +31,7 @@ export function MonacoCodeEditorFindBar({
   activeSearchMatchIndex,
   onChangeReplaceQuery,
   onChangeSearchQuery,
+  onCycleSearchHistory,
   onClose,
   onGoToNextMatch,
   onGoToPreviousMatch,
@@ -66,6 +68,16 @@ export function MonacoCodeEditorFindBar({
           className="code-editor-findbar-input"
           spellCheck={false}
           onKeyDown={(event) => {
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              onCycleSearchHistory('older')
+              return
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              onCycleSearchHistory('newer')
+              return
+            }
             if (event.key === 'Enter' && event.shiftKey) {
               event.preventDefault()
               onGoToPreviousMatch()
@@ -82,66 +94,26 @@ export function MonacoCodeEditorFindBar({
             }
           }}
         />
-        <span className="code-editor-findbar-count">
-          {searchMatchCount > 0 ? `${activeSearchMatchIndex}/${searchMatchCount}` : t('codeWorkspace.noResults')}
-        </span>
-        <button
-          type="button"
-          className={`code-editor-findbar-toggle ${searchCaseSensitive ? 'is-active' : ''}`}
-          onClick={onToggleSearchCaseSensitive}
-          title={t('common.matchCase')}
-          aria-pressed={searchCaseSensitive}
-        >
+        <span className="code-editor-findbar-count">{searchMatchCount > 0 ? `${activeSearchMatchIndex}/${searchMatchCount}` : t('codeWorkspace.noResults')}</span>
+        <button type="button" className={`code-editor-findbar-toggle ${searchCaseSensitive ? 'is-active' : ''}`} onClick={onToggleSearchCaseSensitive} title={t('common.matchCase')} aria-pressed={searchCaseSensitive}>
           Aa
         </button>
-        <button
-          type="button"
-          className={`code-editor-findbar-toggle ${searchWholeWord ? 'is-active' : ''}`}
-          onClick={onToggleSearchWholeWord}
-          title={t('common.matchWholeWord')}
-          aria-pressed={searchWholeWord}
-        >
+        <button type="button" className={`code-editor-findbar-toggle ${searchWholeWord ? 'is-active' : ''}`} onClick={onToggleSearchWholeWord} title={t('common.matchWholeWord')} aria-pressed={searchWholeWord}>
           ab
         </button>
-        <button
-          type="button"
-          className={`code-editor-findbar-toggle ${searchRegex ? 'is-active' : ''}`}
-          onClick={onToggleRegex}
-          title={t('common.useRegularExpression')}
-          aria-pressed={searchRegex}
-        >
+        <button type="button" className={`code-editor-findbar-toggle ${searchRegex ? 'is-active' : ''}`} onClick={onToggleRegex} title={t('common.useRegularExpression')} aria-pressed={searchRegex}>
           .*
         </button>
-        <button
-          type="button"
-          className="code-editor-findbar-icon-btn"
-          onClick={onGoToPreviousMatch}
-          title={t('codeWorkspace.previousMatch')}
-        >
+        <button type="button" className="code-editor-findbar-icon-btn" onClick={onGoToPreviousMatch} title={t('codeWorkspace.previousMatch')}>
           <ChevronUp className="h-3.5 w-3.5" />
         </button>
-        <button
-          type="button"
-          className="code-editor-findbar-icon-btn"
-          onClick={onGoToNextMatch}
-          title={t('codeWorkspace.nextMatch')}
-        >
+        <button type="button" className="code-editor-findbar-icon-btn" onClick={onGoToNextMatch} title={t('codeWorkspace.nextMatch')}>
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
-        <button
-          type="button"
-          className={`code-editor-findbar-icon-btn ${searchMode === 'replace' ? 'is-active' : ''}`}
-          onClick={onToggleReplaceMode}
-          title={searchMode === 'replace' ? t('common.hideReplace') : t('common.showReplace')}
-        >
+        <button type="button" className={`code-editor-findbar-icon-btn ${searchMode === 'replace' ? 'is-active' : ''}`} onClick={onToggleReplaceMode} title={searchMode === 'replace' ? t('common.hideReplace') : t('common.showReplace')}>
           <Replace className="h-3.5 w-3.5" />
         </button>
-        <button
-          type="button"
-          className="code-editor-findbar-icon-btn"
-          onClick={onClose}
-          title={t('common.close')}
-        >
+        <button type="button" className="code-editor-findbar-icon-btn" onClick={onClose} title={t('common.close')}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -171,20 +143,10 @@ export function MonacoCodeEditorFindBar({
               }
             }}
           />
-          <button
-            type="button"
-            className="code-editor-findbar-action-btn"
-            onClick={onReplaceCurrentMatch}
-            disabled={searchMatchCount <= 0}
-          >
+          <button type="button" className="code-editor-findbar-action-btn" onClick={onReplaceCurrentMatch} disabled={searchMatchCount <= 0}>
             {t('codeWorkspace.replace')}
           </button>
-          <button
-            type="button"
-            className="code-editor-findbar-action-btn"
-            onClick={onReplaceAllMatches}
-            disabled={searchMatchCount <= 0}
-          >
+          <button type="button" className="code-editor-findbar-action-btn" onClick={onReplaceAllMatches} disabled={searchMatchCount <= 0}>
             {t('common.replaceAll')}
           </button>
         </div>
