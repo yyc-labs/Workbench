@@ -1680,7 +1680,7 @@ export interface ProjectFileAutoLoadDecision {
   limit: number
 }
 
-export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'video' | 'audio' | 'csv' | 'unsupported' | 'excluded'
+export type ProjectFilePreviewKind = 'text' | 'markdown' | 'image' | 'html' | 'pdf' | 'docx' | 'video' | 'audio' | 'csv' | 'unsupported' | 'excluded'
 
 /** unsupported 结果的具体原因：类型本身不支持，或超过自动预览大小上限。 */
 export type ProjectFileUnsupportedReason = 'unsupported-kind' | 'size-limit'

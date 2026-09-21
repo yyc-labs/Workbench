@@ -137,6 +137,17 @@ function countLines(value: string): number {
   return value.split('\n').length
 }
 
+const RAW_FRONTMATTER_RE = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/
+
+/**
+ * 按原始文本切分 frontmatter 与正文，不规范化换行符，frontmatter 可原样回填。
+ */
+export function splitMarkdownFrontmatterRaw(source: string): { frontmatter: string; body: string } {
+  const match = RAW_FRONTMATTER_RE.exec(source)
+  if (!match) return { frontmatter: '', body: source }
+  return { frontmatter: match[0], body: source.slice(match[0].length) }
+}
+
 export function parseMarkdownDocument(source: string): ParsedMarkdownDocument {
   const normalized = source.replace(/\r\n/g, '\n')
   const frontmatterMatch = normalized.match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/)

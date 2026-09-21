@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type MouseEvent, type PointerEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Editor, EditorStatus, commandsCtx, defaultValueCtx, editorStateCtx, editorViewCtx, editorViewOptionsCtx, rootCtx, serializerCtx } from '@milkdown/core'
 import { TextSelection } from '@milkdown/prose/state'
@@ -49,6 +49,7 @@ type ClipboardImagePayload = {
 type MarkdownDocumentRichEditorProps = {
   initialMarkdown: string
   documentPath: string
+  metaSlot?: ReactNode
   onEditorChange: (editor: Editor | null) => void
   onMarkdownChange: (markdown: string) => void
   onContextMenu: (event: MouseEvent<HTMLDivElement>, editor: Editor, selectionContext: ReturnType<typeof getMarkdownDocumentSelectionContext>) => void
@@ -126,7 +127,7 @@ const markdownDocumentImageView = $view(imageSchema.node, () => (node) => {
   }
 })
 
-export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEditorChange, onMarkdownChange, onContextMenu, onDocumentProfileChange, onFlushReady }: MarkdownDocumentRichEditorProps) {
+export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, metaSlot, onEditorChange, onMarkdownChange, onContextMenu, onDocumentProfileChange, onFlushReady }: MarkdownDocumentRichEditorProps) {
   const { t } = useI18n()
   const rootRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<Editor | null>(null)
@@ -195,6 +196,9 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
     if (!root) return
 
     let disposed = false
+    // 记录挂载后是否发生过真实的文档编辑；未编辑时 flush 返回 null，
+    // 避免把 Milkdown 序列化产生的规范化结果写回源文本。
+    let docChanged = false
     const editor = Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root)
@@ -231,16 +235,20 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
       instance.action((ctx) => {
         const listeners = ctx.get(listenerCtx)
         listeners.markdownUpdated((_ctx, nextMarkdown) => {
+          docChanged = true
           markdownChangeRef.current(nextMarkdown)
         })
       })
 
       flushReadyRef.current(() => {
-        return instance.action((ctx) => {
+        if (!docChanged) return null
+        const markdown = instance.action((ctx) => {
           const serializer = ctx.get(serializerCtx)
           const state = ctx.get(editorStateCtx)
           return serializer(state.doc)
         })
+        // 编辑后又完全还原（如撤销到初始内容）时同样视为未变更。
+        return markdown === initialMarkdown ? null : markdown
       })
       editorChangeRef.current(instance)
     }
@@ -453,7 +461,14 @@ export function MarkdownDocumentRichEditor({ initialMarkdown, documentPath, onEd
           const selectionContext = editor.action((ctx) => getMarkdownDocumentSelectionContext(ctx.get(editorViewCtx).state))
           contextMenuRef.current(event, editor, selectionContext)
         }}
-      />
+      >
+        {metaSlot ? (
+          // 元信息卡片随正文一起滚动；内部的粘贴/右键走输入框原生行为，不触发正文图片粘贴与格式菜单。
+          <div className="markdown-document-meta-slot" onPaste={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
+            {metaSlot}
+          </div>
+        ) : null}
+      </div>
       {tableInsertHandle
         ? createPortal(
             <div

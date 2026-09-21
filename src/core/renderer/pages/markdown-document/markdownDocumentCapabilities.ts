@@ -1,7 +1,6 @@
 import type { MarkdownDocumentCompatibility, MarkdownDocumentComplexity, MarkdownDocumentComplexityLevel, MarkdownDocumentDisplayMode } from './markdownDocumentTypes'
 
 const FENCE = String.fromCharCode(96)
-const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/
 const FENCED_CODE_RE = new RegExp('^' + FENCE + FENCE + FENCE, 'm')
 const TABLE_ROW_RE = /^\s*\|.*\|\s*$/m
 const IMAGE_RE = /!\[[^\]]*]\(([^)]+)\)/g
@@ -35,7 +34,7 @@ function countTopLevelBlocks(markdown: string): number {
 export function classifyMarkdownDocumentCompatibility(markdown: string): MarkdownDocumentCompatibility {
   const reasons: string[] = []
 
-  if (FRONTMATTER_RE.test(markdown)) reasons.push('frontmatter')
+  // frontmatter 不再参与兼容性判定：富文本模式会原样保留 frontmatter，正文与元信息分离编辑。
   if (RAW_HTML_RE.test(markdown)) reasons.push('raw-html')
   if (markdown.indexOf(String.fromCharCode(96).repeat(3)) >= 0 && markdown.indexOf('~~~') >= 0) reasons.push('mixed-fences')
   if (markdown.indexOf('|---') >= 0 && markdown.indexOf('::') >= 0) reasons.push('table-alignment-markers')

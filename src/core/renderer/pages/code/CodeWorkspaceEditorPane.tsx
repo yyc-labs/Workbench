@@ -11,6 +11,7 @@ import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
+import { CodeMarkdownTocButton } from './CodeMarkdownTocButton'
 import { formatCodeLanguageLabel } from './code.markdown'
 import { transformMarkdownUrl } from './code.markdownUrls'
 import { remarkBoxDrawingTables } from './code.markdownBoxTables'
@@ -25,6 +26,7 @@ import { FileHtmlViewer } from './viewers/FileHtmlViewer'
 import { FileImageViewer } from './viewers/FileImageViewer'
 import { FileMediaViewer } from './viewers/FileMediaViewer'
 import { FilePdfViewer } from './viewers/FilePdfViewer'
+import { FileDocxViewer } from './viewers/docx/FileDocxViewer'
 import { FileUnsupportedViewer } from './viewers/FileUnsupportedViewer'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -82,7 +84,7 @@ type CodeWorkspaceEditorPaneProps = {
   closeCodePreview: () => void
   closeStructuredPreview: () => void
   codePreview: MarkdownCodePreviewState | null
-  editorRef: Ref<MonacoCodeEditorHandle>
+  editorRef: RefObject<MonacoCodeEditorHandle>
   editorValue: string
   effectiveMarkdownPreviewMode: MarkdownPreviewMode
   excludedNodeKind: ProjectFileNodeKind
@@ -120,7 +122,7 @@ type CodeWorkspaceEditorPaneProps = {
   onRequestProjectContextMenu?: (x: number, y: number) => void
   parsedMarkdownDoc: ParsedMarkdownDocument | null
   previewRootRef: RefObject<Element | null>
-  previewScrollRef: Ref<HTMLDivElement>
+  previewScrollRef: RefObject<HTMLDivElement>
   previewSearchInputRef: Ref<HTMLInputElement>
   previewSearchMatches: Array<unknown>
   previewSearchQuery: string
@@ -266,44 +268,47 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               {t('codeWorkspace.previewUpdating')}
             </span>
           )}
-          <div className="code-editor-preview-mode-group">
-            <button
-              type="button"
-              className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'edit' ? 'is-active' : ''}`}
-              onClick={() => {
-                onCaptureCurrentModeScroll()
-                onSetMarkdownPreviewMode('edit')
-              }}
-              title={t('codeWorkspace.editor')}
-            >
-              <Code2 className="h-3.5 w-3.5" />
-              {t('codeWorkspace.editor')}
-            </button>
-            <button
-              type="button"
-              className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'preview' ? 'is-active' : ''}`}
-              onClick={() => {
-                onCaptureCurrentModeScroll()
-                onSetMarkdownPreviewMode('preview')
-              }}
-              title={t('codeWorkspace.preview')}
-            >
-              <Eye className="h-3.5 w-3.5" />
-              {t('codeWorkspace.preview')}
-            </button>
-            <button
-              type="button"
-              className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'split' ? 'is-active' : ''}`}
-              onClick={() => {
-                onCaptureCurrentModeScroll()
-                onSetMarkdownPreviewMode('split')
-              }}
-              title={isNarrowViewport ? t('codeWorkspace.splitWideOnly') : t('codeWorkspace.splitView')}
-              disabled={isNarrowViewport}
-            >
-              <Columns2 className="h-3.5 w-3.5" />
-              {t('codeWorkspace.split')}
-            </button>
+          <div className="code-editor-preview-toolbar-actions">
+            <div className="code-editor-preview-mode-group">
+              <button
+                type="button"
+                className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'edit' ? 'is-active' : ''}`}
+                onClick={() => {
+                  onCaptureCurrentModeScroll()
+                  onSetMarkdownPreviewMode('edit')
+                }}
+                title={t('codeWorkspace.editor')}
+              >
+                <Code2 className="h-3.5 w-3.5" />
+                {t('codeWorkspace.editor')}
+              </button>
+              <button
+                type="button"
+                className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'preview' ? 'is-active' : ''}`}
+                onClick={() => {
+                  onCaptureCurrentModeScroll()
+                  onSetMarkdownPreviewMode('preview')
+                }}
+                title={t('codeWorkspace.preview')}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                {t('codeWorkspace.preview')}
+              </button>
+              <button
+                type="button"
+                className={`code-editor-preview-mode-btn ${effectiveMarkdownPreviewMode === 'split' ? 'is-active' : ''}`}
+                onClick={() => {
+                  onCaptureCurrentModeScroll()
+                  onSetMarkdownPreviewMode('split')
+                }}
+                title={isNarrowViewport ? t('codeWorkspace.splitWideOnly') : t('codeWorkspace.splitView')}
+                disabled={isNarrowViewport}
+              >
+                <Columns2 className="h-3.5 w-3.5" />
+                {t('codeWorkspace.split')}
+              </button>
+            </div>
+            <CodeMarkdownTocButton parsedMarkdownDoc={parsedMarkdownDoc} previewMode={effectiveMarkdownPreviewMode} editorRef={editorRef} previewScrollRef={previewScrollRef} />
           </div>
         </div>
       )}
@@ -318,6 +323,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
             <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
           ) : fileKind === 'pdf' && binaryDataUrl ? (
             <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : fileKind === 'docx' && binaryDataUrl ? (
+            <FileDocxViewer data={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
           ) : fileKind === 'html' ? (
             <FileHtmlViewer previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')} sourceHtml={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} activeLanguage={activeLanguage} />
           ) : fileKind === 'video' && binaryDataUrl ? (

@@ -29,7 +29,9 @@ export function createMonacoModelUri(projectPath: string | null | undefined, fil
   if (!normalizedFile) {
     return `inmemory://model/${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
   }
-  const normalizedProject = normalizeMonacoCachePath(projectPath).replace(/\/+$/, '')
+  // WSL UNC 路径（\\wsl.localhost\...）规范化后会以 // 开头，必须剥掉前导斜杠，
+  // 否则拼出的 file:// URI path 以 // 开头，触发 Monaco UriError。
+  const normalizedProject = normalizeMonacoCachePath(projectPath).replace(/^\/+/, '').replace(/\/+$/, '')
   // URI 带上项目命名空间，保证跨项目同名文件也拥有唯一 Model URI。
   return normalizedProject ? `file:///${normalizedProject}/${normalizedFile}` : `file:///${normalizedFile}`
 }

@@ -94,7 +94,8 @@ export function resolveFilePathFromModelUri(uri: Uri, projectPath?: string | nul
 
   // 模块级 Model 缓存的 URI 带有项目命名空间前缀，这里剥离后还原为项目内相对路径。
   if (projectPath) {
-    const normalizedProject = normalizeMonacoCachePath(projectPath).replace(/\/+$/, '')
+    // 与 createMonacoModelUri 保持一致：剥掉前导斜杠（WSL UNC 路径会以 // 开头）。
+    const normalizedProject = normalizeMonacoCachePath(projectPath).replace(/^\/+/, '').replace(/\/+$/, '')
     if (normalizedProject && path.toLowerCase().startsWith(`${normalizedProject.toLowerCase()}/`)) {
       path = path.slice(normalizedProject.length + 1)
     }

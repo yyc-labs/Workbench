@@ -46,7 +46,7 @@ export async function readProjectFile(projectPath: string, relativePath: string)
       return toUnsupportedReadResult(normalizedRelativePath, stat)
     }
 
-    if (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio') {
+    if (kind === 'image' || kind === 'pdf' || kind === 'docx' || kind === 'video' || kind === 'audio') {
       // 上限可在设置页调整（filePreviewLimitMb），主进程按当前配置动态生效。
       const previewLimitBytes = (loadConfig().filePreviewLimitMb ?? DEFAULT_FILE_PREVIEW_LIMIT_MB) * 1024 * 1024
       if (stat.size > previewLimitBytes) {

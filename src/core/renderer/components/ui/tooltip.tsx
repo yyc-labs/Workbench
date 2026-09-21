@@ -1,11 +1,11 @@
-import * as React from "react"
-import { createPortal } from "react-dom"
+import * as React from 'react'
+import { createPortal } from 'react-dom'
 
-import { cn } from "@/lib/utils"
+import { cn } from '@/lib/utils'
 
-type TooltipSide = "top" | "bottom"
-type TooltipAlign = "start" | "center" | "end"
-type TooltipPlacementMode = "anchor" | "pointer"
+type TooltipSide = 'top' | 'bottom' | 'left' | 'right'
+type TooltipAlign = 'start' | 'center' | 'end'
+type TooltipPlacementMode = 'anchor' | 'pointer'
 
 const VIEWPORT_PADDING = 8
 const DEFAULT_POINTER_OFFSET: TooltipPointerOffset = { x: 14, y: 18 }
@@ -27,57 +27,58 @@ function clamp(value: number, min: number, max: number): number {
   return value
 }
 
-function resolveAlignedLeft(
-  triggerRect: DOMRect,
-  tooltipRect: DOMRect,
-  align: TooltipAlign
-): number {
-  if (align === "start") return triggerRect.left
-  if (align === "end") return triggerRect.right - tooltipRect.width
+function resolveAlignedLeft(triggerRect: DOMRect, tooltipRect: DOMRect, align: TooltipAlign): number {
+  if (align === 'start') return triggerRect.left
+  if (align === 'end') return triggerRect.right - tooltipRect.width
   return triggerRect.left + (triggerRect.width - tooltipRect.width) / 2
 }
 
-function resolveTooltipPosition(
-  triggerRect: DOMRect,
-  tooltipRect: DOMRect,
-  side: TooltipSide,
-  align: TooltipAlign,
-  offset: number
-): TooltipPosition {
+function resolveTooltipPosition(triggerRect: DOMRect, tooltipRect: DOMRect, side: TooltipSide, align: TooltipAlign, offset: number): TooltipPosition {
   let resolvedSide = side
-  let top = side === "top"
-    ? triggerRect.top - tooltipRect.height - offset
-    : triggerRect.bottom + offset
+  let top: number
+  let left: number
 
-  const overTop = top < VIEWPORT_PADDING
-  const overBottom = top + tooltipRect.height > window.innerHeight - VIEWPORT_PADDING
+  if (side === 'left' || side === 'right') {
+    top = triggerRect.top + (triggerRect.height - tooltipRect.height) / 2
+    left = side === 'left' ? triggerRect.left - tooltipRect.width - offset : triggerRect.right + offset
 
-  if (resolvedSide === "top" && overTop) {
-    resolvedSide = "bottom"
-    top = triggerRect.bottom + offset
-  } else if (resolvedSide === "bottom" && overBottom) {
-    resolvedSide = "top"
-    top = triggerRect.top - tooltipRect.height - offset
+    const overLeft = left < VIEWPORT_PADDING
+    const overRight = left + tooltipRect.width > window.innerWidth - VIEWPORT_PADDING
+
+    if (side === 'left' && overLeft) {
+      resolvedSide = 'right'
+      left = triggerRect.right + offset
+    } else if (side === 'right' && overRight) {
+      resolvedSide = 'left'
+      left = triggerRect.left - tooltipRect.width - offset
+    }
+  } else {
+    top = side === 'top' ? triggerRect.top - tooltipRect.height - offset : triggerRect.bottom + offset
+    left = resolveAlignedLeft(triggerRect, tooltipRect, align)
+
+    const overTop = top < VIEWPORT_PADDING
+    const overBottom = top + tooltipRect.height > window.innerHeight - VIEWPORT_PADDING
+
+    if (side === 'top' && overTop) {
+      resolvedSide = 'bottom'
+      top = triggerRect.bottom + offset
+    } else if (side === 'bottom' && overBottom) {
+      resolvedSide = 'top'
+      top = triggerRect.top - tooltipRect.height - offset
+    }
   }
 
-  const unclampedLeft = resolveAlignedLeft(triggerRect, tooltipRect, align)
   const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - tooltipRect.width - VIEWPORT_PADDING)
-  const left = clamp(unclampedLeft, VIEWPORT_PADDING, maxLeft)
   const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - tooltipRect.height - VIEWPORT_PADDING)
 
   return {
     top: clamp(top, VIEWPORT_PADDING, maxTop),
-    left,
+    left: clamp(left, VIEWPORT_PADDING, maxLeft),
     side: resolvedSide,
   }
 }
 
-function resolvePointerTooltipPosition(
-  pointerX: number,
-  pointerY: number,
-  tooltipRect: DOMRect,
-  offset: TooltipPointerOffset
-): TooltipPosition {
+function resolvePointerTooltipPosition(pointerX: number, pointerY: number, tooltipRect: DOMRect, offset: TooltipPointerOffset): TooltipPosition {
   const preferredLeft = pointerX + offset.x
   const preferredTop = pointerY + offset.y
   const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - tooltipRect.width - VIEWPORT_PADDING)
@@ -86,23 +87,18 @@ function resolvePointerTooltipPosition(
   return {
     top: clamp(preferredTop, VIEWPORT_PADDING, maxTop),
     left: clamp(preferredLeft, VIEWPORT_PADDING, maxLeft),
-    side: "bottom",
+    side: 'bottom',
   }
 }
 
 function hasRenderableContent(content: React.ReactNode): boolean {
   if (content === null || content === undefined || content === false) return false
-  if (typeof content === "string") return content.trim().length > 0
+  if (typeof content === 'string') return content.trim().length > 0
   return true
 }
 
 function isSamePosition(left: TooltipPosition | null, right: TooltipPosition): boolean {
-  return Boolean(
-    left
-    && left.top === right.top
-    && left.left === right.left
-    && left.side === right.side
-  )
+  return Boolean(left && left.top === right.top && left.left === right.left && left.side === right.side)
 }
 
 export interface TooltipProps {
@@ -122,22 +118,7 @@ export interface TooltipProps {
   contentClassName?: string
 }
 
-export function Tooltip({
-  content,
-  children,
-  disabled = false,
-  side = "top",
-  align = "center",
-  offset = 8,
-  placementMode = "anchor",
-  pointerOffset = DEFAULT_POINTER_OFFSET,
-  interactive = true,
-  delayMs = 180,
-  hideDelayMs = 90,
-  maxWidth = 460,
-  className,
-  contentClassName,
-}: TooltipProps) {
+export function Tooltip({ content, children, disabled = false, side = 'top', align = 'center', offset = 8, placementMode = 'anchor', pointerOffset = DEFAULT_POINTER_OFFSET, interactive = true, delayMs = 180, hideDelayMs = 90, maxWidth = 460, className, contentClassName }: TooltipProps) {
   const triggerRef = React.useRef<HTMLSpanElement | null>(null)
   const tooltipRef = React.useRef<HTMLDivElement | null>(null)
   const pointerRef = React.useRef<{ x: number; y: number } | null>(null)
@@ -168,7 +149,7 @@ export function Tooltip({
   const updatePosition = React.useCallback(() => {
     if (!tooltipRef.current) return
     const tooltipRect = tooltipRef.current.getBoundingClientRect()
-    if (placementMode === "pointer") {
+    if (placementMode === 'pointer') {
       const pointer = pointerRef.current
       if (pointer) {
         const next = resolvePointerTooltipPosition(pointer.x, pointer.y, tooltipRect, pointerOffset)
@@ -222,11 +203,11 @@ export function Tooltip({
       updatePosition()
     }
 
-    window.addEventListener("resize", handleLayout)
-    window.addEventListener("scroll", handleLayout, true)
+    window.addEventListener('resize', handleLayout)
+    window.addEventListener('scroll', handleLayout, true)
     return () => {
-      window.removeEventListener("resize", handleLayout)
-      window.removeEventListener("scroll", handleLayout, true)
+      window.removeEventListener('resize', handleLayout)
+      window.removeEventListener('scroll', handleLayout, true)
     }
   }, [open, updatePosition])
 
@@ -259,14 +240,14 @@ export function Tooltip({
   React.useEffect(() => {
     if (!open) return
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         setOpen(false)
         setPosition(null)
       }
     }
-    window.addEventListener("keydown", handleKeyDown)
+    window.addEventListener('keydown', handleKeyDown)
     return () => {
-      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
 
@@ -276,12 +257,12 @@ export function Tooltip({
       id={tooltipId}
       role="tooltip"
       data-side={position?.side ?? side}
-      className={cn("app-tooltip-content", contentClassName)}
+      className={cn('app-tooltip-content', contentClassName)}
       style={{
         top: position?.top ?? 0,
         left: position?.left ?? 0,
         maxWidth: `${maxWidth}px`,
-        pointerEvents: interactive ? "auto" : "none",
+        pointerEvents: interactive ? 'auto' : 'none',
       }}
       onMouseEnter={interactive ? requestOpen : undefined}
       onMouseLeave={interactive ? requestClose : undefined}
@@ -290,22 +271,28 @@ export function Tooltip({
     </div>
   ) : null
 
-  const handlePointerEnter = React.useCallback((event: React.PointerEvent<HTMLSpanElement>) => {
-    pointerRef.current = { x: event.clientX, y: event.clientY }
-    requestOpen()
-  }, [requestOpen])
+  const handlePointerEnter = React.useCallback(
+    (event: React.PointerEvent<HTMLSpanElement>) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY }
+      requestOpen()
+    },
+    [requestOpen],
+  )
 
-  const handlePointerMove = React.useCallback((event: MouseEvent | React.PointerEvent<HTMLSpanElement>) => {
-    pointerRef.current = { x: event.clientX, y: event.clientY }
-    if (open && placementMode === "pointer") {
-      updatePosition()
-    }
-  }, [open, placementMode, updatePosition])
+  const handlePointerMove = React.useCallback(
+    (event: MouseEvent | React.PointerEvent<HTMLSpanElement>) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY }
+      if (open && placementMode === 'pointer') {
+        updatePosition()
+      }
+    },
+    [open, placementMode, updatePosition],
+  )
 
   return (
     <span
       ref={triggerRef}
-      className={cn("app-tooltip-trigger", className)}
+      className={cn('app-tooltip-trigger', className)}
       data-native-title-tooltip="true"
       aria-describedby={open ? tooltipId : undefined}
       onMouseEnter={requestOpen}

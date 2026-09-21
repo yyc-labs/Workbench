@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { useI18n } from '../../../i18n'
 import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
@@ -22,8 +23,97 @@ function decodeDataUrlToBlobUrl(dataUrl: string): { blobUrl: string; type: strin
   return { blobUrl: URL.createObjectURL(blob), type }
 }
 
+function formatMediaTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  const total = Math.floor(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`
+}
+
+function MediaControls({ mediaRef }: { mediaRef: RefObject<HTMLMediaElement | null> }) {
+  const { t } = useI18n()
+  const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  useEffect(() => {
+    const media = mediaRef.current
+    if (!media) return
+    const sync = () => {
+      setPlaying(!media.paused && !media.ended)
+      setMuted(media.muted)
+      setCurrentTime(media.currentTime)
+      setDuration(Number.isFinite(media.duration) ? media.duration : 0)
+    }
+    sync()
+    const events = ['play', 'pause', 'ended', 'timeupdate', 'durationchange', 'volumechange'] as const
+    for (const event of events) media.addEventListener(event, sync)
+    return () => {
+      for (const event of events) media.removeEventListener(event, sync)
+    }
+  }, [mediaRef])
+
+  const togglePlay = () => {
+    const media = mediaRef.current
+    if (!media) return
+    if (media.paused) void media.play()
+    else media.pause()
+  }
+
+  const toggleMute = () => {
+    const media = mediaRef.current
+    if (!media) return
+    media.muted = !media.muted
+  }
+
+  const seek = (value: number) => {
+    const media = mediaRef.current
+    if (!media || !Number.isFinite(value)) return
+    media.currentTime = value
+    setCurrentTime(value)
+  }
+
+  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0
+
+  const seekInput = (
+    <input
+      type="range"
+      className="code-media-seek"
+      min={0}
+      max={duration > 0 ? duration : 1}
+      step={0.1}
+      value={Math.min(currentTime, duration > 0 ? duration : 0)}
+      disabled={duration <= 0}
+      onChange={(event) => seek(Number(event.target.value))}
+      style={{ '--media-progress': `${progress}%` } as CSSProperties}
+      aria-label={t('codeWorkspace.mediaSeek')}
+    />
+  )
+
+  return (
+    <div className={`code-media-controls${playing ? '' : ' is-paused'}`}>
+      <button type="button" className="code-media-btn" onClick={togglePlay} title={t(playing ? 'codeWorkspace.mediaPause' : 'codeWorkspace.mediaPlay')} aria-label={t(playing ? 'codeWorkspace.mediaPause' : 'codeWorkspace.mediaPlay')}>
+        {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+      </button>
+      <span className="code-media-time">{formatMediaTime(currentTime)}</span>
+      {seekInput}
+      <span className="code-media-time">{formatMediaTime(duration)}</span>
+      <button type="button" className="code-media-btn" onClick={toggleMute} title={t(muted ? 'codeWorkspace.mediaUnmute' : 'codeWorkspace.mediaMute')} aria-label={t(muted ? 'codeWorkspace.mediaUnmute' : 'codeWorkspace.mediaMute')}>
+        {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+      </button>
+    </div>
+  )
+}
+
 export function FileMediaViewer({ dataUrl, kind, projectPath, relativePath }: FileMediaViewerProps) {
   const { t } = useI18n()
+  const mediaRef = useRef<HTMLMediaElement | null>(null)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,10 +142,42 @@ export function FileMediaViewer({ dataUrl, kind, projectPath, relativePath }: Fi
 
   const playErrorMessage = t(kind === 'video' ? 'codeWorkspace.videoNotPlayable' : 'codeWorkspace.audioNotPlayable')
 
+  const toggleVideoPlay = () => {
+    const media = mediaRef.current
+    if (!media) return
+    if (media.paused) void media.play()
+    else media.pause()
+  }
+
   return (
     <FileViewerShell title={relativePath} actions={<FileViewerOpenButton projectPath={projectPath} relativePath={relativePath} />}>
       {error ? <div className="code-file-viewer-error">{error}</div> : null}
-      {!error && blobUrl ? kind === 'video' ? <video controls src={blobUrl} className="code-file-viewer-media" onError={() => setError(playErrorMessage)} /> : <audio controls src={blobUrl} className="code-file-viewer-audio" onError={() => setError(playErrorMessage)} /> : null}
+      {!error && blobUrl ? (
+        <div className={`code-file-viewer-media-shell${kind === 'audio' ? ' is-audio' : ''}`}>
+          {kind === 'video' ? (
+            <video
+              ref={(el) => {
+                mediaRef.current = el
+              }}
+              src={blobUrl}
+              className="code-file-viewer-media"
+              playsInline
+              onClick={toggleVideoPlay}
+              onError={() => setError(playErrorMessage)}
+            />
+          ) : (
+            <audio
+              ref={(el) => {
+                mediaRef.current = el
+              }}
+              src={blobUrl}
+              className="code-file-viewer-audio"
+              onError={() => setError(playErrorMessage)}
+            />
+          )}
+          <MediaControls mediaRef={mediaRef} />
+        </div>
+      ) : null}
     </FileViewerShell>
   )
 }

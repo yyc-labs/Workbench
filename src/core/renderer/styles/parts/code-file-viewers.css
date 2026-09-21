@@ -20,8 +20,7 @@
   border-radius: 0;
 }
 
-.code-file-viewer--fullscreen .code-file-viewer-media,
-.code-file-viewer--fullscreen .code-file-viewer-audio {
+.code-file-viewer--fullscreen .code-file-viewer-media-shell {
   margin: auto;
 }
 
@@ -163,14 +162,211 @@
   user-select: none;
 }
 
-.code-file-viewer-media {
+/* 媒体（视频/音频）预览：内容画布居中，空余区域留白而非堆积在左上角。 */
+.code-file-viewer-frame:has(> .code-file-viewer-media-shell) {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.code-file-viewer-media-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
 }
 
-.code-file-viewer-audio {
+.code-file-viewer-media-shell.is-audio {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
   width: 100%;
   max-width: 480px;
+}
+
+/* 音频元素本身不渲染原生控件，仅作为播放载体存在。 */
+.code-file-viewer-audio {
+  display: none;
+}
+
+.code-file-viewer-media {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-popover);
+  cursor: pointer;
+}
+
+/* 媒体控制条：popover 质感悬浮层，扁平图标按钮 + token 化进度条。 */
+.code-media-controls {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 16px;
+  z-index: 2;
+  height: 40px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-popover);
+  backdrop-filter: saturate(150%) blur(16px);
+  -webkit-backdrop-filter: saturate(150%) blur(16px);
+  box-shadow: var(--shadow-popover);
+  transition:
+    left 280ms var(--spring),
+    right 280ms var(--spring),
+    bottom 280ms var(--spring),
+    height 280ms var(--spring),
+    padding 280ms var(--spring),
+    gap 280ms var(--spring),
+    border-radius 280ms var(--spring),
+    border-color 200ms var(--spring),
+    background-color 200ms var(--spring),
+    box-shadow 200ms var(--spring);
+}
+
+/* 空闲播放态：控制条收拢为贴底进度细线——同一元素形变，进度显示无缝接管。 */
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  padding: 0;
+  gap: 0;
+  border-radius: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  pointer-events: none;
+}
+
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) .code-media-seek {
+  border-radius: 0;
+}
+
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) .code-media-btn,
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) .code-media-time {
+  opacity: 0;
+}
+
+/* 收拢态下按钮与时间宽度同步塌缩，细线占满全宽，仅渲染进度条本身。 */
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) .code-media-btn {
+  width: 0;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.code-file-viewer-media-shell:not(.is-audio) .code-media-controls:not(.is-paused) .code-media-time {
+  min-width: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+/* 视频底部轻微压暗，保证进度细线与控制条在任意画面亮度下可读。 */
+.code-file-viewer-media-shell:not(.is-audio)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 56px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.18), transparent);
+  pointer-events: none;
+}
+
+.code-file-viewer-media-shell.is-audio .code-media-controls {
+  position: static;
+}
+
+.code-media-btn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted-foreground);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition:
+    background-color 120ms var(--spring),
+    color 120ms var(--spring),
+    opacity 180ms var(--spring) 60ms,
+    width 280ms var(--spring),
+    height 280ms var(--spring),
+    border-radius 280ms var(--spring);
+}
+
+.code-media-btn:hover {
+  background: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+  color: var(--color-foreground);
+}
+
+.code-media-time {
+  flex: none;
+  min-width: 36px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  transition:
+    opacity 180ms var(--spring) 60ms,
+    min-width 280ms var(--spring),
+    width 280ms var(--spring);
+}
+
+/* 进度拖拽条：位于控制条内；控制条收拢时它随容器展开为贴底细线。 */
+.code-media-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-accent) var(--media-progress, 0%), color-mix(in srgb, var(--color-foreground) 32%, transparent) var(--media-progress, 0%));
+  outline: none;
+  cursor: pointer;
+  transition: border-radius 280ms var(--spring);
+}
+
+.code-media-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--color-foreground);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--color-foreground) 30%, transparent);
+  opacity: 0;
+  transition: opacity 120ms var(--spring);
+}
+
+.code-media-seek:hover::-webkit-slider-thumb {
+  opacity: 1;
 }
 
 .code-file-viewer-unsupported {
@@ -259,6 +455,40 @@
 }
 
 .code-file-viewer-pdf-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-background);
+  z-index: 1;
+}
+
+/* Word（.docx）预览：灰色画布上居中承载 docx-preview 的白色页面。 */
+.code-docx-viewer-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--color-background-subtle);
+}
+
+.code-docx-viewer-canvas {
+  min-width: fit-content;
+  padding: 36px 40px;
+}
+
+/* docx-preview 默认给 wrapper 硬编码 gray 背景，改用全局 token 保持深浅主题一致；页面本身仍为白纸。 */
+.code-docx-viewer-canvas .docx-wrapper {
+  background: var(--color-background-subtle);
+}
+
+/* 覆盖库注入的深阴影（0 0 10px rgba(0,0,0,.5)），改用克制的浅阴影勾勒纸面轮廓。 */
+.code-docx-viewer-canvas .docx-wrapper > section.docx {
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--color-foreground) 12%, transparent);
+}
+
+.code-docx-viewer-overlay {
   position: absolute;
   inset: 0;
   display: flex;

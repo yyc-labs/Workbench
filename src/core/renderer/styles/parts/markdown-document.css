@@ -261,6 +261,77 @@
   color: var(--color-foreground);
   font-size: 12px;
 }
+/* 富文本模式的 frontmatter 元信息编辑卡片：渲染在滚动容器内，随正文一起滚动。
+   水平边距与富文本编辑器内容的 padding 保持一致。 */
+.markdown-document-meta-slot {
+  flex: 0 0 auto;
+}
+.markdown-document-rich-meta {
+  margin: 16px clamp(18px, 4vw, 56px) 0;
+}
+.markdown-document-rich-meta .code-mdc-meta-title {
+  margin: 5px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-foreground);
+  letter-spacing: 0.01em;
+}
+.markdown-document-meta-edit-row {
+  grid-template-columns: minmax(72px, 128px) minmax(0, 1fr) auto;
+}
+.markdown-document-meta-input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  padding: 2px 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-foreground);
+}
+.markdown-document-meta-input:hover {
+  border-color: var(--color-border);
+}
+.markdown-document-meta-input:focus {
+  border-color: color-mix(in srgb, var(--color-primary) 36%, var(--color-border));
+  background: var(--color-card);
+  outline: none;
+}
+.markdown-document-meta-input--key {
+  color: var(--color-muted-foreground);
+}
+.markdown-document-meta-input--value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.markdown-document-meta-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--color-muted-foreground);
+}
+.markdown-document-meta-remove:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+.markdown-document-meta-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--color-muted-foreground);
+}
+.markdown-document-meta-add:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
 .markdown-document-rich-root .milkdown {
   min-height: 100%;
 }

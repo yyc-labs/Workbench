@@ -12,8 +12,10 @@ import { MarkdownDocumentRichEditorLazy } from './MarkdownDocumentRichEditor.laz
 import { MarkdownDocumentReadOnlyPreview } from './MarkdownDocumentReadOnlyPreview'
 import { MarkdownDocumentSourceEditor } from './MarkdownDocumentSourceEditor'
 import { MarkdownFormatCascader } from './MarkdownFormatCascader'
+import { MarkdownFrontmatterMetaEditor } from './MarkdownFrontmatterMetaEditor'
 import { getMarkdownDocumentSelectionContext } from './markdownDocumentCommands'
 import type { MarkdownDocumentDisplayMode } from './markdownDocumentTypes'
+import { splitMarkdownFrontmatterRaw } from '../code/code.frontmatterParser'
 import { useMarkdownDocumentScrollSync } from './useMarkdownDocumentScrollSync'
 
 type FormatMenuState = {
@@ -80,6 +82,25 @@ export function MarkdownDocumentPage() {
   const scrollMode = mode === 'rich' ? 'preview' : mode === 'source' ? 'edit' : 'split'
   const { previewRef, handleEditorScroll } = useMarkdownDocumentScrollSync(scrollMode, editorRef, active?.path ?? null)
 
+  // 富文本会话始终基于剥离 frontmatter 后的正文：frontmatter 原样保留，Milkdown 只编辑正文。
+  const richSession = useMemo(() => {
+    if (richEditorSession) return richEditorSession
+    if (mode !== 'rich' || !active) return null
+    const split = splitMarkdownFrontmatterRaw(value)
+    return { key: `${active.path}:${active.mtimeMs}`, initialMarkdown: split.body, sequence: 0 }
+  }, [active, mode, richEditorSession, value])
+  // flush / markdownUpdated 回填时都从最新 value 里取当前 frontmatter，
+  // 这样在富文本模式中对元信息卡片的编辑不会被子序列化覆盖。
+  const valueRef = useRef(value)
+  valueRef.current = value
+  const composeRichValue = useCallback((body: string) => splitMarkdownFrontmatterRaw(valueRef.current).frontmatter + body, [])
+  const handleRichFrontmatterChange = useCallback(
+    (nextFrontmatter: string) => {
+      setValue(nextFrontmatter + splitMarkdownFrontmatterRaw(valueRef.current).body)
+    },
+    [setValue],
+  )
+
   useEffect(() => {
     void loadHistory()
   }, [loadHistory])
@@ -144,14 +165,14 @@ export function MarkdownDocumentPage() {
       if (active && isDirty && !saving) {
         if (mode === 'rich' && flushRichEditorRef.current) {
           const markdown = flushRichEditorRef.current()
-          if (markdown != null) setValue(markdown)
+          if (markdown != null) setValue(composeRichValue(markdown))
         }
         void save()
       }
     }
     window.addEventListener('keydown', handleShortcut)
     return () => window.removeEventListener('keydown', handleShortcut)
-  }, [active, isDirty, mode, save, saving, setValue])
+  }, [active, composeRichValue, isDirty, mode, save, saving, setValue])
 
   const handleOpen = async () => {
     const selected = await window.electronAPI.selectMarkdownDocument()
@@ -164,31 +185,32 @@ export function MarkdownDocumentPage() {
     (nextMode: MarkdownDocumentDisplayMode) => {
       if (mode === 'rich' && nextMode !== 'rich' && flushRichEditorRef.current) {
         const markdown = flushRichEditorRef.current()
-        if (markdown != null) setValue(markdown)
+        if (markdown != null) setValue(composeRichValue(markdown))
       }
       if (nextMode === 'rich' && mode !== 'rich' && active) {
+        const split = splitMarkdownFrontmatterRaw(value)
         setRichEditorSession((session) => {
           const sequence = (session?.sequence ?? 0) + 1
           return {
             key: `${active.path}:${active.mtimeMs}:${sequence}`,
-            initialMarkdown: value,
+            initialMarkdown: split.body,
             sequence,
           }
         })
       }
       setMode(nextMode)
     },
-    [active, mode, setMode, setValue, value],
+    [active, composeRichValue, mode, setMode, setValue, value],
   )
 
   const handleSave = useCallback(async () => {
     if (!active || saving) return
     if (mode === 'rich' && flushRichEditorRef.current) {
       const markdown = flushRichEditorRef.current()
-      if (markdown != null) setValue(markdown)
+      if (markdown != null) setValue(composeRichValue(markdown))
     }
     await save()
-  }, [active, mode, save, saving, setValue])
+  }, [active, composeRichValue, mode, save, saving, setValue])
 
   const filteredHistory = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -324,14 +346,15 @@ export function MarkdownDocumentPage() {
               {mode === 'rich' ? (
                 <Suspense fallback={<div className="flex h-full min-w-0 flex-1 items-center justify-center text-sm text-[color:var(--color-muted-foreground)]">{t('common.loading')}</div>}>
                   <MarkdownDocumentRichEditorLazy
-                    key={richEditorSession?.key ?? `${active.path}:${active.mtimeMs}`}
-                    initialMarkdown={richEditorSession?.initialMarkdown ?? value}
+                    key={richSession?.key ?? `${active.path}:${active.mtimeMs}`}
+                    initialMarkdown={richSession?.initialMarkdown ?? ''}
                     documentPath={active.path}
+                    metaSlot={<MarkdownFrontmatterMetaEditor frontmatter={splitMarkdownFrontmatterRaw(value).frontmatter} onChange={handleRichFrontmatterChange} className="markdown-document-rich-meta" />}
                     onEditorChange={(editor) => {
                       richEditorRef.current = editor
                       if (!editor) setFormatMenu(null)
                     }}
-                    onMarkdownChange={(markdown) => setValue(markdown)}
+                    onMarkdownChange={(markdown) => setValue(composeRichValue(markdown))}
                     onContextMenu={handleRichContextMenu}
                     onDocumentProfileChange={() => undefined}
                     onFlushReady={(flush) => {

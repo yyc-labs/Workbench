@@ -42,6 +42,10 @@ export const markdownDocumentMessages = {
       pasteImageClipboardDescription: 'This image has no local file path. Choose where to save it before inserting it.',
       pasteImageReferenceOriginal: 'Reference original file',
       pasteImageSaveAs: 'Choose save location',
+      metadataKey: 'Metadata key',
+      metadataValue: 'Metadata value',
+      addMetadata: 'Add metadata',
+      removeMetadata: 'Remove metadata',
       menu: {
         title: 'Format',
         text: 'Text',
@@ -155,6 +159,10 @@ export const markdownDocumentMessages = {
       pasteImageClipboardDescription: '这张图片没有本地文件路径。请先选择保存位置，再插入到文档。',
       pasteImageReferenceOriginal: '引用原文件',
       pasteImageSaveAs: '选择保存位置',
+      metadataKey: '元数据键名',
+      metadataValue: '元数据值',
+      addMetadata: '添加元数据',
+      removeMetadata: '删除元数据',
       menu: {
         title: '格式',
         text: '文本',

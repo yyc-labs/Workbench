@@ -150,7 +150,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
         const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
         if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
 
-        const isBinaryKind = result.kind === 'image' || result.kind === 'pdf' || result.kind === 'video' || result.kind === 'audio'
+        const isBinaryKind = result.kind === 'image' || result.kind === 'pdf' || result.kind === 'docx' || result.kind === 'video' || result.kind === 'audio'
         const isUnsupportedKind = result.kind === 'unsupported'
 
         setActiveFile(toActiveCodeFile(result))

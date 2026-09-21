@@ -263,8 +263,9 @@
   font-family: var(--font-mono);
   font-size: 0.9em;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* 单词内部不拆分；仅在整词无法一行放下时才断开，避免表格窄列把代码芯片逐字符拆开。 */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .code-markdown-content pre {

@@ -357,7 +357,14 @@ export const CodeFileTree = memo(function CodeFileTree({
         anchor: activeRelativePath,
         mostRecent: activeRelativePath,
       })
-      currentTree.focus(activeRelativePath, { scroll: false })
+      // react-arborist 的行组件在 isFocused 时会抢占 DOM 焦点；搜索结果返回等
+      // nodes 变化会触发本逻辑，若无条件 focus 会把搜索输入框的焦点抢走。
+      // 仅当树已持有 DOM 焦点时才同步 arborist 内部 focus，保证键盘导航可用。
+      const listElement = currentTree.listEl.current
+      const treeHasDomFocus = Boolean(listElement && document.activeElement instanceof Node && listElement.contains(document.activeElement))
+      if (treeHasDomFocus) {
+        currentTree.focus(activeRelativePath, { scroll: false })
+      }
 
       // 用户主动展开/折叠目录时抑制自动滚动，避免查看目录内容时视图被拉回当前文件位置。
       // 目录懒加载期间 nodes/expandedDirectories 持续变化，通过续期抑制窗口保证加载完成前不跳回。

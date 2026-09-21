@@ -15,6 +15,7 @@ import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
+import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
 import { resolveTreeNodeSearchScope } from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
@@ -194,9 +195,15 @@ export function CodeWorkspacePanel({
   })
   const handleMarkdownProjectFileLinkClick = useCallback(
     (relativePath: string) => {
-      void openFile(relativePath)
+      if (!projectPath) {
+        void openFile(relativePath)
+        return
+      }
+      void resolveMarkdownLinkTarget(projectPath, relativePath).then((target) => {
+        void openFile(target ?? relativePath)
+      })
     },
-    [openFile],
+    [openFile, projectPath],
   )
   const {
     activeContentSearchScopeKey,

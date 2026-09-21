@@ -77,6 +77,8 @@ const BINARY_EXTENSIONS = new Set([
   '.avi',
   '.webm',
   '.pdf',
+  '.doc',
+  '.docx',
   '.zip',
   '.gz',
   '.tar',
@@ -106,6 +108,9 @@ const BINARY_EXTENSIONS = new Set([
 export const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.bmp', '.tiff', '.tif', '.avif'])
 export const PREVIEW_HTML_EXTENSIONS = new Set(['.html', '.htm'])
 export const PREVIEW_PDF_EXTENSIONS = new Set(['.pdf'])
+export const PREVIEW_DOCX_EXTENSIONS = new Set(['.docx'])
+/** docx 预览暂不开放：渲染链路（viewers/docx/）已就绪，验证后置为 true 即可放开。 */
+const DOCX_PREVIEW_ENABLED = false
 export const PREVIEW_VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mkv', '.avi', '.webm'])
 export const PREVIEW_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'])
 export const PREVIEW_CSV_EXTENSIONS = new Set(['.csv', '.tsv'])
@@ -116,6 +121,8 @@ export function inferPreviewKindFromPath(relativePath: string): ProjectFilePrevi
   if (PREVIEW_IMAGE_EXTENSIONS.has(ext)) return 'image'
   if (PREVIEW_HTML_EXTENSIONS.has(ext)) return 'html'
   if (PREVIEW_PDF_EXTENSIONS.has(ext)) return 'pdf'
+  // .docx 优先于二进制判定（OOXML zip 包，由 docx-preview 渲染）；旧版 .doc 落入 unsupported。
+  if (DOCX_PREVIEW_ENABLED && PREVIEW_DOCX_EXTENSIONS.has(ext)) return 'docx'
   if (PREVIEW_VIDEO_EXTENSIONS.has(ext)) return 'video'
   if (PREVIEW_AUDIO_EXTENSIONS.has(ext)) return 'audio'
   if (PREVIEW_CSV_EXTENSIONS.has(ext)) return 'csv'
@@ -158,6 +165,7 @@ export function mimeTypeFromPreviewPath(relativePath: string): string {
   if (lower.endsWith('.ogg')) return 'audio/ogg'
   if (lower.endsWith('.m4a')) return 'audio/mp4'
   if (lower.endsWith('.pdf')) return 'application/pdf'
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   return 'application/octet-stream'
 }
 

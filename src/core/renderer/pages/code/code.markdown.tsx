@@ -1,4 +1,4 @@
-import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
+import { Children, createElement, isValidElement, useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check, Copy, Maximize2, X } from 'lucide-react'
 import { MONO_FONT_STACK } from '../../lib/fonts'
@@ -10,6 +10,8 @@ import { joinProjectPath } from './code.pathActions'
 import { copyTextToClipboard } from './code.clipboard'
 import { MermaidBlock } from './code.markdownMermaid'
 import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps } from './code.markdownStructuredBlocks'
+import { extractHastText, MARKDOWN_PREVIEW_SCROLL_ROOT_SELECTOR, scrollMarkdownPreviewToAnchor, slugifyMarkdownHeading } from './code.markdownShared'
+import type { Element as HastElement } from 'hast'
 import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
 import { useI18n } from '../../i18n'
 import { ModalShell } from '../../components/ModalShell'
@@ -618,6 +620,17 @@ function isTranscriptReferenceHref(value: string): boolean {
   return value.trim().toLowerCase().startsWith('transcript-ref://')
 }
 
+type MarkdownHeadingTagName = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
+
+function createHeadingComponentWithAnchor<TagName extends MarkdownHeadingTagName>(tagName: TagName, lineOffset: number): NonNullable<Components[TagName]> {
+  return function AnchorTrackedHeading({ node, ...props }: JSX.IntrinsicElements[TagName] & ExtraProps) {
+    const hastNode = node as HastElement | undefined
+    const anchorId = slugifyMarkdownHeading(extractHastText(hastNode))
+    const sourceLineProps = getSourceLineDataProps(hastNode, lineOffset)
+    return createElement(tagName, { ...props, id: anchorId || props.id, ...sourceLineProps }, props.children)
+  } as NonNullable<Components[TagName]>
+}
+
 function resolveProjectRelativeMarkdownLink(href: string, activeRelativePath: string | null): string | null {
   const encodedPath = href.trim().split(/[?#]/, 1)[0]?.replace(/\\/g, '/') ?? ''
   const path = decodeMarkdownUrlPathSafely(encodedPath)
@@ -655,12 +668,12 @@ export function createMarkdownComponents({
 }: CreateMarkdownComponentsOptions): Components {
   return {
     div: createStructuredBlockComponent('div', lineOffset, onStructuredBlockClick),
-    h1: createSourceTrackedBlockComponent('h1', lineOffset),
-    h2: createSourceTrackedBlockComponent('h2', lineOffset),
-    h3: createSourceTrackedBlockComponent('h3', lineOffset),
-    h4: createSourceTrackedBlockComponent('h4', lineOffset),
-    h5: createSourceTrackedBlockComponent('h5', lineOffset),
-    h6: createSourceTrackedBlockComponent('h6', lineOffset),
+    h1: createHeadingComponentWithAnchor('h1', lineOffset),
+    h2: createHeadingComponentWithAnchor('h2', lineOffset),
+    h3: createHeadingComponentWithAnchor('h3', lineOffset),
+    h4: createHeadingComponentWithAnchor('h4', lineOffset),
+    h5: createHeadingComponentWithAnchor('h5', lineOffset),
+    h6: createHeadingComponentWithAnchor('h6', lineOffset),
     p: createSourceTrackedBlockComponent('p', lineOffset),
     blockquote: createSourceTrackedBlockComponent('blockquote', lineOffset),
     ul: createSourceTrackedBlockComponent('ul', lineOffset),
@@ -730,6 +743,12 @@ export function createMarkdownComponents({
             if (canConsumeInternal) {
               event.preventDefault()
               onInternalLinkClick(link)
+              return
+            }
+            if (link.startsWith('#') && link.length > 1) {
+              event.preventDefault()
+              const container = event.currentTarget.closest<HTMLElement>(MARKDOWN_PREVIEW_SCROLL_ROOT_SELECTOR)
+              if (container) scrollMarkdownPreviewToAnchor(container, link)
               return
             }
             if (projectFilePath) {

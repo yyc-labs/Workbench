@@ -13,8 +13,9 @@
 
 .code-markdown-content th,
 .code-markdown-content td {
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  /* 不在单词内部断行：min-content 保留完整单词宽度，仅整词放不下时才兜底断行。 */
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .code-markdown-content tbody tr:hover {
