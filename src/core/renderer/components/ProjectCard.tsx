@@ -19,8 +19,6 @@ import { preloadProjectPane } from '../lib/projectPagePreload'
 import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
-import { shouldUseWslForRuntimeEntrypoint } from '../../shared/runtimeEntrypoint'
-import { detectProjectEnvironment } from '../lib/projectEnvironment'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -40,7 +38,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const devUrls = useAppStore((s) => s.processUrls[project.id] ?? EMPTY_URLS)
   const runTaskConfig = useAppStore((s) => s.runTaskConfigs[project.id])
   const runTaskStates = useAppStore((s) => s.runTaskStates[project.id])
-  const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
   const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
   const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
   const startProject = useAppStore((s) => s.startProject)
@@ -73,8 +70,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   const session = useAppStore((s) => s.sessions[project.id])
   const runtimeEntry = useAppStore((s) => s.runtimeEntries[project.id])
   const aiEnvironmentMode = useAppStore((s) => s.config.aiEnvironment?.mode)
-  const aiEnvironment = useAppStore((s) => s.config.aiEnvironment)
-  const capability = useAppStore((s) => s.capability)
   const isRuntimeAttached = session?.status === 'attached'
   const isRuntimeDetached = session?.status === 'detached'
   const isRuntimeActive = isRuntimeAttached || isRuntimeDetached
@@ -186,17 +181,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
   // bare-process state alone.
   const isMenuDevRunning = isDevRunning || runTasksActive
   const isMenuDevStopping = isDevStopping || isAnyRunTaskStopping
-
-  // Lazily discover whether the project has a .yworkbench.json so the card can
-  // switch its Run button to "start all tasks" when one exists.
-  useEffect(() => {
-    if (!capability) return
-    const skipWslProjectTaskProbe = capability?.hostPlatform === 'windows' && detectProjectEnvironment(project.path) === 'ubuntu' && aiEnvironmentMode !== 'windows-wsl' && !(aiEnvironmentMode === 'custom-script' && shouldUseWslForRuntimeEntrypoint(aiEnvironment))
-    if (skipWslProjectTaskProbe) return
-    if (runTaskConfig === undefined) {
-      void loadRunTaskConfig(project.id, project.path)
-    }
-  }, [aiEnvironment, aiEnvironmentMode, capability?.hostPlatform, loadRunTaskConfig, project.id, project.path, runTaskConfig])
 
   const handleCardRun = useCallback(() => {
     // Unified start: config tasks, or the legacy command synthesized into a

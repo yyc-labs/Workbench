@@ -198,6 +198,9 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
   startAllRunTasks: async (projectId, projectPath) => {
     // Unified start path: config-file tasks, or a synthesized default task for
     // legacy single-command projects — "Run" always goes through run tasks.
+    if (get().runTaskConfigs[projectId] === undefined) {
+      await get().loadRunTaskConfig(projectId, projectPath)
+    }
     const config = get().runTaskConfigs[projectId]
     const project = get().projects.find((item) => item.id === projectId)
     const { tasks: effectiveTasks } = getEffectiveRunTasks(project ?? {}, config)
