@@ -19,9 +19,9 @@ type FileUnsupportedViewerProps = {
 
 export function FileUnsupportedViewer({ size, mtimeMs, projectPath, relativePath, unsupportedReason = null }: FileUnsupportedViewerProps) {
   const { t } = useI18n()
-  const filePreviewLimitMb = useAppStore((s) => s.config.filePreviewLimitMb ?? 50)
-  // 临时查看阈值 = 自动预览上限 × 2，避免超大文件占用过多 renderer 内存。
-  const tempPreviewMaxBytes = filePreviewLimitMb * 2 * 1024 * 1024
+  const imagePreviewLimitMb = useAppStore((s) => s.config.imagePreviewLimitMb ?? 10)
+  // 临时查看阈值 = 图片自动预览上限 × 2（临时查看仅开放图片类型），避免超大文件占用过多 renderer 内存。
+  const tempPreviewMaxBytes = imagePreviewLimitMb * 2 * 1024 * 1024
   const [tempSrc, setTempSrc] = useState<string | null>(null)
   const [tempLoadFailed, setTempLoadFailed] = useState(false)
 
@@ -31,7 +31,7 @@ export function FileUnsupportedViewer({ size, mtimeMs, projectPath, relativePath
 
   const isSizeLimit = unsupportedReason === 'size-limit'
   const title = isSizeLimit ? t('codeWorkspace.previewTooLargeTitle') : t('codeWorkspace.previewUnsupported')
-  const hint = isSizeLimit ? (canLoadTemporarily ? t('codeWorkspace.previewTooLargeHint') : t('codeWorkspace.previewTooLargeOpenHint')) : t('codeWorkspace.previewUnsupportedHint')
+  const hint = isSizeLimit ? (canLoadTemporarily ? t('codeWorkspace.previewTooLargeHint', { size: formatFileSize(size), limit: String(imagePreviewLimitMb) }) : t('codeWorkspace.previewTooLargeOpenHint')) : t('codeWorkspace.previewUnsupportedHint')
 
   const handleLoadTemporarily = () => {
     setTempLoadFailed(false)

@@ -3,23 +3,13 @@ import { writeFileSync, unlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { loadConfig } from '../config'
-import {
-  listRuntimeEntries as listRegistryRuntimeEntries,
-  removeRuntimeEntry,
-  setRuntimeEntry,
-} from '../runtime-registry'
+import { shouldUseWslForRuntimeEntrypoint } from '../../../shared/runtimeEntrypoint'
+import { listRuntimeEntries as listRegistryRuntimeEntries, removeRuntimeEntry, setRuntimeEntry } from '../runtime-registry'
 import type { RuntimeLaunchCommand } from '../ai-environment/provider-types'
 import type { ProcessManager } from '../runner'
 import { tmuxManager } from '../tmux-manager'
 import type { AiEnvironmentController } from '../ai-environment/environment-controller'
-import type {
-  Capability,
-  AiRuntimeProfile,
-  RuntimeDiagnostics,
-  RuntimeSessionInfo,
-  TerminalProcessInventory,
-  TerminalStopAllResult,
-} from '../../../shared/types'
+import type { Capability, AiRuntimeProfile, RuntimeDiagnostics, RuntimeSessionInfo, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
 
 type RuntimeStateChangedPayload = {
   reason: string
@@ -46,14 +36,17 @@ function isPosixTmuxMode(mode?: RuntimeSessionInfo['mode'] | RuntimeDiagnostics[
   return mode === 'linux-native' || mode === 'macos-native'
 }
 
-type RuntimeSpawnResult =
-  | { ok: true, pid: number | null }
-  | { ok: false, error: string }
+function shouldQueryRuntimeSessions(capability: Capability | null): boolean {
+  if (capability?.hostPlatform !== 'windows') return true
 
-function spawnRuntimeAttempt(
-  attempt: RuntimeLaunchCommand,
-  fallbackEnv?: Record<string, string>,
-): Promise<RuntimeSpawnResult> {
+  const environment = loadConfig().aiEnvironment
+  if (environment?.mode === 'windows-wsl') return true
+  return environment?.mode === 'custom-script' && shouldUseWslForRuntimeEntrypoint(environment)
+}
+
+type RuntimeSpawnResult = { ok: true; pid: number | null } | { ok: false; error: string }
+
+function spawnRuntimeAttempt(attempt: RuntimeLaunchCommand, fallbackEnv?: Record<string, string>): Promise<RuntimeSpawnResult> {
   return new Promise<RuntimeSpawnResult>((resolve) => {
     let settled = false
     const finish = (result: RuntimeSpawnResult) => {
@@ -68,9 +61,7 @@ function spawnRuntimeAttempt(
       windowsHide: attempt.windowsHide,
       shell: attempt.shell ?? false,
       stdio: 'ignore',
-      env: attempt.env
-        ? { ...process.env, ...attempt.env }
-        : fallbackEnv ? { ...process.env, ...fallbackEnv } : process.env,
+      env: attempt.env ? { ...process.env, ...attempt.env } : fallbackEnv ? { ...process.env, ...fallbackEnv } : process.env,
     })
 
     child.on('error', (err) => {
@@ -122,7 +113,7 @@ function focusTerminalWindow(sessionName: string): Promise<boolean> {
     'param([string]$match)',
     '$ErrorActionPreference = "Stop"',
     '',
-    'Add-Type -TypeDefinition @\'',
+    "Add-Type -TypeDefinition @'",
     'using System;',
     'using System.Runtime.InteropServices;',
     'using System.Text;',
@@ -141,7 +132,7 @@ function focusTerminalWindow(sessionName: string): Promise<boolean> {
     '  public static extern bool BringWindowToTop(IntPtr hWnd);',
     '  public delegate bool EnumWinProc(IntPtr hWnd, IntPtr lParam);',
     '}',
-    '\'@',
+    "'@",
     '$found = [IntPtr]::Zero',
     '$cb = [TF+EnumWinProc]{ param($h,$l)',
     '  $sb = New-Object System.Text.StringBuilder 256',
@@ -169,7 +160,11 @@ function focusTerminalWindow(sessionName: string): Promise<boolean> {
     const finish = (ok: boolean) => {
       if (settled) return
       settled = true
-      try { unlinkSync(ps1File) } catch { /* noop */ }
+      try {
+        unlinkSync(ps1File)
+      } catch {
+        /* noop */
+      }
       resolve(ok)
     }
     child.on('error', () => finish(false))
@@ -185,12 +180,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     return deps.aiEnvironmentController.diagnoseRuntime(profile)
   }
 
-  async function startRuntime(
-    projectId: string,
-    projectPath: string,
-    profile?: AiRuntimeProfile | null,
-    cli?: 'claude' | 'codex'
-  ): Promise<boolean> {
+  async function startRuntime(projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex'): Promise<boolean> {
     const diagnostics = await diagnoseRuntime(profile)
     if (diagnostics.issues.length > 0 && diagnostics.mode !== 'windows-native') {
       console.error('[runtime:start] diagnostics failed:', diagnostics.issues.join(' | '))
@@ -228,9 +218,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
         return true
       }
 
-      console.error(
-        `[runtime:start] launch attempt ${index + 1}/${launchAttempts.length} failed: ${attempt.startCommand} (${result.error})`
-      )
+      console.error(`[runtime:start] launch attempt ${index + 1}/${launchAttempts.length} failed: ${attempt.startCommand} (${result.error})`)
     }
 
     return false
@@ -240,9 +228,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
     const diagnostics = await diagnoseRuntime()
     let sessionMode: RuntimeSessionInfo['mode'] | undefined
     try {
-      sessionMode = (await deps.aiEnvironmentController.listRuntimeSessions())
-        .find((item) => item.sessionName === sessionName)
-        ?.mode
+      sessionMode = (await deps.aiEnvironmentController.listRuntimeSessions()).find((item) => item.sessionName === sessionName)?.mode
     } catch {
       // Ignore lookup failures and fall back to the configured provider mode.
     }
@@ -262,11 +248,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
       if (!exists) return false
       const distro = getCapability()?.wslDistro || 'Ubuntu'
       return new Promise<boolean>((resolve) => {
-        const child = spawn('wt.exe', [
-          'wsl', '-d', distro,
-          '--', 'bash', '-c',
-          `exec tmux attach-session -t '${sessionName}'`,
-        ], {
+        const child = spawn('wt.exe', ['wsl', '-d', distro, '--', 'bash', '-c', `exec tmux attach-session -t '${sessionName}'`], {
           detached: true,
           stdio: 'ignore',
         })
@@ -317,7 +299,7 @@ export function createRuntimeService(deps: RuntimeServiceDependencies) {
 
   async function listTerminalInventory(): Promise<TerminalProcessInventory> {
     const managedProcesses = getProcessManager()?.listManagedProcesses() ?? []
-    const runtimeSessions = await deps.aiEnvironmentController.listRuntimeSessions()
+    const runtimeSessions = shouldQueryRuntimeSessions(deps.getCapability()) ? await deps.aiEnvironmentController.listRuntimeSessions() : []
     const tmuxSessions = runtimeSessions
       .filter((item) => item.mode === 'windows-wsl' || item.mode === 'linux-native' || item.mode === 'macos-native')
       .map((item) => ({

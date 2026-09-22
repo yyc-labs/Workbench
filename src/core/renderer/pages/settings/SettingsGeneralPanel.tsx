@@ -14,7 +14,10 @@ type GeneralPanelProps = {
   launchOnLoginDisplayMode: LaunchOnLoginDisplayMode
   closeWindowBehavior: CloseWindowBehavior
   codeFileExclusions: ProjectFileExclusionsConfig
-  filePreviewLimitMb: number
+  imagePreviewLimitMb: number
+  pdfPreviewLimitMb: number
+  audioPreviewLimitMb: number
+  videoPreviewLimitMb: number
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
   configRecovery?: ConfigRecoveryInfo
@@ -24,7 +27,53 @@ type GeneralPanelProps = {
   onLaunchOnLoginDisplayModeChange: (mode: LaunchOnLoginDisplayMode) => void | Promise<void>
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
   onCodeFileExclusionsChange: (exclusions: ProjectFileExclusionsConfig) => void | Promise<void>
-  onFilePreviewLimitMbChange: (limitMb: number) => void | Promise<void>
+  onFilePreviewLimitsChange: (limits: { imagePreviewLimitMb?: number; pdfPreviewLimitMb?: number; audioPreviewLimitMb?: number; videoPreviewLimitMb?: number }) => void | Promise<void>
+}
+
+type PreviewLimitInputProps = {
+  label: string
+  value: number
+  placeholder: string
+  onCommit: (limitMb: number) => void
+}
+
+function PreviewLimitInput({ label, value, placeholder, onCommit }: PreviewLimitInputProps) {
+  const [draft, setDraft] = useState(String(value))
+
+  useEffect(() => {
+    setDraft(String(value))
+  }, [value])
+
+  const commitPreviewLimit = () => {
+    const parsed = Number(draft)
+    if (!Number.isFinite(parsed) || Math.round(parsed) === value) {
+      setDraft(String(value))
+      return
+    }
+    onCommit(Math.round(parsed))
+  }
+
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-[color:var(--color-foreground)]">{label}</span>
+      <Input
+        type="number"
+        min={1}
+        max={1024}
+        step={1}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitPreviewLimit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur()
+          }
+        }}
+        className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
+        placeholder={placeholder}
+      />
+    </label>
+  )
 }
 
 function SettingsGeneralPanel({
@@ -34,7 +83,10 @@ function SettingsGeneralPanel({
   launchOnLoginDisplayMode,
   closeWindowBehavior,
   codeFileExclusions,
-  filePreviewLimitMb,
+  imagePreviewLimitMb,
+  pdfPreviewLimitMb,
+  audioPreviewLimitMb,
+  videoPreviewLimitMb,
   supportsLaunchOnLogin,
   supportsCloseWindowBehavior,
   configRecovery,
@@ -44,28 +96,14 @@ function SettingsGeneralPanel({
   onLaunchOnLoginDisplayModeChange,
   onCloseWindowBehaviorChange,
   onCodeFileExclusionsChange,
-  onFilePreviewLimitMbChange,
+  onFilePreviewLimitsChange,
 }: GeneralPanelProps) {
   const { t } = useI18n()
   const [codeExclusionsDraft, setCodeExclusionsDraft] = useState(codeFileExclusions)
-  const [previewLimitDraft, setPreviewLimitDraft] = useState(String(filePreviewLimitMb))
 
   useEffect(() => {
     setCodeExclusionsDraft(codeFileExclusions)
   }, [codeFileExclusions])
-
-  useEffect(() => {
-    setPreviewLimitDraft(String(filePreviewLimitMb))
-  }, [filePreviewLimitMb])
-
-  const commitPreviewLimit = () => {
-    const parsed = Number(previewLimitDraft)
-    if (!Number.isFinite(parsed) || Math.round(parsed) === filePreviewLimitMb) {
-      setPreviewLimitDraft(String(filePreviewLimitMb))
-      return
-    }
-    void onFilePreviewLimitMbChange(Math.round(parsed))
-  }
 
   return (
     <div className="space-y-8">
@@ -122,25 +160,14 @@ function SettingsGeneralPanel({
           {t('settings.general.saveCodeExclusions')}
         </Button>
 
-        <div className="mt-6 max-w-xs space-y-1.5">
-          <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitLabel')}</p>
-          <Input
-            type="number"
-            min={1}
-            max={1024}
-            step={1}
-            value={previewLimitDraft}
-            onChange={(event) => setPreviewLimitDraft(event.target.value)}
-            onBlur={commitPreviewLimit}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur()
-              }
-            }}
-            className="quiet-control w-full h-11 rounded-full border-0 px-4 text-[color:var(--color-foreground)]"
-            placeholder="50"
-          />
-          <p className="text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitHint')}</p>
+        <div className="mt-6 max-w-xl">
+          <div className="grid gap-5 md:grid-cols-2">
+            <PreviewLimitInput label={t('settings.general.imagePreviewLimitLabel')} value={imagePreviewLimitMb} placeholder="10" onCommit={(limitMb) => void onFilePreviewLimitsChange({ imagePreviewLimitMb: limitMb })} />
+            <PreviewLimitInput label={t('settings.general.pdfPreviewLimitLabel')} value={pdfPreviewLimitMb} placeholder="3" onCommit={(limitMb) => void onFilePreviewLimitsChange({ pdfPreviewLimitMb: limitMb })} />
+            <PreviewLimitInput label={t('settings.general.audioPreviewLimitLabel')} value={audioPreviewLimitMb} placeholder="5" onCommit={(limitMb) => void onFilePreviewLimitsChange({ audioPreviewLimitMb: limitMb })} />
+            <PreviewLimitInput label={t('settings.general.videoPreviewLimitLabel')} value={videoPreviewLimitMb} placeholder="10" onCommit={(limitMb) => void onFilePreviewLimitsChange({ videoPreviewLimitMb: limitMb })} />
+          </div>
+          <p className="mt-3 text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitsHint')}</p>
         </div>
       </div>
 

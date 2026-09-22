@@ -1538,8 +1538,11 @@ export interface AppConfig {
   closeWindowBehavior?: CloseWindowBehavior
   /** Names of directories and files omitted from the Code workspace explorer. */
   codeFileExclusions?: ProjectFileExclusionsConfig
-  /** Automatic file preview size limit in MB for image / pdf / video / audio kinds. */
-  filePreviewLimitMb?: number
+  /** Automatic file preview size limits in MB, per preview kind. */
+  imagePreviewLimitMb?: number
+  pdfPreviewLimitMb?: number
+  audioPreviewLimitMb?: number
+  videoPreviewLimitMb?: number
   /** Chromium session/cache storage location. Changes apply after restart. */
   cacheLocation?: AppCacheLocationConfig
   /** Removed project metadata snapshots kept for same-path restore on re-add. */

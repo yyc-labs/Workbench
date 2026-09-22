@@ -40,7 +40,10 @@ import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persis
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
 const MAX_CODE_SESSION_CURSOR_ENTRIES = 60
-export const DEFAULT_FILE_PREVIEW_LIMIT_MB = 50
+export const DEFAULT_IMAGE_PREVIEW_LIMIT_MB = 10
+export const DEFAULT_PDF_PREVIEW_LIMIT_MB = 3
+export const DEFAULT_AUDIO_PREVIEW_LIMIT_MB = 5
+export const DEFAULT_VIDEO_PREVIEW_LIMIT_MB = 10
 const MIN_FILE_PREVIEW_LIMIT_MB = 1
 const MAX_FILE_PREVIEW_LIMIT_MB = 1024
 const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
@@ -124,7 +127,10 @@ const DEFAULT_CONFIG: AppConfig = {
   launchOnLoginDisplayMode: 'tray',
   closeWindowBehavior: 'quit',
   codeFileExclusions: DEFAULT_CODE_FILE_EXCLUSIONS,
-  filePreviewLimitMb: DEFAULT_FILE_PREVIEW_LIMIT_MB,
+  imagePreviewLimitMb: DEFAULT_IMAGE_PREVIEW_LIMIT_MB,
+  pdfPreviewLimitMb: DEFAULT_PDF_PREVIEW_LIMIT_MB,
+  audioPreviewLimitMb: DEFAULT_AUDIO_PREVIEW_LIMIT_MB,
+  videoPreviewLimitMb: DEFAULT_VIDEO_PREVIEW_LIMIT_MB,
   cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
   folders: [],
@@ -730,10 +736,22 @@ function normalizeCacheLocationConfig(value: AppConfig['cacheLocation'] | unknow
   return { mode }
 }
 
-function normalizeFilePreviewLimitMb(value: unknown): number {
+function normalizePreviewLimitMb(value: unknown, defaultMb: number): number {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
-  if (!Number.isFinite(parsed)) return DEFAULT_FILE_PREVIEW_LIMIT_MB
+  if (!Number.isFinite(parsed)) return defaultMb
   return Math.min(MAX_FILE_PREVIEW_LIMIT_MB, Math.max(MIN_FILE_PREVIEW_LIMIT_MB, Math.round(parsed)))
+}
+
+type FilePreviewLimits = Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb'>
+
+/** 归一化四类预览上限；旧版单一 filePreviewLimitMb 不再继承，统一使用约定默认值。 */
+function normalizeFilePreviewLimits(source: Partial<AppConfig> & { filePreviewLimitMb?: unknown }): FilePreviewLimits {
+  return {
+    imagePreviewLimitMb: normalizePreviewLimitMb(source.imagePreviewLimitMb, DEFAULT_IMAGE_PREVIEW_LIMIT_MB),
+    pdfPreviewLimitMb: normalizePreviewLimitMb(source.pdfPreviewLimitMb, DEFAULT_PDF_PREVIEW_LIMIT_MB),
+    audioPreviewLimitMb: normalizePreviewLimitMb(source.audioPreviewLimitMb, DEFAULT_AUDIO_PREVIEW_LIMIT_MB),
+    videoPreviewLimitMb: normalizePreviewLimitMb(source.videoPreviewLimitMb, DEFAULT_VIDEO_PREVIEW_LIMIT_MB),
+  }
 }
 
 function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | unknown): ShortcutPreferencesConfig {
@@ -864,7 +882,7 @@ export function loadConfig(): AppConfig {
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(parsed.codeFileExclusions),
-      filePreviewLimitMb: normalizeFilePreviewLimitMb(parsed.filePreviewLimitMb),
+      ...normalizeFilePreviewLimits(parsed),
       aiEnvironment: normalizeAiEnvironmentConfig({
         ...DEFAULT_CONFIG,
         ...parsed,
@@ -875,6 +893,7 @@ export function loadConfig(): AppConfig {
     cachedConfig.launchOnLoginDisplayMode = normalizeLaunchOnLoginDisplayMode(parsed.launchOnLoginDisplayMode)
     cachedConfig.closeWindowBehavior = normalizeCloseWindowBehavior(parsed.closeWindowBehavior)
     delete (cachedConfig as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
+    delete (cachedConfig as AppConfig & { filePreviewLimitMb?: unknown }).filePreviewLimitMb
     {
       const runtimeProfiles = normalizeAiRuntimeProfiles(parsed.aiRuntimeProfiles, parsed.activeAiRuntimeProfileId)
       cachedConfig.aiRuntimeProfiles = runtimeProfiles.profiles
@@ -917,7 +936,7 @@ export function loadConfig(): AppConfig {
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(DEFAULT_CONFIG.codeFileExclusions),
-      filePreviewLimitMb: normalizeFilePreviewLimitMb(DEFAULT_CONFIG.filePreviewLimitMb),
+      ...normalizeFilePreviewLimits(DEFAULT_CONFIG),
       aiEnvironment: normalizeAiEnvironmentConfig(DEFAULT_CONFIG),
       configRecovery,
     }
@@ -968,12 +987,16 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
-    filePreviewLimitMb: Object.prototype.hasOwnProperty.call(partial, 'filePreviewLimitMb') ? normalizeFilePreviewLimitMb(partial.filePreviewLimitMb) : normalizeFilePreviewLimitMb(current.filePreviewLimitMb),
+    imagePreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'imagePreviewLimitMb') ? partial.imagePreviewLimitMb : current.imagePreviewLimitMb, DEFAULT_IMAGE_PREVIEW_LIMIT_MB),
+    pdfPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'pdfPreviewLimitMb') ? partial.pdfPreviewLimitMb : current.pdfPreviewLimitMb, DEFAULT_PDF_PREVIEW_LIMIT_MB),
+    audioPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'audioPreviewLimitMb') ? partial.audioPreviewLimitMb : current.audioPreviewLimitMb, DEFAULT_AUDIO_PREVIEW_LIMIT_MB),
+    videoPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'videoPreviewLimitMb') ? partial.videoPreviewLimitMb : current.videoPreviewLimitMb, DEFAULT_VIDEO_PREVIEW_LIMIT_MB),
   }
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false) : (current.launchOnLogin ?? false)
   updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode') ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode) : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)
   updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior') ? normalizeCloseWindowBehavior(partial.closeWindowBehavior) : normalizeCloseWindowBehavior(current.closeWindowBehavior)
   delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
+  delete (updated as AppConfig & { filePreviewLimitMb?: unknown }).filePreviewLimitMb
   const runtimeProfiles = normalizeClaudeRuntimeProfiles(
     Object.prototype.hasOwnProperty.call(partial, 'claudeRuntimeProfiles') ? partial.claudeRuntimeProfiles : current.claudeRuntimeProfiles,
     Object.prototype.hasOwnProperty.call(partial, 'activeClaudeRuntimeProfileId') ? partial.activeClaudeRuntimeProfileId : current.activeClaudeRuntimeProfileId,

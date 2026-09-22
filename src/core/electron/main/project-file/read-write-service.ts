@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { shell } from 'electron'
 import type { ProjectFileReadResult, ProjectFileStatResult, ProjectFileUnsupportedReason, ProjectFileWriteImageResult, ProjectFileWriteResult } from '../../../shared/types'
-import { DEFAULT_FILE_PREVIEW_LIMIT_MB, loadConfig } from '../config'
+import { DEFAULT_AUDIO_PREVIEW_LIMIT_MB, DEFAULT_IMAGE_PREVIEW_LIMIT_MB, DEFAULT_PDF_PREVIEW_LIMIT_MB, DEFAULT_VIDEO_PREVIEW_LIMIT_MB, loadConfig } from '../config'
 import { toHostAccessiblePath } from '../host-path'
 import { wslBridge } from '../wsl-bridge'
 import {
@@ -47,8 +47,17 @@ export async function readProjectFile(projectPath: string, relativePath: string)
     }
 
     if (kind === 'image' || kind === 'pdf' || kind === 'docx' || kind === 'video' || kind === 'audio') {
-      // 上限可在设置页调整（filePreviewLimitMb），主进程按当前配置动态生效。
-      const previewLimitBytes = (loadConfig().filePreviewLimitMb ?? DEFAULT_FILE_PREVIEW_LIMIT_MB) * 1024 * 1024
+      // 各类型上限可在设置页分别调整（imagePreviewLimitMb 等），主进程按当前配置动态生效；docx 属文档，与 PDF 共用上限。
+      const config = loadConfig()
+      const limitMb =
+        kind === 'image'
+          ? (config.imagePreviewLimitMb ?? DEFAULT_IMAGE_PREVIEW_LIMIT_MB)
+          : kind === 'pdf' || kind === 'docx'
+            ? (config.pdfPreviewLimitMb ?? DEFAULT_PDF_PREVIEW_LIMIT_MB)
+            : kind === 'video'
+              ? (config.videoPreviewLimitMb ?? DEFAULT_VIDEO_PREVIEW_LIMIT_MB)
+              : (config.audioPreviewLimitMb ?? DEFAULT_AUDIO_PREVIEW_LIMIT_MB)
+      const previewLimitBytes = limitMb * 1024 * 1024
       if (stat.size > previewLimitBytes) {
         return toUnsupportedReadResult(normalizedRelativePath, stat, 'size-limit')
       }

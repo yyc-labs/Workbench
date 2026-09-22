@@ -49,7 +49,7 @@ export function SettingsPage() {
   const setLaunchOnLoginDisplayModeConfig = useAppStore((s) => s.setLaunchOnLoginDisplayMode)
   const setCloseWindowBehaviorConfig = useAppStore((s) => s.setCloseWindowBehavior)
   const setCodeFileExclusions = useAppStore((s) => s.setCodeFileExclusions)
-  const setFilePreviewLimitMb = useAppStore((s) => s.setFilePreviewLimitMb)
+  const setFilePreviewLimits = useAppStore((s) => s.setFilePreviewLimits)
   const setCacheLocationConfig = useAppStore((s) => s.setCacheLocation)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
   const setRuntimeKeepAliveOnQuit = useAppStore((s) => s.setRuntimeKeepAliveOnQuit)
@@ -374,7 +374,10 @@ export function SettingsPage() {
                   launchOnLoginDisplayMode={launchOnLoginDisplayMode}
                   closeWindowBehavior={closeWindowBehavior}
                   codeFileExclusions={codeFileExclusions}
-                  filePreviewLimitMb={config.filePreviewLimitMb ?? 50}
+                  imagePreviewLimitMb={config.imagePreviewLimitMb ?? 10}
+                  pdfPreviewLimitMb={config.pdfPreviewLimitMb ?? 3}
+                  audioPreviewLimitMb={config.audioPreviewLimitMb ?? 5}
+                  videoPreviewLimitMb={config.videoPreviewLimitMb ?? 10}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
                   configRecovery={config.configRecovery}
@@ -384,7 +387,7 @@ export function SettingsPage() {
                   onLaunchOnLoginDisplayModeChange={handleLaunchOnLoginDisplayModeChange}
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                   onCodeFileExclusionsChange={handleCodeFileExclusionsChange}
-                  onFilePreviewLimitMbChange={setFilePreviewLimitMb}
+                  onFilePreviewLimitsChange={setFilePreviewLimits}
                 />
               )}
               {section === 'shortcuts' && <SettingsShortcutsPanel shortcutPreferences={config.shortcutPreferences} onSave={setShortcutPreferences} />}
