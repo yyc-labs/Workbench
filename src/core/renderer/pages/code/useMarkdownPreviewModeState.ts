@@ -115,6 +115,11 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
     }
   }, [activeRelativePath, editorValue, isMarkdownFile])
 
+  // The file path and editor value switch together, but the debounced preview
+  // state is updated after paint. Use the current editor value for that first
+  // render so the previous file cannot flash as the new file's preview.
+  const previewEditorValueForActivePath = previousPreviewPathRef.current === activeRelativePath ? previewEditorValue : editorValue
+
   const effectiveMarkdownPreviewMode = isMarkdownFile ? (markdownPreviewMode === 'split' && isNarrowViewport ? 'preview' : markdownPreviewMode) : 'edit'
 
   useEffect(() => {
@@ -125,14 +130,14 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
     }
   }, [editorValue, effectiveMarkdownPreviewMode])
 
-  const parsedMarkdownPreviewDoc = useMemo(() => (shouldParseFrontmatter ? measureMarkdownPreviewSync('preview.frontmatter.parse', () => parseMarkdownDocument(previewEditorValue)) : null), [previewEditorValue, shouldParseFrontmatter])
+  const parsedMarkdownPreviewDoc = useMemo(() => (shouldParseFrontmatter ? measureMarkdownPreviewSync('preview.frontmatter.parse', () => parseMarkdownDocument(previewEditorValueForActivePath)) : null), [previewEditorValueForActivePath, shouldParseFrontmatter])
 
   const markdownPreviewContent = useMemo(() => {
     if (parsedMarkdownPreviewDoc?.hasFrontmatter) {
       return parsedMarkdownPreviewDoc.markdownBody
     }
-    return previewEditorValue
-  }, [parsedMarkdownPreviewDoc, previewEditorValue])
+    return previewEditorValueForActivePath
+  }, [parsedMarkdownPreviewDoc, previewEditorValueForActivePath])
 
   const enableMarkdownSyntaxHighlight = useMemo(() => !shouldDisableMarkdownSyntaxHighlight(markdownPreviewContent), [markdownPreviewContent])
 
@@ -238,7 +243,7 @@ export function useMarkdownPreviewModeState({ activeRelativePath, editorValue, i
     handlePasteImage,
     isMarkdownFile,
     isMdcFile,
-    isMarkdownPreviewStale: isShowingPreview && previewEditorValue !== editorValue,
+    isMarkdownPreviewStale: isShowingPreview && previewEditorValueForActivePath !== editorValue,
     isShowingEditor,
     isShowingPreview,
     markdownComponents,
