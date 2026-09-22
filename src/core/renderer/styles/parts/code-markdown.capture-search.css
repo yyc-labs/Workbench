@@ -142,16 +142,6 @@ body.structured-capture-active .transcript-structured-preview-modal .code-markdo
   min-width: max-content !important;
 }
 
-::highlight(code-markdown-search-highlight) {
-  background: color-mix(in srgb, var(--color-warning) 28%, transparent);
-  color: inherit;
-}
-
-::highlight(code-markdown-search-highlight-active) {
-  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
-  color: inherit;
-}
-
 .code-markdown-source-reveal {
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-primary) 12%, var(--color-warning-background));

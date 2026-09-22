@@ -6,7 +6,7 @@ import { useEffectiveTheme } from '../../hooks/useEffectiveTheme'
 import { useAppStore } from '../../stores/appStore'
 import { MarkdownFrontmatterMetaCard } from './MarkdownFrontmatterMetaCard'
 import { resolveMarkdownDocumentBase } from './markdownDocumentLinks'
-import { isMarkdownRelativePath, resolveMarkdownLinkTarget } from '../code/code.markdownLinkTarget'
+import { resolveMarkdownLinkTarget } from '../code/code.markdownLinkTarget'
 
 type MarkdownDocumentReadOnlyPreviewProps = {
   content: string
@@ -41,7 +41,7 @@ export function MarkdownDocumentReadOnlyPreview({ content, activePath, previewRo
         onProjectFileLinkClick: (relativePath) => {
           if (!base.projectPath || !relativePath) return
           void resolveMarkdownLinkTarget(base.projectPath, relativePath).then((target) => {
-            if (!target || !isMarkdownRelativePath(target)) return
+            if (!target) return
             onOpenPath(toPosixAbsolutePath(base.projectPath, target))
           })
         },

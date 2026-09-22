@@ -46,6 +46,7 @@
 .code-markdown-toc-popover {
   white-space: normal;
   padding: 6px;
+  background: color-mix(in srgb, var(--color-popover) 90%, transparent);
 }
 
 .code-markdown-toc-list {
@@ -212,7 +213,7 @@
   width: min(620px, calc(100% - 28px));
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--color-card) 96%, transparent);
+  background: color-mix(in srgb, var(--color-popover) 90%, transparent);
   box-shadow: var(--shadow-popover);
   backdrop-filter: saturate(145%) blur(18px);
   -webkit-backdrop-filter: saturate(145%) blur(18px);
