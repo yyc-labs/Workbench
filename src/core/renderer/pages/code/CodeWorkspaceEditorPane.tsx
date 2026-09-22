@@ -326,7 +326,16 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
           ) : fileKind === 'docx' && binaryDataUrl ? (
             <FileDocxViewer data={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
           ) : fileKind === 'html' ? (
-            <FileHtmlViewer previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')} sourceHtml={editorValue} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} activeLanguage={activeLanguage} />
+            <FileHtmlViewer
+              previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')}
+              sourceHtml={editorValue}
+              projectPath={projectPath}
+              relativePath={activeRelativePath}
+              monacoTheme={monacoTheme}
+              activeLanguage={activeLanguage}
+              onChange={onChangeEditorValue}
+              onSave={onHandleSave}
+            />
           ) : fileKind === 'video' && binaryDataUrl ? (
             <FileMediaViewer dataUrl={binaryDataUrl} kind="video" projectPath={projectPath} relativePath={activeRelativePath} />
           ) : fileKind === 'audio' && binaryDataUrl ? (

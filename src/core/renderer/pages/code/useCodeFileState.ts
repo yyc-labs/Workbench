@@ -296,7 +296,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
 
   const handleSave = useCallback(async () => {
     if (!activeRelativePath || !activeFile) return
-    if (activeFile.kind !== 'text' && activeFile.kind !== 'markdown') return
+    if (activeFile.kind !== 'text' && activeFile.kind !== 'markdown' && activeFile.kind !== 'html') return
     if (!isDirty) return
 
     setSaveStatus('saving')

@@ -10,7 +10,8 @@ export function configureMonacoTypeScriptDefaults(monaco: typeof Monaco): void {
   if (monacoTypeScriptDefaultsConfigured) return
   monacoTypeScriptDefaultsConfigured = true
 
-  const ts = monaco.languages.typescript
+  // Monaco 0.55 起 languages.typescript 在类型层废弃，TS 语言服务改由顶层 typescript 命名空间导出。
+  const ts = monaco.typescript
   const compilerOptions = {
     target: ts.ScriptTarget.ESNext,
     module: ts.ModuleKind.ESNext,

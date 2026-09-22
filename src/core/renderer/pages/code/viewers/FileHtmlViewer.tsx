@@ -15,6 +15,8 @@ type FileHtmlViewerProps = {
   relativePath: string
   monacoTheme: 'vs' | 'vs-dark'
   activeLanguage: string | null
+  onChange: (value: string) => void
+  onSave: () => void
 }
 
 type HtmlViewMode = 'render' | 'source'
@@ -215,7 +217,7 @@ function HtmlPreviewGuest({
   return <div ref={containerRef} className="code-file-viewer-html-guest" />
 }
 
-export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePath, monacoTheme, activeLanguage }: FileHtmlViewerProps) {
+export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePath, monacoTheme, activeLanguage, onChange, onSave }: FileHtmlViewerProps) {
   const { t } = useI18n()
   const [mode, setMode] = useState<HtmlViewMode>('render')
   const [viewportMode, setViewportMode] = useState<HtmlViewportMode>('desktop')
@@ -432,7 +434,7 @@ export function FileHtmlViewer({ previewUrl, sourceHtml, projectPath, relativePa
           </div>
         </div>
       ) : (
-        <MonacoCodeEditor filePath={relativePath} value={sourceHtml} language={activeLanguage || 'html'} theme={monacoTheme} isReadOnly onChange={() => {}} onSave={() => {}} />
+        <MonacoCodeEditor filePath={relativePath} projectPath={projectPath} value={sourceHtml} language={activeLanguage || 'html'} theme={monacoTheme} onChange={onChange} onSave={onSave} />
       )}
     </FileViewerShell>
   )

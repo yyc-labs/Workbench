@@ -56,7 +56,7 @@ export function CodeSidebarRailButton({ side, collapsed, onClick, className, ari
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (!dragArmedRef.current || didDragRef.current) return
+    if (!onLongPress || !dragArmedRef.current || didDragRef.current) return
     const dx = event.clientX - pointerStartRef.current.x
     const dy = event.clientY - pointerStartRef.current.y
     // 位移达到阈值才真正进入拖拽，避免轻微抖动误触发
