@@ -870,6 +870,9 @@ export function CodeWorkspacePanel({
     <div ref={pageRootRef} className="relative flex h-full min-h-0 flex-col">
       <SidebarGestureHost
         pageRootRef={pageRootRef}
+        onToggleHeader={() => {
+          window.dispatchEvent(new CustomEvent('app:toggle-project-header'))
+        }}
         onToggleLeftSidebar={() => {
           if (isNarrowViewport) {
             setIsExplorerOpen((current) => !current)

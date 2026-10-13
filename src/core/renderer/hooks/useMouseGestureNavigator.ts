@@ -11,7 +11,6 @@ import {
   GESTURE_MAX_POINTS as MAX_POINTS,
   GESTURE_SAMPLE_MIN_DISTANCE as SAMPLE_MIN_DISTANCE,
   GESTURE_VERTICAL_DOWN_THRESHOLD as VERTICAL_DOWN_THRESHOLD,
-  GESTURE_VERTICAL_UP_THRESHOLD as VERTICAL_UP_THRESHOLD,
   isScribble,
   isStraightSwipe,
   type GesturePoint,
@@ -46,7 +45,6 @@ const EMPTY_HINT: MouseGestureHint = {
 
 const RECENT_GESTURE_ALLOW_SELECTOR = '[data-allow-recent-gesture="true"]'
 const RECENT_GESTURE_IGNORE_SELECTOR = ['button', 'a', 'input', 'textarea', 'select', '[contenteditable="true"]', '.xterm', '[role="dialog"]'].join(', ')
-const PROJECT_HEADER_COLLAPSED_STORAGE_KEY = 'app:project-header-collapsed'
 const GESTURE_ACTIVE_CLASS_NAME = 'gesture-active'
 
 export function navigateHomeWithStartupDefaultReset(navigate: NavigateFunction): void {
@@ -72,19 +70,45 @@ function isProjectDetailRoute(pathname: string): boolean {
   return segments[0] === 'project' && segments.length >= 2
 }
 
-function readProjectHeaderCollapsed(): boolean {
-  try {
-    return localStorage.getItem(PROJECT_HEADER_COLLAPSED_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
 function translateGesture(locale: GestureLocale, key: string): string {
   return translate(locale, key as never)
 }
 
-function toPreview(locale: GestureLocale, dx: number, dy: number, points: GesturePoint[], allowRecentGesture: boolean, recentDrawerOpen: boolean, allowProjectHeaderGesture: boolean, isDetailRoute: boolean, projectHeaderCollapsed: boolean): GesturePreview {
+function toPreview(locale: GestureLocale, dx: number, dy: number, points: GesturePoint[], allowRecentGesture: boolean, recentDrawerOpen: boolean, isHeaderGesture: boolean): GesturePreview {
+  if (isHeaderGesture) {
+    // Ctrl/Cmd + right-drag: reserved for the project header toggle, so
+    // horizontal navigation, the recent drawer, and circles do not apply.
+    if (isScribble(computeTrajectoryStats(points))) {
+      return {
+        status: 'invalid',
+        action: null,
+        label: translateGesture(locale, 'common.mouseGesture.invalidScribble'),
+      }
+    }
+    const absX = Math.abs(dx)
+    const absY = Math.abs(dy)
+    const straight = isStraightSwipe(computeTrajectoryStats(points))
+    if (straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
+      return {
+        status: 'ready',
+        action: 'toggleProjectHeader',
+        label: translateGesture(locale, 'common.mouseGesture.releaseToggleProjectHeader'),
+      }
+    }
+    if (dy > ACTIVATE_DISTANCE && absY > absX * 1.05) {
+      return {
+        status: 'pending',
+        action: null,
+        label: translateGesture(locale, 'common.mouseGesture.continueDownToggleProjectHeader'),
+      }
+    }
+    return {
+      status: 'invalid',
+      action: null,
+      label: translateGesture(locale, 'common.mouseGesture.invalidScribble'),
+    }
+  }
+
   if (detectCircleGesture(points)) {
     return {
       status: 'ready',
@@ -97,14 +121,6 @@ function toPreview(locale: GestureLocale, dx: number, dy: number, points: Gestur
   const absX = Math.abs(dx)
   const absY = Math.abs(dy)
   const straight = isStraightSwipe(stats)
-
-  if (allowProjectHeaderGesture && isDetailRoute && straight && dy <= -VERTICAL_UP_THRESHOLD && absY >= absX * ANGLE_RATIO) {
-    return {
-      status: 'ready',
-      action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed ? translateGesture(locale, 'common.mouseGesture.releaseExpandProjectHeader') : translateGesture(locale, 'common.mouseGesture.releaseCollapseProjectHeader'),
-    }
-  }
 
   if (allowRecentGesture && straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO) {
     return {
@@ -139,25 +155,11 @@ function toPreview(locale: GestureLocale, dx: number, dy: number, points: Gestur
     }
   }
 
-  if (allowProjectHeaderGesture && isDetailRoute && dy < -ACTIVATE_DISTANCE && absY > absX * 1.05) {
-    return {
-      status: 'pending',
-      action: 'toggleProjectHeader',
-      label: projectHeaderCollapsed ? translateGesture(locale, 'common.mouseGesture.continueUpExpandProjectHeader') : translateGesture(locale, 'common.mouseGesture.continueUpCollapseProjectHeader'),
-    }
-  }
-
   if (absY > absX * 1.05 && absY >= ACTIVATE_DISTANCE * 2) {
     return {
       status: 'invalid',
       action: null,
-      label: allowRecentGesture
-        ? allowProjectHeaderGesture && isDetailRoute
-          ? translateGesture(locale, 'common.mouseGesture.invalidUpDownHorizontalCircle')
-          : translateGesture(locale, 'common.mouseGesture.invalidDownHorizontalCircle')
-        : allowProjectHeaderGesture && isDetailRoute
-          ? translateGesture(locale, 'common.mouseGesture.invalidUpHorizontalCircle')
-          : translateGesture(locale, 'common.mouseGesture.invalidHorizontalCircle'),
+      label: allowRecentGesture ? translateGesture(locale, 'common.mouseGesture.invalidDownHorizontalCircle') : translateGesture(locale, 'common.mouseGesture.invalidHorizontalCircle'),
     }
   }
 
@@ -186,9 +188,9 @@ export function useMouseGestureNavigator(): MouseGestureHint {
     activated: false,
     moved: false,
     startLocked: false,
+    isHeaderGesture: false,
     ignoreRecentInThisGesture: false,
     isDetailRouteAtStart: false,
-    projectHeaderCollapsedAtStart: false,
     recentDrawerOpenAtStart: false,
     rawStartX: 0,
     rawStartY: 0,
@@ -251,18 +253,20 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 2) return
-      // Ctrl/Cmd + right-drag is reserved for the sidebar (file tree) gesture,
-      // whose capture-phase handler owns that sequence entirely.
-      if (e.ctrlKey || e.metaKey) return
+      const isHeaderGesture = e.ctrlKey || e.metaKey
+      // Ctrl/Cmd + right-drag toggles the project header. Pages mounting a
+      // SidebarGestureHost capture this sequence in the capture phase and own
+      // it entirely, so this handler only sees it on pages without one.
+      if (isHeaderGesture && !isProjectDetailRoute(location.pathname)) return
       const detailRoute = isProjectDetailRoute(location.pathname)
       setGestureActive(true)
       stateRef.current.tracking = true
       stateRef.current.activated = false
       stateRef.current.moved = false
       stateRef.current.startLocked = false
-      stateRef.current.ignoreRecentInThisGesture = shouldSkipRecentGesture(e.target)
+      stateRef.current.isHeaderGesture = isHeaderGesture
+      stateRef.current.ignoreRecentInThisGesture = !isHeaderGesture && shouldSkipRecentGesture(e.target)
       stateRef.current.isDetailRouteAtStart = detailRoute
-      stateRef.current.projectHeaderCollapsedAtStart = detailRoute ? readProjectHeaderCollapsed() : false
       stateRef.current.recentDrawerOpenAtStart = isRecentProjectDrawerOpen()
       stateRef.current.rawStartX = e.clientX
       stateRef.current.rawStartY = e.clientY
@@ -279,7 +283,6 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const state = stateRef.current
       if (!state.tracking) return
       const allowRecentGesture = !state.ignoreRecentInThisGesture
-      const allowProjectHeaderGesture = !state.ignoreRecentInThisGesture
 
       if ((e.buttons & 2) === 0) {
         setGestureActive(false)
@@ -287,9 +290,9 @@ export function useMouseGestureNavigator(): MouseGestureHint {
         state.activated = false
         state.moved = false
         state.startLocked = false
+        state.isHeaderGesture = false
         state.ignoreRecentInThisGesture = false
         state.isDetailRouteAtStart = false
-        state.projectHeaderCollapsedAtStart = false
         state.recentDrawerOpenAtStart = false
         state.points = []
         clearHint()
@@ -335,7 +338,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
 
       if (!state.activated) return
       const gesturePoints = [...state.points, { x: e.clientX, y: e.clientY }]
-      const preview = toPreview(locale, state.lastDx, state.lastDy, gesturePoints, allowRecentGesture, state.recentDrawerOpenAtStart, allowProjectHeaderGesture, state.isDetailRouteAtStart, state.projectHeaderCollapsedAtStart)
+      const preview = toPreview(locale, state.lastDx, state.lastDy, gesturePoints, allowRecentGesture, state.recentDrawerOpenAtStart, state.isHeaderGesture)
       scheduleHint({
         visible: true,
         label: preview.label,
@@ -371,20 +374,25 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const isCircle = detectCircleGesture(gesturePoints)
       const segments = location.pathname.split('/').filter(Boolean)
       const isDetailRoute = segments[0] === 'project' && segments.length >= 2
-      const passedUp = !state.ignoreRecentInThisGesture && state.isDetailRouteAtStart && straight && dy <= -VERTICAL_UP_THRESHOLD && absY >= absX * ANGLE_RATIO
+      const passedHeaderDown = straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO
       const passedDown = !state.ignoreRecentInThisGesture && straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO
       const passedHorizontal = straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
+
+      if (hadGestureMovement && state.isHeaderGesture) {
+        hideHintImmediately()
+        if (isDetailRoute && passedHeaderDown) {
+          window.dispatchEvent(new CustomEvent('app:toggle-project-header'))
+        }
+        state.points = []
+        state.isHeaderGesture = false
+        state.isDetailRouteAtStart = false
+        state.recentDrawerOpenAtStart = false
+        return
+      }
 
       if (hadGestureMovement && isCircle) {
         hideHintImmediately()
         navigateHomeWithStartupDefaultReset(navigate)
-        state.points = []
-        return
-      }
-
-      if (hadGestureMovement && passedUp) {
-        hideHintImmediately()
-        window.dispatchEvent(new CustomEvent('app:toggle-project-header'))
         state.points = []
         return
       }
@@ -415,9 +423,9 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       }
 
       state.points = []
+      state.isHeaderGesture = false
       state.ignoreRecentInThisGesture = false
       state.isDetailRouteAtStart = false
-      state.projectHeaderCollapsedAtStart = false
       state.recentDrawerOpenAtStart = false
       hideHintImmediately()
     }
@@ -437,9 +445,9 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       stateRef.current.activated = false
       stateRef.current.moved = false
       stateRef.current.startLocked = false
+      stateRef.current.isHeaderGesture = false
       stateRef.current.ignoreRecentInThisGesture = false
       stateRef.current.isDetailRouteAtStart = false
-      stateRef.current.projectHeaderCollapsedAtStart = false
       stateRef.current.recentDrawerOpenAtStart = false
       stateRef.current.points = []
       hideHintImmediately()

@@ -627,7 +627,7 @@ export const settingsMessages = {
           },
           gestureProjectHeader: {
             title: 'Toggle Project Header',
-            description: 'On project detail pages, right-drag upward to collapse or expand the project header.',
+            description: 'On project detail pages (Code / AI Commit / Transcript), hold Ctrl/Cmd and right-drag downward to collapse or expand the project header.',
           },
           gestureCodeSidebar: {
             title: 'Code Page Left Sidebar',
@@ -1661,7 +1661,7 @@ export const settingsMessages = {
           },
           gestureProjectHeader: {
             title: '切换项目栏',
-            description: '在项目详情页里，右键向上拖动可收起或展开顶部项目栏。',
+            description: '在项目详情页（代码 / AI Commit / 转录）里，按住 Ctrl/Cmd 并按住右键向下拖动，可收起或展开顶部项目栏。',
           },
           gestureCodeSidebar: {
             title: '代码页左侧栏',
