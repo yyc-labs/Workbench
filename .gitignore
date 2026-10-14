@@ -23,6 +23,7 @@ cache/
 # Runtime output and temporary verification files
 logs/
 .tmp-*/
+tmps/
 *.pid
 *.seed
 

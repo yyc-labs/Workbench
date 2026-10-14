@@ -5,7 +5,7 @@ export {
   searchProjectFiles,
 } from './project-file/tree-service'
 export { searchProjectContent } from './project-file/content-search-service'
-export { copyProjectFileToClipboard, copyProjectFolderZipToClipboard, createProjectFolderZip } from './project-file/archive-service'
+export { copyProjectFileToClipboard, copyProjectFolderZipToClipboard, createProjectFolderZip, prewarmClipboardWorker } from './project-file/archive-service'
 export {
   openProjectFileInSystem,
   readProjectFile,

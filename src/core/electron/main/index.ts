@@ -12,6 +12,7 @@ import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
 import { openTerminalAtPath } from './shell/openers'
 import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
+import { prewarmClipboardWorker } from './project-file-service'
 import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
 import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
 import { MarkdownDocumentOpenRequestStore } from './markdown-document/markdownDocumentOpenRequest'
@@ -715,6 +716,9 @@ app.whenReady().then(async () => {
       applyWindowBackground(mainWindow, theme, nativeTheme.shouldUseDarkColors)
     }
   })
+
+  // 预热剪贴板 worker：把 .NET 冷启动挪到启动阶段，首次复制文件也能毫秒级完成。
+  prewarmClipboardWorker()
 
   try {
     await runAppStartupSteps(
