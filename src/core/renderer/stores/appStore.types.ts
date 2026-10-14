@@ -107,6 +107,8 @@ import type {
   SkillSummary,
   SkillUpdateCategoryPayload,
   SkillUpdatePayload,
+  FloatingTerminalInstance,
+  FloatingTerminalDock,
 } from '../../shared/types'
 import type { ElectronApi } from '../../shared/electronApi'
 import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from '../../shared/runTasks'
@@ -127,6 +129,8 @@ export interface AppState {
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
   processUrls: Record<string, string[]>
+  /** 浮动终端实例（会话内状态；几何持久化进 config.floatingTerminals）。 */
+  floatingTerminals: FloatingTerminalInstance[]
   config: AppConfig
   searchQuery: string
   homeClassifierFilter: StartupDefaultFilter
@@ -198,6 +202,26 @@ export interface AppState {
   removeProject: (projectId: string) => Promise<void>
   startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean, cwdOverride?: string, runStartupModeOverride?: 'silent' | 'terminal') => Promise<boolean>
   stopProject: (projectId: string) => Promise<void>
+  /** 13.4 浮动终端：新增实例并启动交互 shell（processKey = `${projectId}::float::<n>`）。 */
+  addFloatingTerminal: (projectId: string, cwd: string) => Promise<boolean>
+  /** 单面板多标签：当前激活的标签实例 id。 */
+  activeFloatingTerminalId: string | null
+  setActiveFloatingTerminal: (id: string) => void
+  /** 把已在运行的进程（如 ::script:: 脚本）挂进面板显示：同 key 已挂过则激活，否则新增标签。 */
+  attachFloatingTerminal: (input: { processKey: string; projectId: string; cwd: string; useWsl: boolean; title: string }) => void
+  /** 标签 ×：终止该终端会话并移除标签。 */
+  closeFloatingTerminal: (id: string) => void
+  /** 一键关闭：终止全部会话并清空面板。 */
+  closeAllFloatingTerminals: () => void
+  /** 隐藏整个面板但保留所有会话（可在 /settings/logs 查看）。 */
+  hideAllFloatingTerminals: () => void
+  setFloatingTerminalDock: (id: string, dock: FloatingTerminalDock, sizeRatio?: number) => void
+  setFloatingTerminalSizeRatio: (id: string, sizeRatio: number) => void
+  focusFloatingTerminal: (id: string) => void
+  toggleFloatingTerminals: () => Promise<void>
+  reconnectFloatingTerminal: (id: string) => Promise<boolean>
+  /** 恢复持久化的浮动终端：仅保留主进程仍存活的会话，死会话清空。 */
+  hydrateFloatingTerminals: () => Promise<void>
   runTaskConfigs: Record<string, RunTaskConfigFile | null>
   runTaskStates: Record<string, RunTaskProgressEvent['tasks']>
   loadRunTaskConfig: (projectId: string, projectPath: string) => Promise<RunTaskConfigReadResult>

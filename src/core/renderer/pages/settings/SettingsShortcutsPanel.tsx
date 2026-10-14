@@ -1,6 +1,6 @@
-import { Keyboard, MousePointer2 } from 'lucide-react'
+import { Keyboard, MousePointer2, TerminalSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { ShortcutPreferencesConfig } from '../../../shared/types'
+import type { FloatingTerminalToggleAccelerator, ShortcutPreferencesConfig } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 
 type SettingsShortcutsPanelProps = {
@@ -56,6 +56,7 @@ function ShortcutGuideCardView({ card, t }: { card: ShortcutGuideCard; t: (key: 
 function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcutsPanelProps) {
   const { t } = useI18n()
   const [openViewer, setOpenViewer] = useState(Boolean(shortcutPreferences?.quickTranscriptCaptureOpenViewer))
+  const [floatingTerminalAccelerator, setFloatingTerminalAccelerator] = useState<FloatingTerminalToggleAccelerator>(shortcutPreferences?.floatingTerminalToggleAccelerator ?? 'CommandOrControl+J')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -319,7 +320,8 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
 
   useEffect(() => {
     setOpenViewer(Boolean(shortcutPreferences?.quickTranscriptCaptureOpenViewer))
-  }, [shortcutPreferences?.quickTranscriptCaptureOpenViewer])
+    setFloatingTerminalAccelerator(shortcutPreferences?.floatingTerminalToggleAccelerator ?? 'CommandOrControl+J')
+  }, [shortcutPreferences?.quickTranscriptCaptureOpenViewer, shortcutPreferences?.floatingTerminalToggleAccelerator])
 
   const handleOpenViewerChange = async (enabled: boolean) => {
     const previous = openViewer
@@ -333,6 +335,24 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
       })
     } catch (error) {
       setOpenViewer(previous)
+      setSaveError(error instanceof Error ? error.message : t('settings.shortcuts.saveError'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleFloatingTerminalAcceleratorChange = async (next: FloatingTerminalToggleAccelerator) => {
+    const previous = floatingTerminalAccelerator
+    setFloatingTerminalAccelerator(next)
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave({
+        ...shortcutPreferences,
+        floatingTerminalToggleAccelerator: next,
+      })
+    } catch (error) {
+      setFloatingTerminalAccelerator(previous)
       setSaveError(error instanceof Error ? error.message : t('settings.shortcuts.saveError'))
     } finally {
       setSaving(false)
@@ -372,6 +392,28 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
           </label>
         </div>
 
+        {saveError && <p className="mt-4 text-sm text-rose-600">{saveError}</p>}
+      </section>
+
+      <section className="quiet-control rounded-[22px] p-5">
+        <div className="flex flex-wrap items-start justify-between gap-5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--color-foreground)]">
+              <TerminalSquare className="h-4 w-4" strokeWidth={1.8} />
+              {t('settings.shortcuts.floatingTerminalTitle')}
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.floatingTerminalDescription')}</p>
+            <div className="mt-4 flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
+              <span>{t('settings.shortcuts.floatingTerminalLabel')}</span>
+              <select className="quiet-control rounded-full px-3 py-1.5 text-[12px] text-[color:var(--color-foreground)]" value={floatingTerminalAccelerator} disabled={saving} onChange={(event) => void handleFloatingTerminalAcceleratorChange(event.target.value as FloatingTerminalToggleAccelerator)}>
+                <option value="CommandOrControl+J">{t('settings.shortcuts.floatingTerminalOptions.j')}</option>
+                <option value="CommandOrControl+Shift+J">{t('settings.shortcuts.floatingTerminalOptions.shiftJ')}</option>
+                <option value="CommandOrControl+`">{t('settings.shortcuts.floatingTerminalOptions.backquote')}</option>
+                <option value="disabled">{t('settings.shortcuts.floatingTerminalOptions.disabled')}</option>
+              </select>
+            </div>
+          </div>
+        </div>
         {saveError && <p className="mt-4 text-sm text-rose-600">{saveError}</p>}
       </section>
 

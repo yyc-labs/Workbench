@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronRight } from 'lucide-react'
 
@@ -27,11 +27,15 @@ export type ContextCascaderSection = {
   items: ContextCascaderItem[]
 }
 
+export type ContextCascaderLayout = 'cascader' | 'grouped'
+
 export type ContextCascaderProps = {
   x: number
   y: number
   title?: string
   sections: ContextCascaderSection[]
+  /** cascader：两列级联（默认，既有行为）；grouped：单列分组标题，items 平铺在各自 section 标题下。 */
+  layout?: ContextCascaderLayout
   onClose: () => void
 }
 
@@ -62,6 +66,14 @@ function getAdjacentPanelPosition(anchor: { left: number; top: number }, preferr
   }
 }
 
+const PANEL_SURFACE_CLASS = 'fixed z-[10000] overflow-hidden rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]'
+
+const PANEL_SURFACE_STYLE: CSSProperties = {
+  width: PANEL_WIDTH,
+  maxHeight: PANEL_MAX_HEIGHT,
+  WebkitBackdropFilter: 'saturate(170%) blur(18px)',
+}
+
 function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectItem }: { left: number; top: number; items: ContextCascaderItem[]; activeItemId: string | null; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
   const tablePickerItem = items.length === 1 ? (items[0] ?? null) : null
   const tablePicker = tablePickerItem?.tablePicker
@@ -70,13 +82,11 @@ function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectIt
 
   return (
     <div
-      className="fixed z-[10000] overflow-hidden rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 p-1.5 text-[color:var(--color-popover-foreground)] shadow-[var(--shadow-popover)] backdrop-blur-[18px]"
+      className={PANEL_SURFACE_CLASS}
       style={{
         left,
         top,
-        width: PANEL_WIDTH,
-        maxHeight: PANEL_MAX_HEIGHT,
-        WebkitBackdropFilter: 'saturate(170%) blur(18px)',
+        ...PANEL_SURFACE_STYLE,
       }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
@@ -150,7 +160,55 @@ function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectIt
   )
 }
 
-export function ContextCascader({ x, y, title, sections, onClose }: ContextCascaderProps) {
+function GroupedItemRow({ item, onHoverItem, onSelectItem }: { item: ContextCascaderItem; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
+  const hasChildren = Boolean(item.children?.length)
+  return (
+    <button
+      type="button"
+      disabled={item.disabled}
+      className="group flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+      onMouseDown={(event) => event.preventDefault()}
+      onMouseEnter={() => onHoverItem(item)}
+      onFocus={() => onHoverItem(item)}
+      onClick={() => onSelectItem(item)}
+    >
+      {item.icon ? <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[color:var(--color-muted-foreground)] group-hover:text-[color:var(--color-foreground)]">{item.icon}</span> : null}
+      <span className="min-w-0 flex-1 truncate text-[12px] text-[color:var(--color-foreground)]">{item.label}</span>
+      {item.count ? <span className="text-[10px] text-[color:var(--color-muted-foreground)]">{item.count}</span> : null}
+      {hasChildren ? <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" /> : null}
+    </button>
+  )
+}
+
+/** grouped 模式根面板：单列，section 渲染为不可点的分组小标题，组间以分隔线区隔，组内 items 平铺。 */
+function GroupedRootPanel({ left, top, sections, onHoverItem, onSelectItem }: { left: number; top: number; sections: ContextCascaderSection[]; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
+  return (
+    <div
+      className={PANEL_SURFACE_CLASS}
+      style={{
+        left,
+        top,
+        ...PANEL_SURFACE_STYLE,
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div className="max-h-[344px] overflow-auto">
+        {sections.map((section, sectionIndex) => (
+          <div key={section.id} className={sectionIndex > 0 ? 'mt-1.5 border-t border-[color:var(--color-border)] pt-1.5' : undefined}>
+            <div className="px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{section.label}</div>
+            {section.items.map((item) => (
+              <GroupedItemRow key={item.id} item={item} onHoverItem={onHoverItem} onSelectItem={onSelectItem} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function ContextCascader({ x, y, title, sections, layout = 'cascader', onClose }: ContextCascaderProps) {
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? '')
   const [activeBranch, setActiveBranch] = useState<string[]>([])
   const activeSection = useMemo(() => sections.find((section) => section.id === activeSectionId) ?? sections[0] ?? null, [activeSectionId, sections])
@@ -160,18 +218,100 @@ export function ContextCascader({ x, y, title, sections, onClose }: ContextCasca
   const activeChildItem = activeChildItems.find((item) => item.id === activeBranch[1]) ?? activeChildItems[0] ?? null
   const activeGrandChildItems = activeChildItem?.children ?? []
 
+  // grouped 模式下 branch 链路跨 section 查找（根面板 items 平铺，不属于某个激活 section）。
+  const groupedRootItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
+  const groupedRootItem = activeBranch[0] ? (groupedRootItems.find((item) => item.id === activeBranch[0]) ?? null) : null
+  const groupedChildItems = groupedRootItem?.children ?? []
+  const groupedChildItem = activeBranch[1] ? (groupedChildItems.find((item) => item.id === activeBranch[1]) ?? null) : null
+  const groupedGrandChildItems = groupedChildItem?.children ?? []
+
   const rootPosition = useMemo(() => getRootPanelPosition(x, y), [x, y])
   const branchPosition = useMemo(() => getAdjacentPanelPosition(rootPosition, 'right'), [rootPosition])
   const grandChildPosition = useMemo(() => getAdjacentPanelPosition(branchPosition, branchPosition.direction), [branchPosition])
   const greatGrandChildPosition = useMemo(() => getAdjacentPanelPosition(grandChildPosition, grandChildPosition.direction), [grandChildPosition])
 
   useLayoutEffect(() => {
+    if (layout !== 'cascader') return
     if (!activeSection) return
     if (!activeBranch[0]) setActiveBranch([activeSection.items[0]?.id ?? ''])
-  }, [activeBranch, activeSection])
+  }, [activeBranch, activeSection, layout])
+
+  // Escape 关闭：与 CodeTreeContextMenu 原有关闭语义一致。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  // 注意：不监听滚动关闭。菜单为 fixed 定位、不随内容移动（与主流编辑器一致）；
+  // 且分组菜单条目多时面板内部可滚动（max-h 344 + overflow-auto），
+  // 若监听 scroll（即使排除内部滚动）会与用户浏览菜单的滚动冲突导致误关。
+
+  const selectBranchItem = async (item: ContextCascaderItem, branch: string[]) => {
+    if (item.disabled) return
+    if (item.children?.length) {
+      setActiveBranch(branch)
+      return
+    }
+    await item.onSelect?.()
+    onClose()
+  }
+
+  if (layout === 'grouped') {
+    return createPortal(
+      <div className="fixed inset-0 z-[9999]" data-context-cascader-overlay="" onPointerDown={onClose} onContextMenu={onClose}>
+        {title ? (
+          <div
+            className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]"
+            style={{ left: rootPosition.left, top: Math.max(8, rootPosition.top - 28) }}
+          >
+            {title}
+          </div>
+        ) : null}
+        <GroupedRootPanel
+          left={rootPosition.left}
+          top={rootPosition.top}
+          sections={sections}
+          onHoverItem={(item) => {
+            setActiveBranch(item.children?.length ? [item.id] : [])
+          }}
+          onSelectItem={(item) => {
+            void selectBranchItem(item, [item.id])
+          }}
+        />
+        {groupedRootItem?.children?.length ? (
+          <CascaderPanel
+            left={branchPosition.left}
+            top={branchPosition.top}
+            items={groupedChildItems}
+            activeItemId={groupedChildItem?.id ?? null}
+            onHoverItem={(item) => setActiveBranch([groupedRootItem.id, item.id])}
+            onSelectItem={(item) => {
+              void selectBranchItem(item, [groupedRootItem.id, item.id])
+            }}
+          />
+        ) : null}
+        {groupedChildItem?.children?.length ? (
+          <CascaderPanel
+            left={grandChildPosition.left}
+            top={grandChildPosition.top}
+            items={groupedGrandChildItems}
+            activeItemId={null}
+            onHoverItem={() => undefined}
+            onSelectItem={(item) => {
+              void selectBranchItem(item, [])
+            }}
+          />
+        ) : null}
+      </div>,
+      document.body,
+    )
+  }
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999]" onPointerDown={onClose} onContextMenu={onClose}>
+    <div className="fixed inset-0 z-[9999]" data-context-cascader-overlay="" onPointerDown={onClose} onContextMenu={onClose}>
       {title ? (
         <div
           className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]"

@@ -1,4 +1,4 @@
-import { spawn as spawnChild, type ChildProcess } from 'child_process'
+import { spawn as spawnChild, spawnSync, type ChildProcess } from 'child_process'
 import { basename } from 'path'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
@@ -254,19 +254,76 @@ class ProcessManager {
     return this.stopPty(managed as PtyManagedProcess)
   }
 
-  stopAll(): void {
-    const ids = [...this.processes.keys()]
-    for (const projectId of ids) {
-      this.stop(projectId)
-    }
-  }
-
   stopAllWithCount(): number {
     const ids = [...this.processes.keys()]
     for (const processId of ids) {
       this.stop(processId)
     }
     return ids.length
+  }
+
+  /**
+   * 退出路径专用：同步强杀全部托管进程。不写 Ctrl+C、不等宽限定时器——
+   * stop() 的延迟 kill 在 app.quit() 前可能来不及触发，会留下孤儿 shell。
+   */
+  stopAllImmediate(): void {
+    for (const managed of this.processes.values()) {
+      try {
+        if (managed.backend === 'spawn') {
+          this.stopSpawnImmediate(managed as SpawnManagedProcess)
+        } else {
+          this.stopPtyImmediate(managed as PtyManagedProcess)
+        }
+      } catch {
+        /* 尽力而为，逐个继续 */
+      }
+    }
+    this.resizeCtrls.forEach((ctrl) => ctrl.dispose())
+    this.resizeCtrls.clear()
+    this.processes.clear()
+    this.stopping.clear()
+  }
+
+  private stopSpawnImmediate(managed: SpawnManagedProcess): void {
+    const pid = managed.child.pid
+    if (pid != null) this.killProcessTreeImmediate(pid)
+    try {
+      managed.child.kill()
+    } catch {
+      /* already dead */
+    }
+  }
+
+  private stopPtyImmediate(managed: PtyManagedProcess): void {
+    const pid = managed.pty.pid
+    if (typeof pid === 'number' && Number.isFinite(pid)) this.killProcessTreeImmediate(pid)
+    try {
+      managed.pty.kill()
+    } catch {
+      /* already dead */
+    }
+  }
+
+  /** 同步杀整棵进程树：Windows 用 taskkill /t /f，POSIX 杀进程组（node-pty 子进程是会话首进程）。 */
+  private killProcessTreeImmediate(pid: number): void {
+    try {
+      if (process.platform === 'win32') {
+        spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { stdio: 'ignore', windowsHide: true })
+      } else {
+        try {
+          process.kill(-pid, 'SIGKILL')
+        } catch {
+          /* 非进程组长 */
+        }
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          /* already dead */
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   sendInput(projectId: string, data: string): void {

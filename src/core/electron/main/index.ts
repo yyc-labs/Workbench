@@ -650,7 +650,7 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
   await runAppCleanupSteps([
     ...(!runtimeKeepAliveOnQuit ? [{ name: 'runtime', run: () => runtimeService.cleanupOnBeforeQuit() }] : []),
     { name: 'ai-commit', run: () => aiCommitService.cleanupOnBeforeQuit() },
-    { name: 'process-manager', run: () => processManager?.stopAll() },
+    { name: 'process-manager', run: () => processManager?.stopAllImmediate() },
     { name: 'agent-hooks', run: () => agentHookGateway.stop() },
     { name: 'ai-gateway', run: () => aiGatewayService.shutdown() },
     { name: 'transcript-share', run: () => transcriptShareService.shutdown() },
@@ -733,7 +733,7 @@ app.whenReady().then(async () => {
             processManager = new ProcessManager(bootCapability)
           },
           rollback: async () => {
-            await processManager?.stopAll()
+            processManager?.stopAllImmediate()
             processManager = null
           },
         },

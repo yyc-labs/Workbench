@@ -5,14 +5,18 @@ import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReferenc
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { SidebarGestureHost } from '../../components/SidebarGestureHost'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
+import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { CodeSidebarRailButton } from './CodeSidebarRailButton'
+import { CodeTreeContextMenu } from './CodeTreeContextMenu'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
+import { FolderFileSearchPopover } from './FolderFileSearchPopover'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
@@ -750,12 +754,45 @@ export function CodeWorkspacePanel({
     },
     [expandedDirectories, hasSearchQuery, loadDirectory],
   )
-  const { handleCopyTreeNodeName, handleCopyTreeNodeRelativePath, handleCopyTreeNodeRelativePathWithoutSlashes, handleOpenContentSearchResult, handleOpenSmartEmptyFile, handleOpenTreeNodeFolder, handleOpenTreeNodeTerminal, handleSelectExcluded, handleSelectTreeFile, openFileFromQuickDrawer } = useCodeTreePathActions({
+  const {
+    closeFolderFileSearch,
+    closeFolderSearchContextMenu,
+    closePendingScriptConfirm,
+    closeZipAsDialog,
+    confirmPendingScript,
+    confirmZipTreeNodeAs,
+    handleCopyTreeNodeToClipboard,
+    handleCopyTreeNodeName,
+    handleCopyTreeNodeRelativePath,
+    handleCopyTreeNodeRelativePathWithoutSlashes,
+    handleCopyTreeNodeZipToClipboard,
+    handleExecuteScriptInEmbeddedTerminal,
+    handleExecuteScriptInSystemTerminal,
+    handleFindTreeNodeFilesByName,
+    handleFolderSearchContextMenu,
+    handleOpenContentSearchResult,
+    handleOpenSmartEmptyFile,
+    handleOpenTreeNodeFolder,
+    handleOpenTreeNodeTerminal,
+    handleSelectExcluded,
+    handleSelectTreeFile,
+    handleZipTreeNode,
+    handleZipTreeNodeAs,
+    folderSearchContextMenuPayload,
+    folderSearchTarget,
+    isScriptConfirmBusy,
+    isZipDialogBusy,
+    openFileFromQuickDrawer,
+    pendingScriptConfirm,
+    resolveTreeNodeRunnableScript,
+    zipAsTarget,
+  } = useCodeTreePathActions({
     isNarrowViewport,
     openContentSearchMatch,
     openFile,
     openExcludedEntry,
     openFileWithTreeLocate,
+    projectId,
     projectPath,
     setActiveContentSearchLocation,
     setIsExplorerOpen,
@@ -786,6 +823,29 @@ export function CodeWorkspacePanel({
       transcriptTitle: item.transcriptTitle,
     })
   }, [])
+
+  // 13.2：菜单回调适配（去掉 zipName 参数位，避免 nodeKind 被误当作 zip 名）。
+  const handleZipNodeFolderFromMenu = useCallback(
+    (relativePath: string, nodeName: string) => {
+      void handleZipTreeNode(relativePath, nodeName)
+    },
+    [handleZipTreeNode],
+  )
+
+  const handleCopyNodeZipToClipboardFromMenu = useCallback(
+    (relativePath: string, nodeName: string) => {
+      void handleCopyTreeNodeZipToClipboard(relativePath, nodeName)
+    },
+    [handleCopyTreeNodeZipToClipboard],
+  )
+
+  // zip 命名弹窗：打开时以文件夹名作为默认值。
+  const [zipAsDraftName, setZipAsDraftName] = useState('')
+  useEffect(() => {
+    if (zipAsTarget) {
+      setZipAsDraftName(zipAsTarget.nodeName)
+    }
+  }, [zipAsTarget])
 
   const handleOpenTranscriptPageReference = useCallback(
     (target: TranscriptContentDrawerTarget) => {
@@ -992,6 +1052,14 @@ export function CodeWorkspacePanel({
                 onCopyTreeNodeName={handleCopyTreeNodeName}
                 onCopyTreeNodeRelativePath={handleCopyTreeNodeRelativePath}
                 onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
+                onCopyTreeNodeToClipboard={handleCopyTreeNodeToClipboard}
+                onZipTreeNodeFolder={handleZipNodeFolderFromMenu}
+                onZipTreeNodeFolderAs={handleZipTreeNodeAs}
+                onCopyTreeNodeZipToClipboard={handleCopyNodeZipToClipboardFromMenu}
+                onRunTreeNodeScriptInSystemTerminal={handleExecuteScriptInSystemTerminal}
+                onRunTreeNodeScriptInEmbeddedTerminal={handleExecuteScriptInEmbeddedTerminal}
+                onResolveTreeNodeRunnableScript={resolveTreeNodeRunnableScript}
+                onFindTreeNodeFilesByName={handleFindTreeNodeFilesByName}
                 onOpenContentSearchResult={handleOpenContentSearchResult}
                 onOpenTreeNodeFolder={handleOpenTreeNodeFolder}
                 onOpenTreeNodeTerminal={handleOpenTreeNodeTerminal}
@@ -1090,6 +1158,78 @@ export function CodeWorkspacePanel({
         </div>
       </div>
       <TranscriptContentDrawer open={Boolean(transcriptContentDrawer)} target={transcriptContentDrawer} projectId={projectId} projectPath={projectPath} onClose={() => setTranscriptContentDrawer(null)} onOpenInTranscriptPage={handleOpenTranscriptPageReference} />
+      {folderSearchTarget && (
+        <FolderFileSearchPopover
+          x={folderSearchTarget.x}
+          y={folderSearchTarget.y}
+          folderRelativePath={folderSearchTarget.relativePath}
+          folderName={folderSearchTarget.nodeName}
+          projectPath={projectPath}
+          onOpenFile={(relativePath) => {
+            void openFileWithTreeLocate(relativePath)
+          }}
+          onContextMenu={handleFolderSearchContextMenu}
+          onClose={closeFolderFileSearch}
+        />
+      )}
+      {folderSearchContextMenuPayload && (
+        <CodeTreeContextMenu
+          x={folderSearchContextMenuPayload.x}
+          y={folderSearchContextMenuPayload.y}
+          relativePath={folderSearchContextMenuPayload.relativePath}
+          nodeName={folderSearchContextMenuPayload.nodeName}
+          nodeKind={folderSearchContextMenuPayload.nodeKind}
+          onOpenFolder={() => handleOpenTreeNodeFolder(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
+          onOpenTerminal={() => handleOpenTreeNodeTerminal(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
+          onSearchInFolder={() => handleSearchInFolder(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
+          onCopyName={() => handleCopyTreeNodeName(folderSearchContextMenuPayload.nodeName)}
+          onCopyRelativePath={() => handleCopyTreeNodeRelativePath(folderSearchContextMenuPayload.relativePath)}
+          onCopyRelativePathWithoutSlashes={() => handleCopyTreeNodeRelativePathWithoutSlashes(folderSearchContextMenuPayload.relativePath)}
+          onCopyFileToClipboard={() => void handleCopyTreeNodeToClipboard(folderSearchContextMenuPayload.relativePath)}
+          onZipFolder={() => handleZipNodeFolderFromMenu(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
+          onZipFolderAs={() => handleZipTreeNodeAs(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
+          onCopyZipToClipboard={() => handleCopyNodeZipToClipboardFromMenu(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
+          onRunScriptInSystemTerminal={() => handleExecuteScriptInSystemTerminal(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
+          onRunScriptInEmbeddedTerminal={() => handleExecuteScriptInEmbeddedTerminal(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
+          resolveRunnableScript={resolveTreeNodeRunnableScript}
+          onClose={closeFolderSearchContextMenu}
+        />
+      )}
+      <ConfirmDialog
+        open={Boolean(zipAsTarget)}
+        onClose={closeZipAsDialog}
+        onConfirm={() => confirmZipTreeNodeAs(zipAsDraftName)}
+        ariaLabel={t('codeFileTree.zipDialogPrompt')}
+        title={t('codeFileTree.zipFolderAs')}
+        description={t('codeFileTree.zipDialogPrompt')}
+        confirmLabel={t('codeFileTree.zipDialogConfirm')}
+        busy={isZipDialogBusy}
+        widthClassName="max-w-[420px]"
+      >
+        <Input
+          value={zipAsDraftName}
+          onChange={(event) => setZipAsDraftName(event.target.value)}
+          disabled={isZipDialogBusy}
+          autoFocus
+          spellCheck={false}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !isZipDialogBusy) {
+              void confirmZipTreeNodeAs(zipAsDraftName)
+            }
+          }}
+        />
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={Boolean(pendingScriptConfirm)}
+        onClose={closePendingScriptConfirm}
+        onConfirm={() => confirmPendingScript()}
+        ariaLabel={t('codeFileTree.scriptConfirmTitle')}
+        title={t('codeFileTree.scriptConfirmTitle')}
+        description={t('codeFileTree.scriptConfirmDescription')}
+        confirmLabel={t('codeFileTree.sectionRun')}
+        busy={isScriptConfirmBusy}
+        widthClassName="max-w-[420px]"
+      />
     </div>
   )
 }

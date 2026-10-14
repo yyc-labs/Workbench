@@ -84,11 +84,13 @@ import type {
   ProjectFileTreeResult,
   ProjectFileWriteImageResult,
   ProjectFileWriteResult,
+  ProjectFileZipResult,
   ProjectInfo,
   RuntimeDiagnostics,
   RuntimeEntry,
   RuntimeSessionInfo,
   TerminalProcessInventory,
+  ManagedProcessSnapshot,
   TerminalStopAllResult,
   TmuxSessionInfo,
   TranscriptCaptureInitialText,
@@ -249,13 +251,16 @@ export interface ProjectFileElectronApi {
   getProjectFileAutoLoadDecision: (projectPath: string) => Promise<ProjectFileAutoLoadDecision>
   listProjectFiles: (projectPath: string, options?: ProjectFileTreeOptions) => Promise<ProjectFileTreeResult>
   listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) => Promise<ProjectFileTreeResult>
-  searchProjectFiles: (projectPath: string, query: string) => Promise<ProjectFileNode[]>
+  searchProjectFiles: (projectPath: string, query: string, folderRelativePath?: string) => Promise<ProjectFileNode[]>
   searchProjectContent: (projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => Promise<ProjectFileContentSearchResponse>
   readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
   statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
   writeProjectFile: (projectPath: string, relativePath: string, content: string, expectedMtimeMs?: number) => Promise<ProjectFileWriteResult>
   writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => Promise<ProjectFileWriteImageResult>
   openProjectFilePath: (projectPath: string, relativePath: string) => Promise<{ ok: boolean; error?: string }>
+  zipProjectFolder: (projectPath: string, folderRelativePath: string, zipName: string) => Promise<ProjectFileZipResult>
+  copyProjectFolderZipToClipboard: (projectPath: string, folderRelativePath: string, zipName: string) => Promise<{ name: string; size: number }>
+  copyProjectFileToClipboard: (projectPath: string, fileRelativePath: string) => Promise<{ name: string; size: number }>
 }
 
 export interface MarkdownDocumentElectronApi {
@@ -348,6 +353,7 @@ export interface RuntimeElectronApi {
   listTmuxSessions: () => Promise<TmuxSessionInfo[]>
   killTmuxSession: (sessionName: string) => Promise<boolean>
   listTerminalProcesses: () => Promise<TerminalProcessInventory>
+  listManagedProcesses: () => Promise<ManagedProcessSnapshot[]>
   stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
   startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => Promise<boolean>
   getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
@@ -355,6 +361,7 @@ export interface RuntimeElectronApi {
   listRuntimeEntries: () => Promise<RuntimeEntry[]>
   openTerminal: (sessionName: string, statusHint?: string) => Promise<boolean>
   openPathTerminal: (folderPath: string, command?: string) => Promise<boolean>
+  getInteractiveShellCommand: (useWsl: boolean) => Promise<{ command: string; shellKind: string }>
   openSshTerminal: (payload: OpenSshTerminalPayload) => Promise<OpenSshTerminalResult>
 }
 

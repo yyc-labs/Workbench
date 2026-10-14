@@ -1,7 +1,7 @@
-import { Copy, FileText, Folder, FolderOpen, Search, Terminal } from 'lucide-react'
-import { createPortal } from 'react-dom'
-import { useCallback, useEffect } from 'react'
+import { Archive, ClipboardCopy, Copy, FileSearch, FolderOpen, Play, Search, TerminalSquare } from 'lucide-react'
+import type { ComponentType, ReactNode } from 'react'
 import type { ProjectFileNodeKind } from '../../../shared/types'
+import { ContextCascader, type ContextCascaderSection } from '../../components/ui/ContextCascader'
 import { useI18n } from '../../i18n'
 
 export interface CodeTreeContextMenuPayload {
@@ -12,146 +12,122 @@ export interface CodeTreeContextMenuPayload {
   nodeKind: ProjectFileNodeKind
 }
 
+type ContextMenuAction = () => void | Promise<void>
+
 interface CodeTreeContextMenuProps {
   x: number
   y: number
+  relativePath: string
   nodeName: string
   nodeKind: ProjectFileNodeKind
-  onOpenFolder: () => void | Promise<void>
-  onOpenTerminal: () => void | Promise<void>
-  onSearchInFolder: () => void | Promise<void>
-  onCopyName: () => void | Promise<void>
-  onCopyRelativePath: () => void | Promise<void>
-  onCopyRelativePathWithoutSlashes: () => void | Promise<void>
+  onOpenFolder: ContextMenuAction
+  onOpenTerminal: ContextMenuAction
+  onSearchInFolder: ContextMenuAction
+  onCopyName: ContextMenuAction
+  onCopyRelativePath: ContextMenuAction
+  onCopyRelativePathWithoutSlashes: ContextMenuAction
+  /** 13.2：复制文件内容（仅 file 时由调用方传入）。 */
+  onCopyFileToClipboard?: ContextMenuAction
+  /** 13.2：导出为 zip（仅 directory 时由调用方传入）。 */
+  onZipFolder?: ContextMenuAction
+  /** 13.2：导出为 zip…（命名弹窗，仅 directory 时由调用方传入）。 */
+  onZipFolderAs?: ContextMenuAction
+  /** 13.2：复制 zip 到剪贴板（项目内不落盘，仅 directory 时由调用方传入）。 */
+  onCopyZipToClipboard?: ContextMenuAction
+  /** 13.5：按名称查找文件（仅 directory 时由调用方传入）。 */
+  onFindFilesByName?: ContextMenuAction
+  /** 13.3：在系统终端中运行脚本（resolveExecutableScript 命中时由调用方传入）。 */
+  onRunScriptInSystemTerminal?: ContextMenuAction
+  /** 13.3：在内置终端中运行脚本（resolveExecutableScript 命中时由调用方传入）。 */
+  onRunScriptInEmbeddedTerminal?: ContextMenuAction
+  /** 13.3：按节点判断是否存在可执行脚本（resolveExecutableScript 的适配），非空且提供运行回调时渲染「执行」组。 */
+  resolveRunnableScript?: (relativePath: string, nodeKind: ProjectFileNodeKind) => unknown
   onClose: () => void
 }
 
-export function CodeTreeContextMenu({ x, y, nodeName, nodeKind, onOpenFolder, onOpenTerminal, onSearchInFolder, onCopyName, onCopyRelativePath, onCopyRelativePathWithoutSlashes, onClose }: CodeTreeContextMenuProps) {
+function actionIcon(Icon: ComponentType<{ className?: string }>, tone: 'warning' | 'muted'): ReactNode {
+  return <Icon className={`h-3.5 w-3.5 ${tone === 'warning' ? 'text-[color:var(--color-warning)]' : ''}`} />
+}
+
+// 菜单渲染依赖 ContextCascader 的关闭语义（Escape / 外部 pointerdown / 滚动捕获），组件本身不再手写关闭 effect。
+export function CodeTreeContextMenu({
+  x,
+  y,
+  relativePath,
+  nodeName,
+  nodeKind,
+  onOpenFolder,
+  onOpenTerminal,
+  onSearchInFolder,
+  onCopyName,
+  onCopyRelativePath,
+  onCopyRelativePathWithoutSlashes,
+  onCopyFileToClipboard,
+  onZipFolder,
+  onZipFolderAs,
+  onCopyZipToClipboard,
+  onFindFilesByName,
+  onRunScriptInSystemTerminal,
+  onRunScriptInEmbeddedTerminal,
+  resolveRunnableScript,
+  onClose,
+}: CodeTreeContextMenuProps) {
   const { t } = useI18n()
-  const width = 210
-  const height = 250
-  const padding = 8
-  const left = Math.min(Math.max(padding, x), window.innerWidth - width - padding)
-  const top = Math.min(Math.max(padding, y), window.innerHeight - height - padding)
 
-  const handleAction = useCallback(
-    async (action: () => void | Promise<void>) => {
-      await action()
-      onClose()
-    },
-    [onClose],
-  )
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
-
-  useEffect(() => {
-    const onPointerDown = () => onClose()
-    const timer = window.setTimeout(() => {
-      document.addEventListener('pointerdown', onPointerDown)
-    }, 0)
-    return () => {
-      window.clearTimeout(timer)
-      document.removeEventListener('pointerdown', onPointerDown)
-    }
-  }, [onClose])
-
-  // 任意滚动容器（包括文件树虚拟滚动）触发滚动即关闭，与链接账号密码弹层卡片行为一致；scroll 不冒泡，需在 window 捕获阶段监听。
-  useEffect(() => {
-    const onScroll = () => onClose()
-    window.addEventListener('scroll', onScroll, true)
-    return () => window.removeEventListener('scroll', onScroll, true)
-  }, [onClose])
-
-  const itemTypeLabel = nodeKind === 'directory' ? t('codeFileTree.directory') : t('codeFileTree.file')
+  const title = `${nodeKind === 'directory' ? t('codeFileTree.directory') : t('codeFileTree.file')}: ${nodeName}`
   const openFolderLabel = nodeKind === 'directory' ? t('codeFileTree.openDirectory') : t('codeFileTree.openCurrentFolder')
-  const openTerminalLabel = t('codeFileTree.openCurrentTerminal')
-  const searchInFolderLabel = nodeKind === 'directory' ? t('codeFileTree.searchDirectory') : t('codeFileTree.searchCurrentFolder')
-  const copyNameLabel = nodeKind === 'directory' ? t('codeFileTree.copyDirectoryName') : t('codeFileTree.copyFileName')
-  const copyRelativePathLabel = t('codeFileTree.copyRelativePath')
-  const copyRelativePathWithoutSlashesLabel = t('codeFileTree.copyRelativePathWithoutSlashes')
 
-  return createPortal(
-    <div
-      className="fixed z-[9998] min-w-[210px] rounded-[16px] border border-[color:var(--color-border)] bg-[color:var(--color-popover)] p-1.5 shadow-[var(--shadow-popover)]"
-      style={{ top, left }}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <div className="px-2.5 py-1.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-        <span className="inline-flex items-center gap-1">
-          {nodeKind === 'directory' ? <Folder className="h-3.5 w-3.5 text-[color:var(--color-warning)]" /> : <FileText className="h-3.5 w-3.5 text-[color:var(--color-muted-foreground)]" />}
-          <span>{itemTypeLabel}:</span>
-        </span>{' '}
-        <span className="font-medium text-[color:var(--color-foreground)]">{nodeName}</span>
-      </div>
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onOpenFolder)
-        }}
-      >
-        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-warning)]" />
-        {openFolderLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onOpenTerminal)
-        }}
-      >
-        <Terminal className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {openTerminalLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onSearchInFolder)
-        }}
-      >
-        <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {searchInFolderLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onCopyName)
-        }}
-      >
-        <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {copyNameLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onCopyRelativePath)
-        }}
-      >
-        <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {copyRelativePathLabel}
-      </button>
-      <button
-        type="button"
-        className="mt-0.5 flex w-full items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[12px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-        onClick={() => {
-          void handleAction(onCopyRelativePathWithoutSlashes)
-        }}
-      >
-        <Copy className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-        {copyRelativePathWithoutSlashesLabel}
-      </button>
-    </div>,
-    document.body,
-  )
+  const sections: ContextCascaderSection[] = []
+
+  sections.push({
+    id: 'open',
+    label: t('codeFileTree.sectionOpen'),
+    items: [
+      { id: 'open-folder', label: openFolderLabel, icon: actionIcon(FolderOpen, 'warning'), onSelect: onOpenFolder },
+      { id: 'open-terminal', label: t('codeFileTree.openCurrentTerminal'), icon: actionIcon(TerminalSquare, 'muted'), onSelect: onOpenTerminal },
+    ],
+  })
+
+  const searchItems: ContextCascaderSection['items'] = [
+    {
+      id: 'search-in-folder',
+      label: nodeKind === 'directory' ? t('codeFileTree.searchDirectory') : t('codeFileTree.searchCurrentFolder'),
+      icon: actionIcon(Search, 'muted'),
+      onSelect: onSearchInFolder,
+    },
+  ]
+  if (nodeKind === 'directory' && onFindFilesByName) {
+    searchItems.push({ id: 'find-files-by-name', label: t('codeFileTree.searchFilesByName'), icon: actionIcon(FileSearch, 'muted'), onSelect: onFindFilesByName })
+  }
+  sections.push({ id: 'search', label: t('codeFileTree.sectionSearch'), items: searchItems })
+
+  const copyItems: ContextCascaderSection['items'] = [
+    { id: 'copy-name', label: nodeKind === 'directory' ? t('codeFileTree.copyDirectoryName') : t('codeFileTree.copyFileName'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyName },
+    { id: 'copy-relative-path', label: t('codeFileTree.copyRelativePath'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyRelativePath },
+    { id: 'copy-relative-path-without-slashes', label: t('codeFileTree.copyRelativePathWithoutSlashes'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyRelativePathWithoutSlashes },
+  ]
+  if (nodeKind === 'file' && onCopyFileToClipboard) {
+    copyItems.push({ id: 'copy-file-to-clipboard', label: t('codeFileTree.copyFile'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyFileToClipboard })
+  }
+  if (nodeKind === 'directory' && onZipFolder && onZipFolderAs) {
+    if (onCopyZipToClipboard) {
+      copyItems.push({ id: 'zip-folder-to-clipboard', label: t('codeFileTree.zipToClipboard'), icon: actionIcon(ClipboardCopy, 'muted'), onSelect: onCopyZipToClipboard })
+    }
+    copyItems.push({ id: 'zip-folder', label: t('codeFileTree.zipFolder'), icon: actionIcon(Archive, 'muted'), onSelect: onZipFolder })
+    copyItems.push({ id: 'zip-folder-as', label: t('codeFileTree.zipFolderAs'), icon: actionIcon(Archive, 'muted'), onSelect: onZipFolderAs })
+  }
+  sections.push({ id: 'copy', label: t('codeFileTree.sectionCopy'), items: copyItems })
+
+  if (onRunScriptInSystemTerminal && onRunScriptInEmbeddedTerminal && resolveRunnableScript?.(relativePath, nodeKind)) {
+    sections.push({
+      id: 'run',
+      label: t('codeFileTree.sectionRun'),
+      items: [
+        { id: 'run-in-system-terminal', label: t('codeFileTree.runInSystemTerminal'), icon: actionIcon(Play, 'muted'), onSelect: onRunScriptInSystemTerminal },
+        { id: 'run-in-embedded-terminal', label: t('codeFileTree.runInEmbeddedTerminal'), icon: actionIcon(TerminalSquare, 'muted'), onSelect: onRunScriptInEmbeddedTerminal },
+      ],
+    })
+  }
+
+  return <ContextCascader x={x} y={y} title={title} sections={sections} layout="grouped" onClose={onClose} />
 }

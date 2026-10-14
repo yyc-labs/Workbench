@@ -13,6 +13,9 @@ function registerGlobalShortcut(accelerator: string, action: () => void): void {
   }
 }
 
+// 浮动终端开关不注册系统级 globalShortcut：改为 renderer 应用内 keydown 监听（见 AppGlobalEffects），
+// 避免劫持系统级 Ctrl+J（浏览器等其他应用也在用）。
+
 export function registerGlobalShortcuts(onHomeShortcut: () => void, onThemeShortcut: () => void, onTranscriptCaptureShortcut: () => void, onBrowserScreenshotShortcut: () => void, onAgentSkillPromptShortcut: () => void): void {
   registerGlobalShortcut(GLOBAL_HOME_SHORTCUT_ACCELERATOR, onHomeShortcut)
   registerGlobalShortcut(GLOBAL_THEME_SHORTCUT_ACCELERATOR, onThemeShortcut)

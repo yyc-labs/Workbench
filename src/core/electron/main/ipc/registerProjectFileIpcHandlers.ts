@@ -1,6 +1,20 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
-import { getProjectFileAutoLoadDecision, listProjectDirectoryFiles, listProjectFiles, openProjectFileInSystem, readProjectFile, searchProjectContent, searchProjectFiles, statProjectFile, writeProjectFile, writeProjectImageFile } from '../project-file-service'
+import {
+  copyProjectFileToClipboard,
+  copyProjectFolderZipToClipboard,
+  createProjectFolderZip,
+  getProjectFileAutoLoadDecision,
+  listProjectDirectoryFiles,
+  listProjectFiles,
+  openProjectFileInSystem,
+  readProjectFile,
+  searchProjectContent,
+  searchProjectFiles,
+  statProjectFile,
+  writeProjectFile,
+  writeProjectImageFile,
+} from '../project-file-service'
 import type { ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../../shared/types'
 import { withProjectFileErrors } from './registerIpcHandlers.shared'
 
@@ -17,8 +31,8 @@ export function registerProjectFileIpcHandlers(): void {
     return withProjectFileErrors(() => listProjectDirectoryFiles(projectPath, directoryRelativePath))
   })
 
-  ipcMain.handle(IPC.PROJECT_FILE_SEARCH, async (_event, projectPath: string, query: string) => {
-    return withProjectFileErrors(() => searchProjectFiles(projectPath, query))
+  ipcMain.handle(IPC.PROJECT_FILE_SEARCH, async (_event, projectPath: string, query: string, folderRelativePath?: string) => {
+    return withProjectFileErrors(() => searchProjectFiles(projectPath, query, folderRelativePath))
   })
 
   ipcMain.handle(IPC.PROJECT_FILE_CONTENT_SEARCH, async (_event, projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => {
@@ -43,5 +57,17 @@ export function registerProjectFileIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROJECT_FILE_OPEN_PATH, async (_event, projectPath: string, relativePath: string) => {
     return withProjectFileErrors(() => openProjectFileInSystem(projectPath, relativePath))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_ZIP, async (_event, projectPath: string, folderRelativePath: string, zipName: string) => {
+    return withProjectFileErrors(() => createProjectFolderZip(projectPath, folderRelativePath, zipName))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_ZIP_CLIPBOARD, async (_event, projectPath: string, folderRelativePath: string, zipName: string) => {
+    return withProjectFileErrors(() => copyProjectFolderZipToClipboard(projectPath, folderRelativePath, zipName))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_CLIPBOARD, async (_event, projectPath: string, fileRelativePath: string) => {
+    return withProjectFileErrors(() => copyProjectFileToClipboard(projectPath, fileRelativePath))
   })
 }

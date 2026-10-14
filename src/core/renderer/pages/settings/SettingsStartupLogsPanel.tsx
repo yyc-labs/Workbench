@@ -49,6 +49,16 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     return 'project'
   }
 
+  // 脚本通道（::script::<n>）与浮动终端（::float::<n>）的 processId 即完整 key，
+  // 主进程未归一化 projectId，这里拆回裸 projectId 让它们归入所属项目分组。
+  const resolveSnapshotProjectId = (item: ManagedProcessSnapshot): string => {
+    if (item.processId.includes('::script::') || item.processId.includes('::float::')) {
+      const separatorIndex = item.processId.indexOf('::')
+      if (separatorIndex > 0) return item.processId.slice(0, separatorIndex)
+    }
+    return item.projectId
+  }
+
   const refreshInventory = async (silent = false) => {
     if (!silent) setInventoryLoading(true)
     try {
@@ -78,10 +88,11 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
   const processGroups = useMemo<ProcessTreeGroup[]>(() => {
     const groups = new Map<string, ProcessTreeGroup>()
     for (const item of projectManaged) {
-      let group = groups.get(item.projectId)
+      const groupProjectId = resolveSnapshotProjectId(item)
+      let group = groups.get(groupProjectId)
       if (!group) {
-        group = { projectId: item.projectId, name: projectNameMap.get(item.projectId) || item.projectId, processes: [] }
-        groups.set(item.projectId, group)
+        group = { projectId: groupProjectId, name: projectNameMap.get(groupProjectId) || groupProjectId, processes: [] }
+        groups.set(groupProjectId, group)
       }
       group.processes.push(item)
     }
@@ -113,6 +124,10 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
   const getProcessLabel = (item: ManagedProcessSnapshot): string => {
     const runTask = parseRunTaskProcessKey(item.processId)
     if (runTask) return runTaskConfigNames.get(`${runTask.projectId}::${runTask.taskId}`) || runTask.taskId
+    const scriptMatch = /::script::(\d+)$/.exec(item.processId)
+    if (scriptMatch) return t('startupLogs.scriptProcessLabel', { n: scriptMatch[1] })
+    const floatMatch = /::float::(\d+)$/.exec(item.processId)
+    if (floatMatch) return t('startupLogs.floatTerminalLabel', { n: floatMatch[1] })
     return backendLabel(item.backend)
   }
 

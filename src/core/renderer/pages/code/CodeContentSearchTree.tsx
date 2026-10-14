@@ -23,6 +23,14 @@ interface CodeContentSearchTreeProps {
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeZipToClipboard?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunNodeScriptInSystemTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunNodeScriptInEmbeddedTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onResolveNodeRunnableScript?: (relativePath: string, nodeKind: ProjectFileNodeKind) => unknown
+  onFindNodeFilesByName?: (payload: CodeTreeContextMenuPayload) => void
   autoCollapseMatchThreshold?: number
 }
 
@@ -205,7 +213,26 @@ function ContentSearchNodeRenderer({ node, style, dragHandle, activeLocation, on
 }
 
 const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeContentSearchTreeProps>(function CodeContentSearchTreeInner(
-  { files, activeLocation, onOpenMatch, onOpenNodeFolder, onOpenNodeTerminal, onSearchInFolder, onCopyNodeName, onCopyNodeRelativePath, onCopyNodeRelativePathWithoutSlashes, autoCollapseMatchThreshold = 10 },
+  {
+    files,
+    activeLocation,
+    onOpenMatch,
+    onOpenNodeFolder,
+    onOpenNodeTerminal,
+    onSearchInFolder,
+    onCopyNodeName,
+    onCopyNodeRelativePath,
+    onCopyNodeRelativePathWithoutSlashes,
+    onCopyNodeToClipboard,
+    onZipNodeFolder,
+    onZipNodeFolderAs,
+    onCopyNodeZipToClipboard,
+    onRunNodeScriptInSystemTerminal,
+    onRunNodeScriptInEmbeddedTerminal,
+    onResolveNodeRunnableScript,
+    onFindNodeFilesByName,
+    autoCollapseMatchThreshold = 10,
+  },
   ref,
 ) {
   const treeRef = useRef<TreeApi<ContentSearchTreeNode> | null>(null)
@@ -271,14 +298,23 @@ const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeC
         <CodeTreeContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          relativePath={contextMenu.relativePath}
           nodeName={contextMenu.nodeName}
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
           onSearchInFolder={() => onSearchInFolder(contextMenu.relativePath, contextMenu.nodeKind)}
+          onFindFilesByName={onFindNodeFilesByName ? () => onFindNodeFilesByName(contextMenu) : undefined}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyFileToClipboard={onCopyNodeToClipboard ? () => onCopyNodeToClipboard(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          onZipFolder={onZipNodeFolder ? () => onZipNodeFolder(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onZipFolderAs={onZipNodeFolderAs ? () => onZipNodeFolderAs(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onCopyZipToClipboard={onCopyNodeZipToClipboard ? () => onCopyNodeZipToClipboard(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onRunScriptInSystemTerminal={onRunNodeScriptInSystemTerminal ? () => onRunNodeScriptInSystemTerminal(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          onRunScriptInEmbeddedTerminal={onRunNodeScriptInEmbeddedTerminal ? () => onRunNodeScriptInEmbeddedTerminal(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          resolveRunnableScript={onResolveNodeRunnableScript}
           onClose={closeContextMenu}
         />
       )}

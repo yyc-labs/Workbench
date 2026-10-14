@@ -2,31 +2,14 @@ import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
 import { tmuxManager } from '../tmux-manager'
 import { openSshTerminal, openTerminalAtPath } from '../shell/openers'
-import type {
-  AiRuntimeProfile,
-  TerminalProcessInventory,
-  TerminalStopAllResult,
-} from '../../../shared/types'
-import {
-  getBootDistro,
-  type RegisterIpcHandlersDependencies,
-} from './registerIpcHandlers.shared'
+import { resolveInteractiveShellCommand } from '../shell/windows-shell'
+import type { AiRuntimeProfile, TerminalProcessInventory, TerminalStopAllResult } from '../../../shared/types'
+import { getBootDistro, type RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
-export function registerRuntimeIpcHandlers(
-  deps: RegisterIpcHandlersDependencies
-): void {
-  ipcMain.handle(
-    IPC.RUNTIME_START,
-    async (
-      _event,
-      projectId: string,
-      projectPath: string,
-      profile?: AiRuntimeProfile | null,
-      cli?: 'claude' | 'codex',
-    ) => {
-      return deps.runtimeService.startRuntime(projectId, projectPath, profile, cli)
-    }
-  )
+export function registerRuntimeIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
+  ipcMain.handle(IPC.RUNTIME_START, async (_event, projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => {
+    return deps.runtimeService.startRuntime(projectId, projectPath, profile, cli)
+  })
 
   ipcMain.handle(IPC.SHELL_OPEN_TERMINAL, async (_event, sessionName: string, statusHint?: string) => {
     return deps.runtimeService.openRuntimeTerminal(sessionName, statusHint)
@@ -34,6 +17,10 @@ export function registerRuntimeIpcHandlers(
 
   ipcMain.handle(IPC.SHELL_OPEN_PATH_TERMINAL, async (_event, folderPath: string, command?: string) => {
     return openTerminalAtPath(folderPath, getBootDistro(deps), command)
+  })
+
+  ipcMain.handle(IPC.SHELL_INTERACTIVE_SHELL, async (_event, useWsl: boolean) => {
+    return resolveInteractiveShellCommand(useWsl === true)
   })
 
   ipcMain.handle(
@@ -46,10 +33,10 @@ export function registerRuntimeIpcHandlers(
         username: string
         password?: string | null
         route?: 'wsl' | 'windows'
-      }
+      },
     ) => {
       return openSshTerminal(getBootDistro(deps), payload)
-    }
+    },
   )
 
   ipcMain.handle(IPC.RUNTIME_LIST_ENTRIES, () => {
@@ -78,6 +65,11 @@ export function registerRuntimeIpcHandlers(
 
   ipcMain.handle(IPC.TERMINAL_LIST_ALL, async (): Promise<TerminalProcessInventory> => {
     return deps.runtimeService.listTerminalInventory()
+  })
+
+  // 轻量快照：只读 ProcessManager 内存 Map，不查 WSL/tmux 运行时会话（那可能耗时数百毫秒以上）。
+  ipcMain.handle(IPC.TERMINAL_LIST_MANAGED, () => {
+    return deps.getProcessManager()?.listManagedProcesses() ?? []
   })
 
   ipcMain.handle(IPC.TERMINAL_STOP_ALL, async (): Promise<TerminalStopAllResult> => {

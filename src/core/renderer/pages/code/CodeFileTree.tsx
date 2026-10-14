@@ -25,6 +25,14 @@ interface CodeFileTreeProps {
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodeZipToClipboard?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunNodeScriptInSystemTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunNodeScriptInEmbeddedTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onResolveNodeRunnableScript?: (relativePath: string, nodeKind: ProjectFileNodeKind) => unknown
+  onFindNodeFilesByName?: (payload: CodeTreeContextMenuPayload) => void
   flatFileListMode?: boolean
   /** 扁平搜索模式下查询携带的行区间目标（`path:N` / `path:N-M`），点击结果时透传给 onSelectFile。 */
   flatListLineTarget?: FileSearchLineTarget | null
@@ -268,6 +276,14 @@ export const CodeFileTree = memo(function CodeFileTree({
   onCopyNodeName,
   onCopyNodeRelativePath,
   onCopyNodeRelativePathWithoutSlashes,
+  onCopyNodeToClipboard,
+  onZipNodeFolder,
+  onZipNodeFolderAs,
+  onCopyNodeZipToClipboard,
+  onRunNodeScriptInSystemTerminal,
+  onRunNodeScriptInEmbeddedTerminal,
+  onResolveNodeRunnableScript,
+  onFindNodeFilesByName,
   flatFileListMode = false,
   flatListLineTarget = null,
   locateRequestToken = 0,
@@ -491,14 +507,23 @@ export const CodeFileTree = memo(function CodeFileTree({
         <CodeTreeContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          relativePath={contextMenu.relativePath}
           nodeName={contextMenu.nodeName}
           nodeKind={contextMenu.nodeKind}
           onOpenFolder={() => onOpenNodeFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
           onSearchInFolder={() => onSearchInFolder(contextMenu.relativePath, contextMenu.nodeKind)}
+          onFindFilesByName={onFindNodeFilesByName ? () => onFindNodeFilesByName(contextMenu) : undefined}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyFileToClipboard={onCopyNodeToClipboard ? () => onCopyNodeToClipboard(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          onZipFolder={onZipNodeFolder ? () => onZipNodeFolder(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onZipFolderAs={onZipNodeFolderAs ? () => onZipNodeFolderAs(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onCopyZipToClipboard={onCopyNodeZipToClipboard ? () => onCopyNodeZipToClipboard(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
+          onRunScriptInSystemTerminal={onRunNodeScriptInSystemTerminal ? () => onRunNodeScriptInSystemTerminal(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          onRunScriptInEmbeddedTerminal={onRunNodeScriptInEmbeddedTerminal ? () => onRunNodeScriptInEmbeddedTerminal(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
+          resolveRunnableScript={onResolveNodeRunnableScript}
           onClose={closeContextMenu}
         />
       )}

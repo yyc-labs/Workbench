@@ -8,6 +8,7 @@ import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeC
 import { CodeFileTree } from './CodeFileTree'
 import type { ProjectFileContentSearchResponse, ProjectFileNodeKind } from '../../../shared/types'
 import { contentSearchScopeKey, type ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
+import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import type { FileSearchLineTarget, FileTreeState } from './code.types'
 
 type CodeWorkspaceSidebarProps = {
@@ -47,6 +48,14 @@ type CodeWorkspaceSidebarProps = {
   onCopyTreeNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyTreeNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyTreeNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyTreeNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipTreeNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipTreeNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyTreeNodeZipToClipboard?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunTreeNodeScriptInSystemTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onRunTreeNodeScriptInEmbeddedTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onResolveTreeNodeRunnableScript?: (relativePath: string, nodeKind: ProjectFileNodeKind) => unknown
+  onFindTreeNodeFilesByName?: (payload: CodeTreeContextMenuPayload) => void
   onOpenContentSearchResult: (relativePath: string, lineNumber: number, column: number) => void
   onOpenTreeNodeFolder: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onOpenTreeNodeTerminal: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -101,6 +110,14 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   onCopyTreeNodeName,
   onCopyTreeNodeRelativePath,
   onCopyTreeNodeRelativePathWithoutSlashes,
+  onCopyTreeNodeToClipboard,
+  onZipTreeNodeFolder,
+  onZipTreeNodeFolderAs,
+  onCopyTreeNodeZipToClipboard,
+  onRunTreeNodeScriptInSystemTerminal,
+  onRunTreeNodeScriptInEmbeddedTerminal,
+  onResolveTreeNodeRunnableScript,
+  onFindTreeNodeFilesByName,
   onOpenContentSearchResult,
   onOpenTreeNodeFolder,
   onOpenTreeNodeTerminal,
@@ -203,6 +220,14 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             onCopyNodeName={onCopyTreeNodeName}
             onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
             onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
+            onCopyNodeToClipboard={onCopyTreeNodeToClipboard}
+            onZipNodeFolder={onZipTreeNodeFolder}
+            onZipNodeFolderAs={onZipTreeNodeFolderAs}
+            onCopyNodeZipToClipboard={onCopyTreeNodeZipToClipboard}
+            onRunNodeScriptInSystemTerminal={onRunTreeNodeScriptInSystemTerminal}
+            onRunNodeScriptInEmbeddedTerminal={onRunTreeNodeScriptInEmbeddedTerminal}
+            onResolveNodeRunnableScript={onResolveTreeNodeRunnableScript}
+            onFindNodeFilesByName={onFindTreeNodeFilesByName}
           />
         )}
       </aside>
@@ -328,6 +353,14 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
           onCopyNodeName={onCopyTreeNodeName}
           onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
           onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
+          onCopyNodeToClipboard={onCopyTreeNodeToClipboard}
+          onZipNodeFolder={onZipTreeNodeFolder}
+          onZipNodeFolderAs={onZipTreeNodeFolderAs}
+          onCopyNodeZipToClipboard={onCopyTreeNodeZipToClipboard}
+          onRunNodeScriptInSystemTerminal={onRunTreeNodeScriptInSystemTerminal}
+          onRunNodeScriptInEmbeddedTerminal={onRunTreeNodeScriptInEmbeddedTerminal}
+          onResolveNodeRunnableScript={onResolveTreeNodeRunnableScript}
+          onFindNodeFilesByName={onFindTreeNodeFilesByName}
         />
       )}
     </aside>

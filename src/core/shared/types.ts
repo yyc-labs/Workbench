@@ -510,6 +510,34 @@ export interface AgentHookGatewayConfig {
 export interface ShortcutPreferencesConfig {
   /** Open the main transcript viewer after Ctrl/Cmd+Shift+K quick capture imports content. */
   quickTranscriptCaptureOpenViewer?: boolean
+  /** Global accelerator that toggles the floating terminal layer; 'disabled' turns it off. */
+  floatingTerminalToggleAccelerator?: FloatingTerminalToggleAccelerator
+}
+
+export type FloatingTerminalToggleAccelerator = 'CommandOrControl+J' | 'CommandOrControl+Shift+J' | 'CommandOrControl+`' | 'disabled'
+
+export const FLOATING_TERMINAL_TOGGLE_ACCELERATORS: readonly FloatingTerminalToggleAccelerator[] = ['CommandOrControl+J', 'CommandOrControl+Shift+J', 'CommandOrControl+`', 'disabled']
+
+/** 浮动终端停靠方位。 */
+export type FloatingTerminalDock = 'top' | 'bottom' | 'left' | 'right'
+
+/** 浮动终端实例几何（进程运行态不入 config，重启只恢复几何与数量）。 */
+export interface FloatingTerminalInstance {
+  id: string
+  /** Managed process key：`${projectId}::float::<n>`。 */
+  processKey: string
+  projectId: string
+  /** 交互 shell 启动时的 cwd（项目根或项目内目录），重启重连时复用。 */
+  cwd: string
+  useWsl: boolean
+  title: string
+  dock: FloatingTerminalDock
+  /** 停靠时占宽/高比例，clamp [0.2, 0.8]。 */
+  sizeRatio: number
+  /** 面板隐藏时不参与渲染，但会话在主进程继续保活，可在 /settings/logs 查看。 */
+  hidden?: boolean
+  /** 9000 段内部递增，上限 9997，永远低于弹层。 */
+  zIndex: number
 }
 
 export interface AgentHookGatewayStatus {
@@ -1475,7 +1503,7 @@ export interface ProcessInfo {
 }
 
 export interface ManagedProcessSnapshot {
-  /** Internal process key used by renderer store (projectId, projectId::toolbox, or projectId::run::<taskId>). */
+  /** Internal process key used by renderer store (projectId, projectId::toolbox, projectId::run::<taskId>, projectId::script::<n>, or projectId::float::<n>). */
   processId: string
   /** Logical project id; run-task process keys (`${projectId}::run::<taskId>`) are normalized back to the bare projectId. */
   projectId: string
@@ -1587,6 +1615,8 @@ export interface AppConfig {
   browserAi?: BrowserAiConfig
   /** User-configurable global shortcut behavior */
   shortcutPreferences?: ShortcutPreferencesConfig
+  /** Floating terminal instances (geometry only; processes are not restored). */
+  floatingTerminals?: FloatingTerminalInstance[]
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
 }
@@ -1707,6 +1737,17 @@ export interface ProjectFileWriteResult {
 }
 
 export interface ProjectFileWriteImageResult {
+  relativePath: string
+  size: number
+  mtimeMs: number
+}
+
+export interface ProjectFileZipRequest {
+  folderRelativePath: string
+  zipName: string
+}
+
+export interface ProjectFileZipResult {
   relativePath: string
   size: number
   mtimeMs: number

@@ -196,6 +196,15 @@ export function resolveWindowsAutomationShell(preferredShell?: string, availabil
   return resolved
 }
 
+/** 浮动终端交互 shell 命令解析：Windows 复用终端 shell 探测链路；WSL 在 pty 内固定 `bash -i`。 */
+export function resolveInteractiveShellCommand(useWsl: boolean): { command: string; shellKind: string } {
+  if (useWsl) {
+    return { command: 'bash -i', shellKind: 'bash' }
+  }
+  const shell = resolveWindowsTerminalShell()
+  return { command: shell.command, shellKind: shell.kind }
+}
+
 export function buildWindowsTerminalShellLaunch(
   command: string,
   options?: {

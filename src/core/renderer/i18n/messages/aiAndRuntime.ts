@@ -39,6 +39,8 @@ export const aiAndRuntimeMessages = {
       treeSummary: '{projects} projects · {processes} processes',
       noRunningProcesses: 'No running non-tmux project terminals.',
       selectProcess: 'Select a running process to view logs',
+      scriptProcessLabel: 'Script {n}',
+      floatTerminalLabel: 'Floating terminal {n}',
     },
     settingsRuntime: {
       kicker: 'Runtime',
@@ -206,6 +208,8 @@ export const aiAndRuntimeMessages = {
       treeSummary: '{projects} 个项目 · {processes} 个进程',
       noRunningProcesses: '暂无正在运行的非 tmux 项目终端。',
       selectProcess: '请选择一个运行中的进程查看日志',
+      scriptProcessLabel: '脚本 {n}',
+      floatTerminalLabel: '浮动终端 {n}',
     },
     settingsRuntime: {
       kicker: '运行时',

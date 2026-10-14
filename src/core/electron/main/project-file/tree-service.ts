@@ -25,11 +25,13 @@ import {
   isExcludedFile,
   normalizeListedRelativePath,
   normalizeRelativeInput,
+  ProjectFileServiceError,
   resolveRoot,
   type ProjectFileExclusions,
   scanDirectoryForAutoLoadThreshold,
   shouldSkipListedFilePath,
   toPosixRelativePath,
+  validateRelativePathLooksSafe,
 } from './shared'
 
 interface ProjectFileListCacheEntry {
@@ -337,12 +339,27 @@ export async function getProjectFileAutoLoadDecision(projectPath: string): Promi
   }
 }
 
-export async function searchProjectFiles(projectPath: string, query: string): Promise<ProjectFileNode[]> {
+export async function searchProjectFiles(projectPath: string, query: string, folderRelativePath?: string): Promise<ProjectFileNode[]> {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) return []
 
   const rootRealPath = await resolveRoot(projectPath)
   const exclusions = getProjectFileExclusions()
+
+  // 可选范围过滤：限定在指定目录子树内。校验复用现有防护链；空值视为全项目，行为不变。
+  let folderPrefix = ''
+  if (folderRelativePath && folderRelativePath.trim()) {
+    const normalizedFolder = normalizeRelativeInput(folderRelativePath)
+    validateRelativePathLooksSafe(normalizedFolder)
+    const folderCandidatePath = path.resolve(rootRealPath, normalizedFolder)
+    const folderRealPath = await fs.realpath(folderCandidatePath)
+    ensureWithinRoot(rootRealPath, folderRealPath)
+    const folderStat = await fs.stat(folderRealPath)
+    if (!folderStat.isDirectory()) {
+      throw new ProjectFileServiceError('Selected path is not a directory.')
+    }
+    folderPrefix = `${toPosixRelativePath(normalizedFolder)}/`
+  }
 
   let resolvedPaths = getProjectFileListFromCache(rootRealPath, exclusions)
   if (!resolvedPaths) {
@@ -378,6 +395,8 @@ export async function searchProjectFiles(projectPath: string, query: string): Pr
 
   const matches: ProjectFileNode[] = []
   for (const relativePath of resolvedPaths) {
+    // 截断发生在范围过滤之后：先过滤前缀，再受 MAX_SEARCH_RESULTS 约束。
+    if (folderPrefix && !relativePath.startsWith(folderPrefix)) continue
     if (matches.length >= MAX_SEARCH_RESULTS) break
     const fileName = fileNameFromRelativePath(relativePath)
     if (!fuzzyPathMatch(normalizedQuery, relativePath) && !fuzzyPathMatch(normalizedQuery, fileName)) {

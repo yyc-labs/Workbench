@@ -412,6 +412,37 @@ function GlobalThemeShortcutListener() {
   return null
 }
 
+/** 浮动终端开关：应用内快捷键（非系统级 globalShortcut），仅应用聚焦时生效。 */
+function FloatingTerminalShortcutListener() {
+  const toggleFloatingTerminals = useAppStore((s) => s.toggleFloatingTerminals)
+  const accelerator = useAppStore((s) => s.config.shortcutPreferences?.floatingTerminalToggleAccelerator ?? 'CommandOrControl+J')
+
+  useEffect(() => {
+    if (accelerator === 'disabled') return
+    const onKeyDown = (event: KeyboardEvent) => {
+      // 按住连发的 repeat 事件必须忽略：否则第二次触发会把刚弹出的面板立刻隐藏（表现为闪一下就没了）。
+      if (event.repeat) return
+      if (!(event.ctrlKey || event.metaKey)) return
+      if (accelerator === 'CommandOrControl+Shift+J') {
+        if (!event.shiftKey) return
+      } else if (event.shiftKey) {
+        // Ctrl+J / Ctrl+` 不响应带 Shift 的按下，避免与 Ctrl+Shift+J 语义混淆。
+        return
+      }
+      const matches = accelerator === 'CommandOrControl+`' ? event.code === 'Backquote' : event.key.toLowerCase() === 'j'
+      if (!matches) return
+      event.preventDefault()
+      event.stopPropagation()
+      void toggleFloatingTerminals()
+    }
+    // capture 阶段拦截：优先于 xterm/输入框，保证终端聚焦时也能开合面板。
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [accelerator, toggleFloatingTerminals])
+
+  return null
+}
+
 function AppInit() {
   const initApp = useAppStore((s) => s.initApp)
 
@@ -440,6 +471,7 @@ export function AppGlobalEffects() {
       <MarkdownDocumentOpenListener />
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
+      <FloatingTerminalShortcutListener />
       <GlobalProjectDropListener />
       <GlobalRecentProjectsDrawerHost />
       <RouteCatalogDialogHost />

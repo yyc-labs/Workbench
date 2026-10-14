@@ -218,6 +218,9 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
         if (item.processId.includes('::toolbox')) continue
         // Run-task processes are owned by the run-task scheduler, never merged into project state.
         if (item.processId.includes('::run::')) continue
+        // 脚本通道（${projectId}::script::<n>）与浮动终端（${projectId}::float::<n>）为独立实例，不并入项目 dev 状态。
+        if (item.processId.includes('::script::')) continue
+        if (item.processId.includes('::float::')) continue
         const resolvedProjectId = projectIdSet.has(item.processId) ? item.processId : projectIdSet.has(item.projectId) ? item.projectId : null
         if (!resolvedProjectId) continue
         if (item.backend === 'tmux') continue

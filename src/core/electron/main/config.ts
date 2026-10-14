@@ -25,10 +25,13 @@ import type {
   CodexSandboxMode,
   CodexSettingsSnapshot,
   CodexSettingsSnapshotMap,
+  FloatingTerminalInstance,
+  FloatingTerminalToggleAccelerator,
   LaunchOnLoginDisplayMode,
   ShortcutPreferencesConfig,
   ProjectFileExclusionsConfig,
 } from '../../shared/types'
+import { FLOATING_TERMINAL_TOGGLE_ACCELERATORS } from '../../shared/types'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
 import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/gateway-config'
 import { DEFAULT_BROWSER_AI_CONFIG, normalizeBrowserAiConfig } from './browser-ai/browserAiConfig'
@@ -80,6 +83,7 @@ const DEFAULT_CACHE_LOCATION_CONFIG: AppCacheLocationConfig = {
 }
 const DEFAULT_SHORTCUT_PREFERENCES: ShortcutPreferencesConfig = {
   quickTranscriptCaptureOpenViewer: false,
+  floatingTerminalToggleAccelerator: 'CommandOrControl+J',
 }
 const DEFAULT_CODE_FILE_EXCLUSIONS: ProjectFileExclusionsConfig = {
   directories: ['.git', 'node_modules', 'dist', 'build', 'out', '.next', '.nuxt', '.turbo', '.cache', 'coverage', '.venv', 'venv', '__pycache__'],
@@ -759,7 +763,45 @@ function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | 
 
   return {
     quickTranscriptCaptureOpenViewer: typeof raw.quickTranscriptCaptureOpenViewer === 'boolean' ? raw.quickTranscriptCaptureOpenViewer : DEFAULT_SHORTCUT_PREFERENCES.quickTranscriptCaptureOpenViewer,
+    floatingTerminalToggleAccelerator: FLOATING_TERMINAL_TOGGLE_ACCELERATORS.includes(raw.floatingTerminalToggleAccelerator as FloatingTerminalToggleAccelerator) ? (raw.floatingTerminalToggleAccelerator as FloatingTerminalToggleAccelerator) : DEFAULT_SHORTCUT_PREFERENCES.floatingTerminalToggleAccelerator,
   }
+}
+
+/** 浮动终端实例几何归一化：sizeRatio clamp [0.2,0.8]、旧 free 停靠迁移为 bottom、zIndex 归一段。 */
+function normalizeFloatingTerminals(value: unknown): FloatingTerminalInstance[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) return undefined
+  const clampNumber = (input: unknown, fallback: number, min: number, max: number): number => {
+    const parsed = typeof input === 'number' ? input : Number(input)
+    if (!Number.isFinite(parsed)) return fallback
+    return Math.min(max, Math.max(min, parsed))
+  }
+  const normalized: FloatingTerminalInstance[] = []
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object') continue
+    const item = raw as Partial<FloatingTerminalInstance>
+    if (typeof item.id !== 'string' || !item.id.trim()) continue
+    if (typeof item.processKey !== 'string' || !item.processKey.trim()) continue
+    if (typeof item.projectId !== 'string' || !item.projectId.trim()) continue
+    if (typeof item.cwd !== 'string' || !item.cwd.trim()) continue
+    // 旧版本遗留的 'free' 停靠已下线，迁移为 bottom，不丢实例。
+    const dock = item.dock === 'top' || item.dock === 'bottom' || item.dock === 'left' || item.dock === 'right' ? item.dock : item.dock === 'free' ? 'bottom' : null
+    if (!dock) continue
+    normalized.push({
+      id: item.id,
+      processKey: item.processKey,
+      projectId: item.projectId,
+      cwd: item.cwd,
+      useWsl: item.useWsl === true,
+      title: typeof item.title === 'string' ? item.title.slice(0, 80) : 'Terminal',
+      dock,
+      sizeRatio: clampNumber(item.sizeRatio, 0.35, 0.2, 0.8),
+      hidden: item.hidden === true,
+      zIndex: clampNumber(item.zIndex, 9000, 9000, 9997),
+    })
+    if (normalized.length >= 12) break
+  }
+  return normalized
 }
 
 function normalizeCodeFileExclusions(value: AppConfig['codeFileExclusions'] | unknown): ProjectFileExclusionsConfig {
@@ -985,6 +1027,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway') ? normalizeAiGatewayConfig(partial.aiGateway) : normalizeAiGatewayConfig(current.aiGateway),
     browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi') ? normalizeBrowserAiConfig(partial.browserAi) : normalizeBrowserAiConfig(current.browserAi),
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
+    floatingTerminals: Object.prototype.hasOwnProperty.call(partial, 'floatingTerminals') ? normalizeFloatingTerminals(partial.floatingTerminals) : current.floatingTerminals,
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
     imagePreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'imagePreviewLimitMb') ? partial.imagePreviewLimitMb : current.imagePreviewLimitMb, DEFAULT_IMAGE_PREVIEW_LIMIT_MB),

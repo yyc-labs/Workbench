@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS_SECTION } from './pages/settings/settings.types'
 import { loadDetailPageModule, loadHomePageModule, loadLearningCenterPageModule, loadMarkdownDocumentPageModule, loadSettingsPageModule, loadTranscriptPageModule, preloadProjectPane } from './lib/projectPagePreload'
 import { AppGlobalEffects } from './app/AppGlobalEffects'
 import { AppWindowTitleBar, WindowTitleSync } from './app/AppWindowTitleBar'
+import { FloatingTerminalLayer } from './components/floating-terminal/FloatingTerminalLayer'
 
 const HomePage = lazy(() => loadHomePageModule().then((module) => ({ default: module.HomePage })))
 const DetailPage = lazy(() => loadDetailPageModule().then((module) => ({ default: module.DetailPage })))
@@ -67,6 +68,7 @@ export function App() {
           </Suspense>
         </div>
       </div>
+      <FloatingTerminalLayer />
     </Router>
   )
 }
