@@ -24,6 +24,7 @@ cache/
 logs/
 .tmp-*/
 tmps/
+script/clipboard-worker/bin/
 *.pid
 *.seed
 

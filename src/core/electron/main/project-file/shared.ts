@@ -476,7 +476,7 @@ export function toContentSearchResultRecord(results: Map<string, ProjectFileCont
   return next
 }
 
-export function filterListedFilePaths(listedPaths: string[], exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }): FilterListedPathsResult {
+export function filterListedFilePaths(listedPaths: string[], exclusions: ProjectFileExclusions = { directories: EXCLUDED_DIRECTORIES, files: EXCLUDED_FILES }, maxFiles: number = MAX_TREE_FILES): FilterListedPathsResult {
   let skippedFiles = 0
   const acceptedPaths: string[] = []
 
@@ -491,7 +491,7 @@ export function filterListedFilePaths(listedPaths: string[], exclusions: Project
       continue
     }
 
-    if (acceptedPaths.length >= MAX_TREE_FILES) {
+    if (acceptedPaths.length >= maxFiles) {
       skippedFiles += 1
       continue
     }

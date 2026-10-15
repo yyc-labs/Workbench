@@ -1566,6 +1566,8 @@ export interface AppConfig {
   closeWindowBehavior?: CloseWindowBehavior
   /** Names of directories and files omitted from the Code workspace explorer. */
   codeFileExclusions?: ProjectFileExclusionsConfig
+  /** 文件树自动加载上限（文件数）；超出后目录树需手动加载，同时作为树扫描截断下限。 */
+  codeTreeAutoLoadFileLimit?: number
   /** Automatic file preview size limits in MB, per preview kind. */
   imagePreviewLimitMb?: number
   pdfPreviewLimitMb?: number

@@ -23,6 +23,7 @@ interface CodeContentSearchTreeProps {
   onCopyNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyNodePathWithLineNumber?: (relativePath: string, lineNumber: number) => void | Promise<void>
   onCopyNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onZipNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onZipNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -199,6 +200,7 @@ function ContentSearchNodeRenderer({ node, style, dragHandle, activeLocation, on
             relativePath: data.relativePath,
             nodeName: fileNameFromRelativePath(data.relativePath),
             nodeKind: 'file',
+            lineNumber: data.lineNumber,
           })
         }}
         title={`${data.relativePath}:${data.lineNumber}:${data.column}`}
@@ -223,6 +225,7 @@ const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeC
     onCopyNodeName,
     onCopyNodeRelativePath,
     onCopyNodeRelativePathWithoutSlashes,
+    onCopyNodePathWithLineNumber,
     onCopyNodeToClipboard,
     onZipNodeFolder,
     onZipNodeFolderAs,
@@ -308,6 +311,7 @@ const CodeContentSearchTreeInner = forwardRef<CodeContentSearchTreeHandle, CodeC
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}
+          onCopyPathWithLineNumber={onCopyNodePathWithLineNumber && contextMenu.lineNumber != null ? () => onCopyNodePathWithLineNumber(contextMenu.relativePath, contextMenu.lineNumber!) : undefined}
           onCopyFileToClipboard={onCopyNodeToClipboard ? () => onCopyNodeToClipboard(contextMenu.relativePath, contextMenu.nodeKind) : undefined}
           onZipFolder={onZipNodeFolder ? () => onZipNodeFolder(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}
           onZipFolderAs={onZipNodeFolderAs ? () => onZipNodeFolderAs(contextMenu.relativePath, contextMenu.nodeName, contextMenu.nodeKind) : undefined}

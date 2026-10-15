@@ -1,9 +1,10 @@
-import { createWriteStream, promises as fs } from 'node:fs'
+import { createWriteStream, existsSync, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { app } from 'electron'
 import { ZipArchive } from 'archiver'
 import type { ProjectFileZipResult } from '../../../shared/types'
+import { resolveAppResourcePath } from '../app-resource-path'
 import { ensureWithinRoot, normalizeRelativeInput, ProjectFileServiceError, resolveRoot, toPosixRelativePath, validateRelativePathLooksSafe } from './shared'
 
 /** Windows 文件名非法字符与保留名检查，zip 文件名强制为单段安全文件名。 */
@@ -119,29 +120,45 @@ const CLIPBOARD_WORKER_OK_LINE = '__OK__'
 const CLIPBOARD_WORKER_ERROR_PREFIX = '__ERR__'
 const CLIPBOARD_WORKER_EXIT_LINE = '__EXIT__'
 
+/** READY worker 池目标容量：分配即补位，吸收连续快速复制。 */
+const CLIPBOARD_READY_POOL_SIZE = 2
+
 /**
- * 常驻 PowerShell worker 脚本：启动时一次性加载 .NET WinForms（冷启动约 1.5 秒），
- * 之后逐行读取命令执行，毫秒级响应。STA 线程保证 Clipboard API 可用；
- * 父进程退出导致 stdin EOF 后自然退出。
- *
- * 每次 SetDataObject 后必须紧跟 OleFlushClipboard：常驻进程不走旧方案的「退出即 flush」
- * 路径，不 flush 的话剪贴板处于 OLE 延迟渲染状态，而本线程阻塞在 ReadLine 上不泵消息，
- * 其他进程（资源管理器/微信）请求渲染数据时会拿到空结果。
+ * PowerShell 回退 worker 脚本（编译版 ClipboardWorker.exe 缺失/启动失败时使用）：
+ * STA 线程保证 Clipboard API 可用；stdin 每行一个 base64(UTF-8) 文件路径。
+ * SetDataObject($true) 内部已执行 flush（实验证实），显式 flush 仅作 best-effort 双保险。
  */
 const CLIPBOARD_WORKER_SCRIPT = [
   "$ErrorActionPreference = 'Stop'",
   '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
   'Add-Type -AssemblyName System.Windows.Forms',
   'Add-Type -Namespace Native -Name Ole32 -MemberDefinition \'[DllImport("ole32.dll")] public static extern int OleFlushClipboard();\'',
-  // 只读不写，预热 .NET 剪贴板内部懒加载，让首次复制也达到毫秒级。
+  // 只读不写，预热 .NET 剪贴板内部懒加载。
   'try { [void][System.Windows.Forms.Clipboard]::GetDataObject() } catch {}',
   `[Console]::Out.WriteLine('${CLIPBOARD_WORKER_READY_LINE}')`,
   'while ($true) {',
   '  $line = [Console]::In.ReadLine()',
   `  if ($null -eq $line -or $line -eq '${CLIPBOARD_WORKER_EXIT_LINE}') { break }`,
   '  try {',
-  '    Invoke-Expression $line',
-  "    if ([Native.Ole32]::OleFlushClipboard() -ne 0) { throw 'OleFlushClipboard failed.' }",
+  '    $p = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($line))',
+  '    $list = New-Object System.Collections.Specialized.StringCollection',
+  '    [void]$list.Add($p)',
+  '    $data = New-Object System.Windows.Forms.DataObject',
+  '    $data.SetFileDropList($list)',
+  // 写入后回读验证：剪贴板监听类程序可能在毫秒级窗口内覆盖写入，失败时重试。
+  '    $verifyError = $null',
+  '    for ($i = 0; $i -lt 3; $i++) {',
+  '      try {',
+  '        [System.Windows.Forms.Clipboard]::SetDataObject($data, $true)',
+  '        if ([System.Windows.Forms.Clipboard]::ContainsFileDropList()) { $verifyError = $null; break }',
+  '        $verifyError = "clipboard verify failed: FileDrop missing after write"',
+  '      } catch {',
+  '        $verifyError = $_.Exception.Message',
+  '      }',
+  '      Start-Sleep -Milliseconds 200',
+  '    }',
+  '    if ($verifyError) { throw $verifyError }',
+  '    try { [void][Native.Ole32]::OleFlushClipboard() } catch {}',
   `    [Console]::Out.WriteLine('${CLIPBOARD_WORKER_OK_LINE}')`,
   '  } catch {',
   `    [Console]::Out.WriteLine('${CLIPBOARD_WORKER_ERROR_PREFIX}' + ($_.Exception.Message -replace '\\r|\\n', ' '))`,
@@ -149,27 +166,39 @@ const CLIPBOARD_WORKER_SCRIPT = [
   '}',
 ].join('\n')
 
-/** 常驻剪贴板 worker：通过 stdin 逐条下发命令，stdout 按行回执。 */
+/** worker 宿主：编译版 C# EXE 优先，PowerShell 回退。 */
+type ClipboardWorkerHost = 'exe' | 'powershell'
+
+/**
+ * 剪贴板 worker：通过 stdin 逐行下发 base64(UTF-8) 路径，stdout 按行回执。
+ * 生命周期由池控制：每次复制后 terminate（stdin EOF → 进程退出），
+ * 使剪贴板回到「owner 已退出」状态——资源管理器/桌面粘贴可用的前提。
+ */
 type ClipboardWorker = {
-  run(command: string): Promise<void>
+  host: ClipboardWorkerHost
+  run(filePathBase64: string): Promise<void>
   terminate(): void
 }
 
-let clipboardWorkerPromise: Promise<ClipboardWorker> | null = null
-let clipboardWorkerGeneration = 0
-// 串行化复制请求，避免并发时 stdin 命令与 stdout 回执交错。
-let clipboardTaskQueue: Promise<unknown> = Promise.resolve()
+function resolveClipboardWorkerExePath(): string {
+  return resolveAppResourcePath('script', 'clipboard-worker', 'bin', 'ClipboardWorker.exe')
+}
 
-function createClipboardWorker(): Promise<ClipboardWorker> {
-  const generation = (clipboardWorkerGeneration += 1)
-  const encoded = Buffer.from(CLIPBOARD_WORKER_SCRIPT, 'utf-16le').toString('base64')
+function createClipboardWorker(host: ClipboardWorkerHost, onDead: (worker: ClipboardWorker) => void): Promise<ClipboardWorker> {
   return new Promise((resolveWorker, rejectWorker) => {
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded], {
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+    if (host === 'exe' && !existsSync(resolveClipboardWorkerExePath())) {
+      rejectWorker(new ProjectFileServiceError(`Clipboard worker exe is missing: ${resolveClipboardWorkerExePath()}`))
+      return
+    }
+    const child =
+      host === 'exe'
+        ? spawn(resolveClipboardWorkerExePath(), [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+        : spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', Buffer.from(CLIPBOARD_WORKER_SCRIPT, 'utf-16le').toString('base64')], {
+            windowsHide: true,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          })
 
-    let workerSettled = false
+    let resolvedWorker: ClipboardWorker | null = null
     let stdoutBuffer = ''
     let stderrTail = ''
     let pendingResolve: (() => void) | null = null
@@ -184,12 +213,10 @@ function createClipboardWorker(): Promise<ClipboardWorker> {
       }
     }
     const failWorker = (error: Error) => {
-      if (clipboardWorkerGeneration === generation) {
-        clipboardWorkerPromise = null
-      }
       failPending(error)
-      if (!workerSettled) {
-        workerSettled = true
+      if (resolvedWorker) {
+        onDead(resolvedWorker)
+      } else {
         rejectWorker(error)
       }
     }
@@ -203,33 +230,31 @@ function createClipboardWorker(): Promise<ClipboardWorker> {
         stdoutBuffer = stdoutBuffer.slice(newlineIndex).replace(/^\r?\n/, '')
         newlineIndex = stdoutBuffer.search(/\r?\n/)
 
-        if (line === CLIPBOARD_WORKER_READY_LINE) {
-          if (!workerSettled) {
-            workerSettled = true
-            resolveWorker({
-              run: (command) =>
-                new Promise<void>((resolve, reject) => {
-                  if (!child.stdin.writable) {
-                    reject(new ProjectFileServiceError('Clipboard worker is not available.'))
-                    return
-                  }
-                  pendingResolve = resolve
-                  pendingReject = reject
-                  try {
-                    child.stdin.write(`${command}\n`)
-                  } catch (error) {
-                    pendingResolve = null
-                    pendingReject = null
-                    reject(error instanceof Error ? error : new ProjectFileServiceError('Failed to write clipboard command.'))
-                  }
-                }),
-              terminate: () => {
-                // 结束 stdin → worker 的 ReadLine 返回 null → 自然退出，
-                // 剪贴板回到「owner 已退出」状态（资源管理器粘贴可用的前提）。
-                child.stdin.end()
-              },
-            })
+        if (line === CLIPBOARD_WORKER_READY_LINE && !resolvedWorker) {
+          resolvedWorker = {
+            host,
+            run: (filePathBase64) =>
+              new Promise<void>((resolve, reject) => {
+                if (!child.stdin.writable) {
+                  reject(new ProjectFileServiceError('Clipboard worker is not available.'))
+                  return
+                }
+                pendingResolve = resolve
+                pendingReject = reject
+                try {
+                  child.stdin.write(`${filePathBase64}\n`)
+                } catch (error) {
+                  pendingResolve = null
+                  pendingReject = null
+                  reject(error instanceof Error ? error : new ProjectFileServiceError('Failed to write clipboard command.'))
+                }
+              }),
+            terminate: () => {
+              // 结束 stdin → worker 自然退出，剪贴板保持「owner 已退出」终态。
+              child.stdin.end()
+            },
           }
+          resolveWorker(resolvedWorker)
         } else if (line === CLIPBOARD_WORKER_OK_LINE) {
           if (pendingResolve) {
             const resolve = pendingResolve
@@ -258,61 +283,104 @@ function createClipboardWorker(): Promise<ClipboardWorker> {
   })
 }
 
-function getClipboardWorker(): Promise<ClipboardWorker> {
-  if (!clipboardWorkerPromise) {
-    const workerPromise = createClipboardWorker()
-    clipboardWorkerPromise = workerPromise
-    workerPromise.catch(() => {
-      // 失败后清空缓存，让下次复制重新创建 worker。
-      if (clipboardWorkerPromise === workerPromise) {
-        clipboardWorkerPromise = null
-      }
-    })
+/** READY worker 池条目：worker 创建完成前为 null。 */
+type ClipboardWorkerPoolEntry = {
+  promise: Promise<ClipboardWorker>
+  worker: ClipboardWorker | null
+}
+
+const clipboardWorkerPool: ClipboardWorkerPoolEntry[] = []
+// 串行化复制请求，避免并发时 stdin 命令与 stdout 回执交错。
+let clipboardTaskQueue: Promise<unknown> = Promise.resolve()
+
+function removePoolEntry(entry: ClipboardWorkerPoolEntry): void {
+  const index = clipboardWorkerPool.indexOf(entry)
+  if (index !== -1) {
+    clipboardWorkerPool.splice(index, 1)
   }
-  return clipboardWorkerPromise
+}
+
+function createClipboardWorkerPoolEntry(): ClipboardWorkerPoolEntry {
+  const entry: ClipboardWorkerPoolEntry = { promise: Promise.reject(new Error('uninitialized')), worker: null }
+  // 标记 entry.promise 已接管，避免内部占位 rejection 触发 unhandled rejection。
+  entry.promise.catch(() => undefined)
+  const t0 = Date.now()
+  const onDead = (dead: ClipboardWorker) => {
+    if (entry.worker === dead) {
+      removePoolEntry(entry)
+    }
+  }
+
+  const exePath = resolveClipboardWorkerExePath()
+  const create = existsSync(exePath) ? () => createClipboardWorker('exe', onDead) : () => createClipboardWorker('powershell', onDead)
+
+  entry.promise = create().catch((error) => {
+    // EXE 缺失/启动失败时回退 PowerShell 宿主，功能不变只是变慢。
+    console.warn('[clipboard-worker] primary host failed, falling back to powershell:', error.message)
+    return createClipboardWorker('powershell', onDead)
+  })
+  entry.promise
+    .then((worker) => {
+      entry.worker = worker
+      console.log(`[clipboard-worker] ready in ${Date.now() - t0}ms (host=${worker.host})`)
+    })
+    .catch(() => removePoolEntry(entry))
+  clipboardWorkerPool.push(entry)
+  return entry
+}
+
+/** 补满 READY worker 池。失败静默：复制时会重试创建。 */
+function refillClipboardWorkerPool(): void {
+  while (clipboardWorkerPool.length < CLIPBOARD_READY_POOL_SIZE) {
+    createClipboardWorkerPoolEntry()
+  }
+}
+
+/** 从池中取 worker：优先已就绪实例，取走后立即补位（吸收连续快速复制）。 */
+async function acquireClipboardWorker(): Promise<ClipboardWorker> {
+  refillClipboardWorkerPool()
+  const readyIndex = clipboardWorkerPool.findIndex((entry) => entry.worker !== null)
+  if (readyIndex !== -1) {
+    const [entry] = clipboardWorkerPool.splice(readyIndex, 1)
+    refillClipboardWorkerPool()
+    return entry.worker as ClipboardWorker
+  }
+  // 无就绪实例：等待最早创建的那个完成启动。
+  const entry = clipboardWorkerPool.shift()
+  if (!entry) {
+    throw new ProjectFileServiceError('No clipboard worker slot available.')
+  }
+  const worker = await entry.promise
+  refillClipboardWorkerPool()
+  return worker
 }
 
 /**
- * 单条复制命令：与旧方案等价的 .NET SetFileDropList 写入（保持微信等聊天窗口的兼容性）。
- * 路径以 base64（纯 ASCII）下发、worker 端按 UTF-8 解码——避免中文路径被 PowerShell
- * 按控制台 ANSI 编码（GBK）误读成乱码。
- */
-function buildFileDropCommand(filePath: string): string {
-  const encodedPath = Buffer.from(filePath, 'utf-8').toString('base64')
-  return [
-    `$p = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}'))`,
-    '$list = New-Object System.Collections.Specialized.StringCollection',
-    '[void]$list.Add($p)',
-    '$data = New-Object System.Windows.Forms.DataObject',
-    '$data.SetFileDropList($list)',
-    '[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)',
-  ].join('; ')
-}
-
-/**
- * 单条复制生命周期：写入剪贴板后立刻让 worker 退出——剪贴板回到「owner 已退出」状态，
- * 与旧一次性方案完全一致（资源管理器/桌面粘贴依赖此状态；owner 存活时其 OLE IDataObject
- * 查询会被 marshal 到阻塞中的 STA 线程而失败）。随后立即预热下一个 worker，冷启动无感。
+ * 单条复制生命周期：从池中取 worker → 下发 base64 路径 → terminate。
+ * 路径以 base64（纯 ASCII）传输，避免中文路径被控制台 ANSI 编码（GBK）误读。
+ * 复制后 worker 立即退出，剪贴板保持「owner 已退出 + 数据已 flush」的兼容终态；
+ * 池在分配时已同步补位，冷启动成本被后台预热吸收。
  */
 async function writeFileDropToClipboard(filePath: string): Promise<void> {
   const runTask = clipboardTaskQueue.then(async () => {
-    const worker = await getClipboardWorker()
-    await worker.run(buildFileDropCommand(filePath))
+    const worker = await acquireClipboardWorker()
+    const command = Buffer.from(filePath, 'utf-8').toString('base64')
+    const t0 = Date.now()
+    await worker.run(command)
+    console.log(`[clipboard-worker] copy completed in ${Date.now() - t0}ms (host=${worker.host})`)
     worker.terminate()
-    clipboardWorkerPromise = null
   })
   clipboardTaskQueue = runTask.catch(() => undefined)
   await runTask
-  prewarmClipboardWorker()
 }
 
 /**
- * 应用启动时预热剪贴板 worker（fire-and-forget）：把 .NET 冷启动成本挪到应用启动阶段，
- * 首次复制也能毫秒级返回。失败时静默处理，下次复制会重试创建。
+ * 应用启动时把 READY worker 池补满（fire-and-forget）：把 worker 冷启动成本挪到
+ * 应用启动阶段，首次复制也能毫秒级返回。
  */
 export function prewarmClipboardWorker(): void {
   if (process.platform !== 'win32') return
-  void getClipboardWorker().catch(() => undefined)
+  refillClipboardWorkerPool()
 }
 
 /**

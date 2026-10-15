@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
+import { contentSearchScopeKey, parseContentSearchScopeGlobs } from './code.contentSearchScope'
 import { collectParentDirectories } from './code.helpers'
 import { collectTopLevelDirectories, expandTreePath, findDirectoryNode, mergeKnownFilePaths, replaceDirectoryNodes, sortProjectNodes } from './code.tree'
 import type { FileSearchLineTarget, FileTreeState } from './code.types'
@@ -13,8 +14,6 @@ export type ContentSearchScopePreset = {
   title: string
 }
 
-const MAX_CONTENT_SEARCH_SCOPE_GLOBS = 24
-const CONTENT_SEARCH_SCOPE_SEPARATOR_RE = /[\s,;\n，；]+/
 const CONTENT_SEARCH_ROOT_SCOPE_CANDIDATES = ['src', 'app', 'packages', 'docs', 'test', 'tests', 'spec', 'scripts']
 // 文件搜索行号后缀：`path:2032` 或 `path:2032-2087`，冒号前必须有非空路径。
 const FILE_SEARCH_LINE_TARGET_RE = /^(.+):(\d+)(?:-(\d+))?$/
@@ -51,32 +50,6 @@ type LoadDirectoryOptions = {
   force?: boolean
   reason?: DirectoryLoadReason
   suppressError?: boolean
-}
-
-function normalizeContentSearchScopeToken(value: string): string {
-  const token = value.trim()
-  if (!token) return ''
-  if (token.startsWith('.')) return `*${token}`
-  if (!token.includes('*') && !token.includes('/') && /^[A-Za-z0-9_-]+$/.test(token)) {
-    return `*.${token}`
-  }
-  if (token.endsWith('/') || (!token.includes('*') && token.includes('/'))) {
-    const normalized = token.replace(/\/+$/, '')
-    return `${normalized}/**`
-  }
-  return token
-}
-
-export function parseContentSearchScopeGlobs(scopeInput: string): string[] {
-  const tokens = scopeInput
-    .split(CONTENT_SEARCH_SCOPE_SEPARATOR_RE)
-    .map(normalizeContentSearchScopeToken)
-    .filter((item) => item.length > 0)
-  return Array.from(new Set(tokens)).slice(0, MAX_CONTENT_SEARCH_SCOPE_GLOBS)
-}
-
-export function contentSearchScopeKey(scopeInput: string): string {
-  return parseContentSearchScopeGlobs(scopeInput).join('\n')
 }
 
 function directoryFromRelativePath(relativePath: string | null | undefined): string {
@@ -127,6 +100,8 @@ type UseCodeWorkspaceExplorerStateOptions = {
   activeRelativePath: string | null
   contentSearchScopeInput: string
   projectPath: string
+  /** 设置页可配置的文件树自动加载上限；变化时解除既有 block 并重新决策。 */
+  treeAutoLoadFileLimit?: number
   treeAutoLoadPaused?: boolean
 }
 
@@ -198,7 +173,7 @@ function createInitialTreeState(projectPath: string): FileTreeState {
   }
 }
 
-export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, contentSearchScopeInput, projectPath, treeAutoLoadPaused = false }: UseCodeWorkspaceExplorerStateOptions) {
+export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, contentSearchScopeInput, projectPath, treeAutoLoadFileLimit, treeAutoLoadPaused = false }: UseCodeWorkspaceExplorerStateOptions) {
   const [tree, setTree] = useState<FileTreeState>(() => createInitialTreeState(projectPath))
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => readTreeSnapshot(projectPath)?.expandedDirectories ?? new Set())
   const [fileSearchQuery, setFileSearchQuery] = useState('')
@@ -557,6 +532,31 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         void loadTree()
       })
   }, [activePane, blockTreeAutoLoad, loadTree, projectPath, tree.autoLoadBlocked, tree.status, treeAutoLoadPaused])
+
+  // 设置页修改自动加载上限后，解除既有 block 并重置为 idle，上面的决策 effect 会用新配置重新判断。
+  const treeAutoLoadFileLimitRef = useRef(treeAutoLoadFileLimit)
+  useEffect(() => {
+    if (treeAutoLoadFileLimitRef.current === treeAutoLoadFileLimit) return
+    treeAutoLoadFileLimitRef.current = treeAutoLoadFileLimit
+    setTree((prev) => {
+      if (!prev.autoLoadBlocked) return prev
+      directoryLoadGenerationRef.current += 1
+      directoryLoadPromisesRef.current.clear()
+      return {
+        status: 'idle',
+        nodes: [],
+        error: null,
+        knownFilePaths: new Set(),
+        loadingDirectories: new Set(),
+        isRefreshingRoot: false,
+        lastRootLoadedAtMs: null,
+        lastRootRefreshStartedAtMs: null,
+        autoLoadBlocked: false,
+        autoLoadFileCountSample: 0,
+        autoLoadLimit: 0,
+      }
+    })
+  }, [treeAutoLoadFileLimit])
 
   // 卸载（如跳转转录页）时保存树快照，返回工作区时即时恢复，避免重新决策扫描空窗。
   useEffect(() => {

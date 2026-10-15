@@ -19,6 +19,18 @@ function isMonacoCanceledError(error: unknown): boolean {
   return name === 'Canceled' || message === 'Canceled'
 }
 
+// #11-3：取「光标下方最近」的匹配——第一个起点 ≥ 光标位置的匹配，无则向后环绕取最后一个。
+function findNearestMatchIndex(matches: MonacoEditor.FindMatch[], position: { lineNumber: number; column: number } | null): number {
+  if (matches.length <= 0 || !position) return 0
+  for (let index = 0; index < matches.length; index++) {
+    const start = matches[index].range.getStartPosition()
+    if (start.lineNumber > position.lineNumber || (start.lineNumber === position.lineNumber && start.column >= position.column)) {
+      return index
+    }
+  }
+  return matches.length - 1
+}
+
 export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOptions) {
   const [searchVisible, setSearchVisible] = useState(false)
   const [searchMode, setSearchMode] = useState<EditorSearchMode>('find')
@@ -40,6 +52,8 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
   const searchHistoryRef = useRef<string[]>([])
   const searchHistoryIndexRef = useRef(-1)
   const searchHistoryDraftRef = useRef('')
+  // #11-4：prefill（双击选词）成功时置位，下一次刷新按 keep 处理以保持当前匹配；消费一次后清除。
+  const preserveSelectionOnNextRefreshRef = useRef(false)
 
   const rememberSearchQuery = useCallback((query: string) => {
     const normalizedQuery = query.trim()
@@ -134,18 +148,19 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
   }, [])
 
   const refreshSearchResult = useCallback(
-    (editor: MonacoEditor.IStandaloneCodeEditor, mode: 'keep' | 'reset-to-first' = 'keep') => {
+    (editor: MonacoEditor.IStandaloneCodeEditor, mode: 'keep' | 'reset-to-first' | 'reset-to-nearest' = 'keep') => {
       const model = editor.getModel()
       if (!model) return
       const matches = computeSearchMatches(model, searchQueryRef.current)
-      if (mode === 'reset-to-first') {
-        applySearchMatchDecorations(editor, matches, matches.length > 0 ? 0 : -1)
+      if (mode === 'reset-to-first' || mode === 'reset-to-nearest') {
+        const index = mode === 'reset-to-first' ? 0 : findNearestMatchIndex(matches, editor.getPosition())
+        applySearchMatchDecorations(editor, matches, matches.length > 0 ? index : -1)
         setSearchMatchCount(matches.length)
         if (matches.length <= 0) {
           setActiveSearchMatchIndex(0)
           return
         }
-        selectSearchMatch(editor, matches, 0)
+        selectSearchMatch(editor, matches, index)
         return
       }
       const selection = editor.getSelection()
@@ -154,6 +169,19 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
       syncSearchMatchIndexFromSelection(editor, matches)
     },
     [applySearchMatchDecorations, computeSearchMatches, selectSearchMatch, syncSearchMatchIndexFromSelection],
+  )
+
+  // 打开查找面板时的统一刷新策略：prefill 成功保持当前匹配（#11-4），否则选中光标最近匹配（#11-3）。
+  const refreshSearchResultForOpen = useCallback(
+    (editor: MonacoEditor.IStandaloneCodeEditor) => {
+      if (preserveSelectionOnNextRefreshRef.current) {
+        preserveSelectionOnNextRefreshRef.current = false
+        refreshSearchResult(editor, 'keep')
+        return
+      }
+      refreshSearchResult(editor, 'reset-to-nearest')
+    },
+    [refreshSearchResult],
   )
 
   const getSelectedTextForSearch = useCallback((editor: MonacoEditor.IStandaloneCodeEditor): string => {
@@ -180,6 +208,7 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
       if (!editor) return
       const selectedQuery = options?.prefillFromSelection ? getSelectedTextForSearch(editor) : ''
       if (selectedQuery) {
+        preserveSelectionOnNextRefreshRef.current = true
         rememberSearchQuery(searchQueryRef.current)
         searchQueryRef.current = selectedQuery
         setSearchQueryState(selectedQuery)
@@ -196,10 +225,10 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
       window.setTimeout(() => {
         searchInputRef.current?.focus()
         searchInputRef.current?.select()
-        refreshSearchResult(editor)
+        refreshSearchResultForOpen(editor)
       }, 0)
     },
-    [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResult, rememberSearchQuery],
+    [closeMonacoFindWidget, editorRef, getSelectedTextForSearch, refreshSearchResultForOpen, rememberSearchQuery],
   )
 
   const closeSearchPanel = useCallback(() => {
@@ -301,8 +330,8 @@ export function useMonacoSearchWidget({ editorRef }: UseMonacoSearchWidgetOption
     if (!searchVisible) return
     const editor = editorRef.current
     if (!editor) return
-    refreshSearchResult(editor, 'reset-to-first')
-  }, [editorRef, refreshSearchResult, searchCaseSensitive, searchQuery, searchRegex, searchVisible, searchWholeWord])
+    refreshSearchResultForOpen(editor)
+  }, [editorRef, refreshSearchResultForOpen, searchCaseSensitive, searchQuery, searchRegex, searchVisible, searchWholeWord])
 
   return {
     activeSearchMatchIndex,

@@ -49,6 +49,21 @@ function getProjectFileExclusions(): ProjectFileExclusions {
   }
 }
 
+// 文件树自动加载上限：用户可在设置页配置（默认 4000，clamp [500, 20000]）。
+const MIN_TREE_AUTOLOAD_FILE_LIMIT = 500
+const MAX_TREE_AUTOLOAD_FILE_LIMIT = 20000
+
+function getProjectTreeAutoLoadLimit(): number {
+  const configured = loadConfig().codeTreeAutoLoadFileLimit
+  if (typeof configured !== 'number' || !Number.isFinite(configured)) return LARGE_PROJECT_AUTOLOAD_FILE_LIMIT
+  return Math.min(MAX_TREE_AUTOLOAD_FILE_LIMIT, Math.max(MIN_TREE_AUTOLOAD_FILE_LIMIT, Math.round(configured)))
+}
+
+// 树扫描截断上限跟随配置抬高，保证「决策放行的项目，树就能完整加载」。
+function getProjectTreeScanMaxFiles(): number {
+  return Math.max(getProjectTreeAutoLoadLimit(), MAX_TREE_FILES)
+}
+
 function projectFileCacheKey(rootRealPath: string, exclusions: ProjectFileExclusions): string {
   return `${rootRealPath}\0${Array.from(exclusions.directories).join('\0')}\0${Array.from(exclusions.files).join('\0')}`
 }
@@ -104,7 +119,7 @@ async function listProjectFilesByRipgrep(rootRealPath: string, exclusions: Proje
   }
 }
 
-async function scanDirectoryFallback(rootRealPath: string, absoluteDirPath: string, depth: number, counters: ScanCounters, exclusions: ProjectFileExclusions): Promise<ProjectFileNode[]> {
+async function scanDirectoryFallback(rootRealPath: string, absoluteDirPath: string, depth: number, counters: ScanCounters, exclusions: ProjectFileExclusions, maxFiles: number = MAX_TREE_FILES): Promise<ProjectFileNode[]> {
   if (depth > MAX_TREE_DEPTH) {
     counters.skippedDirectories += 1
     return []
@@ -137,12 +152,12 @@ async function scanDirectoryFallback(rootRealPath: string, absoluteDirPath: stri
         continue
       }
 
-      if (counters.filesScanned >= MAX_TREE_FILES) {
+      if (counters.filesScanned >= maxFiles) {
         counters.skippedDirectories += 1
         continue
       }
 
-      const children = await scanDirectoryFallback(rootRealPath, entryAbsolutePath, depth + 1, counters, exclusions)
+      const children = await scanDirectoryFallback(rootRealPath, entryAbsolutePath, depth + 1, counters, exclusions, maxFiles)
       directories.push({
         name: entry.name,
         relativePath,
@@ -161,7 +176,7 @@ async function scanDirectoryFallback(rootRealPath: string, absoluteDirPath: stri
       continue
     }
 
-    if (counters.filesScanned >= MAX_TREE_FILES) {
+    if (counters.filesScanned >= maxFiles) {
       counters.skippedFiles += 1
       continue
     }
@@ -303,39 +318,41 @@ export async function listProjectFiles(projectPath: string, options: ProjectFile
 export async function getProjectFileAutoLoadDecision(projectPath: string): Promise<ProjectFileAutoLoadDecision> {
   const rootRealPath = await resolveRoot(projectPath)
   const exclusions = getProjectFileExclusions()
+  const autoLoadLimit = getProjectTreeAutoLoadLimit()
+  const scanMaxFiles = getProjectTreeScanMaxFiles()
   const cached = getProjectFileListFromCache(rootRealPath, exclusions)
   if (cached) {
     return {
-      shouldAutoLoad: cached.length <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
-      reason: cached.length <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+      shouldAutoLoad: cached.length <= autoLoadLimit,
+      reason: cached.length <= autoLoadLimit ? 'ok' : 'large-project',
       fileCountSample: cached.length,
-      limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+      limit: autoLoadLimit,
     }
   }
 
   const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
   if (listedPaths) {
-    const filtered = filterListedFilePaths(listedPaths, exclusions)
+    const filtered = filterListedFilePaths(listedPaths, exclusions, scanMaxFiles)
     setProjectFileListCache(rootRealPath, exclusions, filtered.acceptedPaths)
     const fileCountSample = filtered.acceptedPaths.length
     return {
-      shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
-      reason: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+      shouldAutoLoad: fileCountSample <= autoLoadLimit,
+      reason: fileCountSample <= autoLoadLimit ? 'ok' : 'large-project',
       fileCountSample,
-      limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+      limit: autoLoadLimit,
     }
   }
 
   const counters: AutoLoadProbeCounters = {
     filesSeen: 0,
   }
-  await scanDirectoryForAutoLoadThreshold(rootRealPath, rootRealPath, 0, LARGE_PROJECT_AUTOLOAD_FILE_LIMIT, counters, exclusions)
+  await scanDirectoryForAutoLoadThreshold(rootRealPath, rootRealPath, 0, autoLoadLimit, counters, exclusions)
   const fileCountSample = counters.filesSeen
   return {
-    shouldAutoLoad: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
-    reason: fileCountSample <= LARGE_PROJECT_AUTOLOAD_FILE_LIMIT ? 'ok' : 'large-project',
+    shouldAutoLoad: fileCountSample <= autoLoadLimit,
+    reason: fileCountSample <= autoLoadLimit ? 'ok' : 'large-project',
     fileCountSample,
-    limit: LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+    limit: autoLoadLimit,
   }
 }
 
@@ -366,7 +383,7 @@ export async function searchProjectFiles(projectPath: string, query: string, fol
     const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
     if (listedPaths) {
       listedPaths.sort((a, b) => a.localeCompare(b))
-      const filtered = filterListedFilePaths(listedPaths, exclusions)
+      const filtered = filterListedFilePaths(listedPaths, exclusions, getProjectTreeScanMaxFiles())
       resolvedPaths = filtered.acceptedPaths
     } else {
       const counters: ScanCounters = {
@@ -374,7 +391,7 @@ export async function searchProjectFiles(projectPath: string, query: string, fol
         skippedFiles: 0,
         skippedDirectories: 0,
       }
-      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters, exclusions)
+      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters, exclusions, getProjectTreeScanMaxFiles())
       const nextPaths: string[] = []
       const walk = (nodes: ProjectFileNode[]) => {
         for (const node of nodes) {

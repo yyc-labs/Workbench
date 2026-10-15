@@ -10,6 +10,8 @@ export interface CodeTreeContextMenuPayload {
   relativePath: string
   nodeName: string
   nodeKind: ProjectFileNodeKind
+  /** 仅搜索结果 match 行附加；文件树与 file 行不附加。 */
+  lineNumber?: number
 }
 
 type ContextMenuAction = () => void | Promise<void>
@@ -26,6 +28,8 @@ interface CodeTreeContextMenuProps {
   onCopyName: ContextMenuAction
   onCopyRelativePath: ContextMenuAction
   onCopyRelativePathWithoutSlashes: ContextMenuAction
+  /** #11-1：复制带行号的路径（仅搜索结果 match 行由调用方传入）。 */
+  onCopyPathWithLineNumber?: ContextMenuAction
   /** 13.2：复制文件内容（仅 file 时由调用方传入）。 */
   onCopyFileToClipboard?: ContextMenuAction
   /** 13.2：导出为 zip（仅 directory 时由调用方传入）。 */
@@ -62,6 +66,7 @@ export function CodeTreeContextMenu({
   onCopyName,
   onCopyRelativePath,
   onCopyRelativePathWithoutSlashes,
+  onCopyPathWithLineNumber,
   onCopyFileToClipboard,
   onZipFolder,
   onZipFolderAs,
@@ -106,6 +111,9 @@ export function CodeTreeContextMenu({
     { id: 'copy-relative-path', label: t('codeFileTree.copyRelativePath'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyRelativePath },
     { id: 'copy-relative-path-without-slashes', label: t('codeFileTree.copyRelativePathWithoutSlashes'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyRelativePathWithoutSlashes },
   ]
+  if (onCopyPathWithLineNumber) {
+    copyItems.push({ id: 'copy-path-with-line-number', label: t('codeFileTree.copyPathWithLineNumber'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyPathWithLineNumber })
+  }
   if (nodeKind === 'file' && onCopyFileToClipboard) {
     copyItems.push({ id: 'copy-file-to-clipboard', label: t('codeFileTree.copyFile'), icon: actionIcon(Copy, 'muted'), onSelect: onCopyFileToClipboard })
   }

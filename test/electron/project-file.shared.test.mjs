@@ -2,17 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const {
-  ProjectFileServiceError,
-  filterListedFilePaths,
-  fuzzyPathMatch,
-  normalizeContentSearchIncludeGlobs,
-  normalizeImageExtension,
-  normalizeListedRelativePath,
-  normalizeRelativeInput,
-  shouldSkipListedFilePath,
-  validateRelativePathLooksSafe,
-} = loadTsModule('src/core/electron/main/project-file/shared.ts')
+const { ProjectFileServiceError, filterListedFilePaths, fuzzyPathMatch, normalizeContentSearchIncludeGlobs, normalizeImageExtension, normalizeListedRelativePath, normalizeRelativeInput, shouldSkipListedFilePath, validateRelativePathLooksSafe } = loadTsModule('src/core/electron/main/project-file/shared.ts')
 
 test('normalizeRelativeInput accepts safe relative paths and rejects traversal or absolute paths', () => {
   assert.equal(normalizeRelativeInput(' ./src\\pages//Home.tsx '), 'src/pages/Home.tsx')
@@ -31,23 +21,22 @@ test('normalizeListedRelativePath and filterListedFilePaths remove unsafe or exc
   assert.equal(shouldSkipListedFilePath('node_modules/pkg/index.js'), true)
   assert.equal(shouldSkipListedFilePath('.DS_Store'), true)
 
-  const result = filterListedFilePaths([
-    'src/main.ts',
-    'node_modules/pkg/index.js',
-    'a/b/c/d/e/f/g/h/i/deep.ts',
-    'docs/guide.md',
-  ])
+  const result = filterListedFilePaths(['src/main.ts', 'node_modules/pkg/index.js', 'a/b/c/d/e/f/g/h/i/deep.ts', 'docs/guide.md'])
   assert.deepEqual(result.acceptedPaths, ['src/main.ts', 'docs/guide.md'])
   assert.equal(result.skippedFiles, 2)
+})
+
+test('filterListedFilePaths honors custom maxFiles and keeps the default cap', () => {
+  const paths = ['a.ts', 'b.ts', 'c.ts', 'd.ts']
+  assert.deepEqual(filterListedFilePaths(paths, undefined, 2).acceptedPaths, ['a.ts', 'b.ts'])
+  assert.deepEqual(filterListedFilePaths(paths, undefined, 100).acceptedPaths, paths)
+  assert.deepEqual(filterListedFilePaths(paths).acceptedPaths, paths) // 默认 MAX_TREE_FILES，行为不回归
 })
 
 test('project file helpers normalize image extensions, search globs, and fuzzy path matches', () => {
   assert.equal(normalizeImageExtension('.jpeg'), 'jpg')
   assert.equal(normalizeImageExtension('bad/ext'), 'png')
-  assert.deepEqual(
-    normalizeContentSearchIncludeGlobs([' **/*.ts ', '', '**/*.ts', null, '**/*.tsx']),
-    ['**/*.ts', '**/*.tsx']
-  )
+  assert.deepEqual(normalizeContentSearchIncludeGlobs([' **/*.ts ', '', '**/*.ts', null, '**/*.tsx']), ['**/*.ts', '**/*.tsx'])
   assert.equal(fuzzyPathMatch('cwp', 'src/core/renderer/pages/code/CodeWorkspacePanel.tsx'), true)
   assert.equal(fuzzyPathMatch('zzzz', 'src/core/renderer/pages/code/CodeWorkspacePanel.tsx'), false)
 })

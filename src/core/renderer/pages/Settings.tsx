@@ -49,6 +49,7 @@ export function SettingsPage() {
   const setLaunchOnLoginDisplayModeConfig = useAppStore((s) => s.setLaunchOnLoginDisplayMode)
   const setCloseWindowBehaviorConfig = useAppStore((s) => s.setCloseWindowBehavior)
   const setCodeFileExclusions = useAppStore((s) => s.setCodeFileExclusions)
+  const setCodeTreeAutoLoadFileLimitConfig = useAppStore((s) => s.setCodeTreeAutoLoadFileLimit)
   const setFilePreviewLimits = useAppStore((s) => s.setFilePreviewLimits)
   const setCacheLocationConfig = useAppStore((s) => s.setCacheLocation)
   const setAiEnvironmentConfig = useAppStore((s) => s.setAiEnvironmentConfig)
@@ -196,6 +197,10 @@ export function SettingsPage() {
   const handleCodeFileExclusionsChange = async (next: ProjectFileExclusionsConfig) => {
     setCodeFileExclusionsState(next)
     await setCodeFileExclusions(next)
+  }
+
+  const handleCodeTreeAutoLoadFileLimitChange = async (limit: number) => {
+    await setCodeTreeAutoLoadFileLimitConfig(limit)
   }
 
   const applyCacheLocationChange = async (nextLocation: AppCacheLocationConfig) => {
@@ -374,6 +379,7 @@ export function SettingsPage() {
                   launchOnLoginDisplayMode={launchOnLoginDisplayMode}
                   closeWindowBehavior={closeWindowBehavior}
                   codeFileExclusions={codeFileExclusions}
+                  codeTreeAutoLoadFileLimit={config.codeTreeAutoLoadFileLimit ?? 4000}
                   imagePreviewLimitMb={config.imagePreviewLimitMb ?? 10}
                   pdfPreviewLimitMb={config.pdfPreviewLimitMb ?? 3}
                   audioPreviewLimitMb={config.audioPreviewLimitMb ?? 5}
@@ -387,6 +393,7 @@ export function SettingsPage() {
                   onLaunchOnLoginDisplayModeChange={handleLaunchOnLoginDisplayModeChange}
                   onCloseWindowBehaviorChange={handleCloseWindowBehaviorChange}
                   onCodeFileExclusionsChange={handleCodeFileExclusionsChange}
+                  onCodeTreeAutoLoadFileLimitChange={handleCodeTreeAutoLoadFileLimitChange}
                   onFilePreviewLimitsChange={setFilePreviewLimits}
                 />
               )}

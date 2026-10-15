@@ -7,7 +7,8 @@ import { DebouncedSearchInput } from './DebouncedSearchInput'
 import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileTree } from './CodeFileTree'
 import type { ProjectFileContentSearchResponse, ProjectFileNodeKind } from '../../../shared/types'
-import { contentSearchScopeKey, type ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
+import { contentSearchScopeKey } from './code.contentSearchScope'
+import { type ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
 import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import type { FileSearchLineTarget, FileTreeState } from './code.types'
 
@@ -44,10 +45,12 @@ type CodeWorkspaceSidebarProps = {
   locateRequestToken: number
   onApplyContentSearchScopePreset: (preset: ContentSearchScopePreset) => void
   onChangeContentSearchQuery: (nextValue: string) => void
+  onContentSearchHistoryNavigate?: (direction: 'older' | 'newer') => void
   onChangeFileSearchQuery: (nextValue: string) => void
   onCopyTreeNodeName: (nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyTreeNodeRelativePath: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyTreeNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onCopyTreeNodePathWithLineNumber?: (relativePath: string, lineNumber: number) => void | Promise<void>
   onCopyTreeNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onZipTreeNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onZipTreeNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -106,10 +109,12 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   locateRequestToken,
   onApplyContentSearchScopePreset,
   onChangeContentSearchQuery,
+  onContentSearchHistoryNavigate,
   onChangeFileSearchQuery,
   onCopyTreeNodeName,
   onCopyTreeNodeRelativePath,
   onCopyTreeNodeRelativePathWithoutSlashes,
+  onCopyTreeNodePathWithLineNumber,
   onCopyTreeNodeToClipboard,
   onZipTreeNodeFolder,
   onZipTreeNodeFolderAs,
@@ -187,6 +192,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
               <div className="code-large-project-empty-copy">{t('codeWorkspace.largeProjectManualLoadHint')}</div>
               <div className="code-large-project-empty-meta">{t('codeWorkspace.largeProjectManualLoadCount', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}</div>
               <div className="code-large-project-empty-copy code-large-project-empty-copy--secondary">{t('codeWorkspace.largeProjectManualLoadDetail', { count: tree.autoLoadFileCountSample || tree.autoLoadLimit })}</div>
+              <div className="code-large-project-empty-copy code-large-project-empty-copy--secondary">{t('codeWorkspace.largeProjectManualLoadSettingsHint')}</div>
               <button type="button" className="code-large-project-empty-action" onClick={onReloadTree}>
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>{t('codeWorkspace.largeProjectManualLoadAction')}</span>
@@ -265,6 +271,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             inputClassName="code-search-input code-search-input--hero"
             debounceMs={FILE_SEARCH_DEBOUNCE_MS}
             onQueryChange={onChangeContentSearchQuery}
+            onHistoryNavigate={onContentSearchHistoryNavigate}
             syncValue={contentSearchQuery}
           />
         </div>
@@ -353,6 +360,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
           onCopyNodeName={onCopyTreeNodeName}
           onCopyNodeRelativePath={onCopyTreeNodeRelativePath}
           onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
+          onCopyNodePathWithLineNumber={onCopyTreeNodePathWithLineNumber}
           onCopyNodeToClipboard={onCopyTreeNodeToClipboard}
           onZipNodeFolder={onZipTreeNodeFolder}
           onZipNodeFolderAs={onZipTreeNodeFolderAs}

@@ -14,6 +14,7 @@ type GeneralPanelProps = {
   launchOnLoginDisplayMode: LaunchOnLoginDisplayMode
   closeWindowBehavior: CloseWindowBehavior
   codeFileExclusions: ProjectFileExclusionsConfig
+  codeTreeAutoLoadFileLimit: number
   imagePreviewLimitMb: number
   pdfPreviewLimitMb: number
   audioPreviewLimitMb: number
@@ -27,6 +28,7 @@ type GeneralPanelProps = {
   onLaunchOnLoginDisplayModeChange: (mode: LaunchOnLoginDisplayMode) => void | Promise<void>
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
   onCodeFileExclusionsChange: (exclusions: ProjectFileExclusionsConfig) => void | Promise<void>
+  onCodeTreeAutoLoadFileLimitChange: (limit: number) => void | Promise<void>
   onFilePreviewLimitsChange: (limits: { imagePreviewLimitMb?: number; pdfPreviewLimitMb?: number; audioPreviewLimitMb?: number; videoPreviewLimitMb?: number }) => void | Promise<void>
 }
 
@@ -34,10 +36,12 @@ type PreviewLimitInputProps = {
   label: string
   value: number
   placeholder: string
+  min?: number
+  max?: number
   onCommit: (limitMb: number) => void
 }
 
-function PreviewLimitInput({ label, value, placeholder, onCommit }: PreviewLimitInputProps) {
+function PreviewLimitInput({ label, value, placeholder, min = 1, max = 1024, onCommit }: PreviewLimitInputProps) {
   const [draft, setDraft] = useState(String(value))
 
   useEffect(() => {
@@ -58,8 +62,8 @@ function PreviewLimitInput({ label, value, placeholder, onCommit }: PreviewLimit
       <span className="mb-2 block text-sm font-medium text-[color:var(--color-foreground)]">{label}</span>
       <Input
         type="number"
-        min={1}
-        max={1024}
+        min={min}
+        max={max}
         step={1}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
@@ -83,6 +87,7 @@ function SettingsGeneralPanel({
   launchOnLoginDisplayMode,
   closeWindowBehavior,
   codeFileExclusions,
+  codeTreeAutoLoadFileLimit,
   imagePreviewLimitMb,
   pdfPreviewLimitMb,
   audioPreviewLimitMb,
@@ -96,6 +101,7 @@ function SettingsGeneralPanel({
   onLaunchOnLoginDisplayModeChange,
   onCloseWindowBehaviorChange,
   onCodeFileExclusionsChange,
+  onCodeTreeAutoLoadFileLimitChange,
   onFilePreviewLimitsChange,
 }: GeneralPanelProps) {
   const { t } = useI18n()
@@ -168,6 +174,10 @@ function SettingsGeneralPanel({
             <PreviewLimitInput label={t('settings.general.videoPreviewLimitLabel')} value={videoPreviewLimitMb} placeholder="10" onCommit={(limitMb) => void onFilePreviewLimitsChange({ videoPreviewLimitMb: limitMb })} />
           </div>
           <p className="mt-3 text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitsHint')}</p>
+          <div className="mt-6">
+            <PreviewLimitInput label={t('settings.general.fileTreeAutoLoadLimitLabel')} value={codeTreeAutoLoadFileLimit} placeholder="4000" min={500} max={20000} onCommit={(limit) => void onCodeTreeAutoLoadFileLimitChange(limit)} />
+            <p className="mt-3 text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.fileTreeAutoLoadLimitHint')}</p>
+          </div>
         </div>
       </div>
 

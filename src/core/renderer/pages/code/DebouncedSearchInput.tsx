@@ -14,30 +14,24 @@ interface DebouncedSearchInputProps {
   syncValue?: string
   syncNonce?: number
   disabled?: boolean
+  /** #11-2：上下键翻阅搜索历史；未传时不拦截方向键（文件名过滤输入框不受影响）。 */
+  onHistoryNavigate?: (direction: 'older' | 'newer') => void
 }
 
-export function DebouncedSearchInput({
-  placeholder,
-  inputClassName,
-  debounceMs,
-  onQueryChange,
-  leadingIcon,
-  trailingAction,
-  inputRef,
-  syncValue,
-  syncNonce,
-  disabled = false,
-}: DebouncedSearchInputProps) {
+export function DebouncedSearchInput({ placeholder, inputClassName, debounceMs, onQueryChange, leadingIcon, trailingAction, inputRef, syncValue, syncNonce, disabled = false, onHistoryNavigate }: DebouncedSearchInputProps) {
   const { t } = useI18n()
   const [draft, setDraft] = useState(syncValue ?? '')
   const lastEmittedRef = useRef('')
   const lastSyncSignatureRef = useRef<string>('')
 
-  const emitQuery = useCallback((nextValue: string) => {
-    if (lastEmittedRef.current === nextValue) return
-    lastEmittedRef.current = nextValue
-    onQueryChange(nextValue)
-  }, [onQueryChange])
+  const emitQuery = useCallback(
+    (nextValue: string) => {
+      if (lastEmittedRef.current === nextValue) return
+      lastEmittedRef.current = nextValue
+      onQueryChange(nextValue)
+    },
+    [onQueryChange],
+  )
 
   useEffect(() => {
     const normalized = draft.trim()
@@ -75,6 +69,16 @@ export function DebouncedSearchInput({
           type="text"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (!onHistoryNavigate || event.nativeEvent.isComposing) return
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              onHistoryNavigate('older')
+            } else if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              onHistoryNavigate('newer')
+            }
+          }}
           placeholder={placeholder}
           className={inputClassName ?? 'code-search-input'}
           spellCheck={false}
@@ -83,9 +87,7 @@ export function DebouncedSearchInput({
         <button
           type="button"
           className={`absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-opacity ${
-            hasValue && !disabled
-              ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-              : 'pointer-events-none opacity-0'
+            hasValue && !disabled ? 'hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]' : 'pointer-events-none opacity-0'
           }`}
           onClick={() => {
             setDraft('')

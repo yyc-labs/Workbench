@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:watch": "electron-vite dev --watch",
-    "build": "electron-vite build",
+    "build": "npm run build:clipboard-worker && electron-vite build",
+    "build:clipboard-worker": "node script/clipboard-worker/build.mjs",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "node script/release/dist-win.mjs",

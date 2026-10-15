@@ -421,6 +421,9 @@ export const settingsMessages = {
         codeExcludedFiles: 'Excluded files',
         codeExclusionsHint: 'Enter one name per line. The default entries are included; remove an entry to show it again.',
         saveCodeExclusions: 'Save exclusions',
+        fileTreeAutoLoadLimitLabel: 'File tree auto-load limit (files)',
+        fileTreeAutoLoadLimitHint:
+          'Projects within the limit load the file tree automatically; larger ones ask for a manual load. Reference: ≤1000 — small projects, loads instantly; 4000 (default) — fits most repositories; 10000 — large monorepos, noticeably slower first scan and more memory; 20000 — ceiling, raise temporarily only for very large repos. Range 500–20000.',
         imagePreviewLimitLabel: 'Image preview size limit (MB)',
         pdfPreviewLimitLabel: 'PDF preview size limit (MB)',
         audioPreviewLimitLabel: 'Audio preview size limit (MB)',
@@ -1464,6 +1467,8 @@ export const settingsMessages = {
         codeExcludedFiles: '排除的文件',
         codeExclusionsHint: '每行填写一个名称。默认项目会预先列出；删除某一行即可重新显示它。',
         saveCodeExclusions: '保存排除项',
+        fileTreeAutoLoadLimitLabel: '文件树自动加载上限（文件数）',
+        fileTreeAutoLoadLimitHint: '不超过上限的项目会自动加载目录树，超出后需手动加载。参考：1000 以内 — 小型项目，打开即加载；4000（默认）— 适合大多数仓库；10000 — 大型 monorepo，首次扫描与内存占用明显增加；20000 — 上限，仅建议超大型仓库临时调高。范围 500–20000。',
         imagePreviewLimitLabel: '图片预览大小上限（MB）',
         pdfPreviewLimitLabel: 'PDF 预览大小上限（MB）',
         audioPreviewLimitLabel: '音频预览大小上限（MB）',

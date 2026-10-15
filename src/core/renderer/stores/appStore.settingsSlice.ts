@@ -13,6 +13,7 @@ export type SettingsActionsSlice = Pick<
   | 'setLaunchOnLoginDisplayMode'
   | 'setCloseWindowBehavior'
   | 'setCodeFileExclusions'
+  | 'setCodeTreeAutoLoadFileLimit'
   | 'setFilePreviewLimits'
   | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
@@ -91,6 +92,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         codeFileExclusions: updated.codeFileExclusions,
+      },
+    }))
+  },
+
+  setCodeTreeAutoLoadFileLimit: async (limit) => {
+    const updated = await window.electronAPI.setConfig({ codeTreeAutoLoadFileLimit: limit })
+    set((state) => ({
+      config: {
+        ...state.config,
+        codeTreeAutoLoadFileLimit: updated.codeTreeAutoLoadFileLimit,
       },
     }))
   },

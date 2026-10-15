@@ -49,6 +49,9 @@ export const DEFAULT_AUDIO_PREVIEW_LIMIT_MB = 5
 export const DEFAULT_VIDEO_PREVIEW_LIMIT_MB = 10
 const MIN_FILE_PREVIEW_LIMIT_MB = 1
 const MAX_FILE_PREVIEW_LIMIT_MB = 1024
+export const DEFAULT_CODE_TREE_AUTOLOAD_FILE_LIMIT = 4000
+const MIN_CODE_TREE_AUTOLOAD_FILE_LIMIT = 500
+const MAX_CODE_TREE_AUTOLOAD_FILE_LIMIT = 20000
 const DEFAULT_AGENT_HOOK_CONFIG: NonNullable<AppConfig['agentHooks']> = {
   enabled: true,
   host: '0.0.0.0',
@@ -131,6 +134,7 @@ const DEFAULT_CONFIG: AppConfig = {
   launchOnLoginDisplayMode: 'tray',
   closeWindowBehavior: 'quit',
   codeFileExclusions: DEFAULT_CODE_FILE_EXCLUSIONS,
+  codeTreeAutoLoadFileLimit: DEFAULT_CODE_TREE_AUTOLOAD_FILE_LIMIT,
   imagePreviewLimitMb: DEFAULT_IMAGE_PREVIEW_LIMIT_MB,
   pdfPreviewLimitMb: DEFAULT_PDF_PREVIEW_LIMIT_MB,
   audioPreviewLimitMb: DEFAULT_AUDIO_PREVIEW_LIMIT_MB,
@@ -746,6 +750,12 @@ function normalizePreviewLimitMb(value: unknown, defaultMb: number): number {
   return Math.min(MAX_FILE_PREVIEW_LIMIT_MB, Math.max(MIN_FILE_PREVIEW_LIMIT_MB, Math.round(parsed)))
 }
 
+function normalizeCodeTreeAutoLoadFileLimit(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  if (!Number.isFinite(parsed)) return DEFAULT_CODE_TREE_AUTOLOAD_FILE_LIMIT
+  return Math.min(MAX_CODE_TREE_AUTOLOAD_FILE_LIMIT, Math.max(MIN_CODE_TREE_AUTOLOAD_FILE_LIMIT, Math.round(parsed)))
+}
+
 type FilePreviewLimits = Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb'>
 
 /** 归一化四类预览上限；旧版单一 filePreviewLimitMb 不再继承，统一使用约定默认值。 */
@@ -1030,6 +1040,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     floatingTerminals: Object.prototype.hasOwnProperty.call(partial, 'floatingTerminals') ? normalizeFloatingTerminals(partial.floatingTerminals) : current.floatingTerminals,
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
+    codeTreeAutoLoadFileLimit: Object.prototype.hasOwnProperty.call(partial, 'codeTreeAutoLoadFileLimit') ? normalizeCodeTreeAutoLoadFileLimit(partial.codeTreeAutoLoadFileLimit) : normalizeCodeTreeAutoLoadFileLimit(current.codeTreeAutoLoadFileLimit),
     imagePreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'imagePreviewLimitMb') ? partial.imagePreviewLimitMb : current.imagePreviewLimitMb, DEFAULT_IMAGE_PREVIEW_LIMIT_MB),
     pdfPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'pdfPreviewLimitMb') ? partial.pdfPreviewLimitMb : current.pdfPreviewLimitMb, DEFAULT_PDF_PREVIEW_LIMIT_MB),
     audioPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'audioPreviewLimitMb') ? partial.audioPreviewLimitMb : current.audioPreviewLimitMb, DEFAULT_AUDIO_PREVIEW_LIMIT_MB),

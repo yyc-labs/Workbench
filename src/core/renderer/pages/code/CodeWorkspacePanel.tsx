@@ -17,6 +17,7 @@ import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { FolderFileSearchPopover } from './FolderFileSearchPopover'
+import { readContentSearchHistory, recordContentSearchHistory } from './code.contentSearchHistory'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
@@ -140,6 +141,7 @@ export function CodeWorkspacePanel({
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
   const transcriptSummaries = useAppStore((s) => s.transcriptSummariesByProjectId[projectId] ?? [], shallow)
+  const treeAutoLoadFileLimit = useAppStore((s) => s.config.codeTreeAutoLoadFileLimit ?? 4000)
   const transcriptListStatus = useAppStore((s) => s.transcriptListStatusByProjectId[projectId] ?? 'idle')
   const loadProjectTranscripts = useAppStore((s) => s.loadProjectTranscripts)
   const openTranscript = useAppStore((s) => s.openTranscript)
@@ -249,6 +251,7 @@ export function CodeWorkspacePanel({
     activeRelativePath,
     contentSearchScopeInput,
     projectPath,
+    treeAutoLoadFileLimit,
     treeAutoLoadPaused: !isNarrowViewport && isLeftSidebarCollapsed,
   })
   const {
@@ -526,11 +529,47 @@ export function CodeWorkspacePanel({
     [applyTreeWidthStyle, endTreeResize, handleTreeResizeMove, leftSidebarWidth],
   )
   const isActiveFileFavorite = Boolean(activeRelativePath && codeFileDrawerState.favorites.includes(activeRelativePath))
+  // #11-2：全局搜索历史（localStorage，上限 20），交互模型复刻 useMonacoSearchWidget 的内存态历史。
+  const contentSearchHistoryRef = useRef<string[]>([])
+  const contentSearchHistoryIndexRef = useRef(-1)
+  const contentSearchHistoryDraftRef = useRef('')
+  const contentSearchQueryRef = useRef('')
+  // 程序化回填标记：syncValue effect 会把回填值经 emitQuery 再次上抛，需跳过历史记录，否则翻阅历史会重排历史顺序。
+  const expectedExternalContentSearchQueryRef = useRef<string | null>(null)
   const handleFileSearchQueryChange = useCallback((nextValue: string) => {
     setFileSearchQuery(nextValue)
   }, [])
   const handleContentSearchQueryChange = useCallback((nextValue: string) => {
+    contentSearchQueryRef.current = nextValue
+    if (expectedExternalContentSearchQueryRef.current !== null) {
+      if (nextValue === expectedExternalContentSearchQueryRef.current) {
+        expectedExternalContentSearchQueryRef.current = null // 程序化回填，不记录
+      }
+    } else {
+      contentSearchHistoryIndexRef.current = -1
+      contentSearchHistoryDraftRef.current = ''
+      if (nextValue.trim()) {
+        contentSearchHistoryRef.current = recordContentSearchHistory(nextValue)
+      }
+    }
     setContentSearchQuery(nextValue)
+  }, [])
+  const cycleContentSearchHistory = useCallback((direction: 'older' | 'newer') => {
+    if (contentSearchHistoryRef.current.length === 0) {
+      contentSearchHistoryRef.current = readContentSearchHistory()
+    }
+    const history = contentSearchHistoryRef.current
+    if (history.length === 0) return
+
+    const currentIndex = contentSearchHistoryIndexRef.current
+    if (currentIndex === -1) {
+      contentSearchHistoryDraftRef.current = contentSearchQueryRef.current
+    }
+    const nextIndex = direction === 'older' ? (currentIndex === -1 ? 0 : Math.min(history.length - 1, currentIndex + 1)) : currentIndex === -1 ? -1 : currentIndex - 1
+    contentSearchHistoryIndexRef.current = nextIndex
+    const nextQuery = nextIndex === -1 ? contentSearchHistoryDraftRef.current : history[nextIndex]
+    expectedExternalContentSearchQueryRef.current = nextQuery
+    setContentSearchQuery(nextQuery) // 经 syncValue={contentSearchQuery} 回填输入框 draft
   }, [])
   const applyContentSearchScopePreset = useCallback((preset: ContentSearchScopePreset) => {
     setContentSearchScopeInput(preset.scopeInput)
@@ -765,6 +804,7 @@ export function CodeWorkspacePanel({
     handleCopyTreeNodeName,
     handleCopyTreeNodeRelativePath,
     handleCopyTreeNodeRelativePathWithoutSlashes,
+    handleCopyTreeNodePathWithLineNumber,
     handleCopyTreeNodeZipToClipboard,
     handleExecuteScriptInEmbeddedTerminal,
     handleExecuteScriptInSystemTerminal,
@@ -1048,10 +1088,12 @@ export function CodeWorkspacePanel({
                 locateRequestToken={locateRequestToken}
                 onApplyContentSearchScopePreset={applyContentSearchScopePreset}
                 onChangeContentSearchQuery={handleContentSearchQueryChange}
+                onContentSearchHistoryNavigate={cycleContentSearchHistory}
                 onChangeFileSearchQuery={handleFileSearchQueryChange}
                 onCopyTreeNodeName={handleCopyTreeNodeName}
                 onCopyTreeNodeRelativePath={handleCopyTreeNodeRelativePath}
                 onCopyTreeNodeRelativePathWithoutSlashes={handleCopyTreeNodeRelativePathWithoutSlashes}
+                onCopyTreeNodePathWithLineNumber={handleCopyTreeNodePathWithLineNumber}
                 onCopyTreeNodeToClipboard={handleCopyTreeNodeToClipboard}
                 onZipTreeNodeFolder={handleZipNodeFolderFromMenu}
                 onZipTreeNodeFolderAs={handleZipTreeNodeAs}

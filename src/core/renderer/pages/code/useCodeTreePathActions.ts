@@ -108,6 +108,14 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     [copyWithToast],
   )
 
+  // #11-1：搜索结果 match 行复制「path:lineNumber」，供快速跳转引用。
+  const handleCopyTreeNodePathWithLineNumber = useCallback(
+    (relativePath: string, lineNumber: number) => {
+      void copyWithToast(`${normalizeRelativePathForCopy(relativePath)}:${lineNumber}`)
+    },
+    [copyWithToast],
+  )
+
   // 「复制文件」：把文件本身以 Windows 标准文件格式（CF_HDROP）写入系统剪贴板——
   // 粘贴到资源管理器 / 聊天窗口得到的是文件本身，不是文本内容。非 Windows 宿主由主进程抛错提示。
   const handleCopyTreeNodeToClipboard = useCallback(
@@ -364,6 +372,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     handleCopyTreeNodeName,
     handleCopyTreeNodeRelativePath,
     handleCopyTreeNodeRelativePathWithoutSlashes,
+    handleCopyTreeNodePathWithLineNumber,
     handleCopyTreeNodeZipToClipboard,
     handleExecuteScriptInEmbeddedTerminal,
     handleExecuteScriptInSystemTerminal,
