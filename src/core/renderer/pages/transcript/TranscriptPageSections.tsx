@@ -1,18 +1,18 @@
+import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Code2, Columns2, Eye, FileText, Folder, FolderOpen, RefreshCw, Share2, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Code2, Columns2, Eye, FileText, Folder, FolderOpen, RefreshCw, Share2, Trash2 } from 'lucide-react'
 import type { ProjectDocTagOption, TranscriptSession, TranscriptSessionSummary, TranscriptViewerMode } from '../../../shared/types'
-import type { InterpolationValues, MessageKey, ResolvedLocale, SettingsSectionMessageKey } from '../../i18n/messages'
-import { Button } from '../../components/ui/button'
 import { MonacoTextViewer } from '../../components/MonacoTextViewer'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
-import { projectDisplayName, middleTruncatePath } from '../../lib/projectDisplay'
+import { Button } from '../../components/ui/button'
+import type { InterpolationValues, MessageKey, ResolvedLocale, SettingsSectionMessageKey } from '../../i18n/messages'
+import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay'
 import { preloadProjectPane } from '../../lib/projectPagePreload'
 import { inferLanguageFromRelativePath } from '../code/code.helpers'
-import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { remarkBoxDrawingTables } from '../code/code.markdownBoxTables'
+import { transformMarkdownUrl } from '../code/code.markdownUrls'
 import { MarkdownPreviewVisibilityProvider } from '../code/code.markdownVisibility'
 import { TranscriptTreeContextMenu, type TranscriptTreeContextMenuPayload } from './TranscriptTreeContextMenu'
 
@@ -43,7 +43,6 @@ type TranscriptPageHeaderProps = {
   setProjectHeaderCollapsed: (value: boolean) => void
   transcriptCountLabel: string
   projectDocsCountLabel: string
-  firstProjectLinkItem?: { url: string; label: string }
   projectLinkItems: Array<{ url: string; label: string; tagId?: string }>
   docLinkTagOptions: ReadonlyArray<ProjectDocTagOption>
   session: TranscriptSession | undefined
@@ -76,7 +75,6 @@ export function TranscriptPageHeader({
   setProjectHeaderCollapsed,
   transcriptCountLabel,
   projectDocsCountLabel,
-  firstProjectLinkItem,
   session,
   locale,
   formatTranscriptSourceType,
@@ -189,7 +187,7 @@ export function TranscriptPageHeader({
                     navigateToPane(pane)
                   }}
                 />
-                {firstProjectLinkItem && renderProjectLinksButton()}
+                {renderProjectLinksButton()}
                 {(isDevReady || pendingOpenDevUrl || !isActive) && (
                   <button
                     type="button"

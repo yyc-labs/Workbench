@@ -83,6 +83,7 @@ export function TranscriptPage() {
       cli: found.cli,
       aiRuntimeProfileId: found.aiRuntimeProfileId,
       docLinks: found.docLinks,
+      sharedDocLinkGroupIds: found.sharedDocLinkGroupIds,
       folderId: found.folderId,
       tagIds: found.tagIds,
       codeSession: found.codeSession,
@@ -821,7 +822,6 @@ export function TranscriptPage() {
             setProjectHeaderCollapsed={setProjectHeaderCollapsed}
             transcriptCountLabel={transcriptCountLabel}
             projectDocsCountLabel={projectDocsCountLabel}
-            firstProjectLinkItem={firstProjectLinkItem}
             projectLinkItems={projectLinkItems}
             docLinkTagOptions={docLinkTagOptionsFromHook}
             session={session}

@@ -73,6 +73,7 @@ export function DetailPage() {
       cli: found.cli,
       aiRuntimeProfileId: found.aiRuntimeProfileId,
       docLinks: found.docLinks,
+      sharedDocLinkGroupIds: found.sharedDocLinkGroupIds,
       folderId: found.folderId,
       tagIds: found.tagIds,
     }
