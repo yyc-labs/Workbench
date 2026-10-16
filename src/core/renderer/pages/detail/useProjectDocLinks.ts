@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type SetStateAction } from 'react'
 import { arrayMove } from '@dnd-kit/sortable'
+import { type SetStateAction, useCallback, useEffect, useMemo, useState } from 'react'
 import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocLinkTag, ProjectDocTagOption, ProjectInfo } from '../../../shared/types'
+import { useResolvedProjectDocLinks } from '../../hooks/useResolvedProjectDocLinks'
 import { useI18n, useLocale } from '../../i18n'
+import { normalizeProjectDocLinkKind, normalizeProjectDocLinkTag, PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, projectDocLinkCopyValue, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
 import { useAppStore } from '../../stores/appStore'
 import { copyTextToClipboard } from '../code/code.clipboard'
 import { buildSshDocLinkTarget, createDocLinkId, normalizeDocLinkPort, normalizeDocUrl, normalizeSshHost, parseSshShortcutInput } from './detail.aiFlow'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, normalizeProjectDocLinkKind, projectDocLinkCopyValue, normalizeProjectDocLinkTag, projectDocLinkTagLabel } from '../../lib/projectDocLinks'
 
 type UseProjectDocLinksOptions = {
   project: ProjectInfo | undefined
@@ -29,6 +30,9 @@ export type ProjectDocMenuItem = {
     onCopy: () => Promise<boolean>
     icon?: 'account' | 'password'
   }>
+  note?: string
+  source?: 'private' | 'shared'
+  sharedGroupId?: string
   linkId?: string
 }
 
@@ -57,7 +61,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
   const [docSshRouteInput, setDocSshRouteInput] = useState<ProjectDocLinkSshRoute>('wsl')
   const [docError, setDocError] = useState<string | null>(null)
 
-  const docLinks = useMemo(
+  const privateDocLinks = useMemo(
     () =>
       (project?.docLinks ?? []).map((link) => {
         const kind: ProjectDocLinkKind = normalizeProjectDocLinkKind(link.kind)
@@ -76,7 +80,9 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       }),
     [docLinkTagOptions, project?.docLinks],
   )
-  const defaultDocLink = docLinks[0]
+  // 默认链接只从私有取（语义不变）；合并列表供展示与弹层使用。
+  const defaultDocLink = privateDocLinks[0]
+  const docLinks = useResolvedProjectDocLinks(project)
 
   const normalizeDocTagOptions = useCallback((input: ProjectDocTagOption[]): ProjectDocTagOption[] => {
     const deduped: ProjectDocTagOption[] = []
@@ -161,9 +167,9 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
         return { ok: false, message: t('documentation.removeCategoryMissing') }
       }
       if (project) {
-        const hasTagInProject = docLinks.some((link) => normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value)
+        const hasTagInProject = privateDocLinks.some((link) => normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value)
         if (hasTagInProject) {
-          const migrated = docLinks.map((link) => (normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value ? { ...link, tag: undefined } : link))
+          const migrated = privateDocLinks.map((link) => (normalizeProjectDocLinkTag(link.tag, docLinkTagOptions) === value ? { ...link, tag: undefined } : link))
           await setProjectDocLinks(project.id, migrated)
         }
       }
@@ -171,7 +177,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       await setDocLinkTags(next)
       return { ok: true }
     },
-    [docLinkTagOptions, docLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks, t],
+    [docLinkTagOptions, privateDocLinks, normalizeDocTagOptions, project, setDocLinkTags, setProjectDocLinks, t],
   )
 
   const handleAddDocLink = useCallback(async () => {
@@ -194,7 +200,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
         setDocError(t('documentation.invalidSshUsername'))
         return false
       }
-      const duplicate = docLinks.some((link) => link.kind === 'ssh' && link.sshHost?.toLowerCase() === sshHost.toLowerCase() && (link.sshPort ?? 22) === sshPort && (link.sshUsername ?? link.account ?? '').toLowerCase() === sshUsername.toLowerCase())
+      const duplicate = privateDocLinks.some((link) => link.kind === 'ssh' && link.sshHost?.toLowerCase() === sshHost.toLowerCase() && (link.sshPort ?? 22) === sshPort && (link.sshUsername ?? link.account ?? '').toLowerCase() === sshUsername.toLowerCase())
       if (duplicate) {
         setDocError(t('documentation.duplicateSsh'))
         return false
@@ -215,7 +221,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
         ...(note ? { note } : {}),
         ...(secret ? { hasSecret: true } : {}),
       }
-      const nextLinks = [...docLinks, nextLink]
+      const nextLinks = [...privateDocLinks, nextLink]
       await setProjectDocLinks(project.id, nextLinks)
       if (secret) {
         try {
@@ -247,7 +253,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       return false
     }
 
-    const duplicate = docLinks.some((link) => (link.kind ?? 'url') === 'url' && (link.url ?? '').toLowerCase() === normalizedUrl.toLowerCase())
+    const duplicate = privateDocLinks.some((link) => (link.kind ?? 'url') === 'url' && (link.url ?? '').toLowerCase() === normalizedUrl.toLowerCase())
     if (duplicate) {
       setDocError(t('documentation.duplicateUrl'))
       return false
@@ -272,7 +278,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       ...(account ? { account } : {}),
       ...(secret ? { hasSecret: true } : {}),
     }
-    const nextLinks = [...docLinks, nextLink]
+    const nextLinks = [...privateDocLinks, nextLink]
     await setProjectDocLinks(project.id, nextLinks)
     if (secret) {
       try {
@@ -296,7 +302,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
     setDocSshRouteInput('wsl')
     setDocError(null)
     return true
-  }, [docKindInput, docTagInput, docAccountInput, docLinks, docNoteInput, docSecretInput, docSshHostInput, docSshPortInput, docSshRouteInput, docSshShortcutInput, docSshUsernameInput, docTitleInput, docUrlInput, project, setProjectDocLinks, docLinkTagOptions, t])
+  }, [docKindInput, docTagInput, docAccountInput, privateDocLinks, docNoteInput, docSecretInput, docSshHostInput, docSshPortInput, docSshRouteInput, docSshShortcutInput, docSshUsernameInput, docTitleInput, docUrlInput, project, setProjectDocLinks, docLinkTagOptions, t])
 
   const handleRemoveDocLink = useCallback(
     async (linkId: string) => {
@@ -306,33 +312,33 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       } catch {
         // best effort
       }
-      const nextLinks = docLinks.filter((link) => link.id !== linkId)
+      const nextLinks = privateDocLinks.filter((link) => link.id !== linkId)
       await setProjectDocLinks(project.id, nextLinks)
     },
-    [docLinks, project, setProjectDocLinks],
+    [privateDocLinks, project, setProjectDocLinks],
   )
 
   const handleSetDefaultDocLink = useCallback(
     async (linkId: string) => {
       if (!project) return
-      const index = docLinks.findIndex((link) => link.id === linkId)
+      const index = privateDocLinks.findIndex((link) => link.id === linkId)
       if (index <= 0) return
-      const nextLinks = [docLinks[index], ...docLinks.slice(0, index), ...docLinks.slice(index + 1)]
+      const nextLinks = [privateDocLinks[index], ...privateDocLinks.slice(0, index), ...privateDocLinks.slice(index + 1)]
       await setProjectDocLinks(project.id, nextLinks)
     },
-    [docLinks, project, setProjectDocLinks],
+    [privateDocLinks, project, setProjectDocLinks],
   )
 
   const handleReorderDocLinks = useCallback(
     async (activeLinkId: string, overLinkId: string) => {
       if (!project) return
-      const oldIndex = docLinks.findIndex((link) => link.id === activeLinkId)
-      const newIndex = docLinks.findIndex((link) => link.id === overLinkId)
+      const oldIndex = privateDocLinks.findIndex((link) => link.id === activeLinkId)
+      const newIndex = privateDocLinks.findIndex((link) => link.id === overLinkId)
       if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
-      const nextLinks = arrayMove(docLinks, oldIndex, newIndex)
+      const nextLinks = arrayMove(privateDocLinks, oldIndex, newIndex)
       await setProjectDocLinks(project.id, nextLinks)
     },
-    [docLinks, project, setProjectDocLinks],
+    [privateDocLinks, project, setProjectDocLinks],
   )
 
   const handleUpdateDocLink = useCallback(
@@ -356,7 +362,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       let title = nextTitleInput.trim()
       const note = nextNoteInput.trim() || undefined
       const secret = nextSecretInput.trim()
-      const targetLink = docLinks.find((link) => link.id === linkId)
+      const targetLink = privateDocLinks.find((link) => link.id === linkId)
 
       let normalizedUrl: string | undefined
       let account: string | undefined
@@ -377,7 +383,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
           setDocError(t('documentation.invalidSshUsername'))
           return false
         }
-        const duplicate = docLinks.some((link) => link.id !== linkId && link.kind === 'ssh' && link.sshHost?.toLowerCase() === normalizedHost.toLowerCase() && (link.sshPort ?? 22) === normalizedPort && (link.sshUsername ?? link.account ?? '').toLowerCase() === normalizedUsername.toLowerCase())
+        const duplicate = privateDocLinks.some((link) => link.id !== linkId && link.kind === 'ssh' && link.sshHost?.toLowerCase() === normalizedHost.toLowerCase() && (link.sshPort ?? 22) === normalizedPort && (link.sshUsername ?? link.account ?? '').toLowerCase() === normalizedUsername.toLowerCase())
         if (duplicate) {
           setDocError(t('documentation.duplicateSsh'))
           return false
@@ -397,7 +403,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
           return false
         }
         normalizedUrl = nextNormalizedUrl
-        const duplicate = docLinks.some((link) => link.id !== linkId && (link.kind ?? 'url') === 'url' && (link.url ?? '').toLowerCase() === nextNormalizedUrl.toLowerCase())
+        const duplicate = privateDocLinks.some((link) => link.id !== linkId && (link.kind ?? 'url') === 'url' && (link.url ?? '').toLowerCase() === nextNormalizedUrl.toLowerCase())
         if (duplicate) {
           setDocError(t('documentation.duplicateUrl'))
           return false
@@ -435,7 +441,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
         }
       }
 
-      const nextLinks = docLinks.map((link) =>
+      const nextLinks = privateDocLinks.map((link) =>
         link.id === linkId
           ? {
               ...link,
@@ -467,7 +473,7 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
       setDocError(null)
       return true
     },
-    [docLinks, project, setProjectDocLinks, docLinkTagOptions, t],
+    [privateDocLinks, project, setProjectDocLinks, docLinkTagOptions, t],
   )
 
   useEffect(() => {
@@ -493,7 +499,8 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
     async (linkId: string): Promise<boolean> => {
       if (!project) return false
       try {
-        const result = await window.electronAPI.getDocLinkSecret(project.id, linkId)
+        const link = docLinks.find((item) => item.id === linkId)
+        const result = link?.source === 'shared' ? await window.electronAPI.getSharedDocLinkSecret(link.id) : await window.electronAPI.getDocLinkSecret(project.id, linkId)
         const secret = result.secret?.trim()
         if (!secret) return false
         await navigator.clipboard.writeText(secret)
@@ -502,21 +509,22 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
         return false
       }
     },
-    [project],
+    [docLinks, project],
   )
 
   const handleGetDocLinkSecret = useCallback(
     async (linkId: string): Promise<string | null> => {
       if (!project) return null
       try {
-        const result = await window.electronAPI.getDocLinkSecret(project.id, linkId)
+        const link = docLinks.find((item) => item.id === linkId)
+        const result = link?.source === 'shared' ? await window.electronAPI.getSharedDocLinkSecret(link.id) : await window.electronAPI.getDocLinkSecret(project.id, linkId)
         const secret = result.secret?.trim()
         return secret || null
       } catch {
         return null
       }
     },
-    [project],
+    [docLinks, project],
   )
 
   const handleOpenDocLink = useCallback(
@@ -597,6 +605,9 @@ export function useProjectDocLinks({ project, initialSettingsOpen = false }: Use
           kind: link.kind ?? 'url',
           description: isSsh ? `${link.sshUsername || link.account || ''}@${sshTarget}` : (link.url ?? ''),
           copyValue: projectDocLinkCopyValue(link),
+          note: link.note,
+          source: link.source,
+          sharedGroupId: link.sharedGroupId,
           credentialActions: [
             ...(link.account?.trim() || link.sshUsername?.trim()
               ? [

@@ -6,15 +6,6 @@ import type { RuntimeSessionInfo, TmuxSessionInfo } from './types/runtime'
 import type { TranscriptSession, TranscriptSourceType, TranscriptViewerMode } from './types/transcript'
 
 export type {
-  MarkdownDocumentDisplayMode,
-  MarkdownDocumentHistoryEntry,
-  MarkdownDocumentImageSaveResult,
-  MarkdownDocumentOpenRequest,
-  MarkdownDocumentReadResult,
-  MarkdownDocumentWriteResult,
-} from './types/markdownDocument'
-
-export type {
   AiGatewayClientBinding,
   AiGatewayClientBindingBackup,
   AiGatewayClientCli,
@@ -40,6 +31,14 @@ export type {
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
 } from './types/learning'
+export type {
+  MarkdownDocumentDisplayMode,
+  MarkdownDocumentHistoryEntry,
+  MarkdownDocumentImageSaveResult,
+  MarkdownDocumentOpenRequest,
+  MarkdownDocumentReadResult,
+  MarkdownDocumentWriteResult,
+} from './types/markdownDocument'
 export type { ProjectType } from './types/project'
 export type {
   Capability,
@@ -1417,6 +1416,43 @@ export interface ProjectDocTagOption {
   sortOrder: number
 }
 
+export interface SharedDocLinkGroup {
+  id: string
+  name: string
+  sortOrder: number
+}
+
+/** 共享链接载荷 = ProjectDocLink 基础字段，仅剔除 id；保留 hasSecret（秘密本体存 domain 内 secret store，D5）。 */
+export type SharedDocLinkPayload = Omit<ProjectDocLink, 'id'>
+
+export interface SharedDocLink extends SharedDocLinkPayload {
+  id: string
+  groupId: string
+  createdAt: number
+}
+
+export type ProjectDocLinkSource = 'private' | 'shared'
+
+/** 合并后的展示模型（renderer 侧派生，不落盘） */
+export interface ResolvedProjectDocLink extends ProjectDocLink {
+  source: ProjectDocLinkSource
+  sharedGroupId?: string
+}
+
+/** 共享链接库文件结构（主进程 userData/doc-link-library/library.json） */
+export interface DocLinkLibraryFile {
+  version: 1
+  groups: SharedDocLinkGroup[]
+  links: SharedDocLink[]
+}
+
+/** upsert 入参（renderer → preload → service） */
+export type UpsertSharedDocLinkInput = SharedDocLinkPayload & {
+  /** 缺省 = 新建；传入 = 编辑既有条目 */
+  id?: string
+  groupId: string
+}
+
 export interface ProjectFolder {
   id: string
   name: string
@@ -1480,6 +1516,8 @@ export interface ProjectInfo {
   aiRuntimeProfileId?: string
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
+  /** 订阅的共享链接组 id 列表（#7 共享库） */
+  sharedDocLinkGroupIds?: string[]
   /** User-defined folder classification */
   folderId?: string
   /** User-defined tags */
@@ -1642,6 +1680,8 @@ export interface SavedProject {
   aiRuntimeProfileId?: string
   /** Project-specific documentation links for quick access */
   docLinks?: ProjectDocLink[]
+  /** 订阅的共享链接组 id 列表（#7 共享库） */
+  sharedDocLinkGroupIds?: string[]
   /** User-defined folder classification */
   folderId?: string
   /** User-defined tags */

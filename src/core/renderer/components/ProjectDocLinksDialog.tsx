@@ -9,11 +9,7 @@ type ProjectDocLinksDialogProps = {
   onClose: () => void
 }
 
-export function ProjectDocLinksDialog({
-  open,
-  project,
-  onClose,
-}: ProjectDocLinksDialogProps) {
+export function ProjectDocLinksDialog({ open, project, onClose }: ProjectDocLinksDialogProps) {
   const {
     docLinks,
     docKindInput,
@@ -70,6 +66,7 @@ export function ProjectDocLinksDialog({
   return (
     <DetailDocumentationCard
       docLinks={docLinks}
+      projectId={project.id}
       docKindInput={docKindInput}
       setDocKindInput={setDocKindInput}
       docTitleInput={docTitleInput}

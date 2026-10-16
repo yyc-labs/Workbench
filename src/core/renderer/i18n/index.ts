@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
-import { useAppStore } from '../stores/appStore'
 import type { AppLocale } from '../../shared/types'
-import { FALLBACK_LOCALE, messages, type InterpolationValues, type MessageKey, type ResolvedLocale, type SettingsSectionMessageKey } from './messages'
 import type { Section } from '../pages/settings/settings.types'
+import { useAppStore } from '../stores/appStore'
+import { FALLBACK_LOCALE, type InterpolationValues, type MessageKey, messages, type ResolvedLocale, type SettingsSectionMessageKey } from './messages'
 
 const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = {
   general: 'settings.sections.general',
@@ -20,6 +20,7 @@ const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = 
   logs: 'settings.sections.logs',
   ai: 'settings.sections.ai',
   rules: 'settings.sections.rules',
+  'doc-link-library': 'settings.sections.docLinkLibrary',
   about: 'settings.sections.about',
 }
 

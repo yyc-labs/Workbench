@@ -1,19 +1,20 @@
-import { registerCoreIpcHandlers } from './registerCoreIpcHandlers'
 import { registerAgentLogsIpcHandlers } from './registerAgentLogsIpcHandlers'
-import { registerGitIpcHandlers } from './registerGitIpcHandlers'
-import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
 import { registerAiConnectionIpcHandlers } from './registerAiConnectionIpcHandlers'
+import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
 import { registerBrowserAiIpcHandlers } from './registerBrowserAiIpcHandlers'
 import { registerBrowserScreenshotIpcHandlers } from './registerBrowserScreenshotIpcHandlers'
-import { registerLearningIpcHandlers } from './registerLearningIpcHandlers'
-import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
-import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
-import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
-import { registerProcessPortsIpcHandlers } from './registerProcessPortsIpcHandlers'
-import { registerRunTaskIpcHandlers } from './registerRunTaskIpcHandlers'
-import { registerTranscriptIpcHandlers } from './registerTranscriptIpcHandlers'
-import { registerMarkdownDocumentIpcHandlers } from './registerMarkdownDocumentIpcHandlers'
+import { registerCoreIpcHandlers } from './registerCoreIpcHandlers'
+import { registerDocLinkLibraryIpcHandlers } from './registerDocLinkLibraryIpcHandlers'
+import { registerGitIpcHandlers } from './registerGitIpcHandlers'
 import type { RegisterIpcHandlersDependencies, RuntimeStateChangedPayload } from './registerIpcHandlers.shared'
+import { registerLearningIpcHandlers } from './registerLearningIpcHandlers'
+import { registerMarkdownDocumentIpcHandlers } from './registerMarkdownDocumentIpcHandlers'
+import { registerProcessPortsIpcHandlers } from './registerProcessPortsIpcHandlers'
+import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
+import { registerRunTaskIpcHandlers } from './registerRunTaskIpcHandlers'
+import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
+import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
+import { registerTranscriptIpcHandlers } from './registerTranscriptIpcHandlers'
 
 let ipcHandlersRegistered = false
 
@@ -41,4 +42,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerBrowserAiIpcHandlers(deps)
   registerBrowserScreenshotIpcHandlers(deps)
   registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore, deps.routeMarkdownDocumentOpen)
+  registerDocLinkLibraryIpcHandlers(deps.docLinkLibraryService)
 }

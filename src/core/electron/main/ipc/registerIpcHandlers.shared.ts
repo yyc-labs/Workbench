@@ -1,29 +1,29 @@
 import type { BrowserWindow } from 'electron'
 import http from 'http'
-import { loadConfig } from '../config'
-import { toProjectFileServiceErrorMessage } from '../project-file-service'
+import type { RunTaskProgressEvent } from '../../../shared/runTasks'
+import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptGatewayImportPayload, TranscriptImportedEvent } from '../../../shared/types'
 import type { AgentLogService } from '../agent-logs/agent-log-service'
 import type { AiCommitService } from '../ai-commit/ai-commit-service'
 import type { AiConnectionService } from '../ai-connection/ai-connection-service'
 import type { AiGatewayService } from '../ai-gateway/gateway-service'
-import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
+import type { BrowserAiService } from '../browser-ai/browserAiService'
+import { loadConfig } from '../config'
+import type { DocLinkLibraryService } from '../doc-link-library/docLinkLibraryService'
 import type { GitService } from '../git/git-service'
+import type { AgentHookGateway } from '../hooks/agent-hook-gateway'
 import type { LearningService } from '../learning/learningService'
-import type { SkillService } from '../skill/skillService'
-import type { RuntimeService } from '../runtime/runtime-service'
+import type { MarkdownDocumentOpenRequestStore } from '../markdown-document/markdownDocumentOpenRequest'
+import type { MarkdownDocumentService } from '../markdown-document/markdownDocumentService'
 import type { ProcessPortService } from '../process-ports/process-port-service'
+import { toProjectFileServiceErrorMessage } from '../project-file-service'
 import type { RunTaskService } from '../run-tasks/run-task-service'
-import type { RunTaskProgressEvent } from '../../../shared/runTasks'
 import type { ProcessManager } from '../runner'
+import type { RuntimeService } from '../runtime/runtime-service'
+import type { PreviewPageCaptureService } from '../screenshot/previewCaptureService'
+import type { BrowserScreenshotService } from '../screenshot/screenshotService'
+import type { SkillService } from '../skill/skillService'
 import type { TranscriptService } from '../transcript/transcriptService'
 import type { TranscriptShareService } from '../transcript/transcriptShareService'
-import type { BrowserAiService } from '../browser-ai/browserAiService'
-import type { BrowserScreenshotService } from '../screenshot/screenshotService'
-import type { PreviewPageCaptureService } from '../screenshot/previewCaptureService'
-import type { Capability, TranscriptCaptureInitialText, TranscriptImportedEvent, TranscriptGatewayImportPayload } from '../../../shared/types'
-import type { BrowserScreenshotViewerPayload } from '../../../shared/types'
-import type { MarkdownDocumentService } from '../markdown-document/markdownDocumentService'
-import type { MarkdownDocumentOpenRequestStore } from '../markdown-document/markdownDocumentOpenRequest'
 
 export type RuntimeStateChangedPayload = {
   reason: string
@@ -64,6 +64,7 @@ export type RegisterIpcHandlersDependencies = {
   markdownDocumentService: MarkdownDocumentService
   markdownDocumentOpenRequestStore: MarkdownDocumentOpenRequestStore
   routeMarkdownDocumentOpen: (markdownPath: string) => void
+  docLinkLibraryService: DocLinkLibraryService
 }
 
 type GitRequestWithRepoRoot = {

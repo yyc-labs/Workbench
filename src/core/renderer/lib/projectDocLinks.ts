@@ -1,22 +1,14 @@
-import type {
-  ProjectDocLink,
-  ProjectDocLinkKind,
-  ProjectDocLinkTag,
-  ProjectDocTagOption,
-} from '../../shared/types'
-import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
+import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, projectDocLinkDedupeKey } from '../../shared/projectDocLinks'
+import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkTag, ProjectDocTagOption } from '../../shared/types'
 import type { ResolvedLocale } from '../i18n/messages'
 
-export { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS }
+export { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, projectDocLinkDedupeKey }
 
 export function normalizeProjectDocLinkKind(value: ProjectDocLinkKind | string | null | undefined): ProjectDocLinkKind {
   return value === 'ssh' ? 'ssh' : 'url'
 }
 
-export function normalizeProjectDocLinkTag(
-  value: ProjectDocLinkTag | string | null | undefined,
-  options: ReadonlyArray<Pick<ProjectDocTagOption, 'value'>> = PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS
-): ProjectDocLinkTag {
+export function normalizeProjectDocLinkTag(value: ProjectDocLinkTag | string | null | undefined, options: ReadonlyArray<Pick<ProjectDocTagOption, 'value'>> = PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS): ProjectDocLinkTag {
   const trimmed = typeof value === 'string' ? value.trim() : ''
   if (!trimmed) return ''
   const set = new Set(options.map((item) => item.value))
@@ -69,11 +61,7 @@ export function isSshProjectDocLink(link: Pick<ProjectDocLink, 'kind'>): boolean
   return normalizeProjectDocLinkKind(link.kind) === 'ssh'
 }
 
-export function projectDocLinkTagLabel(
-  value: ProjectDocLinkTag | string | null | undefined,
-  options: ReadonlyArray<Pick<ProjectDocTagOption, 'value' | 'label'>> = PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
-  locale: ResolvedLocale = 'zh-CN'
-): string {
+export function projectDocLinkTagLabel(value: ProjectDocLinkTag | string | null | undefined, options: ReadonlyArray<Pick<ProjectDocTagOption, 'value' | 'label'>> = PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS, locale: ResolvedLocale = 'zh-CN'): string {
   const tag = normalizeProjectDocLinkTag(value, options)
   if (!tag) {
     return locale === 'zh-CN' ? '未分类' : 'Uncategorized'

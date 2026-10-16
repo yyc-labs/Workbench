@@ -1,7 +1,7 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import type { StateCreator } from 'zustand'
-import type { AppState } from './appStore.types'
 import { applySavedProjectSnapshot, createEntityId, createFallbackProject, persistWorkspace, toRemovedProjectSnapshot } from './appStore.helpers'
+import type { AppState } from './appStore.types'
 
 export type WorkspaceActionsSlice = Pick<
   AppState,
@@ -15,6 +15,7 @@ export type WorkspaceActionsSlice = Pick<
   | 'setProjectRunWorkingDirectory'
   | 'setProjectRunStartupMode'
   | 'setProjectDocLinks'
+  | 'setProjectSharedDocLinkGroups'
   | 'setProjectLastCodeFile'
   | 'setProjectCodeSession'
   | 'setProjectLastMarkdownPreviewMode'
@@ -55,9 +56,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     }
 
     set((state) => {
-      const nextRemovedProjects = reusedSnapshot
-        ? state.config.removedProjects?.filter((item) => item.path !== dirPath) ?? []
-        : state.config.removedProjects ?? []
+      const nextRemovedProjects = reusedSnapshot ? (state.config.removedProjects?.filter((item) => item.path !== dirPath) ?? []) : (state.config.removedProjects ?? [])
       return {
         projects: [...state.projects, project],
         config: {
@@ -75,12 +74,8 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       delete nextProcessUrls[projectId]
       const removedProject = state.projects.find((p) => p.id === projectId)
       const existingSnapshots = state.config.removedProjects ?? []
-      const dedupedSnapshots = removedProject
-        ? existingSnapshots.filter((item) => item.path !== removedProject.path)
-        : existingSnapshots
-      const nextRemovedProjects = removedProject
-        ? [toRemovedProjectSnapshot(removedProject), ...dedupedSnapshots].slice(0, 200)
-        : dedupedSnapshots
+      const dedupedSnapshots = removedProject ? existingSnapshots.filter((item) => item.path !== removedProject.path) : existingSnapshots
+      const nextRemovedProjects = removedProject ? [toRemovedProjectSnapshot(removedProject), ...dedupedSnapshots].slice(0, 200) : dedupedSnapshots
       return {
         projects: state.projects.filter((p) => p.id !== projectId),
         processUrls: nextProcessUrls,
@@ -104,21 +99,21 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const normalizedProfileId = profileId.trim()
     const profile = get().config.aiRuntimeProfiles?.find((item) => item.id === normalizedProfileId)
     set((state) => ({
-      projects: state.projects.map((project) => (
+      projects: state.projects.map((project) =>
         project.id === projectId
           ? normalizedProfileId
             ? {
-              ...project,
-              aiRuntimeProfileId: normalizedProfileId,
-              cli: profile?.cli ?? project.cli,
-            }
+                ...project,
+                aiRuntimeProfileId: normalizedProfileId,
+                cli: profile?.cli ?? project.cli,
+              }
             : {
-              ...project,
-              aiRuntimeProfileId: undefined,
-              cli: undefined,
-            }
-          : project
-      )),
+                ...project,
+                aiRuntimeProfileId: undefined,
+                cli: undefined,
+              }
+          : project,
+      ),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -126,11 +121,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectCustomName: async (projectId, customName) => {
     const normalized = customName?.trim()
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId
-          ? { ...project, customName: normalized || undefined }
-          : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, customName: normalized || undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -138,11 +129,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectCustomType: async (projectId, customType) => {
     const normalized = customType?.trim()
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId
-          ? { ...project, customType: normalized || undefined }
-          : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, customType: normalized || undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -165,22 +152,14 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectRunWorkingDirectory: async (projectId, runWorkingDirectory) => {
     const normalized = runWorkingDirectory?.trim()
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId
-          ? { ...project, runWorkingDirectory: normalized || undefined }
-          : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, runWorkingDirectory: normalized || undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectRunStartupMode: async (projectId, mode) => {
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId
-          ? { ...project, runStartupMode: mode === 'terminal' ? 'terminal' : 'silent' }
-          : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, runStartupMode: mode === 'terminal' ? 'terminal' : 'silent' } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -192,27 +171,26 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
+  setProjectSharedDocLinkGroups: async (projectId, groupIds) => {
+    set((state) => ({
+      projects: state.projects.map((p) => (p.id === projectId ? { ...p, sharedDocLinkGroupIds: groupIds } : p)),
+    }))
+    await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
+  },
+
   setProjectLastCodeFile: async (projectId, relativePath) => {
     const normalized = relativePath?.trim() || undefined
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId ? { ...project, lastCodeFile: normalized } : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, lastCodeFile: normalized } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   setProjectCodeSession: async (projectId, session) => {
-    const normalizePath = (value: unknown): string => (
-      typeof value === 'string' ? value.trim() : ''
-    )
+    const normalizePath = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
     const normalizeContentSearchHistory = (value: unknown): string[] | undefined => {
       if (!Array.isArray(value)) return undefined
-      const normalized = Array.from(new Set(
-        value
-          .map((item) => (typeof item === 'string' ? item.trim() : ''))
-          .filter((item) => item.length > 0)
-      )).slice(0, 12)
+      const normalized = Array.from(new Set(value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item.length > 0))).slice(0, 12)
       return normalized.length > 0 ? normalized : undefined
     }
     const normalizeContentSearchScope = (value: unknown): string | undefined => {
@@ -228,13 +206,9 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       return { lineNumber, column }
     }
 
-    const normalizedTabs = Array.isArray(session?.tabs)
-      ? Array.from(new Set(session.tabs.map((item) => normalizePath(item)).filter(Boolean))).slice(0, 5)
-      : []
+    const normalizedTabs = Array.isArray(session?.tabs) ? Array.from(new Set(session.tabs.map((item) => normalizePath(item)).filter(Boolean))).slice(0, 5) : []
     const normalizedActivePathRaw = normalizePath(session?.activePath)
-    const normalizedActivePath = normalizedActivePathRaw && normalizedTabs.includes(normalizedActivePathRaw)
-      ? normalizedActivePathRaw
-      : normalizedTabs[normalizedTabs.length - 1]
+    const normalizedActivePath = normalizedActivePathRaw && normalizedTabs.includes(normalizedActivePathRaw) ? normalizedActivePathRaw : normalizedTabs[normalizedTabs.length - 1]
 
     const cursorEntries: Array<[string, { lineNumber: number; column: number }]> = []
     const rawCursorPositions = session?.cursorPositions
@@ -251,21 +225,19 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const normalizedCursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
     const normalizedContentSearchHistory = normalizeContentSearchHistory(session?.contentSearchHistory)
     const normalizedContentSearchScope = normalizeContentSearchScope(session?.contentSearchScope)
-    const normalizedSession = normalizedTabs.length > 0 || normalizedCursorPositions
-      || normalizedContentSearchHistory || normalizedContentSearchScope
-      ? {
-        tabs: normalizedTabs,
-        activePath: normalizedActivePath,
-        cursorPositions: normalizedCursorPositions,
-        contentSearchHistory: normalizedContentSearchHistory,
-        contentSearchScope: normalizedContentSearchScope,
-      }
-      : undefined
+    const normalizedSession =
+      normalizedTabs.length > 0 || normalizedCursorPositions || normalizedContentSearchHistory || normalizedContentSearchScope
+        ? {
+            tabs: normalizedTabs,
+            activePath: normalizedActivePath,
+            cursorPositions: normalizedCursorPositions,
+            contentSearchHistory: normalizedContentSearchHistory,
+            contentSearchScope: normalizedContentSearchScope,
+          }
+        : undefined
 
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId ? { ...project, codeSession: normalizedSession } : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, codeSession: normalizedSession } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -273,9 +245,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectLastMarkdownPreviewMode: async (projectId, mode) => {
     const normalized = mode === 'edit' || mode === 'preview' || mode === 'split' ? mode : undefined
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId ? { ...project, lastMarkdownPreviewMode: normalized } : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, lastMarkdownPreviewMode: normalized } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -287,13 +257,13 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
       projects: state.projects.map((project) =>
         project.id === projectId
           ? {
-            ...project,
-            codeFileDrawerState: {
-              favorites: normalizedFavorites,
-              recents: normalizedRecents,
-            },
-          }
-          : project
+              ...project,
+              codeFileDrawerState: {
+                favorites: normalizedFavorites,
+                recents: normalizedRecents,
+              },
+            }
+          : project,
       ),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
@@ -304,27 +274,21 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     if (!hasAnyLastCodeFile) return
 
     set((state) => ({
-      projects: state.projects.map((project) => (
-        project.lastCodeFile ? { ...project, lastCodeFile: undefined } : project
-      )),
+      projects: state.projects.map((project) => (project.lastCodeFile ? { ...project, lastCodeFile: undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   togglePin: async (projectId) => {
     set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === projectId ? { ...p, pinned: !p.pinned } : p
-      ),
+      projects: state.projects.map((p) => (p.id === projectId ? { ...p, pinned: !p.pinned } : p)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   updateLastOpened: (projectId) => {
     set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === projectId ? { ...p, lastOpened: Date.now() } : p
-      ),
+      projects: state.projects.map((p) => (p.id === projectId ? { ...p, lastOpened: Date.now() } : p)),
     }))
     void persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -333,11 +297,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const target = get().projects.find((project) => project.id === projectId)
     if (!target?.lastOpened) return
     set((state) => ({
-      projects: state.projects.map((project) => (
-        project.id === projectId
-          ? { ...project, lastOpened: undefined }
-          : project
-      )),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, lastOpened: undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -365,15 +325,11 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const trimmed = name.trim()
     if (!trimmed) return
 
-    const dup = get().folders.some(
-      (folder) => folder.id !== folderId && folder.name.toLowerCase() === trimmed.toLowerCase()
-    )
+    const dup = get().folders.some((folder) => folder.id !== folderId && folder.name.toLowerCase() === trimmed.toLowerCase())
     if (dup) return
 
     set((state) => ({
-      folders: state.folders.map((folder) =>
-        folder.id === folderId ? { ...folder, name: trimmed } : folder
-      ),
+      folders: state.folders.map((folder) => (folder.id === folderId ? { ...folder, name: trimmed } : folder)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -392,9 +348,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
 
     set((state) => ({
       folders: state.folders.filter((folder) => folder.id !== folderId),
-      projects: state.projects.map((project) =>
-        project.folderId === folderId ? { ...project, folderId: undefined } : project
-      ),
+      projects: state.projects.map((project) => (project.folderId === folderId ? { ...project, folderId: undefined } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -416,9 +370,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
 
   assignProjectFolder: async (projectId, folderId) => {
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId ? { ...project, folderId } : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, folderId } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -446,15 +398,11 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const trimmed = name.trim()
     if (!trimmed) return
 
-    const dup = get().tags.some(
-      (tag) => tag.id !== tagId && tag.name.toLowerCase() === trimmed.toLowerCase()
-    )
+    const dup = get().tags.some((tag) => tag.id !== tagId && tag.name.toLowerCase() === trimmed.toLowerCase())
     if (dup) return
 
     set((state) => ({
-      tags: state.tags.map((tag) =>
-        tag.id === tagId ? { ...tag, name: trimmed } : tag
-      ),
+      tags: state.tags.map((tag) => (tag.id === tagId ? { ...tag, name: trimmed } : tag)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
@@ -499,9 +447,7 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
   setProjectTags: async (projectId, tagIds) => {
     const uniq = [...new Set(tagIds)]
     set((state) => ({
-      projects: state.projects.map((project) =>
-        project.id === projectId ? { ...project, tagIds: uniq } : project
-      ),
+      projects: state.projects.map((project) => (project.id === projectId ? { ...project, tagIds: uniq } : project)),
     }))
     await persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },

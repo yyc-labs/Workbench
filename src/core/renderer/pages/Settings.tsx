@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Input } from '../components/ui/input'
 import { useI18n } from '../i18n'
 import { useAppStore } from '../stores/appStore'
+import { SettingsProcessesPanel } from './settings/processes/SettingsProcessesPanel'
 import { SettingsAboutPanel } from './settings/SettingsAboutPanel'
 import { SettingsAgentHooksPanel } from './settings/SettingsAgentHooksPanel'
 import { SettingsAgentLogsPanel } from './settings/SettingsAgentLogsPanel'
@@ -17,9 +18,9 @@ import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
 import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
 import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
-import { SettingsProcessesPanel } from './settings/processes/SettingsProcessesPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
+import { SettingsSharedDocLinkLibraryPanel } from './settings/SettingsSharedDocLinkLibraryPanel'
 import { SettingsShortcutsPanel } from './settings/SettingsShortcutsPanel'
 import { SettingsSidebar } from './settings/SettingsSidebar'
 import { SettingsStartupLogsPanel } from './settings/SettingsStartupLogsPanel'
@@ -463,6 +464,7 @@ export function SettingsPage() {
                 />
               )}
               {section === 'rules' && <SettingsRulesPanel />}
+              {section === 'doc-link-library' && <SettingsSharedDocLinkLibraryPanel />}
               {section === 'about' && <SettingsAboutPanel />}
             </div>
           </main>

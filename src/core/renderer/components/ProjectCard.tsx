@@ -1,24 +1,25 @@
-import { memo, useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import type { AiCommitTaskSnapshot, CliTool, ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
-import { useAppStore } from '../stores/appStore'
-import { ArrowUpRight, Play, Square, Folder, Sparkles, Terminal, MoreHorizontal, BookOpen, RefreshCw, TriangleAlert } from 'lucide-react'
-import { ProjectLinksTrigger } from './ProjectLinksTrigger'
-import { CardContextMenu } from './CardContextMenu'
-import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
-import { ProjectMetaDialog } from './ProjectMetaDialog'
-import { RunTasksDialog } from './run-tasks/RunTasksDialog'
-import { Select, type SelectOption } from './ui/select'
-import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
-import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../lib/projectDocLinks'
-import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
-import { useI18n } from '../i18n'
-import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
-import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
-import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
-import { preloadProjectPane } from '../lib/projectPagePreload'
-import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
+import { ArrowUpRight, BookOpen, Folder, MoreHorizontal, Play, RefreshCw, Sparkles, Square, Terminal, TriangleAlert } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
+import type { AiCommitTaskSnapshot, CliTool, ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
+import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
+import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useResolvedProjectDocLinks } from '../hooks/useResolvedProjectDocLinks'
+import { useI18n } from '../i18n'
+import { middleTruncatePath, projectDisplayName, projectDisplayType } from '../lib/projectDisplay'
+import { normalizeProjectDocLinkTag, projectDocLinkCopyValue, projectDocLinkTagLabel, projectDocLinkTarget } from '../lib/projectDocLinks'
+import { preloadProjectPane } from '../lib/projectPagePreload'
+import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
+import { useProjectDocLinks } from '../pages/detail/useProjectDocLinks'
+import { useAppStore } from '../stores/appStore'
+import { CardContextMenu } from './CardContextMenu'
+import { ProjectDocLinksDialog } from './ProjectDocLinksDialog'
+import { ProjectLinksTrigger } from './ProjectLinksTrigger'
+import { ProjectMetaDialog } from './ProjectMetaDialog'
+import type { ProjectPanePreloadHandle } from './ProjectPaneTabs'
+import { RunTasksDialog } from './run-tasks/RunTasksDialog'
+import { Select, type SelectOption } from './ui/select'
 
 interface ProjectCardProps {
   project: ProjectInfo
@@ -195,7 +196,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     }
     void stopProject(project.id)
   }, [project.id, runTasksActive, stopAllRunTasks, stopProject])
-  const docLinks = project.docLinks ?? []
+  const docLinks = useResolvedProjectDocLinks(project)
   const defaultDocLink = docLinks[0]
   // Dev links surfaced on the card: legacy bare-process URLs plus URLs
   // published by run tasks (primary task/link first), deduped.
@@ -215,6 +216,9 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
           kind: link.kind ?? 'url',
           description: projectDocLinkTarget(link),
           copyValue: projectDocLinkCopyValue(link),
+          note: link.note,
+          source: link.source,
+          sharedGroupId: link.sharedGroupId,
           credentialActions: [
             ...(link.account?.trim() || link.sshUsername?.trim()
               ? [
@@ -242,8 +246,6 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
     ],
     [devLinkUrls, docLinkTagOptions, docLinks, handleCopyDocLinkAccount, handleCopyDocLinkSecret, handleOpenDocLink, t],
   )
-  const hasProjectDocLinks = docLinks.length > 0
-  const hasProjectLinks = hasProjectDocLinks || devLinkUrls.length > 0
   const hoverDocLabel = defaultDocLink ? `${t('project.runtimeDocsPrefix')} ${defaultDocLink.title}` : docLinks.length > 0 ? t('project.docsCount', { count: docLinks.length }) : null
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
@@ -558,7 +560,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             )}
           />
         </div>
-        {hasProjectLinks && <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" title={t('common.leftClickOpenFirstLink')} />}
+        <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" />
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button
             className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${

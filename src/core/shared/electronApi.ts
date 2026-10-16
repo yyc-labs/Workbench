@@ -1,3 +1,4 @@
+import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from './runTasks'
 import type {
   AgentHookEnvelope,
   AgentHookGatewayStatus,
@@ -5,33 +6,33 @@ import type {
   AgentLogSource,
   AgentLogSummary,
   AiCommitRunOverride,
-  AiConnectionTestRequest,
-  AiConnectionTestResult,
   AiCommitTaskSnapshot,
   AiCommitUndoCloseReason,
   AiCommitUndoResult,
+  AiConnectionTestRequest,
+  AiConnectionTestResult,
   AiGatewayBindingResult,
   AiGatewayClientCli,
   AiGatewayConfig,
   AiGatewayLogEntry,
   AiGatewaySaveConfigResult,
   AiGatewayStatus,
+  AiRuntimeProfile,
   AppCacheLocationInfo,
-  LegacyUserDataMigrationInfo,
-  LegacyUserDataMigrationResult,
   AppConfig,
-  BrowserDataCleanupResult,
-  BrowserDataMaintenanceInfo,
+  AppViewPath,
   BrowserAiConfig,
   BrowserAiConnectionTestResult,
   BrowserAiContextPreview,
   BrowserAiRunTaskPayload,
-  BrowserAiSaveTaskRecordPayload,
   BrowserAiSaveResultPayload,
+  BrowserAiSaveTaskRecordPayload,
   BrowserAiSnapshot,
   BrowserAiTaskRecord,
   BrowserAiTaskRecordSummary,
   BrowserAiTaskResult,
+  BrowserDataCleanupResult,
+  BrowserDataMaintenanceInfo,
   BrowserScreenshotProgress,
   BrowserScreenshotRequest,
   BrowserScreenshotResult,
@@ -45,6 +46,7 @@ import type {
   CodexSettingsInput,
   CodexSettingsSaveResult,
   CodexSettingsSnapshot,
+  DocLinkLibraryFile,
   GitConflictFileRequest,
   GitConflictFileResult,
   GitFileDiffRequest,
@@ -65,13 +67,14 @@ import type {
   LearningSearchResult,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
-  Skill,
-  SkillCategory,
-  SkillCreateCategoryPayload,
-  SkillCreatePayload,
-  SkillSummary,
-  SkillUpdateCategoryPayload,
-  SkillUpdatePayload,
+  LegacyUserDataMigrationInfo,
+  LegacyUserDataMigrationResult,
+  ManagedProcessSnapshot,
+  MarkdownDocumentHistoryEntry,
+  MarkdownDocumentImageSaveResult,
+  MarkdownDocumentOpenRequest,
+  MarkdownDocumentReadResult,
+  MarkdownDocumentWriteResult,
   ProcessInfo,
   ProcessPortInventory,
   ProjectFileAutoLoadDecision,
@@ -89,30 +92,30 @@ import type {
   RuntimeDiagnostics,
   RuntimeEntry,
   RuntimeSessionInfo,
+  Skill,
+  SkillCategory,
+  SkillCreateCategoryPayload,
+  SkillCreatePayload,
+  SkillSummary,
+  SkillUpdateCategoryPayload,
+  SkillUpdatePayload,
   TerminalProcessInventory,
-  ManagedProcessSnapshot,
   TerminalStopAllResult,
   TmuxSessionInfo,
   TranscriptCaptureInitialText,
   TranscriptExternalImportPayload,
   TranscriptFileReference,
   TranscriptGatewayImportPayload,
-  TranscriptImportPayload,
   TranscriptImportedEvent,
+  TranscriptImportPayload,
   TranscriptSession,
   TranscriptSessionSummary,
   TranscriptShareListResult,
   TranscriptShareStartPayload,
   TranscriptShareStartResult,
   TranscriptUpdatePayload,
-  MarkdownDocumentHistoryEntry,
-  MarkdownDocumentImageSaveResult,
-  MarkdownDocumentOpenRequest,
-  MarkdownDocumentReadResult,
-  MarkdownDocumentWriteResult,
+  UpsertSharedDocLinkInput,
 } from './types'
-import type { AiRuntimeProfile, AppViewPath } from './types'
-import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from './runTasks'
 
 export type ElectronApiSubscription<T> = (cb: (data: T) => void) => () => void
 export type ElectronApiSignalSubscription = (cb: () => void) => () => void
@@ -275,6 +278,19 @@ export interface MarkdownDocumentElectronApi {
   routeMarkdownDocumentOpen: (filePath: string) => Promise<boolean>
 }
 
+export interface DocLinkLibraryElectronApi {
+  listDocLinkLibrary: () => Promise<DocLinkLibraryFile>
+  createDocLinkGroup: (name: string) => Promise<DocLinkLibraryFile>
+  renameDocLinkGroup: (groupId: string, name: string) => Promise<DocLinkLibraryFile>
+  removeDocLinkGroup: (groupId: string) => Promise<DocLinkLibraryFile>
+  upsertSharedDocLink: (input: UpsertSharedDocLinkInput) => Promise<DocLinkLibraryFile>
+  removeSharedDocLink: (linkId: string) => Promise<DocLinkLibraryFile>
+  reorderSharedDocLinks: (groupId: string, orderedLinkIds: string[]) => Promise<DocLinkLibraryFile>
+  setSharedDocLinkSecret: (linkId: string, secret: string) => Promise<void>
+  getSharedDocLinkSecret: (linkId: string) => Promise<DocLinkSecretResult>
+  deleteSharedDocLinkSecret: (linkId: string) => Promise<void>
+}
+
 export interface TranscriptElectronApi {
   importTranscript: (payload: TranscriptImportPayload) => Promise<TranscriptSession>
   importExternalTranscript: (payload: TranscriptExternalImportPayload) => Promise<TranscriptImportedEvent>
@@ -412,6 +428,7 @@ export type ElectronApi = CoreElectronApi &
   GitElectronApi &
   ProjectFileElectronApi &
   MarkdownDocumentElectronApi &
+  DocLinkLibraryElectronApi &
   TranscriptElectronApi &
   LearningElectronApi &
   SkillElectronApi &

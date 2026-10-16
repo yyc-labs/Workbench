@@ -1,38 +1,40 @@
-import { app, BrowserWindow, nativeTheme, screen, type Rectangle } from 'electron'
-import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
+import { app, BrowserWindow, nativeTheme, type Rectangle, screen } from 'electron'
+import { buildAgentSkillPrompt } from '../../shared/agentSkillPrompt'
 import type { RunTaskProgressEvent } from '../../shared/runTasks'
-import { RunTaskService } from './run-tasks/run-task-service'
+import type { BrowserScreenshotViewerPayload, Capability, TranscriptCaptureInitialText, TranscriptImportedEvent } from '../../shared/types'
 import { flushAiCommitRegistry } from './ai-commit-registry'
 import { registerAppLifecycle, runAppCleanupSteps, runAppStartupSteps } from './app-lifecycle'
 import { createAppServices } from './app-services'
 import { applyAppCacheLocation } from './cache-location'
 import { capabilityManager } from './capability-manager'
 import { loadConfig, updateConfig } from './config'
+import { DocLinkLibraryRepository } from './doc-link-library/docLinkLibraryRepository'
+import { DocLinkLibrarySecretStore } from './doc-link-library/docLinkLibrarySecretStore'
+import { DocLinkLibraryService } from './doc-link-library/docLinkLibraryService'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
-import { openTerminalAtPath } from './shell/openers'
-import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
-import { prewarmClipboardWorker } from './project-file-service'
-import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
-import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
-import { MarkdownDocumentOpenRequestStore } from './markdown-document/markdownDocumentOpenRequest'
-import { parseMarkdownDocumentOpenRequest } from './markdown-document/markdownDocumentOpenRequest'
 import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
+import { MarkdownDocumentOpenRequestStore, parseMarkdownDocumentOpenRequest } from './markdown-document/markdownDocumentOpenRequest'
+import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
+import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
+import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
+import { prewarmClipboardWorker } from './project-file-service'
+import { RunTaskService } from './run-tasks/run-task-service'
 import { ProcessManager } from './runner'
+import { openTerminalAtPath } from './shell/openers'
 import { TranscriptCaptureController } from './transcript-capture-controller'
 import { type AppTrayController, createAppTray } from './tray'
-import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
-import { createBrowserScreenshotWindow, BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_WINDOW_HEIGHT, BROWSER_SCREENSHOT_WINDOW_WIDTH } from './window/createBrowserScreenshotWindow'
+import { pasteTextToActiveWindow } from './window/activeWindowPaste'
+import { APP_VIEW_WINDOW_TITLES, createAppViewWindow } from './window/createAppViewWindow'
 import { createBrowserScreenshotViewerWindow } from './window/createBrowserScreenshotViewerWindow'
-import { createAppViewWindow, APP_VIEW_WINDOW_TITLES } from './window/createAppViewWindow'
+import { BROWSER_SCREENSHOT_DOCK_SIZE, BROWSER_SCREENSHOT_WINDOW_HEIGHT, BROWSER_SCREENSHOT_WINDOW_WIDTH, createBrowserScreenshotWindow } from './window/createBrowserScreenshotWindow'
+import { createTranscriptCaptureWindow, TRANSCRIPT_CAPTURE_WINDOW_HEIGHT, TRANSCRIPT_CAPTURE_WINDOW_WIDTH } from './window/createTranscriptCaptureWindow'
 import { applyWindowBackground, createWindow } from './window/createWindow'
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from './window/globalShortcuts'
-import { registerWebContentsSecurityPolicy } from './window/webContentsSecurity'
 import { captureTranscriptCaptureInitialText, readTranscriptCaptureClipboardText } from './window/transcriptCaptureSelection'
+import { registerWebContentsSecurityPolicy } from './window/webContentsSecurity'
 import { ensureWindowVisible } from './window/windowFocus'
-import { buildAgentSkillPrompt } from '../../shared/agentSkillPrompt'
-import { pasteTextToActiveWindow } from './window/activeWindowPaste'
 
 let mainWindow: BrowserWindow | null = null
 let transcriptCaptureWindow: BrowserWindow | null = null
@@ -91,6 +93,7 @@ const services = createAppServices({
   emitTranscriptImported,
 })
 const markdownDocumentService = new MarkdownDocumentService(new MarkdownDocumentRepository(app.getPath('userData')), () => mainWindow)
+const docLinkLibraryService = new DocLinkLibraryService(new DocLinkLibraryRepository(app.getPath('userData')), new DocLinkLibrarySecretStore())
 const {
   gitService,
   runtimeService,
@@ -792,6 +795,7 @@ app.whenReady().then(async () => {
               markdownDocumentService,
               markdownDocumentOpenRequestStore,
               routeMarkdownDocumentOpen: routeMarkdownDocumentOpenRequest,
+              docLinkLibraryService,
             })
           },
         },

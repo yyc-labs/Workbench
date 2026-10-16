@@ -1,12 +1,12 @@
+import { ArrowRight, Bot, Code2, FileText, FileType2, FolderOpen, GraduationCap, Home, type LucideIcon, Map, Route as RouteIcon, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowRight, Bot, Code2, FileText, FolderOpen, GraduationCap, Home, Map, Route as RouteIcon, Search, Settings, FileType2, type LucideIcon, X } from 'lucide-react'
 import type { ProjectInfo } from '../../shared/types'
 import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { preloadProjectPane } from '../lib/projectPagePreload'
-import { SETTINGS_SECTIONS, DEFAULT_SETTINGS_SECTION, type Section } from '../pages/settings/settings.types'
+import { DEFAULT_SETTINGS_SECTION, SETTINGS_SECTIONS, type Section } from '../pages/settings/settings.types'
 import { useAppStore } from '../stores/appStore'
 
 type RouteCatalogGroupId = 'base' | 'project' | 'settings'
@@ -63,6 +63,7 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   logs: 'common.routeCatalog.settingsDescriptions.logs',
   ai: 'common.routeCatalog.settingsDescriptions.ai',
   rules: 'common.routeCatalog.settingsDescriptions.rules',
+  'doc-link-library': 'common.routeCatalog.settingsDescriptions.docLinkLibrary',
   about: 'common.routeCatalog.settingsDescriptions.about',
 }
 

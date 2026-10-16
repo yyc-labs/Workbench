@@ -1,10 +1,11 @@
-import { ChevronDown, Edit3, Plus, Settings2, Trash2, X } from 'lucide-react'
+import { ChevronDown, Edit3, Library, Plus, Settings2, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { ModalShell } from '../../components/ModalShell'
 import { useI18n } from '../../i18n'
-import type { DetailDocumentationCardProps } from './detail.documentationCard.types'
 import { DetailDocumentationLinkList } from './DetailDocumentationLinkList'
+import { DetailDocumentationSharedLibrarySection } from './DetailDocumentationSharedLibrarySection'
 import { DetailDocumentationTagSelect } from './DetailDocumentationTagSelect'
+import type { DetailDocumentationCardProps } from './detail.documentationCard.types'
 import type { UseDetailDocumentationCardStateResult } from './useDetailDocumentationCardState'
 
 type DetailDocumentationSettingsModalProps = Pick<
@@ -72,6 +73,7 @@ function DetailDocumentationSettingsModal({
 }: DetailDocumentationSettingsModalProps) {
   const { t } = useI18n()
   const [tagManagerOpen, setTagManagerOpen] = useState(false)
+  const [sharedLibraryOpen, setSharedLibraryOpen] = useState(false)
 
   const closeAddDialog = () => {
     state.settings.closeAddDialog()
@@ -86,32 +88,20 @@ function DetailDocumentationSettingsModal({
   useEffect(() => {
     if (!state.settings.open) {
       setTagManagerOpen(false)
+      setSharedLibraryOpen(false)
     }
   }, [state.settings.open])
 
   return (
     <>
-      <ModalShell
-        open={state.settings.open}
-        baseZIndex={1000}
-        widthClassName="max-w-[760px]"
-        ariaLabel={t('documentation.modalAria')}
-        onClose={state.settings.close}
-      >
+      <ModalShell open={state.settings.open} baseZIndex={1000} widthClassName="max-w-[760px]" ariaLabel={t('documentation.modalAria')} onClose={state.settings.close}>
         <div className="flex h-[78vh] max-h-[780px] flex-col">
           <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
             <div>
               <p className="section-label mb-1 text-base">{t('documentation.modalTitle')}</p>
-              <p className="text-xs text-[color:var(--color-muted-foreground)]">
-                {t('documentation.modalDescription')}
-              </p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('documentation.modalDescription')}</p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={state.settings.close}
-              title={t('common.close')}
-            >
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={state.settings.close} title={t('common.close')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -129,26 +119,23 @@ function DetailDocumentationSettingsModal({
                 <Plus className="h-3.5 w-3.5" />
                 {t('documentation.addItem')}
               </button>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-                onClick={() => setTagManagerOpen((prev) => !prev)}
-              >
+              <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => setTagManagerOpen((prev) => !prev)}>
                 <Settings2 className="h-3.5 w-3.5" />
                 {t('documentation.manageCategories')}
-                <ChevronDown
-                  className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${
-                    tagManagerOpen ? 'rotate-180' : ''
-                  }`}
-                />
+                <ChevronDown className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${tagManagerOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <button type="button" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 text-xs text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={() => setSharedLibraryOpen((prev) => !prev)}>
+                <Library className="h-3.5 w-3.5" />
+                {t('documentation.sharedLibrary')}
+                <ChevronDown className={`h-3.5 w-3.5 text-[color:var(--color-muted-foreground)] transition-transform ${sharedLibraryOpen ? 'rotate-180' : ''}`} />
               </button>
             </div>
 
+            {sharedLibraryOpen && <DetailDocumentationSharedLibrarySection projectId={state.projectId} />}
+
             {tagManagerOpen && (
               <div className="rounded-[14px] border border-[color:var(--color-border)] px-3 py-3">
-                <p className="mb-2 px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  {t('documentation.categoriesTitle')}
-                </p>
+                <p className="mb-2 px-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('documentation.categoriesTitle')}</p>
                 <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     type="text"
@@ -175,10 +162,7 @@ function DetailDocumentationSettingsModal({
                   {state.tags.options.map((option) => {
                     const isRenaming = state.tags.renamingValue === option.value
                     return (
-                      <div
-                        key={option.value}
-                        className="inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] px-2 py-1 text-[11px] text-[color:var(--color-muted-foreground)]"
-                      >
+                      <div key={option.value} className="inline-flex items-center gap-1 rounded-full border border-[color:var(--color-border)] px-2 py-1 text-[11px] text-[color:var(--color-muted-foreground)]">
                         {isRenaming ? (
                           <>
                             <input
@@ -201,11 +185,7 @@ function DetailDocumentationSettingsModal({
                             >
                               {t('common.save')}
                             </button>
-                            <button
-                              type="button"
-                              className="rounded-full px-1.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-                              onClick={state.tags.cancelRename}
-                            >
+                            <button type="button" className="rounded-full px-1.5 py-0.5 text-[11px] text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={state.tags.cancelRename}>
                               {t('common.cancel')}
                             </button>
                           </>
@@ -243,9 +223,7 @@ function DetailDocumentationSettingsModal({
               <button
                 type="button"
                 className={`inline-flex h-7 items-center rounded-full px-2.5 text-[11px] transition-colors ${
-                  state.tags.activeFilter === 'all'
-                    ? 'bg-primary text-white'
-                    : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                  state.tags.activeFilter === 'all' ? 'bg-primary text-white' : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                 }`}
                 onClick={() => state.tags.selectFilter('all')}
               >
@@ -256,9 +234,7 @@ function DetailDocumentationSettingsModal({
                   key={option.value}
                   type="button"
                   className={`inline-flex h-7 items-center rounded-full px-2.5 text-[11px] transition-colors ${
-                    state.tags.activeFilter === option.value
-                      ? 'bg-primary text-white'
-                      : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                    state.tags.activeFilter === option.value ? 'bg-primary text-white' : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                   }`}
                   onClick={() => state.tags.selectFilter(option.value)}
                 >
@@ -269,44 +245,21 @@ function DetailDocumentationSettingsModal({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
-            <DetailDocumentationLinkList
-              links={state.links}
-              editing={state.editing}
-              docTagOptions={state.tags.options}
-            />
+            <DetailDocumentationLinkList links={state.links} editing={state.editing} docTagOptions={state.tags.options} projectId={state.projectId} />
           </div>
 
-          {docError && (
-            <p className="mt-3 shrink-0 text-xs text-[color:var(--color-destructive)]">
-              {docError}
-            </p>
-          )}
+          {docError && <p className="mt-3 shrink-0 text-xs text-[color:var(--color-destructive)]">{docError}</p>}
         </div>
       </ModalShell>
 
-      <ModalShell
-        open={state.settings.addDialogOpen}
-        baseZIndex={1100}
-        widthClassName="max-w-[640px]"
-        ariaLabel={docKindInput === 'ssh' ? t('documentation.addSsh') : t('documentation.addLink')}
-        onClose={closeAddDialog}
-      >
+      <ModalShell open={state.settings.addDialogOpen} baseZIndex={1100} widthClassName="max-w-[640px]" ariaLabel={docKindInput === 'ssh' ? t('documentation.addSsh') : t('documentation.addLink')} onClose={closeAddDialog}>
         <div className="flex max-h-[78vh] flex-col">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <p className="section-label mb-1 text-base">
-                {docKindInput === 'ssh' ? t('documentation.addSsh') : t('documentation.addLink')}
-              </p>
-              <p className="text-xs text-[color:var(--color-muted-foreground)]">
-                {t('documentation.addDialogDescription')}
-              </p>
+              <p className="section-label mb-1 text-base">{docKindInput === 'ssh' ? t('documentation.addSsh') : t('documentation.addLink')}</p>
+              <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('documentation.addDialogDescription')}</p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={closeAddDialog}
-              title={t('common.close')}
-            >
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={closeAddDialog} title={t('common.close')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -316,9 +269,7 @@ function DetailDocumentationSettingsModal({
               <button
                 type="button"
                 className={`inline-flex h-9 items-center rounded-full px-3 text-xs transition-colors ${
-                  docKindInput === 'url'
-                    ? 'bg-primary text-white'
-                    : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                  docKindInput === 'url' ? 'bg-primary text-white' : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                 }`}
                 onClick={() => setDocKindInput('url')}
               >
@@ -327,9 +278,7 @@ function DetailDocumentationSettingsModal({
               <button
                 type="button"
                 className={`inline-flex h-9 items-center rounded-full px-3 text-xs transition-colors ${
-                  docKindInput === 'ssh'
-                    ? 'bg-primary text-white'
-                    : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
+                  docKindInput === 'ssh' ? 'bg-primary text-white' : 'border border-[color:var(--color-border)] text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
                 }`}
                 onClick={() => setDocKindInput('ssh')}
               >
@@ -400,32 +349,20 @@ function DetailDocumentationSettingsModal({
                   placeholder={t('documentation.sshShortcutPlaceholder')}
                   className="quiet-control block h-10 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
-                <p className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                  {t('documentation.sshShortcutHint')}
-                </p>
+                <p className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('documentation.sshShortcutHint')}</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">
-                    {t('documentation.sshRouteLabel')}
-                  </span>
+                  <span className="px-1 text-[11px] text-[color:var(--color-muted-foreground)]">{t('documentation.sshRouteLabel')}</span>
                   <div className="inline-flex rounded-full border border-[color:var(--color-border)] p-1">
                     <button
                       type="button"
-                      className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
-                        docSshRouteInput === 'wsl'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                      }`}
+                      className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${docSshRouteInput === 'wsl' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'}`}
                       onClick={() => setDocSshRouteInput('wsl')}
                     >
                       {t('documentation.sshRouteWsl')}
                     </button>
                     <button
                       type="button"
-                      className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
-                        docSshRouteInput === 'windows'
-                          ? 'bg-primary text-white'
-                          : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                      }`}
+                      className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${docSshRouteInput === 'windows' ? 'bg-primary text-white' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'}`}
                       onClick={() => setDocSshRouteInput('windows')}
                     >
                       {t('documentation.sshRouteWindows')}
@@ -434,11 +371,7 @@ function DetailDocumentationSettingsModal({
                 </div>
               </div>
             )}
-            <DetailDocumentationTagSelect
-              value={docTagInput}
-              onChange={setDocTagInput}
-              options={state.tags.options}
-            />
+            <DetailDocumentationTagSelect value={docTagInput} onChange={setDocTagInput} options={state.tags.options} />
             <textarea
               value={docNoteInput}
               onChange={(event) => setDocNoteInput(event.target.value)}
@@ -456,9 +389,7 @@ function DetailDocumentationSettingsModal({
                   className="quiet-control block h-10 w-full rounded-full border-0 px-4 text-sm text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               ) : (
-                <div className="rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                  {t('documentation.sshPasswordHint')}
-                </div>
+                <div className="rounded-[14px] border border-[color:var(--color-border)] px-3 py-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('documentation.sshPasswordHint')}</div>
               )}
               <input
                 type="text"
@@ -470,18 +401,10 @@ function DetailDocumentationSettingsModal({
             </div>
           </div>
 
-          {docError && (
-            <p className="mt-3 text-xs text-[color:var(--color-destructive)]">
-              {docError}
-            </p>
-          )}
+          {docError && <p className="mt-3 text-xs text-[color:var(--color-destructive)]">{docError}</p>}
 
           <div className="mt-4 flex shrink-0 items-center justify-end gap-2">
-            <button
-              type="button"
-              className="inline-flex h-10 items-center justify-center rounded-full border border-[color:var(--color-border)] px-4 text-sm text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]"
-              onClick={closeAddDialog}
-            >
+            <button type="button" className="inline-flex h-10 items-center justify-center rounded-full border border-[color:var(--color-border)] px-4 text-sm text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]" onClick={closeAddDialog}>
               {t('common.cancel')}
             </button>
             <button

@@ -1,26 +1,26 @@
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square, TriangleAlert } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronUp, ListTree, Play, RefreshCw, Square, TriangleAlert } from 'lucide-react'
-import { CardContextMenu } from '../components/CardContextMenu'
-import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
-import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
-import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
-import { UrlPopover } from '../components/UrlPopover'
-import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
-import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
-import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
-import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
-import { useI18n, useLocale } from '../i18n'
-import { useAppStore } from '../stores/appStore'
-import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
-import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
-import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
-import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preloadProjectPane } from '../lib/projectPagePreload'
-import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
-import { useProjectDocLinks } from './detail/useProjectDocLinks'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
+import type { AiCommitStatus, AiCommitTaskSnapshot, CliTool } from '../../shared/types'
+import { CardContextMenu } from '../components/CardContextMenu'
+import { ProjectLinksTrigger } from '../components/ProjectLinksTrigger'
+import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
+import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
+import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
+import { UrlPopover } from '../components/UrlPopover'
+import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
+import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
+import { useI18n, useLocale } from '../i18n'
+import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
+import { detectProjectEnvironment, projectEnvironmentLabel } from '../lib/projectEnvironment'
+import { loadCodeWorkspacePanelModule, loadDetailAiCommitPaneHostModule, preloadProjectPane } from '../lib/projectPagePreload'
+import { isTmuxRuntimeEntry } from '../lib/runtimePresentation'
+import { useAppStore } from '../stores/appStore'
+import { DetailDocumentationCard } from './detail/DetailDocumentationCard'
+import { useProjectDocLinks } from './detail/useProjectDocLinks'
 
 const CodeWorkspacePanel = lazy(() => loadCodeWorkspacePanelModule().then((module) => ({ default: module.CodeWorkspacePanel })))
 const DetailAiCommitPaneHost = lazy(() => loadDetailAiCommitPaneHostModule().then((module) => ({ default: module.DetailAiCommitPaneHost })))
@@ -737,6 +737,7 @@ export function DetailPage() {
 
       <DetailDocumentationCard
         docLinks={docLinks}
+        projectId={project?.id}
         docKindInput={docLinkState.docKindInput}
         setDocKindInput={docLinkState.setDocKindInput}
         docTitleInput={docTitleInput}

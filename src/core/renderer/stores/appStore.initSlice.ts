@@ -1,17 +1,14 @@
 import type { StateCreator } from 'zustand'
-import type { AppState } from './appStore.types'
-import { applySavedProjectSnapshot, createFallbackProject } from './appStore.helpers'
-import { detectProjectEnvironment } from '../lib/projectEnvironment'
 import { shouldUseWslForRuntimeEntrypoint } from '../../shared/runtimeEntrypoint'
 import type { AppConfig, Capability, SavedProject, TmuxSessionInfo } from '../../shared/types'
+import { detectProjectEnvironment } from '../lib/projectEnvironment'
+import { applySavedProjectSnapshot, createFallbackProject } from './appStore.helpers'
+import type { AppState } from './appStore.types'
 
 let initAppPromise: Promise<void> | null = null
 let browserAiSubscriptionInitialized = false
 
-export type InitActionsSlice = Pick<
-  AppState,
-  'initApp' | 'loadConfig'
->
+export type InitActionsSlice = Pick<AppState, 'initApp' | 'loadConfig'>
 
 async function loadSavedProjects(
   savedProjects: AppState['config']['projects'],
@@ -70,16 +67,12 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
               browserAiSteps: progress.steps ?? state.browserAiSteps,
               browserAi: state.browserAi
                 ? {
-                  ...state.browserAi,
-                  taskStatus: progress.status,
-                  activeTaskId: progress.status === 'completed'
-                    || progress.status === 'failed'
-                    || progress.status === 'cancelled'
-                    ? undefined
-                    : progress.taskId,
-                  errorCode: progress.errorCode ?? state.browserAi.errorCode,
-                  errorMessage: progress.message ?? state.browserAi.errorMessage,
-                }
+                    ...state.browserAi,
+                    taskStatus: progress.status,
+                    activeTaskId: progress.status === 'completed' || progress.status === 'failed' || progress.status === 'cancelled' ? undefined : progress.taskId,
+                    errorCode: progress.errorCode ?? state.browserAi.errorCode,
+                    errorMessage: progress.message ?? state.browserAi.errorMessage,
+                  }
                 : state.browserAi,
             }
           })
@@ -104,6 +97,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
 
       void (async () => {
         try {
+          await get().loadDocLinkLibrary()
           let tmuxSessions: TmuxSessionInfo[] = []
           if (capability?.hasTmux) {
             try {
@@ -134,7 +128,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
 
   loadConfig: async () => {
     const config = await window.electronAPI.getConfig()
-    const capability = get().capability ?? await window.electronAPI.getCapability()
+    const capability = get().capability ?? (await window.electronAPI.getCapability())
     const projects = await loadSavedProjects(config.projects, '[appStore.loadConfig]', {
       skipWslProjectProbe: shouldSkipWslProjectProbe(config, capability),
     })

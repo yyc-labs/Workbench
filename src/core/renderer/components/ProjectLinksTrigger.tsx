@@ -14,30 +14,28 @@ type ProjectLinksTriggerProps = {
   className?: string
 }
 
-export function ProjectLinksTrigger({
-  items,
-  tagOptions,
-  onOpenDefault,
-  onOpenManager,
-  size = 'icon',
-  label,
-  title,
-  className,
-}: ProjectLinksTriggerProps) {
+export function ProjectLinksTrigger({ items, tagOptions, onOpenDefault, onOpenManager, size = 'icon', label, title, className }: ProjectLinksTriggerProps) {
   const { t } = useI18n()
-  const resolvedTitle = title ?? t('common.leftClickOpenFirstLink')
+  const isEmpty = items.length === 0
+  const resolvedTitle = title ?? (isEmpty ? t('documentation.emptyTriggerTitle') : t('common.leftClickOpenFirstLink'))
 
-  const baseClassName = size === 'icon'
-    ? 'quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer'
-    : size === 'compact'
-      ? 'inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
-      : 'inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
+  const baseClassName =
+    isEmpty && size === 'icon'
+      ? 'quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)]/45 cursor-default transition-colors'
+      : size === 'icon'
+        ? 'quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] cursor-pointer'
+        : isEmpty
+          ? `${size === 'compact' ? 'inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-muted-foreground)]/45 cursor-default transition-colors' : 'inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-muted-foreground)]/45 cursor-default transition-colors'}`
+          : size === 'compact'
+            ? 'inline-flex items-center gap-1.5 rounded-full border border-[color:var(--color-border)] px-3 py-1.5 text-xs font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
+            : 'inline-flex items-center gap-2 rounded-full border border-[color:var(--color-border)] px-4 py-2 text-sm font-medium text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)]'
 
   const iconClassName = size === 'default' ? 'h-4 w-4 shrink-0' : 'h-3.5 w-3.5 shrink-0'
 
-  const content = size === 'icon'
-    ? <BookOpen className={iconClassName} />
-    : (
+  const content =
+    size === 'icon' ? (
+      <BookOpen className={iconClassName} />
+    ) : (
       <>
         <BookOpen className={iconClassName} />
         {label && <span>{label}</span>}
@@ -46,6 +44,10 @@ export function ProjectLinksTrigger({
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation()
+    if (isEmpty) {
+      onOpenManager?.()
+      return
+    }
     if (onOpenDefault) {
       void onOpenDefault()
       return
@@ -60,20 +62,14 @@ export function ProjectLinksTrigger({
   }
 
   const trigger = (
-    <button
-      type="button"
-      className={className ? `${baseClassName} ${className}` : baseClassName}
-      onClick={handleClick}
-      onContextMenu={handleContextMenu}
-      title={resolvedTitle}
-    >
+    <button type="button" className={className ? `${baseClassName} ${className}` : baseClassName} onClick={handleClick} onContextMenu={handleContextMenu} title={resolvedTitle}>
       {content}
     </button>
   )
 
   if (items.length > 0) {
     return (
-      <UrlPopover items={items} tagOptions={tagOptions}>
+      <UrlPopover items={items} tagOptions={tagOptions} onOpenManager={onOpenManager} forcePopover>
         {trigger}
       </UrlPopover>
     )

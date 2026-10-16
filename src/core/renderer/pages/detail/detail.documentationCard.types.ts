@@ -1,14 +1,9 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type {
-  ProjectDocLink,
-  ProjectDocLinkKind,
-  ProjectDocLinkSshRoute,
-  ProjectDocLinkTag,
-  ProjectDocTagOption,
-} from '../../../shared/types'
+import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocLinkTag, ProjectDocTagOption, ResolvedProjectDocLink } from '../../../shared/types'
 
 export type DetailDocumentationCardProps = {
-  docLinks: ProjectDocLink[]
+  docLinks: ResolvedProjectDocLink[]
+  projectId?: string
   docKindInput: ProjectDocLinkKind
   setDocKindInput: Dispatch<SetStateAction<ProjectDocLinkKind>>
   docTitleInput: string
@@ -40,21 +35,7 @@ export type DetailDocumentationCardProps = {
   onAddDocTag: (label: string) => Promise<{ ok: boolean; message?: string }>
   onRenameDocTag: (value: string, label: string) => Promise<{ ok: boolean; message?: string }>
   onRemoveDocTag: (value: string) => Promise<{ ok: boolean; message?: string }>
-  onUpdateDocLink: (
-    linkId: string,
-    kind: ProjectDocLinkKind,
-    title: string,
-    url: string,
-    tag: ProjectDocLinkTag,
-    note: string,
-    account: string,
-    sshHost: string,
-    sshPort: string,
-    sshUsername: string,
-    sshRoute: ProjectDocLinkSshRoute,
-    secret: string,
-    clearSecret: boolean
-  ) => Promise<boolean>
+  onUpdateDocLink: (linkId: string, kind: ProjectDocLinkKind, title: string, url: string, tag: ProjectDocLinkTag, note: string, account: string, sshHost: string, sshPort: string, sshUsername: string, sshRoute: ProjectDocLinkSshRoute, secret: string, clearSecret: boolean) => Promise<boolean>
   onSetDefaultDocLink: (linkId: string) => Promise<void>
   onReorderDocLinks: (activeLinkId: string, overLinkId: string) => Promise<void>
   onRemoveDocLink: (linkId: string) => Promise<void>
@@ -68,7 +49,6 @@ export type DetailDocumentationCardProps = {
 }
 
 export type DetailDocumentationTagFilter = ProjectDocLinkTag | 'all'
-
 export type DetailDocumentationEditState = {
   linkId: string | null
   kind: ProjectDocLinkKind

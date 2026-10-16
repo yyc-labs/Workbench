@@ -1,3 +1,4 @@
+import type { UrlPopoverItem } from '../../components/UrlPopover'
 import type { PanelGitOperationKind } from './detail.gitOperations'
 
 export type OperationConfirmState = {
@@ -20,15 +21,5 @@ export type IndexedBranchCandidate = {
   searchText: string
 }
 
-export type ProjectLinkItem = {
-  url: string
-  label: string
-  tag?: string
-  tagLabel?: string
-  onOpen?: () => void | Promise<void>
-  kind?: 'url' | 'ssh'
-  description?: string
-  copyValue?: string
-  copyLabel?: string
-  copyValueResolver?: () => Promise<string>
-}
+/** 与 UrlPopoverItem 完全重合，直接别名：详情浮层/徽标/凭证动作全链路通用。 */
+export type ProjectLinkItem = UrlPopoverItem

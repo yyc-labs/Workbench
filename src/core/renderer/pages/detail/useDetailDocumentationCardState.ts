@@ -1,22 +1,15 @@
 import type { DragCancelEvent, DragEndEvent, DragStartEvent } from '@dnd-kit/core'
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocTagOption } from '../../../shared/types'
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ProjectDocLink, ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocTagOption, ResolvedProjectDocLink } from '../../../shared/types'
 import { useI18n } from '../../i18n'
-import {
-  PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS,
-  normalizeProjectDocLinkTag,
-  normalizeProjectDocLinkKind,
-} from '../../lib/projectDocLinks'
+import { normalizeProjectDocLinkKind, normalizeProjectDocLinkTag, PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../lib/projectDocLinks'
 import { buildSshDocLinkTarget, parseSshShortcutInput } from './detail.aiFlow'
-import type {
-  DetailDocumentationCardProps,
-  DetailDocumentationEditState,
-  DetailDocumentationTagFilter,
-} from './detail.documentationCard.types'
+import type { DetailDocumentationCardProps, DetailDocumentationEditState, DetailDocumentationTagFilter } from './detail.documentationCard.types'
 
 type UseDetailDocumentationCardStateOptions = Pick<
   DetailDocumentationCardProps,
   | 'docLinks'
+  | 'projectId'
   | 'docTagOptions'
   | 'docTagInput'
   | 'setDocTagInput'
@@ -37,6 +30,7 @@ type UseDetailDocumentationCardStateOptions = Pick<
 >
 
 export type UseDetailDocumentationCardStateResult = {
+  projectId?: string
   settings: {
     open: boolean
     setOpen: Dispatch<SetStateAction<boolean>>
@@ -63,9 +57,9 @@ export type UseDetailDocumentationCardStateResult = {
   }
   links: {
     allCount: number
-    defaultLink: ProjectDocLink | undefined
+    defaultLink: ResolvedProjectDocLink | undefined
     defaultLinkId: string | null
-    filteredLinks: ProjectDocLink[]
+    filteredLinks: ResolvedProjectDocLink[]
     expandedLinkId: string | null
     draggingLinkId: string | null
     dragDisabled: boolean
@@ -76,7 +70,7 @@ export type UseDetailDocumentationCardStateResult = {
     copySecret: (linkId: string) => Promise<void>
     revealSecret: (linkId: string) => Promise<void>
     toggleExpand: (linkId: string) => void
-    open: (link: ProjectDocLink) => Promise<void>
+    open: (link: ResolvedProjectDocLink) => Promise<void>
     startDrag: (event: DragStartEvent) => void
     cancelDrag: (event: DragCancelEvent) => void
     endDrag: (event: DragEndEvent) => void
@@ -88,6 +82,7 @@ export type UseDetailDocumentationCardStateResult = {
 
 function useDetailDocumentationCardState({
   docLinks,
+  projectId,
   docTagOptions,
   docTagInput,
   setDocTagInput,
@@ -107,10 +102,7 @@ function useDetailDocumentationCardState({
   setSettingsOpen: setSettingsOpenProp,
 }: UseDetailDocumentationCardStateOptions): UseDetailDocumentationCardStateResult {
   const { t } = useI18n()
-  const safeTagOptions = useMemo(
-    () => (docTagOptions.length > 0 ? docTagOptions : PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS),
-    [docTagOptions]
-  )
+  const safeTagOptions = useMemo(() => (docTagOptions.length > 0 ? docTagOptions : PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS), [docTagOptions])
   const [settingsOpenState, setSettingsOpenState] = useState(false)
   const settingsOpen = settingsOpenProp ?? settingsOpenState
   const setSettingsOpen = setSettingsOpenProp ?? setSettingsOpenState
@@ -147,14 +139,7 @@ function useDetailDocumentationCardState({
     setActiveTagFilter(tag)
   }, [])
 
-  const filteredDocLinks = useMemo(
-    () => (
-      activeTagFilter === 'all'
-        ? docLinks
-        : docLinks.filter((link) => normalizeProjectDocLinkTag(link.tag, safeTagOptions) === activeTagFilter)
-    ),
-    [activeTagFilter, docLinks, safeTagOptions]
-  )
+  const filteredDocLinks = useMemo(() => (activeTagFilter === 'all' ? docLinks : docLinks.filter((link) => normalizeProjectDocLinkTag(link.tag, safeTagOptions) === activeTagFilter)), [activeTagFilter, docLinks, safeTagOptions])
 
   useEffect(() => {
     return () => {
@@ -162,41 +147,44 @@ function useDetailDocumentationCardState({
     }
   }, [])
 
-  const startEdit = useCallback(async (link: ProjectDocLink) => {
-    const requestId = ++editSecretRequestRef.current
-    const normalizedKind = normalizeProjectDocLinkKind(link.kind)
-    setEditingLinkId(link.id)
-    setExpandedLinkId(link.id)
-    setEditingKind(normalizedKind)
-    setEditingTitle(link.title)
-    setEditingUrl(link.url ?? '')
-    setEditingTag(normalizeProjectDocLinkTag(link.tag, safeTagOptions))
-    setEditingNote(link.note ?? '')
-    setEditingAccount(link.account ?? '')
-    setEditingSshHost(link.sshHost ?? '')
-    setEditingSshPort(String(link.sshPort ?? 22))
-    setEditingSshUsername(link.sshUsername ?? link.account ?? '')
-    setEditingSshRoute(link.sshRoute === 'windows' ? 'windows' : 'wsl')
-    const username = link.sshUsername ?? link.account ?? ''
-    const target = buildSshDocLinkTarget(link.sshHost ?? '', link.sshPort)
-    setEditingSshShortcut(username && target ? `${username}@${target}` : '')
-    setEditingSecret('')
-    setClearEditingSecret(false)
-    if (!link.hasSecret) {
-      setEditingSecretLoading(false)
-      return
-    }
-    setEditingSecretLoading(true)
-    try {
-      const secret = await onGetDocLinkSecret(link.id)
-      if (editSecretRequestRef.current !== requestId) return
-      setEditingSecret(secret ?? '')
-    } finally {
-      if (editSecretRequestRef.current === requestId) {
+  const startEdit = useCallback(
+    async (link: ProjectDocLink) => {
+      const requestId = ++editSecretRequestRef.current
+      const normalizedKind = normalizeProjectDocLinkKind(link.kind)
+      setEditingLinkId(link.id)
+      setExpandedLinkId(link.id)
+      setEditingKind(normalizedKind)
+      setEditingTitle(link.title)
+      setEditingUrl(link.url ?? '')
+      setEditingTag(normalizeProjectDocLinkTag(link.tag, safeTagOptions))
+      setEditingNote(link.note ?? '')
+      setEditingAccount(link.account ?? '')
+      setEditingSshHost(link.sshHost ?? '')
+      setEditingSshPort(String(link.sshPort ?? 22))
+      setEditingSshUsername(link.sshUsername ?? link.account ?? '')
+      setEditingSshRoute(link.sshRoute === 'windows' ? 'windows' : 'wsl')
+      const username = link.sshUsername ?? link.account ?? ''
+      const target = buildSshDocLinkTarget(link.sshHost ?? '', link.sshPort)
+      setEditingSshShortcut(username && target ? `${username}@${target}` : '')
+      setEditingSecret('')
+      setClearEditingSecret(false)
+      if (!link.hasSecret) {
         setEditingSecretLoading(false)
+        return
       }
-    }
-  }, [onGetDocLinkSecret, safeTagOptions])
+      setEditingSecretLoading(true)
+      try {
+        const secret = await onGetDocLinkSecret(link.id)
+        if (editSecretRequestRef.current !== requestId) return
+        setEditingSecret(secret ?? '')
+      } finally {
+        if (editSecretRequestRef.current === requestId) {
+          setEditingSecretLoading(false)
+        }
+      }
+    },
+    [onGetDocLinkSecret, safeTagOptions],
+  )
 
   const cancelEdit = useCallback(() => {
     editSecretRequestRef.current += 1
@@ -230,41 +218,11 @@ function useDetailDocumentationCardState({
 
   const saveEdit = useCallback(async () => {
     if (!editingLinkId) return
-    const ok = await onUpdateDocLink(
-      editingLinkId,
-      editingKind,
-      editingTitle,
-      editingUrl,
-      editingTag,
-      editingNote,
-      editingAccount,
-      editingSshHost,
-      editingSshPort,
-      editingSshUsername,
-      editingSshRoute,
-      editingSecret,
-      clearEditingSecret
-    )
+    const ok = await onUpdateDocLink(editingLinkId, editingKind, editingTitle, editingUrl, editingTag, editingNote, editingAccount, editingSshHost, editingSshPort, editingSshUsername, editingSshRoute, editingSecret, clearEditingSecret)
     if (ok) {
       cancelEdit()
     }
-  }, [
-    cancelEdit,
-    clearEditingSecret,
-    editingAccount,
-    editingKind,
-    editingLinkId,
-    editingNote,
-    editingSecret,
-    editingSshHost,
-    editingSshPort,
-    editingSshRoute,
-    editingSshUsername,
-    editingTag,
-    editingTitle,
-    editingUrl,
-    onUpdateDocLink,
-  ])
+  }, [cancelEdit, clearEditingSecret, editingAccount, editingKind, editingLinkId, editingNote, editingSecret, editingSshHost, editingSshPort, editingSshRoute, editingSshUsername, editingTag, editingTitle, editingUrl, onUpdateDocLink])
 
   const closeSettings = useCallback(() => {
     setSettingsOpen(false)
@@ -280,33 +238,45 @@ function useDetailDocumentationCardState({
     }, 800)
   }, [])
 
-  const handleCopyAccount = useCallback(async (linkId: string) => {
-    const copied = await onCopyDocLinkAccount(linkId)
-    if (copied) markCopied(`${linkId}:account`)
-  }, [markCopied, onCopyDocLinkAccount])
+  const handleCopyAccount = useCallback(
+    async (linkId: string) => {
+      const copied = await onCopyDocLinkAccount(linkId)
+      if (copied) markCopied(`${linkId}:account`)
+    },
+    [markCopied, onCopyDocLinkAccount],
+  )
 
-  const handleCopySecret = useCallback(async (linkId: string) => {
-    const copied = await onCopyDocLinkSecret(linkId)
-    if (copied) markCopied(`${linkId}:secret`)
-  }, [markCopied, onCopyDocLinkSecret])
+  const handleCopySecret = useCallback(
+    async (linkId: string) => {
+      const copied = await onCopyDocLinkSecret(linkId)
+      if (copied) markCopied(`${linkId}:secret`)
+    },
+    [markCopied, onCopyDocLinkSecret],
+  )
 
-  const handleRevealSecret = useCallback(async (linkId: string) => {
-    if (secretPreviewLoadingMap[linkId]) return
-    if (Object.prototype.hasOwnProperty.call(secretPreviewMap, linkId) && secretPreviewMap[linkId]) return
-    setSecretPreviewLoadingMap((current) => ({ ...current, [linkId]: true }))
-    try {
-      const secret = await onGetDocLinkSecret(linkId)
-      setSecretPreviewMap((current) => ({ ...current, [linkId]: secret }))
-    } finally {
-      setSecretPreviewLoadingMap((current) => ({ ...current, [linkId]: false }))
-    }
-  }, [onGetDocLinkSecret, secretPreviewLoadingMap, secretPreviewMap])
+  const handleRevealSecret = useCallback(
+    async (linkId: string) => {
+      if (secretPreviewLoadingMap[linkId]) return
+      if (Object.hasOwn(secretPreviewMap, linkId) && secretPreviewMap[linkId]) return
+      setSecretPreviewLoadingMap((current) => ({ ...current, [linkId]: true }))
+      try {
+        const secret = await onGetDocLinkSecret(linkId)
+        setSecretPreviewMap((current) => ({ ...current, [linkId]: secret }))
+      } finally {
+        setSecretPreviewLoadingMap((current) => ({ ...current, [linkId]: false }))
+      }
+    },
+    [onGetDocLinkSecret, secretPreviewLoadingMap, secretPreviewMap],
+  )
 
-  const handleDragEnd = useCallback(({ active, over }: DragEndEvent) => {
-    setDraggingLinkId(null)
-    if (!over || active.id === over.id) return
-    void onReorderDocLinks(String(active.id), String(over.id))
-  }, [onReorderDocLinks])
+  const handleDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      setDraggingLinkId(null)
+      if (!over || active.id === over.id) return
+      void onReorderDocLinks(String(active.id), String(over.id))
+    },
+    [onReorderDocLinks],
+  )
 
   const handleDragStart = useCallback(({ active }: DragStartEvent) => {
     setDraggingLinkId(String(active.id))
@@ -321,9 +291,12 @@ function useDetailDocumentationCardState({
     setExpandedLinkId((current) => (current === linkId ? null : linkId))
   }, [])
 
-  const handleOpenLink = useCallback(async (link: ProjectDocLink) => {
-    await onOpenDocLink(link)
-  }, [onOpenDocLink])
+  const handleOpenLink = useCallback(
+    async (link: ResolvedProjectDocLink) => {
+      await onOpenDocLink(link)
+    },
+    [onOpenDocLink],
+  )
 
   const handleCreateTag = useCallback(async () => {
     if (tagSaving) return
@@ -367,39 +340,32 @@ function useDetailDocumentationCardState({
     }
   }, [cancelRenameTag, onRenameDocTag, renamingTagLabel, renamingTagValue, setDocError, t, tagSaving])
 
-  const handleDeleteTag = useCallback(async (value: string) => {
-    if (tagSaving) return
-    setTagSaving(true)
-    try {
-      const result = await onRemoveDocTag(value)
-      if (!result.ok) {
-        setDocError(result.message ?? t('documentation.removeCategoryFailed'))
-        return
+  const handleDeleteTag = useCallback(
+    async (value: string) => {
+      if (tagSaving) return
+      setTagSaving(true)
+      try {
+        const result = await onRemoveDocTag(value)
+        if (!result.ok) {
+          setDocError(result.message ?? t('documentation.removeCategoryFailed'))
+          return
+        }
+        if (activeTagFilter === value) {
+          selectTagFilter('all')
+        }
+        if (docTagInput === value) {
+          setDocTagInput('')
+        }
+        if (editingTag === value) {
+          setEditingTag('')
+        }
+        setDocError(null)
+      } finally {
+        setTagSaving(false)
       }
-      if (activeTagFilter === value) {
-        selectTagFilter('all')
-      }
-      if (docTagInput === value) {
-        setDocTagInput('')
-      }
-      if (editingTag === value) {
-        setEditingTag('')
-      }
-      setDocError(null)
-    } finally {
-      setTagSaving(false)
-    }
-  }, [
-    activeTagFilter,
-    docTagInput,
-    editingTag,
-    onRemoveDocTag,
-    selectTagFilter,
-    setDocError,
-    setDocTagInput,
-    t,
-    tagSaving,
-  ])
+    },
+    [activeTagFilter, docTagInput, editingTag, onRemoveDocTag, selectTagFilter, setDocError, setDocTagInput, t, tagSaving],
+  )
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -440,6 +406,7 @@ function useDetailDocumentationCardState({
   }, [cancelRenameTag, renamingTagValue, safeTagOptions])
 
   return {
+    projectId,
     settings: {
       open: settingsOpen,
       setOpen: setSettingsOpen,
@@ -466,8 +433,8 @@ function useDetailDocumentationCardState({
     },
     links: {
       allCount: docLinks.length,
-      defaultLink: docLinks[0],
-      defaultLinkId: docLinks[0]?.id ?? null,
+      defaultLink: docLinks.find((link) => link.source === 'private'),
+      defaultLinkId: docLinks.find((link) => link.source === 'private')?.id ?? null,
       filteredLinks: filteredDocLinks,
       expandedLinkId,
       draggingLinkId,

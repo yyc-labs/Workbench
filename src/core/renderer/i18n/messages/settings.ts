@@ -20,6 +20,7 @@ export const settingsMessages = {
         logs: 'Startup Logs',
         ai: 'AI Commit',
         rules: 'Rules',
+        docLinkLibrary: 'Shared Link Library',
         about: 'About',
       },
       aiConnection: {
@@ -1066,6 +1067,7 @@ export const settingsMessages = {
         logs: '启动日志',
         ai: 'AI 提交',
         rules: '规则',
+        docLinkLibrary: '共享链接库',
         about: '关于',
       },
       aiConnection: {

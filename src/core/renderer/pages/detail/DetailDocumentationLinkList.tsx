@@ -1,68 +1,35 @@
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
+import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useMemo } from 'react'
 import { useI18n } from '../../i18n'
 import { projectDocLinkTarget } from '../../lib/projectDocLinks'
-import type { UseDetailDocumentationCardStateResult } from './useDetailDocumentationCardState'
 import { DetailDocumentationLinkItem } from './DetailDocumentationLinkItem'
+import type { UseDetailDocumentationCardStateResult } from './useDetailDocumentationCardState'
 
 type DetailDocumentationLinkListProps = {
   links: UseDetailDocumentationCardStateResult['links']
   editing: UseDetailDocumentationCardStateResult['editing']
   docTagOptions: UseDetailDocumentationCardStateResult['tags']['options']
+  projectId?: string
 }
 
-function DetailDocumentationLinkList({
-  links,
-  editing,
-  docTagOptions,
-}: DetailDocumentationLinkListProps) {
+function DetailDocumentationLinkList({ links, editing, docTagOptions, projectId }: DetailDocumentationLinkListProps) {
   const { t } = useI18n()
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    })
+    }),
   )
-  const sortableItems = useMemo(
-    () => links.filteredLinks.map((link) => link.id),
-    [links.filteredLinks]
-  )
-  const draggingLink = useMemo(
-    () => (
-      links.draggingLinkId
-        ? links.filteredLinks.find((link) => link.id === links.draggingLinkId) ?? null
-        : null
-    ),
-    [links.draggingLinkId, links.filteredLinks]
-  )
+  const sortableItems = useMemo(() => links.filteredLinks.map((link) => link.id), [links.filteredLinks])
+  const draggingLink = useMemo(() => (links.draggingLinkId ? (links.filteredLinks.find((link) => link.id === links.draggingLinkId) ?? null) : null), [links.draggingLinkId, links.filteredLinks])
 
   if (links.filteredLinks.length === 0) {
-    return (
-      <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">
-        {links.allCount === 0 ? t('documentation.noDocsYet') : t('documentation.noDocsInCategory')}
-      </div>
-    )
+    return <div className="rounded-[16px] border border-dashed border-[color:var(--color-border)] px-5 py-5 text-xs text-[color:var(--color-muted-foreground)]">{links.allCount === 0 ? t('documentation.noDocsYet') : t('documentation.noDocsInCategory')}</div>
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={links.startDrag}
-      onDragCancel={links.cancelDrag}
-      onDragEnd={links.endDrag}
-    >
-      <SortableContext
-        items={sortableItems}
-        strategy={verticalListSortingStrategy}
-      >
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={links.startDrag} onDragCancel={links.cancelDrag} onDragEnd={links.endDrag}>
+      <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
         <div className="space-y-2.5">
           {links.filteredLinks.map((link) => {
             const isEditing = editing.linkId === link.id
@@ -76,16 +43,13 @@ function DetailDocumentationLinkList({
                 isEditing={isEditing}
                 isExpanded={links.expandedLinkId === link.id}
                 isSorting={links.draggingLinkId !== null}
-                dragDisabled={links.dragDisabled}
+                dragDisabled={links.dragDisabled || link.source === 'shared'}
                 editing={editing}
                 copiedAccount={copiedAccount}
                 copiedSecret={copiedSecret}
-                secretPreview={
-                  Object.prototype.hasOwnProperty.call(links.secretPreviewMap, link.id)
-                    ? (links.secretPreviewMap[link.id] ?? null)
-                    : null
-                }
+                secretPreview={Object.hasOwn(links.secretPreviewMap, link.id) ? (links.secretPreviewMap[link.id] ?? null) : null}
                 secretPreviewLoading={Boolean(links.secretPreviewLoadingMap[link.id])}
+                projectId={projectId}
                 docTagOptions={docTagOptions}
                 onCopyAccount={links.copyAccount}
                 onCopySecret={links.copySecret}
@@ -103,9 +67,7 @@ function DetailDocumentationLinkList({
         {draggingLink ? (
           <div className="quiet-control w-[min(620px,calc(100vw-96px))] rounded-[16px] px-4 py-3 shadow-lg">
             <p className="truncate text-sm text-[color:var(--color-foreground)]">{draggingLink.title}</p>
-            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-              {projectDocLinkTarget(draggingLink)}
-            </p>
+            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{projectDocLinkTarget(draggingLink)}</p>
           </div>
         ) : null}
       </DragOverlay>

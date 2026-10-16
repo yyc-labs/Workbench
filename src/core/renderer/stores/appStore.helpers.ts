@@ -1,5 +1,5 @@
-import type { ProjectInfo, RemovedProjectSnapshot, ProjectFolder, ProjectTag, RunStartupMode } from '../../shared/types'
 import { projectIdFromPath } from '../../shared/rules'
+import type { ProjectFolder, ProjectInfo, ProjectTag, RemovedProjectSnapshot, RunStartupMode } from '../../shared/types'
 import { collectUrlsFromText as collectUrlsFromTextShared } from '../../shared/urlExtract'
 
 const MAX_TERMINAL_OUTPUT_CHARS = 120_000
@@ -81,6 +81,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   cli?: 'claude' | 'codex'
   aiRuntimeProfileId?: string
   docLinks: ProjectInfo['docLinks']
+  sharedDocLinkGroupIds?: string[]
   folderId?: string
   tagIds: string[]
   lastCodeFile?: string
@@ -100,6 +101,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     cli: p.cli,
     aiRuntimeProfileId: p.aiRuntimeProfileId,
     docLinks: p.docLinks ?? [],
+    sharedDocLinkGroupIds: p.sharedDocLinkGroupIds,
     folderId: p.folderId,
     tagIds: p.tagIds ?? [],
     lastCodeFile: p.lastCodeFile,
@@ -145,6 +147,7 @@ export function applySavedProjectSnapshot(
     cli?: 'claude' | 'codex'
     aiRuntimeProfileId?: string
     docLinks?: ProjectInfo['docLinks']
+    sharedDocLinkGroupIds?: string[]
     folderId?: string
     tagIds?: string[]
     lastCodeFile?: string
@@ -153,7 +156,7 @@ export function applySavedProjectSnapshot(
     codeSession?: ProjectInfo['codeSession']
   },
 ): ProjectInfo {
-  const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => Object.prototype.hasOwnProperty.call(saved, key)
+  const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => Object.hasOwn(saved, key)
 
   if (hasSavedField('customCommand')) project.customCommand = saved.customCommand
   if (hasSavedField('runWorkingDirectory')) project.runWorkingDirectory = saved.runWorkingDirectory
@@ -165,6 +168,7 @@ export function applySavedProjectSnapshot(
   if (hasSavedField('cli')) project.cli = saved.cli
   if (hasSavedField('aiRuntimeProfileId')) project.aiRuntimeProfileId = saved.aiRuntimeProfileId
   if (hasSavedField('docLinks')) project.docLinks = saved.docLinks ?? []
+  if (hasSavedField('sharedDocLinkGroupIds')) project.sharedDocLinkGroupIds = saved.sharedDocLinkGroupIds ? [...saved.sharedDocLinkGroupIds] : undefined
   if (hasSavedField('folderId')) project.folderId = saved.folderId
   if (hasSavedField('tagIds')) project.tagIds = saved.tagIds ?? []
   if (hasSavedField('lastCodeFile')) project.lastCodeFile = saved.lastCodeFile

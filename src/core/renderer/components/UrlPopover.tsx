@@ -1,8 +1,9 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type MutableRefObject } from 'react'
-import { createPortal } from 'react-dom'
 import { Check, ChevronDown, Copy, Ellipsis, ExternalLink, KeyRound, Link2, RefreshCw, UserRound } from 'lucide-react'
+import { type MutableRefObject, type MouseEvent as ReactMouseEvent, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '../i18n'
 import { copyTextToClipboard } from '../pages/code/code.clipboard'
+import { UrlPopoverItemDetailCard } from './UrlPopoverItemDetailCard'
 
 interface UrlPopoverProps {
   urls?: string[]
@@ -15,6 +16,8 @@ interface UrlPopoverProps {
   forcePopover?: boolean
   /** 追加到触发容器上的 className。 */
   triggerClassName?: string
+  /** 打开链接管理弹窗（详情浮层「管理链接」动作触发；由 ProjectLinksTrigger 透传） */
+  onOpenManager?: () => void
 }
 
 export type UrlPopoverItem = {
@@ -29,6 +32,12 @@ export type UrlPopoverItem = {
   copyLabel?: string
   copyValueResolver?: () => Promise<string>
   credentialActions?: ReadonlyArray<UrlPopoverCredentialAction>
+  /** 备注（#6 详情浮层展示）；来自 ProjectDocLink.note */
+  note?: string
+  /** 来源（#7 共享库徽标）；私有项不传 */
+  source?: 'private' | 'shared'
+  /** 所属共享组 id（source === 'shared' 时有值） */
+  sharedGroupId?: string
 }
 type UrlPopoverEntry = UrlPopoverItem
 type PreparedUrlPopoverEntry = UrlPopoverEntry & {
@@ -456,7 +465,7 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
   await window.electronAPI.openExternal(entry.url)
 }
 
-export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, onOpenManager }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
@@ -464,6 +473,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null)
   const [openingEntryKey, setOpeningEntryKey] = useState<string | null>(null)
   const [credentialMenuOpen, setCredentialMenuOpen] = useState(false)
+  const [detailCard, setDetailCard] = useState<{ x: number; y: number; entry: PreparedUrlPopoverEntry } | null>(null)
   const [query, setQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [activeEntryIndex, setActiveEntryIndex] = useState(0)
@@ -471,6 +481,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
   const popoverRef = useRef<HTMLDivElement>(null)
   const categoryMenuRef = useRef<HTMLDivElement | null>(null)
   const itemActionsMenuRef = useRef<HTMLDivElement | null>(null)
+  const detailCardRef = useRef<HTMLDivElement | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const entryRefs = useRef<Array<HTMLDivElement | null>>([])
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -604,7 +615,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
     setShow(false)
   }
 
-  const isWithinInteractiveArea = (target: EventTarget | null) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || popoverRef.current?.contains(target) || categoryMenuRef.current?.contains(target) || itemActionsMenuRef.current?.contains(target))
+  const isWithinInteractiveArea = (target: EventTarget | null) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || popoverRef.current?.contains(target) || categoryMenuRef.current?.contains(target) || itemActionsMenuRef.current?.contains(target) || detailCardRef.current?.contains(target))
 
   const hasSearchText = () => query.trim().length > 0
   const hasSelectedCategory = () => selectedCategory !== 'all'
@@ -615,6 +626,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
       if (forceClose && (hasSearchText() || hasSelectedCategory())) return
       if (!forceClose && focusWithinRef.current) return
       if (credentialMenuOpen) return
+      if (detailCard) return
       const activeEl = document.activeElement
       if (activeEl instanceof HTMLElement && (categoryMenuRef.current?.contains(activeEl) || itemActionsMenuRef.current?.contains(activeEl))) return
       if (hoverStateRef.current.trigger || hoverStateRef.current.popover) return
@@ -686,7 +698,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
 
   const handleOpenEntry = async (entry: PreparedUrlPopoverEntry) => {
     if (openingEntryKey === entry.key) return
-
+    setDetailCard(null)
     const trackOpening = entry.kind === 'ssh'
     if (trackOpening) setOpeningEntryKey(entry.key)
 
@@ -723,6 +735,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
       setCopiedCredentialKey(null)
       setOpeningEntryKey(null)
       setCredentialMenuOpen(false)
+      setDetailCard(null)
       setSelectedCategory('all')
       setActiveEntryIndex(0)
       return
@@ -870,6 +883,11 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
                 onClick={() => {
                   void handleOpenEntry(entry)
                 }}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setDetailCard({ x: event.clientX, y: event.clientY, entry })
+                }}
                 onKeyDown={(e) => {
                   if (isOpening) return
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -885,7 +903,10 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
                 <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]">
                   {entry.kind === 'ssh' ? <Link2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />}
                   <div className="min-w-0 flex-1">
-                    <span className="block truncate">{entry.label}</span>
+                    <span className="flex items-center gap-1">
+                      <span className="truncate">{entry.label}</span>
+                      {entry.source === 'shared' && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-1.5 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('documentation.sharedBadge')}</span>}
+                    </span>
                     {entry.description && <span className="block truncate text-[11px] text-[color:var(--color-muted-foreground)]">{entry.description}</span>}
                   </div>
                 </div>
@@ -931,9 +952,37 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
   )
 
   return (
-    <div ref={triggerRef} className={`relative inline-flex${triggerClassName ? ` ${triggerClassName}` : ''}`} onMouseEnter={handleTriggerEnter} onMouseLeave={handleTriggerLeave} onContextMenuCapture={() => closePopover({ blur: true })}>
+    <div
+      ref={triggerRef}
+      className={`relative inline-flex${triggerClassName ? ` ${triggerClassName}` : ''}`}
+      onMouseEnter={handleTriggerEnter}
+      onMouseLeave={handleTriggerLeave}
+      onContextMenuCapture={(event) => {
+        if (popoverRef.current?.contains(event.target as Node)) return
+        closePopover({ blur: true })
+      }}
+    >
       {children}
       {createPortal(popover, document.body)}
+      {detailCard &&
+        createPortal(
+          <UrlPopoverItemDetailCard
+            cardRef={detailCardRef}
+            position={{ x: detailCard.x, y: detailCard.y }}
+            entry={detailCard.entry}
+            zIndex={zIndex + 2}
+            onClose={() => setDetailCard(null)}
+            onOpenManager={
+              onOpenManager &&
+              (() => {
+                setDetailCard(null)
+                closePopover({ blur: true })
+                onOpenManager()
+              })
+            }
+          />,
+          document.body,
+        )}
     </div>
   )
 }

@@ -40,6 +40,7 @@ test('initApp does not refresh WSL sessions on cold startup without runtime entr
     runtimeEntries: {},
     tmuxSessions: [],
     rehydrateProcessUrlsFromStorage: () => undefined,
+    loadDocLinkLibrary: async () => undefined,
     refreshSessions: async () => {
       refreshSessionsCalls += 1
     },
@@ -140,6 +141,7 @@ test('initApp skips saved WSL project filesystem probes in windows-native mode',
     runtimeEntries: {},
     tmuxSessions: [],
     rehydrateProcessUrlsFromStorage: () => undefined,
+    loadDocLinkLibrary: async () => undefined,
     refreshSessions: async () => undefined,
     loadRuntimeEntries: async () => {
       state.runtimeEntries = {}
@@ -156,10 +158,7 @@ test('initApp skips saved WSL project filesystem probes in windows-native mode',
   globalThis.window = {
     electronAPI: {
       getConfig: async () => ({
-        projects: [
-          { path: wslPath },
-          { path: windowsPath },
-        ],
+        projects: [{ path: wslPath }, { path: windowsPath }],
         folders: [],
         tags: [],
         aiEnvironment: {

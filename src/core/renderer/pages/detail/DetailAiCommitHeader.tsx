@@ -1,12 +1,12 @@
-import type { MouseEvent as ReactMouseEvent, MutableRefObject, ReactNode } from 'react'
 import { ArrowUpRight, Bot, Loader2, RefreshCw, RotateCcw, X } from 'lucide-react'
+import type { MutableRefObject, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { AiCommitUndoState } from '../../../shared/types'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
-import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
+import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import { useI18n } from '../../i18n'
-import type { AiCommitStatus, AiFlowNode } from './detail.types'
 import type { ProjectLinkItem } from './detail.aiCommitPanel.types'
+import type { AiCommitStatus, AiFlowNode } from './detail.types'
 
 function getStepClass(status: AiFlowNode['data']['status']): string {
   if (status === 'success') return 'border-[color:var(--color-success)]/30 bg-[color:var(--color-success-background)] text-[color:var(--color-success)]'
@@ -159,7 +159,7 @@ export function DetailAiCommitHeader({
                   />
                 </>
               )}
-              {projectHeaderCollapsed && hasProjectDocLinks && firstProjectLinkItem && <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={firstProjectLinkItem.onOpen} onOpenManager={onOpenProjectLinksManager} size="icon" title={t('common.leftClickOpenFirstLink')} />}
+              {projectHeaderCollapsed && <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={firstProjectLinkItem?.onOpen} onOpenManager={onOpenProjectLinksManager} size="icon" />}
               {projectHeaderCollapsed && projectDevUrlActionVisible && onStartAndOpenDevUrl && (
                 <button
                   type="button"

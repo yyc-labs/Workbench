@@ -1,12 +1,12 @@
 import { ArrowUpRight, Code2, Files, ListTree, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
-import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import { ModalShell } from '../../components/ModalShell'
-import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
+import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
-import { useI18n } from '../../i18n'
+import { ProjectPaneTabs } from '../../components/ProjectPaneTabs'
 import type { UrlPopoverItem } from '../../components/UrlPopover'
-import type { DiscardUnsavedConfirmState } from './useCodeFileState'
+import { useI18n } from '../../i18n'
 import { QuickDrawerTabsCard } from './QuickDrawerTabsCard'
+import type { DiscardUnsavedConfirmState } from './useCodeFileState'
 
 type CodeWorkspaceChromeProps = {
   activeLanguage: string | null
@@ -141,7 +141,7 @@ export function CodeWorkspaceChrome({
                   onSwitchPane?.(pane)
                 }}
               />
-              {hasProjectDocLinks && <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={onOpenFirstProjectLink} onOpenManager={onOpenProjectLinksManager} size="icon" title={t('common.leftClickOpenFirstLink')} />}
+              <ProjectLinksTrigger items={projectLinkItems} tagOptions={projectLinkTagOptions} onOpenDefault={onOpenFirstProjectLink} onOpenManager={onOpenProjectLinksManager} size="icon" />
               {onOpenRunTasks && (
                 <button
                   type="button"
