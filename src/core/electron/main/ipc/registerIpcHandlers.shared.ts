@@ -16,6 +16,7 @@ import type { MarkdownDocumentOpenRequestStore } from '../markdown-document/mark
 import type { MarkdownDocumentService } from '../markdown-document/markdownDocumentService'
 import type { ProcessPortService } from '../process-ports/process-port-service'
 import { toProjectFileServiceErrorMessage } from '../project-file-service'
+import type { QuickActionService } from '../quick-actions/quickActionService'
 import type { RunTaskService } from '../run-tasks/run-task-service'
 import type { ProcessManager } from '../runner'
 import type { RuntimeService } from '../runtime/runtime-service'
@@ -65,6 +66,7 @@ export type RegisterIpcHandlersDependencies = {
   markdownDocumentOpenRequestStore: MarkdownDocumentOpenRequestStore
   routeMarkdownDocumentOpen: (markdownPath: string) => void
   docLinkLibraryService: DocLinkLibraryService
+  quickActionService: QuickActionService
 }
 
 type GitRequestWithRepoRoot = {

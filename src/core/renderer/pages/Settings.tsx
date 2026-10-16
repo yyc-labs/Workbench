@@ -18,6 +18,7 @@ import { SettingsAiGatewayPanel } from './settings/SettingsAiGatewayPanel'
 import { SettingsBrowserAiPanel } from './settings/SettingsBrowserAiPanel'
 import { SettingsDataCachePanel } from './settings/SettingsDataCachePanel'
 import { SettingsGeneralPanel } from './settings/SettingsGeneralPanel'
+import { SettingsQuickActionsPanel } from './settings/SettingsQuickActionsPanel'
 import { SettingsRulesPanel } from './settings/SettingsRulesPanel'
 import { SettingsRuntimePanel } from './settings/SettingsRuntimePanel'
 import { SettingsSharedDocLinkLibraryPanel } from './settings/SettingsSharedDocLinkLibraryPanel'
@@ -465,6 +466,7 @@ export function SettingsPage() {
               )}
               {section === 'rules' && <SettingsRulesPanel />}
               {section === 'doc-link-library' && <SettingsSharedDocLinkLibraryPanel />}
+              {section === 'quick-actions' && <SettingsQuickActionsPanel />}
               {section === 'about' && <SettingsAboutPanel />}
             </div>
           </main>

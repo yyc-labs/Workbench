@@ -89,6 +89,12 @@ import type {
   ProjectFileWriteResult,
   ProjectFileZipResult,
   ProjectInfo,
+  QuickAction,
+  QuickActionCreateInput,
+  QuickActionResult,
+  QuickActionSpec,
+  QuickActionUpdateInput,
+  QuickActionView,
   RuntimeDiagnostics,
   RuntimeEntry,
   RuntimeSessionInfo,
@@ -398,6 +404,16 @@ export interface RunTaskElectronApi {
   startDockerDaemon: (projectPath: string, tasks: RunTask[]) => Promise<{ ready: boolean; error?: string }>
 }
 
+export interface QuickActionsElectronApi {
+  listQuickActions: () => Promise<QuickActionView[]>
+  createQuickAction: (input: QuickActionCreateInput) => Promise<QuickAction>
+  updateQuickAction: (id: string, input: QuickActionUpdateInput) => Promise<QuickAction>
+  deleteQuickAction: (id: string) => Promise<boolean>
+  executeQuickAction: (request: { id: string } | { spec: QuickActionSpec }) => Promise<QuickActionResult>
+  createQuickActionDesktopShortcut: (id: string) => Promise<{ shortcutPath: string }>
+  removeQuickActionDesktopShortcut: (id: string) => Promise<boolean>
+}
+
 export interface SubscriptionElectronApi {
   onProcessOutput: ElectronApiSubscription<ProcessOutputEvent>
   onRunTaskProgress: ElectronApiSubscription<RunTaskProgressEvent>
@@ -437,4 +453,5 @@ export type ElectronApi = CoreElectronApi &
   RuntimeElectronApi &
   ProcessPortsElectronApi &
   RunTaskElectronApi &
+  QuickActionsElectronApi &
   SubscriptionElectronApi

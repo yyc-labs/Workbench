@@ -98,6 +98,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       void (async () => {
         try {
           await get().loadDocLinkLibrary()
+          await get().loadQuickActions()
           let tmuxSessions: TmuxSessionInfo[] = []
           if (capability?.hasTmux) {
             try {

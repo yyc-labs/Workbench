@@ -1,8 +1,9 @@
-import path from 'node:path'
-import { app, dialog, shell } from 'electron'
-import type { BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import path, { join } from 'node:path'
+import type { BrowserWindow } from 'electron'
+import { app, dialog, shell } from 'electron'
 import { projectIdFromPath } from '../../shared/rules'
 import type { AppConfig, BrowserScreenshotViewerPayload, Capability, TranscriptImportedEvent } from '../../shared/types'
 import { createAgentLogService } from './agent-logs/agent-log-service'
@@ -10,21 +11,24 @@ import { createAiCommitService } from './ai-commit/ai-commit-service'
 import { createAiConnectionService } from './ai-connection/ai-connection-service'
 import { AiEnvironmentController } from './ai-environment/environment-controller'
 import { createAiGatewayService } from './ai-gateway/gateway-service'
+import { resolveAppResourcePath } from './app-resource-path'
 import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
-import { createBrowserScreenshotService } from './screenshot/screenshotService'
-import { createPreviewPageCaptureService } from './screenshot/previewCaptureService'
 import { createGitService } from './git/git-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
 import { readTranscriptImportSkillFile } from './hooks/transcript-import-skill'
-import { resolveAppResourcePath } from './app-resource-path'
 import { IPC } from './ipc'
 import { createLearningRepository } from './learning/learningRepository'
 import { createLearningService } from './learning/learningService'
+import { type MainLocale, translateMain } from './mainI18n'
 import { createProcessPortService } from './process-ports/process-port-service'
-import { translateMain, type MainLocale } from './mainI18n'
+import { createQuickActionDesktopShortcuts } from './quick-actions/quickActionDesktopShortcuts'
+import { createQuickActionService } from './quick-actions/quickActionService'
+import type { RunTaskService } from './run-tasks/run-task-service'
 import type { ProcessManager } from './runner'
 import { createRuntimeService } from './runtime/runtime-service'
+import { createPreviewPageCaptureService } from './screenshot/previewCaptureService'
+import { createBrowserScreenshotService } from './screenshot/screenshotService'
 import { createSkillRepository } from './skill/skillRepository'
 import { createSkillService } from './skill/skillService'
 import { listTranscriptImportProjects } from './transcript/transcriptImportProjects'
@@ -47,6 +51,10 @@ export type AppServicesOptions = {
   getBrowserScreenshotWindow: () => BrowserWindow | null
   openBrowserScreenshotViewer: (payload: BrowserScreenshotViewerPayload) => Promise<boolean>
   openBrowserScreenshotWindow: () => Promise<boolean>
+  /** RunTaskService is assembled after app-services; quick actions need it lazily. */
+  getRunTaskService: () => Pick<RunTaskService, 'start' | 'startAll' | 'getConfig'> | null
+  navigateMainWindow: (pathname: string) => void
+  ensureWindowVisible: () => void
   loadConfig: () => AppConfig
   updateConfig: (patch: Partial<AppConfig>) => Promise<AppConfig>
   getUserDataPath: () => string
@@ -244,6 +252,21 @@ export function createAppServices(options: AppServicesOptions) {
     clearAiGatewayLogs: () => aiGatewayService.clearRecentLogs(),
     clearAgentHookLogs: () => agentHookGateway.clearRecentLogs(),
   })
+  const quickActionService = createQuickActionService({
+    loadConfig: options.loadConfig,
+    updateConfig: options.updateConfig,
+    getRunTaskService: options.getRunTaskService,
+    validateProjectPath: (projectPath) => {
+      const target = path.resolve(projectPath)
+      return options.loadConfig().projects.some((project) => path.resolve(project.path) === target) && existsSync(target)
+    },
+    navigateMainWindow: options.navigateMainWindow,
+    ensureWindowVisible: options.ensureWindowVisible,
+    openPath: (target) => shell.openPath(target),
+    openExternal: (url) => shell.openExternal(url),
+    randomUUID: () => randomUUID(),
+    desktopShortcuts: process.platform === 'win32' ? createQuickActionDesktopShortcuts() : undefined,
+  })
 
   return {
     aiEnvironmentController,
@@ -264,6 +287,7 @@ export function createAppServices(options: AppServicesOptions) {
     aiGatewayService,
     agentHookGateway,
     agentLogService,
+    quickActionService,
   }
 }
 

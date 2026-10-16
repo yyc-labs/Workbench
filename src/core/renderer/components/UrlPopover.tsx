@@ -16,6 +16,8 @@ interface UrlPopoverProps {
   forcePopover?: boolean
   /** 追加到触发容器上的 className。 */
   triggerClassName?: string
+  /** 搜索框占位文案（默认 common.searchLinks）。 */
+  searchPlaceholder?: string
   /** 打开链接管理弹窗（详情浮层「管理链接」动作触发；由 ProjectLinksTrigger 透传） */
   onOpenManager?: () => void
 }
@@ -465,7 +467,7 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
   await window.electronAPI.openExternal(entry.url)
 }
 
-export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, onOpenManager }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, searchPlaceholder, onOpenManager }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
@@ -852,7 +854,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
               }
             }}
             aria-activedescendant={activeEntry ? `url-popover-entry-${activeEntryIndexResolved}` : undefined}
-            placeholder={t('common.searchLinks')}
+            placeholder={searchPlaceholder ?? t('common.searchLinks')}
             className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 w-full' : ' w-full'}`}
           />
           {showCategorySelect && <UrlPopoverCategorySelect value={selectedCategory} options={categoryOptions} onChange={handleChangeCategory} floatingMenuRef={categoryMenuRef} onOpenChange={handleCategorySelectOpenChange} zIndex={zIndex + 1} />}

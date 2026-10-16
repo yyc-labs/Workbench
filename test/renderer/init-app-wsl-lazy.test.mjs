@@ -41,6 +41,7 @@ test('initApp does not refresh WSL sessions on cold startup without runtime entr
     tmuxSessions: [],
     rehydrateProcessUrlsFromStorage: () => undefined,
     loadDocLinkLibrary: async () => undefined,
+    loadQuickActions: async () => undefined,
     refreshSessions: async () => {
       refreshSessionsCalls += 1
     },
@@ -142,6 +143,7 @@ test('initApp skips saved WSL project filesystem probes in windows-native mode',
     tmuxSessions: [],
     rehydrateProcessUrlsFromStorage: () => undefined,
     loadDocLinkLibrary: async () => undefined,
+    loadQuickActions: async () => undefined,
     refreshSessions: async () => undefined,
     loadRuntimeEntries: async () => {
       state.runtimeEntries = {}

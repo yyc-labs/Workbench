@@ -64,6 +64,7 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   ai: 'common.routeCatalog.settingsDescriptions.ai',
   rules: 'common.routeCatalog.settingsDescriptions.rules',
   'doc-link-library': 'common.routeCatalog.settingsDescriptions.docLinkLibrary',
+  'quick-actions': 'common.routeCatalog.settingsDescriptions.quickActions',
   about: 'common.routeCatalog.settingsDescriptions.about',
 }
 

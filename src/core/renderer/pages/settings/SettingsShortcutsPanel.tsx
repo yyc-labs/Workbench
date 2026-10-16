@@ -1,7 +1,15 @@
 import { Keyboard, MousePointer2, TerminalSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { FloatingTerminalToggleAccelerator, ShortcutPreferencesConfig } from '../../../shared/types'
+import { FLOATING_TERMINAL_TOGGLE_ACCELERATORS, type FloatingTerminalToggleAccelerator, type ShortcutPreferencesConfig } from '../../../shared/types'
+import { Select, type SelectOption } from '../../components/ui/select'
 import { useI18n } from '../../i18n'
+
+const FLOATING_TERMINAL_ACCELERATOR_OPTION_KEYS: Record<FloatingTerminalToggleAccelerator, string> = {
+  'CommandOrControl+J': 'j',
+  'CommandOrControl+Shift+J': 'shiftJ',
+  'CommandOrControl+`': 'backquote',
+  disabled: 'disabled',
+}
 
 type SettingsShortcutsPanelProps = {
   shortcutPreferences?: ShortcutPreferencesConfig
@@ -359,6 +367,11 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
     }
   }
 
+  const floatingTerminalAcceleratorOptions: SelectOption[] = FLOATING_TERMINAL_TOGGLE_ACCELERATORS.map((accelerator) => ({
+    value: accelerator,
+    label: t(`settings.shortcuts.floatingTerminalOptions.${FLOATING_TERMINAL_ACCELERATOR_OPTION_KEYS[accelerator]}`),
+  }))
+
   return (
     <div className="space-y-8">
       <div>
@@ -405,12 +418,17 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
             <p className="mt-2 max-w-2xl text-sm leading-6 text-[color:var(--color-muted-foreground)]">{t('settings.shortcuts.floatingTerminalDescription')}</p>
             <div className="mt-4 flex items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
               <span>{t('settings.shortcuts.floatingTerminalLabel')}</span>
-              <select className="quiet-control rounded-full px-3 py-1.5 text-[12px] text-[color:var(--color-foreground)]" value={floatingTerminalAccelerator} disabled={saving} onChange={(event) => void handleFloatingTerminalAcceleratorChange(event.target.value as FloatingTerminalToggleAccelerator)}>
-                <option value="CommandOrControl+J">{t('settings.shortcuts.floatingTerminalOptions.j')}</option>
-                <option value="CommandOrControl+Shift+J">{t('settings.shortcuts.floatingTerminalOptions.shiftJ')}</option>
-                <option value="CommandOrControl+`">{t('settings.shortcuts.floatingTerminalOptions.backquote')}</option>
-                <option value="disabled">{t('settings.shortcuts.floatingTerminalOptions.disabled')}</option>
-              </select>
+              <Select
+                ariaLabel={t('settings.shortcuts.floatingTerminalLabel')}
+                value={floatingTerminalAccelerator}
+                options={floatingTerminalAcceleratorOptions}
+                disabled={saving}
+                onChange={(value) => void handleFloatingTerminalAcceleratorChange(value as FloatingTerminalToggleAccelerator)}
+                triggerClassName="h-8 w-auto min-w-[180px] rounded-full px-3 text-[12px]"
+                minDropdownWidth={200}
+                contentClassName="rounded-[16px] p-1"
+                optionClassName="rounded-[12px] px-3 py-2 text-xs"
+              />
             </div>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Bot, Cpu, Database, FileText, Globe2, HardDrive, Info, Keyboard, Library, Palette, PlugZap, RadioTower, Router, ScrollText, Terminal as TerminalIcon, Wrench } from 'lucide-react'
+import { Bot, Cpu, Database, FileText, Globe2, HardDrive, Info, Keyboard, Library, Palette, PlugZap, RadioTower, Router, ScrollText, Terminal as TerminalIcon, Wrench, Zap } from 'lucide-react'
 import { useI18n } from '../../i18n'
 import { SETTINGS_SECTIONS, type Section } from './settings.types'
 
@@ -26,6 +26,7 @@ function SettingsSidebar({ active, onSelect }: SettingsSidebarProps) {
     ai: Bot,
     rules: Database,
     'doc-link-library': Library,
+    'quick-actions': Zap,
     about: Info,
   }
   const renderItem = (section: Section) => {

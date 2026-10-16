@@ -21,6 +21,7 @@ export const settingsMessages = {
         ai: 'AI Commit',
         rules: 'Rules',
         docLinkLibrary: 'Shared Link Library',
+        quickActions: 'Quick Actions',
         about: 'About',
       },
       aiConnection: {
@@ -1068,6 +1069,7 @@ export const settingsMessages = {
         ai: 'AI 提交',
         rules: '规则',
         docLinkLibrary: '共享链接库',
+        quickActions: '快捷操作',
         about: '关于',
       },
       aiConnection: {

@@ -1,6 +1,7 @@
 import { BookOpenText, FileType2, FolderPlus, Plus, Settings, Zap } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { useI18n } from '../../i18n'
+import { HomeQuickActions } from './HomeQuickActions'
 
 type HomeEmptyStateProps = {
   onAddFolder: () => void
@@ -27,9 +28,12 @@ function HomeEmptyState({ onAddFolder, onOpenMarkdown, onOpenLearningCenter, onO
           <span className="text-[15px] font-medium text-[color:var(--color-foreground)]">{t('common.runtime')}</span>
         </div>
         <div className="flex-1" />
-        <Button variant="ghost" size="icon" className="mr-2 h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenLearningCenter} title={t('common.learningCenter')}>
-          <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <HomeQuickActions />
+          <Button variant="ghost" size="icon" className="mr-2 h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenLearningCenter} title={t('common.learningCenter')}>
+            <BookOpenText className="w-4 h-4" strokeWidth={1.8} />
+          </Button>
+        </div>
         <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenSettings}>
           <Settings className="w-4 h-4" strokeWidth={1.8} />
         </Button>

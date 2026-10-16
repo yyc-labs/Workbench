@@ -86,6 +86,11 @@ import type {
   ProjectFolder,
   ProjectInfo,
   ProjectTag,
+  QuickAction,
+  QuickActionCreateInput,
+  QuickActionResult,
+  QuickActionUpdateInput,
+  QuickActionView,
   RuntimeDiagnostics,
   RuntimeEntry,
   RuntimeSessionInfo,
@@ -194,6 +199,17 @@ export interface AppState {
   clearSharedDocLinkSecret: (linkId: string) => Promise<void>
   getSharedDocLinkSecret: (linkId: string) => Promise<string | null>
   setProjectSharedDocLinkGroups: (projectId: string, groupIds: string[]) => Promise<void>
+
+  quickActions: QuickActionView[]
+  quickActionsLoading: boolean
+  loadQuickActions: () => Promise<void>
+  createQuickAction: (input: QuickActionCreateInput) => Promise<QuickAction>
+  updateQuickAction: (id: string, input: QuickActionUpdateInput) => Promise<QuickAction>
+  deleteQuickAction: (id: string) => Promise<boolean>
+  executeQuickAction: (request: { id: string } | { spec: QuickActionCreateInput['action'] }) => Promise<QuickActionResult>
+  reorderQuickAction: (id: string, direction: 'up' | 'down') => Promise<void>
+  createQuickActionDesktopShortcut: (id: string) => Promise<string>
+  removeQuickActionDesktopShortcut: (id: string) => Promise<boolean>
 
   loadConfig: () => Promise<void>
   setTheme: (theme: AppConfig['theme']) => Promise<void>

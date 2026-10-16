@@ -11,6 +11,7 @@ import { registerLearningIpcHandlers } from './registerLearningIpcHandlers'
 import { registerMarkdownDocumentIpcHandlers } from './registerMarkdownDocumentIpcHandlers'
 import { registerProcessPortsIpcHandlers } from './registerProcessPortsIpcHandlers'
 import { registerProjectFileIpcHandlers } from './registerProjectFileIpcHandlers'
+import { registerQuickActionIpcHandlers } from './registerQuickActionIpcHandlers'
 import { registerRunTaskIpcHandlers } from './registerRunTaskIpcHandlers'
 import { registerRuntimeIpcHandlers } from './registerRuntimeIpcHandlers'
 import { registerSkillIpcHandlers } from './registerSkillIpcHandlers'
@@ -43,4 +44,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerBrowserScreenshotIpcHandlers(deps)
   registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore, deps.routeMarkdownDocumentOpen)
   registerDocLinkLibraryIpcHandlers(deps.docLinkLibraryService)
+  registerQuickActionIpcHandlers(deps)
 }

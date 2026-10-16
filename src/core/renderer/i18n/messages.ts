@@ -7,6 +7,7 @@ import { docsAndCommandsMessages } from './messages/docsAndCommands'
 import { learningMessages } from './messages/learning'
 import { markdownDocumentMessages } from './messages/markdownDocument'
 import { projectMessages } from './messages/project'
+import { quickActionsMessages } from './messages/quickActions'
 import { settingsMessages } from './messages/settings'
 import { transcriptMessages } from './messages/transcript'
 
@@ -51,6 +52,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
       settingsProcesses: aiAndRuntimeMessages[locale].settingsProcesses,
       settingsRules: aiAndRuntimeMessages[locale].settingsRules,
     },
+    { quickActions: quickActionsMessages[locale].quickActions },
   )
 }
 

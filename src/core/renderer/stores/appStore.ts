@@ -8,6 +8,7 @@ import { initialThemeMode, loadPersistedProcessUrls } from './appStore.helpers'
 import { createInitActionsSlice } from './appStore.initSlice'
 import { createMarkdownDocumentActionsSlice } from './appStore.markdownDocumentSlice'
 import { createProcessActionsSlice } from './appStore.processSlice'
+import { createQuickActionsSlice } from './appStore.quickActionsSlice'
 import { createRunTaskActionsSlice } from './appStore.runTasksSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createSettingsActionsSlice } from './appStore.settingsSlice'
@@ -81,4 +82,5 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createSkillActionsSlice(...args),
   ...createMarkdownDocumentActionsSlice(...args),
   ...createDocLinkLibraryActionsSlice(...args),
+  ...createQuickActionsSlice(...args),
 }))

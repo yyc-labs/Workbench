@@ -1,8 +1,9 @@
-import { Search, Settings, Plus, Zap, SlidersHorizontal, X, BookOpenText, FileType2 } from 'lucide-react'
+import { BookOpenText, FileType2, Plus, Search, Settings, SlidersHorizontal, X, Zap } from 'lucide-react'
+import type { AppViewPath } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
-import type { AppViewPath } from '../../../shared/types'
+import { HomeQuickActions } from './HomeQuickActions'
 
 type HomeToolbarProps = {
   searchQuery: string
@@ -56,6 +57,7 @@ function HomeToolbar({ searchQuery, onSearchChange, onAddFolder, onLearningCente
 
       <div className="quiet-control ml-auto flex items-center rounded-full px-1.5 py-1 gap-2.5">
         <div className="flex items-center gap-2">
+          <HomeQuickActions />
           <Button
             variant="ghost"
             size="icon"

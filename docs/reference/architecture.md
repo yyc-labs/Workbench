@@ -44,6 +44,10 @@ Markdown 工作区支持 GFM、代码高亮、表格和 Mermaid 图表渲染，�
 
 学习中心用于维护结构化笔记、分类、技能和浏览器辅助学习资料。浏览器截图模块支持网页长截图、固定元素处理、元素标记和独立预览，为学习中心和项目文档提供视觉素材来源。
 
+### 快捷操作
+
+快捷操作（Quick Actions）把「打开项目、启动运行任务、打开目录、打开网址」预定义为可复用操作，在 Home 区块、设置面板和桌面 `.lnk` 图标中触发。操作定义持久化在应用配置中，主进程 quick-actions 域统一负责 CRUD、执行分发与桌面快捷方式生命周期；`run-task` 类型的环境判定完全复用 RunTaskService，本域不引入新的 Windows/WSL 分支。
+
 ## Electron 分层
 
 ```mermaid
@@ -73,7 +77,7 @@ Preload 通过 `contextBridge` 暴露最小化、类型安全的 API。它负责
 
 ### Main process
 
-Main process 承担文件系统、进程、Git、窗口、Runtime、AI Gateway、Transcript、Hook 和 Windows 集成等系统能力。具体能力按 domain 组织，IPC 注册层只负责装配 Handler。
+Main process 承担文件系统、进程、Git、窗口、Runtime、AI Gateway、Transcript、Hook、Quick Actions 和 Windows 集成等系统能力。具体能力按 domain 组织，IPC 注册层只负责装配 Handler。
 
 ### Shared
 

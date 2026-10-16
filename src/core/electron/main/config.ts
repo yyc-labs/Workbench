@@ -28,8 +28,8 @@ import type {
   FloatingTerminalInstance,
   FloatingTerminalToggleAccelerator,
   LaunchOnLoginDisplayMode,
-  ShortcutPreferencesConfig,
   ProjectFileExclusionsConfig,
+  ShortcutPreferencesConfig,
 } from '../../shared/types'
 import { FLOATING_TERMINAL_TOGGLE_ACCELERATORS } from '../../shared/types'
 import { migrateLegacyEnvironment } from './ai-environment/platform-detector'
@@ -39,6 +39,7 @@ import { capabilityManager } from './capability-manager'
 import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
 import { migrateConfigDocument } from './config/config-migrations'
 import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persistence'
+import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from './config/config-quick-actions'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -167,6 +168,7 @@ const DEFAULT_CONFIG: AppConfig = {
   aiGateway: defaultAiGatewayConfig(),
   browserAi: DEFAULT_BROWSER_AI_CONFIG,
   shortcutPreferences: DEFAULT_SHORTCUT_PREFERENCES,
+  quickActions: DEFAULT_QUICK_ACTIONS,
 }
 
 let configRecovery: ConfigRecoveryInfo | undefined
@@ -932,6 +934,7 @@ export function loadConfig(): AppConfig {
       aiGateway: normalizeAiGatewayConfig(parsed.aiGateway),
       browserAi: normalizeBrowserAiConfig(parsed.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(parsed.shortcutPreferences),
+      quickActions: normalizeQuickActions(parsed.quickActions),
       cacheLocation: normalizeCacheLocationConfig(parsed.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(parsed.codeFileExclusions),
       ...normalizeFilePreviewLimits(parsed),
@@ -986,6 +989,7 @@ export function loadConfig(): AppConfig {
       aiGateway: normalizeAiGatewayConfig(DEFAULT_CONFIG.aiGateway),
       browserAi: normalizeBrowserAiConfig(DEFAULT_CONFIG.browserAi),
       shortcutPreferences: normalizeShortcutPreferences(DEFAULT_CONFIG.shortcutPreferences),
+      quickActions: normalizeQuickActions(DEFAULT_CONFIG.quickActions),
       cacheLocation: normalizeCacheLocationConfig(DEFAULT_CONFIG.cacheLocation),
       codeFileExclusions: normalizeCodeFileExclusions(DEFAULT_CONFIG.codeFileExclusions),
       ...normalizeFilePreviewLimits(DEFAULT_CONFIG),
@@ -1037,6 +1041,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     aiGateway: Object.prototype.hasOwnProperty.call(partial, 'aiGateway') ? normalizeAiGatewayConfig(partial.aiGateway) : normalizeAiGatewayConfig(current.aiGateway),
     browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi') ? normalizeBrowserAiConfig(partial.browserAi) : normalizeBrowserAiConfig(current.browserAi),
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
+    quickActions: Object.prototype.hasOwnProperty.call(partial, 'quickActions') ? normalizeQuickActions(partial.quickActions) : normalizeQuickActions(current.quickActions),
     floatingTerminals: Object.prototype.hasOwnProperty.call(partial, 'floatingTerminals') ? normalizeFloatingTerminals(partial.floatingTerminals) : current.floatingTerminals,
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),

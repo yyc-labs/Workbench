@@ -21,6 +21,7 @@ const settingsSectionKeyBySection: Record<Section, SettingsSectionMessageKey> = 
   ai: 'settings.sections.ai',
   rules: 'settings.sections.rules',
   'doc-link-library': 'settings.sections.docLinkLibrary',
+  'quick-actions': 'settings.sections.quickActions',
   about: 'settings.sections.about',
 }
 

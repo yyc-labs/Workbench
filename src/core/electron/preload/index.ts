@@ -12,6 +12,7 @@ import { createLearningInvokeApi } from './invokeApi.learning'
 import { createMarkdownDocumentInvokeApi } from './invokeApi.markdownDocument'
 import { createProcessPortsInvokeApi } from './invokeApi.processPorts'
 import { createProjectFileInvokeApi } from './invokeApi.projectFiles'
+import { createQuickActionsInvokeApi } from './invokeApi.quickActions'
 import { createRunTaskInvokeApi } from './invokeApi.runTasks'
 import { createRuntimeInvokeApi } from './invokeApi.runtime'
 import { createSkillInvokeApi } from './invokeApi.skill'
@@ -27,6 +28,7 @@ const api = {
   ...createBrowserScreenshotInvokeApi(),
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
+  ...createQuickActionsInvokeApi(),
   ...createProcessPortsInvokeApi(),
   ...createRunTaskInvokeApi(),
   ...createTranscriptInvokeApi(),

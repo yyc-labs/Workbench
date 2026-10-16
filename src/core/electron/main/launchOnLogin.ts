@@ -1,19 +1,8 @@
 import { app } from 'electron'
 import type { AppConfig } from '../../shared/types'
-import {
-  WINDOWS_AUTOSTART_ARG,
-  WINDOWS_AUTOSTART_SILENT_ARG,
-  buildWindowsAutostartArgs,
-  isSilentAutostartLaunch,
-  isWindowsAutostartLaunch,
-} from './launchArgs'
+import { buildWindowsAutostartArgs, isSilentAutostartLaunch, isWindowsAutostartLaunch, parseQuickActionArg, WINDOWS_AUTOSTART_ARG, WINDOWS_AUTOSTART_SILENT_ARG } from './launchArgs'
 
-export {
-  WINDOWS_AUTOSTART_ARG,
-  WINDOWS_AUTOSTART_SILENT_ARG,
-  isSilentAutostartLaunch,
-  isWindowsAutostartLaunch,
-}
+export { isSilentAutostartLaunch, isWindowsAutostartLaunch, parseQuickActionArg, WINDOWS_AUTOSTART_ARG, WINDOWS_AUTOSTART_SILENT_ARG }
 
 function supportsWindowsLaunchOnLogin(): boolean {
   return process.platform === 'win32' && app.isPackaged

@@ -1659,6 +1659,8 @@ export interface AppConfig {
   floatingTerminals?: FloatingTerminalInstance[]
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
+  /** User-defined quick actions surfaced on Home and the settings panel. */
+  quickActions?: QuickActionsConfig
 }
 
 export interface SavedProject {
@@ -1824,4 +1826,66 @@ export interface ProjectFileContentSearchResponse {
 export interface ProjectFileContentSearchOptions {
   caseSensitive?: boolean
   includeGlobs?: string[]
+}
+
+// ── Quick Actions ──────────────────────────────────────────
+
+/** Action kinds a quick action can trigger. */
+export type QuickActionType = 'open-project' | 'run-task' | 'open-path' | 'open-url'
+
+/** Coarse grouping used by the settings panel filters and Home ordering. */
+export type QuickActionGroup = 'project' | 'task' | 'other'
+
+/** Icon key rendered by the quick action UI (mapped to lucide icons in the renderer). */
+export type QuickActionIcon = 'folder-open' | 'play' | 'terminal' | 'globe'
+
+export type QuickActionSpec = { type: 'open-project'; projectPath: string } | { type: 'run-task'; projectPath: string; taskId?: string } | { type: 'open-path'; path: string } | { type: 'open-url'; url: string }
+
+export interface QuickAction {
+  id: string
+  name: string
+  action: QuickActionSpec
+  icon: QuickActionIcon
+  group: QuickActionGroup
+  enabled: boolean
+  /** Stable ordering inside its group; renumbered by normalize. */
+  order: number
+  createdAt: number
+  updatedAt: number
+  /** Absolute path of the desktop `.lnk` shortcut, when one was created. */
+  desktopShortcutPath?: string
+}
+
+/** Desktop shortcut state computed by the main process for list views. */
+export type QuickActionShortcutState = 'none' | 'valid' | 'missing'
+
+export type QuickActionView = QuickAction & { shortcutState: QuickActionShortcutState }
+
+export type QuickActionCreateInput = {
+  name: string
+  action: QuickActionSpec
+  /** Defaults to the icon derived from action.type. */
+  icon?: QuickActionIcon
+  /** Defaults to the group derived from action.type. */
+  group?: QuickActionGroup
+  /** Defaults to true. */
+  enabled?: boolean
+}
+
+export type QuickActionUpdateInput = Partial<Omit<QuickActionCreateInput, 'action'>> & {
+  /** Allows replacing the whole spec (the form resets fields when the type switches). */
+  action?: QuickActionSpec
+  /** Reorder-only field: written by the adjacent-swap reorder flow, not by the create/edit form. */
+  order?: number
+}
+
+/** Execute either a stored action (by id, with enabled check) or an unsaved spec (form test-run). */
+export type QuickActionExecuteRequest = { id: string } | { spec: QuickActionSpec }
+
+export type QuickActionErrorCode = 'not-found' | 'disabled' | 'invalid-project' | 'invalid-task' | 'invalid-spec' | 'exec-failed'
+
+export type QuickActionResult = { ok: true; kind: 'navigated' } | { ok: true; kind: 'task-started'; taskIds: string[] } | { ok: true; kind: 'opened' } | { ok: false; code: QuickActionErrorCode; error?: string }
+
+export interface QuickActionsConfig {
+  actions: QuickAction[]
 }

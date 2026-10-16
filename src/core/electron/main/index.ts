@@ -13,13 +13,14 @@ import { DocLinkLibrarySecretStore } from './doc-link-library/docLinkLibrarySecr
 import { DocLinkLibraryService } from './doc-link-library/docLinkLibraryService'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
-import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
+import { isSilentAutostartLaunch, isWindowsAutostartLaunch, parseQuickActionArg, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
 import { MarkdownDocumentOpenRequestStore, parseMarkdownDocumentOpenRequest } from './markdown-document/markdownDocumentOpenRequest'
 import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
 import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
 import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
 import { prewarmClipboardWorker } from './project-file-service'
+import { QuickActionRequestStore } from './quick-actions/quickActionRequestStore'
 import { RunTaskService } from './run-tasks/run-task-service'
 import { ProcessManager } from './runner'
 import { openTerminalAtPath } from './shell/openers'
@@ -61,6 +62,8 @@ const shouldUseTrayLifecycle = process.platform === 'win32'
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 const markdownDocumentOpenRequestStore = new MarkdownDocumentOpenRequestStore()
 markdownDocumentOpenRequestStore.setFromArgv(process.argv)
+const quickActionRequestStore = new QuickActionRequestStore()
+quickActionRequestStore.setFromArgv(process.argv)
 
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -83,6 +86,11 @@ const services = createAppServices({
   openBrowserScreenshotWindow: async () => {
     await showBrowserScreenshotWindow()
     return true
+  },
+  getRunTaskService: () => runTaskService,
+  navigateMainWindow,
+  ensureWindowVisible: () => {
+    ensureWindowVisible(mainWindow)
   },
   loadConfig,
   updateConfig,
@@ -111,6 +119,7 @@ const {
   aiGatewayService,
   agentHookGateway,
   agentLogService,
+  quickActionService,
 } = services
 
 const runTaskService = new RunTaskService({
@@ -672,6 +681,16 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
 registerAppLifecycle(app, {
   onSecondInstance: (_event, argv) => {
     if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
+    // 快捷操作优先于 markdown 路由：.lnk 双击是显式用户动作。
+    const quickActionId = parseQuickActionArg(argv)
+    if (quickActionId) {
+      // 不聚焦主窗口：open-project / run-task 内部自行 ensureWindowVisible，
+      // open-path / open-url 只打开目标，不应抢占焦点。
+      void quickActionService.execute({ id: quickActionId }).catch((error) => {
+        console.warn('[quick-actions] Failed to execute from second instance:', error)
+      })
+      return
+    }
     const markdownPath = parseMarkdownDocumentOpenRequest(argv)
     if (markdownPath) {
       routeMarkdownDocumentOpenRequest(markdownPath)
@@ -796,6 +815,7 @@ app.whenReady().then(async () => {
               markdownDocumentOpenRequestStore,
               routeMarkdownDocumentOpen: routeMarkdownDocumentOpenRequest,
               docLinkLibraryService,
+              quickActionService,
             })
           },
         },
@@ -839,5 +859,17 @@ app.whenReady().then(async () => {
   agentHookGateway.start()
   void aiGatewayService.start(false).catch((error) => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)
+  })
+
+  // 冷启动 .lnk 触发：consume 启动参数里的快捷操作（navigateMainWindow 自带 did-finish-load 兜底）。
+  const pendingQuickAction = quickActionRequestStore.consume()
+  if (pendingQuickAction) {
+    void quickActionService.execute({ id: pendingQuickAction.id }).catch((error) => {
+      console.warn('[quick-actions] Failed to execute from launch args:', error)
+    })
+  }
+  // 静默重建失效/漂移的桌面快捷方式（失败仅记日志，UI 徽标已反映状态）。
+  void quickActionService.repairDesktopShortcuts().catch((error) => {
+    console.warn('[quick-actions] Failed to repair desktop shortcuts:', error)
   })
 })
