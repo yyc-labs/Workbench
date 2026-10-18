@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
 import { GitBranch, GitCommitHorizontal, RotateCcw } from 'lucide-react'
+import { useMemo } from 'react'
 import { Combobox, type ComboboxGroup } from '../../components/ui/combobox'
-import { getGitOperationItems, type OperationCardState, type PanelGitOperationKind } from './detail.gitOperations'
-import type { IndexedBranchCandidate } from './detail.aiCommitPanel.types'
 import { useI18n } from '../../i18n'
+import type { IndexedBranchCandidate } from './detail.aiCommitPanel.types'
+import { getGitOperationItems, type OperationCardState, type PanelGitOperationKind } from './detail.gitOperations'
 
 type DetailAiCommitBranchPanelProps = {
   branchAhead: number
@@ -205,10 +205,11 @@ export function DetailAiCommitBranchPanel({
                 inputPlaceholder={mergeTarget || t('detail.branchPanelSearchPlaceholder')}
                 toggleAriaLabel={t('detail.branchPanelCloseList')}
                 emptyText={mergeSearchQuery ? t('detail.branchPanelNoMatch') : t('detail.branchPanelNoBranches')}
-                inputClassName="h-10 rounded-[14px] px-3 font-mono text-[12px]"
-                triggerClassName="h-10 rounded-[14px] px-3 text-[12px] hover:border-[color:var(--color-border-hover)]"
+                inputClassName="h-10 rounded-[14px] px-3 font-mono"
+                textSize={12}
+                triggerClassName="h-10 rounded-[14px] px-3 hover:border-[color:var(--color-border-hover)]"
                 contentClassName="surface-card rounded-[14px] p-1"
-                optionClassName="rounded-[10px] px-2.5 py-1.5 text-[11.5px]"
+                optionClassName="rounded-[10px] px-2.5 py-1.5"
                 groupLabelClassName="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
                 renderDisplayValue={() => <span className={mergeTarget ? 'font-mono text-[12px] text-[color:var(--color-foreground)]' : 'font-sans text-[12px] text-[color:var(--color-muted-foreground)]'}>{mergeTargetLabel}</span>}
                 renderOption={(option, state) => (

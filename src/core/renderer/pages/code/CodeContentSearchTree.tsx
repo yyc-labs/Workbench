@@ -1,7 +1,7 @@
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileSearch } from 'lucide-react'
-import { Tree } from 'react-arborist'
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
+import { Tree } from 'react-arborist'
 import type { ProjectFileContentSearchResult, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
 import { CodeTreeContextMenu, type CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
@@ -170,7 +170,7 @@ function ContentSearchNodeRenderer({ node, style, dragHandle, activeLocation, on
         >
           {node.isOpen ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
           <FileSearch className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-          <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="min-w-0 flex-1" contentClassName="font-mono text-[10.5px] leading-[1.4]">
+          <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="min-w-0 flex-1" contentClassName="font-mono text-[12px] leading-[1.4]">
             <span className="code-content-search-file-path">{data.name}</span>
           </Tooltip>
           <div className="code-content-search-file-count">{data.matchCount}</div>

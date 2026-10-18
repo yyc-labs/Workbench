@@ -25,10 +25,11 @@ import type {
   CodexSandboxMode,
   CodexSettingsSnapshot,
   CodexSettingsSnapshotMap,
-  FloatingTerminalInstance,
+  FloatingTerminalPanelState,
   FloatingTerminalToggleAccelerator,
   LaunchOnLoginDisplayMode,
   ProjectFileExclusionsConfig,
+  SavedProject,
   ShortcutPreferencesConfig,
 } from '../../shared/types'
 import { FLOATING_TERMINAL_TOGGLE_ACCELERATORS } from '../../shared/types'
@@ -650,6 +651,39 @@ function normalizeDocLinkTags(input: AppConfig['docLinkTags'] | unknown): NonNul
     .map((item, index) => ({ ...item, sortOrder: index }))
 }
 
+const TERMINAL_DOCK_MIN_HEIGHT = 160
+const TERMINAL_DOCK_MAX_TITLE_ENTRIES = 200
+const TERMINAL_DOCK_MAX_TITLE_LENGTH = 80
+
+/** 终端集合面板（Ctrl+J）几何 clamp：sizeRatio [0.2, 0.8]。 */
+const FLOATING_PANEL_MIN_SIZE_RATIO = 0.2
+const FLOATING_PANEL_MAX_SIZE_RATIO = 0.8
+const FLOATING_PANEL_DEFAULT_SIZE_RATIO = 0.35
+
+/** 项目终端 title 覆盖表归一化：仅保留 titles（open/height 已随项目坞下线废弃）。 */
+function normalizeProjectTerminalDock(value: unknown): SavedProject['terminalDock'] | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as { titles?: unknown }
+
+  const titleEntries: Array<[string, string]> = []
+  if (raw.titles && typeof raw.titles === 'object' && !Array.isArray(raw.titles)) {
+    for (const [rawKey, rawTitle] of Object.entries(raw.titles as Record<string, unknown>)) {
+      const key = rawKey.trim()
+      if (!key) continue
+      if (typeof rawTitle !== 'string') continue
+      const title = rawTitle.trim()
+      if (!title) continue
+      titleEntries.push([key, title.slice(0, TERMINAL_DOCK_MAX_TITLE_LENGTH)])
+      if (titleEntries.length >= TERMINAL_DOCK_MAX_TITLE_ENTRIES) break
+    }
+  }
+
+  // 无 titles 时不落空对象：等价于未配置。
+  if (titleEntries.length === 0) return undefined
+
+  return { titles: Object.fromEntries(titleEntries) }
+}
+
 function normalizeCodeSession(value: unknown):
   | {
       tabs: string[]
@@ -779,41 +813,23 @@ function normalizeShortcutPreferences(value: AppConfig['shortcutPreferences'] | 
   }
 }
 
-/** 浮动终端实例几何归一化：sizeRatio clamp [0.2,0.8]、旧 free 停靠迁移为 bottom、zIndex 归一段。 */
-function normalizeFloatingTerminals(value: unknown): FloatingTerminalInstance[] | undefined {
+/** 终端集合面板几何归一化：sizeRatio clamp [0.2,0.8]、旧 free 停靠迁移为 bottom；旧实例数组整体丢弃。 */
+function normalizeFloatingPanel(value: unknown): FloatingTerminalPanelState | undefined {
   if (value === undefined) return undefined
-  if (!Array.isArray(value)) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as { dock?: unknown; sizeRatio?: unknown; hidden?: unknown }
   const clampNumber = (input: unknown, fallback: number, min: number, max: number): number => {
     const parsed = typeof input === 'number' ? input : Number(input)
     if (!Number.isFinite(parsed)) return fallback
     return Math.min(max, Math.max(min, parsed))
   }
-  const normalized: FloatingTerminalInstance[] = []
-  for (const raw of value) {
-    if (!raw || typeof raw !== 'object') continue
-    const item = raw as Partial<FloatingTerminalInstance>
-    if (typeof item.id !== 'string' || !item.id.trim()) continue
-    if (typeof item.processKey !== 'string' || !item.processKey.trim()) continue
-    if (typeof item.projectId !== 'string' || !item.projectId.trim()) continue
-    if (typeof item.cwd !== 'string' || !item.cwd.trim()) continue
-    // 旧版本遗留的 'free' 停靠已下线，迁移为 bottom，不丢实例。
-    const dock = item.dock === 'top' || item.dock === 'bottom' || item.dock === 'left' || item.dock === 'right' ? item.dock : item.dock === 'free' ? 'bottom' : null
-    if (!dock) continue
-    normalized.push({
-      id: item.id,
-      processKey: item.processKey,
-      projectId: item.projectId,
-      cwd: item.cwd,
-      useWsl: item.useWsl === true,
-      title: typeof item.title === 'string' ? item.title.slice(0, 80) : 'Terminal',
-      dock,
-      sizeRatio: clampNumber(item.sizeRatio, 0.35, 0.2, 0.8),
-      hidden: item.hidden === true,
-      zIndex: clampNumber(item.zIndex, 9000, 9000, 9997),
-    })
-    if (normalized.length >= 12) break
+  // 旧版本遗留的 'free' 停靠已下线，迁移为 bottom。
+  const dock = raw.dock === 'top' || raw.dock === 'bottom' || raw.dock === 'left' || raw.dock === 'right' ? raw.dock : raw.dock === 'free' ? 'bottom' : 'bottom'
+  return {
+    dock,
+    sizeRatio: clampNumber(raw.sizeRatio, FLOATING_PANEL_DEFAULT_SIZE_RATIO, FLOATING_PANEL_MIN_SIZE_RATIO, FLOATING_PANEL_MAX_SIZE_RATIO),
+    hidden: raw.hidden === true,
   }
-  return normalized
 }
 
 function normalizeCodeFileExclusions(value: AppConfig['codeFileExclusions'] | unknown): ProjectFileExclusionsConfig {
@@ -873,6 +889,7 @@ export function loadConfig(): AppConfig {
             : []
           const hasDrawerState = favorites.length > 0 || recents.length > 0
           const codeSession = normalizeCodeSession(project.codeSession)
+          const terminalDock = normalizeProjectTerminalDock(project.terminalDock)
           return {
             ...project,
             cli: isCliTool(project.cli) ? project.cli : undefined,
@@ -884,6 +901,7 @@ export function loadConfig(): AppConfig {
                 }
               : undefined,
             codeSession,
+            terminalDock,
           }
         })
       : []
@@ -903,6 +921,7 @@ export function loadConfig(): AppConfig {
             : []
           const hasDrawerState = favorites.length > 0 || recents.length > 0
           const codeSession = normalizeCodeSession(project.codeSession)
+          const terminalDock = normalizeProjectTerminalDock(project.terminalDock)
           return {
             ...project,
             cli: isCliTool(project.cli) ? project.cli : undefined,
@@ -915,6 +934,7 @@ export function loadConfig(): AppConfig {
                 }
               : undefined,
             codeSession,
+            terminalDock,
           }
         })
       : []
@@ -1042,7 +1062,7 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     browserAi: Object.prototype.hasOwnProperty.call(partial, 'browserAi') ? normalizeBrowserAiConfig(partial.browserAi) : normalizeBrowserAiConfig(current.browserAi),
     shortcutPreferences: Object.prototype.hasOwnProperty.call(partial, 'shortcutPreferences') ? normalizeShortcutPreferences(partial.shortcutPreferences) : normalizeShortcutPreferences(current.shortcutPreferences),
     quickActions: Object.prototype.hasOwnProperty.call(partial, 'quickActions') ? normalizeQuickActions(partial.quickActions) : normalizeQuickActions(current.quickActions),
-    floatingTerminals: Object.prototype.hasOwnProperty.call(partial, 'floatingTerminals') ? normalizeFloatingTerminals(partial.floatingTerminals) : current.floatingTerminals,
+    floatingPanel: Object.prototype.hasOwnProperty.call(partial, 'floatingPanel') ? normalizeFloatingPanel(partial.floatingPanel) : current.floatingPanel,
     cacheLocation: Object.prototype.hasOwnProperty.call(partial, 'cacheLocation') ? normalizeCacheLocationConfig(partial.cacheLocation) : normalizeCacheLocationConfig(current.cacheLocation),
     codeFileExclusions: Object.prototype.hasOwnProperty.call(partial, 'codeFileExclusions') ? normalizeCodeFileExclusions(partial.codeFileExclusions) : normalizeCodeFileExclusions(current.codeFileExclusions),
     codeTreeAutoLoadFileLimit: Object.prototype.hasOwnProperty.call(partial, 'codeTreeAutoLoadFileLimit') ? normalizeCodeTreeAutoLoadFileLimit(partial.codeTreeAutoLoadFileLimit) : normalizeCodeTreeAutoLoadFileLimit(current.codeTreeAutoLoadFileLimit),

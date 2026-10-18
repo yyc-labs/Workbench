@@ -1,10 +1,11 @@
+import { Check, ChevronDown } from 'lucide-react'
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-import { dropdownSurfaceClassName, dropdownSurfaceStyle, resolveDropdownFallbackRect, useDropdownLayer, type DropdownAlign } from './dropdown'
+import { type ControlTextSize, resolveControlFontSize } from './controlTextSize'
+import { type DropdownAlign, dropdownSurfaceClassName, dropdownSurfaceStyle, resolveDropdownFallbackRect, useDropdownLayer } from './dropdown'
 
 export type SelectOption = {
   value: string
@@ -40,6 +41,12 @@ export interface SelectProps {
   /** Portal 层级;在 ModalShell 等高层级容器内使用时需高于面板 z-index(默认下拉层 z-[10010] 只适用于基础层)。 */
   contentZIndex?: number
   optionClassName?: string
+  /**
+   * 字号（硬契约）：trigger / option / 空态统一由此 prop 经内联 style 下发，
+   * 外部 className 的 text-* 一律无效。预设 'xs'(12px) / 'sm'(14px，默认) /
+   * 'base'(16px)，数字按 px。
+   */
+  textSize?: ControlTextSize | number
   floatingContentRef?: React.Ref<HTMLDivElement>
   renderValue?: (option: SelectOption | undefined) => React.ReactNode
   renderOption?: (option: SelectOption, state: RenderSelectOptionState) => React.ReactNode
@@ -98,6 +105,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
     contentClassName,
     contentZIndex,
     optionClassName,
+    textSize,
     floatingContentRef,
     renderValue,
     renderOption,
@@ -212,6 +220,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
 
   const fallbackRect = resolveDropdownFallbackRect(triggerRef)
   const scrollAreaMaxHeight = Math.max(0, (layout?.maxHeight ?? maxHeight) - 12)
+  const resolvedFontSize = resolveControlFontSize(textSize)
 
   return (
     <div className={cn('relative', className)}>
@@ -222,10 +231,11 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
         }}
         type="button"
         className={cn(
-          'quiet-control flex h-10 w-full items-center justify-between rounded-full border-0 px-4 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+          'quiet-control flex h-10 w-full items-center justify-between rounded-full border-0 px-4 text-left text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
           open && 'bg-[color:var(--color-popover)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]',
           triggerClassName,
         )}
+        style={{ fontSize: resolvedFontSize }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -292,7 +302,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
                       </>
                     )
                     const optionClass = cn(
-                      'flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors',
+                      'flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-[color:var(--color-foreground)] outline-none transition-colors',
                       selected ? 'bg-[color:var(--color-primary)]/12' : highlighted ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]',
                       option.disabled && 'cursor-not-allowed opacity-50',
                       optionClassName,
@@ -300,7 +310,7 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
 
                     if (option.actions && option.actions.length > 0) {
                       return (
-                        <div key={option.value} role="option" aria-selected={selected} className={optionClass} onMouseEnter={() => setHighlightedIndex(index)}>
+                        <div key={option.value} role="option" aria-selected={selected} className={optionClass} style={{ fontSize: resolvedFontSize }} onMouseEnter={() => setHighlightedIndex(index)}>
                           <button type="button" className="flex min-w-0 flex-1 items-center text-left outline-none" disabled={option.disabled} onClick={() => handleSelect(option.value)}>
                             {optionContent}
                           </button>
@@ -324,13 +334,15 @@ const Select = React.forwardRef<HTMLButtonElement, SelectProps>(function Select(
                     }
 
                     return (
-                      <button key={option.value} type="button" role="option" aria-selected={selected} disabled={option.disabled} className={optionClass} onMouseEnter={() => setHighlightedIndex(index)} onClick={() => handleSelect(option.value)}>
+                      <button key={option.value} type="button" role="option" aria-selected={selected} disabled={option.disabled} className={optionClass} style={{ fontSize: resolvedFontSize }} onMouseEnter={() => setHighlightedIndex(index)} onClick={() => handleSelect(option.value)}>
                         {optionContent}
                       </button>
                     )
                   })
                 ) : (
-                  <p className="px-3 py-2 text-sm text-[color:var(--color-muted-foreground)]">{emptyText}</p>
+                  <p className="px-3 py-2 text-[color:var(--color-muted-foreground)]" style={{ fontSize: resolvedFontSize }}>
+                    {emptyText}
+                  </p>
                 )}
               </div>
             </div>,

@@ -466,8 +466,8 @@ export const settingsMessages = {
         openViewerHint: 'Enabled: the quick capture window saves the transcript, reveals the main window, and opens the selected project transcript page.',
         disabledHint: 'Disabled: Ctrl/Cmd+Shift+K quick capture only saves the transcript and closes the capture window.',
         saveError: 'Failed to save shortcut preferences.',
-        floatingTerminalTitle: 'Floating Terminal Shortcut',
-        floatingTerminalDescription: 'In-app shortcut that toggles the floating built-in terminal (only works while the app window is focused). Changes apply immediately.',
+        floatingTerminalTitle: 'Terminal Panel Shortcut',
+        floatingTerminalDescription: 'In-app shortcut that toggles the terminal collection panel (Ctrl+J: all project terminals in one panel; only works while the app window is focused). Changes apply immediately.',
         floatingTerminalLabel: 'Accelerator',
         floatingTerminalOptions: {
           j: 'Ctrl/Cmd+J',
@@ -482,8 +482,9 @@ export const settingsMessages = {
         gestureTriggers: {
           backForward: 'Right-drag left / right',
           recent: 'Right-drag down',
+          terminalPanel: 'Right-drag up',
           home: 'Right-draw a circle',
-          projectHeader: 'Right-drag up',
+          projectHeader: 'Ctrl/Cmd + Right-drag down',
           codeSidebar: 'Ctrl/Cmd + Right-drag right',
           learningLeftSidebar: 'Ctrl/Cmd + Right-drag right',
           learningRightSidebar: 'Ctrl/Cmd + Right-drag left',
@@ -634,6 +635,10 @@ export const settingsMessages = {
           gestureRecent: {
             title: 'Toggle All Projects',
             description: 'Right-drag downward to open or close the all-projects drawer.',
+          },
+          gestureTerminalPanel: {
+            title: 'Terminal Panel',
+            description: 'Right-drag upward to open or collapse the Ctrl+J terminal collection panel — the same as the shortcut. Inside a project it focuses that project\u2019s terminals.',
           },
           gestureHome: {
             title: 'Go Home',
@@ -1513,8 +1518,8 @@ export const settingsMessages = {
         openViewerHint: '开启后，快速导入会先保存转录，然后显示主窗口并打开所选项目的转录页面。',
         disabledHint: '关闭后，Ctrl/Cmd+Shift+K 快速导入只保存转录并关闭导入窗口。',
         saveError: '保存快捷键偏好失败。',
-        floatingTerminalTitle: '浮动终端快捷键',
-        floatingTerminalDescription: '唤起或隐藏浮动内置终端的应用内快捷键（仅应用窗口聚焦时生效），修改后立即生效。',
+        floatingTerminalTitle: '终端面板快捷键',
+        floatingTerminalDescription: '唤起或隐藏终端集合面板的应用内快捷键（Ctrl+J：一个面板汇聚所有项目的终端，仅应用窗口聚焦时生效），修改后立即生效。',
         floatingTerminalLabel: '组合键',
         floatingTerminalOptions: {
           j: 'Ctrl/Cmd+J',
@@ -1529,8 +1534,9 @@ export const settingsMessages = {
         gestureTriggers: {
           backForward: '右键向左 / 向右拖动',
           recent: '右键向下拖动',
+          terminalPanel: '右键向上拖动',
           home: '右键画圆',
-          projectHeader: '右键向上拖动',
+          projectHeader: 'Ctrl/Cmd + 右键向下拖动',
           codeSidebar: 'Ctrl/Cmd + 右键向右拖动',
           learningLeftSidebar: 'Ctrl/Cmd + 右键向右拖动',
           learningRightSidebar: 'Ctrl/Cmd + 右键向左拖动',
@@ -1681,6 +1687,10 @@ export const settingsMessages = {
           gestureRecent: {
             title: '开关全部项目抽屉',
             description: '右键向下拖动可打开或关闭全部项目抽屉。',
+          },
+          gestureTerminalPanel: {
+            title: '终端面板',
+            description: '右键向上拖动可打开或收起 Ctrl+J 终端集合面板，与快捷键等价；在项目内会定位到该项目的终端。',
           },
           gestureHome: {
             title: '回到首页',

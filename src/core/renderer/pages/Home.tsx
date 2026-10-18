@@ -29,6 +29,7 @@ export function HomePage() {
   const markHomeDefaultFilterApplied = useAppStore((s) => s.markHomeDefaultFilterApplied)
   const addProject = useAppStore((s) => s.addProject)
   const openMarkdownDocument = useAppStore((s) => s.openMarkdownDocument)
+  const toggleTerminalCollection = useAppStore((s) => s.toggleTerminalCollection)
   const updateLastOpened = useAppStore((s) => s.updateLastOpened)
   const createFolder = useAppStore((s) => s.createFolder)
   const renameFolder = useAppStore((s) => s.renameFolder)
@@ -268,6 +269,9 @@ export function HomePage() {
         }}
         onMarkdownClick={() => {
           void openView('/markdown')
+        }}
+        onOpenTerminalPanel={() => {
+          void toggleTerminalCollection()
         }}
         onOpenInSeparateWindow={(viewPath) => {
           void openViewInSeparateWindow(viewPath)

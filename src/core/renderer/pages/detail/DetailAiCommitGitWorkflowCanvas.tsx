@@ -117,7 +117,8 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                   type="text"
                   value={selectedNode.data.label || ''}
                   onChange={(event) => runner.updateNodeConfig(selectedNode.id, (data) => ({ ...data, label: event.target.value || undefined }))}
-                  className="h-9 rounded-[12px] px-3 text-[12px]"
+                  className="h-9 rounded-[12px] px-3"
+                  textSize={12}
                   placeholder={t('detail.gitWorkflowNodeLabelPlaceholder')}
                 />
               </label>
@@ -198,9 +199,10 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                       triggerPlaceholder={t('detail.gitWorkflowSwitchTarget')}
                       inputPlaceholder={t('detail.gitWorkflowSwitchTarget')}
                       emptyText={t('detail.branchPanelNoBranches')}
-                      triggerClassName="h-9 rounded-[12px] px-3 text-[11px]"
+                      triggerClassName="h-9 rounded-[12px] px-3"
+                      textSize={11}
                       contentClassName="surface-card rounded-[12px] p-1"
-                      optionClassName="rounded-[8px] px-2 py-1.5 text-[11px]"
+                      optionClassName="rounded-[8px] px-2 py-1.5"
                     />
                   )}
                 </div>
@@ -251,9 +253,10 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                       triggerPlaceholder={t('detail.gitWorkflowMergeSource')}
                       inputPlaceholder={t('detail.gitWorkflowMergeSource')}
                       emptyText={t('detail.branchPanelNoBranches')}
-                      triggerClassName="h-9 rounded-[12px] px-3 text-[11px]"
+                      triggerClassName="h-9 rounded-[12px] px-3"
+                      textSize={11}
                       contentClassName="surface-card rounded-[12px] p-1"
-                      optionClassName="rounded-[8px] px-2 py-1.5 text-[11px]"
+                      optionClassName="rounded-[8px] px-2 py-1.5"
                     />
                   )}
                 </div>
@@ -322,9 +325,10 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                             return { ...next, config: { ...next.config, execution: value as GitWorkflowCommitExecution } }
                           })
                         }
-                        triggerClassName="h-9 rounded-[12px] px-3 text-[12px]"
+                        triggerClassName="h-9 rounded-[12px] px-3"
+                        textSize={12}
                         contentClassName="surface-card rounded-[12px] p-1"
-                        optionClassName="rounded-[8px] px-2 py-1.5 text-[12px]"
+                        optionClassName="rounded-[8px] px-2 py-1.5"
                       />
                     </div>
                   )}
@@ -341,7 +345,8 @@ function WorkflowCanvasInner({ runner }: { runner: WorkflowRunner }) {
                         })
                       }
                       placeholder={t('detail.gitWorkflowCommitPresetPlaceholder')}
-                      className="min-h-[96px] text-[12px]"
+                      className="min-h-[96px]"
+                      textSize={12}
                     />
                     {!isAiCommit && selectedExecution === 'preset-direct' && !(selectedNode.data.config.message.preset || '').trim() && <span className="mt-1 block text-[10px] text-[color:var(--color-warning)]">{t('detail.gitWorkflowCommitPresetRequired')}</span>}
                   </label>

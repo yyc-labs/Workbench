@@ -520,23 +520,13 @@ export const FLOATING_TERMINAL_TOGGLE_ACCELERATORS: readonly FloatingTerminalTog
 /** 浮动终端停靠方位。 */
 export type FloatingTerminalDock = 'top' | 'bottom' | 'left' | 'right'
 
-/** 浮动终端实例几何（进程运行态不入 config，重启只恢复几何与数量）。 */
-export interface FloatingTerminalInstance {
-  id: string
-  /** Managed process key：`${projectId}::float::<n>`。 */
-  processKey: string
-  projectId: string
-  /** 交互 shell 启动时的 cwd（项目根或项目内目录），重启重连时复用。 */
-  cwd: string
-  useWsl: boolean
-  title: string
+/** 终端集合面板（Ctrl+J）几何与显隐（进程运行态不入 config，重启只恢复面板几何）。 */
+export interface FloatingTerminalPanelState {
   dock: FloatingTerminalDock
   /** 停靠时占宽/高比例，clamp [0.2, 0.8]。 */
   sizeRatio: number
-  /** 面板隐藏时不参与渲染，但会话在主进程继续保活，可在 /settings/logs 查看。 */
-  hidden?: boolean
-  /** 9000 段内部递增，上限 9997，永远低于弹层。 */
-  zIndex: number
+  /** 面板隐藏时不渲染，但会话在主进程继续保活，可在 设置 → 日志 查看。 */
+  hidden: boolean
 }
 
 export interface AgentHookGatewayStatus {
@@ -1492,6 +1482,12 @@ export interface ProjectCodeSession {
   contentSearchScope?: string
 }
 
+/** 项目终端坞（code 工作区底部面板）的项目级状态与自定义 tab title。 */
+/** 项目终端自定义 tab title 覆盖表：processKey → 用户命名；缺省/空串 = 用默认 title。 */
+export interface ProjectTerminalDockState {
+  titles?: Record<string, string>
+}
+
 export interface ProjectInfo {
   id: string
   path: string
@@ -1530,6 +1526,8 @@ export interface ProjectInfo {
   codeFileDrawerState?: ProjectCodeFileDrawerState
   /** Per-project Code page session snapshot (recent tabs + cursor positions) */
   codeSession?: ProjectCodeSession
+  /** 项目终端坞（code 工作区底部面板）的项目级状态与自定义 tab title */
+  terminalDock?: ProjectTerminalDockState
 }
 
 export interface ProcessInfo {
@@ -1655,8 +1653,8 @@ export interface AppConfig {
   browserAi?: BrowserAiConfig
   /** User-configurable global shortcut behavior */
   shortcutPreferences?: ShortcutPreferencesConfig
-  /** Floating terminal instances (geometry only; processes are not restored). */
-  floatingTerminals?: FloatingTerminalInstance[]
+  /** Terminal collection panel (Ctrl+J) geometry and visibility. */
+  floatingPanel?: FloatingTerminalPanelState
   /** sessionName → projectId mapping for tmux recovery */
   sessions?: Record<string, string>
   /** User-defined quick actions surfaced on Home and the settings panel. */
@@ -1696,6 +1694,8 @@ export interface SavedProject {
   codeFileDrawerState?: ProjectCodeFileDrawerState
   /** Per-project Code page session snapshot (recent tabs + cursor positions) */
   codeSession?: ProjectCodeSession
+  /** 项目终端坞（code 工作区底部面板）的项目级状态与自定义 tab title */
+  terminalDock?: ProjectTerminalDockState
 }
 
 export interface RemovedProjectSnapshot extends SavedProject {

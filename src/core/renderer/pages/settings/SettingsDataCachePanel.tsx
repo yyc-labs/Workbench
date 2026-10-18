@@ -1,7 +1,7 @@
-import type { AppCacheLocationConfig, AppCacheLocationInfo, AppCacheLocationMode, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, BrowserDataOperationItemResult, LegacyUserDataMigrationInfo } from '../../../shared/types'
 import { useEffect, useState } from 'react'
-import { useI18n } from '../../i18n'
+import type { AppCacheLocationConfig, AppCacheLocationInfo, AppCacheLocationMode, BrowserDataCleanupResult, BrowserDataMaintenanceInfo, BrowserDataOperationItemResult, LegacyUserDataMigrationInfo } from '../../../shared/types'
 import { Select, type SelectOption } from '../../components/ui/select'
+import { useI18n } from '../../i18n'
 
 type DataCachePanelProps = {
   cacheLocation: AppCacheLocationConfig
@@ -240,9 +240,10 @@ function SettingsDataCachePanel({
                   value={selectedOldCacheRootPath}
                   options={oldCacheRootOptions}
                   onChange={setSelectedOldCacheRootPath}
-                  triggerClassName="h-10 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 text-xs hover:border-[color:var(--color-border-hover)]"
+                  triggerClassName="h-10 rounded-[12px] border border-[color:var(--color-border)] bg-[color:var(--color-background)] px-3 hover:border-[color:var(--color-border-hover)]"
+                  textSize="xs"
                   contentClassName="rounded-[16px] p-1"
-                  optionClassName="rounded-[12px] px-3 py-2 text-xs"
+                  optionClassName="rounded-[12px] px-3 py-2"
                 />
               </label>
             )}

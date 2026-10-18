@@ -45,7 +45,7 @@ import type {
   CodexSettingsSnapshot,
   DocLinkLibraryFile,
   FloatingTerminalDock,
-  FloatingTerminalInstance,
+  FloatingTerminalPanelState,
   GitConflictFileRequest,
   GitConflictFileResult,
   GitFileDiffRequest,
@@ -65,6 +65,7 @@ import type {
   LearningNoteSummary,
   LearningUpdateCategoryPayload,
   LearningUpdateNotePayload,
+  ManagedProcessSnapshot,
   MarkdownDocumentHistoryEntry,
   MarkdownDocumentReadResult,
   ProcessInfo,
@@ -105,7 +106,6 @@ import type {
   SkillUpdateCategoryPayload,
   SkillUpdatePayload,
   StartupDefaultFilter,
-  TerminalProcessInventory,
   TerminalStopAllResult,
   TmuxSessionInfo,
   TranscriptCaptureInitialText,
@@ -139,8 +139,6 @@ export interface AppState {
   processes: Record<string, ProcessInfo>
   terminalOutputs: Record<string, string>
   processUrls: Record<string, string[]>
-  /** 浮动终端实例（会话内状态；几何持久化进 config.floatingTerminals）。 */
-  floatingTerminals: FloatingTerminalInstance[]
   config: AppConfig
   searchQuery: string
   homeClassifierFilter: StartupDefaultFilter
@@ -239,26 +237,45 @@ export interface AppState {
   removeProject: (projectId: string) => Promise<void>
   startProject: (projectId: string, commandOverride?: string, processId?: string, useWsl?: boolean, cwdOverride?: string, runStartupModeOverride?: 'silent' | 'terminal') => Promise<boolean>
   stopProject: (projectId: string) => Promise<void>
-  /** 13.4 浮动终端：新增实例并启动交互 shell（processKey = `${projectId}::float::<n>`）。 */
-  addFloatingTerminal: (projectId: string, cwd: string) => Promise<boolean>
-  /** 单面板多标签：当前激活的标签实例 id。 */
-  activeFloatingTerminalId: string | null
-  setActiveFloatingTerminal: (id: string) => void
-  /** 把已在运行的进程（如 ::script:: 脚本）挂进面板显示：同 key 已挂过则激活，否则新增标签。 */
-  attachFloatingTerminal: (input: { processKey: string; projectId: string; cwd: string; useWsl: boolean; title: string }) => void
-  /** 标签 ×：终止该终端会话并移除标签。 */
-  closeFloatingTerminal: (id: string) => void
-  /** 一键关闭：终止全部会话并清空面板。 */
-  closeAllFloatingTerminals: () => void
-  /** 隐藏整个面板但保留所有会话（可在 /settings/logs 查看）。 */
-  hideAllFloatingTerminals: () => void
-  setFloatingTerminalDock: (id: string, dock: FloatingTerminalDock, sizeRatio?: number) => void
-  setFloatingTerminalSizeRatio: (id: string, sizeRatio: number) => void
-  focusFloatingTerminal: (id: string) => void
-  toggleFloatingTerminals: () => Promise<void>
-  reconnectFloatingTerminal: (id: string) => Promise<boolean>
-  /** 恢复持久化的浮动终端：仅保留主进程仍存活的会话，死会话清空。 */
-  hydrateFloatingTerminals: () => Promise<void>
+  /** 终端集合面板（Ctrl+J）：面板几何与显隐（持久化进 config.floatingPanel）。 */
+  floatingPanel: FloatingTerminalPanelState
+  /** 主进程进程清单快照（terminal:list-all），由 Layer 轮询写入。 */
+  terminalInventory: ManagedProcessSnapshot[]
+  /** 集合面板当前选中的项目 tab。 */
+  collectionActiveProjectId: string | null
+  /** 集合面板当前激活的进程 key；null 时组件回落到该项目第一个终端。 */
+  collectionActiveKey: string | null
+  /** 乐观占位：已分配 key 但主进程清单尚未收录的启动中终端（会话内，不持久化）。 */
+  collectionPendingTerminals: { processKey: string; projectId: string; title: string }[]
+  /** 是否展示 ::toolbox 进程（会话内有效，不持久化）。 */
+  collectionShowToolbox: boolean
+  /** 跨页面聚焦请求：集合面板消费后清空（不持久化）。 */
+  pendingTerminalFocus: { projectId: string; processKey: string } | null
+  setTerminalInventory: (inventory: ManagedProcessSnapshot[]) => void
+  /**
+   * 集合面板开关：可见 → 整体隐藏（会话保活，可在 设置 → 日志 查看）；隐藏 → 唤醒。
+   * contextProjectId 为项目路由上下文（`/project/:projectId`）：唤醒时定位到该项目，无终端则直接新建。
+   */
+  toggleTerminalCollection: (contextProjectId?: string) => Promise<void>
+  /** 显示面板并聚焦指定项目的指定进程（processKey 为空则只定位项目）。 */
+  revealTerminal: (projectId: string, processKey?: string) => void
+  setCollectionActiveProject: (projectId: string) => void
+  setCollectionActiveKey: (processKey: string) => void
+  setCollectionShowToolbox: (visible: boolean) => void
+  /** 给指定项目新建交互 shell 终端（processKey = `${projectId}::float::<n>`）并聚焦。 */
+  addCollectionTerminal: (projectId: string, cwd: string) => Promise<boolean>
+  /** 重命名终端；空标题删除覆盖条目并回落默认 title。 */
+  renameTerminal: (projectId: string, processKey: string, title: string) => void
+  /** 按 kind 分发停止逻辑；toolbox 与解析失败忽略。 */
+  stopCollectionTerminal: (projectId: string, processKey: string) => void
+  /** 一键停止全部项目全部终端（当前清单内的非 toolbox 进程）。 */
+  stopAllCollectionTerminals: () => void
+  /** 停止指定项目的全部终端（清单内非 toolbox + 启动中占位）。 */
+  stopProjectTerminals: (projectId: string) => void
+  setFloatingPanelDock: (dock: FloatingTerminalDock) => void
+  setFloatingPanelSizeRatio: (sizeRatio: number) => void
+  requestProjectTerminalFocus: (projectId: string, processKey: string) => void
+  consumePendingTerminalFocus: () => { projectId: string; processKey: string } | null
   runTaskConfigs: Record<string, RunTaskConfigFile | null>
   runTaskStates: Record<string, RunTaskProgressEvent['tasks']>
   loadRunTaskConfig: (projectId: string, projectPath: string) => Promise<RunTaskConfigReadResult>

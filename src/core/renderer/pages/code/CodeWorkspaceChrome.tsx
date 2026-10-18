@@ -1,4 +1,4 @@
-import { ArrowUpRight, Code2, Files, ListTree, PanelLeftOpen, RefreshCw, Save, Star, TextSearch, X } from 'lucide-react'
+import { ArrowUpRight, Code2, Files, ListTree, PanelLeftOpen, RefreshCw, Save, SquareTerminal, Star, TextSearch, X } from 'lucide-react'
 import { ModalShell } from '../../components/ModalShell'
 import { ProjectLinksTrigger } from '../../components/ProjectLinksTrigger'
 import type { ProjectPanePreload, ProjectPaneTab } from '../../components/ProjectPaneTabs'
@@ -29,6 +29,11 @@ type CodeWorkspaceChromeProps = {
   onOpenProjectLinksManager?: () => void
   onOpenRunTasks?: () => void
   runTasksActive?: boolean
+  /** 唤起终端集合面板（Ctrl+J）并聚焦当前项目。 */
+  onRevealTerminalPanel?: () => void
+  /** 集合面板可见且正聚焦当前项目（按钮激活态）。 */
+  terminalPanelActive?: boolean
+  terminalRunningCount?: number
   onResolveDiscardUnsavedConfirm: (proceed: boolean) => void
   onSetExplorerOpen: React.Dispatch<React.SetStateAction<boolean>>
   onSetQuickDrawerOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -97,6 +102,9 @@ export function CodeWorkspaceChrome({
   onOpenProjectLinksManager,
   onOpenRunTasks,
   runTasksActive = false,
+  onRevealTerminalPanel,
+  terminalPanelActive = false,
+  terminalRunningCount = 0,
   onResolveDiscardUnsavedConfirm,
   onSetExplorerOpen,
   onSetQuickDrawerOpen,
@@ -195,6 +203,7 @@ export function CodeWorkspaceChrome({
               {isActiveFileFavorite ? t('codeWorkspace.favorited') : t('codeWorkspace.favorite')}
             </button>
           )}
+          {/* 查找 / 替换按钮暂时注释掉：编辑器内查找改由 Monaco 原生与内容搜索面板承担。
           {activeRelativePath && (
             <>
               <button
@@ -216,7 +225,7 @@ export function CodeWorkspaceChrome({
                 {t('codeWorkspace.replace')}
               </button>
             </>
-          )}
+          )} */}
           <QuickDrawerTabsCard openTabs={openTabs} activeRelativePath={activeRelativePath} onOpenFile={onOpenFileFromTab} onCloseTab={onCloseOpenTab}>
             <button
               type="button"
@@ -252,6 +261,20 @@ export function CodeWorkspaceChrome({
             </button>
           )}
           <span className={`text-[11px] ${saveIndicatorToneClass}`}>{saveIndicatorText}</span>
+          {onRevealTerminalPanel && (
+            <button
+              type="button"
+              className={`quiet-control relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-[color:var(--color-border)] transition-colors hover:bg-[color:var(--color-accent)] ${
+                terminalPanelActive ? 'text-primary' : 'text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)]'
+              }`}
+              onClick={onRevealTerminalPanel}
+              title={`${t('terminalCollection.title')} (Ctrl+J)`}
+              aria-label={t('terminalCollection.title')}
+            >
+              <SquareTerminal className="h-3.5 w-3.5" />
+              {terminalRunningCount > 0 && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[color:var(--color-success)]" />}
+            </button>
+          )}
           <button
             type="button"
             className={`inline-flex h-9 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-all ${saveStatus === 'saving' ? 'border text-[color:var(--color-warning)] bg-[color:var(--color-warning-background)]' : 'bg-primary text-white shadow-sm hover:bg-primary-hover disabled:opacity-50'}`}

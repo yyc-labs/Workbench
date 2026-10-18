@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock3, FileText, RefreshCw, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectInfo } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Button } from '../../components/ui/button'
@@ -11,15 +11,7 @@ import { middleTruncatePath, projectDisplayName } from '../../lib/projectDisplay
 type ManualTranscriptImportProject = Pick<ProjectInfo, 'id' | 'name' | 'customName' | 'path' | 'lastOpened'>
 type ManualTranscriptImportWrapMode = 'none' | 'typescript' | 'tsx' | 'javascript' | 'json' | 'bash' | 'mermaid'
 
-const MANUAL_TRANSCRIPT_IMPORT_WRAP_MODES: readonly ManualTranscriptImportWrapMode[] = [
-  'none',
-  'typescript',
-  'tsx',
-  'javascript',
-  'json',
-  'bash',
-  'mermaid',
-] as const
+const MANUAL_TRANSCRIPT_IMPORT_WRAP_MODES: readonly ManualTranscriptImportWrapMode[] = ['none', 'typescript', 'tsx', 'javascript', 'json', 'bash', 'mermaid'] as const
 
 const SINGLE_FENCED_BLOCK_PATTERN = /^(`{3,})([^\n`]*)\r?\n[\s\S]*\r?\n\1$/
 
@@ -61,25 +53,7 @@ type ManualTranscriptImportModalProps = {
   autoFocusContent?: boolean
 }
 
-export function ManualTranscriptImportModal({
-  open,
-  onClose,
-  onImport,
-  projects,
-  project,
-  initialProjectId,
-  initialTitle,
-  initialText,
-  resetKey,
-  requireProjectSelection = false,
-  submitting = false,
-  ariaLabel,
-  title,
-  description,
-  submitLabel,
-  onImported,
-  autoFocusContent = false,
-}: ManualTranscriptImportModalProps) {
+export function ManualTranscriptImportModal({ open, onClose, onImport, projects, project, initialProjectId, initialTitle, initialText, resetKey, requireProjectSelection = false, submitting = false, ariaLabel, title, description, submitLabel, onImported, autoFocusContent = false }: ManualTranscriptImportModalProps) {
   const { t, formatDateTime } = useI18n()
   const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId ?? '')
   const [projectSearchQuery, setProjectSearchQuery] = useState('')
@@ -108,21 +82,22 @@ export function ManualTranscriptImportModal({
   }, [autoFocusContent, open, resetKey])
 
   const availableProjects = useMemo(
-    () => (projects ?? []).slice().sort((a, b) => {
-      const openedDiff = (b.lastOpened ?? 0) - (a.lastOpened ?? 0)
-      if (openedDiff !== 0) return openedDiff
-      return projectDisplayName(a).localeCompare(projectDisplayName(b))
-    }),
-    [projects]
+    () =>
+      (projects ?? []).slice().sort((a, b) => {
+        const openedDiff = (b.lastOpened ?? 0) - (a.lastOpened ?? 0)
+        if (openedDiff !== 0) return openedDiff
+        return projectDisplayName(a).localeCompare(projectDisplayName(b))
+      }),
+    [projects],
   )
   const lockedProject = useMemo(() => {
     if (!project) return undefined
     const trimmedId = project.id.trim()
     return trimmedId
       ? {
-        ...project,
-        id: trimmedId,
-      }
+          ...project,
+          id: trimmedId,
+        }
       : undefined
   }, [project])
   const canChooseProject = availableProjects.length > 0
@@ -131,26 +106,22 @@ export function ManualTranscriptImportModal({
   const selectedProject = lockedProject ?? availableProjects.find((item) => item.id === resolvedProjectId)
   const normalizedProjectSearchQuery = projectSearchQuery.trim().toLowerCase()
   const filteredProjects = useMemo(
-    () => availableProjects.filter((project) => {
-      if (!normalizedProjectSearchQuery) return true
-      return [
-        projectDisplayName(project),
-        project.path,
-        project.id,
-      ].some((value) => value.toLowerCase().includes(normalizedProjectSearchQuery))
-    }),
-    [availableProjects, normalizedProjectSearchQuery]
+    () =>
+      availableProjects.filter((project) => {
+        if (!normalizedProjectSearchQuery) return true
+        return [projectDisplayName(project), project.path, project.id].some((value) => value.toLowerCase().includes(normalizedProjectSearchQuery))
+      }),
+    [availableProjects, normalizedProjectSearchQuery],
   )
-  const selectedProjectLabel = selectedProject
-    ? projectDisplayName(selectedProject)
-    : t('transcript.manualImportProjectPlaceholder')
+  const selectedProjectLabel = selectedProject ? projectDisplayName(selectedProject) : t('transcript.manualImportProjectPlaceholder')
   const projectOptions = useMemo<ComboboxOption[]>(
-    () => availableProjects.map((item) => ({
-      value: item.id,
-      label: projectDisplayName(item),
-      keywords: [item.path, item.id],
-    })),
-    [availableProjects]
+    () =>
+      availableProjects.map((item) => ({
+        value: item.id,
+        label: projectDisplayName(item),
+        keywords: [item.path, item.id],
+      })),
+    [availableProjects],
   )
 
   const effectiveTitle = title ?? t('transcript.manualImportTitle')
@@ -210,12 +181,8 @@ export function ManualTranscriptImportModal({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="section-label mb-1">{t('transcript.listTitle')}</p>
-            <p className="text-base font-semibold text-[color:var(--color-foreground)]">
-              {effectiveTitle}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              {effectiveDescription}
-            </p>
+            <p className="text-base font-semibold text-[color:var(--color-foreground)]">{effectiveTitle}</p>
+            <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted-foreground)]">{effectiveDescription}</p>
           </div>
           <button
             type="button"
@@ -234,17 +201,10 @@ export function ManualTranscriptImportModal({
             {hasLockedProject && selectedProject ? (
               <div className="rounded-[18px] border px-4 py-4" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">
-                    {projectDisplayName(selectedProject)}
-                  </p>
-                  <span className="inline-flex items-center rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
-                    {t('common.currentProject')}
-                  </span>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">{projectDisplayName(selectedProject)}</p>
+                  <span className="inline-flex items-center rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('common.currentProject')}</span>
                 </div>
-                <p
-                  className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]"
-                  title={selectedProject.path}
-                >
+                <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]" title={selectedProject.path}>
                   {middleTruncatePath(selectedProject.path, 34, 28)}
                 </p>
               </div>
@@ -266,14 +226,10 @@ export function ManualTranscriptImportModal({
                 matchTriggerWidth={true}
                 inputClassName="h-11 rounded-full pr-10"
                 inputLeading={<Search className="h-4 w-4" />}
-                triggerClassName="h-11 gap-3 px-4 text-sm"
+                triggerClassName="h-11 gap-3 px-4"
                 contentClassName="rounded-[18px] p-1.5"
                 optionClassName="items-start gap-3 rounded-[14px] px-3 py-3"
-                renderDisplayValue={() => (
-                  <span className={`min-w-0 truncate ${selectedProject ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
-                    {selectedProjectLabel}
-                  </span>
-                )}
+                renderDisplayValue={() => <span className={`min-w-0 truncate ${selectedProject ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}`}>{selectedProjectLabel}</span>}
                 renderOption={(option, state) => {
                   const project = availableProjects.find((item) => item.id === option.value)
                   if (!project) return null
@@ -283,9 +239,7 @@ export function ManualTranscriptImportModal({
                     <>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">
-                            {projectDisplayName(project)}
-                          </p>
+                          <p className="truncate text-sm font-medium text-[color:var(--color-foreground)]">{projectDisplayName(project)}</p>
                           {isRecent ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                               <Clock3 className="h-3 w-3" />
@@ -293,18 +247,11 @@ export function ManualTranscriptImportModal({
                             </span>
                           ) : null}
                         </div>
-                        <p
-                          className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]"
-                          title={project.path}
-                        >
+                        <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]" title={project.path}>
                           {middleTruncatePath(project.path, 30, 24)}
                         </p>
                       </div>
-                      <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                        state.selected
-                          ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white'
-                          : 'border-[color:var(--color-border)] text-transparent'
-                      }`}>
+                      <span className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${state.selected ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white' : 'border-[color:var(--color-border)] text-transparent'}`}>
                         <span className="h-3 w-3 rounded-full bg-current" />
                       </span>
                     </>
@@ -315,11 +262,7 @@ export function ManualTranscriptImportModal({
                   if (!normalizedQuery) return true
                   const project = availableProjects.find((item) => item.id === option.value)
                   if (!project) return false
-                  return [
-                    projectDisplayName(project),
-                    project.path,
-                    project.id,
-                  ].some((field) => field.toLowerCase().includes(normalizedQuery))
+                  return [projectDisplayName(project), project.path, project.id].some((field) => field.toLowerCase().includes(normalizedQuery))
                 }}
                 onOpenChange={(isOpen) => {
                   if (!isOpen) {
@@ -328,19 +271,14 @@ export function ManualTranscriptImportModal({
                 }}
               />
             ) : (
-              <div
-                className="rounded-[18px] border px-4 py-4 text-sm text-[color:var(--color-muted-foreground)]"
-                style={{ borderColor: 'var(--color-border)' }}
-              >
+              <div className="rounded-[18px] border px-4 py-4 text-sm text-[color:var(--color-muted-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
                 {t('transcript.manualImportNoProjects')}
               </div>
             )}
             {selectedProject && !hasLockedProject ? (
               <div className="rounded-[16px] border px-4 py-3" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">
-                    {projectDisplayName(selectedProject)}
-                  </p>
+                  <p className="text-sm font-medium text-[color:var(--color-foreground)]">{projectDisplayName(selectedProject)}</p>
                   {typeof selectedProject.lastOpened === 'number' ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                       <Clock3 className="h-3 w-3" />
@@ -348,10 +286,7 @@ export function ManualTranscriptImportModal({
                     </span>
                   ) : null}
                 </div>
-                <p
-                  className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]"
-                  title={selectedProject.path}
-                >
+                <p className="mt-1 truncate text-xs text-[color:var(--color-muted-foreground)]" title={selectedProject.path}>
                   {middleTruncatePath(selectedProject.path, 34, 28)}
                 </p>
               </div>
@@ -361,23 +296,13 @@ export function ManualTranscriptImportModal({
 
         <div className="space-y-1.5">
           <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('transcript.manualImportTitleLabel')}</p>
-          <Input
-            value={draftTitle}
-            onChange={(event) => setDraftTitle(event.target.value)}
-            className="h-11"
-            placeholder={t('transcript.manualImportTitlePlaceholder')}
-            disabled={submitting}
-          />
+          <Input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className="h-11" placeholder={t('transcript.manualImportTitlePlaceholder')} disabled={submitting} />
         </div>
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('transcript.manualImportWrapLabel')}</p>
-            {wrapMode !== 'none' ? (
-              <code className="quiet-control rounded-full px-3 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]">
-                {` \`\`\`${wrapMode} `}
-              </code>
-            ) : null}
+            {wrapMode !== 'none' ? <code className="quiet-control rounded-full px-3 py-1 font-mono text-[11px] text-[color:var(--color-foreground)]">{` \`\`\`${wrapMode} `}</code> : null}
           </div>
           <div className="quiet-control flex flex-wrap gap-1 rounded-[18px] p-1">
             {MANUAL_TRANSCRIPT_IMPORT_WRAP_MODES.map((option) => {
@@ -386,11 +311,7 @@ export function ManualTranscriptImportModal({
                 <button
                   key={option}
                   type="button"
-                  className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${
-                    active
-                      ? 'bg-[color:var(--color-primary)] text-white'
-                      : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'
-                  }`}
+                  className={`inline-flex h-8 items-center rounded-full px-3 text-xs transition-colors ${active ? 'bg-[color:var(--color-primary)] text-white' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]'}`}
                   onClick={() => setWrapMode(option)}
                   aria-pressed={active}
                   disabled={submitting}
@@ -400,11 +321,7 @@ export function ManualTranscriptImportModal({
               )
             })}
           </div>
-          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-            {wrapMode === 'none'
-              ? t('transcript.manualImportWrapHint')
-              : t('transcript.manualImportWrapSelection', { value: wrapMode })}
-          </p>
+          <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{wrapMode === 'none' ? t('transcript.manualImportWrapHint') : t('transcript.manualImportWrapSelection', { value: wrapMode })}</p>
         </div>
 
         <div className="space-y-1.5">
@@ -434,21 +351,10 @@ export function ManualTranscriptImportModal({
         ) : null}
 
         <div className="flex items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-4"
-            onClick={onClose}
-            disabled={submitting}
-          >
+          <Button type="button" variant="outline" className="h-10 px-4" onClick={onClose} disabled={submitting}>
             {t('common.cancel')}
           </Button>
-          <Button
-            type="button"
-            className="h-10 px-4"
-            onClick={() => void handleSubmit()}
-            disabled={submitting || !textValue || (requiresProject && !resolvedProjectId)}
-          >
+          <Button type="button" className="h-10 px-4" onClick={() => void handleSubmit()} disabled={submitting || !textValue || (requiresProject && !resolvedProjectId)}>
             {submitting ? <RefreshCw className="animate-spin" /> : <FileText className="h-4 w-4" />}
             {submitting ? t('transcript.importing') : effectiveSubmitLabel}
           </Button>

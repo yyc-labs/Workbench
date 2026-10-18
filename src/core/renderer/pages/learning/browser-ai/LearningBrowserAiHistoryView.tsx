@@ -151,7 +151,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
               <History className="h-4 w-4 text-[color:var(--color-primary)]" />
               {t('learning.browserAi.historyTitle')}
             </div>
-            <Input className="h-9 text-xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.historySearchPlaceholder')} />
+            <Input className="h-9" textSize="xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.historySearchPlaceholder')} />
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
               <Select
                 ariaLabel={t('learning.browserAi.historyStatusFilter')}
@@ -269,7 +269,7 @@ export function LearningBrowserAiHistoryView({ currentNote, onReload, onSaved }:
                 <div className="section-label text-[10px]">{t('learning.browserAi.historyActions')}</div>
                 <div className="grid gap-2">
                   <div className="flex gap-2">
-                    <Input className="h-9 min-w-0 flex-1 text-xs" value={title} onChange={(event) => setTitle(event.target.value)} />
+                    <Input className="h-9 min-w-0 flex-1" textSize="xs" value={title} onChange={(event) => setTitle(event.target.value)} />
                     <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" onClick={() => void handleRename()} loading={savingTitle} disabled={!title.trim() || title.trim() === selectedRecord.title} title={t('learning.browserAi.historyRename')}>
                       <Pencil />
                     </Button>

@@ -1,15 +1,15 @@
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { type Dispatch, type SetStateAction, useCallback, useRef, useState } from 'react'
 import type { ProjectFileNodeKind } from '../../../shared/types'
 import { toast } from '../../components/ui/toast'
 import { useI18n } from '../../i18n'
 import { resolveProcessUseWsl } from '../../lib/processEnvironmentResolution'
 import { useAppStore } from '../../stores/appStore'
-import { formatFileSize } from './code.helpers'
-import { buildScriptCommand, resolveExecutableScript, type ExecutableScriptInfo } from './code.executable'
+import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import { copyTextToClipboard } from './code.clipboard'
+import { buildScriptCommand, type ExecutableScriptInfo, resolveExecutableScript } from './code.executable'
+import { formatFileSize } from './code.helpers'
 import { fileNameFromRelativePath } from './code.markdownShared'
 import { joinProjectPath, normalizeRelativePathForCopy, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } from './code.pathActions'
-import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import type { FileSearchLineTarget } from './code.types'
 
 type UseCodeTreePathActionsArgs = {
@@ -260,8 +260,10 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
           toast.error(t('codeFileTree.terminalLaunchFailed'))
           return
         }
-        // 挂进浮动终端面板：脚本输出直接显示给用户，不再让用户去 设置 → 启动日志 找。
-        useAppStore.getState().attachFloatingTerminal({ processKey, projectId, cwd, useWsl, title: fileNameFromRelativePath(relativePath) })
+        // 脚本输出归属集合面板：初始 title 用脚本文件名（D6），并唤起面板聚焦该终端（D5 显式终端动作）。
+        const store = useAppStore.getState()
+        store.renameTerminal(projectId, processKey, fileNameFromRelativePath(relativePath))
+        store.revealTerminal(projectId, processKey)
       })
     },
     [allocateScriptProcessKey, projectId, projectPath, t],

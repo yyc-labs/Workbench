@@ -286,6 +286,12 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
           descriptionKey: 'settings.shortcuts.items.gestureRecent.description',
         },
         {
+          id: 'gesture-terminal-panel',
+          trigger: t('settings.shortcuts.gestureTriggers.terminalPanel'),
+          titleKey: 'settings.shortcuts.items.gestureTerminalPanel.title',
+          descriptionKey: 'settings.shortcuts.items.gestureTerminalPanel.description',
+        },
+        {
           id: 'gesture-home',
           trigger: t('settings.shortcuts.gestureTriggers.home'),
           titleKey: 'settings.shortcuts.items.gestureHome.title',
@@ -424,10 +430,11 @@ function SettingsShortcutsPanel({ shortcutPreferences, onSave }: SettingsShortcu
                 options={floatingTerminalAcceleratorOptions}
                 disabled={saving}
                 onChange={(value) => void handleFloatingTerminalAcceleratorChange(value as FloatingTerminalToggleAccelerator)}
-                triggerClassName="h-8 w-auto min-w-[180px] rounded-full px-3 text-[12px]"
+                triggerClassName="h-8 w-auto min-w-[180px] rounded-full px-3"
+                textSize={12}
                 minDropdownWidth={200}
                 contentClassName="rounded-[16px] p-1"
-                optionClassName="rounded-[12px] px-3 py-2 text-xs"
+                optionClassName="rounded-[12px] px-3 py-2"
               />
             </div>
           </div>

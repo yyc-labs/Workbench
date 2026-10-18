@@ -89,7 +89,7 @@ export function LearningBrowserAiHistoryPickerDialog({ open, selectedRecordIds, 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-            <Input className="h-9 pl-9 text-xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.historyPickerSearchPlaceholder')} aria-label={t('learning.browserAi.historyPickerSearchPlaceholder')} />
+            <Input className="h-9 pl-9" textSize="xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.historyPickerSearchPlaceholder')} aria-label={t('learning.browserAi.historyPickerSearchPlaceholder')} />
           </div>
           <Select ariaLabel={t('learning.browserAi.historyPickerTimeFilter')} value={timeFilter} options={timeFilterOptions.map((option) => ({ value: option.value, label: t(option.labelKey as never) }))} onChange={(value) => setTimeFilter(value as LearningBrowserAiHistoryTimeFilter)} />
         </div>

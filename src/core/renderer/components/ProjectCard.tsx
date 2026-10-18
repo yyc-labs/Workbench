@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { defaultAiRuntimeProfiles, getAiRuntimeProfileCli, getAiRuntimeProfileLabel, resolveAiRuntimeProfile, resolveProjectAiRuntimeProfileId } from '../../shared/aiRuntimeProfiles'
 import { getActiveRunTaskUrls, isPrimaryRunTaskUrlPending } from '../../shared/runTasks'
 import type { AiCommitTaskSnapshot, CliTool, ProjectFolder, ProjectInfo, ProjectTag } from '../../shared/types'
-import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
+import { useOpenProjectTerminal } from '../hooks/useOpenProjectTerminal'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useResolvedProjectDocLinks } from '../hooks/useResolvedProjectDocLinks'
 import { useI18n } from '../i18n'
@@ -340,7 +340,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
         return result.started
       }),
   })
-  const openStartupLogs = useOpenStartupLogs()
+  const openProjectTerminal = useOpenProjectTerminal()
 
   const handleOpenFirstLink = useCallback(async () => {
     if (defaultDocLink) {
@@ -551,7 +551,8 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             onChange={handleSelectAiRuntimeProfile}
             minDropdownWidth={300}
             matchTriggerWidth={false}
-            triggerClassName="h-8 w-auto min-w-[76px] max-w-[220px] px-2 text-[11px]"
+            triggerClassName="h-8 w-auto min-w-[76px] max-w-[220px] px-2"
+            textSize={11}
             renderValue={(option) => (
               <span className="inline-flex min-w-0 max-w-full items-center gap-1">
                 {currentCli === 'codex' ? <Terminal className="h-3 w-3 shrink-0" /> : <Sparkles className="h-3 w-3 shrink-0" />}
@@ -573,7 +574,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              openStartupLogs(project.id)
+              openProjectTerminal(project.id)
             }}
             title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
             aria-label={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}

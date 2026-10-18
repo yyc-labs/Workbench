@@ -8,14 +8,14 @@ import { Input } from '../../../components/ui/input'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n'
 import { useAppStore } from '../../../stores/appStore'
+import { CreateSkillDialog, type TemporarySkill } from '../skills/CreateSkillDialog'
+import { SkillPickerDialog } from '../skills/SkillPickerDialog'
 import { LearningBrowserAiContextPreview } from './LearningBrowserAiContextPreview'
+import { LearningBrowserAiHistoryPickerDialog } from './LearningBrowserAiHistoryPickerDialog'
 import { LearningBrowserAiResultPanel } from './LearningBrowserAiResultPanel'
 import { LearningBrowserAiSourceSelector } from './LearningBrowserAiSourceSelector'
 import { LearningBrowserAiStepTimeline } from './LearningBrowserAiStepTimeline'
-import { LearningBrowserAiHistoryPickerDialog } from './LearningBrowserAiHistoryPickerDialog'
 import { browserAiHistoryRecordToContextSource } from './learningBrowserAiHistory'
-import { CreateSkillDialog, type TemporarySkill } from '../skills/CreateSkillDialog'
-import { SkillPickerDialog } from '../skills/SkillPickerDialog'
 import { readLearningBrowserAiPreferences } from './learningBrowserAiPreferences'
 
 type LearningBrowserAiDialogProps = {
@@ -232,7 +232,8 @@ export function LearningBrowserAiDialog({ open, notes, categories, skills, curre
                 </label>
                 {includePersonalContext ? (
                   <Textarea
-                    className="text-xs leading-5"
+                    className="leading-5"
+                    textSize="xs"
                     value={personalContext}
                     onChange={(event) => {
                       setPersonalContext(event.target.value)

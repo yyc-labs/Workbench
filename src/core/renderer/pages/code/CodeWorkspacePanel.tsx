@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
 import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
-import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
-import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
-import { SidebarGestureHost } from '../../components/SidebarGestureHost'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
+import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
+import { SidebarGestureHost } from '../../components/SidebarGestureHost'
+import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
 import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
@@ -16,15 +16,16 @@ import { CodeTreeContextMenu } from './CodeTreeContextMenu'
 import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
-import { FolderFileSearchPopover } from './FolderFileSearchPopover'
 import { readContentSearchHistory, recordContentSearchHistory } from './code.contentSearchHistory'
 import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
-import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
+import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
 import { resolveTreeNodeSearchScope } from './code.pathActions'
 import { buildKnownFilePathSet } from './code.tree'
+import { FolderFileSearchPopover } from './FolderFileSearchPopover'
 import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
+import { TranscriptContentDrawer, type TranscriptContentDrawerTarget } from './TranscriptContentDrawer'
 import { useCodeFileState } from './useCodeFileState'
 import { useCodeTreePathActions } from './useCodeTreePathActions'
 import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
@@ -35,7 +36,6 @@ import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import { appendProjectCodeTab, CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, normalizeProjectCodeSession } from './useProjectCodeSession'
 import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { useTranscriptFileReferences } from './useTranscriptFileReferences'
-import { TranscriptContentDrawer, type TranscriptContentDrawerTarget } from './TranscriptContentDrawer'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
 const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
@@ -140,6 +140,22 @@ export function CodeWorkspacePanel({
   const setProjectLastCodeFile = useAppStore((s) => s.setProjectLastCodeFile)
   const setProjectLastMarkdownPreviewMode = useAppStore((s) => s.setProjectLastMarkdownPreviewMode)
   const setProjectCodeFileDrawerState = useAppStore((s) => s.setProjectCodeFileDrawerState)
+  // 终端集合面板（Ctrl+J）：chrome 入口按钮 + 运行中徽标（纯 store 派生，面板隐藏时也准确）。
+  const revealTerminal = useAppStore((s) => s.revealTerminal)
+  const terminalPanelActive = useAppStore((s) => !s.floatingPanel.hidden && s.collectionActiveProjectId === projectId)
+  const terminalPanelProcesses = useAppStore((s) => s.processes)
+  const terminalPanelRunTaskStates = useAppStore((s) => s.runTaskStates[projectId])
+  const terminalRunningCount = useMemo(() => {
+    let count = 0
+    for (const [key, info] of Object.entries(terminalPanelProcesses)) {
+      if (key !== projectId && !key.startsWith(`${projectId}::`)) continue
+      if (info.status === 'running' || info.status === 'stopping') count += 1
+    }
+    for (const taskState of Object.values(terminalPanelRunTaskStates ?? {})) {
+      if (taskState.state === 'ready' || taskState.state === 'running') count += 1
+    }
+    return count
+  }, [projectId, terminalPanelProcesses, terminalPanelRunTaskStates])
   const transcriptSummaries = useAppStore((s) => s.transcriptSummariesByProjectId[projectId] ?? [], shallow)
   const treeAutoLoadFileLimit = useAppStore((s) => s.config.codeTreeAutoLoadFileLimit ?? 4000)
   const transcriptListStatus = useAppStore((s) => s.transcriptListStatusByProjectId[projectId] ?? 'idle')
@@ -1013,6 +1029,9 @@ export function CodeWorkspacePanel({
         onOpenProjectLinksManager={onOpenProjectLinksManager}
         onOpenRunTasks={onOpenRunTasks}
         runTasksActive={runTasksActive}
+        onRevealTerminalPanel={() => revealTerminal(projectId)}
+        terminalPanelActive={terminalPanelActive}
+        terminalRunningCount={terminalRunningCount}
         onResolveDiscardUnsavedConfirm={resolveDiscardUnsavedConfirm}
         onSetExplorerOpen={setIsExplorerOpen}
         onSetQuickDrawerOpen={setIsQuickDrawerOpen}

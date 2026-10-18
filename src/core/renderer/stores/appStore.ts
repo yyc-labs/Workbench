@@ -3,7 +3,6 @@ import { defaultAiRuntimeProfileIdForCli, defaultAiRuntimeProfiles } from '../..
 import { PROJECT_DOC_LINK_DEFAULT_TAG_OPTIONS } from '../../shared/projectDocLinks'
 import { createBrowserAiActionsSlice } from './appStore.browserAiSlice'
 import { createDocLinkLibraryActionsSlice } from './appStore.docLinkLibrarySlice'
-import { createFloatingTerminalsSlice } from './appStore.floatingTerminalsSlice'
 import { initialThemeMode, loadPersistedProcessUrls } from './appStore.helpers'
 import { createInitActionsSlice } from './appStore.initSlice'
 import { createMarkdownDocumentActionsSlice } from './appStore.markdownDocumentSlice'
@@ -13,6 +12,7 @@ import { createRunTaskActionsSlice } from './appStore.runTasksSlice'
 import { createRuntimeActionsSlice } from './appStore.runtimeSlice'
 import { createSettingsActionsSlice } from './appStore.settingsSlice'
 import { createSkillActionsSlice } from './appStore.skillSlice'
+import { createTerminalCollectionSlice } from './appStore.terminalCollectionSlice'
 import { createTranscriptActionsSlice } from './appStore.transcriptSlice'
 import type { AppState } from './appStore.types'
 import { createWorkspaceActionsSlice } from './appStore.workspaceSlice'
@@ -74,7 +74,7 @@ export const useAppStore = createWithEqualityFn<AppState>()((...args) => ({
   ...createSettingsActionsSlice(...args),
   ...createWorkspaceActionsSlice(...args),
   ...createProcessActionsSlice(...args),
-  ...createFloatingTerminalsSlice(...args),
+  ...createTerminalCollectionSlice(...args),
   ...createRunTaskActionsSlice(...args),
   ...createRuntimeActionsSlice(...args),
   ...createTranscriptActionsSlice(...args),

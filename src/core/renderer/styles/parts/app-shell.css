@@ -525,7 +525,9 @@ body.gesture-active .modal-overlay-backdrop {
   border: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-popover) 96%, transparent);
   color: var(--color-popover-foreground);
-  font-size: 11px;
+  /* 字号不在此处设置：本文件规则处于无层级状态、优先级高于 Tailwind utilities 层，
+     会压过调用方经 contentClassName 传入的 text-*。默认字号改由 tooltip.tsx 的
+     `text-[11px]` 工具类承担，调用方可正常覆盖。 */
   line-height: 1.45;
   box-shadow: var(--shadow-popover);
   backdrop-filter: saturate(150%) blur(16px);

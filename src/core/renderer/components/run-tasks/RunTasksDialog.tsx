@@ -1,16 +1,16 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, SquareTerminal, Trash2, TriangleAlert } from 'lucide-react'
-import { ModalShell } from '../ModalShell'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
+import type { RunTask, RunTaskProgressEvent } from '../../../shared/runTasks'
+import { getEffectiveRunTasks, getRunTaskStateUrls, runTaskProcessKey } from '../../../shared/runTasks'
+import type { ProjectInfo } from '../../../shared/types'
+import { useOpenProjectTerminal } from '../../hooks/useOpenProjectTerminal'
 import { useI18n, useLocale } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
-import { useOpenStartupLogs } from '../../hooks/useOpenStartupLogs'
-import { getEffectiveRunTasks, getRunTaskStateUrls } from '../../../shared/runTasks'
-import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
-import type { ProjectInfo } from '../../../shared/types'
-import type { RunTask, RunTaskProgressEvent } from '../../../shared/runTasks'
-import { isRunTaskActive, runTaskDotClass, runTaskReadinessSummary, runTaskStateBadgeClass } from './runTasks.helpers'
+import { ModalShell } from '../ModalShell'
 import { RunTaskDetectDialog } from './RunTaskDetectDialog'
 import { RunTaskEditDialog } from './RunTaskEditDialog'
+import { isRunTaskActive, runTaskDotClass, runTaskReadinessSummary, runTaskStateBadgeClass } from './runTasks.helpers'
 
 type RunTasksDialogProps = {
   project: ProjectInfo
@@ -35,7 +35,6 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
   const startRunTask = useAppStore((s) => s.startRunTask)
   const stopRunTask = useAppStore((s) => s.stopRunTask)
   const saveRunTaskConfig = useAppStore((s) => s.saveRunTaskConfig)
-  const openStartupLogs = useOpenStartupLogs()
 
   const [configError, setConfigError] = useState<string | null>(null)
   const [detectOpen, setDetectOpen] = useState(false)
@@ -321,7 +320,7 @@ const RunTaskListItem = memo(function RunTaskListItem({ task, taskState, project
   const { t } = useI18n()
   const startRunTask = useAppStore((s) => s.startRunTask)
   const stopRunTask = useAppStore((s) => s.stopRunTask)
-  const openStartupLogs = useOpenStartupLogs()
+  const openProjectTerminal = useOpenProjectTerminal()
 
   const state = taskState?.state
   const urls = getRunTaskStateUrls(taskState)
@@ -391,7 +390,7 @@ const RunTaskListItem = memo(function RunTaskListItem({ task, taskState, project
               </button>
             </>
           )}
-          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => openStartupLogs(projectId)} title={t('runTasks.openLogs')}>
+          <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => openProjectTerminal(projectId, runTaskProcessKey(projectId, task.id))} title={t('runTasks.openLogs')}>
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
           <button type="button" className="quiet-control rounded-full p-1.5 text-[color:var(--color-muted-foreground)]" onClick={() => onEdit(task)} title={t('runTasks.editTask')}>

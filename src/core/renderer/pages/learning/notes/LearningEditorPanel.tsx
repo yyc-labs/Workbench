@@ -1,7 +1,7 @@
-import { useMemo, type ChangeEvent, type KeyboardEvent, type MouseEvent, type RefObject, type SyntheticEvent } from 'react'
+import { FileText, PanelLeft, PanelRight, RefreshCw, Save, Settings2 } from 'lucide-react'
+import { type ChangeEvent, type KeyboardEvent, type MouseEvent, type RefObject, type SyntheticEvent, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, PanelLeft, PanelRight, RefreshCw, Save, Settings2 } from 'lucide-react'
 import type { LearningNote } from '../../../../shared/types'
 import { Button, type ButtonProps } from '../../../components/ui/button'
 import { Card } from '../../../components/ui/card'
@@ -122,7 +122,8 @@ export function LearningEditorPanel({
                 value={editorTitle}
                 onChange={(event) => onEditorTitleChange(event.target.value)}
                 placeholder={t('learning.editor.untitledNote')}
-                className="h-9 min-w-0 max-w-xl flex-1 rounded-[10px] bg-transparent px-2 text-base font-semibold shadow-none focus-visible:bg-[color:var(--color-accent)]"
+                textSize="base"
+                className="h-9 min-w-0 max-w-xl flex-1 rounded-[10px] bg-transparent px-2 font-semibold shadow-none focus-visible:bg-[color:var(--color-accent)]"
               />
               <div className="flex shrink-0 items-center gap-2 text-xs text-[color:var(--color-muted-foreground)]">
                 <span className={`h-1.5 w-1.5 rounded-full ${saveState === 'error' ? 'bg-[color:var(--color-destructive)]' : hasUnsavedChanges ? 'bg-[color:var(--color-primary)]' : 'bg-[color:var(--color-success)]'}`} />

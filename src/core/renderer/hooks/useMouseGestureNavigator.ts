@@ -21,14 +21,14 @@ export type MouseGestureHint = {
   visible: boolean
   label: string
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | 'toggleTerminal' | null
   points: GesturePoint[]
   cursor: GesturePoint | null
 }
 
 type GesturePreview = {
   status: 'pending' | 'ready' | 'invalid'
-  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | null
+  action: 'back' | 'forward' | 'home' | 'recent' | 'toggleProjectHeader' | 'toggleTerminal' | null
   label: string
 }
 
@@ -130,6 +130,15 @@ function toPreview(locale: GestureLocale, dx: number, dy: number, points: Gestur
     }
   }
 
+  // 上滑：开合 Ctrl+J 终端集合面板（与下滑的最近项目抽屉互斥）。
+  if (straight && dy <= -VERTICAL_DOWN_THRESHOLD && -dy >= absX * ANGLE_RATIO) {
+    return {
+      status: 'ready',
+      action: 'toggleTerminal',
+      label: translateGesture(locale, 'common.mouseGesture.releaseToggleTerminal'),
+    }
+  }
+
   if (straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO) {
     const action = dx < 0 ? 'back' : 'forward'
     return {
@@ -152,6 +161,14 @@ function toPreview(locale: GestureLocale, dx: number, dy: number, points: Gestur
       status: 'pending',
       action: 'recent',
       label: recentDrawerOpen ? translateGesture(locale, 'common.mouseGesture.continueDownCloseRecentProjects') : translateGesture(locale, 'common.mouseGesture.continueDownOpenRecentProjects'),
+    }
+  }
+
+  if (-dy > ACTIVATE_DISTANCE && absY > absX * 1.05) {
+    return {
+      status: 'pending',
+      action: 'toggleTerminal',
+      label: translateGesture(locale, 'common.mouseGesture.continueUpToggleTerminal'),
     }
   }
 
@@ -376,6 +393,7 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       const isDetailRoute = segments[0] === 'project' && segments.length >= 2
       const passedHeaderDown = straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO
       const passedDown = !state.ignoreRecentInThisGesture && straight && dy >= VERTICAL_DOWN_THRESHOLD && dy >= absX * ANGLE_RATIO
+      const passedUp = straight && dy <= -VERTICAL_DOWN_THRESHOLD && -dy >= absX * ANGLE_RATIO
       const passedHorizontal = straight && absX >= HORIZONTAL_THRESHOLD && absX >= absY * ANGLE_RATIO
 
       if (hadGestureMovement && state.isHeaderGesture) {
@@ -400,6 +418,13 @@ export function useMouseGestureNavigator(): MouseGestureHint {
       if (hadGestureMovement && passedDown) {
         hideHintImmediately()
         window.dispatchEvent(new CustomEvent('app:toggle-recent-project-drawer'))
+        state.points = []
+        return
+      }
+
+      if (hadGestureMovement && passedUp) {
+        hideHintImmediately()
+        window.dispatchEvent(new CustomEvent('app:toggle-terminal-collection'))
         state.points = []
         return
       }

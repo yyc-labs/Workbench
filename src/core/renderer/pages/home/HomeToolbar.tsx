@@ -1,4 +1,4 @@
-import { BookOpenText, FileType2, Plus, Search, Settings, SlidersHorizontal, X, Zap } from 'lucide-react'
+import { BookOpenText, FileType2, Plus, Search, Settings, SlidersHorizontal, SquareTerminal, X, Zap } from 'lucide-react'
 import type { AppViewPath } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -11,13 +11,14 @@ type HomeToolbarProps = {
   onAddFolder: () => void
   onLearningCenterClick: () => void
   onMarkdownClick: () => void
+  onOpenTerminalPanel: () => void
   onSettingsClick: () => void
   onManageWorkspace: () => void
   onOpenInSeparateWindow: (viewPath: AppViewPath) => void
   searchRef: React.RefObject<HTMLInputElement>
 }
 
-function HomeToolbar({ searchQuery, onSearchChange, onAddFolder, onLearningCenterClick, onMarkdownClick, onSettingsClick, onManageWorkspace, onOpenInSeparateWindow, searchRef }: HomeToolbarProps) {
+function HomeToolbar({ searchQuery, onSearchChange, onAddFolder, onLearningCenterClick, onMarkdownClick, onOpenTerminalPanel, onSettingsClick, onManageWorkspace, onOpenInSeparateWindow, searchRef }: HomeToolbarProps) {
   const { t } = useI18n()
 
   return (
@@ -83,6 +84,9 @@ function HomeToolbar({ searchQuery, onSearchChange, onAddFolder, onLearningCente
             }}
           >
             <FileType2 className="w-4 h-4" strokeWidth={1.8} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onOpenTerminalPanel} title={`${t('terminalCollection.title')} (Ctrl+J)`}>
+            <SquareTerminal className="w-4 h-4" strokeWidth={1.8} />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-[color:var(--color-muted-foreground)] hover:text-[color:var(--color-foreground)] hover:bg-[color:var(--color-accent)]" onClick={onManageWorkspace} title={t('common.manageFoldersAndTags')}>
             <SlidersHorizontal className="w-4 h-4" strokeWidth={1.8} />

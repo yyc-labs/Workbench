@@ -9,6 +9,7 @@ import { useI18n } from '../i18n'
 import { readEffectiveTheme } from '../hooks/useEffectiveTheme'
 import { navigateHomeWithStartupDefaultReset, useMouseGestureNavigator } from '../hooks/useMouseGestureNavigator'
 import { preloadProjectPane } from '../lib/projectPagePreload'
+import { getProjectIdFromPath } from '../lib/routeProjectContext'
 import { runtimeManager } from '../runtime/RuntimeManager'
 import { useAppStore } from '../stores/appStore'
 import { RouteCatalogDialogHost } from './RouteCatalogDialog'
@@ -272,10 +273,7 @@ function GlobalRecentProjectsDrawerHost() {
   const [metaDialogProjectId, setMetaDialogProjectId] = useState<string | null>(null)
   const { t } = useI18n()
 
-  const currentProjectId = useMemo(() => {
-    const segments = location.pathname.split('/').filter(Boolean)
-    return segments[0] === 'project' && segments[1] ? segments[1] : undefined
-  }, [location.pathname])
+  const currentProjectId = useMemo(() => getProjectIdFromPath(location.pathname), [location.pathname])
 
   useEffect(() => {
     const onOpenRecentDrawer = () => setOpen(true)
@@ -412,10 +410,13 @@ function GlobalThemeShortcutListener() {
   return null
 }
 
-/** 浮动终端开关：应用内快捷键（非系统级 globalShortcut），仅应用聚焦时生效。 */
-function FloatingTerminalShortcutListener() {
-  const toggleFloatingTerminals = useAppStore((s) => s.toggleFloatingTerminals)
+/** 终端集合面板开关：应用内快捷键（非系统级 globalShortcut），仅应用聚焦时生效。 */
+function TerminalCollectionShortcutListener() {
+  const toggleTerminalCollection = useAppStore((s) => s.toggleTerminalCollection)
   const accelerator = useAppStore((s) => s.config.shortcutPreferences?.floatingTerminalToggleAccelerator ?? 'CommandOrControl+J')
+  const location = useLocation()
+  // 项目路由上下文：面板聚合所有项目终端，项目内 Ctrl+J 直接定位该项目的终端。
+  const contextProjectId = useMemo(() => getProjectIdFromPath(location.pathname), [location.pathname])
 
   useEffect(() => {
     if (accelerator === 'disabled') return
@@ -433,12 +434,21 @@ function FloatingTerminalShortcutListener() {
       if (!matches) return
       event.preventDefault()
       event.stopPropagation()
-      void toggleFloatingTerminals()
+      void toggleTerminalCollection(contextProjectId)
     }
     // capture 阶段拦截：优先于 xterm/输入框，保证终端聚焦时也能开合面板。
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [accelerator, toggleFloatingTerminals])
+  }, [accelerator, contextProjectId, toggleTerminalCollection])
+
+  // 全局右键手势「向上滑」：与 Ctrl+J 等价的开合入口（手势识别在 useMouseGestureNavigator）。
+  useEffect(() => {
+    const onToggleByGesture = () => {
+      void toggleTerminalCollection(contextProjectId)
+    }
+    window.addEventListener('app:toggle-terminal-collection', onToggleByGesture as EventListener)
+    return () => window.removeEventListener('app:toggle-terminal-collection', onToggleByGesture as EventListener)
+  }, [contextProjectId, toggleTerminalCollection])
 
   return null
 }
@@ -471,7 +481,7 @@ export function AppGlobalEffects() {
       <MarkdownDocumentOpenListener />
       <ProjectRoutePreloader />
       <GlobalThemeShortcutListener />
-      <FloatingTerminalShortcutListener />
+      <TerminalCollectionShortcutListener />
       <GlobalProjectDropListener />
       <GlobalRecentProjectsDrawerHost />
       <RouteCatalogDialogHost />

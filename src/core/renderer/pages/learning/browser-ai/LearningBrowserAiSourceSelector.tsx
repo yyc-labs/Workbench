@@ -48,7 +48,7 @@ export function LearningBrowserAiSourceSelector({ notes, categories, selectedNot
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[180px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[color:var(--color-muted-foreground)]" />
-          <Input className="h-9 pl-9 text-xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.noteSearchPlaceholder')} aria-label={t('learning.browserAi.noteSearchPlaceholder')} />
+          <Input className="h-9 pl-9" textSize="xs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('learning.browserAi.noteSearchPlaceholder')} aria-label={t('learning.browserAi.noteSearchPlaceholder')} />
         </div>
         <Select ariaLabel={t('learning.browserAi.noteCategoryFilter')} className="min-w-[150px] flex-1 sm:flex-none" value={categoryId} options={[{ value: 'all', label: t('learning.browserAi.allCategories') }, ...categories.map((category) => ({ value: category.id, label: category.name }))]} onChange={setCategoryId} />
       </div>

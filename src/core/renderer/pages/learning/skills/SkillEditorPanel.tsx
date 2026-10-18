@@ -108,7 +108,7 @@ export function SkillEditorPanel({ skill, categories, editor, hasUnsavedChanges,
               {copied ? t('learning.skills.contentCopied') : t('learning.skills.copyContent')}
             </Button>
           </span>
-          <Textarea className="min-h-[min(52vh,520px)] font-mono text-xs leading-6" value={editor.contentMd} onChange={(event) => onChange({ contentMd: event.target.value })} placeholder={t('learning.skills.contentPlaceholder')} />
+          <Textarea className="min-h-[min(52vh,520px)] font-mono leading-6" textSize="xs" value={editor.contentMd} onChange={(event) => onChange({ contentMd: event.target.value })} placeholder={t('learning.skills.contentPlaceholder')} />
         </label>
         {error ? <p className="text-sm text-[color:var(--color-destructive)]">{error}</p> : null}
       </div>

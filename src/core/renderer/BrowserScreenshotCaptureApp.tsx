@@ -207,7 +207,7 @@ export function BrowserScreenshotCaptureApp() {
         </header>
         <main className="min-h-0 space-y-3 overflow-y-auto px-4 pb-3">
           <div className="grid gap-2">
-            <Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t('learning.browserScreenshot.urlPlaceholder')} aria-label={t('learning.browserScreenshot.url')} className="app-no-drag h-9 text-sm md:text-sm" />
+            <Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder={t('learning.browserScreenshot.urlPlaceholder')} aria-label={t('learning.browserScreenshot.url')} className="app-no-drag h-9" />
             <div className="flex items-center gap-2">
               <Select ariaLabel={t('learning.browserScreenshot.target')} value={targetId} options={targetOptions} onChange={setTargetId} emptyText={t('learning.browserScreenshot.noTargets')} className="min-w-0 flex-1" triggerClassName="app-no-drag h-9" />
             </div>

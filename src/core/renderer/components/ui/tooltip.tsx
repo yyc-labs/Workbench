@@ -257,7 +257,7 @@ export function Tooltip({ content, children, disabled = false, side = 'top', ali
       id={tooltipId}
       role="tooltip"
       data-side={position?.side ?? side}
-      className={cn('app-tooltip-content', contentClassName)}
+      className={cn('app-tooltip-content text-[12px]', contentClassName)}
       style={{
         top: position?.top ?? 0,
         left: position?.left ?? 0,

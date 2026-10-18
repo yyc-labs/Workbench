@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, FileX2, Folder, FolderOpen, FolderX } from 'lucide-react'
-import { Tree } from 'react-arborist'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { NodeRendererProps, TreeApi } from 'react-arborist'
+import { Tree } from 'react-arborist'
 import type { ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { Tooltip } from '../../components/ui/tooltip'
 import { useI18n } from '../../i18n'
@@ -255,7 +255,7 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
         ) : (
           <FileText className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)]" />
         )}
-        <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="w-0 min-w-0 flex-1" contentClassName="font-mono text-[10.5px] leading-[1.4]">
+        <Tooltip content={data.relativePath} align="start" placementMode="pointer" interactive={false} className="w-0 min-w-0 flex-1" contentClassName="font-mono text-[12px] leading-[1.4]">
           <span className="block min-w-0 truncate">{rowLabel}</span>
         </Tooltip>
       </button>

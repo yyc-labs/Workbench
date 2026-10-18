@@ -1,15 +1,5 @@
-import {
-  ArrowDownToLine,
-  CheckCircle2,
-  ClipboardPaste,
-  Clock3,
-  FileText,
-  FolderTree,
-  Loader2,
-  Search,
-  X,
-} from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { ArrowDownToLine, CheckCircle2, ClipboardPaste, Clock3, FileText, FolderTree, Loader2, Search, X } from 'lucide-react'
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectInfo, SavedProject, TranscriptCaptureInitialText } from '../shared/types'
 import { resolveTheme } from './app/windowTitle'
 import { Button } from './components/ui/button'
@@ -63,10 +53,7 @@ function TranscriptCaptureLoading() {
     <div
       className="flex min-h-screen items-center justify-center bg-[color:var(--color-background)] p-3"
       style={{
-        backgroundImage: [
-          'radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 36%)',
-          'radial-gradient(circle at bottom right, color-mix(in srgb, var(--color-accent) 88%, transparent), transparent 34%)',
-        ].join(', '),
+        backgroundImage: ['radial-gradient(circle at top left, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 36%)', 'radial-gradient(circle at bottom right, color-mix(in srgb, var(--color-accent) 88%, transparent), transparent 34%)'].join(', '),
       }}
     >
       <div className="surface-card flex items-center gap-3 rounded-[20px] px-4 py-3">
@@ -115,9 +102,7 @@ export function TranscriptCaptureApp() {
           text: clipboardText,
           source: clipboardText.trim() ? 'clipboard' : 'empty',
         }
-        const initialText = initialCaptureText.text.trim()
-          ? initialCaptureText
-          : fallbackInitialText
+        const initialText = initialCaptureText.text.trim() ? initialCaptureText : fallbackInitialText
         if (!active) return
 
         setProjects(nextProjects)
@@ -152,38 +137,27 @@ export function TranscriptCaptureApp() {
     void window.electronAPI.closeWindow()
   }
 
-  const selectedProject = useMemo(
-    () => projects.find((item) => item.id === selectedProjectId),
-    [projects, selectedProjectId]
-  )
+  const selectedProject = useMemo(() => projects.find((item) => item.id === selectedProjectId), [projects, selectedProjectId])
   const projectOptions = useMemo<ComboboxOption[]>(
-    () => projects.map((project) => ({
-      value: project.id,
-      label: projectDisplayName(project),
-      keywords: [project.path, project.id],
-    })),
-    [projects]
+    () =>
+      projects.map((project) => ({
+        value: project.id,
+        label: projectDisplayName(project),
+        keywords: [project.path, project.id],
+      })),
+    [projects],
   )
   const normalizedProjectSearchQuery = projectSearchQuery.trim().toLowerCase()
   const filteredProjects = useMemo(
-    () => projects.filter((project) => {
-      if (!normalizedProjectSearchQuery) return true
-      return [
-        projectDisplayName(project),
-        project.path,
-        project.id,
-      ].some((value) => value.toLowerCase().includes(normalizedProjectSearchQuery))
-    }),
-    [normalizedProjectSearchQuery, projects]
+    () =>
+      projects.filter((project) => {
+        if (!normalizedProjectSearchQuery) return true
+        return [projectDisplayName(project), project.path, project.id].some((value) => value.toLowerCase().includes(normalizedProjectSearchQuery))
+      }),
+    [normalizedProjectSearchQuery, projects],
   )
-  const selectedProjectLabel = selectedProject
-    ? projectDisplayName(selectedProject)
-    : t('transcript.manualImportProjectPlaceholder')
-  const clipboardStatusText = loadedTextSource === 'selection'
-    ? t('transcript.quickCaptureSelectionReady')
-    : clipboardHasText
-    ? t('transcript.quickCaptureClipboardReady')
-    : t('transcript.quickCaptureClipboardEmpty')
+  const selectedProjectLabel = selectedProject ? projectDisplayName(selectedProject) : t('transcript.manualImportProjectPlaceholder')
+  const clipboardStatusText = loadedTextSource === 'selection' ? t('transcript.quickCaptureSelectionReady') : clipboardHasText ? t('transcript.quickCaptureClipboardReady') : t('transcript.quickCaptureClipboardEmpty')
   const contentLength = draftText.trim().length
   const canSubmit = projects.length > 0 && Boolean(selectedProjectId.trim()) && Boolean(draftText.trim())
 
@@ -281,29 +255,23 @@ export function TranscriptCaptureApp() {
         <div
           className="surface-card app-drag-region relative grid min-h-0 w-full flex-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[24px]"
           style={{
-            background:
-              'linear-gradient(145deg, color-mix(in srgb, var(--color-popover) 94%, transparent), color-mix(in srgb, var(--color-card) 84%, transparent))',
+            background: 'linear-gradient(145deg, color-mix(in srgb, var(--color-popover) 94%, transparent), color-mix(in srgb, var(--color-card) 84%, transparent))',
           }}
         >
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-28"
             style={{
-              background:
-                'linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 18%, transparent), color-mix(in srgb, var(--color-success) 12%, transparent), transparent)',
+              background: 'linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 18%, transparent), color-mix(in srgb, var(--color-success) 12%, transparent), transparent)',
             }}
           />
-          <div
-            className="pointer-events-none absolute -right-14 top-7 h-36 w-36 rounded-full opacity-70 blur-3xl"
-            style={{ background: 'color-mix(in srgb, var(--color-primary) 24%, transparent)' }}
-          />
+          <div className="pointer-events-none absolute -right-14 top-7 h-36 w-36 rounded-full opacity-70 blur-3xl" style={{ background: 'color-mix(in srgb, var(--color-primary) 24%, transparent)' }} />
 
           <header className="relative z-10 flex items-start justify-between gap-3 px-4 pb-2.5 pt-4">
             <div className="flex min-w-0 items-start gap-3">
               <div
                 className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-[16px] text-white shadow-sm"
                 style={{
-                  background:
-                    'linear-gradient(145deg, var(--color-primary), color-mix(in srgb, var(--color-success) 62%, var(--color-primary)))',
+                  background: 'linear-gradient(145deg, var(--color-primary), color-mix(in srgb, var(--color-success) 62%, var(--color-primary)))',
                 }}
               >
                 <ArrowDownToLine className="relative z-10 h-5 w-5" />
@@ -322,12 +290,8 @@ export function TranscriptCaptureApp() {
                     Ctrl Shift K
                   </span>
                 </div>
-                <h1 className="truncate text-[20px] font-semibold leading-6 tracking-[-0.04em] text-[color:var(--color-foreground)]">
-                  {t('transcript.quickCaptureTitle')}
-                </h1>
-                <p className="mt-1 max-w-[410px] truncate text-[12px] text-[color:var(--color-muted-foreground)]">
-                  {t('transcript.quickCaptureDescription')}
-                </p>
+                <h1 className="truncate text-[20px] font-semibold leading-6 tracking-[-0.04em] text-[color:var(--color-foreground)]">{t('transcript.quickCaptureTitle')}</h1>
+                <p className="mt-1 max-w-[410px] truncate text-[12px] text-[color:var(--color-muted-foreground)]">{t('transcript.quickCaptureDescription')}</p>
               </div>
             </div>
             <button
@@ -350,21 +314,16 @@ export function TranscriptCaptureApp() {
               className="flex min-h-0 flex-col overflow-hidden rounded-[20px] border p-3"
               style={{
                 borderColor: 'color-mix(in srgb, var(--color-border) 78%, transparent)',
-                background:
-                  'linear-gradient(180deg, color-mix(in srgb, var(--color-background-sunken) 48%, transparent), color-mix(in srgb, var(--color-card) 70%, transparent))',
+                background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-background-sunken) 48%, transparent), color-mix(in srgb, var(--color-card) 70%, transparent))',
                 boxShadow: 'inset 0 1px 0 color-mix(in srgb, #ffffff 22%, transparent)',
               }}
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
                   <FolderTree className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-primary)]" />
-                  <span className="truncate text-xs font-semibold text-[color:var(--color-foreground)]">
-                    {t('transcript.manualImportProjectLabel')}
-                  </span>
+                  <span className="truncate text-xs font-semibold text-[color:var(--color-foreground)]">{t('transcript.manualImportProjectLabel')}</span>
                 </div>
-                {selectedProject && typeof selectedProject.lastOpened === 'number' ? (
-                  <Clock3 className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
-                ) : null}
+                {selectedProject && typeof selectedProject.lastOpened === 'number' ? <Clock3 className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" /> : null}
               </div>
 
               {projects.length > 0 ? (
@@ -389,16 +348,13 @@ export function TranscriptCaptureApp() {
                     maxHeight={210}
                     minDropdownWidth={340}
                     matchTriggerWidth={true}
-                    inputClassName="h-10 rounded-[14px] pr-10 text-xs"
+                    inputClassName="h-10 rounded-[14px] pr-10"
+                    textSize="xs"
                     inputLeading={<Search className="h-3.5 w-3.5" />}
-                    triggerClassName="h-10 gap-2 rounded-[14px] px-3 text-xs"
+                    triggerClassName="h-10 gap-2 rounded-[14px] px-3"
                     contentClassName="surface-card rounded-[16px] p-1"
                     optionClassName="items-start gap-2 rounded-[12px] px-2.5 py-2"
-                    renderDisplayValue={() => (
-                      <span className={`min-w-0 truncate ${selectedProject ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}`}>
-                        {selectedProjectLabel}
-                      </span>
-                    )}
+                    renderDisplayValue={() => <span className={`min-w-0 truncate ${selectedProject ? 'text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)]'}`}>{selectedProjectLabel}</span>}
                     renderOption={(option, state) => {
                       const project = projects.find((item) => item.id === option.value)
                       if (!project) return null
@@ -408,9 +364,7 @@ export function TranscriptCaptureApp() {
                         <>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-[13px] font-medium text-[color:var(--color-foreground)]">
-                                {projectDisplayName(project)}
-                              </p>
+                              <p className="truncate text-[13px] font-medium text-[color:var(--color-foreground)]">{projectDisplayName(project)}</p>
                               {isRecent ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-1.5 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">
                                   <Clock3 className="h-3 w-3" />
@@ -418,18 +372,11 @@ export function TranscriptCaptureApp() {
                                 </span>
                               ) : null}
                             </div>
-                            <p
-                              className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]"
-                              title={project.path}
-                            >
+                            <p className="mt-0.5 truncate text-[11px] text-[color:var(--color-muted-foreground)]" title={project.path}>
                               {middleTruncatePath(project.path, 24, 18)}
                             </p>
                           </div>
-                          <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                            state.selected
-                              ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white'
-                              : 'border-[color:var(--color-border)] text-transparent'
-                          }`}>
+                          <span className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${state.selected ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary)] text-white' : 'border-[color:var(--color-border)] text-transparent'}`}>
                             <span className="h-2 w-2 rounded-full bg-current" />
                           </span>
                         </>
@@ -440,11 +387,7 @@ export function TranscriptCaptureApp() {
                       if (!normalizedQuery) return true
                       const project = projects.find((item) => item.id === option.value)
                       if (!project) return false
-                      return [
-                        projectDisplayName(project),
-                        project.path,
-                        project.id,
-                      ].some((field) => field.toLowerCase().includes(normalizedQuery))
+                      return [projectDisplayName(project), project.path, project.id].some((field) => field.toLowerCase().includes(normalizedQuery))
                     }}
                     onOpenChange={(open) => {
                       if (!open) {
@@ -459,20 +402,14 @@ export function TranscriptCaptureApp() {
                         <CheckCircle2 className="h-3.5 w-3.5 text-[color:var(--color-success)]" />
                         {t('transcript.quickCaptureProjectPathLabel')}
                       </div>
-                      <div
-                        className="break-all font-mono text-[11px] leading-5 text-[color:var(--color-foreground)]"
-                        title={selectedProject.path}
-                      >
+                      <div className="break-all font-mono text-[11px] leading-5 text-[color:var(--color-foreground)]" title={selectedProject.path}>
                         {middleTruncatePath(selectedProject.path, 24, 22)}
                       </div>
                     </div>
                   ) : null}
                 </>
               ) : (
-                <div
-                  className="mt-3 rounded-[16px] border px-3 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]"
-                  style={{ borderColor: 'var(--color-border)' }}
-                >
+                <div className="mt-3 rounded-[16px] border px-3 py-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]" style={{ borderColor: 'var(--color-border)' }}>
                   {t('transcript.manualImportNoProjects')}
                 </div>
               )}
@@ -489,9 +426,7 @@ export function TranscriptCaptureApp() {
                     <ClipboardPaste className="h-3.5 w-3.5 text-[color:var(--color-primary)]" />
                     {t('transcript.quickCaptureClipboardLoad')}
                   </div>
-                  <p className="line-clamp-2 text-[11px] leading-4 text-[color:var(--color-muted-foreground)]">
-                    {clipboardStatusText}
-                  </p>
+                  <p className="line-clamp-2 text-[11px] leading-4 text-[color:var(--color-muted-foreground)]">{clipboardStatusText}</p>
                 </div>
                 <div className="flex items-center justify-between rounded-full bg-[color:var(--color-accent)] px-3 py-1.5 text-[11px] text-[color:var(--color-muted-foreground)]">
                   <span>{t('transcript.manualImportContentLabel')}</span>
@@ -520,22 +455,11 @@ export function TranscriptCaptureApp() {
                     <FileText className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">
-                      {t('transcript.manualImportContentLabel')}
-                    </p>
-                    <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-                      {t('transcript.quickCaptureShortcutHint')}
-                    </p>
+                    <p className="text-sm font-semibold tracking-[-0.02em] text-[color:var(--color-foreground)]">{t('transcript.manualImportContentLabel')}</p>
+                    <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{t('transcript.quickCaptureShortcutHint')}</p>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="app-no-drag h-8 shrink-0 rounded-full px-3 text-xs"
-                  onClick={reloadClipboard}
-                  disabled={isImporting}
-                >
+                <Button type="button" variant="outline" size="sm" className="app-no-drag h-8 shrink-0 rounded-full px-3 text-xs" onClick={reloadClipboard} disabled={isImporting}>
                   <ClipboardPaste className="h-3.5 w-3.5" />
                   {t('transcript.quickCaptureClipboardLoad')}
                 </Button>
@@ -546,8 +470,7 @@ export function TranscriptCaptureApp() {
                   className="flex min-h-0 flex-1 overflow-hidden rounded-[18px] border"
                   style={{
                     borderColor: 'color-mix(in srgb, var(--color-border) 80%, transparent)',
-                    background:
-                      'linear-gradient(180deg, color-mix(in srgb, var(--color-background) 34%, transparent), color-mix(in srgb, var(--color-card) 92%, transparent))',
+                    background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-background) 34%, transparent), color-mix(in srgb, var(--color-card) 92%, transparent))',
                   }}
                 >
                   <textarea
@@ -582,32 +505,14 @@ export function TranscriptCaptureApp() {
                   {error}
                 </div>
               ) : (
-                <div className="truncate text-xs text-[color:var(--color-muted-foreground)]">
-                  {selectedProject
-                    ? t('transcript.manualImportSelectedProject', { value: projectDisplayName(selectedProject) })
-                    : t('transcript.manualImportProjectPlaceholder')}
-                </div>
+                <div className="truncate text-xs text-[color:var(--color-muted-foreground)]">{selectedProject ? t('transcript.manualImportSelectedProject', { value: projectDisplayName(selectedProject) }) : t('transcript.manualImportProjectPlaceholder')}</div>
               )}
             </div>
             <div className="app-no-drag flex shrink-0 items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-9 px-3.5"
-                onClick={handleClose}
-                disabled={isImporting}
-              >
+              <Button type="button" variant="outline" size="sm" className="h-9 px-3.5" onClick={handleClose} disabled={isImporting}>
                 {t('common.cancel')}
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="h-9 px-4 shadow-sm"
-                onClick={() => void handleSubmit()}
-                loading={isImporting}
-                disabled={!canSubmit}
-              >
+              <Button type="button" size="sm" className="h-9 px-4 shadow-sm" onClick={() => void handleSubmit()} loading={isImporting} disabled={!canSubmit}>
                 {t('transcript.importPastedContent')}
               </Button>
             </div>

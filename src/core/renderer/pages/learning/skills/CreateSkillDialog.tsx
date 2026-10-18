@@ -112,7 +112,7 @@ export function CreateSkillDialog({ open, onClose, onCreated }: CreateSkillDialo
         </label>
         <label className="block space-y-1.5">
           <span className="text-xs font-medium text-[color:var(--color-muted-foreground)]">{t('learning.skills.contentLabel')}</span>
-          <Textarea className="min-h-48 font-mono text-xs leading-6" value={contentMd} onChange={(event) => setContentMd(event.target.value)} placeholder={t('learning.skills.contentPlaceholder')} />
+          <Textarea className="min-h-48 font-mono leading-6" textSize="xs" value={contentMd} onChange={(event) => setContentMd(event.target.value)} placeholder={t('learning.skills.contentPlaceholder')} />
         </label>
         <label className="flex items-start gap-2 text-sm text-[color:var(--color-foreground)]">
           <Checkbox checked={saveToSkills} onChange={(event) => setSaveToSkills(event.target.checked)} />

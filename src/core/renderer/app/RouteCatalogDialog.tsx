@@ -6,6 +6,7 @@ import { ModalShell } from '../components/ModalShell'
 import { useI18n } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
 import { preloadProjectPane } from '../lib/projectPagePreload'
+import { getProjectIdFromPath } from '../lib/routeProjectContext'
 import { DEFAULT_SETTINGS_SECTION, SETTINGS_SECTIONS, type Section } from '../pages/settings/settings.types'
 import { useAppStore } from '../stores/appStore'
 
@@ -66,11 +67,6 @@ const settingsDescriptionKeyBySection: Record<Section, string> = {
   'doc-link-library': 'common.routeCatalog.settingsDescriptions.docLinkLibrary',
   'quick-actions': 'common.routeCatalog.settingsDescriptions.quickActions',
   about: 'common.routeCatalog.settingsDescriptions.about',
-}
-
-function getProjectIdFromPath(pathname: string): string | undefined {
-  const segments = pathname.split('/').filter(Boolean)
-  return segments[0] === 'project' && segments[1] ? segments[1] : undefined
 }
 
 function resolveProjectForRoutes(projects: RouteCatalogProject[], currentProjectId: string | undefined): RouteCatalogProject | undefined {

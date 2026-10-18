@@ -3,7 +3,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 
 import { cn } from '@/lib/utils'
-
+import { type ControlTextSize, resolveControlFontSize } from './controlTextSize'
 import { type DropdownAlign, dropdownSurfaceClassName, dropdownSurfaceStyle, resolveDropdownFallbackRect, useDropdownLayer } from './dropdown'
 
 export type ComboboxOption = {
@@ -90,6 +90,12 @@ export interface ComboboxProps {
   isOptionSelected?: (option: ComboboxOption, value: string) => boolean
   onSearchValueChange?: (value: string) => void
   onOpenChange?: (open: boolean) => void
+  /**
+   * 字号（硬契约）：trigger / 输入框 / 展开覆盖层 / option / 空态统一由此 prop
+   * 经内联 style 下发，外部 className 的 text-* 一律无效。预设 'xs'(12px) /
+   * 'sm'(14px，默认) / 'base'(16px)，数字按 px。
+   */
+  textSize?: ControlTextSize | number
 }
 
 function assignRef<T>(ref: React.ForwardedRef<T>, value: T | null) {
@@ -179,6 +185,7 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
     isOptionSelected = (option, currentValue) => option.value === currentValue,
     onSearchValueChange,
     onOpenChange,
+    textSize,
   },
   forwardedRef,
 ) {
@@ -391,6 +398,7 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
 
   const fallbackRect = resolveDropdownFallbackRect(triggerRef)
   const scrollAreaMaxHeight = Math.max(0, (layout?.maxHeight ?? maxHeight) - 12)
+  const resolvedFontSize = resolveControlFontSize(textSize)
 
   return (
     <div ref={triggerRef} className={cn('relative', className)}>
@@ -400,10 +408,11 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
           <button
             type="button"
             className={cn(
-              'quiet-control flex h-10 w-full items-center rounded-full border-0 px-4 pr-11 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+              'quiet-control flex h-10 w-full items-center rounded-full border-0 px-4 pr-11 text-left text-[color:var(--color-foreground)] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
               hasInputLeading && 'pl-10',
               triggerClassName,
             )}
+            style={{ fontSize: resolvedFontSize }}
             aria-label={ariaLabel}
             aria-haspopup="listbox"
             aria-expanded={open}
@@ -454,10 +463,11 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
             onKeyDown={handleInputKeyDown}
             placeholder={effectiveInputPlaceholder}
             className={cn(
-              'quiet-control flex h-10 w-full rounded-full border-0 px-4 py-2 pr-11 text-sm ring-offset-transparent placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50',
+              'quiet-control flex h-10 w-full rounded-full border-0 px-4 py-2 pr-11 ring-offset-transparent placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50',
               hasInputLeading && 'pl-10',
               inputClassName,
             )}
+            style={{ fontSize: resolvedFontSize }}
             disabled={disabled}
           />
           {hasInputLeading ? (
@@ -469,11 +479,12 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
             <div
               aria-hidden="true"
               className={cn(
-                // 覆盖层与输入框/placeholder 保持同一字号（text-sm），避免展开瞬间视觉跳变。
-                'pointer-events-none absolute inset-y-0 left-0 right-11 flex items-center overflow-hidden text-sm text-[color:var(--color-foreground)]',
+                // 覆盖层与输入框/placeholder 保持同一字号（内联 textSize），避免展开瞬间视觉跳变。
+                'pointer-events-none absolute inset-y-0 left-0 right-11 flex items-center overflow-hidden text-[color:var(--color-foreground)]',
                 hasInputLeading && 'pl-10',
                 inputClassName,
               )}
+              style={{ fontSize: resolvedFontSize }}
             >
               <span className="min-w-0 truncate">{displayContent}</span>
             </div>
@@ -545,7 +556,8 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
                           type="button"
                           role="option"
                           aria-selected={false}
-                          className={cn('flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors', highlighted ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]', createOptionClassName)}
+                          className={cn('flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-[color:var(--color-foreground)] outline-none transition-colors', highlighted ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]', createOptionClassName)}
+                          style={{ fontSize: resolvedFontSize }}
                           onMouseEnter={() => setHighlightedIndex(index)}
                           onClick={() => handleCreate(row.value)}
                         >
@@ -570,11 +582,12 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
                         aria-selected={selected}
                         disabled={row.option.disabled}
                         className={cn(
-                          'flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-sm text-[color:var(--color-foreground)] outline-none transition-colors',
+                          'flex w-full items-center justify-between rounded-[13px] px-3 py-2 text-left text-[color:var(--color-foreground)] outline-none transition-colors',
                           selected ? 'bg-[color:var(--color-primary)]/12' : highlighted ? 'bg-[color:var(--color-accent)]' : 'hover:bg-[color:var(--color-accent)]',
                           row.option.disabled && 'cursor-not-allowed opacity-50',
                           optionClassName,
                         )}
+                        style={{ fontSize: resolvedFontSize }}
                         onMouseEnter={() => setHighlightedIndex(index)}
                         onClick={() => {
                           if (!row.option.disabled) handleSelectOption(row.option)
@@ -594,7 +607,9 @@ const Combobox = React.forwardRef<HTMLInputElement, ComboboxProps>(function Comb
                 ) : renderEmpty ? (
                   renderEmpty({ query: resolvedSearchValue })
                 ) : (
-                  <p className="px-3 py-2 text-sm text-[color:var(--color-muted-foreground)]">{emptyText}</p>
+                  <p className="px-3 py-2 text-[color:var(--color-muted-foreground)]" style={{ fontSize: resolvedFontSize }}>
+                    {emptyText}
+                  </p>
                 )}
               </div>
             </div>,

@@ -88,6 +88,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
   lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
   codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
   codeSession?: ProjectInfo['codeSession']
+  terminalDock?: ProjectInfo['terminalDock']
 }> {
   return projects.map((p) => ({
     path: p.path,
@@ -108,6 +109,7 @@ export function toSavedProjects(projects: ProjectInfo[]): Array<{
     lastMarkdownPreviewMode: p.lastMarkdownPreviewMode,
     codeFileDrawerState: p.codeFileDrawerState,
     codeSession: p.codeSession,
+    terminalDock: p.terminalDock,
   }))
 }
 
@@ -130,6 +132,7 @@ export function toRemovedProjectSnapshot(project: ProjectInfo): RemovedProjectSn
     lastMarkdownPreviewMode: project.lastMarkdownPreviewMode,
     codeFileDrawerState: project.codeFileDrawerState,
     codeSession: project.codeSession,
+    terminalDock: project.terminalDock,
     removedAt: Date.now(),
   }
 }
@@ -154,6 +157,7 @@ export function applySavedProjectSnapshot(
     lastMarkdownPreviewMode?: 'edit' | 'preview' | 'split'
     codeFileDrawerState?: ProjectInfo['codeFileDrawerState']
     codeSession?: ProjectInfo['codeSession']
+    terminalDock?: ProjectInfo['terminalDock']
   },
 ): ProjectInfo {
   const hasSavedField = <K extends keyof typeof saved>(key: K): boolean => Object.hasOwn(saved, key)
@@ -175,6 +179,7 @@ export function applySavedProjectSnapshot(
   if (hasSavedField('lastMarkdownPreviewMode')) project.lastMarkdownPreviewMode = saved.lastMarkdownPreviewMode
   if (hasSavedField('codeFileDrawerState')) project.codeFileDrawerState = saved.codeFileDrawerState
   if (hasSavedField('codeSession')) project.codeSession = saved.codeSession
+  if (hasSavedField('terminalDock')) project.terminalDock = saved.terminalDock
   return project
 }
 

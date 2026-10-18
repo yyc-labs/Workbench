@@ -1,11 +1,11 @@
-import { memo, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, Loader2, Play, Save, Sparkles } from 'lucide-react'
-import { ModalShell } from '../ModalShell'
-import { Select, type SelectOption } from '../ui/select'
+import { memo, useEffect, useMemo, useState } from 'react'
+import type { RunTask, RunTaskReadinessStrategy } from '../../../shared/runTasks'
+import type { ProjectInfo } from '../../../shared/types'
 import { useI18n } from '../../i18n'
 import { toProjectRelativeDirectory } from '../../lib/projectPaths'
-import type { ProjectInfo } from '../../../shared/types'
-import type { RunTask, RunTaskReadinessStrategy } from '../../../shared/runTasks'
+import { ModalShell } from '../ModalShell'
+import { Select, type SelectOption } from '../ui/select'
 import { RunTaskTemplatePicker } from './RunTaskTemplatePicker'
 
 type RunTaskEditDialogProps = {
@@ -264,7 +264,7 @@ export const RunTaskEditDialog = memo(function RunTaskEditDialog({ project, open
           )}
 
           <Field label={t('runTasks.field.readiness')} hint={t('runTasks.field.readinessHint')}>
-            <Select ariaLabel={t('runTasks.field.readiness')} value={strategy} onChange={(value) => setStrategy(value as RunTaskReadinessStrategy | 'none')} options={readinessOptions} className="w-full" triggerClassName="h-8 rounded-xl px-3 text-xs" contentZIndex={selectContentZIndex} />
+            <Select ariaLabel={t('runTasks.field.readiness')} value={strategy} onChange={(value) => setStrategy(value as RunTaskReadinessStrategy | 'none')} options={readinessOptions} className="w-full" triggerClassName="h-8 rounded-xl px-3" textSize="xs" contentZIndex={selectContentZIndex} />
           </Field>
 
           {strategy === 'url' && (
@@ -330,10 +330,10 @@ export const RunTaskEditDialog = memo(function RunTaskEditDialog({ project, open
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Field label={t('runTasks.field.useWsl')}>
-              <Select ariaLabel={t('runTasks.field.useWsl')} value={useWsl} onChange={(value) => setUseWsl(value as UseWslChoice)} options={useWslOptions} className="w-[150px]" triggerClassName="h-8 rounded-xl px-3 text-xs" contentZIndex={selectContentZIndex} />
+              <Select ariaLabel={t('runTasks.field.useWsl')} value={useWsl} onChange={(value) => setUseWsl(value as UseWslChoice)} options={useWslOptions} className="w-[150px]" triggerClassName="h-8 rounded-xl px-3" textSize="xs" contentZIndex={selectContentZIndex} />
             </Field>
             <Field label={t('runTasks.field.startupMode')}>
-              <Select ariaLabel={t('runTasks.field.startupMode')} value={startupMode} onChange={(value) => setStartupMode(value as 'silent' | 'terminal')} options={startupModeOptions} className="w-[170px]" triggerClassName="h-8 rounded-xl px-3 text-xs" contentZIndex={selectContentZIndex} />
+              <Select ariaLabel={t('runTasks.field.startupMode')} value={startupMode} onChange={(value) => setStartupMode(value as 'silent' | 'terminal')} options={startupModeOptions} className="w-[170px]" triggerClassName="h-8 rounded-xl px-3" textSize="xs" contentZIndex={selectContentZIndex} />
             </Field>
             <label className="mt-4 inline-flex cursor-pointer items-center gap-2 text-xs text-[color:var(--color-foreground)]">
               <input type="checkbox" className="h-3.5 w-3.5 accent-[color:var(--color-primary)]" checked={isDefault} onChange={(event) => setIsDefault(event.target.checked)} />

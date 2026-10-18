@@ -89,8 +89,7 @@ export function GlobalTitleTooltipBridge() {
     const tooltipRect = tooltipElement.getBoundingClientRect()
     const preferredTop = targetRect.top - tooltipRect.height - 8
     const preferredBottom = targetRect.bottom + 8
-    const shouldUseBottom = preferredTop < VIEWPORT_PADDING
-      && preferredBottom + tooltipRect.height <= window.innerHeight - VIEWPORT_PADDING
+    const shouldUseBottom = preferredTop < VIEWPORT_PADDING && preferredBottom + tooltipRect.height <= window.innerHeight - VIEWPORT_PADDING
     const side: TooltipSide = shouldUseBottom ? 'bottom' : 'top'
     const rawTop = side === 'bottom' ? preferredBottom : preferredTop
     const rawLeft = targetRect.left + (targetRect.width - tooltipRect.width) / 2
@@ -133,28 +132,31 @@ export function GlobalTitleTooltipBridge() {
     })
   }, [])
 
-  const scheduleShowTooltipForTarget = useCallback((target: HTMLElement, delayMs: number) => {
-    if (activeTargetRef.current === target) return
-    if (pendingTargetRef.current === target && openTimerRef.current !== null) return
+  const scheduleShowTooltipForTarget = useCallback(
+    (target: HTMLElement, delayMs: number) => {
+      if (activeTargetRef.current === target) return
+      if (pendingTargetRef.current === target && openTimerRef.current !== null) return
 
-    cacheAndRemoveElementTitle(target)
-    clearOpenTimer()
-    pendingTargetRef.current = target
+      cacheAndRemoveElementTitle(target)
+      clearOpenTimer()
+      pendingTargetRef.current = target
 
-    if (delayMs <= 0) {
-      pendingTargetRef.current = null
-      showTooltipForTarget(target)
-      return
-    }
+      if (delayMs <= 0) {
+        pendingTargetRef.current = null
+        showTooltipForTarget(target)
+        return
+      }
 
-    openTimerRef.current = window.setTimeout(() => {
-      const pending = pendingTargetRef.current
-      openTimerRef.current = null
-      pendingTargetRef.current = null
-      if (!pending) return
-      showTooltipForTarget(pending)
-    }, delayMs)
-  }, [clearOpenTimer, showTooltipForTarget])
+      openTimerRef.current = window.setTimeout(() => {
+        const pending = pendingTargetRef.current
+        openTimerRef.current = null
+        pendingTargetRef.current = null
+        if (!pending) return
+        showTooltipForTarget(pending)
+      }, delayMs)
+    },
+    [clearOpenTimer, showTooltipForTarget],
+  )
 
   useLayoutEffect(() => {
     if (!tooltip) return
@@ -252,7 +254,7 @@ export function GlobalTitleTooltipBridge() {
       ref={tooltipRef}
       role="tooltip"
       data-side={tooltip.side}
-      className={cn('app-tooltip-content app-title-tooltip-content')}
+      className={cn('app-tooltip-content app-title-tooltip-content text-[12px]')}
       style={{
         top: tooltip.top,
         left: tooltip.left,
@@ -261,6 +263,6 @@ export function GlobalTitleTooltipBridge() {
     >
       {tooltip.text}
     </div>,
-    document.body
+    document.body,
   )
 }

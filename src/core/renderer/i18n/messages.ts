@@ -9,6 +9,7 @@ import { markdownDocumentMessages } from './messages/markdownDocument'
 import { projectMessages } from './messages/project'
 import { quickActionsMessages } from './messages/quickActions'
 import { settingsMessages } from './messages/settings'
+import { terminalCollectionMessages } from './messages/terminalCollection'
 import { transcriptMessages } from './messages/transcript'
 
 export type ResolvedLocale = Exclude<AppLocale, 'system'>
@@ -53,6 +54,7 @@ function mergeLocaleMessages(locale: ResolvedLocale) {
       settingsRules: aiAndRuntimeMessages[locale].settingsRules,
     },
     { quickActions: quickActionsMessages[locale].quickActions },
+    { terminalCollection: terminalCollectionMessages[locale].terminalCollection },
   )
 }
 

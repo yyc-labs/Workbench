@@ -11,7 +11,7 @@ import { ProjectMetaDialog } from '../components/ProjectMetaDialog'
 import { ProjectPaneTabs } from '../components/ProjectPaneTabs'
 import { RunTasksDialog } from '../components/run-tasks/RunTasksDialog'
 import { UrlPopover } from '../components/UrlPopover'
-import { useOpenStartupLogs } from '../hooks/useOpenStartupLogs'
+import { useOpenProjectTerminal } from '../hooks/useOpenProjectTerminal'
 import { useProjectDevUrlLauncher } from '../hooks/useProjectDevUrlLauncher'
 import { useI18n, useLocale } from '../i18n'
 import { middleTruncatePath, projectDisplayName } from '../lib/projectDisplay'
@@ -196,7 +196,7 @@ export function DetailPage() {
         return result.started
       }),
   })
-  const openStartupLogs = useOpenStartupLogs()
+  const openProjectTerminal = useOpenProjectTerminal()
   const docLinkState = useProjectDocLinks({ project })
   const {
     docLinks,
@@ -528,7 +528,7 @@ export function DetailPage() {
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (projectId) openStartupLogs(projectId)
+                    if (projectId) openProjectTerminal(projectId)
                   }}
                   disabled={pendingOpenDevUrl}
                   title={isDevReady ? t('project.openDevUrl') : pendingOpenDevUrl ? t('project.waitingForDevUrl') : t('project.startAndOpenDevUrlShort')}
@@ -675,7 +675,7 @@ export function DetailPage() {
                     onPreloadPane={preloadProjectPane}
                     onStartAndOpenDevUrl={startAndOpenDevUrl}
                     onOpenStartupLogs={() => {
-                      if (projectId) openStartupLogs(projectId)
+                      if (projectId) openProjectTerminal(projectId)
                     }}
                     onSwitchPane={(nextPane) => {
                       if (!projectId || nextPane === activePane) return
@@ -720,7 +720,7 @@ export function DetailPage() {
                     }}
                     onStartAndOpenDevUrl={startAndOpenDevUrl}
                     onOpenStartupLogs={() => {
-                      if (projectId) openStartupLogs(projectId)
+                      if (projectId) openProjectTerminal(projectId)
                     }}
                     onOpenTranscript={() => {
                       if (!projectId) return

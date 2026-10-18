@@ -1,7 +1,7 @@
-import { useMemo, type MutableRefObject } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
-import { Combobox, type ComboboxOption } from '../../components/ui/combobox'
+import { type MutableRefObject, useMemo } from 'react'
 import { ModalShell } from '../../components/ModalShell'
+import { Combobox, type ComboboxOption } from '../../components/ui/combobox'
 import { useI18n } from '../../i18n'
 import type { BranchManagerMode } from './detail.aiCommitPanel.types'
 
@@ -39,20 +39,15 @@ type BranchSearchSelectProps = {
   onChange: (value: string) => void
 }
 
-function BranchSearchSelect({
-  disabled = false,
-  options,
-  placeholder,
-  value,
-  onChange,
-}: BranchSearchSelectProps) {
+function BranchSearchSelect({ disabled = false, options, placeholder, value, onChange }: BranchSearchSelectProps) {
   const { t } = useI18n()
   const comboboxOptions = useMemo<ComboboxOption[]>(
-    () => options.map((option) => ({
-      value: option,
-      label: option,
-    })),
-    [options]
+    () =>
+      options.map((option) => ({
+        value: option,
+        label: option,
+      })),
+    [options],
   )
 
   return (
@@ -68,15 +63,12 @@ function BranchSearchSelect({
       toggleAriaLabel={t('detail.branchPanelCloseList')}
       disabled={disabled}
       emptyText={t('detail.branchPanelNoMatch')}
-      inputClassName="h-8 rounded-[10px] px-2 font-mono text-[11.5px] ring-[color:var(--color-ring)]/22"
-      triggerClassName="h-8 rounded-[10px] px-2 font-mono text-[11.5px] hover:border-[color:var(--color-border-hover)]"
+      inputClassName="h-8 rounded-[10px] px-2 font-mono ring-[color:var(--color-ring)]/22"
+      textSize={11.5}
+      triggerClassName="h-8 rounded-[10px] px-2 font-mono hover:border-[color:var(--color-border-hover)]"
       contentClassName="surface-card rounded-[14px] p-1"
-      optionClassName="rounded-[10px] px-2.5 py-1.5 text-[11.5px]"
-      renderDisplayValue={() => (
-        <span className={value ? 'truncate' : 'truncate font-sans text-[color:var(--color-muted-foreground)]'}>
-          {value || placeholder}
-        </span>
-      )}
+      optionClassName="rounded-[10px] px-2.5 py-1.5"
+      renderDisplayValue={() => <span className={value ? 'truncate' : 'truncate font-sans text-[color:var(--color-muted-foreground)]'}>{value || placeholder}</span>}
       renderOption={(option, state) => (
         <>
           <span className="truncate font-mono">{option.label}</span>
@@ -114,19 +106,10 @@ export function DetailAiCommitBranchManagerModal({
   upstreamManagerRemoteName,
 }: DetailAiCommitBranchManagerModalProps) {
   const { t } = useI18n()
-  const deletableLocalBranches = useMemo(
-    () => localBranches.filter((name) => name !== currentBranch),
-    [currentBranch, localBranches]
-  )
+  const deletableLocalBranches = useMemo(() => localBranches.filter((name) => name !== currentBranch), [currentBranch, localBranches])
 
   return (
-    <ModalShell
-      open={Boolean(mode)}
-      onClose={onClose}
-      widthClassName="max-w-[460px]"
-      baseZIndex={1120}
-      ariaLabel={mode === 'current' ? t('detail.branchManagerCurrentTitle') : t('detail.branchManagerUpstreamTitle')}
-    >
+    <ModalShell open={Boolean(mode)} onClose={onClose} widthClassName="max-w-[460px]" baseZIndex={1120} ariaLabel={mode === 'current' ? t('detail.branchManagerCurrentTitle') : t('detail.branchManagerUpstreamTitle')}>
       {mode === 'current' ? (
         <>
           <div className="mb-3 flex items-start justify-between gap-3">
@@ -134,12 +117,7 @@ export function DetailAiCommitBranchManagerModal({
               <p className="section-label mb-1">{t('detail.branchManagerCurrentTitle')}</p>
               <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('detail.branchManagerCurrentDescription')}</p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={onClose}
-              title={t('detail.branchManagerClose')}
-            >
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={onClose} title={t('detail.branchManagerClose')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -169,13 +147,7 @@ export function DetailAiCommitBranchManagerModal({
 
             <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]/62 px-3 py-2">
               <p className="mb-1 text-[10px] uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)]">{t('detail.branchManagerDeleteLocalBranch')}</p>
-              <BranchSearchSelect
-                value={currentManagerDeleteTarget}
-                options={deletableLocalBranches}
-                placeholder={t('detail.branchManagerSearchBranchesPlaceholder')}
-                disabled={branchManagerLoading || deletableLocalBranches.length <= 0}
-                onChange={onChangeCurrentManagerDeleteTarget}
-              />
+              <BranchSearchSelect value={currentManagerDeleteTarget} options={deletableLocalBranches} placeholder={t('detail.branchManagerSearchBranchesPlaceholder')} disabled={branchManagerLoading || deletableLocalBranches.length <= 0} onChange={onChangeCurrentManagerDeleteTarget} />
               <button
                 type="button"
                 className="mt-2 inline-flex h-8 items-center justify-center rounded-full bg-[color:var(--color-destructive)] px-3 text-[11px] font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -186,11 +158,7 @@ export function DetailAiCommitBranchManagerModal({
               </button>
             </div>
           </div>
-          {branchManagerError && (
-            <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">
-              {branchManagerError}
-            </p>
-          )}
+          {branchManagerError && <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">{branchManagerError}</p>}
         </>
       ) : (
         <>
@@ -199,12 +167,7 @@ export function DetailAiCommitBranchManagerModal({
               <p className="section-label mb-1">{t('detail.branchManagerUpstreamTitle')}</p>
               <p className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('detail.branchManagerUpstreamDescription')}</p>
             </div>
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
-              onClick={onClose}
-              title={t('detail.branchManagerClose')}
-            >
+            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]" onClick={onClose} title={t('detail.branchManagerClose')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -255,20 +218,12 @@ export function DetailAiCommitBranchManagerModal({
               />
             </div>
           </div>
-          {branchManagerError && (
-            <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">
-              {branchManagerError}
-            </p>
-          )}
+          {branchManagerError && <p className="mt-2 rounded-[12px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] px-3 py-2 text-[11px] text-[color:var(--color-destructive)]">{branchManagerError}</p>}
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-full bg-primary px-4 text-xs font-medium text-white transition-colors hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={
-                branchManagerLoading
-                || !upstreamManagerBranchName.trim()
-                || upstreamManagerDangerInput.trim() !== branchManagerDangerText
-              }
+              disabled={branchManagerLoading || !upstreamManagerBranchName.trim() || upstreamManagerDangerInput.trim() !== branchManagerDangerText}
               onClick={onCreateRemoteBranchFromUpstream}
             >
               {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerCreateRemoteBranch')}
@@ -276,11 +231,7 @@ export function DetailAiCommitBranchManagerModal({
             <button
               type="button"
               className="inline-flex h-9 items-center justify-center rounded-full bg-[color:var(--color-destructive)] px-4 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={
-                branchManagerLoading
-                || !upstreamManagerBranchName.trim()
-                || upstreamManagerDangerInput.trim() !== branchManagerDangerText
-              }
+              disabled={branchManagerLoading || !upstreamManagerBranchName.trim() || upstreamManagerDangerInput.trim() !== branchManagerDangerText}
               onClick={onSetUpstream}
             >
               {branchManagerLoading ? t('detail.branchManagerCreating') : t('detail.branchManagerBindUpstream')}

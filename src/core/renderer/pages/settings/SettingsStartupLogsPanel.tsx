@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Folder, Terminal as TerminalIcon, TriangleAlert } from 'lucide-react'
-import { projectDisplayName } from '../../lib/projectDisplay'
-import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { parseRunTaskProcessKey } from '../../../shared/runTasks'
-import { Terminal as AppTerminal } from '../../components/Terminal'
+import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
+import { useOpenProjectTerminal } from '../../hooks/useOpenProjectTerminal'
 import { useI18n } from '../../i18n'
+import { projectDisplayName } from '../../lib/projectDisplay'
 import { useAppStore } from '../../stores/appStore'
 import { backendLabel } from './settings.helpers'
 
@@ -22,6 +22,7 @@ interface ProcessTreeGroup {
 
 function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPanelProps) {
   const { t } = useI18n()
+  const openProjectTerminal = useOpenProjectTerminal()
   const [inventoryLoading, setInventoryLoading] = useState(false)
   const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
@@ -119,8 +120,6 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     setSelectedProcessId(projectManaged[0].processId)
   }, [initialProjectId, projectManaged, selectedProcessId])
 
-  const selectedManagedProcess = selectedProcessId ? projectManaged.find((p) => p.processId === selectedProcessId) || null : null
-
   const getProcessLabel = (item: ManagedProcessSnapshot): string => {
     const runTask = parseRunTaskProcessKey(item.processId)
     if (runTask) return runTaskConfigNames.get(`${runTask.projectId}::${runTask.taskId}`) || runTask.taskId
@@ -203,8 +202,11 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
                             <button
                               key={`log-tab-${item.processId}`}
                               className={`mb-0.5 flex w-full min-w-0 items-center gap-1.5 rounded-[9px] px-2 py-1 text-left text-[11px] transition-colors ${selected ? 'bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]' : 'text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)]/50 hover:text-[color:var(--color-foreground)]'}`}
-                              onClick={() => setSelectedProcessId(item.processId)}
-                              title={errorHint ? `${label} — ${errorHint}` : label}
+                              onClick={() => {
+                                setSelectedProcessId(item.processId)
+                                openProjectTerminal(resolveSnapshotProjectId(item), item.processId)
+                              }}
+                              title={errorHint ? `${label} — ${errorHint}` : `${label} · ${t('startupLogs.openInBuiltinTerminal')}`}
                             >
                               {errorHint ? <TriangleAlert className="h-3 w-3 shrink-0 text-[color:var(--color-warning)]" /> : <TerminalIcon className="h-3 w-3 shrink-0" />}
                               <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -219,15 +221,12 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
             </div>
 
             <div className="min-h-0 min-w-0 flex-1">
-              {selectedManagedProcess ? (
-                <div className="h-72 overflow-hidden rounded-[12px] border bg-[color:var(--color-background-sunken)] lg:h-full" style={{ borderColor: 'var(--color-border)' }}>
-                  <AppTerminal projectId={selectedManagedProcess.processId} variant="soft" />
-                </div>
-              ) : (
-                <div className="h-72 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-3 py-2 text-[11px] text-[color:var(--color-muted-foreground)] lg:h-full" style={{ borderColor: 'var(--color-border)' }}>
-                  {t('startupLogs.selectProcess')}
-                </div>
-              )}
+              {/* D2：右侧不再内嵌终端查看器；点击左侧进程即深链到该项目内置终端。 */}
+              <div className="flex h-72 flex-col items-center justify-center gap-2 rounded-[12px] border bg-[color:var(--color-background-sunken)] px-4 py-2 text-center lg:h-full" style={{ borderColor: 'var(--color-border)' }}>
+                <TerminalIcon className="h-5 w-5 text-[color:var(--color-muted-foreground)]" />
+                <p className="text-[11px] font-medium text-[color:var(--color-foreground)]">{t('startupLogs.openInBuiltinTerminal')}</p>
+                <p className="max-w-[280px] text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('startupLogs.sectionDescription')}</p>
+              </div>
             </div>
           </div>
         )}
