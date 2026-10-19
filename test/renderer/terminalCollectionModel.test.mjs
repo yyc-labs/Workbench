@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { buildTerminalCollectionModel } = loadTsModule('src/core/renderer/lib/terminalCollectionModel.ts')
+const { buildTerminalCollectionModel, resolveTerminalCollectionWake } = loadTsModule('src/core/renderer/lib/terminalCollectionModel.ts')
 
 function snapshot(processId, startTime = 1) {
   return { processId, projectId: processId.split('::')[0], backend: 'host', pid: null, startTime }
@@ -136,4 +136,77 @@ test('pending placeholder is dropped once the inventory catches up, and sorts la
       ['float', 'starting'],
     ],
   )
+})
+
+// ── Ctrl+J 唤醒决策（2026-10-18 用户规则） ────────────────────────────────
+
+function wakeInput(overrides = {}) {
+  return {
+    contextProjectId: null,
+    activeProjectId: null,
+    recentProjectIds: [],
+    pendingProjectIds: [],
+    inventoryProcessIds: [],
+    ...overrides,
+  }
+}
+
+test('wake: non-project route with any existing session never creates a terminal', () => {
+  // 非项目路由，别的项目有会话、目标项目没有 → 只唤醒，不新建。
+  const decision = resolveTerminalCollectionWake(
+    wakeInput({
+      activeProjectId: 'beta',
+      recentProjectIds: ['alpha', 'beta'],
+      inventoryProcessIds: ['beta::float::0'],
+    }),
+  )
+  assert.deepEqual(decision, { action: 'wake', projectId: 'beta' })
+})
+
+test('wake: non-project route prefers the active project, else most recent project with sessions', () => {
+  // 上次激活项目没有会话 → 落到最近打开的有会话项目。
+  const decision = resolveTerminalCollectionWake(
+    wakeInput({
+      activeProjectId: 'alpha',
+      recentProjectIds: ['alpha', 'beta', 'gamma'],
+      inventoryProcessIds: ['gamma::float::0'],
+    }),
+  )
+  assert.deepEqual(decision, { action: 'wake', projectId: 'gamma' })
+})
+
+test('wake: non-project route without any session creates one (last active ?? most recent)', () => {
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput({ activeProjectId: 'beta', recentProjectIds: ['alpha', 'beta'] })), { action: 'create', projectId: 'beta' })
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput({ recentProjectIds: ['alpha', 'beta'] })), { action: 'create', projectId: 'alpha' })
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput()), { action: 'none' })
+})
+
+test('wake: project route creates a terminal when that project has none', () => {
+  // 项目路由保持原语义：该项目没有终端就直接新建，保证项目内 Ctrl+J 可见。
+  const decision = resolveTerminalCollectionWake(
+    wakeInput({
+      contextProjectId: 'alpha',
+      recentProjectIds: ['alpha', 'beta'],
+      inventoryProcessIds: ['beta::float::0'],
+    }),
+  )
+  assert.deepEqual(decision, { action: 'create', projectId: 'alpha' })
+})
+
+test('wake: project route with sessions wakes that project; toolbox-only counts as no session', () => {
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput({ contextProjectId: 'alpha', inventoryProcessIds: ['alpha::float::0'] })), { action: 'wake', projectId: 'alpha' })
+  // toolbox 只读：不算会话，项目路由仍新建。
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput({ contextProjectId: 'alpha', inventoryProcessIds: ['alpha::toolbox'] })), { action: 'create', projectId: 'alpha' })
+  // 非项目路由只有 toolbox → 视为无会话。
+  assert.deepEqual(resolveTerminalCollectionWake(wakeInput({ recentProjectIds: ['alpha'], inventoryProcessIds: ['alpha::toolbox'] })), { action: 'create', projectId: 'alpha' })
+})
+
+test('wake: pending placeholders count as sessions in non-project routes', () => {
+  const decision = resolveTerminalCollectionWake(
+    wakeInput({
+      recentProjectIds: ['alpha', 'beta'],
+      pendingProjectIds: ['beta'],
+    }),
+  )
+  assert.deepEqual(decision, { action: 'wake', projectId: 'beta' })
 })

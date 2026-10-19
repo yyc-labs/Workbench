@@ -1563,6 +1563,22 @@ export interface TerminalStopAllResult {
   tmuxSkipped: number
 }
 
+/**
+ * 终端清单快照（轻量）：只含主进程托管进程，不查 WSL/tmux 外部会话。
+ * revision 与增量事件共用同一版本号：旧快照不得覆盖较新事件状态。
+ */
+export interface TerminalInventorySnapshot {
+  revision: number
+  managedProcesses: ManagedProcessSnapshot[]
+}
+
+/**
+ * 终端清单增量事件：主进程进程 Map 变化时推送。
+ * upsert = 进程注册/元数据变化（含 tmux sessionName 补写）；remove = 进程移除。
+ * revision 单调递增，renderer 只应用比当前更新的版本。
+ */
+export type TerminalInventoryEvent = { type: 'upsert'; revision: number; process: ManagedProcessSnapshot } | { type: 'remove'; revision: number; processKey: string }
+
 /** Which execution environment the process runs in. v1 only 'host'; reserved for future WSL. */
 export type ProcessPortHost = 'host' | 'wsl'
 

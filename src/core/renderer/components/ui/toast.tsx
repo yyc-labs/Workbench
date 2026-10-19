@@ -1,10 +1,10 @@
+import { AlertTriangle, CheckCircle2, Info, Loader2, X, XCircle } from 'lucide-react'
 import * as React from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '../../i18n'
 
-export type ToastKind = 'info' | 'success' | 'warning' | 'error'
+export type ToastKind = 'info' | 'success' | 'warning' | 'error' | 'loading'
 
 /** 通知卡片渲染位置。 */
 export type ToastViewportPosition = 'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
@@ -134,6 +134,8 @@ export const toast = {
   success: (message: string, options?: ToastOptions): number => pushToast(message, { ...options, kind: 'success' }),
   warning: (message: string, options?: ToastOptions): number => pushToast(message, { ...options, kind: 'warning' }),
   error: (message: string, options?: ToastOptions): number => pushToast(message, { ...options, kind: 'error' }),
+  /** 持续显示的加载通知（durationMs 默认 0，不自动消失）；完成后调用 toast.dismiss(id)。 */
+  loading: (message: string, options?: ToastOptions): number => pushToast(message, { durationMs: 0, ...options, kind: 'loading' }),
   dismiss: dismissToast,
   clear: (): void => {
     toasts = []
@@ -146,6 +148,7 @@ const TOAST_KIND_ICON = {
   success: CheckCircle2,
   warning: AlertTriangle,
   error: XCircle,
+  loading: Loader2,
 } as const
 
 type ToastPositionStyle = {
@@ -201,7 +204,7 @@ export function ToastViewport({ position = 'bottom-right', size = 'md', offset =
         const itemSize = item.size ?? size
         return (
           <div key={item.id} className={cn('toast-item', `toast-item--${itemSize}`, `toast-item--${item.tone}`)} role="status">
-            <Icon className="toast-item-icon" />
+            <Icon className={cn('toast-item-icon', item.kind === 'loading' && 'animate-spin')} />
             <div className="toast-item-body">
               <div className="toast-item-message">{item.message}</div>
               {item.description ? <div className="toast-item-description">{item.description}</div> : null}

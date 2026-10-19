@@ -106,6 +106,8 @@ import type {
   SkillUpdateCategoryPayload,
   SkillUpdatePayload,
   StartupDefaultFilter,
+  TerminalInventoryEvent,
+  TerminalInventorySnapshot,
   TerminalStopAllResult,
   TmuxSessionInfo,
   TranscriptCaptureInitialText,
@@ -239,8 +241,12 @@ export interface AppState {
   stopProject: (projectId: string) => Promise<void>
   /** 终端集合面板（Ctrl+J）：面板几何与显隐（持久化进 config.floatingPanel）。 */
   floatingPanel: FloatingTerminalPanelState
-  /** 主进程进程清单快照（terminal:list-all），由 Layer 轮询写入。 */
+  /** 主进程进程清单快照（terminal:inventory-snapshot / terminal:inventory-changed），由全局订阅增量维护。 */
   terminalInventory: ManagedProcessSnapshot[]
+  /** 清单版本号：与主进程 inventoryRevision 同步，用于丢弃旧快照/乱序事件。 */
+  terminalInventoryRevision: number
+  /** 乐观关闭中、等待主进程 remove 确认的 key（会话内，不持久化）；confirm 前对快照/upsert 不可见。 */
+  closingTerminalKeys: string[]
   /** 集合面板当前选中的项目 tab。 */
   collectionActiveProjectId: string | null
   /** 集合面板当前激活的进程 key；null 时组件回落到该项目第一个终端。 */
@@ -251,7 +257,15 @@ export interface AppState {
   collectionShowToolbox: boolean
   /** 跨页面聚焦请求：集合面板消费后清空（不持久化）。 */
   pendingTerminalFocus: { projectId: string; processKey: string } | null
-  setTerminalInventory: (inventory: ManagedProcessSnapshot[]) => void
+  /** 写入整份清单快照；revision 缺省时无条件应用（向后兼容），否则仅接受更新版本。 */
+  /** 应用整份清单快照（带版本守卫 + closing key 过滤）。 */
+  applyTerminalInventorySnapshot: (snapshot: TerminalInventorySnapshot) => void
+  /** 应用主进程推送的清单增量事件（upsert/remove），带版本守卫与 closing 竞态防护。 */
+  applyTerminalInventoryEvent: (event: TerminalInventoryEvent) => void
+  /** 乐观关闭：立即从清单/占位移除该 key 并进入 closing 组，等待主进程 remove 确认。 */
+  requestTerminalClose: (processKey: string) => void
+  /** closing key 放行：remove 确认或自愈超时。 */
+  releaseClosingKey: (processKey: string) => void
   /**
    * 集合面板开关：可见 → 整体隐藏（会话保活，可在 设置 → 日志 查看）；隐藏 → 唤醒。
    * contextProjectId 为项目路由上下文（`/project/:projectId`）：唤醒时定位到该项目，无终端则直接新建。

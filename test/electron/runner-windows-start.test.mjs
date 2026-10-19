@@ -64,8 +64,40 @@ test('Windows direct-pty backend starts host-native instead of POSIX bash', () =
   const started = withPlatform('win32', () => manager.start('project-1', 'npm run dev', 'D:\\repo'))
 
   assert.equal(started, true)
-  assert.deepEqual(hostNativeArgs, ['project-1', 'npm run dev', 'D:\\repo'])
+  // startHostNative(projectId, command, cwd, initialSize)：初始尺寸透传，未提供时为 undefined
+  assert.deepEqual(hostNativeArgs, ['project-1', 'npm run dev', 'D:\\repo', undefined])
   assert.equal(startWithPtyCalled, false)
+})
+
+test('start forwards initialSize so the pty spawns at the panel viewport size', () => {
+  const manager = new ProcessManager(windowsCapability)
+  let forwardedSize = null
+
+  manager.startHostNative = (...args) => {
+    forwardedSize = args[3]
+    return true
+  }
+
+  const started = withPlatform('win32', () => manager.start('project-1', 'npm run dev', 'D:\\repo', false, { cols: 175, rows: 12 }))
+
+  assert.equal(started, true)
+  assert.deepEqual(forwardedSize, { cols: 175, rows: 12 })
+})
+
+test('host-native pty spawns with the forwarded initial size', () => {
+  const manager = new ProcessManager(windowsCapability)
+  let spawnOptions = null
+
+  manager.getPtySpawn = () => (_command, _args, options) => {
+    spawnOptions = options
+    return createFakePty()
+  }
+
+  const started = withPlatform('win32', () => manager.start('project-3', 'echo hi', 'D:\\repo', false, { cols: 120, rows: 30 }))
+
+  assert.equal(started, true)
+  assert.equal(spawnOptions.cols, 120)
+  assert.equal(spawnOptions.rows, 30)
 })
 
 test('Windows host-native pty uses absolute cmd path for packaged environments', () => {

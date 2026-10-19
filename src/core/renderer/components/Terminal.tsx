@@ -1,7 +1,7 @@
 import { useEffect, useRef, memo } from 'react'
 import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { MONO_FONT_STACK } from '../lib/fonts'
+import { TERMINAL_FONT_METRICS } from '../lib/terminalViewportSize'
 import '@xterm/xterm/css/xterm.css'
 import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
 import { useAppStore } from '../stores/appStore'
@@ -67,6 +67,19 @@ const DARK_SOFT_THEME: ITheme = {
 
 const XTERM_SCROLLBACK_LINES = 200
 
+/**
+ * 回放只写尾部：面板是「看一眼」语义，长历史应去日志文件（设置 → 日志）。
+ * 从换行边界切入，避免把半行/半个转义序列写进 xterm 造成花屏。
+ */
+const REPLAY_TAIL_CHARS = 30_000
+
+function replayTail(text: string): string {
+  if (text.length <= REPLAY_TAIL_CHARS) return text
+  const tail = text.slice(text.length - REPLAY_TAIL_CHARS)
+  const firstBreak = tail.search(/[\r\n]/)
+  return firstBreak >= 0 ? tail.slice(firstBreak + 1) : tail
+}
+
 function resolveTerminalTheme(theme: 'light' | 'dark', variant: 'default' | 'soft'): ITheme {
   if (theme === 'light') return LIGHT_THEME
   return variant === 'soft' ? DARK_SOFT_THEME : DARK_THEME
@@ -87,12 +100,14 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
     const term = new XTerm({
       // rendererType: 'canvas',
       cursorBlink: true,
-      fontSize: 13,
-      lineHeight: 1.45,
-      letterSpacing: 0.2,
+      // 字体规格与 lib/terminalViewportSize.ts 单一事实源：
+      // 该文件按同规格预测面板视口尺寸，供 pty 启动时使用，两侧漂移会引入尺寸差。
+      fontSize: TERMINAL_FONT_METRICS.fontSize,
+      lineHeight: TERMINAL_FONT_METRICS.lineHeight,
+      letterSpacing: TERMINAL_FONT_METRICS.letterSpacing,
       fontWeight: 450,
       fontWeightBold: 650,
-      fontFamily: MONO_FONT_STACK,
+      fontFamily: TERMINAL_FONT_METRICS.fontFamily,
       allowProposedApi: true,
       convertEol: true,
       rightClickSelectsWord: true,
@@ -106,11 +121,14 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
 
     term.open(containerRef.current)
     containerRef.current.style.backgroundColor = initialTheme.background ?? ''
+    // 先按容器实际宽度同步 fit 再写输出：open 后默认 80 列，长路径 prompt 会先换行，
+    // 等 80ms 防抖的 fit 生效才回流成一行（可见的分行闪烁）。
+    fitAddon.fit()
     term.focus()
 
     const existingOutput = useAppStore.getState().terminalOutputs[projectId]
     if (existingOutput) {
-      term.write(existingOutput)
+      term.write(replayTail(existingOutput))
     } else {
       // term.writeln('Starting Claude...\r\n')
     }

@@ -86,6 +86,39 @@ function ProcessOutputListener() {
   return null
 }
 
+/**
+ * 终端清单全局订阅：启动时取一次轻量快照建立基线，之后只应用主进程推送的
+ * upsert/remove 增量事件（带 revision 守卫）。面板隐藏期间同样保持更新，
+ * 重新打开不依赖旧快照修正；不再有 5s 重量级轮询。
+ */
+function TerminalInventoryListener() {
+  const applyTerminalInventorySnapshot = useAppStore((s) => s.applyTerminalInventorySnapshot)
+  const applyTerminalInventoryEvent = useAppStore((s) => s.applyTerminalInventoryEvent)
+
+  useEffect(() => {
+    let cancelled = false
+    // 初始快照：renderer 刷新/重启后重建基线；与增量事件的竞态由 revision 守卫解决。
+    void (async () => {
+      try {
+        const snapshot = await window.electronAPI.getTerminalInventorySnapshot()
+        if (cancelled) return
+        applyTerminalInventorySnapshot(snapshot)
+      } catch {
+        // 快照失败：保留现状，等待增量事件修正。
+      }
+    })()
+    const unsubscribe = window.electronAPI.onTerminalInventoryChanged((event) => {
+      applyTerminalInventoryEvent(event)
+    })
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [applyTerminalInventoryEvent, applyTerminalInventorySnapshot])
+
+  return null
+}
+
 function RunTaskProgressListener() {
   const updateRunTaskStates = useAppStore((s) => s.updateRunTaskStates)
   const reconcileRunTaskStates = useAppStore((s) => s.reconcileRunTaskStates)
@@ -470,6 +503,7 @@ export function AppGlobalEffects() {
       <ThemeSync />
       <LocaleSync />
       <ProcessOutputListener />
+      <TerminalInventoryListener />
       <RunTaskProgressListener />
       <DockerLaunchPromptDialog />
       <TranscriptImportListener />

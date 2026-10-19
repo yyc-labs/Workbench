@@ -105,6 +105,8 @@ import type {
   SkillSummary,
   SkillUpdateCategoryPayload,
   SkillUpdatePayload,
+  TerminalInventoryEvent,
+  TerminalInventorySnapshot,
   TerminalProcessInventory,
   TerminalStopAllResult,
   TmuxSessionInfo,
@@ -169,7 +171,7 @@ export type OpenSshTerminalResult = {
 
 export interface CoreElectronApi {
   detectProjects: (path: string) => Promise<ProjectInfo | null>
-  startProcess: (id: string, cmd: string, cwd: string, useWsl?: boolean) => Promise<boolean>
+  startProcess: (id: string, cmd: string, cwd: string, useWsl?: boolean, initialSize?: { cols: number; rows: number }) => Promise<boolean>
   stopProcess: (id: string) => Promise<boolean>
   sendInput: (id: string, data: string) => Promise<boolean>
   getConfig: () => Promise<AppConfig>
@@ -376,6 +378,8 @@ export interface RuntimeElectronApi {
   killTmuxSession: (sessionName: string) => Promise<boolean>
   listTerminalProcesses: () => Promise<TerminalProcessInventory>
   listManagedProcesses: () => Promise<ManagedProcessSnapshot[]>
+  /** 轻量清单快照（只读主进程 Map + revision），用于初始/重连基线。 */
+  getTerminalInventorySnapshot: () => Promise<TerminalInventorySnapshot>
   stopAllTerminalProcesses: () => Promise<TerminalStopAllResult>
   startRuntime: (projectId: string, projectPath: string, profile?: AiRuntimeProfile | null, cli?: 'claude' | 'codex') => Promise<boolean>
   getRuntimeDiagnostics: (profile?: AiRuntimeProfile | null) => Promise<RuntimeDiagnostics>
@@ -420,6 +424,7 @@ export interface SubscriptionElectronApi {
   onRunTaskConfigChanged: ElectronApiSubscription<string>
   onProcessStatus: ElectronApiSubscription<ProcessStatusEvent>
   onProcessExit: ElectronApiSubscription<ProcessExitEvent>
+  onTerminalInventoryChanged: ElectronApiSubscription<TerminalInventoryEvent>
   onRuntimeStateChanged: ElectronApiSubscription<RuntimeStateChangedEvent>
   onAiCommitOutput: ElectronApiSubscription<ProcessOutputEvent>
   onAiCommitStatus: ElectronApiSubscription<AiCommitStatusEvent>

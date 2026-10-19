@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Folder, Terminal as TerminalIcon, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { parseRunTaskProcessKey } from '../../../shared/runTasks'
-import type { ManagedProcessSnapshot, TerminalProcessInventory } from '../../../shared/types'
+import type { ManagedProcessSnapshot } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { useOpenProjectTerminal } from '../../hooks/useOpenProjectTerminal'
 import { useI18n } from '../../i18n'
@@ -23,8 +23,10 @@ interface ProcessTreeGroup {
 function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPanelProps) {
   const { t } = useI18n()
   const openProjectTerminal = useOpenProjectTerminal()
+  // 托管进程清单：共享 terminalInventory（主进程事件驱动），不再本地 5s 轮询。
+  const managedProcesses = useAppStore((s) => s.terminalInventory)
+  const applyTerminalInventorySnapshot = useAppStore((s) => s.applyTerminalInventorySnapshot)
   const [inventoryLoading, setInventoryLoading] = useState(false)
-  const [inventory, setInventory] = useState<TerminalProcessInventory | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null)
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<ReadonlySet<string>>(new Set())
   const appliedInitialProjectIdRef = useRef<string | null | undefined>(undefined)
@@ -60,30 +62,18 @@ function SettingsStartupLogsPanel({ projects, initialProjectId }: StartupLogsPan
     return item.projectId
   }
 
-  const refreshInventory = async (silent = false) => {
-    if (!silent) setInventoryLoading(true)
+  // 刷新按钮：拉一次轻量快照（带 revision）写回共享清单。
+  const refreshInventory = async () => {
+    setInventoryLoading(true)
     try {
-      const data = await window.electronAPI.listTerminalProcesses()
-      setInventory(data)
+      const snapshot = await window.electronAPI.getTerminalInventorySnapshot()
+      applyTerminalInventorySnapshot(snapshot)
     } finally {
-      if (!silent) setInventoryLoading(false)
+      setInventoryLoading(false)
     }
   }
 
-  useEffect(() => {
-    void refreshInventory()
-  }, [])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void refreshInventory(true)
-    }, 5000)
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [])
-
-  const projectManaged = useMemo(() => (inventory?.managedProcesses || []).filter((p) => classifyManagedProcess(p) === 'project'), [inventory])
+  const projectManaged = useMemo(() => managedProcesses.filter((p) => classifyManagedProcess(p) === 'project'), [managedProcesses])
 
   // Group processes by project so multi-process projects read as one tree node.
   const processGroups = useMemo<ProcessTreeGroup[]>(() => {

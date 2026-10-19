@@ -636,6 +636,9 @@ body.gesture-active .modal-overlay-backdrop {
 .toast-item--error .toast-item-icon {
   color: var(--color-destructive);
 }
+.toast-item--loading .toast-item-icon {
+  color: var(--color-primary);
+}
 
 .toast-item-body {
   min-width: 0;

@@ -3,6 +3,7 @@ import { shouldUseWslForRuntimeEntrypoint } from '../../shared/runtimeEntrypoint
 import type { AppConfig, Capability, SavedProject, TmuxSessionInfo } from '../../shared/types'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
 import { applySavedProjectSnapshot, createFallbackProject } from './appStore.helpers'
+import { hydrateFloatingPanel } from './appStore.terminalCollectionSlice'
 import type { AppState } from './appStore.types'
 
 let initAppPromise: Promise<void> | null = null
@@ -90,6 +91,8 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         folders: (config.folders ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
         tags: (config.tags ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
         capability,
+        // 面板几何从 config 水合（dock/sizeRatio 恢复持久化值，hidden 恒为 true）。
+        floatingPanel: hydrateFloatingPanel(config.floatingPanel),
         isAppReady: true,
       })
 
@@ -139,6 +142,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       folders: (config.folders ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
       tags: (config.tags ?? []).slice().sort((a, b) => a.sortOrder - b.sortOrder),
       capability,
+      floatingPanel: hydrateFloatingPanel(config.floatingPanel),
     })
   },
 })

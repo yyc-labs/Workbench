@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
-import type { AiRuntimeProfile, ManagedProcessSnapshot } from '../../shared/types'
+import type { AiRuntimeProfile, ManagedProcessSnapshot, TerminalInventorySnapshot } from '../../shared/types'
 
 export function createRuntimeInvokeApi() {
   return {
@@ -13,6 +13,8 @@ export function createRuntimeInvokeApi() {
     listTerminalProcesses: () => ipcRenderer.invoke(IPC.TERMINAL_LIST_ALL),
 
     listManagedProcesses: () => ipcRenderer.invoke(IPC.TERMINAL_LIST_MANAGED) as Promise<ManagedProcessSnapshot[]>,
+
+    getTerminalInventorySnapshot: () => ipcRenderer.invoke(IPC.TERMINAL_INVENTORY_SNAPSHOT) as Promise<TerminalInventorySnapshot>,
 
     stopAllTerminalProcesses: () => ipcRenderer.invoke(IPC.TERMINAL_STOP_ALL),
 

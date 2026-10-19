@@ -22,7 +22,7 @@ export function createCoreInvokeApi() {
   return {
     detectProjects: (dirPath: string) => ipcRenderer.invoke(IPC.DETECT_DIRECTORY, dirPath),
 
-    startProcess: (projectId: string, command: string, cwd: string, useWsl?: boolean) => ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd, useWsl),
+    startProcess: (projectId: string, command: string, cwd: string, useWsl?: boolean, initialSize?: { cols: number; rows: number }) => ipcRenderer.invoke(IPC.PROCESS_START, projectId, command, cwd, useWsl, initialSize),
 
     stopProcess: (projectId: string) => ipcRenderer.invoke(IPC.PROCESS_STOP, projectId),
 

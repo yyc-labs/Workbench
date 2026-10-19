@@ -112,6 +112,8 @@ export const IPC = {
   TMUX_KILL_SESSION: 'tmux:kill-session',
   TERMINAL_LIST_ALL: 'terminal:list-all',
   TERMINAL_LIST_MANAGED: 'terminal:list-managed',
+  TERMINAL_INVENTORY_SNAPSHOT: 'terminal:inventory-snapshot',
+  TERMINAL_INVENTORY_CHANGED: 'terminal:inventory-changed',
   TERMINAL_STOP_ALL: 'terminal:stop-all',
   PROCESS_PORTS_LIST: 'process-ports:list',
   RUN_TASK_GET_CONFIG: 'run-task:get-config',

@@ -72,6 +72,12 @@ export function registerRuntimeIpcHandlers(deps: RegisterIpcHandlersDependencies
     return deps.getProcessManager()?.listManagedProcesses() ?? []
   })
 
+  // 带版本号的清单快照：renderer 启动/重连时建立基线；与 terminal:inventory-changed
+  // 增量事件共用 revision，旧快照不会覆盖较新的事件状态。
+  ipcMain.handle(IPC.TERMINAL_INVENTORY_SNAPSHOT, () => {
+    return deps.getProcessManager()?.getInventorySnapshot() ?? { revision: 0, managedProcesses: [] }
+  })
+
   ipcMain.handle(IPC.TERMINAL_STOP_ALL, async (): Promise<TerminalStopAllResult> => {
     return deps.runtimeService.stopAllTerminals()
   })

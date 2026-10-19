@@ -1,5 +1,6 @@
 import type { StateCreator } from 'zustand'
 import { resolveProcessUseWsl } from '../lib/processEnvironmentResolution'
+import { computeTerminalPanelViewport } from '../lib/terminalViewportSize'
 import { collectUrlsFromText, loadPersistedProcessUrls, persistProcessUrls, trimTerminalBuffer } from './appStore.helpers'
 import type { AppState } from './appStore.types'
 
@@ -59,7 +60,16 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
       },
     }))
 
-    const started = await window.electronAPI.startProcess(pid, command, cwd, resolvedUseWsl)
+    // 以集合面板终端区域的预测尺寸启动 pty：避免 shell 在默认 80x24 下先渲染 prompt
+    // （长路径换行），视图挂载后再 resize 触发 conpty reflow 导致输入回显错位。
+    const initialViewport = computeTerminalPanelViewport({
+      dock: get().floatingPanel.dock,
+      sizeRatio: get().floatingPanel.sizeRatio,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    })
+
+    const started = await window.electronAPI.startProcess(pid, command, cwd, resolvedUseWsl, initialViewport)
     if (!started) {
       set((state) => ({
         processes: {
@@ -207,14 +217,15 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
   syncManagedProcesses: async () => {
     try {
-      const inventory = await window.electronAPI.listTerminalProcesses()
+      // 轻量快照通道：只读主进程 Map（不查 WSL/tmux 外部会话）。
+      const snapshot = await window.electronAPI.getTerminalInventorySnapshot()
       const projects = get().projects
       if (projects.length === 0) return
 
       const projectIdSet = new Set(projects.map((p) => p.id))
       const runningByProject: Record<string, AppState['processes'][string]> = {}
 
-      for (const item of inventory.managedProcesses) {
+      for (const item of snapshot.managedProcesses) {
         if (item.processId.includes('::toolbox')) continue
         // Run-task processes are owned by the run-task scheduler, never merged into project state.
         if (item.processId.includes('::run::')) continue

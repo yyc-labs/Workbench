@@ -69,6 +69,60 @@ function isRunningStatus(status: string): boolean {
   return status === 'running' || status === 'ready' || status === 'stopping'
 }
 
+/**
+ * Ctrl+J 唤醒决策（toggleTerminalCollection 的纯函数化）。
+ *
+ * 规则（2026-10-18 用户确认）：
+ * - 非项目路由（无上下文项目）：集合里已有任意会话 → 只唤醒面板，**不新建终端**；
+ *   激活上次激活项目（有会话时），否则最近打开的有会话项目。
+ * - 项目路由：该项目有会话 → 唤醒；没有 → 新建（保证「在项目里 Ctrl+J 就能看到该项目的终端」）。
+ * - 既无项目也无会话 → none。
+ */
+export interface TerminalCollectionWakeInput {
+  /** 项目路由上下文（/project/:projectId）；非项目路由为 null/undefined。 */
+  contextProjectId?: string | null
+  /** store 里上次激活的项目 tab。 */
+  activeProjectId: string | null
+  /** 按最近打开降序的项目 id。 */
+  recentProjectIds: readonly string[]
+  /** 启动中占位所属项目。 */
+  pendingProjectIds: readonly string[]
+  /** 当前清单的 processKey 列表。 */
+  inventoryProcessIds: readonly string[]
+}
+
+export type TerminalCollectionWakeDecision = { action: 'create'; projectId: string } | { action: 'wake'; projectId: string } | { action: 'none' }
+
+export function resolveTerminalCollectionWake(input: TerminalCollectionWakeInput): TerminalCollectionWakeDecision {
+  // toolbox 只读不参与「有没有会话」的判断。
+  const liveKeys = input.inventoryProcessIds.filter((processId) => {
+    const parsed = parseTerminalProcessKey(processId)
+    return parsed != null && parsed.kind !== 'toolbox'
+  })
+  const projectHasTerminals = (projectId: string): boolean => input.pendingProjectIds.includes(projectId) || liveKeys.some((processId) => parseTerminalProcessKey(processId)?.projectId === projectId)
+  const hasAnyTerminals = liveKeys.length > 0 || input.pendingProjectIds.length > 0
+
+  if (input.contextProjectId) {
+    return projectHasTerminals(input.contextProjectId) ? { action: 'wake', projectId: input.contextProjectId } : { action: 'create', projectId: input.contextProjectId }
+  }
+
+  // 非项目路由：已有任意会话 → 只唤醒，绝不新建。
+  if (hasAnyTerminals) {
+    if (input.activeProjectId && projectHasTerminals(input.activeProjectId)) {
+      return { action: 'wake', projectId: input.activeProjectId }
+    }
+    const recentWithTerminals = input.recentProjectIds.find((projectId) => projectHasTerminals(projectId))
+    if (recentWithTerminals) return { action: 'wake', projectId: recentWithTerminals }
+    // 边界：会话属于已删除项目——落到清单里第一个有会话的项目。
+    const firstLiveProjectId = liveKeys.map((processId) => parseTerminalProcessKey(processId)?.projectId).find((projectId): projectId is string => projectId != null)
+    return firstLiveProjectId ? { action: 'wake', projectId: firstLiveProjectId } : { action: 'none' }
+  }
+
+  // 无任何会话：保持原语义（上次激活 ?? 最近项目）新建一个。
+  const fallback = input.activeProjectId ?? input.recentProjectIds[0] ?? null
+  return fallback ? { action: 'create', projectId: fallback } : { action: 'none' }
+}
+
 /** 坞内一致的 kind 排序：run → primary → float → script → toolbox。 */
 const KIND_ORDER: Record<TerminalProcessKind, number> = {
   run: 0,

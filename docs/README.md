@@ -11,7 +11,6 @@ docs/
 │   └── git-commit-format-cn.md
 ├── reference/                # 稳定的技术接口和集成说明，可提交
 │   ├── architecture.md       # 产品模块、Electron 分层和 AI 工作流
-│   ├── terminal/             # 终端体系（Ctrl+J）全流程分析与优化建议
 │   └── hooks/
 │       ├── agent-hook-gateway.md
 │       └── transcript-import-api.md
@@ -35,7 +34,6 @@ docs/
 ### 技术参考
 
 - [模块与架构说明](./reference/architecture.md)：产品模块、Electron 分层、AI 工作流和 Windows/WSL 边界。
-- [终端体系分析（Ctrl+J）](./reference/terminal/README.md)：开启 / 检测 / 关闭全流程分析与优化建议。
 - [Agent Hook Gateway](./reference/hooks/agent-hook-gateway.md)：Agent 生命周期 Hook Gateway 说明。
 - [Transcript Import API](./reference/hooks/transcript-import-api.md)：Transcript 导入接口说明。
 

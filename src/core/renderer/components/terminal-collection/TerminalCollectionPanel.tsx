@@ -3,6 +3,7 @@ import { type CSSProperties, memo, type PointerEvent as ReactPointerEvent, useCa
 import type { FloatingTerminalDock } from '../../../shared/types'
 import type { TerminalProcessKind } from '../../../shared/terminals'
 import { buildTerminalCollectionModel, type CollectionTerminalItem } from '../../lib/terminalCollectionModel'
+import { TERMINAL_LIST_WIDTH, TERMINAL_PANEL_HEADER_HEIGHT } from '../../lib/terminalViewportSize'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import { Terminal } from '../Terminal'
@@ -12,7 +13,6 @@ import { ContextCascader } from '../ui/ContextCascader'
 import { TerminalCollectionProjectPicker } from './TerminalCollectionProjectPicker'
 
 const DOCK_RESIZE_STRIP = 8
-const TERMINAL_LIST_WIDTH = 208
 
 /** 停靠几何直出（纯函数）。 */
 function panelGeometryStyle(dock: FloatingTerminalDock, sizeRatio: number): CSSProperties {
@@ -245,7 +245,8 @@ function TerminalCollectionPanelInner({ contextProjectId }: TerminalCollectionPa
     >
       {/* 项目 tab 行：点击切换项目；空白处右键打开位置菜单 */}
       <div
-        className="app-chrome flex h-9 shrink-0 items-stretch border-b border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]"
+        className="app-chrome flex shrink-0 items-stretch border-b border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)]"
+        style={{ height: TERMINAL_PANEL_HEADER_HEIGHT }}
         title={t('terminalCollection.dockHint')}
         onContextMenu={(event) => {
           event.preventDefault()

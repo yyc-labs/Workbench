@@ -16,6 +16,8 @@ interface UrlPopoverProps {
   forcePopover?: boolean
   /** 追加到触发容器上的 className。 */
   triggerClassName?: string
+  /** 点击条目后立即关闭弹出层（默认 false，保持既有 hover 交互）。 */
+  closeOnSelect?: boolean
   /** 搜索框占位文案（默认 common.searchLinks）。 */
   searchPlaceholder?: string
   /** 打开链接管理弹窗（详情浮层「管理链接」动作触发；由 ProjectLinksTrigger 透传） */
@@ -467,7 +469,7 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
   await window.electronAPI.openExternal(entry.url)
 }
 
-export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, searchPlaceholder, onOpenManager }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, closeOnSelect = false, searchPlaceholder, onOpenManager }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
   const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
@@ -701,6 +703,8 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
   const handleOpenEntry = async (entry: PreparedUrlPopoverEntry) => {
     if (openingEntryKey === entry.key) return
     setDetailCard(null)
+    // 动作类条目（如快捷操作）点击即关闭，执行反馈交由调用方的 toast 承载。
+    if (closeOnSelect) closePopover({ blur: true })
     const trackOpening = entry.kind === 'ssh'
     if (trackOpening) setOpeningEntryKey(entry.key)
 

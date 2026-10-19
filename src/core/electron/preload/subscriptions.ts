@@ -1,7 +1,7 @@
 import { type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { WindowStateEvent } from '../../shared/electronApi'
 import type { RunTaskProgressEvent } from '../../shared/runTasks'
-import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, MarkdownDocumentOpenRequest, TranscriptImportedEvent } from '../../shared/types'
+import type { AgentHookEnvelope, BrowserAiTaskProgressEvent, BrowserScreenshotProgress, BrowserScreenshotTargetsChanged, BrowserScreenshotViewerPayload, MarkdownDocumentOpenRequest, TerminalInventoryEvent, TranscriptImportedEvent } from '../../shared/types'
 import { IPC } from '../main/ipc'
 
 type AiCommitOutputData = { projectId: string; data: string }
@@ -55,6 +55,8 @@ export function createSubscriptionApi() {
     onProcessStatus: (cb: (data: { projectId: string; status: string }) => void) => subscribeIpcEvent(IPC.PROCESS_STATUS, cb),
 
     onProcessExit: (cb: (data: { projectId: string; code: number | null }) => void) => subscribeIpcEvent(IPC.PROCESS_EXIT, cb),
+
+    onTerminalInventoryChanged: (cb: (data: TerminalInventoryEvent) => void) => subscribeIpcEvent(IPC.TERMINAL_INVENTORY_CHANGED, cb),
 
     onRuntimeStateChanged: (cb: (data: { reason: string; projectId?: string; sessionName?: string }) => void) => subscribeIpcEvent(IPC.RUNTIME_STATE_CHANGED, cb),
 

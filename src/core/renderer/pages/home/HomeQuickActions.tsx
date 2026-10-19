@@ -33,6 +33,21 @@ export function HomeQuickActions() {
     [t],
   )
 
+  /** 点击即执行：loading toast 常驻至主进程返回，再替换为成功/失败通知。 */
+  const runAction = useCallback(
+    async (id: string) => {
+      const loadingId = toast.loading(t('home.quickActions.executing'))
+      try {
+        notifyResult(await executeQuickAction({ id }))
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+      } finally {
+        toast.dismiss(loadingId)
+      }
+    },
+    [executeQuickAction, notifyResult, t],
+  )
+
   const items = useMemo<UrlPopoverItem[]>(() => {
     const manageItem: UrlPopoverItem = {
       url: 'quick-action://manage',
@@ -50,16 +65,16 @@ export function HomeQuickActions() {
         url: `quick-action://${action.id}`,
         label: action.name,
         description,
-        onOpen: () => executeQuickAction({ id: action.id }).then(notifyResult),
+        onOpen: () => runAction(action.id),
       }
     })
     return [manageItem, ...actionItems]
-  }, [enabledActions, navigate, notifyResult, projects, t])
+  }, [enabledActions, navigate, projects, runAction, t])
 
   if (enabledActions.length === 0) return null
 
   return (
-    <UrlPopover items={items} forcePopover searchPlaceholder={t('home.quickActions.searchPlaceholder')} triggerClassName="shrink-0">
+    <UrlPopover items={items} forcePopover closeOnSelect searchPlaceholder={t('home.quickActions.searchPlaceholder')} triggerClassName="shrink-0">
       <Button variant="ghost" size="sm" className="h-8 gap-1 rounded-full px-3 text-sm text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]">
         <Zap className="h-4 w-4" strokeWidth={1.8} />
         {t('home.quickActions.title')}

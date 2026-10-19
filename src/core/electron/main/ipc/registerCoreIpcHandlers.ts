@@ -25,8 +25,8 @@ export function registerCoreIpcHandlers(deps: RegisterIpcHandlersDependencies): 
     return detectProject(dirPath)
   })
 
-  ipcMain.handle(IPC.PROCESS_START, (_event, projectId: string, command: string, cwd: string, useWsl?: boolean) => {
-    const started = deps.getProcessManager()?.start(projectId, command, cwd, useWsl) ?? false
+  ipcMain.handle(IPC.PROCESS_START, (_event, projectId: string, command: string, cwd: string, useWsl?: boolean, initialSize?: { cols: number; rows: number }) => {
+    const started = deps.getProcessManager()?.start(projectId, command, cwd, useWsl, initialSize) ?? false
     if (started) {
       deps.emitRuntimeStateChanged({ reason: 'process-start', projectId })
     }
