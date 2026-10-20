@@ -65,6 +65,7 @@ function setup(overrides = {}) {
     validateProjectPath: (projectPath) => projectPath === PROJECT_PATH,
     navigateMainWindow: (pathname) => navigations.push(pathname),
     ensureWindowVisible: () => windowVisibleCalls.push(true),
+    hasMainWindow: () => overrides.hasMainWindow ?? true,
     openPath: async (target) => {
       openedPaths.push(target)
       return overrides.openPathError ?? ''
@@ -74,6 +75,8 @@ function setup(overrides = {}) {
       if (overrides.openExternalError) throw overrides.openExternalError
     },
     randomUUID: () => `00000000-0000-4000-8000-${String(++uuidCounter).padStart(12, '0')}`,
+    isWorkday: () => true,
+    now: () => new Date(2026, 0, 15, 12, 0, 0),
     ...(desktopShortcuts ? { desktopShortcuts } : {}),
   })
 
@@ -279,6 +282,132 @@ test('delete removes a stale shortcut file best-effort', async () => {
   await service.createDesktopShortcut(created.id)
   assert.equal(await service.delete(created.id), true)
   assert.equal(getStored().actions.length, 0)
+})
+
+function dailySchedule(overrides = {}) {
+  return { kind: 'daily', times: ['09:00'], calendarMode: 'every-day', enabled: true, ...overrides }
+}
+
+test('create persists the schedule and update replaces or clears it', async () => {
+  const { service, getStored } = setup()
+  const created = await service.create({
+    name: 'Morning standup',
+    action: { type: 'run-task', projectPath: PROJECT_PATH },
+    schedule: dailySchedule(),
+  })
+  assert.deepEqual(created.schedule, dailySchedule())
+  assert.deepEqual(getStored().actions[0].schedule, dailySchedule())
+
+  const replaced = await service.update(created.id, { schedule: dailySchedule({ kind: 'weekly', weekdays: [1, 3] }) })
+  assert.deepEqual(replaced.schedule, dailySchedule({ kind: 'weekly', weekdays: [1, 3] }))
+
+  const cleared = await service.update(created.id, { schedule: null })
+  assert.equal('schedule' in cleared, false)
+  assert.equal('schedule' in getStored().actions[0], false)
+})
+
+test('execute with silent navigates without focusing and skips when no window exists', async () => {
+  const { service, navigations, windowVisibleCalls } = setup()
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+
+  // 手动触发（无 silent）：ensureWindowVisible 照旧。
+  assert.deepEqual(await service.execute({ id: created.id }), { ok: true, kind: 'navigated' })
+  assert.deepEqual(windowVisibleCalls, [true])
+
+  // silent 有窗口：只导航，不 ensureWindowVisible。
+  assert.deepEqual(await service.execute({ id: created.id }, { silent: true }), { ok: true, kind: 'navigated' })
+  assert.equal(navigations.length, 2)
+  assert.deepEqual(windowVisibleCalls, [true])
+
+  // silent 无窗口：跳过执行并记 no-window 失败。
+  const noWindow = setup({ hasMainWindow: false })
+  const created2 = await noWindow.service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  const result = await noWindow.service.execute({ id: created2.id }, { silent: true })
+  assert.deepEqual(result, { ok: false, code: 'no-window' })
+  assert.equal(noWindow.navigations.length, 0)
+  assert.deepEqual(noWindow.windowVisibleCalls, [])
+})
+
+test('setScheduleRunStamp writes run state and clears fields with undefined', async () => {
+  const { service, getStored } = setup()
+  const created = await service.create({
+    name: 'Daily',
+    action: { type: 'run-task', projectPath: PROJECT_PATH },
+    schedule: dailySchedule({ nextRetryAt: 111, attemptCount: 2 }),
+  })
+
+  await service.setScheduleRunStamp(created.id, { lastRunAt: 500, lastRunDate: '2026-01-15', attemptCount: 0, nextRetryAt: undefined })
+  let stored = getStored().actions[0].schedule
+  assert.equal(stored.lastRunAt, 500)
+  assert.equal(stored.lastRunDate, '2026-01-15')
+  assert.equal(stored.attemptCount, 0)
+  assert.equal('nextRetryAt' in stored, false)
+
+  // 失败重试：写 attemptCount/nextRetryAt，不碰 lastRunDate。
+  await service.setScheduleRunStamp(created.id, { lastAttemptAt: 900, attemptCount: 1, nextRetryAt: 960 })
+  stored = getStored().actions[0].schedule
+  assert.equal(stored.lastRunDate, '2026-01-15')
+  assert.equal(stored.lastAttemptAt, 900)
+  assert.equal(stored.attemptCount, 1)
+  assert.equal(stored.nextRetryAt, 960)
+
+  // 多时间点：runSlots 记录当天已成功执行的时间点，attemptTime 标记重试归属。
+  await service.setScheduleRunStamp(created.id, { lastRunAt: 800, lastRunDate: '2026-01-15', runSlots: ['09:00'] })
+  stored = getStored().actions[0].schedule
+  assert.deepEqual(stored.runSlots, ['09:00'])
+  await service.setScheduleRunStamp(created.id, { lastAttemptAt: 950, attemptTime: '18:00', attemptCount: 1, nextRetryAt: 1010 })
+  stored = getStored().actions[0].schedule
+  assert.equal(stored.attemptTime, '18:00')
+  // 未包含的 runSlots 保持不动。
+  assert.deepEqual(stored.runSlots, ['09:00'])
+
+  // once 消耗：enabled 置 false。
+  const once = await service.create({
+    name: 'Once',
+    action: { type: 'run-task', projectPath: PROJECT_PATH },
+    schedule: { kind: 'once', times: ['09:00'], date: '2026-03-10', calendarMode: 'every-day', enabled: true },
+  })
+  await service.setScheduleRunStamp(once.id, { lastRunAt: 700, lastRunDate: '2026-03-10', attemptCount: 0, enabled: false })
+  stored = getStored().actions.find((item) => item.id === once.id).schedule
+  assert.equal(stored.enabled, false)
+
+  // 未知 id / 无 schedule 的条目：静默跳过。
+  await service.setScheduleRunStamp('missing-id', { lastRunAt: 1 })
+  const plain = await service.create({ name: 'Plain', action: { type: 'open-path', path: 'C:/Windows' } })
+  await service.setScheduleRunStamp(plain.id, { lastRunAt: 1 })
+  assert.equal('schedule' in getStored().actions.find((item) => item.id === plain.id), false)
+})
+
+test('list computes scheduleNextRunAt only for enabled schedules', async () => {
+  const { service } = setup()
+  // 2026-01-15 12:00（注入时钟）之后的下一次 daily 09:00 = 2026-01-16 09:00。
+  const created = await service.create({
+    name: 'Daily',
+    action: { type: 'run-task', projectPath: PROJECT_PATH },
+    schedule: dailySchedule(),
+  })
+  assert.equal(service.list()[0].scheduleNextRunAt, new Date(2026, 0, 16, 9, 0).getTime())
+
+  // 未启用：不计算。
+  await service.update(created.id, { schedule: dailySchedule({ enabled: false }) })
+  assert.equal(service.list()[0].scheduleNextRunAt, undefined)
+
+  // once 已过：undefined。
+  const once = await service.create({
+    name: 'Once past',
+    action: { type: 'run-task', projectPath: PROJECT_PATH },
+    schedule: { kind: 'once', times: ['09:00'], date: '2026-01-10', calendarMode: 'every-day', enabled: true },
+  })
+  assert.equal(service.list().find((item) => item.id === once.id).scheduleNextRunAt, undefined)
+})
+
+test('readActions exposes stored actions without view enrichment', async () => {
+  const { service } = setup()
+  await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  const actions = service.readActions()
+  assert.equal(actions.length, 1)
+  assert.equal(actions[0].name, 'Open app')
+  assert.equal('shortcutState' in actions[0], false)
 })
 
 /** Mirrors shared/rules.ts projectIdFromPath for navigation assertions. */

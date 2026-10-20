@@ -1,6 +1,8 @@
 import type { StateCreator } from 'zustand'
+import { resolveInteractiveShellCommand } from '../lib/interactiveShell'
 import { resolveProcessUseWsl } from '../lib/processEnvironmentResolution'
-import { computeTerminalPanelViewport } from '../lib/terminalViewportSize'
+import { sendTerminalCommand } from '../lib/terminalCommand'
+import { predictCurrentPanelViewport } from '../lib/terminalViewportSize'
 import { collectUrlsFromText, loadPersistedProcessUrls, persistProcessUrls, trimTerminalBuffer } from './appStore.helpers'
 import type { AppState } from './appStore.types'
 
@@ -45,6 +47,21 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
       // Fall back to managed/background mode if external terminal launch fails.
     }
 
+    // 主 dev 启动走「交互 shell + 命令下发」：命令结束只是前台进程退出，shell 回到提示符，
+    // 终端不随命令关闭——Ctrl+C 中断 dev server 后会话仍在，可立即重跑（与 ::script::/::float::
+    // 终端同一套保活语义；这两类由调用方直接传入已解析的 shell 命令，不在此处理）。
+    // shell 命令解析失败时退回一次性命令启动（旧行为）。
+    let launchCommand = command
+    let followUpCommand: string | null = null
+    if (isPrimaryProjectRun) {
+      try {
+        launchCommand = await resolveInteractiveShellCommand(resolvedUseWsl ?? false)
+        followUpCommand = command
+      } catch {
+        /* shell 不可用：保持一次性命令启动 */
+      }
+    }
+
     set((state) => ({
       processes: {
         ...state.processes,
@@ -62,14 +79,9 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
 
     // 以集合面板终端区域的预测尺寸启动 pty：避免 shell 在默认 80x24 下先渲染 prompt
     // （长路径换行），视图挂载后再 resize 触发 conpty reflow 导致输入回显错位。
-    const initialViewport = computeTerminalPanelViewport({
-      dock: get().floatingPanel.dock,
-      sizeRatio: get().floatingPanel.sizeRatio,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
-    })
+    const initialViewport = predictCurrentPanelViewport(get().floatingPanel)
 
-    const started = await window.electronAPI.startProcess(pid, command, cwd, resolvedUseWsl, initialViewport)
+    const started = await window.electronAPI.startProcess(pid, launchCommand, cwd, resolvedUseWsl, initialViewport)
     if (!started) {
       set((state) => ({
         processes: {
@@ -91,6 +103,13 @@ export const createProcessActionsSlice: StateCreator<AppState, [], [], ProcessAc
       persistProcessUrls(get().processUrls)
       await get().syncManagedProcesses()
       return false
+    }
+    // 交互 shell 就绪（首条输出或 1s 兜底）后把命令作为键盘输入下发。
+    if (followUpCommand !== null) {
+      sendTerminalCommand(pid, followUpCommand, {
+        onOutput: window.electronAPI.onProcessOutput,
+        sendInput: (key, data) => get().sendInput(key, data),
+      })
     }
     return true
   },

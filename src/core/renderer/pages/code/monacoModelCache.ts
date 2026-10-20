@@ -4,7 +4,8 @@ import type { editor as MonacoEditor } from 'monaco-editor'
 // - 撤销栈挂在 Model 上，缓存提升到模块级后，编辑器卸载/重挂载不再丢失撤销历史。
 // - 缓存 key 包含项目路径，避免不同项目的同名相对路径互相串用 Model。
 // - 通过引用计数保护挂载中编辑器正在使用的 Model 不被 LRU 驱逐。
-const MAX_CACHED_MODELS = 12
+// - undo 栈随 model dispose 丢失，上限权衡常驻内存与撤销栈保留。
+const MAX_CACHED_MODELS = 24
 
 const MODULE_CACHE_INMEMORY_KEY = '__inmemory__'
 
@@ -12,6 +13,21 @@ type MonacoApi = typeof import('monaco-editor')
 
 const moduleModelCache = new Map<string, MonacoEditor.ITextModel>()
 const activeModelKeyCounts = new Map<string, number>()
+// 模块级编辑器视图状态存档：key 与 model 缓存一致（projectPath::filePath）。
+// 撤销栈在 model 上，视图状态在 editor 上；editor 随挂载 dispose 后光标/滚动/选区丢失，
+// 此处按 key 存档，重挂载后 restore。仅本会话有效（刷新即失效），
+// 与 ProjectCodeSession.cursorPositions 持久化机制分工见 06-monaco-编辑器-plan-detail.md §1.7。
+const monacoViewStates = new Map<string, MonacoEditor.ICodeEditorViewState>()
+
+export function saveMonacoViewState(key: string, state: MonacoEditor.ICodeEditorViewState | null): void {
+  if (key === MODULE_CACHE_INMEMORY_KEY || !state) return
+  monacoViewStates.set(key, state)
+}
+
+export function getMonacoViewState(key: string): MonacoEditor.ICodeEditorViewState | null {
+  if (key === MODULE_CACHE_INMEMORY_KEY) return null
+  return monacoViewStates.get(key) ?? null
+}
 
 export function normalizeMonacoCachePath(value: string | null | undefined): string {
   return (value ?? '').trim().replace(/\\/g, '/')
@@ -81,8 +97,11 @@ function evictStaleMonacoModels(activeKey: string): void {
       moduleModelCache.set(oldestKey, oldestModel)
       continue
     }
+    // 驱逐留痕：undo 栈随 model dispose 丢失，便于回归观察 LRU 行为。
+    console.warn('[model-cache] evict+dispose', oldestKey)
     moduleModelCache.delete(oldestKey)
     oldestModel.dispose()
+    monacoViewStates.delete(oldestKey)
   }
 }
 

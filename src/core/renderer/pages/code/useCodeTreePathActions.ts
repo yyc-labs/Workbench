@@ -2,7 +2,9 @@ import { type Dispatch, type SetStateAction, useCallback, useRef, useState } fro
 import type { ProjectFileNodeKind } from '../../../shared/types'
 import { toast } from '../../components/ui/toast'
 import { useI18n } from '../../i18n'
+import { resolveInteractiveShellCommand } from '../../lib/interactiveShell'
 import { resolveProcessUseWsl } from '../../lib/processEnvironmentResolution'
+import { sendTerminalCommand } from '../../lib/terminalCommand'
 import { useAppStore } from '../../stores/appStore'
 import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import { copyTextToClipboard } from './code.clipboard'
@@ -240,7 +242,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
   }, [projectId])
 
   const executeScript = useCallback(
-    (channel: 'system' | 'embedded', relativePath: string, nodeKind: ProjectFileNodeKind, info: ExecutableScriptInfo) => {
+    async (channel: 'system' | 'embedded', relativePath: string, nodeKind: ProjectFileNodeKind, info: ExecutableScriptInfo) => {
       // cwd 是文件父目录（resolveTreeNodeFolderPath），命令参数必须只用文件名——
       // 用完整 relativePath 会拼出 <parent>/<relativePath> 双路径（scripts\scripts\…）。
       const cwd = resolveTreeNodeFolderPath(projectPath, relativePath, nodeKind)
@@ -251,19 +253,32 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
         })
         return
       }
-      // 内置通道：显式传 'silent' 启动模式，避免 isPrimaryProjectRun 命中时被劫持到外部终端。
+      // 内置通道：启动交互 shell，再把命令作为键盘输入发送——脚本结束后 shell 回到提示符，
+      // 终端保持打开供查看输出（直接 spawn 一次性命令会在退出时带着终端一起消失）。
+      // 显式传 'silent' 启动模式，避免 isPrimaryProjectRun 命中时被劫持到外部终端。
       const processKey = allocateScriptProcessKey()
-      const startProject = useAppStore.getState().startProject
       const useWsl = resolveProcessUseWsl(cwd) ?? false
-      void startProject(projectId, command, processKey, useWsl, cwd, 'silent').then((ok) => {
-        if (!ok) {
-          toast.error(t('codeFileTree.terminalLaunchFailed'))
-          return
-        }
-        // 脚本输出归属集合面板：初始 title 用脚本文件名（D6），并唤起面板聚焦该终端（D5 显式终端动作）。
-        const store = useAppStore.getState()
-        store.renameTerminal(projectId, processKey, fileNameFromRelativePath(relativePath))
-        store.revealTerminal(projectId, processKey)
+      let shellCommand: string
+      try {
+        shellCommand = await resolveInteractiveShellCommand(useWsl)
+      } catch {
+        toast.error(t('codeFileTree.terminalLaunchFailed'))
+        return
+      }
+      const startProject = useAppStore.getState().startProject
+      const ok = await startProject(projectId, shellCommand, processKey, useWsl, cwd, 'silent')
+      if (!ok) {
+        toast.error(t('codeFileTree.terminalLaunchFailed'))
+        return
+      }
+      // 脚本输出归属集合面板：初始 title 用脚本文件名（D6），并唤起面板聚焦该终端（D5 显式终端动作）。
+      const store = useAppStore.getState()
+      store.renameTerminal(projectId, processKey, fileNameFromRelativePath(relativePath))
+      store.revealTerminal(projectId, processKey)
+      // 命令经 shell 输入通道下发：等该终端首条输出（shell 就绪）后发送，超时按 type-ahead 兜底。
+      sendTerminalCommand(processKey, command, {
+        onOutput: window.electronAPI.onProcessOutput,
+        sendInput: (key, data) => useAppStore.getState().sendInput(key, data),
       })
     },
     [allocateScriptProcessKey, projectId, projectPath, t],
@@ -280,7 +295,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
         setPendingScriptConfirm({ channel, relativePath, nodeKind })
         return
       }
-      executeScript(channel, relativePath, nodeKind, info)
+      void executeScript(channel, relativePath, nodeKind, info)
     },
     [executeScript, resolveTreeNodeRunnableScript],
   )
@@ -304,7 +319,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     setIsScriptConfirmBusy(true)
     try {
       const info = resolveTreeNodeRunnableScript(pendingScriptConfirm.relativePath, pendingScriptConfirm.nodeKind)
-      if (info) executeScript(pendingScriptConfirm.channel, pendingScriptConfirm.relativePath, pendingScriptConfirm.nodeKind, info)
+      if (info) void executeScript(pendingScriptConfirm.channel, pendingScriptConfirm.relativePath, pendingScriptConfirm.nodeKind, info)
       setPendingScriptConfirm(null)
     } finally {
       setIsScriptConfirmBusy(false)

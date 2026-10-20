@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { RunTask, RunTaskConfigFile, RunTaskProgressEvent } from '../../shared/runTasks'
 import { getEffectiveRunTasks, runTaskProcessKey } from '../../shared/runTasks'
+import { predictCurrentPanelViewport } from '../lib/terminalViewportSize'
 import type { AppState } from './appStore.types'
 
 export type RunTaskActionsSlice = Pick<
@@ -180,7 +181,10 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
         [key]: state.processUrls[key] ?? [],
       },
     }))
-    const started = await window.electronAPI.startRunTask(projectId, projectPath, task)
+    // 按集合面板终端区域预测尺寸启动 pty：与 Terminal 挂载后 fit 的结果一致，
+    // 避免 80x24 兜底启动 → 挂载后 resize → conpty reflow 把每行补齐成一片空格。
+    const initialViewport = predictCurrentPanelViewport(get().floatingPanel)
+    const started = await window.electronAPI.startRunTask(projectId, projectPath, task, initialViewport)
     if (!started) {
       // Start never took off — drop the optimistic entry instead of leaving a
       // phantom task stuck on "starting".
@@ -237,7 +241,8 @@ export const createRunTaskActionsSlice: StateCreator<AppState, [], [], RunTaskAc
       return { started: false, error: docker.error }
     }
 
-    const result = await window.electronAPI.startAllRunTasks(projectId, projectPath, tasks)
+    const initialViewport = predictCurrentPanelViewport(get().floatingPanel)
+    const result = await window.electronAPI.startAllRunTasks(projectId, projectPath, tasks, initialViewport)
     if (!result.started) {
       // The scheduler never created a session (cycle / manager missing / no
       // tasks) — roll the optimistic marks back instead of leaving the card

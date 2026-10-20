@@ -41,6 +41,7 @@ import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude
 import { migrateConfigDocument } from './config/config-migrations'
 import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persistence'
 import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from './config/config-quick-actions'
+import { createWorkspacePersistenceCoordinator, flushWithOutcome, WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS, type WorkspacePersistenceFlushOutcome, type WorkspacePersistenceStatus } from './config/workspace-persistence'
 
 const CONFIG_FILE = 'project-launcher-config.json'
 const MAX_CODE_SESSION_TABS = 5
@@ -625,7 +626,34 @@ function normalizeClaudeRuntimeProfiles(profiles: AppConfig['claudeRuntimeProfil
 }
 
 let cachedConfig: AppConfig | undefined
-let saveQueue: Promise<void> = Promise.resolve()
+
+/**
+ * project-launcher-config.json 的统一写入协调者（D1/D2）。
+ * 所有配置写入都经 commitConfig → markDirty 进入本协调器：内存即时更新为唯一可信来源，
+ * 落盘策略（防抖 300ms、最大等待 2s、串行、latest-wins、原子替换、退出 flush）统一管理。
+ * 设计见 docs/todo/15-工作区持久化协调器-plan.md。
+ */
+const workspacePersistence = createWorkspacePersistenceCoordinator(
+  async (serialized) => {
+    const snapshot = cachedConfig // 捕获对象标识
+    await atomicWriteJson(getConfigPath(), serialized)
+    // 保持原 saveConfig 行为：写成功后若 cachedConfig 未被新提交替换，清除运行时恢复标记。
+    // configRecovery 从不进序列化（见 getSnapshot），清除是纯内存行为、不 bump revision（D27）。
+    if (snapshot && cachedConfig === snapshot) {
+      cachedConfig = { ...snapshot, configRecovery: undefined }
+    }
+  },
+  () => {
+    // configRecovery 是纯运行时状态：序列化时排除，磁盘内容从不包含该字段（D27）。
+    const { configRecovery: _configRecovery, ...persistedConfig } = cachedConfig!
+    return JSON.stringify({ ...persistedConfig, configVersion: CURRENT_CONFIG_SCHEMA_VERSION }, null, 2)
+  },
+)
+
+/** config 域的统一变脏入口；本期唯一调用方是 commitConfig */
+function markWorkspaceConfigDirty(reason: string): void {
+  workspacePersistence.markDirty(reason)
+}
 
 function normalizeDocLinkTags(input: AppConfig['docLinkTags'] | unknown): NonNullable<AppConfig['docLinkTags']> {
   if (!Array.isArray(input)) return []
@@ -1020,31 +1048,33 @@ export function loadConfig(): AppConfig {
   return cachedConfig!
 }
 
-export function saveConfig(config: AppConfig): Promise<void> {
+/**
+ * 提交成功（D17）：同步更新 cachedConfig + 安排延迟写入。
+ * 语义从旧 saveConfig 的「调用返回即落盘」改为「内存已更新 + 已安排写入」；
+ * 等待磁盘请用 flushConfigPersistence（保存成功）。
+ */
+export function commitConfig(config: AppConfig): Promise<void> {
   cachedConfig = config
-  const configPath = getConfigPath()
-  const dir = dirname(configPath)
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true })
-  }
-  const { configRecovery: _configRecovery, ...persistedConfig } = config
-  const serialized = JSON.stringify(
-    {
-      ...persistedConfig,
-      configVersion: CURRENT_CONFIG_SCHEMA_VERSION,
-    },
-    null,
-    2,
-  )
-  saveQueue = saveQueue
-    .catch(() => undefined)
-    .then(() => atomicWriteJson(configPath, serialized))
-    .then(() => {
-      if (cachedConfig === config) {
-        cachedConfig = { ...config, configRecovery: undefined }
-      }
-    })
-  return saveQueue
+  markWorkspaceConfigDirty('commitConfig')
+  return Promise.resolve()
+}
+
+/** 保存成功：等待所有已发生修改真正写入磁盘 */
+export function flushConfigPersistence(): Promise<void> {
+  return workspacePersistence.flush()
+}
+
+/**
+ * 带超时护栏的退出用 flush（D22）。
+ * timeout 不取消在途写入、不代表保存成功；三种 outcome 由调用方（退出屏障）分别处理。
+ */
+export function flushConfigPersistenceWithOutcome(timeoutMs: number = WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS): Promise<WorkspacePersistenceFlushOutcome> {
+  return flushWithOutcome(workspacePersistence.flush, timeoutMs)
+}
+
+/** 协调器当前状态（内部诊断用，v1 不暴露给 renderer） */
+export function getWorkspacePersistenceStatus(): WorkspacePersistenceStatus {
+  return workspacePersistence.getStatus()
 }
 
 export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConfig> {
@@ -1089,6 +1119,6 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
   updated.aiRuntimeProfiles = aiRuntimeProfiles.profiles
   updated.activeAiRuntimeProfileId = aiRuntimeProfiles.activeProfileId
   updated.aiEnvironment = normalizeAiEnvironmentConfig(updated)
-  await saveConfig(updated)
+  await commitConfig(updated)
   return updated
 }

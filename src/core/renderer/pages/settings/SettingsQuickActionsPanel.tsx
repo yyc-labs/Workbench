@@ -1,6 +1,6 @@
 import { Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { QuickActionResult, QuickActionSpec, QuickActionView } from '../../../shared/types'
+import type { QuickActionResult, QuickActionSchedule, QuickActionSpec, QuickActionView } from '../../../shared/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Button } from '../../components/ui/button'
 import { toast } from '../../components/ui/toast'
@@ -105,12 +105,12 @@ export function SettingsQuickActionsPanel() {
   )
 
   const handleSubmit = useCallback(
-    async (input: { name: string; action: QuickActionSpec }) => {
+    async (input: { name: string; action: QuickActionSpec; schedule: QuickActionSchedule | null }) => {
       if (editing) {
-        await updateQuickAction(editing.id, { name: input.name, action: input.action })
+        await updateQuickAction(editing.id, { name: input.name, action: input.action, schedule: input.schedule })
         return
       }
-      await createQuickAction({ name: input.name, action: input.action })
+      await createQuickAction({ name: input.name, action: input.action, schedule: input.schedule })
     },
     [createQuickAction, editing, updateQuickAction],
   )

@@ -12,9 +12,11 @@ type ProjectLinksTriggerProps = {
   label?: string
   title?: string
   className?: string
+  /** 触发下方空间不足时将弹层拆成两张卡（搜索栏在下、链接列表在上）；仅首页项目卡片传入。 */
+  splitWhenShort?: boolean
 }
 
-export function ProjectLinksTrigger({ items, tagOptions, onOpenDefault, onOpenManager, size = 'icon', label, title, className }: ProjectLinksTriggerProps) {
+export function ProjectLinksTrigger({ items, tagOptions, onOpenDefault, onOpenManager, size = 'icon', label, title, className, splitWhenShort }: ProjectLinksTriggerProps) {
   const { t } = useI18n()
   const isEmpty = items.length === 0
   const resolvedTitle = title ?? (isEmpty ? t('documentation.emptyTriggerTitle') : t('common.leftClickOpenFirstLink'))
@@ -69,7 +71,7 @@ export function ProjectLinksTrigger({ items, tagOptions, onOpenDefault, onOpenMa
 
   if (items.length > 0) {
     return (
-      <UrlPopover items={items} tagOptions={tagOptions} onOpenManager={onOpenManager} forcePopover>
+      <UrlPopover items={items} tagOptions={tagOptions} onOpenManager={onOpenManager} forcePopover splitWhenShort={splitWhenShort}>
         {trigger}
       </UrlPopover>
     )

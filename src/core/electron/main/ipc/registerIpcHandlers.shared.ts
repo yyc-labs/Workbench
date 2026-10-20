@@ -7,6 +7,8 @@ import type { AiCommitService } from '../ai-commit/ai-commit-service'
 import type { AiConnectionService } from '../ai-connection/ai-connection-service'
 import type { AiGatewayService } from '../ai-gateway/gateway-service'
 import type { BrowserAiService } from '../browser-ai/browserAiService'
+import type { CalendarService } from '../calendar/calendar-service'
+import type { CalendarUpdater } from '../calendar/calendar-updater'
 import { loadConfig } from '../config'
 import type { DocLinkLibraryService } from '../doc-link-library/docLinkLibraryService'
 import type { GitService } from '../git/git-service'
@@ -67,6 +69,8 @@ export type RegisterIpcHandlersDependencies = {
   routeMarkdownDocumentOpen: (markdownPath: string) => void
   docLinkLibraryService: DocLinkLibraryService
   quickActionService: QuickActionService
+  calendarService: CalendarService
+  calendarUpdater: CalendarUpdater
 }
 
 type GitRequestWithRepoRoot = {

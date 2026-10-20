@@ -1,14 +1,14 @@
-import { spawn as spawnChild, spawnSync, type ChildProcess } from 'child_process'
-import { basename } from 'path'
+import { type ChildProcess, spawn as spawnChild, spawnSync } from 'child_process'
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
-import type { BackendMode, Capability, ManagedProcessSnapshot, PtySize, TerminalInventoryEvent, TerminalInventorySnapshot } from '../../shared/types'
+import { basename } from 'path'
 import { parseRunTaskProcessKey } from '../../shared/runTasks'
+import type { BackendMode, Capability, ManagedProcessSnapshot, PtySize, TerminalInventoryEvent, TerminalInventorySnapshot } from '../../shared/types'
 import { toHostAccessiblePath } from './host-path'
-import { wslBridge } from './wsl-bridge'
-import { tmuxManager, getSessionName } from './tmux-manager'
 import { ResizeController } from './resize-controller'
-import { buildWindowsAutomationShellLaunch } from './shell/windows-shell'
+import { buildWindowsAutomationShellLaunch, resolveInteractiveShellCommand } from './shell/windows-shell'
+import { getSessionName, tmuxManager } from './tmux-manager'
+import { wslBridge } from './wsl-bridge'
 
 function resolveWindowsSystemExecutable(command: string): string {
   const trimmed = command.trim()
@@ -48,6 +48,13 @@ export const IPC_CHANNELS = {
  */
 const DEFAULT_PTY_COLS = 80
 const DEFAULT_PTY_ROWS = 24
+
+/**
+ * 交互 shell 启动后命令下发的就绪等待上限：等该进程首条输出（shell prompt 出现）即视为就绪，
+ * 超时按 type-ahead 语义直接发送，避免个别 shell 长时间无输出时命令永远发不出去。
+ * 与 renderer 侧 lib/terminalCommand.ts 的 SHELL_READY_TIMEOUT_MS 保持同一定律。
+ */
+const INTERACTIVE_COMMAND_READY_TIMEOUT_MS = 1000
 
 interface PtyManagedProcess {
   pty: IPty
@@ -207,6 +214,60 @@ class ProcessManager {
       })
       this.send(IPC_CHANNELS.PROCESS_STATUS, { projectId, status: 'error' })
       return false
+    }
+  }
+
+  /**
+   * 交互 shell 启动 + 命令下发：先按 useWsl 起交互 shell（与集合面板 float 终端同一解析），
+   * shell 就绪（首条输出或超时兜底）后把 command 作为键盘输入发送。
+   *
+   * 与一次性命令启动（start）的差异是会话寿命：命令结束只是前台进程退出，shell 回到提示符，
+   * 终端不随命令关闭——Ctrl+C 中断 dev server 后会话仍在，可立即重跑。
+   * exit-readiness 任务（一次性命令，如 docker compose up -d）仍走 start：调度器靠进程退出判就绪。
+   */
+  startInteractive(projectId: string, command: string, cwd: string, useWsl?: boolean, initialSize?: PtySize): boolean {
+    const shell = resolveInteractiveShellCommand(useWsl === true)
+    const started = this.start(projectId, shell.command, cwd, useWsl, initialSize)
+    if (!started) return false
+    this.sendCommandAfterReady(projectId, command)
+    return true
+  }
+
+  /**
+   * 等进程首条输出（或超时）后发送 command + 回车，只发送一次。
+   * pty 后端监听 onData；spawn 兜底后端监听 stdout/stderr 首个 chunk。
+   * 进程在就绪前已退出时 sendInput 自然落空（进程 Map 已清）。
+   */
+  private sendCommandAfterReady(processId: string, command: string): void {
+    const managed = this.processes.get(processId)
+    if (!managed) return
+
+    let settled = false
+    let dispose: (() => void) | null = null
+    const settle = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      dispose?.()
+      this.sendInput(processId, `${command}\r`)
+    }
+    const timer = setTimeout(settle, INTERACTIVE_COMMAND_READY_TIMEOUT_MS)
+
+    if (managed.backend === 'spawn') {
+      const child = (managed as SpawnManagedProcess).child
+      const onFirst = () => settle()
+      child.stdout?.once('data', onFirst)
+      child.stderr?.once('data', onFirst)
+      dispose = () => {
+        child.stdout?.off('data', onFirst)
+        child.stderr?.off('data', onFirst)
+      }
+    } else {
+      const dataListener = (managed as PtyManagedProcess).pty.onData((data: string) => {
+        // 只认非空输出：shell prompt 出现即视为就绪（与 renderer 侧 lib/terminalCommand.ts 同规则）。
+        if (data) settle()
+      })
+      dispose = () => dataListener.dispose()
     }
   }
 

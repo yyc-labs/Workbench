@@ -23,6 +23,7 @@ const ERROR_MESSAGE_KEYS: Record<QuickActionErrorCode, string> = {
   'invalid-task': 'quickActions.error.invalid-task',
   'invalid-spec': 'quickActions.error.invalid-spec',
   'exec-failed': 'quickActions.error.exec-failed',
+  'no-window': 'quickActions.error.no-window',
 }
 
 export function describeQuickActionResult(t: TranslateFn, result: QuickActionResult): QuickActionFeedback {

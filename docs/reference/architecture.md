@@ -48,6 +48,14 @@ Markdown 工作区支持 GFM、代码高亮、表格和 Mermaid 图表渲染，�
 
 快捷操作（Quick Actions）把「打开项目、启动运行任务、打开目录、打开网址」预定义为可复用操作，在 Home 区块、设置面板和桌面 `.lnk` 图标中触发。操作定义持久化在应用配置中，主进程 quick-actions 域统一负责 CRUD、执行分发与桌面快捷方式生命周期；`run-task` 类型的环境判定完全复用 RunTaskService，本域不引入新的 Windows/WSL 分支。
 
+快捷操作支持定时启动（一次性 / 每天 / 每周）。主进程调度器以分钟级 tick 评估，`lastRunDate` 幂等哨兵保证同一天只触发一次；启动或休眠恢复后 5 分钟宽限窗口内补跑，超过则当天跳过；执行失败按线性退避重试（同日最多 3 次），定时执行走 silent 语义不抢占窗口焦点。
+
+### 节假日日历
+
+节假日日历（CalendarService）是主进程基础服务，统一回答「某一天是法定节假日、调休补班日、周末还是工作日」。数据只存储特殊日期，普通工作日和周末按星期推算；内置年度 JSON 兜底，用户目录缓存可覆盖，年度数据缺失时降级为纯星期判断，无网络照常可用。
+
+查询与更新分离：CalendarService 只做同步内存查询，不知道网络的存在；CalendarUpdater 负责低频联网同步（持久化限频、一次性本地定时器、上游格式映射与校验、内容哈希比较、原子替换），更新失败不影响日期查询和定时任务执行。「仅工作日执行」的定时语义经 CalendarService 判定：法定节假日与普通周末跳过，调休补班日照常执行。
+
 ## Electron 分层
 
 ```mermaid
@@ -77,7 +85,7 @@ Preload 通过 `contextBridge` 暴露最小化、类型安全的 API。它负责
 
 ### Main process
 
-Main process 承担文件系统、进程、Git、窗口、Runtime、AI Gateway、Transcript、Hook、Quick Actions 和 Windows 集成等系统能力。具体能力按 domain 组织，IPC 注册层只负责装配 Handler。
+Main process 承担文件系统、进程、Git、窗口、Runtime、AI Gateway、Transcript、Hook、Quick Actions、Calendar 和 Windows 集成等系统能力。具体能力按 domain 组织，IPC 注册层只负责装配 Handler。
 
 ### Shared
 

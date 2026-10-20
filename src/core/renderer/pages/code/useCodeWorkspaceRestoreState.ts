@@ -44,7 +44,11 @@ export function useCodeWorkspaceRestoreState({
   revealPreviewPosition,
   treeStatus,
 }: UseCodeWorkspaceRestoreStateOptions) {
-  const [hasAttemptedInitialRestore, setHasAttemptedInitialRestore] = useState(false)
+  // 用 ref 而非 state 记录「已尝试过恢复」：StrictMode 下 effect 双调用时，state 的 set 尚未生效，
+  // 第二次 setup 会读到旧值 false 而重复启动 restore 循环；两个并发循环通过 openRequestSeqRef
+  // 互相把对方的打开判为失效，导致回退到 tabs 末项打开错误文件。ref 同步生效可彻底防止重入。
+  const hasAttemptedInitialRestoreRef = useRef(false)
+  const lastResetProjectIdRef = useRef<string | null>(null)
   const [isRestoringCodeSession, setIsRestoringCodeSession] = useState(true)
   const pendingRevealRef = useRef<RevealLocation | null>(null)
   const pendingCursorRevealRef = useRef<RevealLocation | null>(null)
@@ -138,7 +142,10 @@ export function useCodeWorkspaceRestoreState({
   }, [clearPendingRevealRetry, flushPendingReveal])
 
   useEffect(() => {
-    setHasAttemptedInitialRestore(false)
+    // StrictMode 双调用跳过：只有 projectId 真正变化（切换项目）才重置恢复状态。
+    if (lastResetProjectIdRef.current === projectId) return
+    lastResetProjectIdRef.current = projectId
+    hasAttemptedInitialRestoreRef.current = false
     setIsRestoringCodeSession(true)
     pendingRevealRef.current = null
     pendingCursorRevealRef.current = null
@@ -148,8 +155,8 @@ export function useCodeWorkspaceRestoreState({
 
   useEffect(() => {
     if (treeStatus !== 'ready') return
-    if (hasAttemptedInitialRestore) return
-    setHasAttemptedInitialRestore(true)
+    if (hasAttemptedInitialRestoreRef.current) return
+    hasAttemptedInitialRestoreRef.current = true
 
     const sanitizedSession = sanitizeProjectCodeSessionByPaths(persistedProjectCodeSession, allProjectFilePathSet)
     const restoreCandidates = Array.from(new Set([persistedLastCodeFile?.trim() || '', sanitizedSession?.activePath?.trim() || '', sanitizedSession?.tabs[sanitizedSession.tabs.length - 1]?.trim() || ''].filter(Boolean)))
@@ -174,7 +181,7 @@ export function useCodeWorkspaceRestoreState({
       isRestoringCodeSessionRef.current = false
       setIsRestoringCodeSession(false)
     })
-  }, [allProjectFilePathSet, ensureTreePathLoaded, hasAttemptedInitialRestore, isRestoringCodeSessionRef, openFile, persistedLastCodeFile, persistedProjectCodeSession, treeStatus])
+  }, [allProjectFilePathSet, ensureTreePathLoaded, isRestoringCodeSessionRef, openFile, persistedLastCodeFile, persistedProjectCodeSession, treeStatus])
 
   const handleOpenedCodeFile = useCallback(
     (relativePath: string) => {

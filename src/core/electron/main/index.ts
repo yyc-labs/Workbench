@@ -7,7 +7,8 @@ import { registerAppLifecycle, runAppCleanupSteps, runAppStartupSteps } from './
 import { createAppServices } from './app-services'
 import { applyAppCacheLocation } from './cache-location'
 import { capabilityManager } from './capability-manager'
-import { loadConfig, updateConfig } from './config'
+import { flushConfigPersistenceWithOutcome, loadConfig, updateConfig } from './config'
+import { WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS } from './config/workspace-persistence'
 import { DocLinkLibraryRepository } from './doc-link-library/docLinkLibraryRepository'
 import { DocLinkLibrarySecretStore } from './doc-link-library/docLinkLibrarySecretStore'
 import { DocLinkLibraryService } from './doc-link-library/docLinkLibraryService'
@@ -120,6 +121,9 @@ const {
   agentHookGateway,
   agentLogService,
   quickActionService,
+  quickActionScheduler,
+  calendarService,
+  calendarUpdater,
 } = services
 
 const runTaskService = new RunTaskService({
@@ -672,6 +676,19 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
     { name: 'browser-screenshot', run: () => browserScreenshotService.cleanupOnBeforeQuit() },
   ])
 
+  // 退出屏障：等待工作区配置真正落盘（保存成功）。
+  // 三种 outcome 都继续退出——运行期防抖保存是主要保障，这里只是最后一道兜底。
+  // timeout 不取消在途写入、绝不代表保存成功（D22）；退出总耗时上界 = 清理步骤 + 3000ms + 1500ms。
+  const persistenceOutcome = await flushConfigPersistenceWithOutcome(WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS)
+  if (persistenceOutcome.status === 'saved') {
+    console.debug('[workspace-persistence] flush on quit: saved')
+  } else if (persistenceOutcome.status === 'timeout') {
+    // 超时不取消在途写入；明确接受可能丢失最后一批修改，运行期定期保存是主要保障。
+    console.warn('[workspace-persistence] flush on quit: timeout, last changes may be lost')
+  } else {
+    console.error('[workspace-persistence] flush on quit: failed', persistenceOutcome.error)
+  }
+
   setTimeout(() => {
     flushAiCommitRegistry()
     app.quit()
@@ -703,6 +720,8 @@ registerAppLifecycle(app, {
     flushAiCommitRegistry()
     trayController?.destroy()
     unregisterGlobalShortcuts()
+    quickActionScheduler.stop()
+    calendarUpdater.stop()
   },
   onActivate: () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -816,6 +835,8 @@ app.whenReady().then(async () => {
               routeMarkdownDocumentOpen: routeMarkdownDocumentOpenRequest,
               docLinkLibraryService,
               quickActionService,
+              calendarService,
+              calendarUpdater,
             })
           },
         },
@@ -871,5 +892,11 @@ app.whenReady().then(async () => {
   // 静默重建失效/漂移的桌面快捷方式（失败仅记日志，UI 徽标已反映状态）。
   void quickActionService.repairDesktopShortcuts().catch((error) => {
     console.warn('[quick-actions] Failed to repair desktop shortcuts:', error)
+  })
+  // 定时启动调度器：立即评估一次 + 对齐分钟边界 tick（宽限窗口与重试上限见 quickActionScheduler）。
+  quickActionScheduler.start()
+  // 日历数据低频更新：到期的年度才发起检查（没到期零请求），随后按最早 nextCheckAt 安排一次性定时器。
+  void calendarUpdater.evaluateOnStartup().catch((error) => {
+    console.warn('[calendar-updater] Startup evaluation failed:', error)
   })
 })

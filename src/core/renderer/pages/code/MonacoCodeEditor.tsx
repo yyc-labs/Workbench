@@ -9,7 +9,7 @@ import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
 import { TranscriptReferenceHoverCard } from './TranscriptReferenceHoverCard'
 import { extractRelativeImportRanges, resolveImportCandidatePaths, resolveFilePathFromModelUri, resolveImportTarget } from './code.importLink'
-import { acquireMonacoModelCacheKey, getOrCreateMonacoModel, releaseMonacoModelCacheKey, toMonacoModelCacheKey } from './monacoModelCache'
+import { acquireMonacoModelCacheKey, getMonacoViewState, getOrCreateMonacoModel, releaseMonacoModelCacheKey, saveMonacoViewState, toMonacoModelCacheKey } from './monacoModelCache'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
 import { useMonacoTranscriptGutter } from './useMonacoTranscriptGutter'
@@ -484,6 +484,12 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       editorRef.current = editor
       transcriptGutter.syncEditorInstance(editor)
       activeModelKeyRef.current = initialKey
+      // 恢复本会话存档的视图状态（光标/滚动/选区/折叠）；有存档才 focus，首次打开不抢焦点。
+      const savedViewState = getMonacoViewState(initialKey)
+      if (savedViewState) {
+        editor.restoreViewState(savedViewState)
+        editor.focus()
+      }
       flushPendingReveal()
 
       const handleCaptureKeyDown = (event: KeyboardEvent) => {
@@ -629,7 +635,14 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       })
 
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyY, () => {
+        // 删行后 Monaco 默认把光标留在原行号（下一行上移到的位置），不符合直觉；
+        // 这里删除第 N 行后把光标移到第 N-1 行行尾，删除首行时保持默认位置。
+        const positionBeforeDelete = editor.getPosition()
         editor.trigger('keyboard', 'editor.action.deleteLines', null)
+        const model = editor.getModel()
+        if (!model || !positionBeforeDelete || positionBeforeDelete.lineNumber <= 1) return
+        const previousLine = positionBeforeDelete.lineNumber - 1
+        editor.setPosition({ lineNumber: previousLine, column: model.getLineMaxColumn(previousLine) })
       })
 
       const handleEditorContextMenu = (e: MonacoEditor.IEditorMouseEvent) => {
@@ -740,6 +753,8 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       const editor = editorRef.current
       if (editor) {
         clearRevealHighlight()
+        // dispose 前存档视图状态：dispose 后 editor 实例不可用，saveViewState 无法调用。
+        saveMonacoViewState(activeModelKeyRef.current, editor.saveViewState())
         editor.dispose()
         editorRef.current = null
       }
@@ -811,6 +826,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     acquireModelCacheKey(nextKey)
 
     if (currentModel !== nextModel) {
+      // 切换前先存档旧 key 的视图状态（此时 editor 仍绑定旧 model）。
+      if (previousKey !== nextKey) {
+        saveMonacoViewState(previousKey, editor.saveViewState())
+      }
       modelRef.current = nextModel
       editor.setModel(nextModel)
     }
@@ -821,9 +840,26 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     }
 
     if (nextModel.getValue() !== value) {
+      // 内容不一致只可能来自 openFile 重载/会话恢复（用户输入经 onChange 回写保持同步，见 §1.2）。
+      // setValue 走 ModelRawFlush 并清空 model 撤销栈（textModel.js _commandManager.clear()），
+      // 语义 = 以传入内容为新基线；同步编辑本身不再入栈成为 Ctrl+Z 的第一个撤销项。
+      // 同 model 在线时先存当前视口，setValue 后恢复，避免基线重置把滚动/光标冲掉。
+      const liveViewState = currentModel === nextModel ? editor.saveViewState() : null
       syncGuardRef.current = true
-      nextModel.pushEditOperations([], [{ range: nextModel.getFullModelRange(), text: value }], () => null)
+      nextModel.setValue(value)
       syncGuardRef.current = false
+      if (liveViewState) {
+        editor.restoreViewState(liveViewState)
+      }
+    }
+
+    if (currentModel !== nextModel) {
+      // 切回已有存档的 key 时恢复视图状态并 focus；无存档（首次打开）不抢焦点。
+      const savedViewState = getMonacoViewState(nextKey)
+      if (savedViewState) {
+        editor.restoreViewState(savedViewState)
+        editor.focus()
+      }
     }
 
     activeModelKeyRef.current = nextKey

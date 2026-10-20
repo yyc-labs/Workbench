@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
-import { IPC } from '../ipc'
 import type { RunTask } from '../../../shared/runTasks'
+import type { PtySize } from '../../../shared/types'
+import { IPC } from '../ipc'
 import type { RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
 export function registerRunTaskIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
@@ -18,15 +19,15 @@ export function registerRunTaskIpcHandlers(deps: RegisterIpcHandlersDependencies
     return service.detectCandidates(projectPath, scanDirectories)
   })
 
-  ipcMain.handle(IPC.RUN_TASK_START, (_event, projectId: string, projectPath: string, task: RunTask) => {
-    return service.start(projectId, projectPath, task)
+  ipcMain.handle(IPC.RUN_TASK_START, (_event, projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize) => {
+    return service.start(projectId, projectPath, task, initialSize)
   })
 
-  ipcMain.handle(IPC.RUN_TASK_START_ALL, (_event, projectId: string, projectPath: string, tasks?: RunTask[]) => {
+  ipcMain.handle(IPC.RUN_TASK_START_ALL, (_event, projectId: string, projectPath: string, tasks?: RunTask[], initialSize?: PtySize) => {
     // The renderer passes the effective task list (config file tasks, or a
     // synthesized default task for legacy single-command projects).
     const config = tasks && tasks.length > 0 ? { version: 1 as const, tasks } : service.getConfig(projectPath).config
-    return service.startAll(projectId, projectPath, config)
+    return service.startAll(projectId, projectPath, config, initialSize)
   })
 
   ipcMain.handle(IPC.RUN_TASK_STOP, (_event, projectId: string, taskId: string) => {

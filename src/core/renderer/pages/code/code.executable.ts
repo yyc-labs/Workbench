@@ -16,7 +16,7 @@ interface ScriptRuntimeRule {
 
 // 只看扩展名静态展示，不读文件内容——避免右键菜单触发文件 IO；解释器缺失时由终端报错（本期决策：不做主进程探测）。
 const SCRIPT_RUNTIME_RULES: readonly ScriptRuntimeRule[] = [
-  { extensions: ['.mjs', '.js'], runtime: 'node' },
+  { extensions: ['.mjs', '.cjs', '.js'], runtime: 'node' },
   { extensions: ['.py'], runtime: 'python' },
   { extensions: ['.sh'], runtime: 'bash', wslOnly: true },
   { extensions: ['.ps1'], runtime: 'powershell', windowsOnly: true },

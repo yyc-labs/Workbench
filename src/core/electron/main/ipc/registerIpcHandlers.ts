@@ -3,6 +3,7 @@ import { registerAiConnectionIpcHandlers } from './registerAiConnectionIpcHandle
 import { registerAiGatewayIpcHandlers } from './registerAiGatewayIpcHandlers'
 import { registerBrowserAiIpcHandlers } from './registerBrowserAiIpcHandlers'
 import { registerBrowserScreenshotIpcHandlers } from './registerBrowserScreenshotIpcHandlers'
+import { registerCalendarIpcHandlers } from './registerCalendarIpcHandlers'
 import { registerCoreIpcHandlers } from './registerCoreIpcHandlers'
 import { registerDocLinkLibraryIpcHandlers } from './registerDocLinkLibraryIpcHandlers'
 import { registerGitIpcHandlers } from './registerGitIpcHandlers'
@@ -45,4 +46,5 @@ export function registerIpcHandlers(deps: RegisterIpcHandlersDependencies): void
   registerMarkdownDocumentIpcHandlers(deps.markdownDocumentService, deps.markdownDocumentOpenRequestStore, deps.routeMarkdownDocumentOpen)
   registerDocLinkLibraryIpcHandlers(deps.docLinkLibraryService)
   registerQuickActionIpcHandlers(deps)
+  registerCalendarIpcHandlers(deps)
 }

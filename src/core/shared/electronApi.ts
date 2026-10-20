@@ -1,3 +1,4 @@
+import type { CalendarCheckResult, CalendarDay, DayInfo } from './calendar'
 import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from './runTasks'
 import type {
   AgentHookEnvelope,
@@ -399,8 +400,9 @@ export interface RunTaskElectronApi {
   getRunTaskConfig: (projectPath: string) => Promise<RunTaskConfigReadResult>
   saveRunTaskConfig: (projectPath: string, tasks: RunTaskConfigFile['tasks'], scanDirectories?: string[]) => Promise<RunTaskConfigReadResult>
   detectRunTaskCandidates: (projectPath: string, scanDirectories?: string[]) => Promise<RunTaskCandidate[]>
-  startRunTask: (projectId: string, projectPath: string, task: RunTask) => Promise<boolean>
-  startAllRunTasks: (projectId: string, projectPath: string, tasks?: RunTask[]) => Promise<{ started: boolean; error?: string }>
+  /** initialSize：集合面板终端区域的预测视口，pty 按此启动，避免挂载后 resize 触发 conpty reflow。 */
+  startRunTask: (projectId: string, projectPath: string, task: RunTask, initialSize?: { cols: number; rows: number }) => Promise<boolean>
+  startAllRunTasks: (projectId: string, projectPath: string, tasks?: RunTask[], initialSize?: { cols: number; rows: number }) => Promise<{ started: boolean; error?: string }>
   stopRunTask: (projectId: string, taskId: string) => Promise<boolean>
   stopAllRunTasks: (projectId: string) => Promise<boolean>
   getRunTaskState: (projectId: string) => Promise<RunTaskProgressEvent | null>
@@ -416,6 +418,19 @@ export interface QuickActionsElectronApi {
   executeQuickAction: (request: { id: string } | { spec: QuickActionSpec }) => Promise<QuickActionResult>
   createQuickActionDesktopShortcut: (id: string) => Promise<{ shortcutPath: string }>
   removeQuickActionDesktopShortcut: (id: string) => Promise<boolean>
+}
+
+/**
+ * 日历查询与手动检查更新入口。查询链路同步返回（主进程内存缓存），
+ * 不依赖网络；checkCalendarUpdate 的 force 跳过冷却（§7.3）。
+ */
+export interface CalendarElectronApi {
+  getCalendarDayInfo: (date: string) => Promise<DayInfo>
+  isCalendarWorkday: (date: string) => Promise<boolean>
+  isCalendarHoliday: (date: string) => Promise<boolean>
+  isCalendarMakeupWorkday: (date: string) => Promise<boolean>
+  getUpcomingHolidays: (from: string, days: number) => Promise<CalendarDay[]>
+  checkCalendarUpdate: (options?: { year?: number; force?: boolean }) => Promise<CalendarCheckResult[]>
 }
 
 export interface SubscriptionElectronApi {
@@ -459,4 +474,5 @@ export type ElectronApi = CoreElectronApi &
   ProcessPortsElectronApi &
   RunTaskElectronApi &
   QuickActionsElectronApi &
+  CalendarElectronApi &
   SubscriptionElectronApi

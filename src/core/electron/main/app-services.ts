@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
-import path, { join } from 'node:path'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import path, { dirname, join } from 'node:path'
 import type { BrowserWindow } from 'electron'
-import { app, dialog, shell } from 'electron'
+import { app, dialog, Notification, shell } from 'electron'
 import { projectIdFromPath } from '../../shared/rules'
 import type { AppConfig, BrowserScreenshotViewerPayload, Capability, TranscriptImportedEvent } from '../../shared/types'
 import { createAgentLogService } from './agent-logs/agent-log-service'
@@ -13,6 +13,8 @@ import { AiEnvironmentController } from './ai-environment/environment-controller
 import { createAiGatewayService } from './ai-gateway/gateway-service'
 import { resolveAppResourcePath } from './app-resource-path'
 import { createBrowserAiService, createDefaultBrowserAiRepository } from './browser-ai/browserAiService'
+import { createCalendarService, readBuiltinYearCalendar } from './calendar/calendar-service'
+import { createCalendarUpdater } from './calendar/calendar-updater'
 import { createGitService } from './git/git-service'
 import { AgentHookGateway } from './hooks/agent-hook-gateway'
 import { FeishuNotifier } from './hooks/feishu-notifier'
@@ -23,6 +25,7 @@ import { createLearningService } from './learning/learningService'
 import { type MainLocale, translateMain } from './mainI18n'
 import { createProcessPortService } from './process-ports/process-port-service'
 import { createQuickActionDesktopShortcuts } from './quick-actions/quickActionDesktopShortcuts'
+import { createQuickActionScheduler, type QuickActionScheduleNotifyEvent } from './quick-actions/quickActionScheduler'
 import { createQuickActionService } from './quick-actions/quickActionService'
 import type { RunTaskService } from './run-tasks/run-task-service'
 import type { ProcessManager } from './runner'
@@ -252,6 +255,12 @@ export function createAppServices(options: AppServicesOptions) {
     clearAiGatewayLogs: () => aiGatewayService.clearRecentLogs(),
     clearAgentHookLogs: () => agentHookGateway.clearRecentLogs(),
   })
+  // 日历基础服务：同步查询 + 内置回退；不知道 Updater 的存在，任何网络状态下行为一致。
+  const calendarService = createCalendarService({
+    getUserDataDir: () => app.getPath('userData'),
+    now: () => new Date(),
+    readBuiltin: readBuiltinYearCalendar,
+  })
   const quickActionService = createQuickActionService({
     loadConfig: options.loadConfig,
     updateConfig: options.updateConfig,
@@ -262,10 +271,71 @@ export function createAppServices(options: AppServicesOptions) {
     },
     navigateMainWindow: options.navigateMainWindow,
     ensureWindowVisible: options.ensureWindowVisible,
+    hasMainWindow: () => {
+      const window = options.getMainWindow()
+      return Boolean(window && !window.isDestroyed())
+    },
     openPath: (target) => shell.openPath(target),
     openExternal: (url) => shell.openExternal(url),
     randomUUID: () => randomUUID(),
+    isWorkday: (date) => calendarService.isWorkday(date),
+    now: () => new Date(),
     desktopShortcuts: process.platform === 'win32' ? createQuickActionDesktopShortcuts() : undefined,
+  })
+  // 定时执行结果通知（D9）：成功与重试耗尽失败均发系统通知；点击聚焦主窗口。
+  // Windows packaged 已设 appUserModelId（index.ts）；不支持时静默跳过。
+  const notifyQuickActionRun = (event: QuickActionScheduleNotifyEvent) => {
+    if (!Notification.isSupported()) return
+    const locale = options.getLocale()
+    const title = translateMain(locale, event.kind === 'success' ? 'quickActions.notification.runTitle' : 'quickActions.notification.failedTitle')
+    const body = translateMain(locale, event.kind === 'success' ? 'quickActions.notification.runBody' : 'quickActions.notification.failedBody', { name: event.actionName, time: event.time, error: event.error ?? '' })
+    const notification = new Notification({ title, body })
+    notification.on('click', () => options.getMainWindow()?.focus())
+    notification.show()
+  }
+  const quickActionScheduler = createQuickActionScheduler({
+    getScheduledActions: () => quickActionService.readActions(),
+    execute: (id) => quickActionService.execute({ id }, { silent: true }),
+    setScheduleRunStamp: (id, stamp) => quickActionService.setScheduleRunStamp(id, stamp),
+    isWorkday: (date) => calendarService.isWorkday(date),
+    notify: notifyQuickActionRun,
+    now: () => new Date(),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (handle) => clearTimeout(handle),
+  })
+  // 日历数据低频更新（§7）：持久化限频 + 一次性本地定时器 + 失败退避 + 原子替换。
+  // HTTP/文件/定时器一律经 deps 注入封装；更新失败不影响日期查询与定时任务。
+  const calendarUpdater = createCalendarUpdater({
+    getStatePath: () => join(app.getPath('userData'), 'calendar', 'update-state.json'),
+    getCacheDir: () => join(app.getPath('userData'), 'calendar', 'CN'),
+    now: () => new Date(),
+    fetchYear: async (url) => {
+      // 固定 HTTPS 地址；15s 超时；响应体上限 1MB（超限按 error 处理）。
+      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+      const text = await response.text()
+      if (Buffer.byteLength(text, 'utf8') > 1024 * 1024) {
+        throw new Error('Upstream year payload exceeds the 1MB response limit.')
+      }
+      return { status: response.status, text }
+    },
+    readTextFile: async (target) => {
+      try {
+        return await readFile(target, 'utf8')
+      } catch {
+        return null
+      }
+    },
+    // 同目录 tmp + rename；失败保留旧文件，不会出现半截年度文件。
+    writeFileAtomic: async (target, text) => {
+      await mkdir(dirname(target), { recursive: true })
+      const temporary = `${target}.tmp`
+      await writeFile(temporary, text, 'utf8')
+      await rename(temporary, target)
+    },
+    getLocalYearDays: (year) => calendarService.getYearCalendar(year)?.days ?? null,
+    onYearApplied: (year) => calendarService.reload(),
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (handle) => clearTimeout(handle),
   })
 
   return {
@@ -288,6 +358,9 @@ export function createAppServices(options: AppServicesOptions) {
     agentHookGateway,
     agentLogService,
     quickActionService,
+    quickActionScheduler,
+    calendarService,
+    calendarUpdater,
   }
 }
 

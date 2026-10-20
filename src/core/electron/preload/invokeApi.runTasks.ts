@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
+import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from '../../shared/runTasks'
+import type { PtySize } from '../../shared/types'
 import { IPC } from '../main/ipc'
-import type { RunTaskCandidate, RunTask, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from '../../shared/runTasks'
 
 export function createRunTaskInvokeApi() {
   return {
@@ -10,9 +11,9 @@ export function createRunTaskInvokeApi() {
 
     detectRunTaskCandidates: (projectPath: string, scanDirectories?: string[]) => ipcRenderer.invoke(IPC.RUN_TASK_DETECT_CANDIDATES, projectPath, scanDirectories) as Promise<RunTaskCandidate[]>,
 
-    startRunTask: (projectId: string, projectPath: string, task: RunTask) => ipcRenderer.invoke(IPC.RUN_TASK_START, projectId, projectPath, task) as Promise<boolean>,
+    startRunTask: (projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize) => ipcRenderer.invoke(IPC.RUN_TASK_START, projectId, projectPath, task, initialSize) as Promise<boolean>,
 
-    startAllRunTasks: (projectId: string, projectPath: string, tasks?: RunTask[]) => ipcRenderer.invoke(IPC.RUN_TASK_START_ALL, projectId, projectPath, tasks) as Promise<{ started: boolean; error?: string }>,
+    startAllRunTasks: (projectId: string, projectPath: string, tasks?: RunTask[], initialSize?: PtySize) => ipcRenderer.invoke(IPC.RUN_TASK_START_ALL, projectId, projectPath, tasks, initialSize) as Promise<{ started: boolean; error?: string }>,
 
     stopRunTask: (projectId: string, taskId: string) => ipcRenderer.invoke(IPC.RUN_TASK_STOP, projectId, taskId) as Promise<boolean>,
 

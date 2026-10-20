@@ -1480,6 +1480,13 @@ export interface ProjectCodeSession {
   contentSearchHistory?: string[]
   /** Scope globs used by content search in Code page */
   contentSearchScope?: string
+  /**
+   * Remembered expanded directories in Code explorer (project-relative, parent-constrained).
+   * 路径存在 = 用户曾主动展开该目录（记忆偏好）；折叠父目录只删父条目、保留后代记忆；
+   * active 展开状态由「全祖先链均在集合中」派生，不持久化。
+   * 语义见 docs/todo/15-工作区持久化协调器-plan.md §7（D20-D25）。
+   */
+  expandedDirectories?: string[]
 }
 
 /** 项目终端坞（code 工作区底部面板）的项目级状态与自定义 tab title。 */
@@ -1857,6 +1864,45 @@ export type QuickActionIcon = 'folder-open' | 'play' | 'terminal' | 'globe'
 
 export type QuickActionSpec = { type: 'open-project'; projectPath: string } | { type: 'run-task'; projectPath: string; taskId?: string } | { type: 'open-path'; path: string } | { type: 'open-url'; url: string }
 
+/** 定时启动频率：一次性 / 每天 / 每周（MVP 三档，不引 cron）。 */
+export type QuickActionScheduleKind = 'once' | 'daily' | 'weekly'
+
+/**
+ * 日历模式：every-day 节假日/周末都执行；workdays-only 仅工作日
+ * （法定节假日与普通周末跳过，调休补班日照常执行，判定经 CalendarService）。
+ */
+export type QuickActionScheduleCalendarMode = 'every-day' | 'workdays-only'
+
+export interface QuickActionSchedule {
+  kind: QuickActionScheduleKind
+  /**
+   * 本地时间点列表 'HH:mm'（可多）；归一化后非空、去重、升序。
+   * 每个时间点按天独立评估：各自最多执行一次，重试与宽限互不影响。
+   */
+  times: string[]
+  /** weekly：0=周日..6=周六；缺省/空数组 = 每天。 */
+  weekdays?: number[]
+  /** once：'YYYY-MM-DD' 本地日期。 */
+  date?: string
+  /** 日历模式；缺省 'every-day'。 */
+  calendarMode: QuickActionScheduleCalendarMode
+  enabled: boolean
+  /** 仅成功执行时写（ms 时间戳）。 */
+  lastRunAt?: number
+  /** runSlots 所指日期；与今天不一致时 runSlots 视为空（跨天自然清零）。 */
+  lastRunDate?: string
+  /** lastRunDate 当天已成功执行的时间点（'HH:mm'）。 */
+  runSlots?: string[]
+  /** 最后一次尝试（含失败）。 */
+  lastAttemptAt?: number
+  /** 最后一次尝试对应的时间点；切换时间点时 attemptCount 重新计数。 */
+  attemptTime?: string
+  /** 该时间点当天已尝试次数；成功或跨天/换点清零。 */
+  attemptCount?: number
+  /** 失败退避：早于该时间不重试该时间点。 */
+  nextRetryAt?: number
+}
+
 export interface QuickAction {
   id: string
   name: string
@@ -1870,12 +1916,18 @@ export interface QuickAction {
   updatedAt: number
   /** Absolute path of the desktop `.lnk` shortcut, when one was created. */
   desktopShortcutPath?: string
+  /** 定时启动配置；缺省 = 仅手动触发。 */
+  schedule?: QuickActionSchedule
 }
 
 /** Desktop shortcut state computed by the main process for list views. */
 export type QuickActionShortcutState = 'none' | 'valid' | 'missing'
 
-export type QuickActionView = QuickAction & { shortcutState: QuickActionShortcutState }
+export type QuickActionView = QuickAction & {
+  shortcutState: QuickActionShortcutState
+  /** 下次运行时间（ms）；主进程 list() 时计算，仅 schedule.enabled 时存在。 */
+  scheduleNextRunAt?: number
+}
 
 export type QuickActionCreateInput = {
   name: string
@@ -1886,6 +1938,8 @@ export type QuickActionCreateInput = {
   group?: QuickActionGroup
   /** Defaults to true. */
   enabled?: boolean
+  /** 定时启动配置；null = 清除定时（语义同 action 整组替换）。 */
+  schedule?: QuickActionSchedule | null
 }
 
 export type QuickActionUpdateInput = Partial<Omit<QuickActionCreateInput, 'action'>> & {
@@ -1893,12 +1947,26 @@ export type QuickActionUpdateInput = Partial<Omit<QuickActionCreateInput, 'actio
   action?: QuickActionSpec
   /** Reorder-only field: written by the adjacent-swap reorder flow, not by the create/edit form. */
   order?: number
+  /** 定时启动配置；null = 清除定时。 */
+  schedule?: QuickActionSchedule | null
 }
 
 /** Execute either a stored action (by id, with enabled check) or an unsaved spec (form test-run). */
 export type QuickActionExecuteRequest = { id: string } | { spec: QuickActionSpec }
 
-export type QuickActionErrorCode = 'not-found' | 'disabled' | 'invalid-project' | 'invalid-task' | 'invalid-spec' | 'exec-failed'
+export type QuickActionErrorCode = 'not-found' | 'disabled' | 'invalid-project' | 'invalid-task' | 'invalid-spec' | 'exec-failed' | 'no-window'
+
+/** 调度器回写 schedule 运行状态的增量戳记（undefined = 清除该字段）。 */
+export type QuickActionScheduleStamp = {
+  lastRunAt?: number
+  lastRunDate?: string
+  runSlots?: string[]
+  lastAttemptAt?: number
+  attemptTime?: string
+  attemptCount?: number
+  nextRetryAt?: number
+  enabled?: boolean
+}
 
 export type QuickActionResult = { ok: true; kind: 'navigated' } | { ok: true; kind: 'task-started'; taskIds: string[] } | { ok: true; kind: 'opened' } | { ok: false; code: QuickActionErrorCode; error?: string }
 

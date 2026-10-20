@@ -109,3 +109,22 @@ export function computeTerminalPanelViewport(input: TerminalPanelViewportInput):
   const rows = Math.max(1, Math.floor(areaHeight / cell.height))
   return { cols, rows }
 }
+
+/** 集合面板几何的最小结构（appStore.floatingPanel 的只读投影）。 */
+export interface TerminalPanelGeometry {
+  dock: 'bottom' | 'top' | 'left' | 'right'
+  sizeRatio: number
+}
+
+/**
+ * 按当前面板几何 + 窗口尺寸取预测视口：各启动入口（项目主运行 / 运行任务）共用，
+ * 保证 pty spawn 尺寸与 Terminal 挂载后 FitAddon.fit() 的结果一致。
+ */
+export function predictCurrentPanelViewport(panel: TerminalPanelGeometry): { cols: number; rows: number } {
+  return computeTerminalPanelViewport({
+    dock: panel.dock,
+    sizeRatio: panel.sizeRatio,
+    windowWidth: window.innerWidth,
+    windowHeight: window.innerHeight,
+  })
+}

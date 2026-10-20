@@ -62,3 +62,24 @@ test('极端尺寸按 FitAddon 语义钳制最小值', () => {
   assert.equal(cols, 2)
   assert.equal(rows, 7)
 })
+
+test('predictCurrentPanelViewport 按面板几何与窗口尺寸取视口', () => {
+  const { predictCurrentPanelViewport } = loadTsModule('src/core/renderer/lib/terminalViewportSize.ts')
+  const previousWindow = globalThis.window
+  // 度量在无 document 的环境走兜底常量 { width: 7.15, height: 21 }（与 CELL 同值）
+  globalThis.window = { innerWidth: 1477, innerHeight: 873, devicePixelRatio: 1 }
+  try {
+    const viewport = predictCurrentPanelViewport({ dock: 'bottom', sizeRatio: 0.35 })
+    const direct = computeTerminalPanelViewport({ dock: 'bottom', sizeRatio: 0.35, windowWidth: 1477, windowHeight: 873, cellSize: CELL })
+    assert.deepEqual(viewport, direct)
+    // dock 变化应反映到结果（left dock 宽按 ratio 视口宽）
+    const left = predictCurrentPanelViewport({ dock: 'left', sizeRatio: 0.35 })
+    assert.notDeepEqual(left, viewport)
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window
+    } else {
+      globalThis.window = previousWindow
+    }
+  }
+})

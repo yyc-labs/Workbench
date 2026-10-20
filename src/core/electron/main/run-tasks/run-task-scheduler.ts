@@ -1,11 +1,12 @@
-import * as path from 'path'
-import * as net from 'net'
 import { spawn } from 'child_process'
+import * as net from 'net'
+import * as path from 'path'
 import waitOn from 'wait-on'
 import { detectProjectEnvironment } from '../../../shared/projectEnvironment'
-import { collectUrlsFromText, findFirstUrl, stripAnsiEscapes } from '../../../shared/urlExtract'
-import { RunTaskCycleError, parseRunTaskProcessKey, runTaskProcessKey, topoSortRunTasks } from '../../../shared/runTasks'
 import type { RunTask, RunTaskProgressEvent, RunTaskState } from '../../../shared/runTasks'
+import { parseRunTaskProcessKey, RunTaskCycleError, runTaskProcessKey, topoSortRunTasks } from '../../../shared/runTasks'
+import type { PtySize } from '../../../shared/types'
+import { collectUrlsFromText, findFirstUrl, stripAnsiEscapes } from '../../../shared/urlExtract'
 import type { ProcessManager } from '../runner'
 
 export type EmitRunTaskProgress = (event: RunTaskProgressEvent) => void
@@ -132,7 +133,7 @@ export class RunTaskScheduler {
     }
   }
 
-  async startAll(projectId: string, projectPath: string, tasks: RunTask[]): Promise<{ started: boolean; error?: string }> {
+  async startAll(projectId: string, projectPath: string, tasks: RunTask[], initialSize?: PtySize): Promise<{ started: boolean; error?: string }> {
     if (tasks.length === 0) return { started: false, error: 'No run tasks configured.' }
     let ordered: RunTask[]
     try {
@@ -151,7 +152,7 @@ export class RunTaskScheduler {
     // depend on them still run (see dispatch — disabled deps resolve directly).
     for (const task of ordered) {
       if (task.enabled === false) continue
-      void this.dispatch(session, task)
+      void this.dispatch(session, task, initialSize)
     }
     await Promise.all([...session.dispatches.values()])
 
@@ -161,7 +162,7 @@ export class RunTaskScheduler {
     return { started: true }
   }
 
-  async start(projectId: string, projectPath: string, task: RunTask): Promise<boolean> {
+  async start(projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize): Promise<boolean> {
     const processManager = this.getProcessManager()
     if (!processManager) return false
 
@@ -187,7 +188,7 @@ export class RunTaskScheduler {
     // checks) belongs to "start all" only. A single start launches the task
     // right away — waiting on a full `mvn install` rebuild first made the
     // start button look dead.
-    await this.startTaskNow(session, task)
+    await this.startTaskNow(session, task, initialSize)
     const state = session.states.get(task.id)?.state
     return state !== 'failed'
   }
@@ -457,7 +458,7 @@ export class RunTaskScheduler {
     session.disposers = []
   }
 
-  private dispatch(session: RunTaskSession, task: RunTask): Promise<void> {
+  private dispatch(session: RunTaskSession, task: RunTask, initialSize?: PtySize): Promise<void> {
     const existing = session.dispatches.get(task.id)
     if (existing) return existing
 
@@ -470,7 +471,7 @@ export class RunTaskScheduler {
             const depTask = session.tasks.get(dep)
             // Disabled dependencies never start; downstream tasks proceed anyway.
             if (!depTask || depTask.enabled === false) return Promise.resolve()
-            return this.dispatch(session, depTask)
+            return this.dispatch(session, depTask, initialSize)
           }),
         )
         const blockedDep = deps.find((dep) => {
@@ -486,7 +487,7 @@ export class RunTaskScheduler {
           return
         }
       }
-      await this.startTaskNow(session, task)
+      await this.startTaskNow(session, task, initialSize)
     })()
 
     session.dispatches.set(task.id, promise)
@@ -496,7 +497,7 @@ export class RunTaskScheduler {
     return promise
   }
 
-  private async startTaskNow(session: RunTaskSession, task: RunTask): Promise<void> {
+  private async startTaskNow(session: RunTaskSession, task: RunTask, initialSize?: PtySize): Promise<void> {
     const processManager = this.getProcessManager()
     if (!processManager) {
       this.setState(session, task.id, { state: 'failed', error: 'Process manager unavailable.' })
@@ -534,9 +535,14 @@ export class RunTaskScheduler {
       return
     }
 
+    // 交互 shell 启动（与集合面板 float / 脚本终端一致）：命令作为键盘输入下发，
+    // 结束只是前台进程退出，shell 回到提示符——Ctrl+C 中断 dev server 后会话不关闭。
+    // exit-readiness 任务（docker compose up -d 等一次性命令）保持一次性启动：
+    // 调度器以「进程退出」判就绪，交互 shell 永远不会退出。
+    const launchInteractive = task.readiness?.strategy !== 'exit'
     let started: boolean
     try {
-      started = processManager.start(key, task.command, cwd, useWsl)
+      started = launchInteractive ? processManager.startInteractive(key, task.command, cwd, useWsl, initialSize) : processManager.start(key, task.command, cwd, useWsl, initialSize)
     } catch {
       started = false
     }
@@ -743,4 +749,4 @@ function isPortListening(port: number): Promise<boolean> {
 }
 
 // Re-exported for consumers that only import the scheduler module.
-export { RunTaskCycleError, parseRunTaskProcessKey, runTaskProcessKey }
+export { parseRunTaskProcessKey, RunTaskCycleError, runTaskProcessKey }

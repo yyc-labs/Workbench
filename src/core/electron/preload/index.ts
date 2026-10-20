@@ -5,6 +5,7 @@ import { createAiConnectionInvokeApi } from './invokeApi.aiConnection'
 import { createAiGatewayInvokeApi } from './invokeApi.aiGateway'
 import { createBrowserAiInvokeApi } from './invokeApi.browserAi'
 import { createBrowserScreenshotInvokeApi } from './invokeApi.browserScreenshot'
+import { createCalendarInvokeApi } from './invokeApi.calendar'
 import { createCoreInvokeApi } from './invokeApi.core'
 import { createDocLinkLibraryInvokeApi } from './invokeApi.docLinkLibrary'
 import { createGitInvokeApi } from './invokeApi.git'
@@ -29,6 +30,7 @@ const api = {
   ...createGitInvokeApi(),
   ...createProjectFileInvokeApi(),
   ...createQuickActionsInvokeApi(),
+  ...createCalendarInvokeApi(),
   ...createProcessPortsInvokeApi(),
   ...createRunTaskInvokeApi(),
   ...createTranscriptInvokeApi(),

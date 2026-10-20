@@ -1,6 +1,7 @@
-import { useEffect, useRef, memo } from 'react'
-import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { type ILink, type ITheme, Terminal as XTerm } from '@xterm/xterm'
+import { memo, useEffect, useRef } from 'react'
+import { extractTerminalLinks } from '../lib/terminalLinks'
 import { TERMINAL_FONT_METRICS } from '../lib/terminalViewportSize'
 import '@xterm/xterm/css/xterm.css'
 import { useEffectiveTheme } from '../hooks/useEffectiveTheme'
@@ -137,6 +138,37 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
       sendInput(projectIdRef.current, data)
     })
 
+    // Ctrl/Meta+点击打开 http(s) 链接（registerLinkProvider 为 xterm 稳定 API，无需 addon-web-links）。
+    // 坐标约定（xterm 内部 Linkifier2）：bufferLineNumber 与 range.y 均为 1-based 绝对缓冲行，
+    // range.x 为 1-based 列；行内容按 0-based 取（getLine(y-1)）。
+    term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        const line = term.buffer.active.getLine(bufferLineNumber - 1)
+        if (!line) {
+          callback(undefined)
+          return
+        }
+        const matches = extractTerminalLinks(line.translateToString(true))
+        if (matches.length === 0) {
+          callback(undefined)
+          return
+        }
+        const links: ILink[] = matches.map((match) => ({
+          text: match.text,
+          range: {
+            start: { x: match.start + 1, y: bufferLineNumber },
+            end: { x: match.end, y: bufferLineNumber },
+          },
+          activate: (event: MouseEvent) => {
+            // 仅响应 Ctrl/Command+点击；裸点击保持终端既有行为（光标定位/选区）。
+            if (!event.ctrlKey && !event.metaKey) return
+            void window.electronAPI.openExternal(match.text)
+          },
+        }))
+        callback(links)
+      },
+    })
+
     // Clipboard: Ctrl+Shift+C copy, Ctrl+Shift+V paste (zero-dependency)
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey) {
@@ -157,6 +189,16 @@ export const Terminal = memo(function Terminal({ projectId, variant = 'default' 
           term.selectAll()
           const selection = term.getSelection()
           if (selection) navigator.clipboard.writeText(selection)
+          return false
+        }
+      }
+      // Ctrl+C（无 Shift/Alt）：有选区 = 复制（Windows 终端习惯，不再把 SIGINT 当「暂停」）；
+      // 无选区 = 透传 xterm 默认 \x03，中断前台命令（交互 shell 下会话存活，见 runner.startInteractive）。
+      // 注意：该处理器在 keydown/keypress/keyup 都会调用，只在 keydown 生效。
+      if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyC' && e.type === 'keydown') {
+        const selection = term.getSelection()
+        if (selection) {
+          navigator.clipboard.writeText(selection)
           return false
         }
       }

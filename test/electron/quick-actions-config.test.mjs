@@ -128,3 +128,115 @@ test('valid http and https urls survive normalization', () => {
     ['http://localhost:3000', 'https://example.com/path?a=1'],
   )
 })
+
+function scheduleOf(overrides = {}) {
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    schedule: {
+      kind: 'daily',
+      times: ['09:00'],
+      calendarMode: 'every-day',
+      enabled: true,
+      ...overrides,
+    },
+  }
+}
+
+test('valid schedules survive normalization with derived defaults', () => {
+  const result = normalizeQuickActions({
+    actions: [action(scheduleOf()), action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'weekly', times: ['23:59'], weekdays: [3, 1, 3, 7, -1], enabled: true } }), action({ id: '44444444-4444-4444-8444-444444444444', schedule: { kind: 'once', times: ['00:00'], date: '2999-12-31', enabled: true } })],
+  })
+  assert.deepEqual(result.actions[0].schedule, { kind: 'daily', times: ['09:00'], calendarMode: 'every-day', enabled: true })
+  // weekdays 去重排序并过滤 0-6 之外值；calendarMode 缺省 every-day。
+  assert.deepEqual(result.actions[1].schedule, { kind: 'weekly', times: ['23:59'], weekdays: [1, 3], calendarMode: 'every-day', enabled: true })
+  assert.deepEqual(result.actions[2].schedule, { kind: 'once', times: ['00:00'], date: '2999-12-31', calendarMode: 'every-day', enabled: true })
+})
+
+test('times are deduped, sorted and capped', () => {
+  const result = normalizeQuickActions({
+    actions: [action(scheduleOf({ times: ['18:00', '09:00', '09:00', '12:30'] })), action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'daily', times: ['00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00', '08:00', '09:00'], enabled: true } })],
+  })
+  assert.deepEqual(result.actions[0].schedule.times, ['09:00', '12:30', '18:00'])
+  // 超过上限（8）截断，保留最早的 8 个。
+  assert.equal(result.actions[1].schedule.times.length, 8)
+  assert.equal(result.actions[1].schedule.times[7], '07:00')
+})
+
+test('legacy single time migrates to a one-element times list', () => {
+  const result = normalizeQuickActions({
+    actions: [action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'daily', time: '07:30', enabled: true } })],
+  })
+  assert.deepEqual(result.actions[0].schedule.times, ['07:30'])
+  assert.equal('time' in result.actions[0].schedule, false)
+})
+
+test('invalid schedules are dropped entirely', () => {
+  const result = normalizeQuickActions({
+    actions: [
+      action(scheduleOf({ kind: 'hourly' })),
+      action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'daily', times: ['9:00'], enabled: true } }),
+      action({ id: '44444444-4444-4444-8444-444444444444', schedule: { kind: 'daily', times: ['25:00'], enabled: true } }),
+      action({ id: '55555555-5555-4555-8555-555555555555', schedule: { kind: 'daily', times: [], enabled: true } }),
+      action({ id: '66666666-6666-4666-8666-666666666666', schedule: { kind: 'once', times: ['09:00'], date: 'not-a-date', enabled: true } }),
+      action({ id: '77777777-7777-4777-8777-777777777777', schedule: { kind: 'once', times: ['09:00'], enabled: true } }),
+      action({ id: '88888888-8888-4888-8888-888888888888', schedule: 'nope' }),
+    ],
+  })
+  assert.equal(
+    result.actions.every((item) => !('schedule' in item)),
+    true,
+  )
+})
+
+test('past once dates force enabled=false as a fallback', () => {
+  const result = normalizeQuickActions({
+    actions: [action(scheduleOf({ kind: 'once', date: '2020-01-01', times: ['09:00'] }))],
+  })
+  assert.equal(result.actions[0].schedule.enabled, false)
+  assert.equal(result.actions[0].schedule.date, '2020-01-01')
+})
+
+test('schedule runtime fields are cleaned by validity', () => {
+  const result = normalizeQuickActions({
+    actions: [
+      action(
+        scheduleOf({
+          lastRunAt: 1000,
+          lastAttemptAt: 'yesterday',
+          attemptTime: '9:00',
+          nextRetryAt: Number.NaN,
+          lastRunDate: '2026-13-99',
+          runSlots: ['09:00', 'nope'],
+          attemptCount: 9,
+        }),
+      ),
+      action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'daily', times: ['09:00'], enabled: true, attemptCount: 2.5, lastRunDate: '2026-01-15', lastAttemptAt: 500, runSlots: ['09:00'] } }),
+    ],
+  })
+  // 非有限/非法字段移除，合法字段保留。
+  assert.deepEqual(result.actions[0].schedule, { kind: 'daily', times: ['09:00'], calendarMode: 'every-day', enabled: true, lastRunAt: 1000 })
+  assert.deepEqual(result.actions[1].schedule, {
+    kind: 'daily',
+    times: ['09:00'],
+    calendarMode: 'every-day',
+    enabled: true,
+    lastRunDate: '2026-01-15',
+    lastAttemptAt: 500,
+    runSlots: ['09:00'],
+  })
+})
+
+test('runSlots only survives together with a valid lastRunDate', () => {
+  const result = normalizeQuickActions({
+    actions: [action(scheduleOf({ runSlots: ['09:00'], lastRunDate: undefined }))],
+  })
+  assert.equal('runSlots' in result.actions[0].schedule, false)
+})
+
+test('weekly without weekdays means every day', () => {
+  const result = normalizeQuickActions({
+    actions: [action(scheduleOf({ kind: 'weekly', weekdays: [] })), action({ id: '33333333-3333-4333-8333-333333333333', schedule: { kind: 'weekly', times: ['09:00'], enabled: true } })],
+  })
+  assert.equal('weekdays' in result.actions[0].schedule, false)
+  assert.equal('weekdays' in result.actions[1].schedule, false)
+})

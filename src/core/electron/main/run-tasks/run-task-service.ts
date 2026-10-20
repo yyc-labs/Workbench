@@ -1,12 +1,13 @@
 import * as path from 'path'
 import type { RunTask, RunTaskCandidate, RunTaskConfigFile, RunTaskConfigReadResult, RunTaskProgressEvent } from '../../../shared/runTasks'
+import type { PtySize } from '../../../shared/types'
 import type { ProcessManager } from '../runner'
 import { ensureDockerDaemonRunning, isDockerDaemonRunning, taskRequiresDocker } from './docker-preflight'
 import { RunTaskConfigStore } from './run-task-config-store'
 import { RunTaskConfigWatcher } from './run-task-config-watcher'
 import { detectRunTaskCandidates } from './run-task-detector'
-import { resolveTaskUseWsl, RunTaskScheduler } from './run-task-scheduler'
 import type { EmitRunTaskProgress, StartTaskInTerminal } from './run-task-scheduler'
+import { RunTaskScheduler, resolveTaskUseWsl } from './run-task-scheduler'
 
 export interface RunTaskServiceDependencies {
   getProcessManager: () => ProcessManager | null
@@ -50,15 +51,24 @@ export class RunTaskService {
     return detectRunTaskCandidates(projectPath, scanDirectories)
   }
 
-  async start(projectId: string, projectPath: string, task: RunTask): Promise<boolean> {
-    return this.scheduler.start(projectId, projectPath, task)
+  /**
+   * initialSize 由 renderer 入口（Ctrl+J 面板 / 项目卡 / 运行任务对话框）按集合面板终端区域的
+   * 预测视口计算后传入（lib/terminalViewportSize.ts 的 predictCurrentPanelViewport），使 pty 以真实
+   * 列宽启动，避免挂载后 fit → conpty reflow 把行尾补齐成一片空格。
+   *
+   * 已知遗留：主进程侧发起的启动（quickActionService 的「一键启动」/快捷操作）拿不到面板几何
+   * （视口预测依赖 renderer 的字体度量与窗口尺寸），不传 initialSize → runner 兜底 80×24，
+   * 该路径启动的任务在面板挂载时仍会触发一次 reflow。暂按 B 方案只标注不修。
+   */
+  async start(projectId: string, projectPath: string, task: RunTask, initialSize?: PtySize): Promise<boolean> {
+    return this.scheduler.start(projectId, projectPath, task, initialSize)
   }
 
-  async startAll(projectId: string, projectPath: string, config: RunTaskConfigFile | null): Promise<{ started: boolean; error?: string }> {
+  async startAll(projectId: string, projectPath: string, config: RunTaskConfigFile | null, initialSize?: PtySize): Promise<{ started: boolean; error?: string }> {
     if (!config || config.tasks.length === 0) {
       return { started: false, error: 'No run tasks configured.' }
     }
-    return this.scheduler.startAll(projectId, projectPath, config.tasks)
+    return this.scheduler.startAll(projectId, projectPath, config.tasks, initialSize)
   }
 
   async stop(projectId: string, taskId: string): Promise<boolean> {

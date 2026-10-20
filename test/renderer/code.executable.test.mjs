@@ -8,6 +8,7 @@ test('resolveExecutableScript maps extensions by environment', () => {
   // node / python 两种环境都展示
   assert.deepEqual(resolveExecutableScript('app.js', false), { runtime: 'node', extension: '.js' })
   assert.deepEqual(resolveExecutableScript('app.mjs', true), { runtime: 'node', extension: '.mjs' })
+  assert.deepEqual(resolveExecutableScript('app.cjs', false), { runtime: 'node', extension: '.cjs' })
   assert.deepEqual(resolveExecutableScript('scripts/train.py', false), { runtime: 'python', extension: '.py' })
 
   // .sh 仅 WSL；.ps1 / .bat / .cmd 仅 Windows Native

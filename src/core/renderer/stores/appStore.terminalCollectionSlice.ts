@@ -1,11 +1,12 @@
 import type { StateCreator } from 'zustand'
-import type { FloatingTerminalDock, FloatingTerminalPanelState, TerminalInventoryEvent } from '../../shared/types'
 import { parseTerminalProcessKey } from '../../shared/terminals'
-import { resolveTerminalCollectionWake } from '../lib/terminalCollectionModel'
-import { persistWorkspace } from './appStore.helpers'
+import type { FloatingTerminalDock, FloatingTerminalPanelState, TerminalInventoryEvent } from '../../shared/types'
+import { resolveInteractiveShellCommand } from '../lib/interactiveShell'
 import { resolveProcessUseWsl } from '../lib/processEnvironmentResolution'
 import { projectDisplayName } from '../lib/projectDisplay'
+import { resolveTerminalCollectionWake } from '../lib/terminalCollectionModel'
 import { applyInventoryRemove, applyInventoryUpsert, filterPendingTerminals, reduceTerminalInventoryEvent, reduceTerminalInventorySnapshot, shouldApplyInventoryUpdate } from '../lib/terminalInventory'
+import { persistWorkspace } from './appStore.helpers'
 import type { AppState } from './appStore.types'
 
 /**
@@ -15,16 +16,6 @@ import type { AppState } from './appStore.types'
  * 之后由主进程 upsert/remove 增量事件（terminal:inventory-changed）维护，不再轮询。
  * 本 slice 只持有面板显隐/几何/激活态，以及 ::float:: 交互 shell 的启动与 title 覆盖持久化。
  */
-
-/** 交互 shell 命令按 useWsl 记忆，避免每次开新终端都走 IPC。 */
-let interactiveShellCache: { useWsl: boolean; command: string } | null = null
-
-async function resolveInteractiveShell(useWsl: boolean): Promise<string> {
-  if (interactiveShellCache?.useWsl === useWsl) return interactiveShellCache.command
-  const result = await window.electronAPI.getInteractiveShellCommand(useWsl)
-  interactiveShellCache = { useWsl, command: result.command }
-  return result.command
-}
 
 /** 面板几何防抖合并：拖动 / resize 期间的高频变更只落一次 config。 */
 let persistTimer: number | null = null
@@ -89,21 +80,6 @@ function allocateFloatProcessKey(liveKeys: readonly string[], projectId: string)
   n += 1
   floatKeyHighWater = n
   return `${prefix}${n}`
-}
-
-/** 项目 titles 覆盖表防抖持久化（复用既有 persistWorkspace 链路）。 */
-const titlePersistTimers = new Map<string, number>()
-
-function scheduleTitlePersist(projectId: string, get: () => AppState): void {
-  const existing = titlePersistTimers.get(projectId)
-  if (existing != null) window.clearTimeout(existing)
-  titlePersistTimers.set(
-    projectId,
-    window.setTimeout(() => {
-      titlePersistTimers.delete(projectId)
-      void persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
-    }, 300),
-  )
 }
 
 export type TerminalCollectionActionsSlice = Pick<
@@ -269,7 +245,7 @@ export const createTerminalCollectionSlice: StateCreator<AppState, [], [], Termi
 
     let shellCommand: string
     try {
-      shellCommand = await resolveInteractiveShell(useWsl)
+      shellCommand = await resolveInteractiveShellCommand(useWsl)
     } catch {
       return false
     }
@@ -320,7 +296,9 @@ export const createTerminalCollectionSlice: StateCreator<AppState, [], [], Termi
         return { ...project, terminalDock: hasTitles ? { titles } : undefined }
       }),
     }))
-    scheduleTitlePersist(projectId, get)
+    // 标题持久化唯一触发点（人工重命名，低频）：直接提交，由主进程 WorkspacePersistenceCoordinator
+    // 统一防抖合并落盘（D11/D24）——不再维护 renderer 侧第二套定时器。
+    void persistWorkspace(get().projects, get().folders, get().tags, get().config.removedProjects)
   },
 
   /** 按 kind 分发停止逻辑；toolbox 与解析失败忽略。 */

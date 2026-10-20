@@ -1,5 +1,6 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import type { StateCreator } from 'zustand'
+import { normalizeRememberedDirectories } from '../pages/code/code.expandedDirectories'
 import { applySavedProjectSnapshot, createEntityId, createFallbackProject, persistWorkspace, toRemovedProjectSnapshot } from './appStore.helpers'
 import type { AppState } from './appStore.types'
 
@@ -225,14 +226,21 @@ export const createWorkspaceActionsSlice: StateCreator<AppState, [], [], Workspa
     const normalizedCursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
     const normalizedContentSearchHistory = normalizeContentSearchHistory(session?.contentSearchHistory)
     const normalizedContentSearchScope = normalizeContentSearchScope(session?.contentSearchScope)
+    // remembered 展开集合：上限与校验规则来自纯函数单一事实源（code.expandedDirectories.ts）。
+    // 合并语义（与 D30 三态一致）：字段缺省 → 保留现有 remembered（tabs/cursor 等提交不得冲掉展开记忆）；
+    // 显式空数组 → 清除；非法条目 → 逐条剔除。
+    const hasExpandedDirectoriesField = Boolean(session) && Object.prototype.hasOwnProperty.call(session, 'expandedDirectories')
+    const existingExpandedDirectories = get().projects.find((project) => project.id === projectId)?.codeSession?.expandedDirectories
+    const normalizedExpandedDirectories = normalizeRememberedDirectories(hasExpandedDirectoriesField ? session?.expandedDirectories : existingExpandedDirectories)
     const normalizedSession =
-      normalizedTabs.length > 0 || normalizedCursorPositions || normalizedContentSearchHistory || normalizedContentSearchScope
+      normalizedTabs.length > 0 || normalizedCursorPositions || normalizedContentSearchHistory || normalizedContentSearchScope || normalizedExpandedDirectories
         ? {
             tabs: normalizedTabs,
             activePath: normalizedActivePath,
             cursorPositions: normalizedCursorPositions,
             contentSearchHistory: normalizedContentSearchHistory,
             contentSearchScope: normalizedContentSearchScope,
+            expandedDirectories: normalizedExpandedDirectories,
           }
         : undefined
 

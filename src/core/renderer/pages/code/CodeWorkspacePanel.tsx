@@ -250,10 +250,10 @@ export function CodeWorkspacePanel({
     isContentSearchAllExpanded,
     isSearchingContent,
     isSearchingFiles,
-    loadDirectory,
     loadTree,
     markFilePathKnown,
     refreshRootIfStale,
+    toggleDirectory,
     setContentSearchCaseSensitive,
     setContentSearchQuery,
     setExpandedDirectories,
@@ -269,6 +269,17 @@ export function CodeWorkspacePanel({
     projectPath,
     treeAutoLoadFileLimit,
     treeAutoLoadPaused: !isNarrowViewport && isLeftSidebarCollapsed,
+    rememberedDirectories: rawPersistedProjectCodeSession?.expandedDirectories,
+    // remembered 集合经 store action 提交：主进程 WorkspacePersistenceCoordinator 统一防抖落盘，
+    // renderer 不再维护第二套定时器（§7.3 persistRememberedDirectories）。
+    onPersistRememberedDirectories: (paths) => {
+      console.debug('[expanded-dirs] panel persist callback', { paths })
+      void setProjectCodeSession(projectId, {
+        tabs: rawPersistedProjectCodeSession?.tabs ?? [],
+        ...rawPersistedProjectCodeSession,
+        expandedDirectories: paths,
+      })
+    },
   })
   const {
     closeCodePreview,
@@ -790,24 +801,10 @@ export function CodeWorkspacePanel({
   const handleToggleTreeDirectory = useCallback(
     (relativePath: string) => {
       if (hasSearchQuery) return
-      const isExpanded = expandedDirectories.has(relativePath)
-      if (isExpanded) {
-        setExpandedDirectories((prev) => {
-          const next = new Set(prev)
-          next.delete(relativePath)
-          return next
-        })
-        return
-      }
-      setExpandedDirectories((prev) => {
-        if (prev.has(relativePath)) return prev
-        const next = new Set(prev)
-        next.add(relativePath)
-        return next
-      })
-      void loadDirectory(relativePath)
+      // 展开/折叠语义（remembered + 父级约束 + 逐级恢复）收敛在 hook 的 toggleDirectory。
+      void toggleDirectory(relativePath)
     },
-    [expandedDirectories, hasSearchQuery, loadDirectory],
+    [hasSearchQuery, toggleDirectory],
   )
   const {
     closeFolderFileSearch,

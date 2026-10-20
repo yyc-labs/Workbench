@@ -22,6 +22,8 @@ interface UrlPopoverProps {
   searchPlaceholder?: string
   /** 打开链接管理弹窗（详情浮层「管理链接」动作触发；由 ProjectLinksTrigger 透传） */
   onOpenManager?: () => void
+  /** 触发下方可用高度不足（<200px）时拆成两张卡：搜索栏留在 trigger 下方，链接列表移到 trigger 上方（仅首页项目卡片开启）。 */
+  splitWhenShort?: boolean
 }
 
 export type UrlPopoverItem = {
@@ -469,10 +471,10 @@ export async function openUrlPopoverItem(entry: UrlPopoverItem): Promise<void> {
   await window.electronAPI.openExternal(entry.url)
 }
 
-export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, closeOnSelect = false, searchPlaceholder, onOpenManager }: UrlPopoverProps) {
+export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, forcePopover = false, triggerClassName, closeOnSelect = false, searchPlaceholder, onOpenManager, splitWhenShort = false }: UrlPopoverProps) {
   const { t } = useI18n()
   const [show, setShow] = useState(false)
-  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300 })
+  const [layout, setLayout] = useState({ top: 0, left: 0, maxHeight: 320, width: 300, split: false, listMaxHeight: 320, listBottom: 0 })
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedCredentialKey, setCopiedCredentialKey] = useState<string | null>(null)
   const [openingEntryKey, setOpeningEntryKey] = useState<string | null>(null)
@@ -483,6 +485,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
   const [activeEntryIndex, setActiveEntryIndex] = useState(0)
   const triggerRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const listCardRef = useRef<HTMLDivElement>(null)
   const categoryMenuRef = useRef<HTMLDivElement | null>(null)
   const itemActionsMenuRef = useRef<HTMLDivElement | null>(null)
   const detailCardRef = useRef<HTMLDivElement | null>(null)
@@ -588,14 +591,23 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
       const availableWidth = window.innerWidth - viewportPadding * 2
       const width = availableWidth > 220 ? Math.min(idealPopoverWidth, availableWidth) : availableWidth
 
+      const splitHeightThreshold = 200
+      const searchCardHeight = 56
       const preferredTop = rect.bottom + triggerGap
-      const highestTopForMinHeight = window.innerHeight - viewportPadding - minVisibleHeight
-      const top = Math.max(viewportPadding, Math.min(preferredTop, highestTopForMinHeight))
-      const availableHeight = window.innerHeight - top - viewportPadding
-      const maxHeight = Math.max(96, Math.min(maxPopoverHeight, availableHeight))
       const left = Math.max(viewportPadding, Math.min(rect.left, window.innerWidth - viewportPadding - width))
 
-      setLayout({ top, left, maxHeight, width })
+      // 开启拆分且触发下方可用高度不足时，拆成两张卡：搜索栏留在下方，链接列表移到 trigger 上方。
+      const availableBelow = window.innerHeight - preferredTop - viewportPadding
+      const split = splitWhenShort && availableBelow < splitHeightThreshold
+      const highestTopForMinHeight = window.innerHeight - viewportPadding - minVisibleHeight
+      const top = split ? Math.max(viewportPadding, Math.min(preferredTop, window.innerHeight - viewportPadding - searchCardHeight)) : Math.max(viewportPadding, Math.min(preferredTop, highestTopForMinHeight))
+      const availableHeight = window.innerHeight - top - viewportPadding
+      const maxHeight = Math.max(96, Math.min(maxPopoverHeight, availableHeight))
+      const availableAbove = rect.top - triggerGap - viewportPadding
+      const listMaxHeight = Math.max(96, Math.min(maxPopoverHeight, availableAbove))
+      const listBottom = window.innerHeight - (rect.top - triggerGap)
+
+      setLayout({ top, left, maxHeight, width, split, listMaxHeight, listBottom })
     }
   }
 
@@ -610,7 +622,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
     clearHideTimer()
     if (blur) {
       const activeEl = document.activeElement
-      if (activeEl instanceof HTMLElement && popoverRef.current?.contains(activeEl)) {
+      if (activeEl instanceof HTMLElement && (popoverRef.current?.contains(activeEl) || listCardRef.current?.contains(activeEl))) {
         activeEl.blur()
       }
     }
@@ -619,7 +631,8 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
     setShow(false)
   }
 
-  const isWithinInteractiveArea = (target: EventTarget | null) => target instanceof Node && Boolean(triggerRef.current?.contains(target) || popoverRef.current?.contains(target) || categoryMenuRef.current?.contains(target) || itemActionsMenuRef.current?.contains(target) || detailCardRef.current?.contains(target))
+  const isWithinInteractiveArea = (target: EventTarget | null) =>
+    target instanceof Node && Boolean(triggerRef.current?.contains(target) || popoverRef.current?.contains(target) || listCardRef.current?.contains(target) || categoryMenuRef.current?.contains(target) || itemActionsMenuRef.current?.contains(target) || detailCardRef.current?.contains(target))
 
   const hasSearchText = () => query.trim().length > 0
   const hasSelectedCategory = () => selectedCategory !== 'all'
@@ -660,6 +673,22 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
     hoverStateRef.current.popover = false
     if (isWithinInteractiveArea(event.relatedTarget)) return
     scheduleHide({ forceClose: true })
+  }
+
+  const handlePopoverFocusCapture = () => {
+    focusWithinRef.current = true
+    clearHideTimer()
+  }
+
+  const handlePopoverBlurCapture = () => {
+    window.setTimeout(() => {
+      const activeEl = document.activeElement
+      const stillWithinPopover = activeEl instanceof Node && (popoverRef.current?.contains(activeEl) || listCardRef.current?.contains(activeEl))
+      focusWithinRef.current = Boolean(stillWithinPopover)
+      if (!focusWithinRef.current) {
+        scheduleHide()
+      }
+    }, 0)
   }
 
   const handleCopy = async (entry: PreparedUrlPopoverEntry) => {
@@ -783,179 +812,182 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
 
   if (!hasPopover) return <>{children}</>
 
-  const popover = show && (
-    <div
-      ref={popoverRef}
-      className="fixed flex flex-col rounded-[20px] px-1.5 py-2"
-      style={{
-        top: layout.top,
-        left: layout.left,
-        maxHeight: layout.maxHeight,
-        width: layout.width,
-        zIndex,
-        background: 'var(--color-popover)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-popover)',
-        backdropFilter: 'saturate(145%) blur(14px)',
-        WebkitBackdropFilter: 'saturate(145%) blur(14px)',
-      }}
-      onMouseEnter={handlePopoverEnter}
-      onMouseLeave={handlePopoverLeave}
-      onPointerDown={(event) => {
-        event.stopPropagation()
-      }}
-      onFocusCapture={() => {
-        focusWithinRef.current = true
-        clearHideTimer()
-      }}
-      onBlurCapture={() => {
-        window.setTimeout(() => {
-          const activeEl = document.activeElement
-          const stillWithinPopover = activeEl instanceof Node && popoverRef.current?.contains(activeEl)
-          focusWithinRef.current = Boolean(stillWithinPopover)
-          if (!focusWithinRef.current) {
-            scheduleHide()
-          }
-        }, 0)
-      }}
-      onContextMenu={() => closePopover({ blur: true })}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="relative z-[1] shrink-0 px-1.5 pb-2">
-        <div className={showCategorySelect ? 'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-center gap-1.5' : undefined}>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setActiveEntryIndex(0)
-            }}
-            onFocus={() => {
-              focusWithinRef.current = true
-              clearHideTimer()
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                e.preventDefault()
-                setQuery('')
-                setActiveEntryIndex(0)
-                return
-              }
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                moveActiveEntry(1)
-                return
-              }
-              if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                moveActiveEntry(-1)
-                return
-              }
-              if (e.key === 'Enter' && filteredEntries[0]) {
-                e.preventDefault()
-                void handleOpenEntry(activeEntry ?? filteredEntries[0])
-              }
-            }}
-            aria-activedescendant={activeEntry ? `url-popover-entry-${activeEntryIndexResolved}` : undefined}
-            placeholder={searchPlaceholder ?? t('common.searchLinks')}
-            className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 w-full' : ' w-full'}`}
-          />
-          {showCategorySelect && <UrlPopoverCategorySelect value={selectedCategory} options={categoryOptions} onChange={handleChangeCategory} floatingMenuRef={categoryMenuRef} onOpenChange={handleCategorySelectOpenChange} zIndex={zIndex + 1} />}
-        </div>
-      </div>
+  const popoverCardStyle = {
+    zIndex,
+    background: 'var(--color-popover)',
+    border: '1px solid var(--color-border)',
+    boxShadow: 'var(--shadow-popover)',
+    backdropFilter: 'saturate(145%) blur(14px)',
+    WebkitBackdropFilter: 'saturate(145%) blur(14px)',
+  }
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5" style={{ overscrollBehavior: 'contain' }}>
-        {filteredEntries.length === 0 ? (
-          <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)]">{t('common.noMatches')}</div>
-        ) : (
-          filteredEntries.map((entry, index) => {
-            const isCopied = copiedKey === entry.key
-            const isOpening = openingEntryKey === entry.key
-            const isActive = index === activeEntryIndexResolved
-            return (
-              <div
-                key={entry.key}
-                id={`url-popover-entry-${index}`}
-                ref={(node) => {
-                  entryRefs.current[index] = node
-                }}
-                className={`group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 ${isActive ? 'bg-[color:var(--color-accent)]/80' : 'hover:bg-[color:var(--color-accent)]/70'} ${isOpening ? 'cursor-progress' : 'cursor-pointer'}`}
-                role="button"
-                tabIndex={0}
-                aria-busy={isOpening || undefined}
-                aria-disabled={isOpening || undefined}
-                aria-current={isActive || undefined}
-                onClick={() => {
-                  void handleOpenEntry(entry)
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setDetailCard({ x: event.clientX, y: event.clientY, entry })
-                }}
-                onKeyDown={(e) => {
-                  if (isOpening) return
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    void handleOpenEntry(entry)
-                  }
-                }}
-                aria-label={entry.label}
-                onMouseEnter={() => {
-                  setActiveEntryIndex(index)
-                }}
-              >
-                <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]">
-                  {entry.kind === 'ssh' ? <Link2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />}
-                  <div className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1">
-                      <span className="truncate">{entry.label}</span>
-                      {entry.source === 'shared' && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-1.5 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('documentation.sharedBadge')}</span>}
-                    </span>
-                    {entry.description && <span className="block truncate text-[11px] text-[color:var(--color-muted-foreground)]">{entry.description}</span>}
-                  </div>
-                </div>
-                {entry.credentialActions && entry.credentialActions.length > 0 && (
-                  <UrlPopoverItemActionsMenu
-                    entryKey={entry.key}
-                    actions={entry.credentialActions}
-                    copiedActionKey={copiedCredentialKey}
-                    onCopyAction={(entryKey, action) => {
-                      void handleCopyCredentialAction(entryKey, action)
-                    }}
-                    floatingMenuRef={itemActionsMenuRef}
-                    onOpenChange={setCredentialMenuOpen}
-                    zIndex={zIndex + 1}
-                  />
-                )}
-                {isOpening ? (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[11px] text-[color:var(--color-foreground)]" aria-live="polite">
-                    <RefreshCw className="h-3 w-3 animate-spin" />
-                    {t('common.opening')}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${
-                      isCopied ? 'scale-105 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] opacity-100' : 'opacity-0 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100'
-                    }`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void handleCopy(entry)
-                    }}
-                  >
-                    {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                    {isCopied ? t('common.copied') : (entry.copyLabel ?? t('common.copy'))}
-                  </button>
-                )}
-              </div>
-            )
-          })
-        )}
+  const popoverCardHandlers = {
+    onMouseEnter: handlePopoverEnter,
+    onMouseLeave: handlePopoverLeave,
+    onPointerDown: (event: ReactMouseEvent<HTMLDivElement>) => {
+      event.stopPropagation()
+    },
+    onFocusCapture: handlePopoverFocusCapture,
+    onBlurCapture: handlePopoverBlurCapture,
+    onContextMenu: () => closePopover({ blur: true }),
+    onClick: (event: ReactMouseEvent<HTMLDivElement>) => event.stopPropagation(),
+  }
+
+  const searchHeader = (
+    <div className="relative z-[1] shrink-0 px-1.5 pb-2">
+      <div className={showCategorySelect ? 'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)] items-center gap-1.5' : undefined}>
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setActiveEntryIndex(0)
+          }}
+          onFocus={() => {
+            focusWithinRef.current = true
+            clearHideTimer()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setQuery('')
+              setActiveEntryIndex(0)
+              return
+            }
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              moveActiveEntry(1)
+              return
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault()
+              moveActiveEntry(-1)
+              return
+            }
+            if (e.key === 'Enter' && filteredEntries[0]) {
+              e.preventDefault()
+              void handleOpenEntry(activeEntry ?? filteredEntries[0])
+            }
+          }}
+          aria-activedescendant={activeEntry ? `url-popover-entry-${activeEntryIndexResolved}` : undefined}
+          placeholder={searchPlaceholder ?? t('common.searchLinks')}
+          className={`quiet-control h-8 rounded-full border-0 px-3 text-xs text-[color:var(--color-foreground)] placeholder:text-[color:var(--color-muted-foreground)]${showCategorySelect ? ' min-w-0 w-full' : ' w-full'}`}
+        />
+        {showCategorySelect && <UrlPopoverCategorySelect value={selectedCategory} options={categoryOptions} onChange={handleChangeCategory} floatingMenuRef={categoryMenuRef} onOpenChange={handleCategorySelectOpenChange} zIndex={zIndex + 1} />}
       </div>
     </div>
   )
+
+  const linkList = (
+    <div className="min-h-0 flex-1 overflow-y-auto px-1.5" style={{ overscrollBehavior: 'contain' }}>
+      {filteredEntries.length === 0 ? (
+        <div className="px-3 py-3 text-xs text-[color:var(--color-muted-foreground)]">{t('common.noMatches')}</div>
+      ) : (
+        filteredEntries.map((entry, index) => {
+          const isCopied = copiedKey === entry.key
+          const isOpening = openingEntryKey === entry.key
+          const isActive = index === activeEntryIndexResolved
+          return (
+            <div
+              key={entry.key}
+              id={`url-popover-entry-${index}`}
+              ref={(node) => {
+                entryRefs.current[index] = node
+              }}
+              className={`group/item flex items-center gap-1.5 rounded-[14px] px-2.5 py-2 ${isActive ? 'bg-[color:var(--color-accent)]/80' : 'hover:bg-[color:var(--color-accent)]/70'} ${isOpening ? 'cursor-progress' : 'cursor-pointer'}`}
+              role="button"
+              tabIndex={0}
+              aria-busy={isOpening || undefined}
+              aria-disabled={isOpening || undefined}
+              aria-current={isActive || undefined}
+              onClick={() => {
+                void handleOpenEntry(entry)
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                setDetailCard({ x: event.clientX, y: event.clientY, entry })
+              }}
+              onKeyDown={(e) => {
+                if (isOpening) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  void handleOpenEntry(entry)
+                }
+              }}
+              aria-label={entry.label}
+              onMouseEnter={() => {
+                setActiveEntryIndex(index)
+              }}
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-left text-xs text-[color:var(--color-foreground)]/88 transition-colors hover:text-[color:var(--color-foreground)]">
+                {entry.kind === 'ssh' ? <Link2 className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" /> : <ExternalLink className="h-3 w-3 shrink-0 text-[color:var(--color-muted-foreground)]" />}
+                <div className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1">
+                    <span className="truncate">{entry.label}</span>
+                    {entry.source === 'shared' && <span className="shrink-0 rounded-full bg-[color:var(--color-accent)] px-1.5 py-0.5 text-[10px] text-[color:var(--color-muted-foreground)]">{t('documentation.sharedBadge')}</span>}
+                  </span>
+                  {entry.description && <span className="block truncate text-[11px] text-[color:var(--color-muted-foreground)]">{entry.description}</span>}
+                </div>
+              </div>
+              {entry.credentialActions && entry.credentialActions.length > 0 && (
+                <UrlPopoverItemActionsMenu
+                  entryKey={entry.key}
+                  actions={entry.credentialActions}
+                  copiedActionKey={copiedCredentialKey}
+                  onCopyAction={(entryKey, action) => {
+                    void handleCopyCredentialAction(entryKey, action)
+                  }}
+                  floatingMenuRef={itemActionsMenuRef}
+                  onOpenChange={setCredentialMenuOpen}
+                  zIndex={zIndex + 1}
+                />
+              )}
+              {isOpening ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-[11px] text-[color:var(--color-foreground)]" aria-live="polite">
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  {t('common.opening')}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] transition-all duration-300 cursor-pointer active:scale-95 ${
+                    isCopied ? 'scale-105 bg-[color:var(--color-success-background)] text-[color:var(--color-success)] opacity-100' : 'opacity-0 text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] group-hover/item:opacity-100'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleCopy(entry)
+                  }}
+                >
+                  {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {isCopied ? t('common.copied') : (entry.copyLabel ?? t('common.copy'))}
+                </button>
+              )}
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+
+  const popover =
+    show &&
+    (layout.split ? (
+      <>
+        <div ref={popoverRef} className="fixed flex flex-col rounded-[20px] px-1.5 py-2" style={{ ...popoverCardStyle, top: layout.top, left: layout.left, width: layout.width }} {...popoverCardHandlers}>
+          {searchHeader}
+        </div>
+        <div ref={listCardRef} className="fixed flex flex-col rounded-[20px] px-1.5 py-2" style={{ ...popoverCardStyle, bottom: layout.listBottom, left: layout.left, maxHeight: layout.listMaxHeight, width: layout.width }} {...popoverCardHandlers}>
+          {linkList}
+        </div>
+      </>
+    ) : (
+      <div ref={popoverRef} className="fixed flex flex-col rounded-[20px] px-1.5 py-2" style={{ ...popoverCardStyle, top: layout.top, left: layout.left, maxHeight: layout.maxHeight, width: layout.width }} {...popoverCardHandlers}>
+        {searchHeader}
+        {linkList}
+      </div>
+    ))
 
   return (
     <div
@@ -964,7 +996,7 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
       onMouseEnter={handleTriggerEnter}
       onMouseLeave={handleTriggerLeave}
       onContextMenuCapture={(event) => {
-        if (popoverRef.current?.contains(event.target as Node)) return
+        if (popoverRef.current?.contains(event.target as Node) || listCardRef.current?.contains(event.target as Node)) return
         closePopover({ blur: true })
       }}
     >

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, Copy, Link2, Link2Off, Pencil, Play, Power, Rot
 import type { QuickActionView } from '../../../../shared/types'
 import { useI18n } from '../../../i18n'
 import { describeQuickActionSummary, QUICK_ACTION_ICON_COMPONENTS } from './quickActions.helpers'
+import { describeQuickActionScheduleBadge, describeQuickActionScheduleNotes } from './quickActions.schedule'
 
 type QuickActionCardProps = {
   action: QuickActionView
@@ -23,6 +24,8 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
   const { t } = useI18n()
   const Icon = QUICK_ACTION_ICON_COMPONENTS[action.icon]
   const summary = describeQuickActionSummary(t, action.action, projectName, taskName)
+  const scheduleBadge = describeQuickActionScheduleBadge(t, action.schedule)
+  const scheduleNotes = describeQuickActionScheduleNotes(t, action.schedule, action.scheduleNextRunAt, new Date())
 
   return (
     <div className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
@@ -36,10 +39,16 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
             {action.shortcutState === 'valid' ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.card.badgeShortcut')}</span> : null}
             {action.shortcutState === 'missing' ? <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">{t('quickActions.card.badgeShortcutMissing')}</span> : null}
             {!action.enabled ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.card.badgeDisabled')}</span> : null}
+            {scheduleBadge ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{scheduleBadge}</span> : null}
           </div>
           <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={summary}>
             {summary}
           </p>
+          {scheduleNotes ? (
+            <p className="mt-0.5 truncate text-xs text-[color:var(--color-muted-foreground)]" title={scheduleNotes}>
+              {scheduleNotes}
+            </p>
+          ) : null}
         </div>
       </div>
 

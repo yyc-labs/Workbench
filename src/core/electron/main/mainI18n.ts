@@ -54,6 +54,14 @@ const mainMessages = {
         introLine: 'What I learned today:',
       },
     },
+    quickActions: {
+      notification: {
+        runTitle: 'Quick action executed',
+        runBody: '\"{name}\" ran at {time}',
+        failedTitle: 'Quick action failed',
+        failedBody: '\"{name}\" failed: {error}',
+      },
+    },
     browserScreenshot: {
       triggerLabel: 'Screenshot',
       fixedPolicy: 'Floating elements',
@@ -123,6 +131,14 @@ const mainMessages = {
       defaults: {
         newNoteTitle: '新学习记录',
         introLine: '今天学习到：',
+      },
+    },
+    quickActions: {
+      notification: {
+        runTitle: '快捷操作已执行',
+        runBody: '「{name}」已于 {time} 执行',
+        failedTitle: '快捷操作执行失败',
+        failedBody: '「{name}」执行失败：{error}',
       },
     },
     browserScreenshot: {

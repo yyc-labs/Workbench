@@ -561,7 +561,7 @@ function ProjectCardInner({ project, folders = [], tags = [], onSelect, index = 
             )}
           />
         </div>
-        <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" />
+        <ProjectLinksTrigger items={linkMenuItems} tagOptions={docLinkTagOptions} onOpenDefault={handleOpenFirstLink} onOpenManager={() => setDocLinksDialogOpen(true)} size="icon" splitWhenShort />
         {(isDevReady || pendingOpenDevUrl || (!isDevRunning && !isDevStopping)) && (
           <button
             className={`quiet-control inline-flex h-8 w-8 items-center justify-center rounded-full border-0 transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60 ${
