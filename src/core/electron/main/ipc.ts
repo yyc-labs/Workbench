@@ -151,6 +151,8 @@ export const IPC = {
   PROJECT_FILE_ZIP: 'project-file:zip',
   PROJECT_FILE_ZIP_CLIPBOARD: 'project-file:zip-clipboard',
   PROJECT_FILE_CLIPBOARD: 'project-file:clipboard',
+  PROJECT_FILE_ZIP_ENTRIES_CLIPBOARD: 'project-file:zip-entries-clipboard',
+  PROJECT_FILE_CLIPBOARD_ENTRIES: 'project-file:clipboard-entries',
   MARKDOWN_DOCUMENT_SELECT: 'markdown-document:select',
   MARKDOWN_DOCUMENT_READ: 'markdown-document:read',
   MARKDOWN_DOCUMENT_WRITE: 'markdown-document:write',

@@ -508,102 +508,148 @@
   background: color-mix(in srgb, var(--color-card) 92%, transparent);
 }
 
-.code-search-toggle-action {
-  flex-shrink: 0;
-}
-
-.code-content-search-virtual-wrap {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-
-.code-content-search-virtual-list {
-  overflow-x: hidden !important;
-}
-
-.code-content-search-file-header {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--color-border) 86%, transparent);
-  border-radius: 11px;
-  padding: 7px 10px;
-  background: color-mix(in srgb, var(--color-card) 96%, transparent);
-  color: var(--color-foreground);
+/* 悬浮命中卡片：挂在 Tooltip portal 上，覆盖 .app-tooltip-content 的内边距与空白处理。 */
+.code-content-search-hover-card {
+  padding: 0;
+  white-space: normal;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-  cursor: pointer;
+  flex-direction: column;
+  max-height: min(420px, 60vh);
+  overflow: hidden;
 }
 
-.code-content-search-file-header:hover {
-  background: var(--color-accent);
-}
-
-.code-content-search-file-path {
-  display: block;
+.code-content-search-hover-card-header {
+  display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.code-content-search-hover-card-path {
   flex: 1;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--color-foreground);
+  min-width: 0;
   font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--color-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.code-content-search-file-count {
-  display: block;
-  min-width: 24px;
-  text-align: right;
-  font-size: 11px;
+.code-content-search-hover-card-count {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 600;
   line-height: 1.2;
   color: var(--color-muted-foreground);
+  white-space: nowrap;
 }
 
-.code-content-search-match {
+.code-content-search-hover-card-truncated {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-warning-background) 60%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 86%, var(--color-muted-foreground));
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.code-content-search-hover-card-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.code-content-search-hover-match {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--color-card) 94%, transparent);
-  color: var(--color-foreground);
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 4px 6px;
   text-align: left;
-  padding: 6px 10px;
-  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms var(--spring);
 }
 
-.code-content-search-match:hover {
+.code-content-search-hover-match:hover {
   background: var(--color-accent);
 }
 
-.code-content-search-match.is-active {
+.code-content-search-hover-match.is-active {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
-.code-content-search-position {
-  display: block;
-  font-size: 11px;
-  line-height: 1.2;
-  color: var(--color-muted-foreground);
+.code-content-search-hover-position {
+  flex: 0 0 auto;
+  width: 60px;
+  text-align: right;
   font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--color-muted-foreground);
 }
 
-.code-content-search-line {
-  display: block;
+.code-content-search-hover-line {
+  flex: 1;
   min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
   color: var(--color-foreground);
-  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.code-tree-selection-hover-card {
+  padding: 0;
+  white-space: normal;
+  display: flex;
+  flex-direction: column;
+  max-height: min(320px, 50vh);
+  overflow: hidden;
+}
+
+.code-tree-selection-hover-card-header {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-foreground);
+}
+
+.code-tree-selection-hover-card-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.code-tree-selection-hover-item {
+  padding: 3px 6px;
+  border-radius: 6px;
   font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .code-panel-empty {
@@ -735,6 +781,32 @@
 .code-tree-row--active {
   background: color-mix(in srgb, var(--color-primary) 13%, transparent);
   color: var(--color-foreground);
+}
+
+/* 16 多选选中态：统一背景覆盖完整行宽；active 的侧边指示线不被覆盖（H10），
+   与 active 叠加时保留 --active 细边框语义，不互相覆盖。 */
+.code-tree-row--selected {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--color-foreground);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-primary) 62%, transparent);
+}
+
+.code-tree-row--selected:hover {
+  background: color-mix(in srgb, var(--color-primary) 26%, transparent);
+}
+
+.code-tree-row--selected.code-tree-row--active {
+  background: color-mix(in srgb, var(--color-primary) 26%, transparent);
+}
+
+/* 多选计数（文件视图与全局搜索共用）：仅计数，悬浮展开所选文件相对路径列表。 */
+.code-tree-selection-count {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+  cursor: default;
 }
 
 .code-tree-row--excluded {

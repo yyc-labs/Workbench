@@ -176,8 +176,9 @@ export function normalizeSchedule(value: unknown): QuickActionSchedule | null {
  * 1. non-array shape → default; 2. drop entries with unknown type or invalid
  * required fields; 3. dedupe/regenerate ids; 4. sanitize names; 5. derive
  * icon/group; 6. renumber order per group; 7. boolean enabled; 8. clean
- * desktopShortcutPath; 9. finite timestamps; 10. normalize schedule
- * (invalid schedule shapes drop the whole schedule).
+ * desktopShortcutPath; 9. boolean desktopShortcutEnabled (期望状态，缺省保持
+ * 缺省——消费者按路径推导，见 wantsDesktopShortcut); 10. finite timestamps;
+ * 11. normalize schedule (invalid schedule shapes drop the whole schedule).
  */
 export function normalizeQuickActions(value: unknown): QuickActionsConfig {
   if (!value || typeof value !== 'object' || !Array.isArray((value as { actions?: unknown }).actions)) {
@@ -212,6 +213,8 @@ export function normalizeQuickActions(value: unknown): QuickActionsConfig {
       createdAt: finiteTimestamp(item.createdAt, now),
       updatedAt: finiteTimestamp(item.updatedAt, now),
       ...(nonEmptyString(item.desktopShortcutPath) ? { desktopShortcutPath: item.desktopShortcutPath.trim() } : {}),
+      // 期望状态：仅接受布尔值；缺省不落字段（由消费者按路径推导，兼容旧配置）。
+      ...(typeof item.desktopShortcutEnabled === 'boolean' ? { desktopShortcutEnabled: item.desktopShortcutEnabled } : {}),
       ...(schedule ? { schedule } : {}),
     })
   }

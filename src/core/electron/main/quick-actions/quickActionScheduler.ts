@@ -9,8 +9,9 @@ import { formatLocalDate, parseLocalDate, weekdayOf } from '../calendar/calendar
  * 执行一次（runSlots 幂等），重试退避与宽限窗口互不影响；频率与日历模式
  * 是按天层判定，对所有时间点一致。
  *
- * 补跑语义（D5）：不错过即不补跑，唯一例外是启动/休眠恢复后的 5 分钟
- * 宽限窗口。重试语义（D14）：单时间点同日最多 3 次尝试，线性退避 1min/2min。
+ * 补跑语义（D5）：不错过即不补跑——计划时间过去超过 5 分钟宽限窗口的时间点
+ * 当天直接跳过（覆盖启动/休眠恢复/日程中途创建等一切超前场景，重启后重新
+ * 判定结果天然一致）。重试语义（D14）：单时间点同日最多 3 次尝试，线性退避 1min/2min。
  */
 
 export type TimerHandle = ReturnType<typeof setTimeout>
@@ -41,9 +42,12 @@ export type QuickActionSchedulerDeps = {
 
 /** 分钟级 tick 对齐间隔（D3）。 */
 const TICK_INTERVAL_MS = 60_000
-/** 与上一 tick 间隔超过该值视为休眠恢复，按追赶 tick 处理（D5）。 */
-const CATCHUP_GAP_MS = 90_000
-/** 启动/休眠恢复后的补跑宽限窗口（D5）。 */
+/**
+ * 补跑宽限窗口（D5）：对每个 tick 统一生效——计划时间过去超过 5 分钟视为
+ * 错过，当天不再补触发该时间点。普通 tick 与计划时间的间隔本就在一个 tick
+ * 周期（60s）内，正常触发不受影响；启动/休眠恢复/日程中途创建的超前时间点
+ * 均按同一规则跳过（重启后重新判定，结果天然一致）。
+ */
 const GRACE_WINDOW_MS = 5 * 60_000
 /** 单时间点同日最大尝试次数（D14）。 */
 const MAX_DAILY_ATTEMPTS = 3
@@ -52,7 +56,6 @@ export function createQuickActionScheduler(deps: QuickActionSchedulerDeps) {
   let timer: TimerHandle | null = null
   let stopped = true
   let ticking = false
-  let lastTickAt = 0
   /** 当天因宽限窗口跳过的时间点（内存按天保持；重启后时间判定天然一致）。 */
   const skippedSlots = new Set<string>()
   let skippedSlotsDate: string | null = null
@@ -100,9 +103,6 @@ export function createQuickActionScheduler(deps: QuickActionSchedulerDeps) {
   async function tick(): Promise<void> {
     const now = deps.now()
     const nowMs = now.getTime()
-    // 启动后首次 tick 或与上一 tick 间隔过大（休眠恢复）按追赶 tick 处理（D5）。
-    const catchUp = lastTickAt === 0 || nowMs - lastTickAt > CATCHUP_GAP_MS
-    lastTickAt = nowMs
     const today = formatLocalDate(now)
     if (skippedSlotsDate !== today) {
       skippedSlots.clear()
@@ -132,10 +132,11 @@ export function createQuickActionScheduler(deps: QuickActionSchedulerDeps) {
         // 4. 重试判定（按时间点独立）：退避未到 / 该点当天次数耗尽。
         if (schedule.attemptTime === time && schedule.nextRetryAt !== undefined && nowMs < schedule.nextRetryAt) continue
         if (attemptsForSlot(schedule, time, today) >= MAX_DAILY_ATTEMPTS) continue
-        // 5. 宽限窗口（D5）：追赶 tick 超过 5 分钟视为错过，当天不再补触发该时间点。
-        if (catchUp && nowMs - planned > GRACE_WINDOW_MS) {
+        // 5. 宽限窗口（D5）：超过 5 分钟视为错过，当天不再补触发该时间点。
+        // 覆盖启动/休眠恢复/日程中途创建等一切超前场景；普通 tick 间隔远小于窗口。
+        if (nowMs - planned > GRACE_WINDOW_MS) {
           skippedSlots.add(slotKey(today, time))
-          console.info(`[quick-actions] Schedule ${action.id} slot ${time} missed the 5-minute grace window on ${today}; skipped for today.`)
+          console.info(`[quick-actions] Schedule ${action.id} slot ${time} is more than 5 minutes past on ${today}; skipped for today.`)
           continue
         }
         // 6. 执行（silent 语义由 service 内部落地）。
@@ -218,7 +219,6 @@ export function createQuickActionScheduler(deps: QuickActionSchedulerDeps) {
     start(): void {
       if (!stopped) return
       stopped = false
-      lastTickAt = 0
       void runTick()
     },
     stop(): void {

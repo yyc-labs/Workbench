@@ -1820,6 +1820,12 @@ export interface ProjectFileZipResult {
   mtimeMs: number
 }
 
+/** 批量打包/复制剪贴板的多选条目（项目内相对路径 + 类型）。 */
+export interface ProjectFileArchiveEntry {
+  relativePath: string
+  kind: 'file' | 'directory'
+}
+
 export interface ProjectFileStatResult {
   relativePath: string
   size: number
@@ -1914,8 +1920,19 @@ export interface QuickAction {
   order: number
   createdAt: number
   updatedAt: number
-  /** Absolute path of the desktop `.lnk` shortcut, when one was created. */
+  /**
+   * Absolute path of the desktop `.lnk` shortcut. Last-known path: kept after
+   * an in-app removal whose file delete failed, so startup reconcile can clean
+   * the leftover up.
+   */
   desktopShortcutPath?: string
+  /**
+   * Desired state: whether the user wants this action to own a desktop
+   * shortcut. true = created in-app (rebuilt when the file is lost/drifted);
+   * false = removed in-app (never rebuilt; leftover files get cleaned up).
+   * Absent = derived from desktopShortcutPath (legacy configs without intent).
+   */
+  desktopShortcutEnabled?: boolean
   /** 定时启动配置；缺省 = 仅手动触发。 */
   schedule?: QuickActionSchedule
 }

@@ -113,6 +113,17 @@ test('desktopShortcutPath is removed when empty or non-string', () => {
   assert.equal(result.actions[2].desktopShortcutPath, 'C:/Users/me/Desktop/Open app.lnk')
 })
 
+test('desktopShortcutEnabled passes through booleans and drops non-booleans', () => {
+  const result = normalizeQuickActions({
+    actions: [action({ id: '22222222-2222-4222-8222-222222222222', desktopShortcutPath: 'C:/a.lnk', desktopShortcutEnabled: false }), action({ id: '33333333-3333-4333-8333-333333333333', desktopShortcutEnabled: 'yes' }), action({ id: '44444444-4444-4444-8444-444444444444', desktopShortcutEnabled: true })],
+  })
+  // false + 路径 = 用户删过（期望状态显式持久化，不会被路径推导翻回 true）。
+  assert.equal(result.actions[0].desktopShortcutEnabled, false)
+  // 非布尔值丢弃；缺省保持缺省（旧配置由消费者按路径推导）。
+  assert.equal('desktopShortcutEnabled' in result.actions[1], false)
+  assert.equal(result.actions[2].desktopShortcutEnabled, true)
+})
+
 test('sanitizeQuickActionName strips invalid characters and trims', () => {
   assert.equal(sanitizeQuickActionName('  a<b>c:d"e/f\\g|h?i*j  '), 'abcdefghij')
   assert.equal(sanitizeQuickActionName('ok name'), 'ok name')

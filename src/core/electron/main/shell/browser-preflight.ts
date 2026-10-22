@@ -1,9 +1,8 @@
+import type { ChildProcess } from 'child_process'
 import { execFile, spawn } from 'child_process'
 import { openExternalUrl } from './openers'
 
 const BROWSER_CHECK_TIMEOUT_MS = 4_000
-const BROWSER_READY_TIMEOUT_MS = 20_000
-const BROWSER_READY_POLL_INTERVAL_MS = 500
 
 export type DefaultBrowserInfo = {
   progId: string
@@ -29,10 +28,6 @@ export function parseProcessNameFromExePath(exePath: string): string {
   const normalized = exePath.replace(/\//g, '\\')
   const lastSegment = normalized.split('\\').pop() ?? ''
   return lastSegment.toLowerCase()
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function execCommandOutput(command: string, args: string[], timeoutMs: number): Promise<string | null> {
@@ -74,32 +69,54 @@ export async function isBrowserProcessRunning(processName: string, timeoutMs = B
   return Boolean(output && output.toLowerCase().includes(processName))
 }
 
-function spawnDetachedBrowser(exePath: string, url: string): boolean {
-  try {
-    const child = spawn(exePath, [url], { detached: true, windowsHide: true, stdio: 'ignore' })
-    child.on('error', () => undefined)
-    child.unref()
-    return true
-  } catch {
-    return false
-  }
-}
+/**
+ * Launch the browser executable directly with the URL, resolving once the
+ * child process has been created (`spawn` event). Showing the window and
+ * loading the page are the browser's own job — the IPC caller is not held
+ * back by `tasklist` polling or load progress.
+ */
+function launchBrowserProcess(exePath: string, url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let child: ChildProcess
+    try {
+      child = spawn(exePath, [url], {
+        detached: true,
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+    } catch {
+      resolve(false)
+      return
+    }
 
-async function waitForBrowserProcess(processName: string): Promise<boolean> {
-  const deadline = Date.now() + BROWSER_READY_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    await sleep(BROWSER_READY_POLL_INTERVAL_MS)
-    if (await isBrowserProcessRunning(processName)) return true
-  }
-  return false
+    // Each open request completes at most once: the first event wins, so a
+    // late duplicate (e.g. an error after a successful spawn) cannot trigger
+    // a second open attempt.
+    let settled = false
+    const settle = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      resolve(ok)
+    }
+
+    child.on('error', (err) => {
+      console.error(`[open-external] failed to launch default browser exe="${exePath}" url="${url}" error=${err instanceof Error ? err.message : String(err)}`)
+      settle(false)
+    })
+    child.on('spawn', () => {
+      child.unref()
+      settle(true)
+    })
+  })
 }
 
 /**
- * Open a URL in the system browser with a Docker-style preflight:
- * probe whether the default browser is running; on a cold start, launch the
- * browser executable directly with the URL (bypassing the flaky
- * ShellExecute/DDE handshake) and poll until the process is up, falling back
- * to `openExternalUrl` when probing or direct launch is not possible.
+ * Open a URL in the system browser: when the http default browser is already
+ * running, hand the URL over via `shell.openExternal`; on a cold start,
+ * launch the resolved browser executable directly with the URL (bypassing the
+ * flaky ShellExecute/DDE handshake) and return as soon as the child process
+ * exists. Falls back to `openExternalUrl` (shell.openExternal, then
+ * explorer.exe) whenever resolution or the direct launch is not possible.
  */
 export async function openExternalUrlWithBrowserPreflight(url: string): Promise<void> {
   const isHttpUrl = /^https?:\/\//i.test(url)
@@ -115,14 +132,9 @@ export async function openExternalUrlWithBrowserPreflight(url: string): Promise<
     return
   }
 
-  if (browser.exePath) {
-    spawnDetachedBrowser(browser.exePath, url)
-    if (await waitForBrowserProcess(browser.processName)) {
-      return
-    }
-    console.warn(`[open-external] browser cold start timed out for "${browser.processName}", falling back to openExternal`)
+  if (browser.exePath && (await launchBrowserProcess(browser.exePath, url))) {
+    return
   }
 
   await openExternalUrl(url)
-  await waitForBrowserProcess(browser.processName)
 }

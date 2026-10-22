@@ -295,7 +295,7 @@ export function QuickActionFormModal({ open, action, projects, onClose, onSubmit
   }
 
   return (
-    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[520px]" baseZIndex={MODAL_Z_INDEX} panelClassName="h-[640px] max-h-[calc(100dvh-2rem)] flex flex-col" ariaLabel={action ? t('quickActions.form.titleEdit') : t('quickActions.form.titleCreate')}>
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[880px]" baseZIndex={MODAL_Z_INDEX} panelClassName="h-[640px] max-h-[calc(100dvh-2rem)] flex flex-col" ariaLabel={action ? t('quickActions.form.titleEdit') : t('quickActions.form.titleCreate')}>
       <div className="flex h-full min-h-0 flex-col">
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto">
           <div>
@@ -303,116 +303,120 @@ export function QuickActionFormModal({ open, action, projects, onClose, onSubmit
             <h3 className="text-xl font-semibold tracking-[-0.03em] text-[color:var(--color-foreground)]">{action ? t('quickActions.form.titleEdit') : t('quickActions.form.titleCreate')}</h3>
           </div>
 
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.actionType')}</span>
-            <Select ariaLabel={t('quickActions.form.actionType')} value={form.type} options={typeOptions} onChange={handleTypeChange} contentZIndex={MODAL_Z_INDEX + 1} />
-          </label>
+          <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+            <div className="space-y-5">
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.actionType')}</span>
+                <Select ariaLabel={t('quickActions.form.actionType')} value={form.type} options={typeOptions} onChange={handleTypeChange} contentZIndex={MODAL_Z_INDEX + 1} />
+              </label>
 
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.name')}</span>
-            <Input value={form.name} onChange={(event) => patch({ name: event.target.value })} placeholder={t('quickActions.form.namePlaceholder')} />
-          </label>
+              <label className="block space-y-1.5">
+                <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.name')}</span>
+                <Input value={form.name} onChange={(event) => patch({ name: event.target.value })} placeholder={t('quickActions.form.namePlaceholder')} />
+              </label>
 
-          {form.type === 'open-project' || form.type === 'run-task' ? (
-            <div className="space-y-1.5">
-              <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.project')}</span>
-              <Combobox
-                ariaLabel={t('quickActions.form.project')}
-                value={form.projectPath}
-                searchValue={projectQuery}
-                onSearchValueChange={setProjectQuery}
-                options={projectOptions}
-                onChange={(value) => {
-                  patch({ projectPath: value, taskId: ALL_TASKS_VALUE })
-                  setProjectQuery('')
-                }}
-                editable="open"
-                clearSearchOnClose
-                triggerPlaceholder={t('quickActions.form.projectPlaceholder')}
-                inputPlaceholder={t('quickActions.form.projectPlaceholder')}
-                inputLeading={<Search className="h-4 w-4" />}
-                matchTriggerWidth
-              />
-            </div>
-          ) : null}
-
-          {form.type === 'run-task' ? (
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.task')}</span>
-              {tasksLoading ? (
-                <p className="text-sm text-[color:var(--color-muted-foreground)]">{t('common.loading')}</p>
-              ) : (
-                <>
-                  <Select ariaLabel={t('quickActions.form.task')} value={form.taskId} options={taskOptions} onChange={(value) => patch({ taskId: value })} disabled={!form.projectPath} contentZIndex={MODAL_Z_INDEX + 1} />
-                  {form.projectPath && tasks.length === 0 ? <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.form.taskNone')}</p> : null}
-                </>
-              )}
-            </label>
-          ) : null}
-
-          {form.type === 'open-path' ? (
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.path')}</span>
-              <Input value={form.path} onChange={(event) => patch({ path: event.target.value })} placeholder={t('quickActions.form.pathPlaceholder')} />
-            </label>
-          ) : null}
-
-          {form.type === 'open-url' ? (
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.url')}</span>
-              <Input value={form.url} onChange={(event) => patch({ url: event.target.value })} placeholder={t('quickActions.form.urlPlaceholder')} />
-            </label>
-          ) : null}
-
-          <div className="space-y-3 rounded-[16px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
-            <label className="flex items-start gap-3 text-sm text-[color:var(--color-foreground)]">
-              <Checkbox checked={form.schedule.enabled} onChange={(event) => patchSchedule({ enabled: event.target.checked })} />
-              <span>
-                <span className="block font-medium">{t('quickActions.schedule.enable')}</span>
-                <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('quickActions.schedule.enableHint')}</span>
-              </span>
-            </label>
-
-            {form.schedule.enabled ? (
-              <div className="space-y-3">
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.frequency')}</span>
-                  <Select ariaLabel={t('quickActions.schedule.frequency')} value={form.schedule.kind} options={scheduleKindOptions} onChange={(value) => patchSchedule({ kind: value as QuickActionScheduleKind })} contentZIndex={MODAL_Z_INDEX + 1} />
-                </label>
-
+              {form.type === 'open-project' || form.type === 'run-task' ? (
                 <div className="space-y-1.5">
-                  <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.timesLabel')}</span>
-                  <QuickActionTimesField value={form.schedule.times} onChange={(times) => patchSchedule({ times })} contentZIndex={MODAL_Z_INDEX + 1} />
+                  <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.project')}</span>
+                  <Combobox
+                    ariaLabel={t('quickActions.form.project')}
+                    value={form.projectPath}
+                    searchValue={projectQuery}
+                    onSearchValueChange={setProjectQuery}
+                    options={projectOptions}
+                    onChange={(value) => {
+                      patch({ projectPath: value, taskId: ALL_TASKS_VALUE })
+                      setProjectQuery('')
+                    }}
+                    editable="open"
+                    clearSearchOnClose
+                    triggerPlaceholder={t('quickActions.form.projectPlaceholder')}
+                    inputPlaceholder={t('quickActions.form.projectPlaceholder')}
+                    inputLeading={<Search className="h-4 w-4" />}
+                    matchTriggerWidth
+                  />
                 </div>
+              ) : null}
 
-                {form.schedule.kind === 'weekly' ? (
-                  <div className="space-y-1.5">
-                    <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.weekdaysLabel')}</span>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {WEEKDAY_ORDER.map((day) => (
-                        <label key={day} className="flex items-center gap-1.5 text-sm text-[color:var(--color-foreground)]">
-                          <Checkbox checked={form.schedule.weekdays.includes(day)} onChange={(event) => toggleWeekday(day, event.target.checked)} />
-                          <span>{t(WEEKDAY_LABEL_KEYS[day])}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {form.schedule.kind === 'once' ? (
-                  <label className="block space-y-1.5">
-                    <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.date')}</span>
-                    <Input type="date" value={form.schedule.date} min={todayDateString()} onChange={(event) => patchSchedule({ date: event.target.value })} />
-                  </label>
-                ) : null}
-
+              {form.type === 'run-task' ? (
                 <label className="block space-y-1.5">
-                  <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.calendarMode')}</span>
-                  <Select ariaLabel={t('quickActions.schedule.calendarMode')} value={form.schedule.calendarMode} options={scheduleCalendarModeOptions} onChange={(value) => patchSchedule({ calendarMode: value as QuickActionScheduleCalendarMode })} contentZIndex={MODAL_Z_INDEX + 1} />
-                  {form.schedule.calendarMode === 'workdays-only' ? <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('quickActions.schedule.calendarModeWorkdaysHint')}</p> : null}
+                  <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.task')}</span>
+                  {tasksLoading ? (
+                    <p className="text-sm text-[color:var(--color-muted-foreground)]">{t('common.loading')}</p>
+                  ) : (
+                    <>
+                      <Select ariaLabel={t('quickActions.form.task')} value={form.taskId} options={taskOptions} onChange={(value) => patch({ taskId: value })} disabled={!form.projectPath} contentZIndex={MODAL_Z_INDEX + 1} />
+                      {form.projectPath && tasks.length === 0 ? <p className="text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.form.taskNone')}</p> : null}
+                    </>
+                  )}
                 </label>
-              </div>
-            ) : null}
+              ) : null}
+
+              {form.type === 'open-path' ? (
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.path')}</span>
+                  <Input value={form.path} onChange={(event) => patch({ path: event.target.value })} placeholder={t('quickActions.form.pathPlaceholder')} />
+                </label>
+              ) : null}
+
+              {form.type === 'open-url' ? (
+                <label className="block space-y-1.5">
+                  <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.form.url')}</span>
+                  <Input value={form.url} onChange={(event) => patch({ url: event.target.value })} placeholder={t('quickActions.form.urlPlaceholder')} />
+                </label>
+              ) : null}
+            </div>
+
+            <div className="space-y-3 rounded-[16px] border p-4" style={{ borderColor: 'var(--color-border)' }}>
+              <label className="flex items-start gap-3 text-sm text-[color:var(--color-foreground)]">
+                <Checkbox checked={form.schedule.enabled} onChange={(event) => patchSchedule({ enabled: event.target.checked })} />
+                <span>
+                  <span className="block font-medium">{t('quickActions.schedule.enable')}</span>
+                  <span className="mt-1 block text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('quickActions.schedule.enableHint')}</span>
+                </span>
+              </label>
+
+              {form.schedule.enabled ? (
+                <div className="space-y-3">
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.frequency')}</span>
+                    <Select ariaLabel={t('quickActions.schedule.frequency')} value={form.schedule.kind} options={scheduleKindOptions} onChange={(value) => patchSchedule({ kind: value as QuickActionScheduleKind })} contentZIndex={MODAL_Z_INDEX + 1} />
+                  </label>
+
+                  <div className="space-y-1.5">
+                    <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.timesLabel')}</span>
+                    <QuickActionTimesField value={form.schedule.times} onChange={(times) => patchSchedule({ times })} contentZIndex={MODAL_Z_INDEX + 1} />
+                  </div>
+
+                  {form.schedule.kind === 'weekly' ? (
+                    <div className="space-y-1.5">
+                      <span className="block text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.weekdaysLabel')}</span>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2">
+                        {WEEKDAY_ORDER.map((day) => (
+                          <label key={day} className="flex items-center gap-1.5 text-sm text-[color:var(--color-foreground)]">
+                            <Checkbox checked={form.schedule.weekdays.includes(day)} onChange={(event) => toggleWeekday(day, event.target.checked)} />
+                            <span>{t(WEEKDAY_LABEL_KEYS[day])}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {form.schedule.kind === 'once' ? (
+                    <label className="block space-y-1.5">
+                      <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.date')}</span>
+                      <Input type="date" value={form.schedule.date} min={todayDateString()} onChange={(event) => patchSchedule({ date: event.target.value })} />
+                    </label>
+                  ) : null}
+
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.schedule.calendarMode')}</span>
+                    <Select ariaLabel={t('quickActions.schedule.calendarMode')} value={form.schedule.calendarMode} options={scheduleCalendarModeOptions} onChange={(value) => patchSchedule({ calendarMode: value as QuickActionScheduleCalendarMode })} contentZIndex={MODAL_Z_INDEX + 1} />
+                    {form.schedule.calendarMode === 'workdays-only' ? <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">{t('quickActions.schedule.calendarModeWorkdaysHint')}</p> : null}
+                  </label>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 

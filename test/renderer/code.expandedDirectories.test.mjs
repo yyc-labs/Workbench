@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { normalizeRememberedDirectories, isEffectivelyExpanded, collectEffectivelyExpanded, collectRestorableExpanded, collectDescendantPaths, resolveRestorablePath, isRestoreParentActive, canRestoreChild, mergeRememberedInit, collectRememberedChildrenOf, MAX_REMEMBERED_DIRECTORIES } =
-  loadTsModule('src/core/renderer/pages/code/code.expandedDirectories.ts')
+const { normalizeRememberedDirectories, MAX_REMEMBERED_DIRECTORIES } = loadTsModule('src/core/shared/rememberedDirectories.ts')
+const { isEffectivelyExpanded, collectEffectivelyExpanded, collectRestorableExpanded, collectDescendantPaths, resolveRestorablePath, isRestoreParentActive, canRestoreChild, mergeRememberedInit, collectRememberedChildrenOf } = loadTsModule('src/core/renderer/pages/code/code.expandedDirectories.ts')
 
 test('用例 14：normalizeRememberedDirectories 基础规则', () => {
   // 反斜杠统一、去尾斜杠、去重、排序（深度优先）

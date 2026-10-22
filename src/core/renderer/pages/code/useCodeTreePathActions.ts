@@ -11,7 +11,8 @@ import { copyTextToClipboard } from './code.clipboard'
 import { buildScriptCommand, type ExecutableScriptInfo, resolveExecutableScript } from './code.executable'
 import { formatFileSize } from './code.helpers'
 import { fileNameFromRelativePath } from './code.markdownShared'
-import { joinProjectPath, normalizeRelativePathForCopy, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } from './code.pathActions'
+import { defaultSelectedZipName, joinProjectPath, normalizeRelativePathForCopy, projectNameFromPath, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } from './code.pathActions'
+import { type CodeTreeContextMenuSnapshot, dedupeByNormalizedPath, joinLines, pruneEntriesForArchive, toAbsolutePathItems, toNameItems } from './code.treeSelection'
 import type { FileSearchLineTarget } from './code.types'
 
 type UseCodeTreePathActionsArgs = {
@@ -22,6 +23,8 @@ type UseCodeTreePathActionsArgs = {
   openFileWithTreeLocate: (relativePath: string) => Promise<boolean> | void
   projectId: string
   projectPath: string
+  /** 当前选择上下文标识，用于批量复制前的快照校验（§5.3）。 */
+  selectionScopeKey: string
   setActiveContentSearchLocation: (value: { relativePath: string; lineNumber: number; column: number }) => void
   setIsExplorerOpen: Dispatch<SetStateAction<boolean>>
   setIsQuickDrawerOpen: Dispatch<SetStateAction<boolean>>
@@ -33,7 +36,7 @@ type PendingScriptExecution = {
   nodeKind: ProjectFileNodeKind
 }
 
-export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openExcludedEntry, openFileWithTreeLocate, projectId, projectPath, setActiveContentSearchLocation, setIsExplorerOpen, setIsQuickDrawerOpen }: UseCodeTreePathActionsArgs) {
+export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatch, openFile, openExcludedEntry, openFileWithTreeLocate, projectId, projectPath, selectionScopeKey, setActiveContentSearchLocation, setIsExplorerOpen, setIsQuickDrawerOpen }: UseCodeTreePathActionsArgs) {
   const { t } = useI18n()
   const collapseExplorerIfNeeded = useCallback(() => {
     if (isNarrowViewport) {
@@ -110,6 +113,119 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     [copyWithToast],
   )
 
+  // ── 16 批量复制 ──────────────────────────────────────
+  // 快照已由 CodeFileTree 按当前 nodes 复核（过滤失效 id）；这里只做项目/scope 校验，
+  // 然后按固定四步装配文本：按路径去重 → 保序 → 按类型转换 → 单换行拼接，只复制一次。
+  const copySelectedItems = useCallback(
+    async (snapshot: CodeTreeContextMenuSnapshot, mode: 'relative' | 'absolute' | 'name') => {
+      if (snapshot.projectPath !== projectPath || snapshot.scopeKey !== selectionScopeKey || snapshot.selectedItems.length === 0) {
+        // 防御：正常流程不可达（复核 + scope 变化即关菜单）。
+        toast.error(t('codeFileTree.selectionExpired'))
+        return
+      }
+      const deduped = dedupeByNormalizedPath(snapshot.selectedItems)
+      const converted = mode === 'relative' ? deduped.map((item) => ({ relativePath: normalizeRelativePathForCopy(item.relativePath) })) : mode === 'absolute' ? toAbsolutePathItems(deduped, projectPath) : toNameItems(deduped)
+      const text = joinLines(converted)
+      const ok = await copyTextToClipboard(text)
+      if (!ok) {
+        toast.error(t('codeFileTree.copyFailed'))
+        return
+      }
+      if (mode === 'name') {
+        toast.success(t('codeFileTree.copiedNamesCount', { count: converted.length }))
+      } else {
+        toast.success(t('codeFileTree.copiedPathsCount', { count: converted.length }))
+      }
+    },
+    [projectPath, selectionScopeKey, t],
+  )
+
+  const handleCopySelectedRelativePaths = useCallback(
+    (snapshot: CodeTreeContextMenuSnapshot) => {
+      void copySelectedItems(snapshot, 'relative')
+    },
+    [copySelectedItems],
+  )
+
+  const handleCopySelectedAbsolutePaths = useCallback(
+    (snapshot: CodeTreeContextMenuSnapshot) => {
+      void copySelectedItems(snapshot, 'absolute')
+    },
+    [copySelectedItems],
+  )
+
+  const handleCopySelectedNames = useCallback(
+    (snapshot: CodeTreeContextMenuSnapshot) => {
+      void copySelectedItems(snapshot, 'name')
+    },
+    [copySelectedItems],
+  )
+
+  // ── 17 批量复制文件 / 批量 zip 到剪贴板 ─────────────────────
+  // 两个动作共用同一裁剪：复核后快照 → pruneEntriesForArchive（目录吸收后代，防重复）→ IPC → toast。
+  // zip 剪贴板打包进行中标志：单选与批量两个入口共用，任一打包期间另一个点击直接忽略。
+  const zipClipboardBusyRef = useRef(false)
+  const toArchiveEntries = useCallback(
+    (snapshot: CodeTreeContextMenuSnapshot) => {
+      if (snapshot.projectPath !== projectPath || snapshot.scopeKey !== selectionScopeKey) return null
+      const entries = pruneEntriesForArchive(snapshot.selectedItems).map((item) => ({ relativePath: item.relativePath, kind: item.kind }))
+      return entries.length > 0 ? entries : null
+    },
+    [projectPath, selectionScopeKey],
+  )
+
+  // 「复制文件（N 个）」：全 file 快照一次性写入剪贴板 FileDropList；含目录时菜单不渲染该选项（需求②），
+  // 主进程仍对目录条目兜底拒绝。非 Windows 宿主由主进程抛错提示。
+  const handleCopySelectedFiles = useCallback(
+    async (snapshot: CodeTreeContextMenuSnapshot) => {
+      const entries = toArchiveEntries(snapshot)
+      if (!entries) {
+        toast.error(t('codeFileTree.selectionExpired'))
+        return
+      }
+      try {
+        const result = await window.electronAPI.copyProjectEntriesToClipboard(projectPath, entries)
+        toast.success(t('codeFileTree.copiedFilesCount', { count: result.count }))
+      } catch (error) {
+        const reason = error instanceof Error && error.message ? error.message : String(error)
+        toast.error(t('codeFileTree.fileClipboardFailed', { reason }))
+      }
+    },
+    [projectPath, t, toArchiveEntries],
+  )
+
+  // 「复制 zip 到剪贴板（N 项）」：混合打包不落项目盘，zip 名由主进程按 {项目名}-selected.zip 生成。
+  // 打包可能耗时数秒：点击后立即给「打包中」常驻反馈，完成后再报成功（附大小，复用 F8 模式）。
+  // 与单选「复制 zip 到剪贴板」共用同一 busy 标志：任一打包进行中时另一个点击直接忽略。
+  const handleCopySelectedZipToClipboard = useCallback(
+    async (snapshot: CodeTreeContextMenuSnapshot, zipName?: string) => {
+      const entries = toArchiveEntries(snapshot)
+      if (!entries) {
+        toast.error(t('codeFileTree.selectionExpired'))
+        return
+      }
+      if (zipClipboardBusyRef.current) return
+      zipClipboardBusyRef.current = true
+      const projectName = projectNameFromPath(projectPath) || defaultSelectedZipName(projectPath)
+      const pendingToastId = toast.info(t('codeFileTree.zipPacking', { name: projectName }), { durationMs: 0 })
+      try {
+        // 二级命名面板回车提交的名字；留空时主进程按 {项目名}-selected.zip 默认生成。
+        const result = await window.electronAPI.copyProjectEntriesZipToClipboard(projectPath, entries, zipName?.trim() ? zipName.trim() : undefined)
+        toast.dismiss(pendingToastId)
+        toast.success(t('codeFileTree.selectedZipCopiedToClipboard', { count: entries.length, name: result.name }), {
+          description: formatFileSize(result.size),
+        })
+      } catch (error) {
+        toast.dismiss(pendingToastId)
+        const reason = error instanceof Error && error.message ? error.message : String(error)
+        toast.error(t('codeFileTree.zipClipboardFailed', { reason }))
+      } finally {
+        zipClipboardBusyRef.current = false
+      }
+    },
+    [projectPath, t, toArchiveEntries],
+  )
+
   // #11-1：搜索结果 match 行复制「path:lineNumber」，供快速跳转引用。
   const handleCopyTreeNodePathWithLineNumber = useCallback(
     (relativePath: string, lineNumber: number) => {
@@ -140,11 +256,15 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
   )
 
   // 13.2：导出文件夹为 zip。产物落点为文件夹同级目录，成功后 toast 提供「查看」动作在资源管理器中高亮产物。
+  // 大文件夹打包可能耗时数秒：先给旋转加载 toast（常驻不自动消失），完成后再替换为成功/失败，避免用户以为卡住。
   const handleZipTreeNode = useCallback(
     async (relativePath: string, nodeName: string, zipNameOverride?: string) => {
-      const zipName = (zipNameOverride ?? nodeName).trim()
+      // 命名面板清空回车时 zipNameOverride 为空串：回退文件夹名（与旧弹窗默认值一致）。
+      const zipName = (zipNameOverride || nodeName).trim()
+      const pendingToastId = toast.loading(t('codeFileTree.zipPacking', { name: zipName }))
       try {
         const result = await window.electronAPI.zipProjectFolder(projectPath, relativePath, zipName)
+        toast.dismiss(pendingToastId)
         const zipAbsolutePath = joinProjectPath(projectPath, result.relativePath)
         const folderAbsolutePath = resolveFileParentFolderPath(projectPath, relativePath)
         toast.success(t('codeFileTree.zipCreated', { name: fileNameFromRelativePath(result.relativePath) }), {
@@ -154,6 +274,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
           },
         })
       } catch (error) {
+        toast.dismiss(pendingToastId)
         const reason = error instanceof Error && error.message ? error.message : String(error)
         toast.error(t('codeFileTree.zipFailed', { reason }))
       }
@@ -163,7 +284,6 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
 
   // 13.2：「复制 zip 到剪贴板」。项目内不落盘——主进程打包到系统临时目录后以文件格式写入剪贴板。
   // 大文件夹打包可能耗时数秒：点击后立即给「正在打包」反馈，完成后再报成功（附大小）。
-  const zipClipboardBusyRef = useRef(false)
   const handleCopyTreeNodeZipToClipboard = useCallback(
     async (relativePath: string, nodeName: string) => {
       const zipName = nodeName.trim()
@@ -187,33 +307,6 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     },
     [projectPath, t],
   )
-
-  // 13.2：导出为 zip…（弹窗命名）。弹窗状态由本 hook 持有，弹窗 UI 由调用方（CodeWorkspacePanel）渲染。
-  const [zipAsTarget, setZipAsTarget] = useState<{ relativePath: string; nodeName: string } | null>(null)
-  const [isZipDialogBusy, setIsZipDialogBusy] = useState(false)
-
-  const handleZipTreeNodeAs = useCallback((relativePath: string, nodeName: string) => {
-    setZipAsTarget({ relativePath, nodeName })
-  }, [])
-
-  const confirmZipTreeNodeAs = useCallback(
-    async (zipName: string) => {
-      if (!zipAsTarget) return
-      setIsZipDialogBusy(true)
-      try {
-        await handleZipTreeNode(zipAsTarget.relativePath, zipAsTarget.nodeName, zipName)
-        setZipAsTarget(null)
-      } finally {
-        setIsZipDialogBusy(false)
-      }
-    },
-    [handleZipTreeNode, zipAsTarget],
-  )
-
-  const closeZipAsDialog = useCallback(() => {
-    if (isZipDialogBusy) return
-    setZipAsTarget(null)
-  }, [isZipDialogBusy])
 
   // ── 13.3 脚本执行 ─────────────────────────────────────────────
   // 安全红线：命令只由「映射表解释器 + 校验后的 relativePath」构成（buildScriptCommand），
@@ -382,15 +475,18 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     closeFolderFileSearch,
     closeFolderSearchContextMenu,
     closePendingScriptConfirm,
-    closeZipAsDialog,
     confirmPendingScript,
-    confirmZipTreeNodeAs,
     handleCopyTreeNodeToClipboard,
     handleCopyTreeNodeName,
     handleCopyTreeNodeRelativePath,
     handleCopyTreeNodeRelativePathWithoutSlashes,
     handleCopyTreeNodePathWithLineNumber,
     handleCopyTreeNodeZipToClipboard,
+    handleCopySelectedAbsolutePaths,
+    handleCopySelectedFiles,
+    handleCopySelectedNames,
+    handleCopySelectedRelativePaths,
+    handleCopySelectedZipToClipboard,
     handleExecuteScriptInEmbeddedTerminal,
     handleExecuteScriptInSystemTerminal,
     handleFindTreeNodeFilesByName,
@@ -402,14 +498,11 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     handleSelectExcluded,
     handleSelectTreeFile,
     handleZipTreeNode,
-    handleZipTreeNodeAs,
     folderSearchContextMenuPayload,
     folderSearchTarget,
     isScriptConfirmBusy,
-    isZipDialogBusy,
     openFileFromQuickDrawer,
     pendingScriptConfirm,
     resolveTreeNodeRunnableScript,
-    zipAsTarget,
   }
 }

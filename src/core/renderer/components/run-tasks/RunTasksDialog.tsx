@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, SquareTerminal, Trash2, TriangleAlert } from 'lucide-react'
+import { Check, CircleStop, ClipboardCopy, FilePlus2, HelpCircle, ListTree, Pencil, Play, Power, PowerOff, RefreshCw, Sparkles, SquareDashed, SquareTerminal, Trash2, TriangleAlert } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { buildRunTaskSkillPrompt } from '../../../shared/runTaskSkill'
 import type { RunTask, RunTaskProgressEvent } from '../../../shared/runTasks'
@@ -10,6 +10,7 @@ import { useAppStore } from '../../stores/appStore'
 import { ModalShell } from '../ModalShell'
 import { RunTaskDetectDialog } from './RunTaskDetectDialog'
 import { RunTaskEditDialog } from './RunTaskEditDialog'
+import { RunTaskSkillDialog } from './RunTaskSkillDialog'
 import { isRunTaskActive, runTaskDotClass, runTaskReadinessSummary, runTaskStateBadgeClass } from './runTasks.helpers'
 
 type RunTasksDialogProps = {
@@ -27,8 +28,9 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
   const { t } = useI18n()
   const locale = useLocale()
   const skillPrompt = useMemo(() => buildRunTaskSkillPrompt(locale), [locale])
+  const [skillOpen, setSkillOpen] = useState(false)
   const config = useAppStore((s) => s.runTaskConfigs[project.id])
-  const taskStates = useAppStore((s) => s.runTaskStates[project.id])
+  const taskStates = useAppStore((s) => (skillOpen ? undefined : s.runTaskStates[project.id]))
   const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
   const startAllRunTasks = useAppStore((s) => s.startAllRunTasks)
   const stopAllRunTasks = useAppStore((s) => s.stopAllRunTasks)
@@ -40,9 +42,7 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
   const [detectOpen, setDetectOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<RunTask | null>(null)
   const [editOpen, setEditOpen] = useState(false)
-  const [skillOpen, setSkillOpen] = useState(false)
   const [skillCopied, setSkillCopied] = useState(false)
-  const [pathWarningOpen, setPathWarningOpen] = useState(false)
   const [deletingTask, setDeletingTask] = useState<RunTask | null>(null)
   const [busy, setBusy] = useState(false)
   const skillCopiedTimerRef = useRef<number | null>(null)
@@ -127,7 +127,9 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
     [editingTask, tasks, handleSaveTasks],
   )
 
-  const handleCopySkillPrompt = async () => {
+  // Stable: passed into the memoized skill dialog (and drives the header
+  // copy button), so it must not be recreated on unrelated re-renders.
+  const handleCopySkillPrompt = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(skillPrompt)
       setSkillCopied(true)
@@ -139,7 +141,9 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
     } catch {
       // clipboard unavailable — nothing to surface
     }
-  }
+  }, [skillPrompt])
+
+  const closeSkill = useCallback(() => setSkillOpen(false), [])
 
   const handleDeleteTask = async () => {
     if (!deletingTask) return
@@ -173,7 +177,7 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
   }, [])
 
   return (
-    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[720px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
+    <ModalShell open={open} onClose={onClose} widthClassName="max-w-[720px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0" overlayClassName={skillOpen ? 'hidden' : 'modal-overlay-backdrop-flat'}>
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex items-center justify-between border-b border-[color:var(--color-border)] px-5 py-4">
           <div className="min-w-0">
@@ -249,35 +253,7 @@ export const RunTasksDialog = memo(function RunTasksDialog({ project, open, base
 
       {editOpen && <RunTaskEditDialog project={project} open tasks={tasks} task={editingTask} baseZIndex={baseZIndex} onClose={closeEdit} onStartTask={handleEditStartTask} onSave={handleEditSave} />}
 
-      {skillOpen && (
-        <ModalShell open onClose={() => setSkillOpen(false)} widthClassName="max-w-[760px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.skillDialog.title')} panelClassName="h-[min(640px,calc(100vh-116px))] overflow-hidden p-0">
-          <div className="flex h-full min-h-0 flex-col">
-            <div className="flex items-start justify-between gap-4 border-b border-[color:var(--color-border)] px-5 py-4">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-[color:var(--color-foreground)]">{t('runTasks.skillDialog.title')}</h2>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-[color:var(--color-muted-foreground)]">{t('runTasks.skillDialog.hint')}</p>
-              </div>
-              <button type="button" className="quiet-control inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-foreground)]" onClick={() => void handleCopySkillPrompt()}>
-                {skillCopied ? <Check className="h-3.5 w-3.5 text-[color:var(--color-success)]" /> : <ClipboardCopy className="h-3.5 w-3.5" />}
-                {skillCopied ? t('common.copied') : t('common.copy')}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-              {hasNonAsciiPath && (
-                <div className="mb-3">
-                  <button type="button" className="quiet-control inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-[color:var(--color-warning)]" onClick={() => setPathWarningOpen((value) => !value)}>
-                    <TriangleAlert className="h-3.5 w-3.5" />
-                    {t('runTasks.nonAsciiPathWarningTitle')}
-                    <ChevronDown className={`h-3 w-3 transition-transform ${pathWarningOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                  {pathWarningOpen && <p className="mt-2 rounded-xl border border-[color:var(--color-warning)]/25 bg-[color:var(--color-warning-background)] px-3 py-2 text-xs leading-relaxed text-[color:var(--color-warning)]">{t('runTasks.nonAsciiPathWarning')}</p>}
-                </div>
-              )}
-              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[color:var(--color-foreground)]">{skillPrompt}</pre>
-            </div>
-          </div>
-        </ModalShell>
-      )}
+      {skillOpen && <RunTaskSkillDialog open skillPrompt={skillPrompt} hasNonAsciiPath={hasNonAsciiPath} copied={skillCopied} onCopy={handleCopySkillPrompt} baseZIndex={baseZIndex} onClose={closeSkill} />}
 
       {deletingTask && (
         <ModalShell open onClose={() => setDeletingTask(null)} widthClassName="max-w-[420px]" baseZIndex={baseZIndex} ariaLabel={t('runTasks.deleteTask')}>

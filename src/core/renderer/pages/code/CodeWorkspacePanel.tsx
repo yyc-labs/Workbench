@@ -6,10 +6,8 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { SidebarGestureHost } from '../../components/SidebarGestureHost'
 import { openUrlPopoverItem, type UrlPopoverItem } from '../../components/UrlPopover'
-import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
-import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
 import { CodeFileQuickDrawer } from './CodeFileQuickDrawer'
 import { CodeSidebarRailButton } from './CodeSidebarRailButton'
 import { CodeTreeContextMenu } from './CodeTreeContextMenu'
@@ -28,7 +26,7 @@ import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
 import { TranscriptContentDrawer, type TranscriptContentDrawerTarget } from './TranscriptContentDrawer'
 import { useCodeFileState } from './useCodeFileState'
 import { useCodeTreePathActions } from './useCodeTreePathActions'
-import { type ContentSearchScopePreset, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
+import { type ContentSearchScopePreset, parseFileSearchLineTarget, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
 import { useCodeWorkspaceRestoreState } from './useCodeWorkspaceRestoreState'
 import { useCodeWorkspaceScrollSync } from './useCodeWorkspaceScrollSync'
 import { useMarkdownPreviewModeState } from './useMarkdownPreviewModeState'
@@ -38,7 +36,6 @@ import { useProjectCodeSessionState } from './useProjectCodeSessionState'
 import { useTranscriptFileReferences } from './useTranscriptFileReferences'
 
 const NARROW_VIEWPORT_QUERY = '(max-width: 960px)'
-const CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD = 10
 const TRANSCRIPT_SUMMARY_LOAD_DELAY_MS = 160
 const CODE_LEFT_SIDEBAR_COLLAPSED_STORAGE_KEY = 'app:code-left-sidebar-collapsed'
 const CODE_LEFT_SIDEBAR_WIDTH_STORAGE_KEY = 'app:code-left-sidebar-width'
@@ -180,7 +177,6 @@ export function CodeWorkspacePanel({
   } | null>(null)
   const [locateRequestToken, setLocateRequestToken] = useState(0)
   const editorRef = useRef<MonacoCodeEditorHandle | null>(null)
-  const contentSearchTreeRef = useRef<CodeContentSearchTreeHandle | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const pageRootRef = useRef<HTMLDivElement | null>(null)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
@@ -230,7 +226,6 @@ export function CodeWorkspacePanel({
   const {
     activeContentSearchScopeKey,
     activeContentSearchScopeLabel,
-    canToggleContentSearchTree,
     contentSearchCaseSensitive,
     contentSearchError,
     contentSearchQuery,
@@ -238,16 +233,15 @@ export function CodeWorkspacePanel({
     contentSearchScopeGlobs,
     contentSearchScopePresets,
     contentSearchScopeSummary,
-    contentSearchToggleLabel,
     ensureTreePathLoaded,
     excludedPathKinds,
     expandedDirectories,
     fileSearchError,
     fileSearchLineTarget,
+    fileSearchQuery,
     hasContentSearchScope,
     hasSearchQuery,
     isContentSearchAdvancedOpen,
-    isContentSearchAllExpanded,
     isSearchingContent,
     isSearchingFiles,
     loadTree,
@@ -259,7 +253,6 @@ export function CodeWorkspacePanel({
     setExpandedDirectories,
     setFileSearchQuery,
     setIsContentSearchAdvancedOpen,
-    setIsContentSearchAllExpanded,
     tree,
     treeNodesForView,
   } = useCodeWorkspaceExplorerState({
@@ -273,7 +266,6 @@ export function CodeWorkspacePanel({
     // remembered 集合经 store action 提交：主进程 WorkspacePersistenceCoordinator 统一防抖落盘，
     // renderer 不再维护第二套定时器（§7.3 persistRememberedDirectories）。
     onPersistRememberedDirectories: (paths) => {
-      console.debug('[expanded-dirs] panel persist callback', { paths })
       void setProjectCodeSession(projectId, {
         tabs: rawPersistedProjectCodeSession?.tabs ?? [],
         ...rawPersistedProjectCodeSession,
@@ -281,6 +273,10 @@ export function CodeWorkspacePanel({
       })
     },
   })
+  // 16：选择上下文标识（项目 + 模式 + 解析后查询）。用解析后的查询（剥掉 :N 行号后缀）：
+  // foo.ts:12 与 foo.ts 属同一搜索上下文（行目标只影响点击跳转，不影响选择语义）。
+  // 全局搜索视图额外并入内容查询：换一次内容搜索 = 新 scope，清空上一轮树内选择。
+  const selectionScopeKey = useMemo(() => (viewMode === 'search' ? `${projectPath}::search::${contentSearchQuery}` : `${projectPath}::${hasSearchQuery ? 'flat' : 'tree'}::${parseFileSearchLineTarget(fileSearchQuery).searchQuery}`), [contentSearchQuery, fileSearchQuery, hasSearchQuery, projectPath, viewMode])
   const {
     closeCodePreview,
     closeStructuredPreview,
@@ -810,15 +806,18 @@ export function CodeWorkspacePanel({
     closeFolderFileSearch,
     closeFolderSearchContextMenu,
     closePendingScriptConfirm,
-    closeZipAsDialog,
     confirmPendingScript,
-    confirmZipTreeNodeAs,
     handleCopyTreeNodeToClipboard,
     handleCopyTreeNodeName,
     handleCopyTreeNodeRelativePath,
     handleCopyTreeNodeRelativePathWithoutSlashes,
     handleCopyTreeNodePathWithLineNumber,
     handleCopyTreeNodeZipToClipboard,
+    handleCopySelectedAbsolutePaths,
+    handleCopySelectedFiles,
+    handleCopySelectedNames,
+    handleCopySelectedRelativePaths,
+    handleCopySelectedZipToClipboard,
     handleExecuteScriptInEmbeddedTerminal,
     handleExecuteScriptInSystemTerminal,
     handleFindTreeNodeFilesByName,
@@ -830,15 +829,12 @@ export function CodeWorkspacePanel({
     handleSelectExcluded,
     handleSelectTreeFile,
     handleZipTreeNode,
-    handleZipTreeNodeAs,
     folderSearchContextMenuPayload,
     folderSearchTarget,
     isScriptConfirmBusy,
-    isZipDialogBusy,
     openFileFromQuickDrawer,
     pendingScriptConfirm,
     resolveTreeNodeRunnableScript,
-    zipAsTarget,
   } = useCodeTreePathActions({
     isNarrowViewport,
     openContentSearchMatch,
@@ -847,6 +843,7 @@ export function CodeWorkspacePanel({
     openFileWithTreeLocate,
     projectId,
     projectPath,
+    selectionScopeKey,
     setActiveContentSearchLocation,
     setIsExplorerOpen,
     setIsQuickDrawerOpen,
@@ -877,10 +874,10 @@ export function CodeWorkspacePanel({
     })
   }, [])
 
-  // 13.2：菜单回调适配（去掉 zipName 参数位，避免 nodeKind 被误当作 zip 名）。
+  // 13.2/17：菜单回调适配——zipName 来自二级命名面板（留空由 hook 回退文件夹名）。
   const handleZipNodeFolderFromMenu = useCallback(
-    (relativePath: string, nodeName: string) => {
-      void handleZipTreeNode(relativePath, nodeName)
+    (relativePath: string, nodeName: string, zipName?: string) => {
+      void handleZipTreeNode(relativePath, nodeName, zipName)
     },
     [handleZipTreeNode],
   )
@@ -891,14 +888,6 @@ export function CodeWorkspacePanel({
     },
     [handleCopyTreeNodeZipToClipboard],
   )
-
-  // zip 命名弹窗：打开时以文件夹名作为默认值。
-  const [zipAsDraftName, setZipAsDraftName] = useState('')
-  useEffect(() => {
-    if (zipAsTarget) {
-      setZipAsDraftName(zipAsTarget.nodeName)
-    }
-  }, [zipAsTarget])
 
   const handleOpenTranscriptPageReference = useCallback(
     (target: TranscriptContentDrawerTarget) => {
@@ -918,20 +907,6 @@ export function CodeWorkspacePanel({
   const handleSaveFromEditor = useCallback(() => {
     void handleSave()
   }, [handleSave])
-
-  const handleToggleContentSearchTree = useCallback(() => {
-    const tree = contentSearchTreeRef.current
-    if (!tree) return
-
-    if (isContentSearchAllExpanded) {
-      tree.collapseAll()
-      setIsContentSearchAllExpanded(false)
-      return
-    }
-
-    tree.expandAll()
-    setIsContentSearchAllExpanded(true)
-  }, [isContentSearchAllExpanded])
 
   const handleSelectOpenTab = useCallback(
     (relativePath: string) => {
@@ -1079,8 +1054,6 @@ export function CodeWorkspacePanel({
                 activeContentSearchScopeKey={activeContentSearchScopeKey}
                 activeContentSearchScopeLabel={activeContentSearchScopeLabel}
                 activeRelativePath={activeRelativePath}
-                autoCollapseMatchThreshold={CONTENT_SEARCH_AUTO_COLLAPSE_MATCH_THRESHOLD}
-                canToggleContentSearchTree={canToggleContentSearchTree}
                 contentSearchCaseSensitive={contentSearchCaseSensitive}
                 contentSearchError={contentSearchError}
                 contentSearchInputRef={contentSearchInputRef}
@@ -1090,8 +1063,6 @@ export function CodeWorkspacePanel({
                 contentSearchScopeInput={contentSearchScopeInput}
                 contentSearchScopePresets={contentSearchScopePresets}
                 contentSearchScopeSummary={contentSearchScopeSummary}
-                contentSearchToggleLabel={contentSearchToggleLabel}
-                contentSearchTreeRef={contentSearchTreeRef}
                 expandedDirectories={expandedDirectories}
                 fileSearchError={fileSearchError}
                 fileSearchInputRef={fileSearchInputRef}
@@ -1112,7 +1083,6 @@ export function CodeWorkspacePanel({
                 onCopyTreeNodePathWithLineNumber={handleCopyTreeNodePathWithLineNumber}
                 onCopyTreeNodeToClipboard={handleCopyTreeNodeToClipboard}
                 onZipTreeNodeFolder={handleZipNodeFolderFromMenu}
-                onZipTreeNodeFolderAs={handleZipTreeNodeAs}
                 onCopyTreeNodeZipToClipboard={handleCopyNodeZipToClipboardFromMenu}
                 onRunTreeNodeScriptInSystemTerminal={handleExecuteScriptInSystemTerminal}
                 onRunTreeNodeScriptInEmbeddedTerminal={handleExecuteScriptInEmbeddedTerminal}
@@ -1128,9 +1098,15 @@ export function CodeWorkspacePanel({
                 onSetContentSearchAdvancedOpen={setIsContentSearchAdvancedOpen}
                 onSetContentSearchCaseSensitive={setContentSearchCaseSensitive}
                 onSetContentSearchScopeInput={setContentSearchScopeInput}
-                onToggleContentSearchTree={handleToggleContentSearchTree}
                 onToggleTreeDirectory={handleToggleTreeDirectory}
                 onLocateFileInTree={locateFileInTree}
+                selectionScopeKey={selectionScopeKey}
+                projectPath={projectPath}
+                onCopySelectedRelativePaths={handleCopySelectedRelativePaths}
+                onCopySelectedAbsolutePaths={handleCopySelectedAbsolutePaths}
+                onCopySelectedNames={handleCopySelectedNames}
+                onCopySelectedFiles={handleCopySelectedFiles}
+                onCopySelectedZipToClipboard={handleCopySelectedZipToClipboard}
                 tree={tree}
                 treeNodesForView={treeNodesForView}
                 viewMode={viewMode}
@@ -1244,8 +1220,7 @@ export function CodeWorkspacePanel({
           onCopyRelativePath={() => handleCopyTreeNodeRelativePath(folderSearchContextMenuPayload.relativePath)}
           onCopyRelativePathWithoutSlashes={() => handleCopyTreeNodeRelativePathWithoutSlashes(folderSearchContextMenuPayload.relativePath)}
           onCopyFileToClipboard={() => void handleCopyTreeNodeToClipboard(folderSearchContextMenuPayload.relativePath)}
-          onZipFolder={() => handleZipNodeFolderFromMenu(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
-          onZipFolderAs={() => handleZipTreeNodeAs(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
+          onZipFolder={(zipName) => handleZipNodeFolderFromMenu(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName, zipName)}
           onCopyZipToClipboard={() => handleCopyNodeZipToClipboardFromMenu(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeName)}
           onRunScriptInSystemTerminal={() => handleExecuteScriptInSystemTerminal(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
           onRunScriptInEmbeddedTerminal={() => handleExecuteScriptInEmbeddedTerminal(folderSearchContextMenuPayload.relativePath, folderSearchContextMenuPayload.nodeKind)}
@@ -1253,30 +1228,6 @@ export function CodeWorkspacePanel({
           onClose={closeFolderSearchContextMenu}
         />
       )}
-      <ConfirmDialog
-        open={Boolean(zipAsTarget)}
-        onClose={closeZipAsDialog}
-        onConfirm={() => confirmZipTreeNodeAs(zipAsDraftName)}
-        ariaLabel={t('codeFileTree.zipDialogPrompt')}
-        title={t('codeFileTree.zipFolderAs')}
-        description={t('codeFileTree.zipDialogPrompt')}
-        confirmLabel={t('codeFileTree.zipDialogConfirm')}
-        busy={isZipDialogBusy}
-        widthClassName="max-w-[420px]"
-      >
-        <Input
-          value={zipAsDraftName}
-          onChange={(event) => setZipAsDraftName(event.target.value)}
-          disabled={isZipDialogBusy}
-          autoFocus
-          spellCheck={false}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !isZipDialogBusy) {
-              void confirmZipTreeNodeAs(zipAsDraftName)
-            }
-          }}
-        />
-      </ConfirmDialog>
       <ConfirmDialog
         open={Boolean(pendingScriptConfirm)}
         onClose={closePendingScriptConfirm}

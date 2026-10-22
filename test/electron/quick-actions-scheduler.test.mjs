@@ -192,6 +192,39 @@ test('workdays-only skips New Year and plain weekends but runs on makeup workday
   everyDay.scheduler.stop()
 })
 
+test('a schedule created mid-day does not back-fill its earlier time point', async () => {
+  // 复现用户场景：应用从早上就在运行，14:47 才创建「每天 09:00、18:00」日程。
+  // 14:48 的普通 tick 不得补跑早已错过的 09:00（超过 5 分钟宽限窗口）。
+  const ctx = setup({ actions: [action({ times: ['09:00', '18:00'] })], clock: new Date(2026, 0, 15, 8, 0, 0) })
+  ctx.scheduler.start()
+  await flush()
+  // 推进到 14:48（模拟上午没有任何日程，用户在 14:47 保存）。
+  ctx.advance(new Date(2026, 0, 15, 14, 48, 0).getTime() - new Date(2026, 0, 15, 8, 0, 0).getTime())
+  await ctx.fireDue()
+  assert.equal(ctx.executeCalls.length, 0)
+  assert.equal(ctx.notifyEvents.length, 0)
+  // 没有写入任何运行状态（卡片不会出现「上次执行 14:48」）。
+  assert.equal(ctx.stamps.length, 0)
+  assert.equal('lastRunAt' in ctx.actions[0].schedule, false)
+
+  // 18:00 仍按计划触发。
+  ctx.advance(new Date(2026, 0, 15, 18, 0, 0).getTime() - new Date(2026, 0, 15, 14, 48, 0).getTime())
+  await ctx.fireDue()
+  assert.equal(ctx.executeCalls.length, 1)
+  assert.equal(ctx.notifyEvents[0].time, '18:00')
+  ctx.scheduler.stop()
+})
+
+test('a normal tick slightly behind schedule still runs within the grace window', async () => {
+  // tick 比计划时间晚 2 分钟（< 5 分钟宽限窗口）时照常触发。
+  const ctx = setup({ clock: new Date(2026, 0, 15, 9, 2, 0) })
+  ctx.scheduler.start()
+  await flush()
+  assert.equal(ctx.executeCalls.length, 1)
+  assert.equal(ctx.stamps[0].stamp.lastRunDate, '2026-01-15')
+  ctx.scheduler.stop()
+})
+
 test('grace window back-runs missed schedules within 5 minutes of startup', async () => {
   // 计划 09:00，启动于 09:03（3 分钟前）→ 补跑一次。
   const backfill = setup({ clock: new Date(2026, 0, 15, 9, 3, 0) })

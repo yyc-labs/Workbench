@@ -14,14 +14,14 @@ import { DocLinkLibrarySecretStore } from './doc-link-library/docLinkLibrarySecr
 import { DocLinkLibraryService } from './doc-link-library/docLinkLibraryService'
 import { IPC } from './ipc'
 import { registerIpcHandlers } from './ipc/registerIpcHandlers'
-import { isSilentAutostartLaunch, isWindowsAutostartLaunch, parseQuickActionArg, syncWindowsLaunchOnLogin } from './launchOnLogin'
+import { isSilentAutostartLaunch, isWindowsAutostartLaunch, syncWindowsLaunchOnLogin } from './launchOnLogin'
 import { resolveMainLocale, translateMain } from './mainI18n'
 import { MarkdownDocumentOpenRequestStore, parseMarkdownDocumentOpenRequest } from './markdown-document/markdownDocumentOpenRequest'
 import { MarkdownDocumentRepository } from './markdown-document/markdownDocumentRepository'
 import { MarkdownDocumentService } from './markdown-document/markdownDocumentService'
 import { registerYycWorkbenchHandler, registerYycWorkbenchScheme } from './project-file/project-file-protocol'
 import { prewarmClipboardWorker } from './project-file-service'
-import { QuickActionRequestStore } from './quick-actions/quickActionRequestStore'
+import { createQuickActionLaunchRouter } from './quick-actions/quickActionLaunchRouter'
 import { RunTaskService } from './run-tasks/run-task-service'
 import { ProcessManager } from './runner'
 import { openTerminalAtPath } from './shell/openers'
@@ -63,8 +63,13 @@ const shouldUseTrayLifecycle = process.platform === 'win32'
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 const markdownDocumentOpenRequestStore = new MarkdownDocumentOpenRequestStore()
 markdownDocumentOpenRequestStore.setFromArgv(process.argv)
-const quickActionRequestStore = new QuickActionRequestStore()
-quickActionRequestStore.setFromArgv(process.argv)
+// 快捷操作启动路由：模块顶层即捕获冷启动 argv（窗口/服务尚不存在），
+// 热启动（second-instance）与冷启动共用同一入口；服务就绪后 markReady 统一分发。
+const quickActionLaunchRouter = createQuickActionLaunchRouter({
+  execute: (id) => quickActionService.execute({ id }),
+  logWarn: (message) => console.warn(message),
+})
+quickActionLaunchRouter.handleArgv(process.argv)
 
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -681,7 +686,7 @@ const handleBeforeQuit = async (e: { preventDefault: () => void }) => {
   // timeout 不取消在途写入、绝不代表保存成功（D22）；退出总耗时上界 = 清理步骤 + 3000ms + 1500ms。
   const persistenceOutcome = await flushConfigPersistenceWithOutcome(WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS)
   if (persistenceOutcome.status === 'saved') {
-    console.debug('[workspace-persistence] flush on quit: saved')
+    // console.debug('[workspace-persistence] flush on quit: saved')
   } else if (persistenceOutcome.status === 'timeout') {
     // 超时不取消在途写入；明确接受可能丢失最后一批修改，运行期定期保存是主要保障。
     console.warn('[workspace-persistence] flush on quit: timeout, last changes may be lost')
@@ -699,15 +704,9 @@ registerAppLifecycle(app, {
   onSecondInstance: (_event, argv) => {
     if (isWindowsAutostartLaunch(argv) && isSilentAutostartLaunch(argv)) return
     // 快捷操作优先于 markdown 路由：.lnk 双击是显式用户动作。
-    const quickActionId = parseQuickActionArg(argv)
-    if (quickActionId) {
-      // 不聚焦主窗口：open-project / run-task 内部自行 ensureWindowVisible，
-      // open-path / open-url 只打开目标，不应抢占焦点。
-      void quickActionService.execute({ id: quickActionId }).catch((error) => {
-        console.warn('[quick-actions] Failed to execute from second instance:', error)
-      })
-      return
-    }
+    // 不聚焦主窗口：open-project / run-task 内部自行 ensureWindowVisible，
+    // open-path / open-url 只打开目标，不应抢占焦点（路由不接管焦点）。
+    if (quickActionLaunchRouter.handleArgv(argv)) return
     const markdownPath = parseMarkdownDocumentOpenRequest(argv)
     if (markdownPath) {
       routeMarkdownDocumentOpenRequest(markdownPath)
@@ -882,16 +881,11 @@ app.whenReady().then(async () => {
     console.warn('[ai-gateway] Failed to start from saved config.', error)
   })
 
-  // 冷启动 .lnk 触发：consume 启动参数里的快捷操作（navigateMainWindow 自带 did-finish-load 兜底）。
-  const pendingQuickAction = quickActionRequestStore.consume()
-  if (pendingQuickAction) {
-    void quickActionService.execute({ id: pendingQuickAction.id }).catch((error) => {
-      console.warn('[quick-actions] Failed to execute from launch args:', error)
-    })
-  }
-  // 静默重建失效/漂移的桌面快捷方式（失败仅记日志，UI 徽标已反映状态）。
-  void quickActionService.repairDesktopShortcuts().catch((error) => {
-    console.warn('[quick-actions] Failed to repair desktop shortcuts:', error)
+  // 冷启动 .lnk 触发：服务就绪，分发启动路由里排队的请求（冷/热共用逻辑）。
+  quickActionLaunchRouter.markReady()
+  // 启动对账：按期望状态恢复/清理桌面快捷方式（失败仅记日志，UI 徽标已反映状态）。
+  void quickActionService.reconcileDesktopShortcuts().catch((error) => {
+    console.warn('[quick-actions] Failed to reconcile desktop shortcuts:', error)
   })
   // 定时启动调度器：立即评估一次 + 对齐分钟边界 tick（宽限窗口与重试上限见 quickActionScheduler）。
   quickActionScheduler.start()

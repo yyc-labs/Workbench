@@ -1,16 +1,17 @@
-import { closestCenter, DndContext, type DragCancelEvent, type DragEndEvent, DragOverlay, type DragStartEvent, MeasuringStrategy, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowUpDown, GripVertical, KeyRound, Pencil, Plus, Trash2, Users } from 'lucide-react'
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { GripVertical, KeyRound, Pencil, Plus, Trash2, Users } from 'lucide-react'
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ProjectDocLinkKind, ProjectDocLinkSshRoute, ProjectDocLinkTag, SharedDocLink } from '../../shared/types'
+import { SORTABLE_REORDER_TRANSITION, useFlipReorder } from '../hooks/useFlipReorder'
 import { useI18n } from '../i18n'
+import { createListBoundsModifier, pointerFirstCollision } from '../lib/dndSorting'
 import { isSshProjectDocLink, normalizeProjectDocLinkTag, projectDocLinkTarget } from '../lib/projectDocLinks'
 import { DetailDocumentationTagSelect } from '../pages/detail/DetailDocumentationTagSelect'
 import { useAppStore } from '../stores/appStore'
 import { ModalShell } from './ModalShell'
 import { SharedDocLinkGroupBindingDialog } from './SharedDocLinkGroupBindingDialog'
-import { SharedDocLinkReorderDialog } from './SharedDocLinkReorderDialog'
 
 type SharedDocLinkLibraryDialogProps = {
   open: boolean
@@ -76,8 +77,6 @@ function linkFormFrom(link: SharedDocLink): LinkFormState {
 type SharedDocLinkRowProps = {
   link: SharedDocLink
   dragDisabled: boolean
-  /** 行内不允许排序时隐藏拖拽把手（设置页面板：排序走弹窗）。 */
-  hideGrip: boolean
   onStartEdit: (link: SharedDocLink) => void
   onRemove: (linkId: string) => void
 }
@@ -86,42 +85,27 @@ type SharedDocLinkRowProps = {
  * 共享库链接行：拖拽把手排序，交互与项目资料夹弹窗一致。
  * memo 化：DndContext 拖拽期间高频重渲染，未拖动的行必须跳过，否则长列表明显卡顿。
  */
-const SharedDocLinkRow = memo(function SharedDocLinkRow({ link, dragDisabled, hideGrip, onStartEdit, onRemove }: SharedDocLinkRowProps) {
+const SharedDocLinkRow = memo(function SharedDocLinkRow({ link, dragDisabled, onStartEdit, onRemove }: SharedDocLinkRowProps) {
   const { t } = useI18n()
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging: sortableIsDragging } = useSortable({ id: link.id, disabled: dragDisabled })
-  // 被拖行原位留坑（只降透明度）：浮层唯一跟随鼠标；transform 不越界，容器不会因此出现滚动条。
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging: sortableIsDragging } = useSortable({ id: link.id, disabled: dragDisabled, transition: dragDisabled ? null : SORTABLE_REORDER_TRANSITION })
+  // 行内原位位移排序（与首页文件夹行一致）：拖动行自己跟随指针，无浮层，不错位、不产生滚动条。
   const style = {
-    transform: sortableIsDragging ? undefined : CSS.Translate.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
   }
 
   return (
-    <div ref={setNodeRef} style={style} className={`rounded-[12px] border border-[color:var(--color-border)] px-2.5 py-2 ${sortableIsDragging ? 'opacity-45 will-change-transform' : ''}`}>
+    <div ref={setNodeRef} data-flip-id={link.id} style={style} className={`rounded-[12px] border border-[color:var(--color-border)] px-2.5 py-2 ${sortableIsDragging ? 'opacity-45 will-change-transform' : ''}`}>
       <div className="flex items-center gap-1.5">
-        {!hideGrip && (
-          <button
-            type="button"
-            ref={setActivatorNodeRef}
-            className={`inline-flex h-7 w-7 touch-none shrink-0 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors ${
-              dragDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-grab hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] active:cursor-grabbing'
-            }`}
-            title={dragDisabled ? t('documentation.dragDisabled') : t('documentation.dragToReorder')}
-            disabled={dragDisabled}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical className="h-3.5 w-3.5" />
-          </button>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs text-[color:var(--color-foreground)]">{link.title}</p>
-          <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
-            {isSshProjectDocLink(link) ? t('documentation.kindSsh') : t('documentation.kindUrl')} · {projectDocLinkTarget(link)}
-          </p>
+        {/* 内容区即拖拽把手（与首页文件夹行一致）：大接触面，相邻交换更稳。 */}
+        <div ref={setActivatorNodeRef} className={`flex min-w-0 flex-1 items-center gap-1.5 touch-none ${dragDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-grab active:cursor-grabbing'}`} title={dragDisabled ? t('documentation.dragDisabled') : t('documentation.dragToReorder')} {...attributes} {...listeners}>
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)] opacity-65" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs text-[color:var(--color-foreground)]">{link.title}</p>
+            <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">
+              {isSshProjectDocLink(link) ? t('documentation.kindSsh') : t('documentation.kindUrl')} · {projectDocLinkTarget(link)}
+            </p>
+          </div>
         </div>
         <button
           type="button"
@@ -151,7 +135,7 @@ const SharedDocLinkRow = memo(function SharedDocLinkRow({ link, dragDisabled, hi
 type SharedDocLinkLibraryContentProps = {
   /** 打开时选中的组。 */
   initialGroupId?: string
-  /** 渲染场景：'dialog'（默认）行内拖拽 + 行内表单；'panel'（设置页）编辑/新增/排序均走弹窗。 */
+  /** 渲染场景：'dialog'（默认）行内表单 + 行内拖拽；'panel'（设置页）编辑/新增走弹窗，排序同样行内拖拽。 */
   variant?: 'dialog' | 'panel'
 }
 
@@ -178,14 +162,11 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
   const [renamingGroupName, setRenamingGroupName] = useState('')
   const [deletingGroupId, setDeletingGroupId] = useState<string | null>(null)
   const [bindingGroupId, setBindingGroupId] = useState<string | null>(null)
-  const [reorderDialogOpen, setReorderDialogOpen] = useState(false)
   const [formDialogOpen, setFormDialogOpen] = useState(false)
-  const [draggingLinkId, setDraggingLinkId] = useState<string | null>(null)
   const [linkForm, setLinkForm] = useState<LinkFormState | null>(null)
   const [busy, setBusy] = useState(false)
 
   const isPanel = variant === 'panel'
-  const canReorderInline = !isPanel
 
   const dragSensors = useSensors(
     useSensor(PointerSensor, {
@@ -196,6 +177,12 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
   const orderedGroups = useMemo(() => [...groups].sort((a, b) => a.sortOrder - b.sortOrder), [groups])
   const activeGroupId = selectedGroupId && orderedGroups.some((group) => group.id === selectedGroupId) ? selectedGroupId : (orderedGroups[0]?.id ?? null)
   const groupLinks = useMemo(() => (activeGroupId ? links.filter((link) => link.groupId === activeGroupId) : []), [activeGroupId, links])
+
+  // FLIP 重排动画：松手时先捕获各行视觉位置，顺序更新后统一补间到新槽位。
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const { captureFirst, cancelFlip } = useFlipReorder(listRef, groupLinks)
+  // 被拖行只能在列表容器内移动（并锁定横向），不能拖出列表无限向下。
+  const listBounds = useMemo(() => createListBoundsModifier(listRef), [listRef])
 
   useEffect(() => {
     if (renamingGroupId && !orderedGroups.some((group) => group.id === renamingGroupId)) {
@@ -353,22 +340,15 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
     [handleRemoveLink],
   )
 
-  const handleDragStart = ({ active }: DragStartEvent) => {
-    setDraggingLinkId(String(active.id))
-  }
-
-  const handleDragCancel = (_event: DragCancelEvent) => {
-    setDraggingLinkId(null)
-  }
-
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
-    setDraggingLinkId(null)
     if (!over || active.id === over.id) return
     if (!activeGroupId || busy) return
     const ids = groupLinks.map((link) => link.id)
     const oldIndex = ids.indexOf(String(active.id))
     const newIndex = ids.indexOf(String(over.id))
     if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return
+    // 先捕获 First（DOM 仍带拖拽 transform），再更新顺序触发 FLIP。
+    captureFirst()
     void reorderSharedDocLinks(activeGroupId, arrayMove(ids, oldIndex, newIndex))
   }
 
@@ -637,26 +617,15 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="section-label">{t('documentation.linksInGroup')}</p>
               <div className="flex items-center gap-1.5">
-                {!canReorderInline && (
-                  <button
-                    type="button"
-                    className="quiet-control inline-flex h-8 items-center gap-1 rounded-full border-0 px-2.5 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60"
-                    onClick={() => setReorderDialogOpen(true)}
-                    disabled={!activeGroupId || busy}
-                  >
-                    <ArrowUpDown className="h-3.5 w-3.5" />
-                    {t('documentation.reorderLinks')}
-                  </button>
-                )}
                 <button type="button" className="quiet-control inline-flex h-8 items-center gap-1 rounded-full border-0 px-2.5 text-[11px] text-[color:var(--color-foreground)] transition-colors hover:bg-[color:var(--color-accent)] disabled:opacity-60" onClick={openAddLink} disabled={!activeGroupId || busy}>
                   <Plus className="h-3.5 w-3.5" />
                   {t('documentation.addSharedLink')}
                 </button>
               </div>
             </div>
-            <DndContext sensors={dragSensors} collisionDetection={closestCenter} measuring={{ droppable: { strategy: MeasuringStrategy.BeforeDragging } }} onDragStart={handleDragStart} onDragCancel={handleDragCancel} onDragEnd={handleDragEnd}>
+            <DndContext sensors={dragSensors} collisionDetection={pointerFirstCollision} modifiers={[listBounds]} onDragStart={cancelFlip} onDragEnd={handleDragEnd}>
               <SortableContext items={groupLinks.map((link) => link.id)} strategy={verticalListSortingStrategy}>
-                <div className={`flex-1 space-y-1.5 overflow-y-auto ${isPanel ? 'min-h-0' : 'max-h-[280px]'}`}>
+                <div ref={listRef} className={`flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden ${isPanel ? 'min-h-0' : 'max-h-[280px]'}`}>
                   {!activeGroupId ? (
                     <p className="px-1 py-2 text-[11px] text-[color:var(--color-muted-foreground)]">{t('documentation.sharedGroupsEmpty')}</p>
                   ) : (
@@ -667,7 +636,7 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
                             {linkFormPanel}
                           </div>
                         ) : (
-                          <SharedDocLinkRow key={link.id} link={link} dragDisabled={busy || linkForm !== null} hideGrip={!canReorderInline} onStartEdit={handleRowStartEdit} onRemove={handleRowRemove} />
+                          <SharedDocLinkRow key={link.id} link={link} dragDisabled={busy || linkForm !== null} onStartEdit={handleRowStartEdit} onRemove={handleRowRemove} />
                         ),
                       )}
                       {linkForm?.linkId === null && !isPanel && <div className="rounded-[12px] border border-dashed border-[color:var(--color-border)] px-2.5 py-2">{linkFormPanel}</div>}
@@ -676,24 +645,11 @@ export function SharedDocLinkLibraryContent({ initialGroupId, variant = 'dialog'
                   )}
                 </div>
               </SortableContext>
-              <DragOverlay>
-                {draggingLinkId
-                  ? groupLinks
-                      .filter((link) => link.id === draggingLinkId)
-                      .map((link) => (
-                        <div key={link.id} className="quiet-control w-full rounded-[12px] border border-[color:var(--color-border)] px-3 py-2 shadow-lg">
-                          <p className="truncate text-xs text-[color:var(--color-foreground)]">{link.title}</p>
-                          <p className="truncate text-[11px] text-[color:var(--color-muted-foreground)]">{projectDocLinkTarget(link)}</p>
-                        </div>
-                      ))
-                  : null}
-              </DragOverlay>
             </DndContext>
           </div>
         </div>
       </div>
       {bindingGroupId && <SharedDocLinkGroupBindingDialog open groupId={bindingGroupId} groupName={orderedGroups.find((group) => group.id === bindingGroupId)?.name ?? ''} onClose={() => setBindingGroupId(null)} />}
-      {reorderDialogOpen && activeGroupId && <SharedDocLinkReorderDialog open groupId={activeGroupId} groupName={orderedGroups.find((group) => group.id === activeGroupId)?.name ?? ''} onClose={() => setReorderDialogOpen(false)} />}
       {formDialogOpen && linkForm && (
         <ModalShell open onClose={closeFormDialog} baseZIndex={1300} widthClassName="max-w-[560px]" ariaLabel={linkForm.linkId ? t('documentation.editSharedLink') : t('documentation.addSharedLink')}>
           <div className="mb-4">

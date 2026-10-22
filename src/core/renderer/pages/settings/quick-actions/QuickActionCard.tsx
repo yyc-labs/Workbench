@@ -1,5 +1,8 @@
-import { ChevronDown, ChevronUp, Copy, Link2, Link2Off, Pencil, Play, Power, RotateCw, Trash2 } from 'lucide-react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { Copy, GripVertical, Link2, Link2Off, Pencil, Play, Power, RotateCw, Trash2 } from 'lucide-react'
 import type { QuickActionView } from '../../../../shared/types'
+import { SORTABLE_REORDER_TRANSITION } from '../../../hooks/useFlipReorder'
 import { useI18n } from '../../../i18n'
 import { describeQuickActionSummary, QUICK_ACTION_ICON_COMPONENTS } from './quickActions.helpers'
 import { describeQuickActionScheduleBadge, describeQuickActionScheduleNotes } from './quickActions.schedule'
@@ -8,36 +11,42 @@ type QuickActionCardProps = {
   action: QuickActionView
   projectName: string | null
   taskName: string | null
-  canMoveUp: boolean
-  canMoveDown: boolean
   onExecute: () => void
   onEdit: () => void
   onToggleEnabled: () => void
-  onMove: (direction: 'up' | 'down') => void
   onDuplicate: () => void
   onDelete: () => void
   onCreateShortcut: () => void
   onRemoveShortcut: () => void
 }
 
-export function QuickActionCard({ action, projectName, taskName, canMoveUp, canMoveDown, onExecute, onEdit, onToggleEnabled, onMove, onDuplicate, onDelete, onCreateShortcut, onRemoveShortcut }: QuickActionCardProps) {
+export function QuickActionCard({ action, projectName, taskName, onExecute, onEdit, onToggleEnabled, onDuplicate, onDelete, onCreateShortcut, onRemoveShortcut }: QuickActionCardProps) {
   const { t } = useI18n()
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: action.id, transition: SORTABLE_REORDER_TRANSITION })
   const Icon = QUICK_ACTION_ICON_COMPONENTS[action.icon]
+  // 期望状态：应用内删过（false）即使用户在桌面留了文件，也不再展示快捷方式
+  // 相关徽章/操作，残留文件由主进程启动对账清理。
+  const wantsShortcut = action.desktopShortcutEnabled !== false
   const summary = describeQuickActionSummary(t, action.action, projectName, taskName)
   const scheduleBadge = describeQuickActionScheduleBadge(t, action.schedule)
   const scheduleNotes = describeQuickActionScheduleNotes(t, action.schedule, action.scheduleNextRunAt, new Date())
+  // 行内原位位移拖拽（与首页文件夹行一致）：整块内容区即把手，大接触面 + 无边界钳制，相邻交换更稳。
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+  }
 
   return (
-    <div className="surface-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div ref={setNodeRef} data-flip-id={action.id} style={style} className={`surface-card flex flex-col gap-3 rounded-[20px] p-4 sm:flex-row sm:items-center ${isDragging ? 'opacity-50 will-change-transform' : ''}`}>
+      <div ref={setActivatorNodeRef} className="flex min-w-0 flex-1 cursor-grab items-center gap-3 touch-none active:cursor-grabbing" title={t('quickActions.card.dragToReorder')} {...attributes} {...listeners}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-accent)] text-[color:var(--color-foreground)]">
           <Icon className="h-4 w-4" strokeWidth={1.8} />
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-[color:var(--color-foreground)]">{action.name}</span>
-            {action.shortcutState === 'valid' ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.card.badgeShortcut')}</span> : null}
-            {action.shortcutState === 'missing' ? <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">{t('quickActions.card.badgeShortcutMissing')}</span> : null}
+            {wantsShortcut && action.shortcutState === 'valid' ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.card.badgeShortcut')}</span> : null}
+            {wantsShortcut && action.shortcutState === 'missing' ? <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs text-destructive">{t('quickActions.card.badgeShortcutMissing')}</span> : null}
             {!action.enabled ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{t('quickActions.card.badgeDisabled')}</span> : null}
             {scheduleBadge ? <span className="rounded-full bg-[color:var(--color-accent)] px-2 py-0.5 text-xs text-[color:var(--color-muted-foreground)]">{scheduleBadge}</span> : null}
           </div>
@@ -50,6 +59,7 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
             </p>
           ) : null}
         </div>
+        <GripVertical className="h-4 w-4 shrink-0 text-[color:var(--color-muted-foreground)] opacity-60" />
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
@@ -82,26 +92,6 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
         </button>
         <button
           type="button"
-          onClick={() => onMove('up')}
-          disabled={!canMoveUp}
-          title={t('quickActions.card.moveUp')}
-          aria-label={t('quickActions.card.moveUp')}
-          className="button-interactive flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-40"
-        >
-          <ChevronUp className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => onMove('down')}
-          disabled={!canMoveDown}
-          title={t('quickActions.card.moveDown')}
-          aria-label={t('quickActions.card.moveDown')}
-          className="button-interactive flex h-9 w-9 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-40"
-        >
-          <ChevronDown className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
           onClick={onDuplicate}
           title={t('quickActions.card.duplicate')}
           aria-label={t('quickActions.card.duplicate')}
@@ -109,7 +99,7 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
         >
           <Copy className="h-4 w-4" />
         </button>
-        {action.shortcutState === 'valid' ? (
+        {wantsShortcut && action.shortcutState === 'valid' ? (
           <button
             type="button"
             onClick={onRemoveShortcut}
@@ -119,7 +109,7 @@ export function QuickActionCard({ action, projectName, taskName, canMoveUp, canM
           >
             <Link2Off className="h-4 w-4" />
           </button>
-        ) : action.shortcutState === 'missing' ? (
+        ) : wantsShortcut && action.shortcutState === 'missing' ? (
           <button
             type="button"
             onClick={onCreateShortcut}

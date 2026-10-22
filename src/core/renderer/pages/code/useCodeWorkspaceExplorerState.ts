@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { normalizeRememberedDirectories } from '../../../shared/rememberedDirectories'
 import type { ProjectFileContentSearchResponse, ProjectFileNode, ProjectFileNodeKind } from '../../../shared/types'
 import { contentSearchScopeKey, parseContentSearchScopeGlobs } from './code.contentSearchScope'
+import { canRestoreChild, collectDescendantPaths, collectEffectivelyExpanded, collectRememberedChildrenOf, collectRestorableExpanded, isRestoreParentActive, mergeRememberedInit } from './code.expandedDirectories'
 import { collectParentDirectories } from './code.helpers'
-import { canRestoreChild, collectDescendantPaths, collectEffectivelyExpanded, collectRememberedChildrenOf, collectRestorableExpanded, isRestoreParentActive, mergeRememberedInit, normalizeRememberedDirectories } from './code.expandedDirectories'
 import { collectTopLevelDirectories, expandTreePath, findDirectoryNode, mergeKnownFilePaths, replaceDirectoryNodes, sortProjectNodes } from './code.tree'
+import { type DirectoryLoadReason, type RootLoadReason, shouldRefreshLoadedDirectory, shouldRefreshRootOnSidebarReveal } from './code.treeRefresh'
 import type { FileSearchLineTarget, FileTreeState } from './code.types'
-import { shouldRefreshLoadedDirectory, shouldRefreshRootOnSidebarReveal, type DirectoryLoadReason, type RootLoadReason } from './code.treeRefresh'
 
 export type ContentSearchScopePreset = {
   id: string
@@ -185,14 +186,7 @@ function createInitialTreeState(projectPath: string): FileTreeState {
 export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, contentSearchScopeInput, projectPath, treeAutoLoadFileLimit, treeAutoLoadPaused = false, rememberedDirectories: rememberedDirectoriesProp, onPersistRememberedDirectories }: UseCodeWorkspaceExplorerStateOptions) {
   const [tree, setTree] = useState<FileTreeState>(() => createInitialTreeState(projectPath))
   // remembered 初始化三态（D30）：快照字段缺失才回退 store；明确为空则空即权威；非法条目逐条剔除。
-  const initialSnapshot = readTreeSnapshot(projectPath)
-  const initialRememberedDirectories = mergeRememberedInit(initialSnapshot?.rememberedDirectories, rememberedDirectoriesProp)
-  console.debug('[expanded-dirs] init', {
-    projectPath,
-    fromSnapshot: initialSnapshot ? Array.from(initialSnapshot.rememberedDirectories) : null,
-    fromStore: rememberedDirectoriesProp ?? null,
-    merged: initialRememberedDirectories ?? null,
-  })
+  const initialRememberedDirectories = mergeRememberedInit(readTreeSnapshot(projectPath)?.rememberedDirectories, rememberedDirectoriesProp)
   const [rememberedDirectories, setRememberedDirectories] = useState<Set<string>>(() => new Set(initialRememberedDirectories ?? []))
   // active 初值 = collectRestorableExpanded(remembered)（D20/D25 + 顶层断裂兜底）：
   // 快照不存 active，remount 时重新派生。
@@ -213,7 +207,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   const [expandedDirectoryRefreshRequest, setExpandedDirectoryRefreshRequest] = useState(0)
   const [isSearchingContent, setIsSearchingContent] = useState(false)
   const [contentSearchError, setContentSearchError] = useState<string | null>(null)
-  const [isContentSearchAllExpanded, setIsContentSearchAllExpanded] = useState(true)
 
   const treeLoadRequestSeqRef = useRef(0)
   const searchRequestSeqRef = useRef(0)
@@ -252,9 +245,7 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   // remembered 持久化提交：归一化后经 store action 交主进程协调器（本期不新建 renderer 定时器）。
   const persistRememberedDirectories = useCallback(
     (next: Set<string>) => {
-      const paths = normalizeRememberedDirectories(Array.from(next)) ?? []
-      console.debug('[expanded-dirs] persist', { paths })
-      onPersistRememberedDirectories?.(paths)
+      onPersistRememberedDirectories?.(normalizeRememberedDirectories(Array.from(next)) ?? [])
     },
     [onPersistRememberedDirectories],
   )
@@ -400,7 +391,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       const path = relativePath.trim()
       if (!path) return
       const rememberedNow = rememberedDirectoriesRef.current
-      console.debug('[expanded-dirs] toggle', { path, isActiveExpanded: expandedDirectoriesRef.current.has(path), remembered: Array.from(rememberedNow) })
       if (expandedDirectoriesRef.current.has(path)) {
         if (rememberedNow.has(path)) {
           const nextRemembered = new Set(rememberedNow)
@@ -734,10 +724,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         lastRootLoadedAtMs: current.lastRootLoadedAtMs,
         savedAtMs: Date.now(),
       })
-      console.debug('[expanded-dirs] snapshot saved on unmount', {
-        projectPath,
-        remembered: Array.from(rememberedDirectoriesRef.current),
-      })
     }
   }, [projectPath])
 
@@ -795,7 +781,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     if (!normalizedQuery) {
       setIsSearchingContent(false)
       setContentSearchError(null)
-      setIsContentSearchAllExpanded(false)
       setContentSearchResult({
         files: [],
         totalMatches: 0,
@@ -808,7 +793,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     contentSearchRequestSeqRef.current = requestSeq
     setIsSearchingContent(true)
     setContentSearchError(null)
-    setIsContentSearchAllExpanded(false)
 
     void window.electronAPI
       .searchProjectContent(projectPath, normalizedQuery, {
@@ -818,7 +802,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       .then((result) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
         setContentSearchResult(result)
-        setIsContentSearchAllExpanded(result.files.length > 0)
       })
       .catch((error) => {
         if (contentSearchRequestSeqRef.current !== requestSeq) return
@@ -827,7 +810,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
           totalMatches: 0,
           limited: false,
         })
-        setIsContentSearchAllExpanded(false)
         setContentSearchError(error instanceof Error ? error.message : String(error))
       })
       .finally(() => {
@@ -898,8 +880,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   const hasContentSearchQuery = contentSearchQuery.trim().length > 0
   const hasContentSearchScope = contentSearchScopeGlobs.length > 0
   const showContentSearchSummary = hasContentSearchQuery && !isSearchingContent && !contentSearchError
-  const canToggleContentSearchTree = hasContentSearchQuery && !isSearchingContent && contentSearchResult.files.length > 0
-  const contentSearchToggleLabel = isContentSearchAllExpanded ? 'Collapse all' : 'Expand all'
   const hasSearchQuery = fileSearchQuery.trim().length > 0
   const treeNodesForView = hasSearchQuery ? searchResultNodes : tree.nodes
   const fileSearchLineTarget = useMemo(() => parseFileSearchLineTarget(fileSearchQuery).lineTarget, [fileSearchQuery])
@@ -925,7 +905,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   return {
     activeContentSearchScopeKey,
     activeContentSearchScopeLabel,
-    canToggleContentSearchTree,
     contentSearchCaseSensitive,
     contentSearchError,
     contentSearchQuery,
@@ -933,7 +912,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     contentSearchScopeGlobs,
     contentSearchScopePresets,
     contentSearchScopeSummary,
-    contentSearchToggleLabel,
     ensureTreePathLoaded,
     excludedPathKinds,
     expandedDirectories,
@@ -944,7 +922,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     hasContentSearchScope,
     hasSearchQuery,
     isContentSearchAdvancedOpen,
-    isContentSearchAllExpanded,
     isSearchingContent,
     isSearchingFiles,
     loadTree,
@@ -955,7 +932,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
     setExpandedDirectories,
     setFileSearchQuery,
     setIsContentSearchAdvancedOpen,
-    setIsContentSearchAllExpanded,
     showContentSearchSummary,
     toggleDirectory,
     tree,

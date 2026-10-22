@@ -1,10 +1,14 @@
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { QuickActionResult, QuickActionSchedule, QuickActionSpec, QuickActionView } from '../../../shared/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { Button } from '../../components/ui/button'
 import { toast } from '../../components/ui/toast'
+import { useFlipReorder } from '../../hooks/useFlipReorder'
 import { useI18n } from '../../i18n'
+import { createListBoundsModifier, pointerFirstCollision } from '../../lib/dndSorting'
 import { describeQuickActionResult } from '../../lib/quickActionFeedback'
 import { useAppStore } from '../../stores/appStore'
 import { QuickActionCard } from './quick-actions/QuickActionCard'
@@ -21,7 +25,7 @@ export function SettingsQuickActionsPanel() {
   const updateQuickAction = useAppStore((s) => s.updateQuickAction)
   const deleteQuickAction = useAppStore((s) => s.deleteQuickAction)
   const executeQuickAction = useAppStore((s) => s.executeQuickAction)
-  const reorderQuickAction = useAppStore((s) => s.reorderQuickAction)
+  const reorderQuickActionGroup = useAppStore((s) => s.reorderQuickActionGroup)
   const createQuickActionDesktopShortcut = useAppStore((s) => s.createQuickActionDesktopShortcut)
   const removeQuickActionDesktopShortcut = useAppStore((s) => s.removeQuickActionDesktopShortcut)
   const projects = useAppStore((s) => s.projects)
@@ -29,6 +33,12 @@ export function SettingsQuickActionsPanel() {
   const loadRunTaskConfig = useAppStore((s) => s.loadRunTaskConfig)
 
   const [filter, setFilter] = useState<QuickActionFilter>('all')
+
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  )
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<QuickActionView | null>(null)
   const [pendingDelete, setPendingDelete] = useState<QuickActionView | null>(null)
@@ -64,6 +74,30 @@ export function SettingsQuickActionsPanel() {
   )
 
   const visible = useMemo(() => (filter === 'all' ? sorted : sorted.filter((item) => item.group === filter)), [filter, sorted])
+
+  // FLIP 重排动画：松手时先捕获各卡片视觉位置，顺序更新后统一补间到新槽位。
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const { captureFirst, cancelFlip } = useFlipReorder(listRef, visible)
+  // 被拖卡片只能在列表容器内移动（并锁定横向），不能拖出列表无限向下。
+  const listBounds = useMemo(() => createListBoundsModifier(listRef), [listRef])
+
+  // 拖拽排序：跨组拖动忽略；同组内按 groupOrder arrayMove 后整组落盘。
+  const handleDragEnd = useCallback(
+    ({ active, over }: DragEndEvent) => {
+      if (!over || active.id === over.id) return
+      const activeItem = sorted.find((item) => item.id === String(active.id))
+      const overItem = sorted.find((item) => item.id === String(over.id))
+      if (!activeItem || !overItem || activeItem.group !== overItem.group) return
+      const groupOrder = sorted.filter((item) => item.group === activeItem.group).map((item) => item.id)
+      const oldIndex = groupOrder.indexOf(String(active.id))
+      const newIndex = groupOrder.indexOf(String(over.id))
+      if (oldIndex < 0 || newIndex < 0) return
+      // 先捕获 First（DOM 仍带拖拽 transform），再同步更新顺序触发 FLIP。
+      captureFirst()
+      void reorderQuickActionGroup(activeItem.group, arrayMove(groupOrder, oldIndex, newIndex))
+    },
+    [captureFirst, reorderQuickActionGroup, sorted],
+  )
 
   /** taskId → task name across the loaded run-task configs, keyed by project path. */
   const taskNamesByPath = useMemo(() => {
@@ -196,7 +230,7 @@ export function SettingsQuickActionsPanel() {
       {sorted.length > 0 ? <QuickActionFilters value={filter} onChange={setFilter} counts={counts} /> : null}
 
       {sorted.length === 0 ? (
-        <div className="surface-card flex flex-col items-center gap-3 px-6 py-12 text-center">
+        <div className="surface-card flex flex-col items-center gap-3 rounded-[20px] px-6 py-12 text-center">
           <p className="text-sm font-medium text-[color:var(--color-foreground)]">{t('quickActions.panel.emptyTitle')}</p>
           <p className="max-w-md text-sm text-[color:var(--color-muted-foreground)]">{t('quickActions.panel.emptyDescription')}</p>
           <Button
@@ -212,34 +246,31 @@ export function SettingsQuickActionsPanel() {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {visible.map((action) => {
-            const groupItems = sorted.filter((item) => item.group === action.group)
-            const groupIndex = groupItems.findIndex((item) => item.id === action.id)
-            return (
-              <QuickActionCard
-                key={action.id}
-                action={action}
-                projectName={resolveQuickActionProjectName(action.action, projects)}
-                taskName={resolveQuickActionTaskName(action.action, taskNamesByPath.get(action.action.type === 'run-task' ? action.action.projectPath : '') ?? new Map())}
-                canMoveUp={groupIndex > 0}
-                canMoveDown={groupIndex >= 0 && groupIndex < groupItems.length - 1}
-                onExecute={() => void handleExecute(action)}
-                onEdit={() => {
-                  setEditing(action)
-                  setFormOpen(true)
-                }}
-                onToggleEnabled={() => void handleToggleEnabled(action)}
-                onMove={(direction) => void reorderQuickAction(action.id, direction)}
-                onDuplicate={() => void handleDuplicate(action)}
-                onDelete={() => setPendingDelete(action)}
-                onCreateShortcut={() => void handleCreateShortcut(action)}
-                onRemoveShortcut={() => void handleRemoveShortcut(action)}
-              />
-            )
-          })}
-          {visible.length === 0 ? <p className="px-1 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">{t('quickActions.filter.empty')}</p> : null}
-        </div>
+        <DndContext sensors={dragSensors} collisionDetection={pointerFirstCollision} modifiers={[listBounds]} onDragStart={cancelFlip} onDragEnd={handleDragEnd}>
+          <SortableContext items={visible.map((action) => action.id)} strategy={verticalListSortingStrategy}>
+            <div ref={listRef} className="space-y-3">
+              {visible.map((action) => (
+                <QuickActionCard
+                  key={action.id}
+                  action={action}
+                  projectName={resolveQuickActionProjectName(action.action, projects)}
+                  taskName={resolveQuickActionTaskName(action.action, taskNamesByPath.get(action.action.type === 'run-task' ? action.action.projectPath : '') ?? new Map())}
+                  onExecute={() => void handleExecute(action)}
+                  onEdit={() => {
+                    setEditing(action)
+                    setFormOpen(true)
+                  }}
+                  onToggleEnabled={() => void handleToggleEnabled(action)}
+                  onDuplicate={() => void handleDuplicate(action)}
+                  onDelete={() => setPendingDelete(action)}
+                  onCreateShortcut={() => void handleCreateShortcut(action)}
+                  onRemoveShortcut={() => void handleRemoveShortcut(action)}
+                />
+              ))}
+              {visible.length === 0 ? <p className="px-1 py-6 text-center text-sm text-[color:var(--color-muted-foreground)]">{t('quickActions.filter.empty')}</p> : null}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       <QuickActionFormModal open={formOpen} action={editing} projects={projects} onClose={() => setFormOpen(false)} onSubmit={handleSubmit} onTestRun={handleTestRun} />

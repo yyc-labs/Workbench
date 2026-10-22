@@ -67,7 +67,8 @@ export function createWorkspacePersistenceCoordinator(write: (serialized: string
   const now = options.now ?? (() => Date.now())
   const setTimer = options.setTimer ?? defaultSetTimer
   const clearTimer = options.clearTimer ?? defaultClearTimer
-  const log = options.log ?? ((message: string) => console.debug(`[workspace-persistence] ${message}`))
+  // 常规调试日志（markDirty / write ok）默认静默，避免每次提交配置刷屏；失败路径仍通过 console.warn/error 输出。
+  const log = options.log ?? noop
 
   let revision = 0
   let persistedRevision = 0
@@ -95,7 +96,7 @@ export function createWorkspacePersistenceCoordinator(write: (serialized: string
 
   const onTimerFire = (): void => {
     void flush().catch((error) => {
-      log(`flush from timer failed: ${error instanceof Error ? error.message : String(error)}`)
+      console.warn(`[workspace-persistence] flush from timer failed: ${error instanceof Error ? error.message : String(error)}`)
     })
   }
 
@@ -129,7 +130,7 @@ export function createWorkspacePersistenceCoordinator(write: (serialized: string
         lastError = error instanceof Error ? error.message : String(error)
         phase = 'failed'
         writeInFlight = null
-        log(`write failed revision=${target}: ${lastError}`)
+        console.error(`[workspace-persistence] write failed revision=${target}: ${lastError}`)
         // 保留脏状态（revision !== persistedRevision），共享 flushPromise 的调用方收到同一 rejection；
         // 重试由下一次 markDirty / flush 触发，不在本循环内自动重试。
         throw error

@@ -7,7 +7,7 @@ const { createQuickActionService } = loadTsModule('src/core/electron/main/quick-
 const PROJECT_PATH = 'D:/repos/app'
 
 function setup(overrides = {}) {
-  let stored = { actions: [] }
+  let stored = { actions: overrides.initialActions ? overrides.initialActions.map((item) => ({ ...item })) : [] }
   let uuidCounter = 0
   const navigations = []
   const windowVisibleCalls = []
@@ -15,6 +15,7 @@ function setup(overrides = {}) {
   const openedUrls = []
   const createdShortcuts = []
   const removedShortcuts = []
+  const rewrittenShortcuts = []
 
   const runTaskService = {
     startCalls: [],
@@ -45,19 +46,30 @@ function setup(overrides = {}) {
     ? undefined
     : {
         createShortcutLink: async (action) => {
+          if (overrides.createShortcutError) throw overrides.createShortcutError
           createdShortcuts.push(action.id)
           return `C:/Users/me/Desktop/${action.name}.lnk`
         },
         removeShortcutLink: async (shortcutPath) => {
           removedShortcuts.push(shortcutPath)
-          return true
+          return overrides.removeShortcutResult ?? true
         },
-        checkShortcutState: (shortcutPath, exePath) => overrides.shortcutState ?? 'valid',
+        checkShortcutState: (shortcutPath, expected) => overrides.shortcutState ?? 'valid',
+        rewriteShortcutLink: async (action, shortcutPath) => {
+          if (overrides.rewriteShortcutError) throw overrides.rewriteShortcutError
+          rewrittenShortcuts.push({ id: action.id, shortcutPath })
+          return shortcutPath
+        },
       }
 
+  let updateConfigCalls = 0
   const service = createQuickActionService({
     loadConfig: () => ({ quickActions: stored }),
     updateConfig: async (partial) => {
+      updateConfigCalls += 1
+      if (overrides.failUpdateConfigAfter !== undefined && updateConfigCalls > overrides.failUpdateConfigAfter) {
+        throw new Error('config write failed')
+      }
       stored = partial.quickActions
       return { quickActions: stored }
     },
@@ -80,7 +92,7 @@ function setup(overrides = {}) {
     ...(desktopShortcuts ? { desktopShortcuts } : {}),
   })
 
-  return { service, navigations, windowVisibleCalls, openedPaths, openedUrls, runTaskService, createdShortcuts, removedShortcuts, getStored: () => stored }
+  return { service, navigations, windowVisibleCalls, openedPaths, openedUrls, runTaskService, createdShortcuts, removedShortcuts, rewrittenShortcuts, getStored: () => stored }
 }
 
 test('create appends to the group end, derives icon/group and persists', async () => {
@@ -262,18 +274,103 @@ test('list reports valid/missing shortcut states and none without a path', async
   assert.equal(drifted.service.list()[0].shortcutState, 'missing')
 })
 
-test('repairDesktopShortcuts rebuilds invalid shortcuts and skips valid ones', async () => {
-  const broken = setup({ shortcutState: 'missing' })
-  const created = await broken.service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
-  await broken.service.createDesktopShortcut(created.id)
-  await broken.service.repairDesktopShortcuts()
-  assert.equal(broken.createdShortcuts.length, 2)
+test('createDesktopShortcut removes the orphan file when the config write fails', async () => {
+  const { service, removedShortcuts } = setup({ failUpdateConfigAfter: 1 })
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  // create 的写入被允许（failUpdateConfigAfter: 0 → 第 1 次之后失败），createDesktopShortcut 的写入触发失败。
+  await assert.rejects(() => service.createDesktopShortcut(created.id), /config write failed/)
+  assert.deepEqual(removedShortcuts, ['C:/Users/me/Desktop/Open app.lnk'])
+})
 
-  const healthy = setup({ shortcutState: 'valid' })
-  const created2 = await healthy.service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
-  await healthy.service.createDesktopShortcut(created2.id)
-  await healthy.service.repairDesktopShortcuts()
-  assert.equal(healthy.createdShortcuts.length, 1)
+test('removeDesktopShortcut persists the desired state before deleting the file', async () => {
+  const { service, removedShortcuts, getStored } = setup()
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  await service.createDesktopShortcut(created.id)
+  assert.equal(await service.removeDesktopShortcut(created.id), true)
+  assert.deepEqual(removedShortcuts, ['C:/Users/me/Desktop/Open app.lnk'])
+  const stored = getStored().actions.find((item) => item.id === created.id)
+  assert.equal('desktopShortcutPath' in stored, false)
+  assert.notEqual(stored.desktopShortcutEnabled, true)
+})
+
+test('removeDesktopShortcut keeps the last-known path when the file delete fails', async () => {
+  // 文件删除失败：路径保留 + 期望=false，重启对账负责补删，绝不自动重建。
+  const { service, getStored } = setup({ removeShortcutResult: false })
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  await service.createDesktopShortcut(created.id)
+  assert.equal(await service.removeDesktopShortcut(created.id), true)
+  const stored = getStored().actions.find((item) => item.id === created.id)
+  assert.equal(stored.desktopShortcutPath, 'C:/Users/me/Desktop/Open app.lnk')
+  assert.equal(stored.desktopShortcutEnabled, false)
+})
+
+test('reconcileDesktopShortcuts rewrites drifted/missing/unreadable shortcuts in place', async () => {
+  for (const state of ['missing', 'drifted', 'unreadable']) {
+    const { service, rewrittenShortcuts, createdShortcuts } = setup({ shortcutState: state })
+    const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+    await service.createDesktopShortcut(created.id)
+    await service.reconcileDesktopShortcuts()
+    assert.deepEqual(rewrittenShortcuts, [{ id: created.id, shortcutPath: 'C:/Users/me/Desktop/Open app.lnk' }], state)
+    assert.equal(createdShortcuts.length, 1, state)
+  }
+})
+
+test('reconcileDesktopShortcuts leaves valid shortcuts untouched', async () => {
+  const { service, rewrittenShortcuts, createdShortcuts, removedShortcuts } = setup({ shortcutState: 'valid' })
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  await service.createDesktopShortcut(created.id)
+  await service.reconcileDesktopShortcuts()
+  assert.equal(rewrittenShortcuts.length, 0)
+  assert.equal(createdShortcuts.length, 1)
+  assert.equal(removedShortcuts.length, 0)
+})
+
+test('reconcileDesktopShortcuts rebuilds desired shortcuts without a recorded path (legacy)', async () => {
+  const legacyAction = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    name: 'Legacy',
+    action: { type: 'open-project', projectPath: PROJECT_PATH },
+    icon: 'folder-open',
+    group: 'project',
+    enabled: true,
+    order: 0,
+    createdAt: 0,
+    updatedAt: 0,
+    // 期望存在但丢失了路径记录（旧配置/异常写入口）。
+    desktopShortcutEnabled: true,
+  }
+  const { service, createdShortcuts, getStored } = setup({ shortcutState: 'valid', initialActions: [legacyAction] })
+  await service.reconcileDesktopShortcuts()
+  assert.deepEqual(createdShortcuts, [legacyAction.id])
+  const stored = getStored().actions.find((item) => item.id === legacyAction.id)
+  assert.equal(stored.desktopShortcutPath, 'C:/Users/me/Desktop/Legacy.lnk')
+})
+
+test('reconcileDesktopShortcuts cleans up leftovers after an in-app removal', async () => {
+  // 应用内删过（desired=false）+ 文件仍在（删除失败残留）→ 补删并清路径。
+  const { service, removedShortcuts, getStored } = setup({ shortcutState: 'valid', removeShortcutResult: false })
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  await service.createDesktopShortcut(created.id)
+  await service.removeDesktopShortcut(created.id) // 文件删除失败，保留路径 + desired=false
+  removedShortcuts.length = 0
+  await service.reconcileDesktopShortcuts()
+  assert.deepEqual(removedShortcuts, ['C:/Users/me/Desktop/Open app.lnk'])
+  const stored = getStored().actions.find((item) => item.id === created.id)
+  assert.equal('desktopShortcutPath' in stored, false)
+})
+
+test('reconcileDesktopShortcuts never rebuilds shortcuts removed in-app', async () => {
+  // desired=false + 文件已不在 → 只整理配置，不重建。
+  const { service, createdShortcuts, removedShortcuts, rewrittenShortcuts } = setup({ shortcutState: 'missing' })
+  const created = await service.create({ name: 'Open app', action: { type: 'open-project', projectPath: PROJECT_PATH } })
+  await service.createDesktopShortcut(created.id)
+  await service.removeDesktopShortcut(created.id)
+  createdShortcuts.length = 0
+  removedShortcuts.length = 0
+  await service.reconcileDesktopShortcuts()
+  assert.equal(createdShortcuts.length, 0)
+  assert.equal(removedShortcuts.length, 0)
+  assert.equal(rewrittenShortcuts.length, 0)
 })
 
 test('delete removes a stale shortcut file best-effort', async () => {

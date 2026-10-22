@@ -37,10 +37,6 @@
     width: 100%;
   }
 
-  .code-content-search-match {
-    grid-template-columns: 60px minmax(0, 1fr);
-  }
-
   .code-file-quick-drawer {
     top: 0;
     right: 0;

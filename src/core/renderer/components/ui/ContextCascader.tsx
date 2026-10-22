@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { ChevronRight } from 'lucide-react'
+import { type CSSProperties, type ReactNode, type Ref, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Tooltip } from './tooltip'
 
 export type ContextCascaderItem = {
   id: string
@@ -17,6 +18,12 @@ export type ContextCascaderItem = {
     onSelect: (rows: number, columns: number) => void | Promise<void>
   }
   children?: ContextCascaderItem[]
+  /**
+   * 自定义二级面板（仅 grouped 布局生效，opt-in）：点击该项时在相邻位置展开调用方提供的内容
+   * （如命名输入框），不触发 onSelect、不关闭菜单；item 同时带 children 时以 children 优先。
+   * 面板内部需自行处理 pointerdown/click 冒泡（ContextCascader 的外层 overlay 点击即关闭）。
+   */
+  panel?: ReactNode
   onSelect?: () => void | Promise<void>
 }
 
@@ -33,6 +40,8 @@ export type ContextCascaderProps = {
   x: number
   y: number
   title?: string
+  /** 标题徽标的悬浮卡片内容（如多选场景的所选文件列表）；不传则徽标无悬浮行为。 */
+  titleHoverCard?: ReactNode
   sections: ContextCascaderSection[]
   /** cascader：两列级联（默认，既有行为）；grouped：单列分组标题，items 平铺在各自 section 标题下。 */
   layout?: ContextCascaderLayout
@@ -74,7 +83,7 @@ const PANEL_SURFACE_STYLE: CSSProperties = {
   WebkitBackdropFilter: 'saturate(170%) blur(18px)',
 }
 
-function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectItem }: { left: number; top: number; items: ContextCascaderItem[]; activeItemId: string | null; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
+function CascaderPanel({ left, top, items, activeItemId, panelRef, onHoverItem, onSelectItem }: { left: number; top: number; items: ContextCascaderItem[]; activeItemId: string | null; panelRef?: Ref<HTMLDivElement>; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
   const tablePickerItem = items.length === 1 ? (items[0] ?? null) : null
   const tablePicker = tablePickerItem?.tablePicker
   const [hoverRows, setHoverRows] = useState(Math.min(3, tablePicker?.maxRows ?? 3))
@@ -82,6 +91,7 @@ function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectIt
 
   return (
     <div
+      ref={panelRef}
       className={PANEL_SURFACE_CLASS}
       style={{
         left,
@@ -161,12 +171,13 @@ function CascaderPanel({ left, top, items, activeItemId, onHoverItem, onSelectIt
 }
 
 function GroupedItemRow({ item, onHoverItem, onSelectItem }: { item: ContextCascaderItem; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
-  const hasChildren = Boolean(item.children?.length)
+  const hasChildren = Boolean(item.children?.length) || Boolean(item.panel)
   return (
     <button
       type="button"
       disabled={item.disabled}
       className="group flex w-full items-center gap-2.5 rounded-[10px] px-3 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)] disabled:cursor-not-allowed disabled:opacity-45"
+      data-cascader-row-id={item.id}
       onMouseDown={(event) => event.preventDefault()}
       onMouseEnter={() => onHoverItem(item)}
       onFocus={() => onHoverItem(item)}
@@ -181,9 +192,10 @@ function GroupedItemRow({ item, onHoverItem, onSelectItem }: { item: ContextCasc
 }
 
 /** grouped 模式根面板：单列，section 渲染为不可点的分组小标题，组间以分隔线区隔，组内 items 平铺。 */
-function GroupedRootPanel({ left, top, sections, onHoverItem, onSelectItem }: { left: number; top: number; sections: ContextCascaderSection[]; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
+function GroupedRootPanel({ left, top, sections, containerRef, onHoverItem, onSelectItem }: { left: number; top: number; sections: ContextCascaderSection[]; containerRef?: Ref<HTMLDivElement>; onHoverItem: (item: ContextCascaderItem) => void; onSelectItem: (item: ContextCascaderItem) => void }) {
   return (
     <div
+      ref={containerRef}
       className={PANEL_SURFACE_CLASS}
       style={{
         left,
@@ -208,7 +220,20 @@ function GroupedRootPanel({ left, top, sections, onHoverItem, onSelectItem }: { 
   )
 }
 
-export function ContextCascader({ x, y, title, sections, layout = 'cascader', onClose }: ContextCascaderProps) {
+/** 菜单标题徽标：fixed 定位于指针上方；传入 hoverCard 时悬浮展开（锚点用徽标自身，绕开零尺寸触发器包裹层）。 */
+function TitleBadge({ title, hoverCard, left, top }: { title: string; hoverCard?: ReactNode; left: number; top: number }) {
+  const badgeRef = useRef<HTMLDivElement | null>(null)
+
+  return (
+    <Tooltip anchorRef={badgeRef} interactive side="top" align="start" maxWidth={360} content={hoverCard}>
+      <div ref={badgeRef} className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]" style={{ left, top }}>
+        {title}
+      </div>
+    </Tooltip>
+  )
+}
+
+export function ContextCascader({ x, y, title, titleHoverCard, sections, layout = 'cascader', onClose }: ContextCascaderProps) {
   const [activeSectionId, setActiveSectionId] = useState(sections[0]?.id ?? '')
   const [activeBranch, setActiveBranch] = useState<string[]>([])
   const activeSection = useMemo(() => sections.find((section) => section.id === activeSectionId) ?? sections[0] ?? null, [activeSectionId, sections])
@@ -227,6 +252,26 @@ export function ContextCascader({ x, y, title, sections, layout = 'cascader', on
 
   const rootPosition = useMemo(() => getRootPanelPosition(x, y), [x, y])
   const branchPosition = useMemo(() => getAdjacentPanelPosition(rootPosition, 'right'), [rootPosition])
+
+  // grouped 布局二级面板定位：面板中心对齐触发行中心（用户 2026-10-22 反馈）——
+  // useLayoutEffect 在绘制前同步（首帧即正确，无闪跳）：量取根面板内对应行的中心，
+  // 与已渲染二级面板的高度求差；钳制保证面板完整落在视口内；量取失败回退根面板顶。
+  const groupedRootPanelRef = useRef<HTMLDivElement>(null)
+  const branchPanelRef = useRef<HTMLDivElement>(null)
+  const [branchPanelTop, setBranchPanelTop] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (layout !== 'grouped' || !activeBranch[0]) {
+      setBranchPanelTop(null)
+      return
+    }
+    const container = groupedRootPanelRef.current
+    const row = container?.querySelector<HTMLElement>(`[data-cascader-row-id="${CSS.escape(activeBranch[0])}"]`)
+    if (!row) return
+    const rowRect = row.getBoundingClientRect()
+    const panelHeight = branchPanelRef.current?.offsetHeight || PANEL_MAX_HEIGHT
+    const centeredTop = rowRect.top + rowRect.height / 2 - panelHeight / 2
+    setBranchPanelTop(clamp(centeredTop, 8, Math.max(8, window.innerHeight - panelHeight - 8)))
+  }, [activeBranch, layout, sections])
   const grandChildPosition = useMemo(() => getAdjacentPanelPosition(branchPosition, branchPosition.direction), [branchPosition])
   const greatGrandChildPosition = useMemo(() => getAdjacentPanelPosition(grandChildPosition, grandChildPosition.direction), [grandChildPosition])
 
@@ -251,7 +296,7 @@ export function ContextCascader({ x, y, title, sections, layout = 'cascader', on
 
   const selectBranchItem = async (item: ContextCascaderItem, branch: string[]) => {
     if (item.disabled) return
-    if (item.children?.length) {
+    if (item.children?.length || item.panel) {
       setActiveBranch(branch)
       return
     }
@@ -262,20 +307,14 @@ export function ContextCascader({ x, y, title, sections, layout = 'cascader', on
   if (layout === 'grouped') {
     return createPortal(
       <div className="fixed inset-0 z-[9999]" data-context-cascader-overlay="" onPointerDown={onClose} onContextMenu={onClose}>
-        {title ? (
-          <div
-            className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]"
-            style={{ left: rootPosition.left, top: Math.max(8, rootPosition.top - 28) }}
-          >
-            {title}
-          </div>
-        ) : null}
+        {title ? <TitleBadge title={title} hoverCard={titleHoverCard} left={rootPosition.left} top={Math.max(8, rootPosition.top - 28)} /> : null}
         <GroupedRootPanel
           left={rootPosition.left}
           top={rootPosition.top}
           sections={sections}
+          containerRef={groupedRootPanelRef}
           onHoverItem={(item) => {
-            setActiveBranch(item.children?.length ? [item.id] : [])
+            setActiveBranch(item.children?.length || item.panel ? [item.id] : [])
           }}
           onSelectItem={(item) => {
             void selectBranchItem(item, [item.id])
@@ -284,14 +323,30 @@ export function ContextCascader({ x, y, title, sections, layout = 'cascader', on
         {groupedRootItem?.children?.length ? (
           <CascaderPanel
             left={branchPosition.left}
-            top={branchPosition.top}
+            top={branchPanelTop ?? branchPosition.top}
             items={groupedChildItems}
             activeItemId={groupedChildItem?.id ?? null}
+            panelRef={branchPanelRef}
             onHoverItem={(item) => setActiveBranch([groupedRootItem.id, item.id])}
             onSelectItem={(item) => {
               void selectBranchItem(item, [groupedRootItem.id, item.id])
             }}
           />
+        ) : groupedRootItem?.panel ? (
+          <div
+            ref={branchPanelRef}
+            className={PANEL_SURFACE_CLASS}
+            style={{
+              left: branchPosition.left,
+              top: branchPanelTop ?? branchPosition.top,
+              ...PANEL_SURFACE_STYLE,
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            {groupedRootItem.panel}
+          </div>
         ) : null}
         {groupedChildItem?.children?.length ? (
           <CascaderPanel
@@ -312,14 +367,7 @@ export function ContextCascader({ x, y, title, sections, layout = 'cascader', on
 
   return createPortal(
     <div className="fixed inset-0 z-[9999]" data-context-cascader-overlay="" onPointerDown={onClose} onContextMenu={onClose}>
-      {title ? (
-        <div
-          className="fixed z-[10001] rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-popover)]/98 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-[color:var(--color-muted-foreground)] shadow-[var(--shadow-popover)]"
-          style={{ left: rootPosition.left, top: Math.max(8, rootPosition.top - 28) }}
-        >
-          {title}
-        </div>
-      ) : null}
+      {title ? <TitleBadge title={title} hoverCard={titleHoverCard} left={rootPosition.left} top={Math.max(8, rootPosition.top - 28)} /> : null}
       <CascaderPanel
         left={rootPosition.left}
         top={rootPosition.top}

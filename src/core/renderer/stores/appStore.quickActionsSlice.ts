@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { QuickActionCreateInput, QuickActionUpdateInput, QuickActionView } from '../../shared/types'
 import type { AppState } from './appStore.types'
 
-export type QuickActionsSlice = Pick<AppState, 'quickActions' | 'quickActionsLoading' | 'loadQuickActions' | 'createQuickAction' | 'updateQuickAction' | 'deleteQuickAction' | 'executeQuickAction' | 'reorderQuickAction' | 'createQuickActionDesktopShortcut' | 'removeQuickActionDesktopShortcut'>
+export type QuickActionsSlice = Pick<AppState, 'quickActions' | 'quickActionsLoading' | 'loadQuickActions' | 'createQuickAction' | 'updateQuickAction' | 'deleteQuickAction' | 'executeQuickAction' | 'reorderQuickActionGroup' | 'createQuickActionDesktopShortcut' | 'removeQuickActionDesktopShortcut'>
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -67,33 +67,32 @@ export const createQuickActionsSlice: StateCreator<AppState, [], [], QuickAction
     }
     return removed
   },
-  reorderQuickAction: async (id: string, direction: 'up' | 'down') => {
-    const sorted = sortQuickActions(get().quickActions)
-    const index = sorted.findIndex((item) => item.id === id)
-    if (index < 0) return
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    // 跨组不移动：相邻判定限定在同组邻居内。
-    if (targetIndex < 0 || targetIndex >= sorted.length) return
-    const current = sorted[index]
-    const target = sorted[targetIndex]
-    if (current.group !== target.group) return
+  // 组内拖拽排序：本地先按目标序列落 0..n-1 的 order（与主进程 normalize 规则一致），
+  // 再仅对位置变化的项逐条 updateQuickAction 落盘；失败时重载回滚。
+  reorderQuickActionGroup: async (group, orderedIds) => {
+    const previous = sortQuickActions(get().quickActions).filter((item) => item.group === group)
+    // 集合不一致时直接重载，避免写入错误的 order。
+    if (orderedIds.length !== previous.length || previous.some((item) => !orderedIds.includes(item.id))) {
+      await get().loadQuickActions()
+      return
+    }
+    const rank = new Map(orderedIds.map((id, index) => [id, index]))
+    const changedIds = orderedIds.filter((id, index) => previous[index]?.id !== id)
+    if (changedIds.length === 0) return
 
-    // 本地先交换两条的 order 值，与随后落盘的主进程状态保持一致。
     set((state) => ({
       quickActions: sortQuickActions(
         state.quickActions.map((item) => {
-          if (item.id === id) return { ...item, order: target.order }
-          if (item.id === target.id) return { ...item, order: current.order }
-          return item
+          const nextOrder = item.group === group ? rank.get(item.id) : undefined
+          return nextOrder === undefined ? item : { ...item, order: nextOrder }
         }),
       ),
     }))
 
-    // 两条 order 互换走两次 update；service 每次均为整表读-改-写，最终状态一致，
-    // 磁盘中间态仅在两次写之间崩溃时可能出现（恢复后重排即可）。
     try {
-      await window.electronAPI.updateQuickAction(id, { order: target.order })
-      await window.electronAPI.updateQuickAction(target.id, { order: current.order })
+      for (const id of changedIds) {
+        await window.electronAPI.updateQuickAction(id, { order: rank.get(id) as number })
+      }
     } catch (error) {
       console.warn('[quickActions] reorder failed, reloading:', errorMessage(error))
       await get().loadQuickActions()

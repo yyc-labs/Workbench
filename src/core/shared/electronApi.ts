@@ -78,6 +78,7 @@ import type {
   MarkdownDocumentWriteResult,
   ProcessInfo,
   ProcessPortInventory,
+  ProjectFileArchiveEntry,
   ProjectFileAutoLoadDecision,
   ProjectFileContentSearchOptions,
   ProjectFileContentSearchResponse,
@@ -273,6 +274,8 @@ export interface ProjectFileElectronApi {
   zipProjectFolder: (projectPath: string, folderRelativePath: string, zipName: string) => Promise<ProjectFileZipResult>
   copyProjectFolderZipToClipboard: (projectPath: string, folderRelativePath: string, zipName: string) => Promise<{ name: string; size: number }>
   copyProjectFileToClipboard: (projectPath: string, fileRelativePath: string) => Promise<{ name: string; size: number }>
+  copyProjectEntriesToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[]) => Promise<{ name: string; count: number }>
+  copyProjectEntriesZipToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[], zipName?: string) => Promise<{ name: string; size: number }>
 }
 
 export interface MarkdownDocumentElectronApi {

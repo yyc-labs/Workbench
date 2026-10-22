@@ -3,7 +3,7 @@ import { useI18n } from '../../i18n'
 
 /**
  * 设置页「共享链接库」：内嵌完整管理（组/链接/绑定均可编辑）。
- * 行内不做拖拽排序——页面滚动容器会干扰 dnd-kit 拖拽，排序统一通过「排序」按钮在弹窗中进行。
+ * 链接排序采用与工作区分类面板一致的行内原位位移拖拽（无浮层，不受页面滚动影响）。
  */
 export function SettingsSharedDocLinkLibraryPanel() {
   const { t } = useI18n()

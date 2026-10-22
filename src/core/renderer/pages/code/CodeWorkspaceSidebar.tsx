@@ -1,16 +1,18 @@
-import type { Dispatch, Ref, SetStateAction } from 'react'
-import { memo } from 'react'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import { ChevronDown, ChevronUp, FileSearch, FolderSearch, LocateFixed, RefreshCw, Search } from 'lucide-react'
-import { useI18n } from '../../i18n'
-import { DebouncedSearchInput } from './DebouncedSearchInput'
-import { CodeContentSearchTree, type CodeContentSearchTreeHandle } from './CodeContentSearchTree'
-import { CodeFileTree } from './CodeFileTree'
+import type { Dispatch, Ref, SetStateAction } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import type { ProjectFileContentSearchResponse, ProjectFileNodeKind } from '../../../shared/types'
-import { contentSearchScopeKey } from './code.contentSearchScope'
-import { type ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
+import { useI18n } from '../../i18n'
+import { CodeFileTree } from './CodeFileTree'
 import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
+import { ContentSearchHoverCard } from './ContentSearchHoverCard'
+import { contentSearchScopeKey } from './code.contentSearchScope'
+import { buildContentSearchTreeData } from './code.contentSearchTree'
+import type { CodeTreeContextMenuSnapshot } from './code.treeSelection'
 import type { FileSearchLineTarget, FileTreeState } from './code.types'
+import { DebouncedSearchInput } from './DebouncedSearchInput'
+import type { ContentSearchScopePreset } from './useCodeWorkspaceExplorerState'
 
 type CodeWorkspaceSidebarProps = {
   activeContentSearchLocation: {
@@ -21,7 +23,6 @@ type CodeWorkspaceSidebarProps = {
   activeContentSearchScopeKey: string
   activeContentSearchScopeLabel: string
   activeRelativePath: string | null
-  canToggleContentSearchTree: boolean
   contentSearchCaseSensitive: boolean
   contentSearchError: string | null
   contentSearchInputRef: Ref<HTMLInputElement>
@@ -31,8 +32,6 @@ type CodeWorkspaceSidebarProps = {
   contentSearchScopeInput: string
   contentSearchScopePresets: ContentSearchScopePreset[]
   contentSearchScopeSummary: string
-  contentSearchToggleLabel: string
-  contentSearchTreeRef: Ref<CodeContentSearchTreeHandle>
   expandedDirectories: Set<string>
   fileSearchError: string | null
   fileSearchInputRef: Ref<HTMLInputElement>
@@ -52,8 +51,7 @@ type CodeWorkspaceSidebarProps = {
   onCopyTreeNodeRelativePathWithoutSlashes: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onCopyTreeNodePathWithLineNumber?: (relativePath: string, lineNumber: number) => void | Promise<void>
   onCopyTreeNodeToClipboard?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
-  onZipTreeNodeFolder?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
-  onZipTreeNodeFolderAs?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
+  onZipTreeNodeFolder?: (relativePath: string, nodeName: string, zipName?: string) => void | Promise<void>
   onCopyTreeNodeZipToClipboard?: (relativePath: string, nodeName: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onRunTreeNodeScriptInSystemTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
   onRunTreeNodeScriptInEmbeddedTerminal?: (relativePath: string, nodeKind: ProjectFileNodeKind) => void | Promise<void>
@@ -69,23 +67,44 @@ type CodeWorkspaceSidebarProps = {
   onSetContentSearchCaseSensitive: Dispatch<SetStateAction<boolean>>
   onSetContentSearchScopeInput: Dispatch<SetStateAction<string>>
   onSetContentSearchAdvancedOpen: Dispatch<SetStateAction<boolean>>
-  onToggleContentSearchTree: () => void
   onToggleTreeDirectory: (relativePath: string) => void
   onLocateFileInTree: (relativePath: string) => void | Promise<void>
   tree: FileTreeState
   treeNodesForView: FileTreeState['nodes']
   viewMode: 'files' | 'search'
-  autoCollapseMatchThreshold?: number
+  /** 16：选择上下文标识（项目 + 模式 + 解析后查询），变化时树内清空选择。 */
+  selectionScopeKey: string
+  /** 16：项目根路径，供右键快照与批量复制绝对路径使用。 */
+  projectPath: string
+  /** 16：批量复制三项（快照已由 CodeFileTree 复核）。 */
+  onCopySelectedRelativePaths: (snapshot: CodeTreeContextMenuSnapshot) => void | Promise<void>
+  onCopySelectedAbsolutePaths: (snapshot: CodeTreeContextMenuSnapshot) => void | Promise<void>
+  onCopySelectedNames: (snapshot: CodeTreeContextMenuSnapshot) => void | Promise<void>
+  /** 17：批量复制所选项文件（全 file 快照；菜单条件渲染）。 */
+  onCopySelectedFiles: (snapshot: CodeTreeContextMenuSnapshot) => void | Promise<void>
+  /** 17：批量复制所选项 zip 到剪贴板（混合打包；仅 Windows 宿主渲染；zipName 来自二级命名面板，留空走主进程默认名）。 */
+  onCopySelectedZipToClipboard: (snapshot: CodeTreeContextMenuSnapshot, zipName?: string) => void | Promise<void>
 }
 
 const FILE_SEARCH_DEBOUNCE_MS = 180
+
+interface SelectionCountHintProps {
+  count: number
+}
+
+/** 多选计数（文件视图与全局搜索共用）：只读展示；所选项明细走右键菜单徽标的悬浮卡片。 */
+function SelectionCountHint({ count }: SelectionCountHintProps) {
+  const { t } = useI18n()
+  if (count <= 1) return null
+
+  return <span className="code-tree-selection-count">{t('codeFileTree.selectedCount', { count })}</span>
+}
 
 export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   activeContentSearchLocation,
   activeContentSearchScopeKey,
   activeContentSearchScopeLabel,
   activeRelativePath,
-  canToggleContentSearchTree,
   contentSearchCaseSensitive,
   contentSearchError,
   contentSearchInputRef,
@@ -95,8 +114,6 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   contentSearchScopeInput,
   contentSearchScopePresets,
   contentSearchScopeSummary,
-  contentSearchToggleLabel,
-  contentSearchTreeRef,
   expandedDirectories,
   fileSearchError,
   fileSearchInputRef,
@@ -117,7 +134,6 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   onCopyTreeNodePathWithLineNumber,
   onCopyTreeNodeToClipboard,
   onZipTreeNodeFolder,
-  onZipTreeNodeFolderAs,
   onCopyTreeNodeZipToClipboard,
   onRunTreeNodeScriptInSystemTerminal,
   onRunTreeNodeScriptInEmbeddedTerminal,
@@ -133,16 +149,38 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   onSetContentSearchCaseSensitive,
   onSetContentSearchScopeInput,
   onSetContentSearchAdvancedOpen,
-  onToggleContentSearchTree,
   onToggleTreeDirectory,
   onLocateFileInTree,
   tree,
   treeNodesForView,
   viewMode,
-  autoCollapseMatchThreshold = 10,
+  selectionScopeKey,
+  projectPath,
+  onCopySelectedRelativePaths,
+  onCopySelectedAbsolutePaths,
+  onCopySelectedNames,
+  onCopySelectedFiles,
+  onCopySelectedZipToClipboard,
 }: CodeWorkspaceSidebarProps) {
   const { t } = useI18n()
   const isFileTreeRefreshing = tree.status === 'loading' || tree.isRefreshingRoot
+  // 多选数量指示器（§4.2）：只读展示，全部由 CodeFileTree 的 onSelect 通知驱动，不回写树。
+  const [selectedCount, setSelectedCount] = useState(0)
+  const handleSelectedCountChange = useCallback((count: number) => {
+    setSelectedCount((prev) => (prev === count ? prev : count))
+  }, [])
+  // 全局搜索结果目录树：共同祖先为根、层级挂载命中文件；直接复用 CodeFileTree 的样式与交互。
+  const contentSearchTreeNodes = useMemo(() => buildContentSearchTreeData(contentSearchResult.files), [contentSearchResult.files])
+  // 点击命中文件行 = 打开该文件并跳到首个命中。
+  const handleSelectContentSearchFile = useCallback(
+    (relativePath: string) => {
+      const file = contentSearchResult.files.find((item) => item.relativePath === relativePath)
+      const firstMatch = file?.matches[0]
+      if (!file || !firstMatch) return
+      onOpenContentSearchResult(file.relativePath, firstMatch.lineNumber, firstMatch.column)
+    },
+    [contentSearchResult.files, onOpenContentSearchResult],
+  )
 
   if (viewMode === 'files') {
     return (
@@ -159,6 +197,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
               disabled={tree.autoLoadBlocked}
             />
           </div>
+          <SelectionCountHint count={selectedCount} />
           <button
             type="button"
             className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)] disabled:opacity-45"
@@ -228,12 +267,19 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             onCopyNodeRelativePathWithoutSlashes={onCopyTreeNodeRelativePathWithoutSlashes}
             onCopyNodeToClipboard={onCopyTreeNodeToClipboard}
             onZipNodeFolder={onZipTreeNodeFolder}
-            onZipNodeFolderAs={onZipTreeNodeFolderAs}
             onCopyNodeZipToClipboard={onCopyTreeNodeZipToClipboard}
             onRunNodeScriptInSystemTerminal={onRunTreeNodeScriptInSystemTerminal}
             onRunNodeScriptInEmbeddedTerminal={onRunTreeNodeScriptInEmbeddedTerminal}
             onResolveNodeRunnableScript={onResolveTreeNodeRunnableScript}
             onFindNodeFilesByName={onFindTreeNodeFilesByName}
+            selectionScopeKey={selectionScopeKey}
+            projectPath={projectPath}
+            onSelectedCountChange={handleSelectedCountChange}
+            onCopySelectedRelativePaths={onCopySelectedRelativePaths}
+            onCopySelectedAbsolutePaths={onCopySelectedAbsolutePaths}
+            onCopySelectedNames={onCopySelectedNames}
+            onCopySelectedFiles={onCopySelectedFiles}
+            onCopySelectedZipToClipboard={onCopySelectedZipToClipboard}
           />
         )}
       </aside>
@@ -299,9 +345,6 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             <span>{t('codeWorkspace.advancedScope')}</span>
             {hasContentSearchScope && <span className="code-search-inline-toggle-value">{contentSearchScopeSummary}</span>}
           </button>
-          <button type="button" className="code-search-meta-action code-search-toggle-action" onClick={onToggleContentSearchTree} disabled={!canToggleContentSearchTree} aria-disabled={!canToggleContentSearchTree}>
-            {contentSearchToggleLabel}
-          </button>
         </div>
         {isContentSearchAdvancedOpen && (
           <div className="code-search-advanced-panel">
@@ -333,6 +376,7 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
                 {contentSearchResult.limited && <span className="code-search-main-limited">{t('codeWorkspace.limited')}</span>}
               </span>
             </div>
+            <SelectionCountHint count={selectedCount} />
           </div>
         )}
       </div>
@@ -348,12 +392,10 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
       ) : contentSearchResult.files.length === 0 ? (
         <div className="code-panel-empty text-xs text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.noMatchingText')}</div>
       ) : (
-        <CodeContentSearchTree
-          ref={contentSearchTreeRef}
-          files={contentSearchResult.files}
-          activeLocation={activeContentSearchLocation}
-          autoCollapseMatchThreshold={autoCollapseMatchThreshold}
-          onOpenMatch={onOpenContentSearchResult}
+        <CodeFileTree
+          nodes={contentSearchTreeNodes}
+          activeRelativePath={activeRelativePath}
+          onSelectFile={handleSelectContentSearchFile}
           onOpenNodeFolder={onOpenTreeNodeFolder}
           onOpenNodeTerminal={onOpenTreeNodeTerminal}
           onSearchInFolder={onSearchInTreeNodeFolder}
@@ -363,12 +405,20 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
           onCopyNodePathWithLineNumber={onCopyTreeNodePathWithLineNumber}
           onCopyNodeToClipboard={onCopyTreeNodeToClipboard}
           onZipNodeFolder={onZipTreeNodeFolder}
-          onZipNodeFolderAs={onZipTreeNodeFolderAs}
           onCopyNodeZipToClipboard={onCopyTreeNodeZipToClipboard}
           onRunNodeScriptInSystemTerminal={onRunTreeNodeScriptInSystemTerminal}
           onRunNodeScriptInEmbeddedTerminal={onRunTreeNodeScriptInEmbeddedTerminal}
           onResolveNodeRunnableScript={onResolveTreeNodeRunnableScript}
           onFindNodeFilesByName={onFindTreeNodeFilesByName}
+          selectionScopeKey={selectionScopeKey}
+          projectPath={projectPath}
+          onSelectedCountChange={handleSelectedCountChange}
+          onCopySelectedRelativePaths={onCopySelectedRelativePaths}
+          onCopySelectedAbsolutePaths={onCopySelectedAbsolutePaths}
+          onCopySelectedNames={onCopySelectedNames}
+          onCopySelectedFiles={onCopySelectedFiles}
+          onCopySelectedZipToClipboard={onCopySelectedZipToClipboard}
+          fileHoverCard={(node, openMatchContextMenu) => <ContentSearchHoverCard node={node} activeLocation={activeContentSearchLocation} onOpenMatch={onOpenContentSearchResult} onMatchContextMenu={openMatchContextMenu} />}
         />
       )}
     </aside>

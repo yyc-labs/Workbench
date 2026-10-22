@@ -116,9 +116,11 @@ export interface TooltipProps {
   maxWidth?: number
   className?: string
   contentClassName?: string
+  /** 可选：定位锚点元素（触发器与锚点分离时使用，如 fixed 定位的徽标；缺省用触发器自身）。 */
+  anchorRef?: React.RefObject<HTMLElement | null>
 }
 
-export function Tooltip({ content, children, disabled = false, side = 'top', align = 'center', offset = 8, placementMode = 'anchor', pointerOffset = DEFAULT_POINTER_OFFSET, interactive = true, delayMs = 180, hideDelayMs = 90, maxWidth = 460, className, contentClassName }: TooltipProps) {
+export function Tooltip({ content, children, disabled = false, side = 'top', align = 'center', offset = 8, placementMode = 'anchor', pointerOffset = DEFAULT_POINTER_OFFSET, interactive = true, delayMs = 180, hideDelayMs = 90, maxWidth = 460, className, contentClassName, anchorRef }: TooltipProps) {
   const triggerRef = React.useRef<HTMLSpanElement | null>(null)
   const tooltipRef = React.useRef<HTMLDivElement | null>(null)
   const pointerRef = React.useRef<{ x: number; y: number } | null>(null)
@@ -157,11 +159,12 @@ export function Tooltip({ content, children, disabled = false, side = 'top', ali
         return
       }
     }
-    if (!triggerRef.current) return
-    const triggerRect = triggerRef.current.getBoundingClientRect()
+    const anchor = anchorRef?.current ?? triggerRef.current
+    if (!anchor) return
+    const triggerRect = anchor.getBoundingClientRect()
     const next = resolveTooltipPosition(triggerRect, tooltipRect, side, align, offset)
     setPosition((prev) => (isSamePosition(prev, next) ? prev : next))
-  }, [align, offset, placementMode, pointerOffset, side])
+  }, [align, anchorRef, offset, placementMode, pointerOffset, side])
 
   const requestOpen = React.useCallback(() => {
     if (!enabled) return

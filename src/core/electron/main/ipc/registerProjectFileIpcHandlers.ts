@@ -1,6 +1,9 @@
 import { ipcMain } from 'electron'
+import type { ProjectFileArchiveEntry, ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../../shared/types'
 import { IPC } from '../ipc'
 import {
+  copyProjectEntriesToClipboard,
+  copyProjectEntriesZipToClipboard,
   copyProjectFileToClipboard,
   copyProjectFolderZipToClipboard,
   createProjectFolderZip,
@@ -15,7 +18,6 @@ import {
   writeProjectFile,
   writeProjectImageFile,
 } from '../project-file-service'
-import type { ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../../shared/types'
 import { withProjectFileErrors } from './registerIpcHandlers.shared'
 
 export function registerProjectFileIpcHandlers(): void {
@@ -69,5 +71,13 @@ export function registerProjectFileIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROJECT_FILE_CLIPBOARD, async (_event, projectPath: string, fileRelativePath: string) => {
     return withProjectFileErrors(() => copyProjectFileToClipboard(projectPath, fileRelativePath))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_CLIPBOARD_ENTRIES, async (_event, projectPath: string, entries: ProjectFileArchiveEntry[]) => {
+    return withProjectFileErrors(() => copyProjectEntriesToClipboard(projectPath, entries))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_ZIP_ENTRIES_CLIPBOARD, async (_event, projectPath: string, entries: ProjectFileArchiveEntry[], zipName?: string) => {
+    return withProjectFileErrors(() => copyProjectEntriesZipToClipboard(projectPath, entries, zipName))
   })
 }

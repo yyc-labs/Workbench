@@ -1,31 +1,34 @@
-import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { unlink } from 'node:fs/promises'
-import { promisify } from 'node:util'
-import { app } from 'electron'
+import { existsSync } from 'node:fs'
+import { open, unlink } from 'node:fs/promises'
+import { app, shell } from 'electron'
 import type { QuickAction } from '../../../shared/types'
 import { createQuickActionLinkFile } from './quickActionLinkFile'
 
-const execFileAsync = promisify(execFile)
-const POWERSHELL_TIMEOUT_MS = 20_000
-
 /**
- * Wires the quick-action desktop shortcut capability to the OS: PowerShell
- * WScript.Shell for writing `.lnk` files, direct fs for reading/removing.
- * Desktop directory resolution goes through Electron (OneDrive-aware).
+ * Wires the quick-action desktop shortcut capability to the OS via the
+ * Electron shell API (writeShortcutLink / readShortcutLink); fs is used only
+ * for atomic candidate reservation and removal. Desktop directory resolution
+ * goes through Electron (OneDrive-aware).
  */
 export function createQuickActionDesktopShortcuts() {
   const linkFile = createQuickActionLinkFile({
-    runPowerShell: async (script) => {
-      await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-        windowsHide: true,
-        timeout: POWERSHELL_TIMEOUT_MS,
-      })
+    writeShortcutLink: (shortcutPath, operation, details) => shell.writeShortcutLink(shortcutPath, operation, details),
+    readShortcutLink: (shortcutPath) => shell.readShortcutLink(shortcutPath),
+    reservePath: async (path) => {
+      // 'wx' = create-exclusive: atomic reservation, EEXIST when the name is taken.
+      const handle = await open(path, 'wx')
+      return async () => {
+        await handle.close()
+      }
     },
-    readFileSync: (target) => readFileSync(target),
     existsSync: (target) => existsSync(target),
     unlink: (target) => unlink(target),
   })
+
+  // Stable, writable working directory for launched processes. The quick-action
+  // executors all pass explicit cwd/project paths, so a neutral default (not
+  // the desktop) keeps child processes independent of the shortcut's location.
+  const workingDirectory = app.getPath('userData')
 
   return {
     createShortcutLink: (action: QuickAction) =>
@@ -33,8 +36,16 @@ export function createQuickActionDesktopShortcuts() {
         action,
         exePath: process.execPath,
         desktopDir: app.getPath('desktop'),
+        workingDirectory,
+      }),
+    rewriteShortcutLink: (action: QuickAction, shortcutPath: string) =>
+      linkFile.rewriteShortcutLink({
+        action,
+        exePath: process.execPath,
+        shortcutPath,
+        workingDirectory,
       }),
     removeShortcutLink: (shortcutPath: string) => linkFile.removeShortcutLink(shortcutPath),
-    checkShortcutState: (shortcutPath: string, exePath: string) => linkFile.checkShortcutState(shortcutPath, exePath),
+    checkShortcutState: (shortcutPath: string, expected: { quickActionId: string }) => linkFile.checkShortcutState(shortcutPath, { exePath: process.execPath, quickActionId: expected.quickActionId }),
   }
 }

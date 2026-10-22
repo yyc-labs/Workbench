@@ -3,159 +3,177 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { createQuickActionLinkFile, readShortcutTargetFromBuffer } = loadTsModule('src/core/electron/main/quick-actions/quickActionLinkFile.ts')
+const { createQuickActionLinkFile, quickActionArgs } = loadTsModule('src/core/electron/main/quick-actions/quickActionLinkFile.ts')
 
 const EXE_PATH = 'C:/Program Files/Workbench/Workbench.exe'
 const DESKTOP_DIR = 'C:/Users/me/Desktop'
 const SHORTCUT_PATH = join(DESKTOP_DIR, 'Open app.lnk')
+const WORKING_DIR = 'C:/Users/me/AppData/Roaming/Workbench'
 
-/** Builds a minimal shell-link buffer with a LinkInfo local base path. */
-function buildLinkBuffer(targetPath, { unicode = false, hasTargetIdList = false } = {}) {
-  const headerSize = 0x4c
-  const linkInfoStart = headerSize
-  const idListSize = hasTargetIdList ? 2 + 20 + 2 : 0 // one 20-byte item + terminator
-  const linkInfoOffset = linkInfoStart + idListSize
-
-  const targetBuffer = unicode ? Buffer.concat([Buffer.from(targetPath, 'utf16le'), Buffer.from([0, 0])]) : Buffer.concat([Buffer.from(targetPath, 'latin1'), Buffer.from([0])])
-  const volumeIdSize = 0x10
-  const linkInfoHeaderSize = 0x1c
-  const linkInfoSize = linkInfoHeaderSize + volumeIdSize + targetBuffer.length + 1 // + CommonPathSuffix null
-
-  const buffer = Buffer.alloc(linkInfoOffset + linkInfoSize)
-  buffer.writeUInt32LE(headerSize, 0)
-  buffer.write('0102140000000000c000000000000046', 4, 'hex')
-  const flags = 0x02 | (unicode ? 0x80 : 0) | (hasTargetIdList ? 0x01 : 0)
-  buffer.writeUInt32LE(flags, 0x14)
-  buffer.writeUInt32LE(0x20, 0x18)
-
-  let cursor = linkInfoStart
-  if (hasTargetIdList) {
-    buffer.writeUInt16LE(20, cursor)
-    cursor += 2
-    buffer.fill(0x1f, cursor, cursor + 20)
-    cursor += 20
-    buffer.writeUInt16LE(0, cursor)
-    cursor += 2
-  }
-
-  buffer.writeUInt32LE(linkInfoSize, linkInfoOffset)
-  buffer.writeUInt32LE(linkInfoHeaderSize, linkInfoOffset + 4)
-  buffer.writeUInt32LE(0x01, linkInfoOffset + 8)
-  buffer.writeUInt32LE(linkInfoHeaderSize, linkInfoOffset + 12)
-  buffer.writeUInt32LE(linkInfoHeaderSize + volumeIdSize, linkInfoOffset + 16)
-  buffer.writeUInt32LE(0, linkInfoOffset + 20)
-  buffer.writeUInt32LE(linkInfoSize - 1, linkInfoOffset + 24)
-  buffer.writeUInt32LE(volumeIdSize, linkInfoOffset + linkInfoHeaderSize)
-  buffer.writeUInt32LE(3, linkInfoOffset + linkInfoHeaderSize + 4)
-  buffer.writeUInt32LE(0x12345678, linkInfoOffset + linkInfoHeaderSize + 8)
-  buffer.writeUInt32LE(0x10, linkInfoOffset + linkInfoHeaderSize + 12)
-  targetBuffer.copy(buffer, linkInfoOffset + linkInfoHeaderSize + volumeIdSize)
-  buffer.writeUInt8(0, linkInfoOffset + linkInfoSize - 1)
-  return buffer
+const ACTION = {
+  id: '11111111-1111-4111-8111-111111111111',
+  name: 'Open app',
+  action: { type: 'open-project', projectPath: 'D:/repos/app' },
+  icon: 'folder-open',
+  group: 'project',
+  enabled: true,
+  order: 0,
+  createdAt: 0,
+  updatedAt: 0,
 }
 
-test('reads the local target from an ANSI shell link', () => {
-  assert.equal(readShortcutTargetFromBuffer(buildLinkBuffer(EXE_PATH)), EXE_PATH)
-})
-
-test('reads the local target from a Unicode shell link', () => {
-  assert.equal(readShortcutTargetFromBuffer(buildLinkBuffer(EXE_PATH, { unicode: true })), EXE_PATH)
-})
-
-test('reads the local target past a link target ID list', () => {
-  assert.equal(readShortcutTargetFromBuffer(buildLinkBuffer(EXE_PATH, { hasTargetIdList: true })), EXE_PATH)
-})
-
-test('returns null for buffers that are not shell links', () => {
-  assert.equal(readShortcutTargetFromBuffer(Buffer.alloc(10)), null)
-  const bad = buildLinkBuffer(EXE_PATH)
-  bad.writeUInt32LE(0x10, 0) // headerSize too small
-  assert.equal(readShortcutTargetFromBuffer(bad), null)
-  const noLinkInfo = buildLinkBuffer(EXE_PATH)
-  noLinkInfo.writeUInt32LE(0, 0x14) // clear flags: no LinkInfo
-  assert.equal(readShortcutTargetFromBuffer(noLinkInfo), null)
-})
-
+/**
+ * In-memory stand-in for the OS: files map path -> details (or 'CORRUPT').
+ * reservePath simulates fs.open 'wx' semantics; taken names throw EEXIST.
+ */
 function setup(overrides = {}) {
-  const files = new Map(overrides.files ? Object.entries(overrides.files) : [])
-  const scripts = []
+  const files = new Map(Object.entries(overrides.files ?? {}))
+  const reserved = new Set()
+  const writes = []
   const unlinked = []
+
   const linkFile = createQuickActionLinkFile({
-    runPowerShell: async (script) => {
-      scripts.push(script)
-      if (overrides.powerShellError) throw overrides.powerShellError
-      if (overrides.powerShellWritesFile === false) return
-      // Simulate WScript.Shell writing the .lnk file on Save().
-      const match = script.match(/CreateShortcut\('([^']*)'\)/)
-      if (match) {
-        const target = match[1].replace(/''/g, "'")
-        files.set(target, buildLinkBuffer(EXE_PATH))
+    writeShortcutLink: (shortcutPath, operation, details) => {
+      writes.push({ shortcutPath, operation, details })
+      if (overrides.writeFails) return false
+      // writeWrongTarget simulates the OS persisting a drifted target.
+      files.set(shortcutPath, overrides.writeWrongTarget ? { ...details, target: overrides.writeWrongTarget } : { ...details })
+      return true
+    },
+    readShortcutLink: (shortcutPath) => {
+      if (overrides.readThrows) throw new Error('read failed')
+      const details = files.get(shortcutPath)
+      if (!details || details === 'CORRUPT' || details === 'RESERVED_EMPTY') throw new Error(`unreadable: ${shortcutPath}`)
+      return details
+    },
+    reservePath: async (path) => {
+      if (reserved.has(path) || files.has(path)) {
+        const error = new Error(`EEXIST: ${path}`)
+        error.code = 'EEXIST'
+        throw error
+      }
+      reserved.add(path)
+      // The reservation creates the file on disk (empty) until the shell write lands.
+      files.set(path, 'RESERVED_EMPTY')
+      return async () => {
+        reserved.delete(path)
       }
     },
-    readFileSync: (target) => {
-      const file = files.get(target)
-      if (!file) {
-        throw new Error(`ENOENT: ${target}`)
+    existsSync: (path) => files.has(path),
+    unlink: async (path) => {
+      if (!files.has(path)) {
+        const error = new Error(`ENOENT: ${path}`)
+        error.code = 'ENOENT'
+        throw error
       }
-      return file
-    },
-    existsSync: (target) => files.has(target),
-    unlink: async (target) => {
-      if (!files.has(target)) throw new Error(`ENOENT: ${target}`)
-      unlinked.push(target)
-      files.delete(target)
+      unlinked.push(path)
+      files.delete(path)
     },
   })
-  return { linkFile, files, scripts, unlinked }
+  return { linkFile, files, reserved, writes, unlinked }
 }
 
-const ACTION = { id: '11111111-1111-4111-8111-111111111111', name: 'Open app', action: { type: 'open-project', projectPath: 'D:/repos/app' }, icon: 'folder-open', group: 'project', enabled: true, order: 0, createdAt: 0, updatedAt: 0 }
+const createOptions = { action: ACTION, exePath: EXE_PATH, desktopDir: DESKTOP_DIR, workingDirectory: WORKING_DIR }
 
-test('createShortcutLink writes the script and returns the path', async () => {
-  const { linkFile, scripts } = setup()
-  const shortcutPath = await linkFile.createShortcutLink({ action: ACTION, exePath: EXE_PATH, desktopDir: DESKTOP_DIR })
+test('quickActionArgs builds the launch argument', () => {
+  assert.equal(quickActionArgs(ACTION.id), `--quick-action=${ACTION.id}`)
+})
+
+test('createShortcutLink writes the details and returns the candidate path', async () => {
+  const { linkFile, writes } = setup()
+  const shortcutPath = await linkFile.createShortcutLink(createOptions)
   assert.equal(shortcutPath, SHORTCUT_PATH)
-  assert.equal(scripts.length, 1)
-  assert.match(scripts[0], /--quick-action=11111111-1111-4111-8111-111111111111/)
-  assert.match(scripts[0], /CreateShortcut/)
-})
-
-test('createShortcutLink substitutes every placeholder, IconLocation included', async () => {
-  const { linkFile, scripts } = setup()
-  await linkFile.createShortcutLink({ action: ACTION, exePath: EXE_PATH, desktopDir: DESKTOP_DIR })
-  assert.doesNotMatch(scripts[0], /__[A-Z_]+__/)
-  assert.match(scripts[0], /\$shortcut\.IconLocation = 'C:\/Program Files\/Workbench\/Workbench\.exe,0'/)
-})
-
-test('createShortcutLink appends a numeric suffix on name conflicts', async () => {
-  const { linkFile } = setup({
-    files: Object.fromEntries([
-      [SHORTCUT_PATH, buildLinkBuffer(EXE_PATH)],
-      [join(DESKTOP_DIR, 'Open app (2).lnk'), buildLinkBuffer(EXE_PATH)],
-    ]),
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].operation, 'create')
+  assert.deepEqual(writes[0].details, {
+    target: EXE_PATH,
+    args: quickActionArgs(ACTION.id),
+    cwd: WORKING_DIR,
+    description: ACTION.name,
+    icon: EXE_PATH,
+    iconIndex: 0,
   })
-  const shortcutPath = await linkFile.createShortcutLink({ action: ACTION, exePath: EXE_PATH, desktopDir: DESKTOP_DIR })
+})
+
+test('createShortcutLink picks the next free candidate on name conflicts', async () => {
+  const { linkFile } = setup({
+    files: {
+      [SHORTCUT_PATH]: { target: EXE_PATH },
+      [join(DESKTOP_DIR, 'Open app (2).lnk')]: { target: EXE_PATH },
+    },
+  })
+  const shortcutPath = await linkFile.createShortcutLink(createOptions)
   assert.equal(shortcutPath, join(DESKTOP_DIR, 'Open app (3).lnk'))
 })
 
-test('createShortcutLink throws when the file did not appear', async () => {
-  const { linkFile } = setup({ powerShellWritesFile: false })
-  await assert.rejects(() => linkFile.createShortcutLink({ action: ACTION, exePath: EXE_PATH, desktopDir: DESKTOP_DIR }), /was not created/)
+test('createShortcutLink cleans up the reserved file when the OS write fails', async () => {
+  const { linkFile, files, unlinked } = setup({ writeFails: true })
+  await assert.rejects(() => linkFile.createShortcutLink(createOptions), /Failed to write shortcut file/)
+  assert.equal(files.size, 0)
+  assert.deepEqual(unlinked, [SHORTCUT_PATH])
 })
 
-test('checkShortcutState distinguishes valid / missing / drifted', () => {
+test('createShortcutLink cleans up when read-back verification fails', async () => {
+  // The OS writes a drifted target; verification must reject and clean up.
+  const { linkFile, files, unlinked } = setup({ writeWrongTarget: 'D:/somewhere/else.exe' })
+  await assert.rejects(() => linkFile.createShortcutLink(createOptions), /Shortcut target verification failed/)
+  assert.equal(files.size, 0)
+  assert.deepEqual(unlinked, [SHORTCUT_PATH])
+})
+
+test('createShortcutLink cleans up when read-back is unreadable', async () => {
+  const { linkFile, files } = setup({ readThrows: true })
+  await assert.rejects(() => linkFile.createShortcutLink(createOptions), /read failed/)
+  assert.equal(files.size, 0)
+})
+
+test('rewriteShortcutLink writes at the recorded path and verifies', async () => {
+  const { linkFile, writes } = setup({
+    files: { [SHORTCUT_PATH]: { target: 'D:/old/Workbench.exe', args: quickActionArgs(ACTION.id) } },
+  })
+  const result = await linkFile.rewriteShortcutLink({ action: ACTION, exePath: EXE_PATH, shortcutPath: SHORTCUT_PATH, workingDirectory: WORKING_DIR })
+  assert.equal(result, SHORTCUT_PATH)
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0].shortcutPath, SHORTCUT_PATH)
+})
+
+test('rewriteShortcutLink failure leaves the pre-existing file untouched', async () => {
+  const { linkFile, files, unlinked } = setup({
+    files: { [SHORTCUT_PATH]: { target: 'D:/old/Workbench.exe', args: quickActionArgs(ACTION.id) } },
+    writeFails: true,
+  })
+  await assert.rejects(() => linkFile.rewriteShortcutLink({ action: ACTION, exePath: EXE_PATH, shortcutPath: SHORTCUT_PATH, workingDirectory: WORKING_DIR }), /Failed to rewrite/)
+  assert.ok(files.has(SHORTCUT_PATH))
+  assert.deepEqual(unlinked, [])
+})
+
+test('checkShortcutState: valid when exe and action id match (case-insensitive path)', () => {
+  const { linkFile } = setup({ files: { [SHORTCUT_PATH]: { target: 'c:/program files/workbench/workbench.exe', args: quickActionArgs(ACTION.id) } } })
+  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, { exePath: EXE_PATH, quickActionId: ACTION.id }), 'valid')
+})
+
+test('checkShortcutState: missing when the file is gone', () => {
   const { linkFile } = setup()
-  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, EXE_PATH), 'missing')
+  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, { exePath: EXE_PATH, quickActionId: ACTION.id }), 'missing')
+})
 
-  const withValid = setup({ files: Object.fromEntries([[SHORTCUT_PATH, buildLinkBuffer(EXE_PATH)]]) })
-  assert.equal(withValid.linkFile.checkShortcutState(SHORTCUT_PATH, EXE_PATH), 'valid')
+test('checkShortcutState: drifted when the target moved', () => {
+  const { linkFile } = setup({ files: { [SHORTCUT_PATH]: { target: 'D:/old/Workbench.exe', args: quickActionArgs(ACTION.id) } } })
+  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, { exePath: EXE_PATH, quickActionId: ACTION.id }), 'drifted')
+})
 
-  const drifted = setup({ files: Object.fromEntries([[SHORTCUT_PATH, buildLinkBuffer('D:/old/Workbench.exe')]]) })
-  assert.equal(drifted.linkFile.checkShortcutState(SHORTCUT_PATH, EXE_PATH), 'drifted')
+test('checkShortcutState: drifted when the action id differs', () => {
+  const { linkFile } = setup({ files: { [SHORTCUT_PATH]: { target: EXE_PATH, args: '--quick-action=other' } } })
+  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, { exePath: EXE_PATH, quickActionId: ACTION.id }), 'drifted')
+})
+
+test('checkShortcutState: unreadable when the read throws', () => {
+  const { linkFile } = setup({ files: { [SHORTCUT_PATH]: 'CORRUPT' } })
+  assert.equal(linkFile.checkShortcutState(SHORTCUT_PATH, { exePath: EXE_PATH, quickActionId: ACTION.id }), 'unreadable')
 })
 
 test('removeShortcutLink unlinks existing files and reports missing ones', async () => {
-  const existing = setup({ files: Object.fromEntries([[SHORTCUT_PATH, buildLinkBuffer(EXE_PATH)]]) })
+  const existing = setup({ files: { [SHORTCUT_PATH]: { target: EXE_PATH } } })
   assert.equal(await existing.linkFile.removeShortcutLink(SHORTCUT_PATH), true)
   assert.deepEqual(existing.unlinked, [SHORTCUT_PATH])
 

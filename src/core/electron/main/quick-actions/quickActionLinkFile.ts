@@ -5,146 +5,153 @@ import { sanitizeQuickActionName } from '../config/config-quick-actions'
 /**
  * Desktop `.lnk` shortcut file operations for quick actions.
  *
- * Writing goes through the WScript.Shell COM (present on every Windows
- * install) instead of hand-rolling the binary Shell Link format — no new
- * dependencies, correct icons/arguments for free. Reading parses the format
- * synchronously so shortcut state checks stay cheap and side-effect free.
- * All side effects are injected so the module stays unit-testable.
+ * All reads/writes go through the Electron shell API (`writeShortcutLink` /
+ * `readShortcutLink`) injected via deps — no PowerShell, no hand-rolled Shell
+ * Link binary parsing. fs is used only for atomic candidate reservation (wx)
+ * and removal. All side effects are injected so the module stays
+ * unit-testable without Electron.
  */
 
+/** Structural subset of Electron's ShortcutDetails (electron is not imported here). */
+export type ShortcutDetailsLike = {
+  target: string
+  args?: string
+  cwd?: string
+  description?: string
+  icon?: string
+  iconIndex?: number
+}
+
 export type QuickActionLinkFileDeps = {
-  /** Runs a PowerShell script; resolves when it exits successfully. */
-  runPowerShell: (script: string) => Promise<void>
-  readFileSync: (path: string) => Buffer
+  /** Electron shell.writeShortcutLink; false return = the OS refused the write. 'create' overwrites an existing file. */
+  writeShortcutLink: (shortcutPath: string, operation: 'create', details: ShortcutDetailsLike) => boolean
+  /** Electron shell.readShortcutLink; throws when the file is unreadable or corrupt. */
+  readShortcutLink: (shortcutPath: string) => ShortcutDetailsLike
+  /**
+   * Atomically reserves a candidate path via fs.open(path, 'wx') (fails with
+   * EEXIST when taken) and returns a release callback that closes the handle.
+   * The reserved empty file is then overwritten in place by writeShortcutLink.
+   */
+  reservePath: (path: string) => Promise<() => Promise<void>>
   existsSync: (path: string) => boolean
   unlink: (path: string) => Promise<void>
 }
 
-/** PowerShell single-quoted string escaping: ' → ''. */
-function psQuote(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`
-}
-
-const CREATE_SHORTCUT_TEMPLATE = [
-  '$shell = New-Object -COM WScript.Shell',
-  '$shortcut = $shell.CreateShortcut(__PATH__)',
-  '$shortcut.TargetPath = __TARGET__',
-  '$shortcut.Arguments = __ARGS__',
-  '$shortcut.WorkingDirectory = __WORKING_DIR__',
-  '$shortcut.IconLocation = __ICON__',
-  '$shortcut.Description = __DESCRIPTION__',
-  '$shortcut.Save()',
-].join('\n')
-
-/** 'valid' = file exists and points at exePath; 'missing' = file gone; 'drifted' = points elsewhere. */
-export type ShortcutLinkState = 'valid' | 'missing' | 'drifted'
-
-const LINK_FLAG_HAS_TARGET_ID_LIST = 0x01
-const LINK_FLAG_HAS_LINK_INFO = 0x02
-const LINK_FLAG_IS_UNICODE = 0x80
-const LINK_INFO_FLAG_VOLUME_AND_LOCAL_BASE = 0x01
-
-function readNullTerminatedString(buffer: Buffer, offset: number, unicode: boolean): string | null {
-  if (offset < 0 || offset >= buffer.length) return null
-  if (unicode) {
-    let cursor = offset
-    while (cursor + 1 < buffer.length && buffer.readUInt16LE(cursor) !== 0) cursor += 2
-    if (cursor + 1 >= buffer.length) return null
-    return buffer.toString('utf16le', offset, cursor)
-  }
-  let cursor = offset
-  while (cursor < buffer.length && buffer[cursor] !== 0) cursor += 1
-  if (cursor >= buffer.length) return null
-  return buffer.toString('latin1', offset, cursor)
-}
-
 /**
- * Synchronously extracts the local target path from a `.lnk` buffer.
- * Returns null when the file is not a parsable shell link.
+ * 'valid' = points at this exe with this action id; 'missing' = file gone;
+ * 'drifted' = readable but points elsewhere or carries a different action id;
+ * 'unreadable' = read failed (corrupt or permission-denied) — distinct from
+ * 'missing' so callers can log the real cause instead of flattening it.
  */
-export function readShortcutTargetFromBuffer(buffer: Buffer): string | null {
-  if (buffer.length < 0x4c) return null
-  // HeaderSize is authoritative: structures start right after it.
-  const headerSize = buffer.readUInt32LE(0)
-  if (headerSize < 0x4c || headerSize > buffer.length) return null
-  const flags = buffer.readUInt32LE(0x14)
-  const isUnicode = (flags & LINK_FLAG_IS_UNICODE) !== 0
-  let offset = headerSize
+export type ShortcutLinkState = 'valid' | 'missing' | 'drifted' | 'unreadable'
 
-  if (flags & LINK_FLAG_HAS_TARGET_ID_LIST) {
-    while (offset + 2 <= buffer.length) {
-      const itemSize = buffer.readUInt16LE(offset)
-      offset += 2
-      if (itemSize === 0) break
-      offset += itemSize
-    }
-  }
+/** Launch argument carried by every quick-action `.lnk`. */
+export function quickActionArgs(id: string): string {
+  return `--quick-action=${id}`
+}
 
-  if (flags & LINK_FLAG_HAS_LINK_INFO) {
-    const linkInfoStart = offset
-    if (linkInfoStart + 0x1c > buffer.length) return null
-    const linkInfoFlags = buffer.readUInt32LE(linkInfoStart + 8)
-    const localBasePathOffset = buffer.readUInt32LE(linkInfoStart + 16)
-    if (linkInfoFlags & LINK_INFO_FLAG_VOLUME_AND_LOCAL_BASE) {
-      return readNullTerminatedString(buffer, linkInfoStart + localBasePathOffset, isUnicode)
-    }
-  }
-
-  return null
+/** Windows paths compare case-insensitively; normalize separators/case/trailing slash. */
+function normalizeForCompare(value: string): string {
+  return value
+    .replace(/[/\\]+$/, '')
+    .replace(/\//g, '\\')
+    .toLowerCase()
 }
 
 export function createQuickActionLinkFile(deps: QuickActionLinkFileDeps) {
-  async function writeShortcutLink(options: { shortcutPath: string; targetPath: string; args: string; workingDirectory: string; description: string }): Promise<void> {
-    const script = CREATE_SHORTCUT_TEMPLATE.replace('__PATH__', psQuote(options.shortcutPath))
-      .replace('__TARGET__', psQuote(options.targetPath))
-      .replace('__ICON__', psQuote(`${options.targetPath},0`))
-      .replace('__ARGS__', psQuote(options.args))
-      .replace('__WORKING_DIR__', psQuote(options.workingDirectory))
-      .replace('__DESCRIPTION__', psQuote(options.description))
-    await deps.runPowerShell(script)
+  function buildDetails(action: QuickAction, exePath: string, workingDirectory: string): ShortcutDetailsLike {
+    return {
+      target: exePath,
+      args: quickActionArgs(action.id),
+      cwd: workingDirectory,
+      description: action.name,
+      icon: exePath,
+      iconIndex: 0,
+    }
   }
 
-  /** Synchronous target read; null when the file is missing or unparsable. */
-  function readShortcutTarget(shortcutPath: string): string | null {
-    try {
-      if (!deps.existsSync(shortcutPath)) return null
-      return readShortcutTargetFromBuffer(deps.readFileSync(shortcutPath))
-    } catch {
-      return null
+  /** Reads the `.lnk` back and asserts it points at exePath + this action id. */
+  function verifyShortcutLink(shortcutPath: string, action: QuickAction, exePath: string): void {
+    // readShortcutLink throws on unreadable/corrupt files — callers clean up.
+    const details = deps.readShortcutLink(shortcutPath)
+    if (normalizeForCompare(details.target) !== normalizeForCompare(exePath)) {
+      throw new Error(`Shortcut target verification failed: ${details.target}`)
+    }
+    if ((details.args ?? '') !== quickActionArgs(action.id)) {
+      throw new Error(`Shortcut arguments verification failed: ${details.args ?? ''}`)
     }
   }
 
   /**
-   * Creates the `.lnk` and returns its absolute path. Same-name conflicts get a
-   * ` (2)`, ` (3)`, … suffix instead of overwriting.
+   * Reserves the first free candidate name: `Name.lnk`, `Name (2).lnk`, …
+   * The wx reservation is atomic, so a name taken between check and write can
+   * never be overwritten — the loser of the race simply moves to the next
+   * candidate.
    */
-  async function createShortcutLink(options: { action: QuickAction; exePath: string; desktopDir: string }): Promise<string> {
-    const { action, exePath, desktopDir } = options
-    const baseName = sanitizeQuickActionName(action.name) || 'Quick action'
+  async function reserveCandidatePath(desktopDir: string, name: string): Promise<string> {
+    const baseName = sanitizeQuickActionName(name) || 'Quick action'
     let candidate = join(desktopDir, `${baseName}.lnk`)
     let suffix = 2
-    while (deps.existsSync(candidate)) {
-      candidate = join(desktopDir, `${baseName} (${suffix}).lnk`)
-      suffix += 1
-      if (suffix > 100) throw new Error('Too many shortcut files with the same name.')
+    while (true) {
+      try {
+        const release = await deps.reservePath(candidate)
+        await release()
+        return candidate
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== 'EEXIST') throw error
+        candidate = join(desktopDir, `${baseName} (${suffix}).lnk`)
+        suffix += 1
+        if (suffix > 100) throw new Error('Too many shortcut files with the same name.')
+      }
     }
-    await writeShortcutLink({
-      shortcutPath: candidate,
-      targetPath: exePath,
-      args: `--quick-action=${action.id}`,
-      workingDirectory: desktopDir,
-      description: action.name,
-    })
-    if (!deps.existsSync(candidate)) {
-      throw new Error(`Shortcut file was not created at ${candidate}`)
-    }
-    return candidate
   }
 
-  function checkShortcutState(shortcutPath: string, exePath: string): ShortcutLinkState {
-    const target = readShortcutTarget(shortcutPath)
-    if (target === null) return 'missing'
-    return target === exePath ? 'valid' : 'drifted'
+  /**
+   * Creates the `.lnk` at a fresh candidate name and returns its absolute
+   * path. On any failure the reserved file is removed so no half-created
+   * shortcut is left behind.
+   */
+  async function createShortcutLink(options: { action: QuickAction; exePath: string; desktopDir: string; workingDirectory: string }): Promise<string> {
+    const { action, exePath, desktopDir, workingDirectory } = options
+    const candidate = await reserveCandidatePath(desktopDir, action.name)
+    try {
+      if (!deps.writeShortcutLink(candidate, 'create', buildDetails(action, exePath, workingDirectory))) {
+        throw new Error(`Failed to write shortcut file at ${candidate}`)
+      }
+      verifyShortcutLink(candidate, action, exePath)
+      return candidate
+    } catch (error) {
+      await deps.unlink(candidate).catch(() => undefined)
+      throw error
+    }
+  }
+
+  /**
+   * Rewrites the `.lnk` directly at a recorded path (drift repair: the app
+   * moved, the file drifted). Unlike createShortcutLink there is no candidate
+   * search and no cleanup-on-failure — the pre-existing file is left as-is
+   * when the rewrite fails.
+   */
+  async function rewriteShortcutLink(options: { action: QuickAction; exePath: string; shortcutPath: string; workingDirectory: string }): Promise<string> {
+    const { action, exePath, shortcutPath, workingDirectory } = options
+    if (!deps.writeShortcutLink(shortcutPath, 'create', buildDetails(action, exePath, workingDirectory))) {
+      throw new Error(`Failed to rewrite shortcut file at ${shortcutPath}`)
+    }
+    verifyShortcutLink(shortcutPath, action, exePath)
+    return shortcutPath
+  }
+
+  function checkShortcutState(shortcutPath: string, expected: { exePath: string; quickActionId: string }): ShortcutLinkState {
+    if (!deps.existsSync(shortcutPath)) return 'missing'
+    let details: ShortcutDetailsLike
+    try {
+      details = deps.readShortcutLink(shortcutPath)
+    } catch {
+      return 'unreadable'
+    }
+    if (normalizeForCompare(details.target) !== normalizeForCompare(expected.exePath)) return 'drifted'
+    if ((details.args ?? '') !== quickActionArgs(expected.quickActionId)) return 'drifted'
+    return 'valid'
   }
 
   async function removeShortcutLink(shortcutPath: string): Promise<boolean> {
@@ -158,10 +165,9 @@ export function createQuickActionLinkFile(deps: QuickActionLinkFileDeps) {
 
   return {
     createShortcutLink,
+    rewriteShortcutLink,
     checkShortcutState,
     removeShortcutLink,
-    readShortcutTarget,
-    writeShortcutLink,
   }
 }
 

@@ -746,12 +746,14 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
     }
   }
 
+  // 仅键盘导航时把激活项滚入视口；悬浮高亮不触发滚动
   const moveActiveEntry = (delta: number) => {
     if (filteredEntries.length === 0) return
-    setActiveEntryIndex((current) => {
-      const startIndex = current < 0 ? 0 : current
-      const nextIndex = (startIndex + delta + filteredEntries.length) % filteredEntries.length
-      return nextIndex
+    const startIndex = activeEntryIndex < 0 ? 0 : activeEntryIndex
+    const nextIndex = (startIndex + delta + filteredEntries.length) % filteredEntries.length
+    setActiveEntryIndex(nextIndex)
+    window.requestAnimationFrame(() => {
+      entryRefs.current[nextIndex]?.scrollIntoView({ block: 'nearest' })
     })
   }
 
@@ -789,12 +791,6 @@ export function UrlPopover({ urls, items, tagOptions, children, zIndex = 9999, f
       setActiveEntryIndex(-1)
     }
   }, [filteredEntries.length, show])
-
-  useEffect(() => {
-    if (!show || activeEntryIndexResolved < 0) return
-    const node = entryRefs.current[activeEntryIndexResolved]
-    node?.scrollIntoView({ block: 'nearest' })
-  }, [activeEntryIndexResolved, show])
 
   useEffect(() => {
     if (!show) return

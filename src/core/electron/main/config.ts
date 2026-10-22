@@ -38,14 +38,13 @@ import { defaultAiGatewayConfig, normalizeAiGatewayConfig } from './ai-gateway/g
 import { DEFAULT_BROWSER_AI_CONFIG, normalizeBrowserAiConfig } from './browser-ai/browserAiConfig'
 import { capabilityManager } from './capability-manager'
 import { defaultClaudeBashrcConfig, normalizeClaudeBashrcConfig } from './claude-bashrc'
+import { normalizeCodeSession } from './config/config-code-session'
 import { migrateConfigDocument } from './config/config-migrations'
 import { atomicWriteJson, backupCorruptConfigSync } from './config/config-persistence'
 import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from './config/config-quick-actions'
 import { createWorkspacePersistenceCoordinator, flushWithOutcome, WORKSPACE_PERSISTENCE_FLUSH_TIMEOUT_MS, type WorkspacePersistenceFlushOutcome, type WorkspacePersistenceStatus } from './config/workspace-persistence'
 
 const CONFIG_FILE = 'project-launcher-config.json'
-const MAX_CODE_SESSION_TABS = 5
-const MAX_CODE_SESSION_CURSOR_ENTRIES = 60
 export const DEFAULT_IMAGE_PREVIEW_LIMIT_MB = 10
 export const DEFAULT_PDF_PREVIEW_LIMIT_MB = 3
 export const DEFAULT_AUDIO_PREVIEW_LIMIT_MB = 5
@@ -710,60 +709,6 @@ function normalizeProjectTerminalDock(value: unknown): SavedProject['terminalDoc
   if (titleEntries.length === 0) return undefined
 
   return { titles: Object.fromEntries(titleEntries) }
-}
-
-function normalizeCodeSession(value: unknown):
-  | {
-      tabs: string[]
-      activePath?: string
-      cursorPositions?: Record<string, { lineNumber: number; column: number }>
-    }
-  | undefined {
-  if (!value || typeof value !== 'object') return undefined
-
-  const raw = value as {
-    tabs?: unknown
-    activePath?: unknown
-    cursorPositions?: unknown
-  }
-  const tabs = Array.isArray(raw.tabs)
-    ? Array.from(
-        new Set(
-          raw.tabs
-            .filter((item): item is string => typeof item === 'string')
-            .map((item) => item.trim())
-            .filter(Boolean),
-        ),
-      ).slice(0, MAX_CODE_SESSION_TABS)
-    : []
-
-  const activePath = typeof raw.activePath === 'string' ? raw.activePath.trim() : ''
-
-  const cursorEntries: Array<[string, { lineNumber: number; column: number }]> = []
-  if (raw.cursorPositions && typeof raw.cursorPositions === 'object') {
-    for (const [rawPath, rawPosition] of Object.entries(raw.cursorPositions as Record<string, unknown>)) {
-      const path = rawPath.trim()
-      if (!path) continue
-      if (!rawPosition || typeof rawPosition !== 'object') continue
-      const lineNumber = Math.max(1, Math.floor(Number((rawPosition as { lineNumber?: unknown }).lineNumber)))
-      const column = Math.max(1, Math.floor(Number((rawPosition as { column?: unknown }).column)))
-      if (!Number.isFinite(lineNumber) || !Number.isFinite(column)) continue
-      cursorEntries.push([path, { lineNumber, column }])
-      if (cursorEntries.length >= MAX_CODE_SESSION_CURSOR_ENTRIES) break
-    }
-  }
-
-  const cursorPositions = cursorEntries.length > 0 ? Object.fromEntries(cursorEntries) : undefined
-
-  const normalizedActivePath = activePath && tabs.includes(activePath) ? activePath : tabs[0]
-
-  if (tabs.length <= 0 && !cursorPositions) return undefined
-
-  return {
-    tabs,
-    activePath: normalizedActivePath,
-    cursorPositions,
-  }
 }
 
 function normalizeAgentHookConfig(value: AppConfig['agentHooks'] | unknown): NonNullable<AppConfig['agentHooks']> {

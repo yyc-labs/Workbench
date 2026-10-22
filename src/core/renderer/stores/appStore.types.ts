@@ -207,7 +207,8 @@ export interface AppState {
   updateQuickAction: (id: string, input: QuickActionUpdateInput) => Promise<QuickAction>
   deleteQuickAction: (id: string) => Promise<boolean>
   executeQuickAction: (request: { id: string } | { spec: QuickActionCreateInput['action'] }) => Promise<QuickActionResult>
-  reorderQuickAction: (id: string, direction: 'up' | 'down') => Promise<void>
+  /** 组内拖拽排序：orderedIds 为该组排序后的完整 id 序列，逐条落盘变更项。 */
+  reorderQuickActionGroup: (group: QuickActionView['group'], orderedIds: string[]) => Promise<void>
   createQuickActionDesktopShortcut: (id: string) => Promise<string>
   removeQuickActionDesktopShortcut: (id: string) => Promise<boolean>
 

@@ -2,13 +2,14 @@
 //
 // 协议（stdin/stdout 按行）：
 //   启动完成后输出 __READY__
-//   每行输入 = base64(UTF-8 文件绝对路径)，写入成功输出 __OK__，失败输出 __ERR__<msg>
+//   每行输入 = base64(UTF-8 的 '\n' 分隔多文件绝对路径)，写入成功输出 __OK__，失败输出 __ERR__<msg>
 //   输入 __EXIT__ 或 stdin EOF 时退出
 //
 // 生命周期由宿主（Electron 主进程）控制：每次复制后由宿主结束本进程，
 // 使剪贴板回到「owner 已退出」状态（资源管理器/桌面粘贴可用的前提）。
 using System;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -19,9 +20,14 @@ internal static class ClipboardWorker
     [DllImport("ole32.dll")]
     private static extern int OleFlushClipboard();
 
-    private static void WriteFileDrop(string filePath)
+    private static void WriteFileDrop(string[] paths)
     {
-        var list = new StringCollection { filePath };
+        var list = new StringCollection();
+        foreach (var path in paths)
+        {
+            list.Add(path);
+        }
+
         var data = new DataObject();
         data.SetFileDropList(list);
 
@@ -111,8 +117,15 @@ internal static class ClipboardWorker
 
             try
             {
-                var filePath = Encoding.UTF8.GetString(Convert.FromBase64String(line));
-                WriteFileDrop(filePath);
+                // 每行协议载荷 = base64(UTF-8 的 '\n' 分隔多路径)；空段过滤兜底。
+                var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(line));
+                var paths = decoded.Split('\n').Where((item) => !string.IsNullOrEmpty(item)).ToArray();
+                if (paths.Length == 0)
+                {
+                    throw new InvalidOperationException("clipboard command contains no file path");
+                }
+
+                WriteFileDrop(paths);
                 Console.Out.WriteLine("__OK__");
             }
             catch (Exception ex)

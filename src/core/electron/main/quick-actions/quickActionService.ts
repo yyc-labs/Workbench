@@ -28,8 +28,10 @@ export type QuickActionServiceDeps = {
   /** Desktop `.lnk` capability; absent on non-Windows platforms. */
   desktopShortcuts?: {
     createShortcutLink: (action: QuickAction) => Promise<string>
+    /** Rewrites the `.lnk` at a recorded path (drift repair during reconcile). */
+    rewriteShortcutLink: (action: QuickAction, shortcutPath: string) => Promise<string>
     removeShortcutLink: (shortcutPath: string) => Promise<boolean>
-    checkShortcutState: (shortcutPath: string, exePath: string) => ShortcutLinkState
+    checkShortcutState: (shortcutPath: string, expected: { quickActionId: string }) => ShortcutLinkState
   }
 }
 
@@ -54,6 +56,14 @@ function errorText(error: unknown): string {
 }
 
 /**
+ * Desired shortcut state: explicit intent wins; legacy configs without the
+ * field derive it from the recorded path (path present = the user created one).
+ */
+function wantsDesktopShortcut(action: QuickAction): boolean {
+  return action.desktopShortcutEnabled ?? action.desktopShortcutPath !== undefined
+}
+
+/**
  * Quick Actions domain: CRUD over the persisted config table, execution
  * dispatch, and desktop shortcut lifecycle. WSL/environment decisions for
  * run-task actions are fully delegated to RunTaskService — this domain adds no
@@ -70,14 +80,27 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
     return normalizeQuickActions(saved.quickActions).actions
   }
 
-  /** Internal path for shortcut bookkeeping — not exposed via the update API. */
-  async function setDesktopShortcutPath(id: string, shortcutPath: string | undefined): Promise<void> {
+  /**
+   * Internal write path for shortcut bookkeeping — not exposed via the update
+   * API. `path` records the last-known `.lnk` location (kept after a failed
+   * file removal so reconcile can clean the leftover); `enabled` records the
+   * desired state.
+   */
+  async function setDesktopShortcutState(id: string, patch: { path?: string; enabled?: boolean }): Promise<void> {
     const actions = readActions()
     const next = actions.map((item) => {
       if (item.id !== id) return item
       const updated: QuickAction = { ...item, updatedAt: Date.now() }
-      if (shortcutPath) updated.desktopShortcutPath = shortcutPath
-      else delete updated.desktopShortcutPath
+      // 'in' 语义：显式 undefined = 清空；字段缺省 = 不动。
+      if ('path' in patch) {
+        if (patch.path) updated.desktopShortcutPath = patch.path
+        else delete updated.desktopShortcutPath
+      }
+      // 期望状态显式落布尔值：false 必须持久化（否则按路径推导会翻回 true，
+      // 导致“用户删过又被重建”）。
+      if ('enabled' in patch && patch.enabled !== undefined) {
+        updated.desktopShortcutEnabled = patch.enabled
+      }
       return updated
     })
     await writeActions(next)
@@ -197,9 +220,10 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
       return readActions().map((action) => {
         let shortcutState: QuickActionShortcutState = 'none'
         if (action.desktopShortcutPath && deps.desktopShortcuts) {
-          // 'drifted' (target moved, e.g. relocated install) reports as 'missing'
-          // so the UI shows the "shortcut invalid" badge.
-          shortcutState = deps.desktopShortcuts.checkShortcutState(action.desktopShortcutPath, process.execPath) === 'valid' ? 'valid' : 'missing'
+          // drifted / unreadable both report as 'missing' so the UI shows the
+          // "shortcut invalid" badge; the detailed cause is logged at reconcile
+          // and verification time, not flattened here.
+          shortcutState = deps.desktopShortcuts.checkShortcutState(action.desktopShortcutPath, { quickActionId: action.id }) === 'valid' ? 'valid' : 'missing'
         }
         const view: QuickActionView = { ...action, shortcutState }
         // scheduleNextRunAt 由主进程计算（仅 schedule.enabled 时存在），renderer 直接展示。
@@ -289,7 +313,16 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
       if (!action) throw new QuickActionNotFoundError(id)
       if (!deps.desktopShortcuts) throw new Error('Desktop shortcuts are not available on this platform.')
       const shortcutPath = await deps.desktopShortcuts.createShortcutLink(action)
-      await setDesktopShortcutPath(id, shortcutPath)
+      try {
+        await setDesktopShortcutState(id, { path: shortcutPath, enabled: true })
+      } catch (error) {
+        // 补偿：文件已创建但配置写入失败时，删掉孤儿文件，避免“用户看得见、
+        // 配置不知道”的快捷方式。补偿本身失败只记日志（下次对账按期望状态处理）。
+        await deps.desktopShortcuts.removeShortcutLink(shortcutPath).catch((cleanupError) => {
+          console.warn('[quick-actions] Failed to remove orphan shortcut after config write failure:', cleanupError)
+        })
+        throw error
+      }
       return { shortcutPath }
     },
 
@@ -297,12 +330,16 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
       const action = readActions().find((item) => item.id === id)
       if (!action) throw new QuickActionNotFoundError(id)
       if (!action.desktopShortcutPath) return false
-      if (deps.desktopShortcuts) {
-        await deps.desktopShortcuts.removeShortcutLink(action.desktopShortcutPath)
-      } else {
-        await unlink(action.desktopShortcutPath).catch(() => undefined)
-      }
-      await setDesktopShortcutPath(id, undefined)
+      // 先落“不再期望”再删文件：即使文件删除失败，重启对账也会按期望状态补删，
+      // 绝不会出现“用户删过又被自动重建”的倒退。
+      await setDesktopShortcutState(id, { enabled: false })
+      const removed = deps.desktopShortcuts
+        ? await deps.desktopShortcuts.removeShortcutLink(action.desktopShortcutPath)
+        : await unlink(action.desktopShortcutPath)
+            .then(() => true)
+            .catch(() => false)
+      // 删除成功才清路径；失败时保留 last-known 路径供 reconcile 清理残留。
+      if (removed) await setDesktopShortcutState(id, { path: undefined })
       return true
     },
 
@@ -310,21 +347,62 @@ export function createQuickActionService(deps: QuickActionServiceDeps) {
     setScheduleRunStamp,
 
     /**
-     * Startup repair pass: silently rebuilds shortcuts whose file went missing
-     * or whose target drifted (e.g. the app moved). Failures only log.
+     * Startup reconciliation: restores the *desired* shortcut state rather than
+     * unconditionally rebuilding missing files. Per action:
+     * - desired falsy (removed in-app): leftover files are deleted and the
+     *   recorded path tidied — a desktop file loss is NOT an expression of
+     *   intent, but an in-app removal is.
+     * - desired truthy + valid: untouched.
+     * - desired truthy + missing / drifted / unreadable: rewritten in place at
+     *   the recorded path (stable name); unreadable files keep their real cause
+     *   in the log instead of being flattened into 'missing'.
+     * - desired truthy without a recorded path (legacy config): created at a
+     *   fresh candidate name.
+     * All failures are logged, never thrown — reconcile must not block startup.
      */
-    async repairDesktopShortcuts(): Promise<void> {
+    async reconcileDesktopShortcuts(): Promise<void> {
       if (!deps.desktopShortcuts) return
-      for (const action of readActions()) {
-        if (!action.desktopShortcutPath) continue
-        if (deps.desktopShortcuts.checkShortcutState(action.desktopShortcutPath, process.execPath) === 'valid') continue
+      const actions = readActions()
+      /** id → new last-known path (undefined = clear). Applied in one write. */
+      const pathUpdates = new Map<string, string | undefined>()
+      for (const action of actions) {
         try {
-          const shortcutPath = await deps.desktopShortcuts.createShortcutLink(action)
-          await setDesktopShortcutPath(action.id, shortcutPath)
+          if (!wantsDesktopShortcut(action)) {
+            if (!action.desktopShortcutPath) continue
+            const state = deps.desktopShortcuts.checkShortcutState(action.desktopShortcutPath, { quickActionId: action.id })
+            // missing = 文件已不在，只需整理配置；其余状态 = 残留文件，补删。
+            if (state !== 'missing') await deps.desktopShortcuts.removeShortcutLink(action.desktopShortcutPath)
+            pathUpdates.set(action.id, undefined)
+            continue
+          }
+          if (!action.desktopShortcutPath) {
+            const shortcutPath = await deps.desktopShortcuts.createShortcutLink(action)
+            pathUpdates.set(action.id, shortcutPath)
+            continue
+          }
+          const state = deps.desktopShortcuts.checkShortcutState(action.desktopShortcutPath, { quickActionId: action.id })
+          if (state === 'valid') continue
+          if (state === 'unreadable') {
+            console.warn(`[quick-actions] Shortcut for '${action.name}' is unreadable (corrupt or permission-denied); rebuilding.`)
+          }
+          // missing / drifted / unreadable → 原地重写，保留稳定文件名。
+          const shortcutPath = await deps.desktopShortcuts.rewriteShortcutLink(action, action.desktopShortcutPath)
+          pathUpdates.set(action.id, shortcutPath)
         } catch (error) {
-          console.warn('[quick-actions] Failed to rebuild desktop shortcut:', error)
+          console.warn(`[quick-actions] Failed to reconcile desktop shortcut for '${action.name}':`, error)
         }
       }
+      if (pathUpdates.size === 0) return
+      await writeActions(
+        actions.map((item) => {
+          if (!pathUpdates.has(item.id)) return item
+          const updated: QuickAction = { ...item, updatedAt: Date.now() }
+          const path = pathUpdates.get(item.id)
+          if (path) updated.desktopShortcutPath = path
+          else delete updated.desktopShortcutPath
+          return updated
+        }),
+      )
     },
   }
 }

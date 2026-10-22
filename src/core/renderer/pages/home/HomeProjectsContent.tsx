@@ -1,7 +1,7 @@
-import { ProjectCard } from '../../components/ProjectCard'
-import { WorkspaceClassifierPanel } from '../../components/WorkspaceClassifierPanel'
-import { ScrollArea } from '../../components/ui/scroll-area'
 import { FolderOpen, Pin } from 'lucide-react'
+import { ProjectCard } from '../../components/ProjectCard'
+import { ScrollArea } from '../../components/ui/scroll-area'
+import { WorkspaceClassifierPanel } from '../../components/WorkspaceClassifierPanel'
 import { useI18n } from '../../i18n'
 import type { HomeProjectsContentProps } from './home.types'
 
@@ -28,7 +28,7 @@ function HomeProjectsContent({
   return (
     <ScrollArea className="flex-1">
       <div className="content-breathe">
-        <div className="mb-8 flex items-end justify-between gap-6">
+        <div className="mb-[31.5px] flex items-end justify-between gap-6">
           <div>
             <p className="section-label mb-2">{t('common.workspace')}</p>
             <h1 className="text-[28px] font-semibold tracking-[-0.035em] text-[color:var(--color-foreground)]">{t('common.projects')}</h1>

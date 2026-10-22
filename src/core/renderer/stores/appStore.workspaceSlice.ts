@@ -1,6 +1,6 @@
 import { arrayMove } from '@dnd-kit/sortable'
 import type { StateCreator } from 'zustand'
-import { normalizeRememberedDirectories } from '../pages/code/code.expandedDirectories'
+import { normalizeRememberedDirectories } from '../../shared/rememberedDirectories'
 import { applySavedProjectSnapshot, createEntityId, createFallbackProject, persistWorkspace, toRemovedProjectSnapshot } from './appStore.helpers'
 import type { AppState } from './appStore.types'
 

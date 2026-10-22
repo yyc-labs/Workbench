@@ -1,5 +1,5 @@
 import type { StateCreator } from 'zustand'
-import type { UpsertSharedDocLinkInput } from '../../shared/types'
+import type { SharedDocLink, UpsertSharedDocLinkInput } from '../../shared/types'
 import type { AppState } from './appStore.types'
 
 export type DocLinkLibrarySlice = Pick<
@@ -82,11 +82,24 @@ export const createDocLinkLibraryActionsSlice: StateCreator<AppState, [], [], Do
     }
   },
   reorderSharedDocLinks: async (groupId, orderedLinkIds) => {
+    // 乐观重排（镜像主进程 reorderLinks 语义：ordered 优先 + 未列出的组内项追加尾部，槽位集合不变），
+    // 先让列表即时到位供 FLIP 连续播放，IPC 返回后再以主进程文件覆盖纠正；失败回滚重载。
+    set((state) => {
+      const inGroup = state.sharedDocLinks.filter((link) => link.groupId === groupId)
+      const ordered = orderedLinkIds.map((id) => inGroup.find((link) => link.id === id)).filter((link): link is SharedDocLink => Boolean(link))
+      const orderedIds = new Set(ordered.map((link) => link.id))
+      const nextInGroup = [...ordered, ...inGroup.filter((link) => !orderedIds.has(link.id))]
+      const nextIds = new Set(nextInGroup.map((link) => link.id))
+      let cursor = 0
+      const sharedDocLinks = state.sharedDocLinks.map((link) => (link.groupId === groupId && nextIds.has(link.id) ? nextInGroup[cursor++] : link))
+      return { sharedDocLinks }
+    })
     try {
       const file = await window.electronAPI.reorderSharedDocLinks(groupId, orderedLinkIds)
       set({ sharedDocLinkGroups: file.groups, sharedDocLinks: file.links, docLinkLibraryError: null })
     } catch (error) {
       set({ docLinkLibraryError: errorMessage(error) })
+      await get().loadDocLinkLibrary()
     }
   },
   setSharedDocLinkSecret: async (linkId, secret) => {
