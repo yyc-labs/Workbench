@@ -256,8 +256,8 @@ export interface GitElectronApi {
   gitTraceEnabled: boolean
   getLatestCommit: (repoRoot: string) => Promise<LatestCommitSummary[]>
   listGitRepositories: (workspacePath: string) => Promise<GitRepositoryListResult>
-  getGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
-  getGitRepositorySnapshotLight: (repoRoot: string) => Promise<GitRepositorySnapshot>
+  getGitRepositorySnapshot: (repoRoot: string, changedFilesLimit?: number) => Promise<GitRepositorySnapshot>
+  getGitRepositorySnapshotLight: (repoRoot: string, changedFilesLimit?: number) => Promise<GitRepositorySnapshot>
   getGitStatusOptimization: (repoRoot: string) => Promise<GitStatusOptimizationState>
   setGitStatusOptimization: (request: GitStatusOptimizationRequest) => Promise<GitStatusOptimizationResult>
   runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>

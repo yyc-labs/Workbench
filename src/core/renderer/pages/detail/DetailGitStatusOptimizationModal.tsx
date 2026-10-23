@@ -3,7 +3,9 @@ import { Gauge, Loader2, X } from 'lucide-react'
 import type { GitStatusOptimizationState } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { Checkbox } from '../../components/ui/checkbox'
+import { Input } from '../../components/ui/input'
 import { useI18n } from '../../i18n'
+import { useAppStore } from '../../stores/appStore'
 
 type DetailGitStatusOptimizationModalProps = {
   onClose: () => void
@@ -19,6 +21,25 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
   const [loadError, setLoadError] = useState<string | null>(null)
   const [applyingKey, setApplyingKey] = useState<'untrackedCache' | 'fsmonitor' | null>(null)
   const [applyError, setApplyError] = useState<string | null>(null)
+  // 变更文件列表上限：应用级设置（对所有仓库生效），持久化在 appConfig
+  const configLimit = useAppStore((state) => state.config.gitChangedFilesLimit)
+  const [limitInput, setLimitInput] = useState(String(configLimit ?? 99))
+
+  useEffect(() => {
+    if (!open) return
+    setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
+  }, [open])
+
+  const commitLimitInput = async () => {
+    const parsed = Number.parseInt(limitInput.trim(), 10)
+    if (!Number.isFinite(parsed)) {
+      setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
+      return
+    }
+    // 范围钳制在主进程 config 归一化中完成（10–2000）
+    await useAppStore.getState().setGitChangedFilesLimit(parsed)
+    setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
+  }
 
   useEffect(() => {
     if (!open || !repoRoot) return
@@ -110,6 +131,26 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
       <div className="space-y-2">
         {renderToggleRow('untrackedCache')}
         {renderToggleRow('fsmonitor')}
+        <div className="rounded-[14px] border border-[color:var(--color-border)] bg-[color:var(--color-background-sunken)] p-3">
+          <p className="text-[12px] font-semibold text-[color:var(--color-foreground)]">{t('detail.gitStatusOptLimit')}</p>
+          <p className="mt-1 text-[12px] leading-5 text-[color:var(--color-muted-foreground)]">{t('detail.gitStatusOptLimitHint')}</p>
+          <Input
+            className="mt-2 h-8 w-24"
+            textSize={12}
+            inputMode="numeric"
+            value={limitInput}
+            disabled={!open}
+            onChange={(event) => setLimitInput(event.target.value)}
+            onBlur={() => {
+              void commitLimitInput()
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+          />
+        </div>
       </div>
       {applyError ? <p className="mt-3 rounded-[10px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] p-3 text-[12px] leading-5 text-[color:var(--color-destructive)]">{applyError}</p> : null}
       <p className="mt-3 text-[11px] leading-4 text-[color:var(--color-muted-foreground)]">{t('detail.gitStatusOptFooter')}</p>

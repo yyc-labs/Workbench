@@ -294,9 +294,12 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined
   }
 
-  async function readGitRepositorySnapshot(repoRoot: string, traceActionId = 'snapshot', options?: { lightweight?: boolean }): Promise<GitRepositorySnapshot> {
+  async function readGitRepositorySnapshot(repoRoot: string, traceActionId = 'snapshot', options?: { lightweight?: boolean; changedFilesLimit?: number }): Promise<GitRepositorySnapshot> {
     const snapshotStartedAt = GIT_TRACE_ENABLED ? performance.now() : 0
     const lightweight = options?.lightweight === true
+    // 变更文件列表展示上限：应用级设置（gitChangedFilesLimit）透传；非法值回退默认 99
+    const limitInput = options?.changedFilesLimit
+    const changedFilesLimit = typeof limitInput === 'number' && Number.isFinite(limitInput) && limitInput >= 1 ? Math.floor(limitInput) : MAX_GIT_CHANGED_FILES_FOR_DETAIL
     const emitSnapshotSummary = (repoKeyRoot: string) => {
       if (!GIT_TRACE_ENABLED) return
       emitGitTrace({
@@ -391,7 +394,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     const parsed = parseGitStatus(statusResult.stdout)
     const changedFileCount = parsed.changedFiles.length
     const conflictedFileCount = parsed.changedFiles.filter((file) => file.scope === 'conflicted').length
-    const changedFilesSuppressed = changedFileCount > MAX_GIT_CHANGED_FILES_FOR_DETAIL
+    const changedFilesSuppressed = changedFileCount > changedFilesLimit
     // remoteBranches 已在 parseGitForEachRefBranches 内完成 500 条截断与 /HEAD 过滤
     const remoteBranchSet = new Set(remoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false

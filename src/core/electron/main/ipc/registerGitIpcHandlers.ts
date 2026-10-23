@@ -12,12 +12,12 @@ export function registerGitIpcHandlers(deps: RegisterIpcHandlersDependencies): v
     return deps.gitService.listGitRepositories(workspacePath)
   })
 
-  ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT, async (_event, repoRoot: string) => {
-    return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh')
+  ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT, async (_event, repoRoot: string, changedFilesLimit?: number) => {
+    return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh', { changedFilesLimit })
   })
 
-  ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, async (_event, repoRoot: string) => {
-    return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh-light', { lightweight: true })
+  ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, async (_event, repoRoot: string, changedFilesLimit?: number) => {
+    return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh-light', { lightweight: true, changedFilesLimit })
   })
 
   ipcMain.handle(IPC.GIT_GET_STATUS_OPTIMIZATION, async (_event, repoRoot: string) => {

@@ -3,8 +3,9 @@
  * 设计见 docs/todo/15-工作区持久化协调器-plan.md §7（D20-D31）。
  *
  * 语义：
- * - remembered（持久化）：路径在集合中 = 用户曾主动展开该目录；折叠父目录只删父条目、保留后代记忆。
- * - active（运行时）：effectivelyExpanded(remembered) ∪ temporaryReveal（文件 reveal 的临时展开）。
+ * - remembered（持久化）：路径在集合中 = 用户曾展开该目录（手动点击或文件 reveal 转正，两者同等持久化）；
+ *   折叠父目录只删父条目、保留后代记忆。
+ * - active（运行时）：effectivelyExpanded(remembered)（reveal 临时展开已并入 remembered，不再单独维护）。
  * - 恢复沿可达父子路径逐级推进，不强行展开未记忆的祖先。
  */
 

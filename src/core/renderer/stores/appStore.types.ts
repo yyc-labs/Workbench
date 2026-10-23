@@ -220,6 +220,7 @@ export interface AppState {
   setCloseWindowBehavior: (behavior: NonNullable<AppConfig['closeWindowBehavior']>) => Promise<void>
   setCodeFileExclusions: (exclusions: ProjectFileExclusionsConfig) => Promise<void>
   setCodeTreeAutoLoadFileLimit: (limit: number) => Promise<void>
+  setGitChangedFilesLimit: (limit: number) => Promise<void>
   setFilePreviewLimits: (limits: Partial<Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb'>>) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>

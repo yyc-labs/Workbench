@@ -3,7 +3,7 @@ import { resolveWslVsCodeTarget } from '../shell/openers'
 import { wslBridge } from '../wsl-bridge'
 import type { GitRepositorySnapshot } from '../../../shared/types'
 
-export type GitSnapshotReadOptions = { lightweight?: boolean }
+export type GitSnapshotReadOptions = { lightweight?: boolean; changedFilesLimit?: number }
 
 type GitSnapshotReader = (repoRoot: string, traceActionId?: string, options?: GitSnapshotReadOptions) => Promise<GitRepositorySnapshot>
 
@@ -53,7 +53,8 @@ export function createGitSnapshotDedupe(deps: GitSnapshotDedupeDependencies) {
   async function readGitSnapshot(repoRoot: string, traceActionId?: string, options?: GitSnapshotReadOptions): Promise<GitRepositorySnapshot> {
     const lightweight = options?.lightweight === true
     const baseKey = await resolveBaseKey(repoRoot)
-    const key = `${baseKey}:${lightweight ? 'light' : 'full'}`
+    // changedFilesLimit 影响快照内容，必须纳入 key，避免不同上限的并发读取互享结果
+    const key = `${baseKey}:${lightweight ? 'light' : 'full'}:cl${options?.changedFilesLimit ?? 'default'}`
     const generation = generations.get(baseKey) ?? 0
     const existing = inflight.get(key)
     if (existing && existing.generation === generation) {

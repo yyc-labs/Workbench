@@ -57,6 +57,8 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
   const quickConfigRef = useRef<HTMLDivElement | null>(null)
   const quickButtonRef = useRef<HTMLButtonElement | null>(null)
   const gitSnapshotRequestSeqRef = useRef(0)
+  // 变更文件列表展示上限（应用级设置）：透传给主进程快照读取，超过上限仅显示计数
+  const gitChangedFilesLimit = useAppStore((state) => state.config.gitChangedFilesLimit)
 
   const isAiEnabled = aiCommitConfig?.enabled ?? true
   const defaultSplit = Boolean(aiCommitConfig?.split ?? false)
@@ -383,14 +385,14 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
       // 分层加载（阶段 3 §4.2）：先 light 快照更新状态区（省两条 log），
       // 再完整快照更新历史区；历史区沿用现有形态，light 到达时保留旧历史避免闪烁。
       if (typeof api.getGitRepositorySnapshotLight === 'function') {
-        const light = await api.getGitRepositorySnapshotLight(selectedGitRepository.repoRoot)
+        const light = await api.getGitRepositorySnapshotLight(selectedGitRepository.repoRoot, gitChangedFilesLimit)
         endGitTraceTiming('ui-refresh-light', traceStartedAt)
         if (requestSeq !== gitSnapshotRequestSeqRef.current) return
         setGitSnapshot((prev) => (prev && prev.repoRoot === light.repoRoot && prev.snapshotKind !== 'light' ? { ...light, recentCommits: prev.recentCommits } : light))
         // 占位的根仓库条目（未初始化 Git）不展示原始 git 报错，界面已有“非 Git 仓库”状态提示。
         setGitSnapshotError(selectedGitRepository.isGitRepository === false ? null : (light.error ?? null))
       }
-      const result = await api.getGitRepositorySnapshot(selectedGitRepository.repoRoot)
+      const result = await api.getGitRepositorySnapshot(selectedGitRepository.repoRoot, gitChangedFilesLimit)
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshot(result)
       // 占位的根仓库条目（未初始化 Git）不展示原始 git 报错，界面已有“非 Git 仓库”状态提示。
@@ -403,7 +405,7 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
       endGitTraceTiming('ui-refresh', traceStartedAt)
       if (requestSeq === gitSnapshotRequestSeqRef.current) setGitSnapshotLoading(false)
     }
-  }, [selectedGitRepository])
+  }, [selectedGitRepository, gitChangedFilesLimit])
 
   useEffect(() => {
     void refreshGitRepositories()

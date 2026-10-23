@@ -238,7 +238,7 @@ export async function expandTreePath(
   options: {
     loadDirectory: (directoryRelativePath: string | null) => Promise<boolean>
     setExpandedDirectories: Dispatch<SetStateAction<Set<string>>>
-    /** 文件 reveal 链路回调：每个被展开的目录祖先经此上报，由调用方记入 temporaryReveal（不持久化）。 */
+    /** 文件 reveal 链路回调：每个成功展开的目录祖先经此上报，由调用方转正进 remembered 并持久化。 */
     onRevealDirectory?: (directoryRelativePath: string) => void
   },
 ): Promise<void> {

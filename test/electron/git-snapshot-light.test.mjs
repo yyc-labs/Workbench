@@ -92,6 +92,20 @@ test('lightweight snapshot skips both logs and upstream oid, other fields match 
   )
 })
 
+test('changedFilesLimit overrides the display cap (app setting passthrough)', async () => {
+  const reader = createGitSnapshotReader(createFakeRunner())
+  const limited = await reader.readGitRepositorySnapshot('/repo', 'ui-refresh', { changedFilesLimit: 1 })
+  assert.equal(limited.changedFileCount, 2)
+  assert.equal(limited.changedFilesSuppressed, true)
+  assert.deepEqual(limited.changedFiles, [])
+  const generous = await reader.readGitRepositorySnapshot('/repo', 'ui-refresh', { changedFilesLimit: 100 })
+  assert.equal(generous.changedFilesSuppressed, false)
+  assert.equal(generous.changedFiles.length, 2)
+  // 非法值回退默认 99
+  const invalid = await reader.readGitRepositorySnapshot('/repo', 'ui-refresh', { changedFilesLimit: 0 })
+  assert.equal(invalid.changedFilesSuppressed, false)
+})
+
 test('readGitRefOid is exported and validates 40-hex oids', async () => {
   const reader = createGitSnapshotReader(createFakeRunner())
   assert.equal(await reader.readGitRefOid('/repo', 'HEAD'), UPSTREAM_OID)

@@ -215,8 +215,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   const treeNodesRef = useRef<ProjectFileNode[]>([])
   const expandedDirectoriesRef = useRef<Set<string>>(new Set())
   const rememberedDirectoriesRef = useRef<Set<string>>(new Set(initialRememberedDirectories ?? []))
-  /** 文件 reveal 的临时展开（仅运行时，不持久化、不触发记忆恢复；折叠/刷新/项目切换时清除） */
-  const temporaryRevealRef = useRef<Set<string>>(new Set())
   const pendingExpandedDirectoryRefreshRef = useRef<string[]>([])
   const directoryLoadGenerationRef = useRef(0)
   const directoryLoadPromisesRef = useRef<Map<string, Promise<boolean>>>(new Map())
@@ -248,6 +246,21 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       onPersistRememberedDirectories?.(normalizeRememberedDirectories(Array.from(next)) ?? [])
     },
     [onPersistRememberedDirectories],
+  )
+
+  // reveal 转正提交：文件 reveal（打开/定位文件带出的祖先展开）与手动展开同等持久化，
+  // 直接写入 remembered 并提交落盘，不再维护运行时临时展开集合。
+  const persistRevealDirectories = useCallback(
+    (paths: string[]) => {
+      const fresh = paths.filter((path) => !rememberedDirectoriesRef.current.has(path))
+      if (fresh.length <= 0) return
+      const nextRemembered = new Set(rememberedDirectoriesRef.current)
+      for (const path of fresh) nextRemembered.add(path)
+      rememberedDirectoriesRef.current = nextRemembered
+      setRememberedDirectories(nextRemembered)
+      persistRememberedDirectories(nextRemembered)
+    },
+    [persistRememberedDirectories],
   )
 
   const loadDirectory = useCallback(
@@ -381,10 +394,9 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
 
   /**
    * 用户点击展开/折叠（§7.3 三职责之一）：
-   * - expand：remembered.add（reveal 转正：temporaryReveal 丢弃该路径）；active.add + 加载；
-   *   加载完成 → restoreReachableChildren 带出记忆后代。
-   * - collapse：remembered 只删父条目（后代记忆保留）；active 去掉该路径及全部后代；
-   *   temporaryReveal 同样清理；提交持久化。
+   * - expand：remembered.add；active.add + 加载；加载完成 → restoreReachableChildren 带出记忆后代。
+   * - collapse：remembered 只删父条目（后代记忆保留）；active 去掉该路径及全部后代；提交持久化。
+   * reveal 展开（打开/定位文件带出的祖先）已由 persistRevealDirectories 同等持久化，此处无临时展开态。
    */
   const toggleDirectory = useCallback(
     async (relativePath: string) => {
@@ -405,24 +417,19 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
           nextActive.delete(descendant)
         }
         commitExpandedDirectories(nextActive)
-        temporaryRevealRef.current.delete(path)
-        for (const descendant of collectDescendantPaths(path, temporaryRevealRef.current)) {
-          temporaryRevealRef.current.delete(descendant)
-        }
         return
       }
 
       const nextRemembered = new Set(rememberedNow)
       nextRemembered.add(path)
-      // 父级约束可达性：path 的祖先若因 reveal 临时展开（active 中但未记忆），
-      // 随本次展开一并转正——否则恢复时 effectivelyExpanded 会因顶层祖先缺失整体失效。
+      // 父级约束可达性兜底：顶层断裂兜底（collectRestorableExpanded）补入 active 的祖先
+      // 不在 remembered 中，随本次展开一并转正——否则恢复时 effectivelyExpanded 会因祖先缺失失效。
       for (const ancestor of collectParentDirectories(path)) {
         if (expandedDirectoriesRef.current.has(ancestor)) nextRemembered.add(ancestor)
       }
       rememberedDirectoriesRef.current = nextRemembered
       setRememberedDirectories(nextRemembered)
       persistRememberedDirectories(nextRemembered)
-      temporaryRevealRef.current.delete(path)
       commitExpandedDirectories(new Set(expandedDirectoriesRef.current).add(path))
       const loaded = await loadDirectory(path)
       if (loaded) {
@@ -442,7 +449,8 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       const currentTree = treeStateRef.current
       const hasLoadedRoot = currentTree.status === 'ready' || currentTree.lastRootLoadedAtMs != null
       const shouldResetDirectoryLoads = !hasLoadedRoot || isManualRefresh
-      // 手动刷新重放集合从 remembered 有效展开收集（D29 方案 A），不再收集 active（含 temporaryReveal）。
+      // 手动刷新重放集合从 remembered 有效展开收集（D29 方案 A）；reveal 转正后其祖先也在
+      // remembered 中，刷新后同样保留。
       const expandedDirectoriesToRefresh = isManualRefresh ? sortDirectoryPathsForRefresh(collectRestorableExpanded(rememberedDirectoriesRef.current)) : []
 
       if (shouldResetDirectoryLoads) {
@@ -480,9 +488,8 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         commitExpandedDirectories(new Set())
       }
       if (isManualRefresh) {
-        // 方案 A（D29）：刷新 = 清空临时展开 + active 重置为 remembered 有效展开，
+        // 方案 A（D29）：刷新 = active 重置为 remembered 有效展开，
         // 由下方 pendingExpandedDirectoryRefreshRef 重放链路逐级加载。
-        temporaryRevealRef.current.clear()
         commitExpandedDirectories(new Set(collectRestorableExpanded(rememberedDirectoriesRef.current)))
       }
       setFileSearchError(null)
@@ -618,7 +625,6 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         autoLoadLimit: limit,
       })
       commitExpandedDirectories(new Set())
-      temporaryRevealRef.current.clear()
       setFileSearchError(null)
       setSearchResultNodes([])
       directoryLoadedAtMsRef.current.clear()
@@ -631,15 +637,14 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       await expandTreePath(relativePath, collectParentDirectories(relativePath), {
         loadDirectory: (directoryRelativePath) => loadDirectory(directoryRelativePath, { reason: 'locate-path' }),
         setExpandedDirectories,
+        // reveal 转正：成功展开的祖先目录写入 remembered 并持久化（expandTreePath 仅在
+        // loadDirectory 成功后回调，加载失败的路径不会进入记忆）。
         onRevealDirectory: (directoryRelativePath) => {
-          // reveal 临时展开：不在 remembered 中的祖先记入 temporaryReveal（不持久化、刷新即清）。
-          if (!rememberedDirectoriesRef.current.has(directoryRelativePath)) {
-            temporaryRevealRef.current.add(directoryRelativePath)
-          }
+          persistRevealDirectories([directoryRelativePath])
         },
       })
     },
-    [loadDirectory],
+    [loadDirectory, persistRevealDirectories],
   )
 
   const markFilePathKnown = useCallback(
@@ -649,11 +654,8 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
 
       const nextActive = expandParentDirectories(expandedDirectoriesRef.current, normalizedPath)
       if (nextActive !== expandedDirectoriesRef.current) {
-        for (const parent of collectParentDirectories(normalizedPath)) {
-          if (!rememberedDirectoriesRef.current.has(parent)) {
-            temporaryRevealRef.current.add(parent)
-          }
-        }
+        // reveal 转正：打开文件带出的祖先展开与手动展开同等持久化。
+        persistRevealDirectories(collectParentDirectories(normalizedPath))
         commitExpandedDirectories(nextActive)
       }
       setTree((prev) => {
@@ -664,7 +666,7 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         }
       })
     },
-    [commitExpandedDirectories],
+    [commitExpandedDirectories, persistRevealDirectories],
   )
 
   useEffect(() => {

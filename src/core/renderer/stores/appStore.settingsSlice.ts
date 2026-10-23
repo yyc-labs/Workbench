@@ -14,6 +14,7 @@ export type SettingsActionsSlice = Pick<
   | 'setCloseWindowBehavior'
   | 'setCodeFileExclusions'
   | 'setCodeTreeAutoLoadFileLimit'
+  | 'setGitChangedFilesLimit'
   | 'setFilePreviewLimits'
   | 'setCacheLocation'
   | 'setAiEnvironmentConfig'
@@ -102,6 +103,16 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
       config: {
         ...state.config,
         codeTreeAutoLoadFileLimit: updated.codeTreeAutoLoadFileLimit,
+      },
+    }))
+  },
+
+  setGitChangedFilesLimit: async (limit) => {
+    const updated = await window.electronAPI.setConfig({ gitChangedFilesLimit: limit })
+    set((state) => ({
+      config: {
+        ...state.config,
+        gitChangedFilesLimit: updated.gitChangedFilesLimit,
       },
     }))
   },

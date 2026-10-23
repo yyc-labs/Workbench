@@ -11,9 +11,9 @@ export function createGitInvokeApi() {
 
     listGitRepositories: (workspacePath: string) => ipcRenderer.invoke(IPC.GIT_LIST_REPOSITORIES, workspacePath),
 
-    getGitRepositorySnapshot: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT, repoRoot),
+    getGitRepositorySnapshot: (repoRoot: string, changedFilesLimit?: number) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT, repoRoot, changedFilesLimit),
 
-    getGitRepositorySnapshotLight: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, repoRoot),
+    getGitRepositorySnapshotLight: (repoRoot: string, changedFilesLimit?: number) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, repoRoot, changedFilesLimit),
 
     getGitStatusOptimization: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_STATUS_OPTIMIZATION, repoRoot),
 
