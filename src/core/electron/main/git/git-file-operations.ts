@@ -13,6 +13,7 @@ type GitFileOperationDependencies = {
   runner: GitCommandRunner
   getLocale: () => MainLocale
   readGitRepositorySnapshot: (repoRoot: string, traceActionId?: string, options?: { lightweight?: boolean }) => Promise<GitRepositorySnapshot>
+  invalidateGitSnapshot: (repoRoot: string) => Promise<void>
 }
 
 function firstNonEmptyLine(input: string): string | undefined {
@@ -85,7 +86,7 @@ function hasConflictMarker(content: string): boolean {
   return normalized.includes('\n<<<<<<< ') || normalized.startsWith('<<<<<<< ')
 }
 
-export function createGitFileOperations({ runner, getLocale, readGitRepositorySnapshot }: GitFileOperationDependencies) {
+export function createGitFileOperations({ runner, getLocale, readGitRepositorySnapshot, invalidateGitSnapshot }: GitFileOperationDependencies) {
   const { runGitCommand } = runner
 
   async function readGitFileEolInfo(cwd: string, filePath: string): Promise<string | undefined> {
@@ -306,6 +307,8 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
+    // mutation 入口失效（规则 3）：写入前 bump generation，防止在途旧快照被共享。
+    await invalidateGitSnapshot(repoRoot)
     const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
@@ -410,6 +413,8 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
+    // mutation 入口失效（规则 3）：写入前 bump generation，防止在途旧快照被共享。
+    await invalidateGitSnapshot(repoRoot)
     const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')

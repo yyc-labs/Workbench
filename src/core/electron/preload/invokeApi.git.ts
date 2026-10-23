@@ -13,6 +13,8 @@ export function createGitInvokeApi() {
 
     getGitRepositorySnapshot: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT, repoRoot),
 
+    getGitRepositorySnapshotLight: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, repoRoot),
+
     runGitOperation: (request: GitOperationRequest) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 
     setGitFileStage: (request: GitSetFileStageRequest) => ipcRenderer.invoke(IPC.GIT_SET_FILE_STAGE, request),

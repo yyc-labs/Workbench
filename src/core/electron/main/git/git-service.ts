@@ -2,6 +2,7 @@ import { createGitCommandRunner, DEFAULT_GIT_OUTPUT_LIMIT_BYTES, DEFAULT_GIT_OPE
 import { createGitFileOperations } from './git-file-operations'
 import { isValidGitBranchName, normalizeGitOperationRequest } from './git-operation-request'
 import { listGitRepositories } from './git-repositories'
+import { createGitSnapshotDedupe } from './git-snapshot-dedupe'
 import { createGitSnapshotReader } from './git-snapshot'
 import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
 import { translateMain, type MainLocale } from '../mainI18n'
@@ -16,10 +17,14 @@ export function createGitService(deps: GitServiceDependencies) {
   const gitCommandRunner = createGitCommandRunner({ getDefaultWslDistro })
   const { runGitCommand, runGitCommandSequence } = gitCommandRunner
   const { readGitRefOid, readRecentCommits, readGitRepositorySnapshot } = createGitSnapshotReader(gitCommandRunner)
+  // 快照 in-flight 去重（阶段 3 §4.1）：只读并发共享，mutation 写入口失效；light 与 full 不互享。
+  const gitSnapshotDedupe = createGitSnapshotDedupe({ readGitRepositorySnapshot, getDefaultWslDistro })
+  const readGitSnapshotDeduped = gitSnapshotDedupe.readGitSnapshot
   const { getGitConflictFile, getGitFileDiff, resolveGitConflictFile, setGitFileStage } = createGitFileOperations({
     runner: gitCommandRunner,
     getLocale: deps.getLocale,
-    readGitRepositorySnapshot,
+    readGitRepositorySnapshot: readGitSnapshotDeduped,
+    invalidateGitSnapshot: gitSnapshotDedupe.invalidateGitSnapshot,
   })
 
   async function runGitOperation(request: GitOperationRequest): Promise<GitOperationResult> {
@@ -41,7 +46,7 @@ export function createGitService(deps: GitServiceDependencies) {
 
     // 轻量预检快照（O2）：所有 operation 的预检判定只需要 branch/changedFiles/conflicts，
     // 不需要 recentCommits 与 upstreamOid，跳过两条 log 与 upstream oid 可省约一半进程。
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'precheck', { lightweight: true })
+    const snapshot = await readGitSnapshotDeduped(repoRoot, 'precheck', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(deps.getLocale(), 'git.notARepository')
       return {
@@ -335,6 +340,10 @@ export function createGitService(deps: GitServiceDependencies) {
     let error: string | undefined
     let commitHead: string | undefined
 
+    // mutation 执行点失效（规则 3）：执行前 bump generation，
+    // 在途旧快照只服务已在等待的调用方；执行后的 renderer finally 完整刷新是唯一权威刷新。
+    await gitSnapshotDedupe.invalidateGitSnapshot(resolvedRepoRoot)
+
     if (commandSequence && commandSequence.length > 0) {
       const sequenceResult = await runGitCommandSequence(resolvedRepoRoot, commandSequence, `op:${operation}`)
       ok = sequenceResult.ok
@@ -386,7 +395,7 @@ export function createGitService(deps: GitServiceDependencies) {
   return {
     listGitRepositories,
     readRecentCommits,
-    readGitRepositorySnapshot,
+    readGitRepositorySnapshot: readGitSnapshotDeduped,
     runGitOperation,
     setGitFileStage,
     getGitFileDiff,

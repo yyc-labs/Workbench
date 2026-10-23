@@ -254,6 +254,7 @@ export interface GitElectronApi {
   getLatestCommit: (repoRoot: string) => Promise<LatestCommitSummary[]>
   listGitRepositories: (workspacePath: string) => Promise<GitRepositoryListResult>
   getGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
+  getGitRepositorySnapshotLight: (repoRoot: string) => Promise<GitRepositorySnapshot>
   runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
   setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>
   getGitFileDiff: (request: GitFileDiffRequest) => Promise<GitFileDiffResult>

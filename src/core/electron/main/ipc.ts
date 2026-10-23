@@ -79,6 +79,7 @@ export const IPC = {
   GIT_GET_LATEST_COMMIT: 'git:getLatestCommit',
   GIT_LIST_REPOSITORIES: 'git:listRepositories',
   GIT_GET_REPOSITORY_SNAPSHOT: 'git:getRepositorySnapshot',
+  GIT_GET_REPOSITORY_SNAPSHOT_LIGHT: 'git:getRepositorySnapshotLight',
   GIT_RUN_OPERATION: 'git:runOperation',
   GIT_SET_FILE_STAGE: 'git:setFileStage',
   GIT_GET_FILE_DIFF: 'git:getFileDiff',

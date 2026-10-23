@@ -16,6 +16,10 @@ export function registerGitIpcHandlers(deps: RegisterIpcHandlersDependencies): v
     return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh')
   })
 
+  ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, async (_event, repoRoot: string) => {
+    return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh-light', { lightweight: true })
+  })
+
   ipcMain.handle(IPC.GIT_RUN_OPERATION, async (_event, request: GitOperationRequest) => {
     return deps.gitService.runGitOperation(normalizeGitRequest(request) as GitOperationRequest)
   })
