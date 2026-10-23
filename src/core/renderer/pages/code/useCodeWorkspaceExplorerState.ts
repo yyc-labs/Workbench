@@ -687,6 +687,41 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
       })
   }, [activePane, blockTreeAutoLoad, loadTree, projectPath, tree.autoLoadBlocked, tree.status, treeAutoLoadPaused])
 
+  // 展开目录自愈：快照恢复路径（createInitialTreeState 直接 status='ready'）不会跑
+  // loadTree/restoreReachableChildren，恢复链静默失败（suppressError + continue）与
+  // 加载结果被代次丢弃也一样——都会留下「已展开但 children 未加载」的目录，树中渲染为
+  // 空白占位行且此后没有任何链路再触发加载。对这些目录补一次 loadDirectory（自身有
+  // in-flight 去重，不会与 toggle/restore 链双载）；每代次每目录只尝试一次，持久失败
+  // 不无限重试（保留现状，可手动刷新兜底）。
+  const reconciledExpandedDirsRef = useRef<Map<string, number>>(new Map())
+  useEffect(() => {
+    if (treeAutoLoadPaused) return
+    if (tree.status !== 'ready') return
+    if (tree.isRefreshingRoot) return
+    const generation = directoryLoadGenerationRef.current
+    for (const [path, recordedGeneration] of reconciledExpandedDirsRef.current) {
+      if (recordedGeneration !== generation) reconciledExpandedDirsRef.current.delete(path)
+    }
+    const pending: string[] = []
+    for (const path of expandedDirectoriesRef.current) {
+      if (reconciledExpandedDirsRef.current.has(path)) continue
+      const node = findDirectoryNode(tree.nodes, path)
+      if (node?.isLoaded) {
+        reconciledExpandedDirsRef.current.set(path, generation)
+        continue
+      }
+      pending.push(path)
+    }
+    if (pending.length <= 0) return
+    void (async () => {
+      for (const path of pending) {
+        // 先记录再加载：即使失败也不在本代次内反复重试。
+        reconciledExpandedDirsRef.current.set(path, directoryLoadGenerationRef.current)
+        await loadDirectory(path, { suppressError: true })
+      }
+    })()
+  }, [expandedDirectories, loadDirectory, tree.isRefreshingRoot, tree.nodes, tree.status, treeAutoLoadPaused])
+
   // 设置页修改自动加载上限后，解除既有 block 并重置为 idle，上面的决策 effect 会用新配置重新判断。
   const treeAutoLoadFileLimitRef = useRef(treeAutoLoadFileLimit)
   useEffect(() => {

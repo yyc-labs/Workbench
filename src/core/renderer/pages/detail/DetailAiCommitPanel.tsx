@@ -8,6 +8,7 @@ import { DetailAiCommitBranchManagerModal } from './DetailAiCommitBranchManagerM
 import { DetailAiCommitBranchPanel } from './DetailAiCommitBranchPanel'
 import { DetailAiCommitCommitModal } from './DetailAiCommitCommitModal'
 import { DetailAiCommitGitGuideModal } from './DetailAiCommitGitGuideModal'
+import { DetailGitStatusOptimizationModal, GitStatusOptimizationTrigger } from './DetailGitStatusOptimizationModal'
 import { DetailAiCommitHeader } from './DetailAiCommitHeader'
 import { DetailAiCommitMiddlePanel } from './DetailAiCommitMiddlePanel'
 import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationConfirmModal'
@@ -256,6 +257,7 @@ function DetailAiCommitPanel({
     onRefreshGitSnapshot,
     t,
   })
+  const [gitStatusOptOpen, setGitStatusOptOpen] = useState(false)
   const {
     activeDiffFile,
     activeDiffFilePath,
@@ -795,17 +797,20 @@ function DetailAiCommitPanel({
   const pendingOperationCancelLabel = pendingOperation === 'undo-ai-commit' ? t('detail.operationConfirmUndoCancel') : operationConfirm?.cancelLabel
   const pendingOperationHelperText = pendingOperation === 'undo-ai-commit' ? (aiCommitUndoGraceActive ? t('detail.operationConfirmUndoHelper') : t('detail.operationConfirmUndoHelperGrace')) : operationConfirm?.helperText
   const gitRepositoryControls = (
-    <DetailGitRepositorySelector
-      repositories={gitRepositories}
-      selectedRepositoryId={selectedGitRepositoryId}
-      snapshot={gitSnapshot}
-      loading={gitSnapshotLoading}
-      repositoriesLoading={gitRepositoriesLoading}
-      repositoriesTruncated={gitRepositoriesTruncated}
-      variant="inline"
-      onChangeRepository={onChangeGitRepository}
-      onRefreshRepositories={onRefreshGitRepositories}
-    />
+    <>
+      <DetailGitRepositorySelector
+        repositories={gitRepositories}
+        selectedRepositoryId={selectedGitRepositoryId}
+        snapshot={gitSnapshot}
+        loading={gitSnapshotLoading}
+        repositoriesLoading={gitRepositoriesLoading}
+        repositoriesTruncated={gitRepositoriesTruncated}
+        variant="inline"
+        onChangeRepository={onChangeGitRepository}
+        onRefreshRepositories={onRefreshGitRepositories}
+      />
+      <GitStatusOptimizationTrigger onClick={() => setGitStatusOptOpen(true)} disabled={!gitSnapshot?.repoRoot} />
+    </>
   )
 
   return (
@@ -1008,6 +1013,7 @@ function DetailAiCommitPanel({
         upstreamManagerRemoteName={upstreamManagerRemoteName}
       />
       <DetailAiCommitGitGuideModal open={gitGuideOpen} onClose={() => setGitGuideOpen(false)} runner={gitWorkflowRunner} />
+      <DetailGitStatusOptimizationModal open={gitStatusOptOpen} onClose={() => setGitStatusOptOpen(false)} repoRoot={gitSnapshot?.repoRoot} />
       <DetailAiCommitOperationConfirmModal
         confirmExactMatch={gitWorkflowRunner.pendingConfirmation?.exactMatch ?? ''}
         confirmNeedsTypedMatch={Boolean(gitWorkflowRunner.pendingConfirmation?.exactMatch)}

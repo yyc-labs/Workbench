@@ -1,6 +1,6 @@
 import { ipcRenderer } from 'electron'
 import { IPC } from '../main/ipc'
-import type { GitConflictFileRequest, GitFileDiffRequest, GitOperationRequest, GitResolveConflictRequest, GitSetFileStageRequest } from '../../shared/types'
+import type { GitConflictFileRequest, GitFileDiffRequest, GitOperationRequest, GitResolveConflictRequest, GitSetFileStageRequest, GitStatusOptimizationRequest } from '../../shared/types'
 
 export function createGitInvokeApi() {
   return {
@@ -14,6 +14,10 @@ export function createGitInvokeApi() {
     getGitRepositorySnapshot: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT, repoRoot),
 
     getGitRepositorySnapshotLight: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, repoRoot),
+
+    getGitStatusOptimization: (repoRoot: string) => ipcRenderer.invoke(IPC.GIT_GET_STATUS_OPTIMIZATION, repoRoot),
+
+    setGitStatusOptimization: (request: GitStatusOptimizationRequest) => ipcRenderer.invoke(IPC.GIT_SET_STATUS_OPTIMIZATION, request),
 
     runGitOperation: (request: GitOperationRequest) => ipcRenderer.invoke(IPC.GIT_RUN_OPERATION, request),
 

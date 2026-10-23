@@ -4,7 +4,7 @@ import { isValidGitBranchName, normalizeGitOperationRequest } from './git-operat
 import { listGitRepositories } from './git-repositories'
 import { createGitSnapshotDedupe } from './git-snapshot-dedupe'
 import { createGitSnapshotReader } from './git-snapshot'
-import type { GitOperationRequest, GitOperationResult } from '../../../shared/types'
+import type { GitOperationRequest, GitOperationResult, GitStatusOptimizationRequest, GitStatusOptimizationResult, GitStatusOptimizationState } from '../../../shared/types'
 import { translateMain, type MainLocale } from '../mainI18n'
 
 type GitServiceDependencies = {
@@ -392,10 +392,67 @@ export function createGitService(deps: GitServiceDependencies) {
     }
   }
 
+  // 大仓库 status 加速（阶段 6 §7）：opt-in，读写仓库本地 Git 配置。
+  // 全部走 --local：仓库外会直接失败，绝不写入全局/系统配置（plan 1.2 红线）。
+  // -uall 保持不变（不降级为 -uno）。
+  const STATUS_OPTIMIZATION_KEYS = {
+    untrackedCache: 'core.untrackedCache',
+    fsmonitor: 'core.fsmonitor',
+  } as const
+
+  function parseGitConfigBoolean(value: string): boolean {
+    return /^(true|1|on|yes)$/i.test(value.trim())
+  }
+
+  async function readGitConfigLocalBoolean(repoRoot: string, key: string): Promise<boolean> {
+    const result = await runGitCommand(repoRoot, ['config', '--local', '--get', key])
+    if (result.code !== 0) return false
+    const value = result.stdout.replace(/\r/g, '').trim()
+    return value ? parseGitConfigBoolean(value) : false
+  }
+
+  async function getGitStatusOptimization(repoRoot: string): Promise<GitStatusOptimizationState> {
+    const trimmed = repoRoot.trim()
+    if (!trimmed) {
+      return { repoRoot, untrackedCache: false, fsmonitor: false, error: 'Repository root is required.' }
+    }
+    const untrackedCache = await readGitConfigLocalBoolean(trimmed, STATUS_OPTIMIZATION_KEYS.untrackedCache)
+    const fsmonitor = await readGitConfigLocalBoolean(trimmed, STATUS_OPTIMIZATION_KEYS.fsmonitor)
+    return { repoRoot: trimmed, untrackedCache, fsmonitor }
+  }
+
+  async function setGitStatusOptimization(request: GitStatusOptimizationRequest): Promise<GitStatusOptimizationResult> {
+    const repoRoot = request.repoRoot.trim()
+    if (!repoRoot) {
+      return { repoRoot: request.repoRoot, ok: false, error: 'Repository root is required.' }
+    }
+    const updates: Array<[string, boolean]> = []
+    if (typeof request.untrackedCache === 'boolean') updates.push([STATUS_OPTIMIZATION_KEYS.untrackedCache, request.untrackedCache])
+    if (typeof request.fsmonitor === 'boolean') updates.push([STATUS_OPTIMIZATION_KEYS.fsmonitor, request.fsmonitor])
+    if (updates.length === 0) {
+      const state = await getGitStatusOptimization(repoRoot)
+      return { repoRoot, ok: !state.error, state, error: state.error }
+    }
+    for (const [key, value] of updates) {
+      const execution = await runGitCommand(repoRoot, ['config', '--local', key, value ? 'true' : 'false'])
+      if (execution.code !== 0) {
+        return {
+          repoRoot,
+          ok: false,
+          error: normalizeGitOperationOutput(execution.stdout, execution.stderr),
+        }
+      }
+    }
+    const state = await getGitStatusOptimization(repoRoot)
+    return { repoRoot, ok: true, state }
+  }
+
   return {
     listGitRepositories,
     readRecentCommits,
     readGitRepositorySnapshot: readGitSnapshotDeduped,
+    getGitStatusOptimization,
+    setGitStatusOptimization,
     runGitOperation,
     setGitFileStage,
     getGitFileDiff,

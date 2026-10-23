@@ -354,7 +354,10 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         ...(outcome.kind === 'cancelled' ? { reason: outcome.reason } : {}),
       })
 
-      // 节点完成后刷新（O3）：后续 mutation 节点的预检依赖新鲜状态，治理（P6）前不得删除。
+      // 节点完成后刷新（P6 治理结论）：GitWorkflowOperation 全部为 mutation
+      // （fetch/pull/push/switch/merge/commit），不存在可跳过刷新的纯计算/展示节点；
+      // fetch 也更新 remote-tracking 状态，后续节点预检依赖它。因此每节点刷新保留，
+      // 重复读取由阶段 3 的 in-flight 去重合并。
       const traceStartedAt = beginGitTraceTiming()
       try {
         await onRefreshGitSnapshot()

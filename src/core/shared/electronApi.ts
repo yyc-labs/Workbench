@@ -56,6 +56,9 @@ import type {
   GitOperationResult,
   GitRepositoryListResult,
   GitRepositorySnapshot,
+  GitStatusOptimizationRequest,
+  GitStatusOptimizationResult,
+  GitStatusOptimizationState,
   GitResolveConflictRequest,
   GitResolveConflictResult,
   GitSetFileStageRequest,
@@ -255,6 +258,8 @@ export interface GitElectronApi {
   listGitRepositories: (workspacePath: string) => Promise<GitRepositoryListResult>
   getGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>
   getGitRepositorySnapshotLight: (repoRoot: string) => Promise<GitRepositorySnapshot>
+  getGitStatusOptimization: (repoRoot: string) => Promise<GitStatusOptimizationState>
+  setGitStatusOptimization: (request: GitStatusOptimizationRequest) => Promise<GitStatusOptimizationResult>
   runGitOperation: (request: GitOperationRequest) => Promise<GitOperationResult>
   setGitFileStage: (request: GitSetFileStageRequest) => Promise<GitSetFileStageResult>
   getGitFileDiff: (request: GitFileDiffRequest) => Promise<GitFileDiffResult>

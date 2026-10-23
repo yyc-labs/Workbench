@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC } from '../ipc'
-import type { GitConflictFileRequest, GitFileDiffRequest, GitOperationRequest, GitResolveConflictRequest, GitSetFileStageRequest } from '../../../shared/types'
+import type { GitConflictFileRequest, GitFileDiffRequest, GitOperationRequest, GitResolveConflictRequest, GitSetFileStageRequest, GitStatusOptimizationRequest } from '../../../shared/types'
 import { normalizeGitRequest, type RegisterIpcHandlersDependencies } from './registerIpcHandlers.shared'
 
 export function registerGitIpcHandlers(deps: RegisterIpcHandlersDependencies): void {
@@ -18,6 +18,14 @@ export function registerGitIpcHandlers(deps: RegisterIpcHandlersDependencies): v
 
   ipcMain.handle(IPC.GIT_GET_REPOSITORY_SNAPSHOT_LIGHT, async (_event, repoRoot: string) => {
     return deps.gitService.readGitRepositorySnapshot(repoRoot, 'ui-refresh-light', { lightweight: true })
+  })
+
+  ipcMain.handle(IPC.GIT_GET_STATUS_OPTIMIZATION, async (_event, repoRoot: string) => {
+    return deps.gitService.getGitStatusOptimization(repoRoot)
+  })
+
+  ipcMain.handle(IPC.GIT_SET_STATUS_OPTIMIZATION, async (_event, request: GitStatusOptimizationRequest) => {
+    return deps.gitService.setGitStatusOptimization(request)
   })
 
   ipcMain.handle(IPC.GIT_RUN_OPERATION, async (_event, request: GitOperationRequest) => {

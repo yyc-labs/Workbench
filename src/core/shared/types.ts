@@ -1269,6 +1269,29 @@ export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 
 
 export type GitOperationSkipReason = 'nothing-to-pull' | 'nothing-to-push' | 'missing-upstream' | 'upstream-gone' | 'dirty-worktree' | 'conflicts-present' | 'detached-head' | 'target-required' | 'target-is-current' | 'target-not-found' | 'already-on-target' | 'other'
 
+// 大仓库 status 加速（阶段 6 / plan-detail §7）：opt-in，仅写仓库本地配置，绝不触碰全局配置。
+export interface GitStatusOptimizationState {
+  repoRoot: string
+  /** core.untrackedCache（仓库本地配置，未设置时为 false） */
+  untrackedCache: boolean
+  /** core.fsmonitor（仓库本地配置，未设置时为 false） */
+  fsmonitor: boolean
+  error?: string
+}
+
+export interface GitStatusOptimizationRequest {
+  repoRoot: string
+  untrackedCache?: boolean
+  fsmonitor?: boolean
+}
+
+export interface GitStatusOptimizationResult {
+  repoRoot: string
+  ok: boolean
+  state?: GitStatusOptimizationState
+  error?: string
+}
+
 export interface GitOperationRequest {
   repoRoot: string
   operation: GitOperationKind
