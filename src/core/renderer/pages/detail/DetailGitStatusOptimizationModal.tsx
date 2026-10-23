@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Gauge, Loader2, X } from 'lucide-react'
 import type { GitStatusOptimizationState } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
@@ -32,8 +32,8 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
     setLimitSavedHint(false)
   }, [open])
 
-  const commitLimitInput = async () => {
-    const parsed = Number.parseInt(limitInput.trim(), 10)
+  const commitLimitValue = async (raw: string) => {
+    const parsed = Number.parseInt(raw.trim(), 10)
     if (!Number.isFinite(parsed)) {
       setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
       return
@@ -45,6 +45,43 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
     setLimitInput(String(after))
     setLimitSavedHint(after !== before)
   }
+
+  const commitLimitInput = () => commitLimitValue(limitInput)
+
+  // 滚轮步进：+/-10，钳制 10–2000；停止滚动 600ms 后自动保存
+  const limitCommitTimerRef = useRef<number | null>(null)
+  const adjustLimitByWheel = (direction: 1 | -1) => {
+    const current = Number.parseInt(limitInput, 10)
+    const base = Number.isFinite(current) ? current : 99
+    const next = Math.min(2000, Math.max(10, base + direction * 10))
+    setLimitInput(String(next))
+    if (limitCommitTimerRef.current) window.clearTimeout(limitCommitTimerRef.current)
+    limitCommitTimerRef.current = window.setTimeout(() => {
+      limitCommitTimerRef.current = null
+      void commitLimitValue(String(next))
+    }, 600)
+  }
+
+  useEffect(
+    () => () => {
+      if (limitCommitTimerRef.current) window.clearTimeout(limitCommitTimerRef.current)
+    },
+    [],
+  )
+
+  const limitInputRef = useRef<HTMLInputElement | null>(null)
+  const wheelDeps = `${limitInput}|${open}`
+  useEffect(() => {
+    const node = limitInputRef.current
+    if (!node || !open) return
+    const handler = (event: WheelEvent) => {
+      event.preventDefault()
+      adjustLimitByWheel(event.deltaY < 0 ? 1 : -1)
+    }
+    node.addEventListener('wheel', handler, { passive: false })
+    return () => node.removeEventListener('wheel', handler)
+    // adjustLimitByWheel 依赖最新 limitInput，随输入重挂
+  }, [wheelDeps])
 
   useEffect(() => {
     if (!open || !repoRoot) return
@@ -140,6 +177,7 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
           <p className="text-[12px] font-semibold text-[color:var(--color-foreground)]">{t('detail.gitStatusOptLimit')}</p>
           <p className="mt-1 text-[12px] leading-5 text-[color:var(--color-muted-foreground)]">{t('detail.gitStatusOptLimitHint')}</p>
           <Input
+            ref={limitInputRef}
             className="mt-2 h-8 w-24"
             textSize={12}
             inputMode="numeric"
