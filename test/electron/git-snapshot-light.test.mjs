@@ -16,8 +16,13 @@ function createFakeRunner() {
     const [cmd] = args
     if (cmd === 'rev-parse' && args[1] === '--show-toplevel') return { code: 0, stdout: '/repo\n', stderr: '' }
     if (cmd === 'status') return { code: 0, stdout: STATUS_OUTPUT, stderr: '' }
-    if (cmd === 'branch' && args.includes('--remotes')) return { code: 0, stdout: 'origin/main\norigin/HEAD\n', stderr: '' }
-    if (cmd === 'branch') return { code: 0, stdout: 'main\nfeature\n', stderr: '' }
+    if (cmd === 'for-each-ref') {
+      return {
+        code: 0,
+        stdout: [`refs/heads/main\x00${UPSTREAM_OID}\x00origin/main\x00*\x1e`, `refs/heads/feature\x00${HEAD_OID}\x00\x00\x1e`, `refs/remotes/origin/main\x00${UPSTREAM_OID}\x00\x00\x1e`, `refs/remotes/origin/HEAD\x00${UPSTREAM_OID}\x00\x00\x1e`].join(''),
+        stderr: '',
+      }
+    }
     if (cmd === 'log' && args.some((arg) => arg.includes('%x00'))) {
       return { code: 0, stdout: `${HEAD_OID}\x00src/app.ts\x00`, stderr: '' }
     }
@@ -70,8 +75,8 @@ test('lightweight snapshot skips both logs and upstream oid, other fields match 
   assert.equal(light.snapshotKind, 'light')
   assert.deepEqual(light.recentCommits, [])
   assert.equal(light.branch.upstreamOid, undefined)
-  // 轻量快照 = toplevel + status + 本地分支 + 远程分支，共 4 个进程，且不执行任何 log
-  assert.equal(runner.calls.length, 4)
+  // 轻量快照 = toplevel + status + for-each-ref，共 3 个进程，且不执行任何 log
+  assert.equal(runner.calls.length, 3)
   assert.ok(!runner.calls.some((args) => args[0] === 'log'))
   // 除 recentCommits / upstreamOid / checkedAt 外逐字段与 full 一致
   const full = await createGitSnapshotReader(createFakeRunner()).readGitRepositorySnapshot('/repo', 'ui-refresh')

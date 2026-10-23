@@ -141,8 +141,34 @@ function parseGitStatus(raw: string): { branch: GitBranchInfo; changedFiles: Git
   return { branch, changedFiles }
 }
 
+// for-each-ref 合并解析（阶段 4 §5.1）：单条命令同时取本地与远程分支，
+// 记录以 %1e 结尾、字段以 %00 分隔（分支名不含 NUL，安全）。
+// 目前仅消费 refname；objectname/upstream/HEAD 字段按 plan-detail §5.1 格式保留。
+// 语义与原两条 branch 命令一致：本地/远程各 500 条截断，远程过滤 /HEAD 结尾，按 refname 排序。
+export function parseGitForEachRefBranches(raw: string): { localBranches: string[]; remoteBranches: string[] } {
+  const records = raw
+    .replace(/\r/g, '')
+    .split('\x1e')
+    .map((record) => record.trim())
+    .filter(Boolean)
+  const localBranches: string[] = []
+  const remoteBranches: string[] = []
+  for (const record of records) {
+    const refname = record.split('\x00')[0]?.trim() ?? ''
+    if (refname.startsWith('refs/heads/')) {
+      localBranches.push(refname.slice('refs/heads/'.length))
+    } else if (refname.startsWith('refs/remotes/')) {
+      remoteBranches.push(refname.slice('refs/remotes/'.length))
+    }
+  }
+  return {
+    localBranches: localBranches.slice(0, MAX_GIT_BRANCH_LIST_ITEMS),
+    remoteBranches: remoteBranches.slice(0, MAX_GIT_BRANCH_LIST_ITEMS).filter((item) => !/\/HEAD$/.test(item)),
+  }
+}
+
 export function createGitSnapshotReader(runner: GitCommandRunner) {
-  const { runGitCommand, listGitLines } = runner
+  const { runGitCommand } = runner
 
   async function readGitCommitFilesChangedMap(cwd: string, limit: number, traceActionId?: string): Promise<Map<string, string[]>> {
     const result = await runGitCommand(
@@ -347,36 +373,27 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       }
     }
 
-    const [localBranches, remoteBranches, recentCommits] = await Promise.all([
-      listGitLines(
+    const [refsResult, recentCommits] = await Promise.all([
+      // for-each-ref 合并（阶段 4 §5.1）：单条命令替代原 branch-local + branch-remote 两条
+      runGitCommand(
         effectiveRepoRoot,
-        ['branch', '--format=%(refname:short)'],
+        ['for-each-ref', '--sort=refname', '--format=%(refname)%00%(objectname)%00%(upstream)%00%(HEAD)%1e', 'refs/heads', 'refs/remotes'],
         {
           stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
           stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-          maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
         },
-        `${traceActionId}:branch-local`,
-      ),
-      listGitLines(
-        effectiveRepoRoot,
-        ['branch', '--remotes', '--format=%(refname:short)'],
-        {
-          stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-          stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-          maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
-        },
-        `${traceActionId}:branch-remote`,
+        `${traceActionId}:refs`,
       ),
       lightweight ? Promise.resolve<GitHistoryCommitInfo[]>([]) : readGitCommitHistory(effectiveRepoRoot, 10, `${traceActionId}:history`),
     ])
+    const { localBranches, remoteBranches } = parseGitForEachRefBranches(refsResult.stdout)
 
     const parsed = parseGitStatus(statusResult.stdout)
     const changedFileCount = parsed.changedFiles.length
     const conflictedFileCount = parsed.changedFiles.filter((file) => file.scope === 'conflicted').length
     const changedFilesSuppressed = changedFileCount > MAX_GIT_CHANGED_FILES_FOR_DETAIL
-    const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
-    const remoteBranchSet = new Set(filteredRemoteBranches)
+    // remoteBranches 已在 parseGitForEachRefBranches 内完成 500 条截断与 /HEAD 过滤
+    const remoteBranchSet = new Set(remoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
     const upstreamOid = lightweight || !parsed.branch.upstream || upstreamGone ? undefined : await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream, `${traceActionId}:rev-parse-upstream`)
     const branch = {
@@ -384,7 +401,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       upstreamGone,
       upstreamOid,
       localBranches,
-      remoteBranches: filteredRemoteBranches,
+      remoteBranches,
     }
 
     emitSnapshotSummary(effectiveRepoRoot)
