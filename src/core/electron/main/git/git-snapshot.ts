@@ -268,14 +268,15 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined
   }
 
-  async function readGitRepositorySnapshot(repoRoot: string, traceActionId = 'snapshot'): Promise<GitRepositorySnapshot> {
+  async function readGitRepositorySnapshot(repoRoot: string, traceActionId = 'snapshot', options?: { lightweight?: boolean }): Promise<GitRepositorySnapshot> {
     const snapshotStartedAt = GIT_TRACE_ENABLED ? performance.now() : 0
+    const lightweight = options?.lightweight === true
     const emitSnapshotSummary = (repoKeyRoot: string) => {
       if (!GIT_TRACE_ENABLED) return
       emitGitTrace({
         actionId: traceActionId,
         repoKey: gitTraceRepoKey(repoKeyRoot),
-        cmd: 'snapshot',
+        cmd: lightweight ? 'snapshot-light' : 'snapshot',
         durationMs: Math.round(performance.now() - snapshotStartedAt),
       })
     }
@@ -284,6 +285,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       emitSnapshotSummary(inputRepoRoot)
       return {
         repoRoot: '',
+        snapshotKind: lightweight ? 'light' : 'full',
         isGitRepository: false,
         branch: emptyGitBranchInfo(),
         changedFiles: [],
@@ -329,6 +331,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       emitSnapshotSummary(effectiveRepoRoot)
       return {
         repoRoot: effectiveRepoRoot,
+        snapshotKind: lightweight ? 'light' : 'full',
         isGitRepository: false,
         repository,
         branch: emptyBranch,
@@ -365,7 +368,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
         },
         `${traceActionId}:branch-remote`,
       ),
-      readGitCommitHistory(effectiveRepoRoot, 10, `${traceActionId}:history`),
+      lightweight ? Promise.resolve<GitHistoryCommitInfo[]>([]) : readGitCommitHistory(effectiveRepoRoot, 10, `${traceActionId}:history`),
     ])
 
     const parsed = parseGitStatus(statusResult.stdout)
@@ -375,7 +378,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
     const remoteBranchSet = new Set(filteredRemoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
-    const upstreamOid = parsed.branch.upstream && !upstreamGone ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream, `${traceActionId}:rev-parse-upstream`) : undefined
+    const upstreamOid = lightweight || !parsed.branch.upstream || upstreamGone ? undefined : await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream, `${traceActionId}:rev-parse-upstream`)
     const branch = {
       ...parsed.branch,
       upstreamGone,
@@ -387,6 +390,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     emitSnapshotSummary(effectiveRepoRoot)
     return {
       repoRoot: effectiveRepoRoot,
+      snapshotKind: lightweight ? 'light' : 'full',
       isGitRepository: true,
       repository,
       branch,
@@ -402,5 +406,6 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
   return {
     readRecentCommits,
     readGitRepositorySnapshot,
+    readGitRefOid,
   }
 }

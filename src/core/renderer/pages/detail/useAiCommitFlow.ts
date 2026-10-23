@@ -357,6 +357,8 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
     }
   }, [projectPath])
 
+  // O3 刷新规则：本函数是动作后的唯一权威完整刷新。mutation 成功/skip/失败都要刷新
+  // （skip 结论可能由过期快照得出）；不得以缓存或主进程 commitHead 顶替这里的刷新。
   const refreshGitSnapshot = useCallback(async () => {
     if (!selectedGitRepository) {
       setGitSnapshot(null)
@@ -399,6 +401,7 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
 
   useEffect(() => {
     if (aiCommitStatus === 'running') return
+    // AI commit 在外部子进程修改仓库，状态变化后的权威刷新不得删除（O3）。
     void refreshGitSnapshot()
   }, [refreshGitSnapshot, aiCommitStatus])
 

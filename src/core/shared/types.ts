@@ -1245,6 +1245,11 @@ export interface GitRepositoryListResult {
   error?: string
 }
 
+// 快照层级：light 仅填充预检所需字段（branch 含 upstreamGone、changedFiles 及计数），
+// recentCommits 恒为空数组且不取 upstreamOid；full 为完整快照。
+// 禁止把 light 快照透传给历史类消费方（renderer 历史区只消费 full），防止把 recentCommits 覆盖为空。
+export type GitSnapshotKind = 'light' | 'full'
+
 export interface GitRepositorySnapshot {
   repoRoot: string
   isGitRepository: boolean
@@ -1257,6 +1262,7 @@ export interface GitRepositorySnapshot {
   recentCommits: GitHistoryCommitInfo[]
   checkedAt: number
   error?: string
+  snapshotKind?: GitSnapshotKind
 }
 
 export type GitOperationKind = 'fetch' | 'pull' | 'push' | 'merge' | 'switch' | 'commit' | 'undo-commit' | 'create-remote-branch' | 'create-local-branch' | 'delete-local-branch' | 'set-upstream'

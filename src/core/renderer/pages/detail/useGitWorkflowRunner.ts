@@ -354,6 +354,7 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         ...(outcome.kind === 'cancelled' ? { reason: outcome.reason } : {}),
       })
 
+      // 节点完成后刷新（O3）：后续 mutation 节点的预检依赖新鲜状态，治理（P6）前不得删除。
       const traceStartedAt = beginGitTraceTiming()
       try {
         await onRefreshGitSnapshot()

@@ -15,7 +15,7 @@ export function createGitService(deps: GitServiceDependencies) {
   const getDefaultWslDistro = () => deps.getDefaultWslDistro() || 'Ubuntu'
   const gitCommandRunner = createGitCommandRunner({ getDefaultWslDistro })
   const { runGitCommand, runGitCommandSequence } = gitCommandRunner
-  const { readRecentCommits, readGitRepositorySnapshot } = createGitSnapshotReader(gitCommandRunner)
+  const { readGitRefOid, readRecentCommits, readGitRepositorySnapshot } = createGitSnapshotReader(gitCommandRunner)
   const { getGitConflictFile, getGitFileDiff, resolveGitConflictFile, setGitFileStage } = createGitFileOperations({
     runner: gitCommandRunner,
     getLocale: deps.getLocale,
@@ -39,7 +39,9 @@ export function createGitService(deps: GitServiceDependencies) {
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'precheck')
+    // 轻量预检快照（O2）：所有 operation 的预检判定只需要 branch/changedFiles/conflicts，
+    // 不需要 recentCommits 与 upstreamOid，跳过两条 log 与 upstream oid 可省约一半进程。
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'precheck', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(deps.getLocale(), 'git.notARepository')
       return {
@@ -362,8 +364,9 @@ export function createGitService(deps: GitServiceDependencies) {
     }
 
     if (ok && operation === 'commit') {
-      const afterSnapshot = await readGitRepositorySnapshot(resolvedRepoRoot, 'after-commit')
-      commitHead = afterSnapshot.branch.oid
+      // O1：commit 成功后只需要新 HEAD 的 OID 作为 commitHead（undo 校验用），不再读完整快照。
+      // rev-parse 失败（空仓库等理论路径）时 commitHead 缺省，与原 afterSnapshot.branch.oid 行为一致。
+      commitHead = await readGitRefOid(resolvedRepoRoot, 'HEAD', 'after-commit:rev-parse-head')
     }
 
     return {

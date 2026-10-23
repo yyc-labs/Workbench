@@ -12,7 +12,7 @@ const GIT_CONFLICT_WORKTREE_MAX_FILE_BYTES = 1024 * 1024
 type GitFileOperationDependencies = {
   runner: GitCommandRunner
   getLocale: () => MainLocale
-  readGitRepositorySnapshot: (repoRoot: string, traceActionId?: string) => Promise<GitRepositorySnapshot>
+  readGitRepositorySnapshot: (repoRoot: string, traceActionId?: string, options?: { lightweight?: boolean }) => Promise<GitRepositorySnapshot>
 }
 
 function firstNonEmptyLine(input: string): string | undefined {
@@ -167,7 +167,7 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op')
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
@@ -306,7 +306,7 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op')
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
@@ -410,7 +410,7 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op')
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {
@@ -526,7 +526,7 @@ export function createGitFileOperations({ runner, getLocale, readGitRepositorySn
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op')
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'file-op', { lightweight: true })
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(getLocale(), 'git.notARepository')
       return {

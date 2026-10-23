@@ -567,6 +567,7 @@ function DetailAiCommitPanel({
     } catch (error) {
       setFileActionError(error instanceof Error ? error.message : String(error))
     } finally {
+      // 权威完整刷新（O3）：skip/失败也刷新，不得省略。
       await onRefreshGitSnapshot()
       endGitTraceTiming('file-stage', traceStartedAt)
       setStagingFilePath(null)
@@ -598,6 +599,7 @@ function DetailAiCommitPanel({
       setFileActionError(error instanceof Error ? error.message : String(error))
     } finally {
       try {
+        // 权威完整刷新（O3）：skip/失败也刷新，不得省略。
         await onRefreshGitSnapshot()
       } finally {
         endGitTraceTiming('file-stage-bulk', traceStartedAt)
@@ -652,6 +654,7 @@ function DetailAiCommitPanel({
       setMiddlePanelMode('git-log')
     } finally {
       try {
+        // 权威完整刷新（O3）：commitHead 只用于 undo 校验，面板新历史靠这次刷新。
         await onRefreshGitSnapshot()
       } finally {
         endGitTraceTiming('commit', traceStartedAt)
@@ -719,6 +722,7 @@ function DetailAiCommitPanel({
       appendOperationLog({ repoRoot: commitUndo.repoRoot, operation: 'undo-commit', ok: false, checkedAt: Date.now(), command: '', output, exitCode: null, error: output })
       setMiddlePanelMode('git-log')
     } finally {
+      // 权威完整刷新（O3）：skip/失败也刷新，不得省略。
       await onRefreshGitSnapshot()
       endGitTraceTiming('undo-commit', traceStartedAt)
       setCommitUndoRunning(false)
@@ -767,6 +771,7 @@ function DetailAiCommitPanel({
       setOperationLogs((prev) => [failedResult, ...prev].slice(0, 50))
       setMiddlePanelMode('git-log')
     } finally {
+      // 权威完整刷新（O3）：skip/失败也刷新，不得省略。
       await onRefreshGitSnapshot()
       endGitTraceTiming(`op:${operation}`, traceStartedAt)
       setRunningOperation(null)
