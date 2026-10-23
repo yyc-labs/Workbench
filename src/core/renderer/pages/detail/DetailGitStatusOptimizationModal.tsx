@@ -48,26 +48,13 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
 
   const commitLimitInput = () => commitLimitValue(limitInput)
 
-  // 滚轮步进：+/-10，钳制 10–2000；停止滚动 600ms 后自动保存
-  const limitCommitTimerRef = useRef<number | null>(null)
+  // 滚轮步进：仅聚焦时生效（+/-10，钳制 10–2000），保存统一走失焦
   const adjustLimitByWheel = (direction: 1 | -1) => {
     const current = Number.parseInt(limitInput, 10)
     const base = Number.isFinite(current) ? current : 99
     const next = Math.min(2000, Math.max(10, base + direction * 10))
     setLimitInput(String(next))
-    if (limitCommitTimerRef.current) window.clearTimeout(limitCommitTimerRef.current)
-    limitCommitTimerRef.current = window.setTimeout(() => {
-      limitCommitTimerRef.current = null
-      void commitLimitValue(String(next))
-    }, 600)
   }
-
-  useEffect(
-    () => () => {
-      if (limitCommitTimerRef.current) window.clearTimeout(limitCommitTimerRef.current)
-    },
-    [],
-  )
 
   const limitInputRef = useRef<HTMLInputElement | null>(null)
   const wheelDeps = `${limitInput}|${open}`
@@ -75,6 +62,7 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
     const node = limitInputRef.current
     if (!node || !open) return
     const handler = (event: WheelEvent) => {
+      if (document.activeElement !== node) return
       event.preventDefault()
       adjustLimitByWheel(event.deltaY < 0 ? 1 : -1)
     }
