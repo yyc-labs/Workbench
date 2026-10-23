@@ -12,7 +12,9 @@ import {
   listProjectFiles,
   openProjectFileInSystem,
   readProjectFile,
+  revealProjectFileInFileManager,
   searchProjectContent,
+  searchProjectDirectories,
   searchProjectFiles,
   statProjectFile,
   writeProjectFile,
@@ -37,6 +39,10 @@ export function registerProjectFileIpcHandlers(): void {
     return withProjectFileErrors(() => searchProjectFiles(projectPath, query, folderRelativePath))
   })
 
+  ipcMain.handle(IPC.PROJECT_FILE_SEARCH_DIRECTORIES, async (_event, projectPath: string, query: string, folderRelativePath?: string) => {
+    return withProjectFileErrors(() => searchProjectDirectories(projectPath, query, folderRelativePath))
+  })
+
   ipcMain.handle(IPC.PROJECT_FILE_CONTENT_SEARCH, async (_event, projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => {
     return withProjectFileErrors(() => searchProjectContent(projectPath, query, options))
   })
@@ -59,6 +65,10 @@ export function registerProjectFileIpcHandlers(): void {
 
   ipcMain.handle(IPC.PROJECT_FILE_OPEN_PATH, async (_event, projectPath: string, relativePath: string) => {
     return withProjectFileErrors(() => openProjectFileInSystem(projectPath, relativePath))
+  })
+
+  ipcMain.handle(IPC.PROJECT_FILE_REVEAL, async (_event, projectPath: string, relativePath: string) => {
+    return withProjectFileErrors(() => revealProjectFileInFileManager(projectPath, relativePath))
   })
 
   ipcMain.handle(IPC.PROJECT_FILE_ZIP, async (_event, projectPath: string, folderRelativePath: string, zipName: string) => {

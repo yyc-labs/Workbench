@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
-import { promises as fs } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
+import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { ProjectFileContentSearchResult, ProjectFileNode, ProjectFilePreviewKind } from '../../../shared/types'
 
@@ -396,7 +396,7 @@ export function fileDepth(relativePath: string): number {
 }
 
 function compactPathToken(value: string): string {
-  return value.toLowerCase().replace(/[\/\\._\-\s]+/g, '')
+  return value.toLowerCase().replace(/[/\\._\-\s]+/g, '')
 }
 
 function isSubsequenceMatch(needle: string, haystack: string): boolean {
@@ -445,6 +445,21 @@ export function decodeRgOutputData(data: RgOutputData | undefined): string {
 
 export function normalizeSearchLineText(lineText: string): string {
   return lineText.replace(/\r?\n$/, '')
+}
+
+/**
+ * ripgrep 的 submatch start/end 是**字节**偏移，而编辑器列与渲染切片都用字符口径：
+ * 含中文等非 ASCII 的行直接用字节偏移会整体右移。这里转换为 UTF-16 字符索引，
+ * 偏移越界（行被 --max-columns 截断等）时收敛到文本末尾。
+ */
+export function byteOffsetToUtf16Index(text: string, byteOffset: number): number {
+  if (!Number.isFinite(byteOffset) || byteOffset <= 0) return 0
+  let bytes = 0
+  for (let index = 0; index < text.length; index += 1) {
+    if (bytes >= byteOffset) return index
+    bytes += Buffer.byteLength(text[index], 'utf8')
+  }
+  return text.length
 }
 
 export function normalizeContentSearchIncludeGlobs(includeGlobs: unknown): string[] {

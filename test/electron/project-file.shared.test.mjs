@@ -2,7 +2,23 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { ProjectFileServiceError, filterListedFilePaths, fuzzyPathMatch, normalizeContentSearchIncludeGlobs, normalizeImageExtension, normalizeListedRelativePath, normalizeRelativeInput, shouldSkipListedFilePath, validateRelativePathLooksSafe } = loadTsModule('src/core/electron/main/project-file/shared.ts')
+const { ProjectFileServiceError, byteOffsetToUtf16Index, filterListedFilePaths, fuzzyPathMatch, normalizeContentSearchIncludeGlobs, normalizeImageExtension, normalizeListedRelativePath, normalizeRelativeInput, shouldSkipListedFilePath, validateRelativePathLooksSafe } =
+  loadTsModule('src/core/electron/main/project-file/shared.ts')
+
+test('byteOffsetToUtf16Index 将 rg 的字节偏移转换为字符索引', () => {
+  // 中文占 3 字节：'abc' 的字节偏移 6 对应字符索引 2。
+  assert.equal(byteOffsetToUtf16Index('中文abc测试', 6), 2)
+  assert.equal(byteOffsetToUtf16Index('中文abc测试', 9), 5)
+  // 纯 ASCII 行字节偏移即字符索引。
+  assert.equal(byteOffsetToUtf16Index('const bot = 1', 6), 6)
+  // emoji 为代理对：按 UTF-16 索引计（'😀' 占 4 字节 / 2 个 UTF-16 单元）。
+  assert.equal(byteOffsetToUtf16Index('😀bot', 4), 2)
+  // 越界与非有限值收敛到边界。
+  assert.equal(byteOffsetToUtf16Index('中文abc', 999), 5)
+  assert.equal(byteOffsetToUtf16Index('中文abc', 0), 0)
+  assert.equal(byteOffsetToUtf16Index('中文abc', -3), 0)
+  assert.equal(byteOffsetToUtf16Index('中文abc', Number.NaN), 0)
+})
 
 test('normalizeRelativeInput accepts safe relative paths and rejects traversal or absolute paths', () => {
   assert.equal(normalizeRelativeInput(' ./src\\pages//Home.tsx '), 'src/pages/Home.tsx')

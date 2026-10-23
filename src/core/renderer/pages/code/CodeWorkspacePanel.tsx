@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { shallow } from 'zustand/shallow'
-import type { ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
+import type { ProjectFileContentMatch, ProjectFileNodeKind, ProjectFileReadResult, TranscriptFileReference } from '../../../shared/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import type { ProjectPanePreload } from '../../components/ProjectPaneTabs'
 import { SidebarGestureHost } from '../../components/SidebarGestureHost'
@@ -15,7 +15,7 @@ import { CodeWorkspaceChrome } from './CodeWorkspaceChrome'
 import { CodeWorkspaceEditorPane } from './CodeWorkspaceEditorPane'
 import { CodeWorkspaceSidebar } from './CodeWorkspaceSidebar'
 import { readContentSearchHistory, recordContentSearchHistory } from './code.contentSearchHistory'
-import { inferLanguageFromRelativePath, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
+import { inferLanguageFromRelativePath, parentDirectory, pushRecentCodeFilePath, removeCodeFilePathFromDrawerState, toggleFavoriteCodeFilePath } from './code.helpers'
 import { resolveMarkdownLinkTarget } from './code.markdownLinkTarget'
 import { revealMarkdownPreviewSourceLine } from './code.markdownShared'
 import type { CodeWorkspaceNavigationState } from './code.navigation'
@@ -176,6 +176,8 @@ export function CodeWorkspacePanel({
     column: number
   } | null>(null)
   const [locateRequestToken, setLocateRequestToken] = useState(0)
+  // 17：右键「定位所在文件夹」请求；token 单调递增，空 relativePath = 项目根下的文件（滚到顶部）。
+  const [locateFolderRequest, setLocateFolderRequest] = useState<{ relativePath: string; token: number } | null>(null)
   const editorRef = useRef<MonacoCodeEditorHandle | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const pageRootRef = useRef<HTMLDivElement | null>(null)
@@ -355,6 +357,39 @@ export function CodeWorkspacePanel({
       setLocateRequestToken((prev) => prev + 1)
     },
     [ensureTreePathLoaded, tree.autoLoadBlocked],
+  )
+
+  // 17：树内 reveal 一个目录——加载并展开祖先链，目录自身按需展开（未展开时才 toggle，
+  // 避免把已展开的目录误折叠），最后触发定位滚动。定位所在文件夹与搜索文件夹结果跳转共用。
+  const revealDirectoryInTree = useCallback(
+    async (directoryRelativePath: string) => {
+      if (tree.autoLoadBlocked) return
+      const directoryPath = directoryRelativePath.trim()
+      if (!directoryPath) return
+      await ensureTreePathLoaded(directoryPath)
+      if (!expandedDirectories.has(directoryPath)) {
+        await toggleDirectory(directoryPath)
+      }
+      setLocateFolderRequest((prev) => ({ relativePath: directoryPath, token: (prev?.token ?? 0) + 1 }))
+    },
+    [ensureTreePathLoaded, expandedDirectories, toggleDirectory, tree.autoLoadBlocked],
+  )
+
+  // 17：右键「定位所在文件夹」（file 菜单项）——定位目标为该文件所在目录；
+  // 根目录下的文件没有可定位的文件夹，直接滚到顶部。
+  const locateNodeFolderInTree = useCallback(
+    async (relativePath: string) => {
+      if (tree.autoLoadBlocked) return
+      const normalizedPath = relativePath.trim()
+      if (!normalizedPath) return
+      const folderPath = parentDirectory(normalizedPath)
+      if (!folderPath) {
+        setLocateFolderRequest((prev) => ({ relativePath: '', token: (prev?.token ?? 0) + 1 }))
+        return
+      }
+      await revealDirectoryInTree(folderPath)
+    },
+    [revealDirectoryInTree, tree.autoLoadBlocked],
   )
   const openFileWithTreeLocate = useCallback(
     async (relativePath: string, forceReload = false): Promise<boolean> => {
@@ -821,6 +856,7 @@ export function CodeWorkspacePanel({
     handleExecuteScriptInEmbeddedTerminal,
     handleExecuteScriptInSystemTerminal,
     handleFindTreeNodeFilesByName,
+    handleSearchFoldersInFolder,
     handleFolderSearchContextMenu,
     handleOpenContentSearchResult,
     handleOpenSmartEmptyFile,
@@ -954,6 +990,36 @@ export function CodeWorkspacePanel({
     [activeRelativePath],
   )
 
+  // Ctrl+↑/↓：仅在当前文件的搜索命中间切换（文件内环绕）；当前文件无命中时不拦截按键。
+  const handleQuickMatchJump = useCallback(
+    (direction: 'next' | 'previous'): boolean => {
+      const file = contentSearchResult.files.find((item) => item.relativePath === activeRelativePath)
+      if (!file || file.matches.length === 0) return false
+
+      const matches = file.matches
+      const activeLocationIndex = activeContentSearchLocation?.relativePath === activeRelativePath ? matches.findIndex((match) => match.lineNumber === activeContentSearchLocation.lineNumber && match.column === activeContentSearchLocation.column) : -1
+
+      let target: ProjectFileContentMatch | undefined
+      if (activeLocationIndex >= 0) {
+        target = matches[(activeLocationIndex + (direction === 'next' ? 1 : -1) + matches.length) % matches.length]
+      } else {
+        // 无锚点：以编辑器光标行为基准，向后/向前找最近的命中（环绕）。
+        const cursorLine = editorRef.current?.getPosition()?.lineNumber ?? 0
+        if (direction === 'next') {
+          target = matches.find((match) => match.lineNumber > cursorLine) ?? matches[0]
+        } else {
+          target = [...matches].reverse().find((match) => match.lineNumber < cursorLine) ?? matches[matches.length - 1]
+        }
+      }
+
+      if (!target) return false
+      void openContentSearchMatch(file.relativePath, target.lineNumber, target.column)
+      setActiveContentSearchLocation({ relativePath: file.relativePath, lineNumber: target.lineNumber, column: target.column })
+      return true
+    },
+    [activeContentSearchLocation, activeRelativePath, contentSearchResult.files, editorRef, openContentSearchMatch],
+  )
+
   return (
     <div ref={pageRootRef} className="relative flex h-full min-h-0 flex-col">
       <SidebarGestureHost
@@ -1073,6 +1139,9 @@ export function CodeWorkspacePanel({
                 isSearchingContent={isSearchingContent}
                 isSearchingFiles={isSearchingFiles}
                 locateRequestToken={locateRequestToken}
+                locateFolderRequest={locateFolderRequest}
+                onLocateNodeFolder={locateNodeFolderInTree}
+                onSearchFoldersInFolder={handleSearchFoldersInFolder}
                 onApplyContentSearchScopePreset={applyContentSearchScopePreset}
                 onChangeContentSearchQuery={handleContentSearchQueryChange}
                 onContentSearchHistoryNavigate={cycleContentSearchHistory}
@@ -1158,6 +1227,7 @@ export function CodeWorkspacePanel({
                 onClosePreviewSearch={closePreviewSearch}
                 onEditorScrollStateChange={handleEditorScrollStateChange}
                 onFocusSearch={focusSearchInputByMode}
+                onQuickMatchJump={handleQuickMatchJump}
                 onGoToNextPreviewSearchMatch={goToNextPreviewSearchMatch}
                 onGoToPreviousPreviewSearchMatch={goToPreviousPreviewSearchMatch}
                 onHandleSave={handleSaveFromEditor}
@@ -1194,13 +1264,19 @@ export function CodeWorkspacePanel({
       <TranscriptContentDrawer open={Boolean(transcriptContentDrawer)} target={transcriptContentDrawer} projectId={projectId} projectPath={projectPath} onClose={() => setTranscriptContentDrawer(null)} onOpenInTranscriptPage={handleOpenTranscriptPageReference} />
       {folderSearchTarget && (
         <FolderFileSearchPopover
-          x={folderSearchTarget.x}
-          y={folderSearchTarget.y}
-          folderRelativePath={folderSearchTarget.relativePath}
-          folderName={folderSearchTarget.nodeName}
+          x={folderSearchTarget.payload.x}
+          y={folderSearchTarget.payload.y}
+          folderRelativePath={folderSearchTarget.payload.relativePath}
+          folderName={folderSearchTarget.payload.nodeName}
           projectPath={projectPath}
-          onOpenFile={(relativePath) => {
-            void openFileWithTreeLocate(relativePath)
+          searchKind={folderSearchTarget.searchKind}
+          onSelectResult={(node) => {
+            // 文件结果：打开并定位；文件夹结果（17 搜索文件夹）：树内 reveal 该目录。
+            if (node.kind === 'directory') {
+              void revealDirectoryInTree(node.relativePath)
+            } else {
+              void openFileWithTreeLocate(node.relativePath)
+            }
           }}
           onContextMenu={handleFolderSearchContextMenu}
           onClose={closeFolderFileSearch}

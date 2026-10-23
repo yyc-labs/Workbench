@@ -1,20 +1,12 @@
-import { Dirent } from 'node:fs'
-import { promises as fs } from 'node:fs'
+import { Dirent, promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { ProjectFileAutoLoadDecision, ProjectFileNode, ProjectFileTreeOptions, ProjectFileTreeResult } from '../../../shared/types'
 import { loadConfig } from '../config'
 import {
-  LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
-  MAX_DIRECTORY_ENTRIES,
-  MAX_SEARCH_RESULTS,
-  MAX_TREE_DEPTH,
-  MAX_TREE_FILES,
-  PROJECT_FILE_LIST_CACHE_TTL_MS,
   type AutoLoadProbeCounters,
-  type DirectoryListCounters,
-  type ScanCounters,
   compareTreeNodesByName,
   createRgExcludeGlobs,
+  type DirectoryListCounters,
   ensureWithinRoot,
   execFileUtf8,
   fileDepth,
@@ -23,11 +15,18 @@ import {
   fuzzyPathMatch,
   isExcludedDirectory,
   isExcludedFile,
+  LARGE_PROJECT_AUTOLOAD_FILE_LIMIT,
+  MAX_DIRECTORY_ENTRIES,
+  MAX_SEARCH_RESULTS,
+  MAX_TREE_DEPTH,
+  MAX_TREE_FILES,
   normalizeListedRelativePath,
   normalizeRelativeInput,
+  PROJECT_FILE_LIST_CACHE_TTL_MS,
+  type ProjectFileExclusions,
   ProjectFileServiceError,
   resolveRoot,
-  type ProjectFileExclusions,
+  type ScanCounters,
   scanDirectoryForAutoLoadThreshold,
   shouldSkipListedFilePath,
   toPosixRelativePath,
@@ -356,59 +355,76 @@ export async function getProjectFileAutoLoadDecision(projectPath: string): Promi
   }
 }
 
+/** posix 相对路径的父目录；无父目录（顶层文件）返回 null。 */
+function posixParentDirectory(relativePath: string): string | null {
+  const slashIndex = relativePath.lastIndexOf('/')
+  if (slashIndex <= 0) return null
+  return relativePath.slice(0, slashIndex)
+}
+
+/**
+ * 搜索范围前缀解析（searchProjectFiles / searchProjectDirectories 共用）：
+ * 可选地把搜索限定在指定目录子树内；校验复用现有防护链，空值视为全项目。
+ */
+async function resolveSearchScopePrefix(rootRealPath: string, folderRelativePath?: string): Promise<string> {
+  if (!folderRelativePath || !folderRelativePath.trim()) return ''
+  const normalizedFolder = normalizeRelativeInput(folderRelativePath)
+  validateRelativePathLooksSafe(normalizedFolder)
+  const folderCandidatePath = path.resolve(rootRealPath, normalizedFolder)
+  const folderRealPath = await fs.realpath(folderCandidatePath)
+  ensureWithinRoot(rootRealPath, folderRealPath)
+  const folderStat = await fs.stat(folderRealPath)
+  if (!folderStat.isDirectory()) {
+    throw new ProjectFileServiceError('Selected path is not a directory.')
+  }
+  return `${toPosixRelativePath(normalizedFolder)}/`
+}
+
+/** 项目文件清单（缓存优先，ripgrep 列表 / 目录扫描回退），两种搜索共用。 */
+async function resolveProjectFileListForSearch(rootRealPath: string, exclusions: ReturnType<typeof getProjectFileExclusions>): Promise<string[]> {
+  const cached = getProjectFileListFromCache(rootRealPath, exclusions)
+  if (cached) return cached
+
+  const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
+  if (listedPaths) {
+    listedPaths.sort((a, b) => a.localeCompare(b))
+    const filtered = filterListedFilePaths(listedPaths, exclusions, getProjectTreeScanMaxFiles())
+    const acceptedPaths = filtered.acceptedPaths
+    setProjectFileListCache(rootRealPath, exclusions, acceptedPaths)
+    return acceptedPaths
+  }
+
+  const counters: ScanCounters = {
+    filesScanned: 0,
+    skippedFiles: 0,
+    skippedDirectories: 0,
+  }
+  const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters, exclusions, getProjectTreeScanMaxFiles())
+  const nextPaths: string[] = []
+  const walk = (nodes: ProjectFileNode[]) => {
+    for (const node of nodes) {
+      if (node.kind === 'file') {
+        nextPaths.push(node.relativePath)
+        continue
+      }
+      if (node.children && node.children.length > 0) {
+        walk(node.children)
+      }
+    }
+  }
+  walk(tree)
+  setProjectFileListCache(rootRealPath, exclusions, nextPaths)
+  return nextPaths
+}
+
 export async function searchProjectFiles(projectPath: string, query: string, folderRelativePath?: string): Promise<ProjectFileNode[]> {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) return []
 
   const rootRealPath = await resolveRoot(projectPath)
   const exclusions = getProjectFileExclusions()
-
-  // 可选范围过滤：限定在指定目录子树内。校验复用现有防护链；空值视为全项目，行为不变。
-  let folderPrefix = ''
-  if (folderRelativePath && folderRelativePath.trim()) {
-    const normalizedFolder = normalizeRelativeInput(folderRelativePath)
-    validateRelativePathLooksSafe(normalizedFolder)
-    const folderCandidatePath = path.resolve(rootRealPath, normalizedFolder)
-    const folderRealPath = await fs.realpath(folderCandidatePath)
-    ensureWithinRoot(rootRealPath, folderRealPath)
-    const folderStat = await fs.stat(folderRealPath)
-    if (!folderStat.isDirectory()) {
-      throw new ProjectFileServiceError('Selected path is not a directory.')
-    }
-    folderPrefix = `${toPosixRelativePath(normalizedFolder)}/`
-  }
-
-  let resolvedPaths = getProjectFileListFromCache(rootRealPath, exclusions)
-  if (!resolvedPaths) {
-    const listedPaths = await listProjectFilesByRipgrep(rootRealPath, exclusions)
-    if (listedPaths) {
-      listedPaths.sort((a, b) => a.localeCompare(b))
-      const filtered = filterListedFilePaths(listedPaths, exclusions, getProjectTreeScanMaxFiles())
-      resolvedPaths = filtered.acceptedPaths
-    } else {
-      const counters: ScanCounters = {
-        filesScanned: 0,
-        skippedFiles: 0,
-        skippedDirectories: 0,
-      }
-      const tree = await scanDirectoryFallback(rootRealPath, rootRealPath, 0, counters, exclusions, getProjectTreeScanMaxFiles())
-      const nextPaths: string[] = []
-      const walk = (nodes: ProjectFileNode[]) => {
-        for (const node of nodes) {
-          if (node.kind === 'file') {
-            nextPaths.push(node.relativePath)
-            continue
-          }
-          if (node.children && node.children.length > 0) {
-            walk(node.children)
-          }
-        }
-      }
-      walk(tree)
-      resolvedPaths = nextPaths
-    }
-    setProjectFileListCache(rootRealPath, exclusions, resolvedPaths)
-  }
+  const folderPrefix = await resolveSearchScopePrefix(rootRealPath, folderRelativePath)
+  const resolvedPaths = await resolveProjectFileListForSearch(rootRealPath, exclusions)
 
   const matches: ProjectFileNode[] = []
   for (const relativePath of resolvedPaths) {
@@ -423,6 +439,50 @@ export async function searchProjectFiles(projectPath: string, query: string, fol
       name: fileName,
       relativePath,
       kind: 'file',
+    })
+  }
+
+  return matches
+}
+
+/**
+ * 在项目（或指定目录子树）内按名称搜索**文件夹**（17 号需求：右键目录 → 搜索文件夹）。
+ * 目录集合从文件清单派生（每个文件的祖先目录），与树的懒加载数据源一致——
+ * 空目录不在文件清单中，故搜索不到；范围根自身不算「子目录」，不进结果。
+ * 匹配只针对目录名本身（用户 2026-10-22 要求），不做全路径匹配。
+ */
+export async function searchProjectDirectories(projectPath: string, query: string, folderRelativePath?: string): Promise<ProjectFileNode[]> {
+  const normalizedQuery = query.trim()
+  if (!normalizedQuery) return []
+
+  const rootRealPath = await resolveRoot(projectPath)
+  const exclusions = getProjectFileExclusions()
+  const folderPrefix = await resolveSearchScopePrefix(rootRealPath, folderRelativePath)
+  const resolvedPaths = await resolveProjectFileListForSearch(rootRealPath, exclusions)
+
+  const directoryPaths = new Set<string>()
+  for (const relativePath of resolvedPaths) {
+    if (folderPrefix && !relativePath.startsWith(folderPrefix)) continue
+    // 逐级上取父目录；越出范围前缀（含范围根本身）即停。
+    let current = posixParentDirectory(relativePath)
+    while (current && (!folderPrefix || current.startsWith(folderPrefix))) {
+      directoryPaths.add(current)
+      current = posixParentDirectory(current)
+    }
+  }
+
+  const matches: ProjectFileNode[] = []
+  for (const relativePath of [...directoryPaths].sort((a, b) => a.localeCompare(b))) {
+    if (matches.length >= MAX_SEARCH_RESULTS) break
+    // 只匹配目录名本身（用户 2026-10-22 要求）：路径匹配会引入大量同前缀的噪音结果。
+    const directoryName = fileNameFromRelativePath(relativePath)
+    if (!fuzzyPathMatch(normalizedQuery, directoryName)) {
+      continue
+    }
+    matches.push({
+      name: directoryName,
+      relativePath,
+      kind: 'directory',
     })
   }
 

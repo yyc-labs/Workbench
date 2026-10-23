@@ -3,6 +3,7 @@ export { searchProjectContent } from './project-file/content-search-service'
 export {
   openProjectFileInSystem,
   readProjectFile,
+  revealProjectFileInFileManager,
   statProjectFile,
   writeProjectFile,
   writeProjectImageFile,
@@ -12,5 +13,6 @@ export {
   getProjectFileAutoLoadDecision,
   listProjectDirectoryFiles,
   listProjectFiles,
+  searchProjectDirectories,
   searchProjectFiles,
 } from './project-file/tree-service'

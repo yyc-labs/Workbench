@@ -265,10 +265,13 @@ export interface ProjectFileElectronApi {
   listProjectFiles: (projectPath: string, options?: ProjectFileTreeOptions) => Promise<ProjectFileTreeResult>
   listProjectDirectoryFiles: (projectPath: string, directoryRelativePath: string | null) => Promise<ProjectFileTreeResult>
   searchProjectFiles: (projectPath: string, query: string, folderRelativePath?: string) => Promise<ProjectFileNode[]>
+  searchProjectDirectories: (projectPath: string, query: string, folderRelativePath?: string) => Promise<ProjectFileNode[]>
   searchProjectContent: (projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => Promise<ProjectFileContentSearchResponse>
   readProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileReadResult>
   statProjectFile: (projectPath: string, relativePath: string) => Promise<ProjectFileStatResult>
   writeProjectFile: (projectPath: string, relativePath: string, content: string, expectedMtimeMs?: number) => Promise<ProjectFileWriteResult>
+  /** 在系统文件管理器中打开并选中该文件（只读提示等场景，让用户自行处理文件属性）。 */
+  revealProjectFileInFileManager: (projectPath: string, relativePath: string) => Promise<{ ok: boolean; error?: string }>
   writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => Promise<ProjectFileWriteImageResult>
   openProjectFilePath: (projectPath: string, relativePath: string) => Promise<{ ok: boolean; error?: string }>
   zipProjectFolder: (projectPath: string, folderRelativePath: string, zipName: string) => Promise<ProjectFileZipResult>

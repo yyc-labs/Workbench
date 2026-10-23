@@ -12,6 +12,8 @@ import type { FileSearchLineTarget } from './code.types'
 
 const DIRECTORY_PLACEHOLDER_SUFFIX = '/__codex_placeholder__'
 const MAX_LOCATE_SCROLL_ATTEMPTS = 6
+/** 17 定位所在文件夹：闪烁高亮时长（与 code-tree-row-locate-flash 动画同源）。 */
+const LOCATE_HIGHLIGHT_DURATION_MS = 1800
 const MAX_FOLLOW_SCROLL_ATTEMPTS = 6
 
 /** 命中文件在 ProjectFileNode 上的附加字段：供 fileHoverCard 消费方渲染悬浮命中卡片。 */
@@ -49,6 +51,12 @@ interface CodeFileTreeProps {
   /** 扁平搜索模式下查询携带的行区间目标（`path:N` / `path:N-M`），点击结果时透传给 onSelectFile。 */
   flatListLineTarget?: FileSearchLineTarget | null
   locateRequestToken?: number
+  /** 17：右键「定位所在文件夹」请求（token 单调递增；relativePath 为空 = 项目根，滚到顶部）。 */
+  locateFolderRequest?: { relativePath: string; token: number } | null
+  /** 17：右键「定位所在文件夹」（file 节点菜单项；在树内跳转并展开所在目录）。 */
+  onLocateNodeFolder?: (relativePath: string) => void | Promise<void>
+  /** 17：右键「搜索文件夹」（directory 节点菜单项；透传右键 payload 供弹层定位）。 */
+  onSearchFoldersInFolder?: (payload: CodeTreeContextMenuPayload) => void | Promise<void>
   /** 选择上下文标识（项目 + 模式 + 解析后查询）：变化时清空选择、锚点与右键快照（16 号计划 §8）。 */
   selectionScopeKey?: string
   /** 项目根路径，供批量复制绝对路径与快照校验使用。 */
@@ -73,6 +81,8 @@ interface FileTreeNodeRendererProps extends NodeRendererProps<ProjectFileNode> {
   onOpenFileContextMenu: (payload: CodeTreeContextMenuPayload) => void
   /** 命中文件悬浮卡片（全局搜索传入）：文件行整行挂交互式卡片。 */
   fileHoverCard?: CodeFileTreeProps['fileHoverCard']
+  /** 17 定位闪烁高亮的目录路径（动画自动淡出，null = 无）。 */
+  locatedFolderPath?: string | null
 }
 
 interface TreeSize {
@@ -210,10 +220,19 @@ function ensureTreeNodeVisibleInViewport(tree: TreeApi<ProjectFileNode>, relativ
   return true
 }
 
-function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onRowClick, onOpenFileContextMenu, fileHoverCard }: FileTreeNodeRendererProps) {
+function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, flatFileListMode, onRowClick, onOpenFileContextMenu, fileHoverCard, locatedFolderPath }: FileTreeNodeRendererProps) {
   const data = node.data
   if (isPlaceholderNode(data)) {
-    return <div style={style} aria-hidden="true" />
+    // 占位行不是真实节点：吞掉点击，防止漏到 arborist 行层 handleClick 把占位节点选上。
+    return (
+      <div
+        style={style}
+        aria-hidden="true"
+        onClick={(event) => {
+          event.stopPropagation()
+        }}
+      />
+    )
   }
   const isExcluded = data.isExcluded === true
   const isDirectory = !flatFileListMode && data.kind === 'directory' && !isExcluded
@@ -225,26 +244,33 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
   // 命中文件行整行挂交互式悬浮卡片（全局搜索）：此时不再挂 label 的路径 tooltip，避免嵌套悬浮层互相抢触发。
   const useHoverCard = !isExcluded && data.kind === 'file' && Boolean(fileHoverCard)
 
+  // 整行统一分发（按钮与根 div 共用）：
+  // 根 div 承载 arborist 的缩进 padding（nodeStyle.paddingLeft），该区域不在按钮内——
+  // 而 arborist 行包裹层自带 onClick=node.handleClick，无修饰分支直接 select() 整换选中集合，
+  // 会把行渲染成「Ctrl 选中」样式并绕过我们的多选模型（2026-10-22 用户报告的 bug）。
+  // 因此根 div 必须先 stopPropagation 再走同一分发；按钮自身已 stopPropagation，不会重复触发。
+  const handleRowAreaClick = (event: ReactMouseEvent<HTMLElement>) => {
+    event.stopPropagation()
+    onRowClick(event, data)
+  }
+  const handleRowAreaContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    onOpenFileContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      relativePath: data.relativePath,
+      nodeName: data.name,
+      nodeKind: data.kind,
+    })
+  }
   const rowButton = (
     <button
       type="button"
-      className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} ${isSelected ? 'code-tree-row--selected' : ''} ${isExcluded ? 'code-tree-row--excluded' : ''}`}
+      className={`code-tree-row ${isActive ? 'code-tree-row--active' : ''} ${isSelected ? 'code-tree-row--selected' : ''} ${isExcluded ? 'code-tree-row--excluded' : ''} ${locatedFolderPath === data.relativePath ? 'code-tree-row--located' : ''}`}
       style={{ paddingLeft: 10 }}
-      onClick={(event) => {
-        event.stopPropagation()
-        onRowClick(event, data)
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        onOpenFileContextMenu({
-          x: event.clientX,
-          y: event.clientY,
-          relativePath: data.relativePath,
-          nodeName: data.name,
-          nodeKind: data.kind,
-        })
-      }}
+      onClick={handleRowAreaClick}
+      onContextMenu={handleRowAreaContextMenu}
     >
       {isDirectory ? (
         hasChildren ? (
@@ -287,7 +313,7 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
 
   if (fileHoverCard && useHoverCard) {
     return (
-      <div ref={dragHandle} style={style}>
+      <div ref={dragHandle} style={style} onClick={handleRowAreaClick} onContextMenu={handleRowAreaContextMenu}>
         <Tooltip content={fileHoverCard(data as ProjectFileNode & ContentSearchNodeExtras, onOpenFileContextMenu)} interactive side="right" align="start" maxWidth={520} className="w-full">
           {rowButton}
         </Tooltip>
@@ -296,7 +322,7 @@ function FileTreeNodeRenderer({ node, style, dragHandle, activeRelativePath, fla
   }
 
   return (
-    <div ref={dragHandle} style={style}>
+    <div ref={dragHandle} style={style} onClick={handleRowAreaClick} onContextMenu={handleRowAreaContextMenu}>
       {rowButton}
     </div>
   )
@@ -327,6 +353,9 @@ export const CodeFileTree = memo(function CodeFileTree({
   flatFileListMode = false,
   flatListLineTarget = null,
   locateRequestToken = 0,
+  locateFolderRequest = null,
+  onLocateNodeFolder,
+  onSearchFoldersInFolder,
   selectionScopeKey = '',
   projectPath = '',
   onSelectedCountChange,
@@ -542,33 +571,75 @@ export const CodeFileTree = memo(function CodeFileTree({
     return state
   }, [expandedDirectories, flatFileListMode])
 
+  // 树内定位滚动（tab 定位文件与右键「定位所在文件夹」共用）：目标行不存在时按帧重试
+  // （刚 expand 的目录行可能还未布局），超过尝试上限放弃；返回取消函数供 effect cleanup。
+  const revealTreeNodePath = useCallback((relativePath: string): (() => void) => {
+    let cancelled = false
+    let frameId = 0
+    let attempts = 0
+
+    const reveal = () => {
+      if (cancelled) return
+      const tree = treeRef.current
+      if (!tree) return
+      if (centerTreeNodeInViewport(tree, relativePath)) return
+
+      attempts += 1
+      void tree.scrollTo(relativePath, 'center')
+      if (attempts >= MAX_LOCATE_SCROLL_ATTEMPTS) return
+      frameId = window.requestAnimationFrame(reveal)
+    }
+
+    reveal()
+    return () => {
+      cancelled = true
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [])
+
   useEffect(() => {
     if (!locateRequestToken) return
     if (locateRequestToken === handledLocateRequestTokenRef.current) return
     handledLocateRequestTokenRef.current = locateRequestToken
     if (!activeRelativePath) return
-    let cancelled = false
-    let frameId = 0
-    let attempts = 0
+    return revealTreeNodePath(activeRelativePath)
+  }, [locateRequestToken, activeRelativePath, revealTreeNodePath])
 
-    const revealActiveFile = () => {
-      if (cancelled) return
-      const tree = treeRef.current
-      if (!tree) return
-      if (centerTreeNodeInViewport(tree, activeRelativePath)) return
-
-      attempts += 1
-      void tree.scrollTo(activeRelativePath, 'center')
-      if (attempts >= MAX_LOCATE_SCROLL_ATTEMPTS) return
-      frameId = window.requestAnimationFrame(revealActiveFile)
+  // 17：右键「定位所在文件夹」——与 tab 定位同一套 reveal，目标为文件夹路径；
+  // 空路径 = 项目根下的文件（所在目录即根），滚到顶部即可。
+  const handledLocateFolderTokenRef = useRef(0)
+  // 定位闪烁高亮：目标目录行短暂挂 code-tree-row--located（动画自动淡出），独立于多选选中态。
+  const [locatedFolderPath, setLocatedFolderPath] = useState<string | null>(null)
+  const locatedHighlightTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!locateFolderRequest) return
+    if (locateFolderRequest.token === handledLocateFolderTokenRef.current) return
+    handledLocateFolderTokenRef.current = locateFolderRequest.token
+    const folderPath = locateFolderRequest.relativePath
+    if (!folderPath) {
+      const listElement = treeRef.current?.listEl.current
+      if (listElement) listElement.scrollTop = 0
+      return
     }
-
-    revealActiveFile()
+    // 定位反馈：目标目录闪烁高亮约 1.8s 后自动淡出（独立于多选选中态）。
+    // 先清再设（rAF 隔帧），同一目录重复定位时动画能重新起播。
+    setLocatedFolderPath(null)
+    const flashFrame = window.requestAnimationFrame(() => setLocatedFolderPath(folderPath))
+    if (locatedHighlightTimerRef.current != null) window.clearTimeout(locatedHighlightTimerRef.current)
+    locatedHighlightTimerRef.current = window.setTimeout(() => setLocatedFolderPath(null), LOCATE_HIGHLIGHT_DURATION_MS)
+    if (!folderPath) {
+      const listElement = treeRef.current?.listEl.current
+      if (listElement) listElement.scrollTop = 0
+      return () => {
+        window.cancelAnimationFrame(flashFrame)
+      }
+    }
+    const cancelReveal = revealTreeNodePath(folderPath)
     return () => {
-      cancelled = true
-      window.cancelAnimationFrame(frameId)
+      window.cancelAnimationFrame(flashFrame)
+      cancelReveal()
     }
-  }, [locateRequestToken, activeRelativePath])
+  }, [locateFolderRequest, revealTreeNodePath])
 
   useEffect(() => {
     // 统一时序（§2.3）：scope 清理优先于 active 同步（C1）。
@@ -750,7 +821,7 @@ export const CodeFileTree = memo(function CodeFileTree({
             onSelectedCountChange?.(selectedNodes.length)
           }}
         >
-          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onRowClick={handleRowClick} onOpenFileContextMenu={handleOpenFileContextMenu} fileHoverCard={fileHoverCard} />}
+          {(props) => <FileTreeNodeRenderer {...props} activeRelativePath={activeRelativePath} flatFileListMode={flatFileListMode} onRowClick={handleRowClick} onOpenFileContextMenu={handleOpenFileContextMenu} fileHoverCard={fileHoverCard} locatedFolderPath={locatedFolderPath} />}
         </Tree>
       )}
       {contextMenu && contextMenuSnapshot && (
@@ -764,6 +835,8 @@ export const CodeFileTree = memo(function CodeFileTree({
           onOpenTerminal={() => onOpenNodeTerminal(contextMenu.relativePath, contextMenu.nodeKind)}
           onSearchInFolder={() => onSearchInFolder(contextMenu.relativePath, contextMenu.nodeKind)}
           onFindFilesByName={onFindNodeFilesByName ? () => onFindNodeFilesByName(contextMenu) : undefined}
+          onLocateNodeFolder={onLocateNodeFolder ? () => onLocateNodeFolder(contextMenu.relativePath) : undefined}
+          onSearchFoldersInFolder={onSearchFoldersInFolder ? () => onSearchFoldersInFolder(contextMenu) : undefined}
           onCopyName={() => onCopyNodeName(contextMenu.nodeName, contextMenu.nodeKind)}
           onCopyRelativePath={() => onCopyNodeRelativePath(contextMenu.relativePath, contextMenu.nodeKind)}
           onCopyRelativePathWithoutSlashes={() => onCopyNodeRelativePathWithoutSlashes(contextMenu.relativePath, contextMenu.nodeKind)}

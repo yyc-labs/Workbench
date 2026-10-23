@@ -1,15 +1,15 @@
 import type { editor as MonacoEditor, Selection } from 'monaco-editor'
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { TranscriptFileReference } from '../../../shared/types'
-import { installMonacoFindWidgetHoverGuard, getMonacoOverflowWidgetsContainer, syncMonacoOverflowWidgetsTheme, type MonacoThemeName } from '../../lib/monacoEnvironment'
 import { MONO_FONT_STACK } from '../../lib/fonts'
+import { getMonacoOverflowWidgetsContainer, installMonacoFindWidgetHoverGuard, type MonacoThemeName, syncMonacoOverflowWidgetsTheme } from '../../lib/monacoEnvironment'
 import { monacoLineHeightForFontSize, readMonacoEditorFontSizePreference, writeMonacoEditorFontSizePreference } from '../../lib/monacoFontPreference'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
+import { extractRelativeImportRanges, resolveFilePathFromModelUri, resolveImportCandidatePaths, resolveImportTarget } from './code.importLink'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
-import { TranscriptReferenceHoverCard } from './TranscriptReferenceHoverCard'
-import { extractRelativeImportRanges, resolveImportCandidatePaths, resolveFilePathFromModelUri, resolveImportTarget } from './code.importLink'
 import { acquireMonacoModelCacheKey, getMonacoViewState, getOrCreateMonacoModel, releaseMonacoModelCacheKey, saveMonacoViewState, toMonacoModelCacheKey } from './monacoModelCache'
+import { TranscriptReferenceHoverCard } from './TranscriptReferenceHoverCard'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
 import { useMonacoTranscriptGutter } from './useMonacoTranscriptGutter'
@@ -24,6 +24,8 @@ export interface MonacoEditorScrollState {
 export interface MonacoCodeEditorHandle {
   getScrollState: () => MonacoEditorScrollState | null
   getPosition: () => { lineNumber: number; column: number } | null
+  /** 编辑器当前实际绑定的文件路径（切模型后即更新）；调用方据此判断 reveal 是否会作用到目标文件。 */
+  getActiveFilePath: () => string | null
   setScrollTop: (scrollTop: number) => void
   setScrollTopForLine: (lineNumber: number) => void
   revealPosition: (lineNumber: number, column?: number) => void
@@ -55,6 +57,8 @@ interface MonacoCodeEditorProps {
   onPasteImage?: (file: File | null, clipboardEvent?: ClipboardEvent) => Promise<string | null>
   onSave: () => void
   onFocusSearch?: () => void
+  /** Ctrl+↑/↓ 命中间快捷跳转（全局搜索场景）；返回 false 表示不拦截、交还默认处理。 */
+  onQuickMatchJump?: (direction: 'next' | 'previous') => boolean
   onScrollStateChange?: (state: MonacoEditorScrollState) => void
   onCursorPositionChange?: (position: { lineNumber: number; column: number }) => void
   /** Ctrl + 右键时上抛坐标，由外层打开项目级通用右键卡片；不传时 Ctrl + 右键仍打开编辑器菜单。 */
@@ -154,7 +158,7 @@ interface EditorContextMenuSnapshot {
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor(
-  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu, transcriptReferences, onOpenTranscriptReference },
+  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onQuickMatchJump, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu, transcriptReferences, onOpenTranscriptReference },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -167,6 +171,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const localModelsRef = useRef<MonacoEditor.ITextModel[]>([])
   const filePathRef = useRef(filePath)
   const projectPathRef = useRef(projectPath)
+  // 编辑器当前实际绑定的文件（与 activeModelKeyRef 同步更新）：reveal 前置校验用，
+  // 避免 reveal 作用到尚未切换掉的旧 model 上、随后被 setModel 冲掉。
+  const activeFilePathRef = useRef<string | null>(filePath)
   const activeModelKeyRef = useRef(toMonacoModelCacheKey(projectPath, filePath))
   const pendingRevealRef = useRef<PendingRevealPosition | null>(null)
   const pendingHighlightLineRef = useRef<PendingHighlightLine | null>(null)
@@ -177,6 +184,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   const onPasteImageRef = useRef(onPasteImage)
   const onRequestProjectContextMenuRef = useRef(onRequestProjectContextMenu)
   const onFocusSearchRef = useRef(onFocusSearch)
+  const onQuickMatchJumpRef = useRef(onQuickMatchJump)
   const onScrollStateChangeRef = useRef(onScrollStateChange)
   const onCursorPositionChangeRef = useRef(onCursorPositionChange)
   const onOpenTranscriptReferenceRef = useRef(onOpenTranscriptReference)
@@ -348,6 +356,10 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
   }, [onSave])
 
   useEffect(() => {
+    onQuickMatchJumpRef.current = onQuickMatchJump
+  }, [onQuickMatchJump])
+
+  useEffect(() => {
     onPasteImageRef.current = onPasteImage
   }, [onPasteImage])
 
@@ -389,6 +401,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         const position = editorRef.current?.getPosition()
         return position ? { lineNumber: position.lineNumber, column: position.column } : null
       },
+      getActiveFilePath: () => activeFilePathRef.current,
       setScrollTop: (scrollTop: number) => {
         const editor = editorRef.current
         if (!editor) return
@@ -484,6 +497,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       editorRef.current = editor
       transcriptGutter.syncEditorInstance(editor)
       activeModelKeyRef.current = initialKey
+      activeFilePathRef.current = filePath
       // 恢复本会话存档的视图状态（光标/滚动/选区/折叠）；有存档才 focus，首次打开不抢焦点。
       const savedViewState = getMonacoViewState(initialKey)
       if (savedViewState) {
@@ -499,11 +513,23 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         const isSearchShortcut = key === 'f' || event.code === 'KeyF'
         if (!isSearchShortcut) {
           const isReplaceShortcut = (key === 'h' || event.code === 'KeyH') && !event.shiftKey && !event.altKey
-          if (!isReplaceShortcut) return
-          event.preventDefault()
-          event.stopPropagation()
-          event.stopImmediatePropagation()
-          openSearchPanel('replace')
+          if (isReplaceShortcut) {
+            event.preventDefault()
+            event.stopPropagation()
+            event.stopImmediatePropagation()
+            openSearchPanel('replace')
+            return
+          }
+          // Ctrl+↑/↓：搜索结果命中间快捷跳转；面板返回 false（无搜索结果等）时不拦截，交还默认处理。
+          const isQuickMatchJump = (key === 'arrowup' || key === 'arrowdown') && !event.shiftKey && !event.altKey
+          if (isQuickMatchJump) {
+            const handled = onQuickMatchJumpRef.current?.(key === 'arrowdown' ? 'next' : 'previous') ?? false
+            if (handled) {
+              event.preventDefault()
+              event.stopPropagation()
+              event.stopImmediatePropagation()
+            }
+          }
           return
         }
 
@@ -863,6 +889,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     }
 
     activeModelKeyRef.current = nextKey
+    activeFilePathRef.current = filePath
     flushPendingReveal()
   }, [filePath, language, value, projectPath])
 

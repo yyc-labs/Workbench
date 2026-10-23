@@ -508,7 +508,7 @@
   background: color-mix(in srgb, var(--color-card) 92%, transparent);
 }
 
-/* 悬浮命中卡片：挂在 Tooltip portal 上，覆盖 .app-tooltip-content 的内边距与空白处理。 */
+/* 悬浮命中卡片：挂在 Tooltip portal 上，覆盖 .app-tooltip-content 的内边距、空白处理与透明度。 */
 .code-content-search-hover-card {
   padding: 0;
   white-space: normal;
@@ -516,6 +516,7 @@
   flex-direction: column;
   max-height: min(420px, 60vh);
   overflow: hidden;
+  background: color-mix(in srgb, var(--color-popover) 98%, transparent);
 }
 
 .code-content-search-hover-card-header {
@@ -612,6 +613,16 @@
   text-overflow: ellipsis;
 }
 
+.code-content-search-hover-ellipsis {
+  color: var(--color-muted-foreground);
+}
+
+/* 命中文字高亮：仅主色文字，不加底色（mark 的浏览器默认黄底需显式置透明）。 */
+.code-content-search-hover-match-text {
+  background: transparent;
+  color: var(--color-primary);
+}
+
 .code-tree-selection-hover-card {
   padding: 0;
   white-space: normal;
@@ -619,6 +630,7 @@
   flex-direction: column;
   max-height: min(320px, 50vh);
   overflow: hidden;
+  background: color-mix(in srgb, var(--color-popover) 98%, transparent);
 }
 
 .code-tree-selection-hover-card-header {
@@ -789,6 +801,21 @@
   background: color-mix(in srgb, var(--color-primary) 22%, transparent);
   color: var(--color-foreground);
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-primary) 62%, transparent);
+}
+
+/* 17 定位所在文件夹：一次性闪烁高亮（约 1.8s 自动淡出），与多选选中态相互独立。 */
+.code-tree-row--located {
+  animation: code-tree-row-locate-flash 1.8s ease forwards;
+}
+
+@keyframes code-tree-row-locate-flash {
+  0%,
+  55% {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 .code-tree-row--selected:hover {

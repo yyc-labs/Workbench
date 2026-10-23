@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron'
-import type { ProjectFileArchiveEntry, ProjectFileContentSearchOptions, ProjectFileTreeOptions } from '../../shared/types'
+import type { ProjectFileArchiveEntry, ProjectFileContentSearchOptions, ProjectFileNode, ProjectFileTreeOptions } from '../../shared/types'
 import { IPC } from '../main/ipc'
 
 export function createProjectFileInvokeApi() {
@@ -12,6 +12,8 @@ export function createProjectFileInvokeApi() {
 
     searchProjectFiles: (projectPath: string, query: string, folderRelativePath?: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH, projectPath, query, folderRelativePath),
 
+    searchProjectDirectories: (projectPath: string, query: string, folderRelativePath?: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_SEARCH_DIRECTORIES, projectPath, query, folderRelativePath) as Promise<ProjectFileNode[]>,
+
     searchProjectContent: (projectPath: string, query: string, options?: ProjectFileContentSearchOptions) => ipcRenderer.invoke(IPC.PROJECT_FILE_CONTENT_SEARCH, projectPath, query, options),
 
     readProjectFile: (projectPath: string, relativePath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_READ, projectPath, relativePath),
@@ -23,6 +25,8 @@ export function createProjectFileInvokeApi() {
     writeProjectImageFile: (projectPath: string, targetDirectoryRelativePath: string, extension: string, dataBase64: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_WRITE_IMAGE, projectPath, targetDirectoryRelativePath, extension, dataBase64),
 
     openProjectFilePath: (projectPath: string, relativePath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_OPEN_PATH, projectPath, relativePath),
+
+    revealProjectFileInFileManager: (projectPath: string, relativePath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_REVEAL, projectPath, relativePath),
 
     zipProjectFolder: (projectPath: string, folderRelativePath: string, zipName: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_ZIP, projectPath, folderRelativePath, zipName),
 

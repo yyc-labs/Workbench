@@ -1,7 +1,7 @@
 import { type SetStateAction, useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectFileNodeKind, ProjectFilePreviewKind, ProjectFileReadResult } from '../../../shared/types'
-import { translateCurrent } from '../../i18n'
 import { toast } from '../../components/ui/toast'
+import { translateCurrent } from '../../i18n'
 import { useAppStore } from '../../stores/appStore'
 import type { SaveStatus } from './code.types'
 import { markMarkdownPreviewPerformance } from './markdownPreviewPerformance'
@@ -81,6 +81,8 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
   const [readError, setReadError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
+  // 只读保存失败的定位路径：非空时错误通知附带「查看」动作（在文件管理器中选中该文件）。
+  const [saveErrorRevealPath, setSaveErrorRevealPath] = useState<string | null>(null)
   const [hasExternalChange, setHasExternalChange] = useState(false)
   const [isReloadingFromDisk, setIsReloadingFromDisk] = useState(false)
   const [discardUnsavedConfirm, setDiscardUnsavedConfirm] = useState<DiscardUnsavedConfirmState>(null)
@@ -143,6 +145,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
       setIsReading(true)
       setReadError(null)
       setSaveError(null)
+      setSaveErrorRevealPath(null)
       setSaveStatus('idle')
       markMarkdownPreviewPerformance('file.read.start')
 
@@ -237,6 +240,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
       setReadError(null)
       setSaveStatus('idle')
       setSaveError(null)
+      setSaveErrorRevealPath(null)
       return true
     },
     [activeRelativePath, isDirty, onBeforeOpenFile, requestDiscardUnsavedConfirm],
@@ -249,17 +253,33 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
 
   useEffect(() => {
     if (readError && previousReadErrorRef.current !== readError) {
-      toast.error(readError)
+      toast.error(readError, { durationMs: 5000 })
     }
     previousReadErrorRef.current = readError
   }, [readError])
 
   useEffect(() => {
     if (saveError && previousSaveErrorRef.current !== saveError) {
-      toast.error(saveError)
+      // 只读保存失败：通知附带「查看」动作，直接在文件管理器中选中该文件，让用户自行处理属性。
+      if (saveErrorRevealPath) {
+        toast.error(saveError, {
+          // 默认 3.2s 对带动作的通知偏短：给 5s，留出看到并点击「查看」的时间。
+          durationMs: 5000,
+          actions: [
+            {
+              label: translateCurrent('codeWorkspace.revealFileInFileManager'),
+              onAction: () => {
+                void window.electronAPI.revealProjectFileInFileManager(projectPath, saveErrorRevealPath)
+              },
+            },
+          ],
+        })
+      } else {
+        toast.error(saveError, { durationMs: 5000 })
+      }
     }
     previousSaveErrorRef.current = saveError
-  }, [saveError])
+  }, [projectPath, saveError, saveErrorRevealPath])
 
   useEffect(() => {
     if (isReloadingFromDisk && !previousReloadingFromDiskRef.current) {
@@ -301,6 +321,7 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
 
     setSaveStatus('saving')
     setSaveError(null)
+    setSaveErrorRevealPath(null)
 
     try {
       // 外部已变更（hasExternalChange）时用户保存是明确要覆盖磁盘版本，跳过 mtime 冲突校验。
@@ -327,7 +348,10 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       setSaveStatus('error')
-      setSaveError(message)
+      // 只读文件（主进程 EPERM + access 探测命中）：把稳定文案映射成本地化提示，并附带「查看」动作入口。
+      const isReadOnlySaveError = message.includes('read-only')
+      setSaveError(isReadOnlySaveError ? translateCurrent('codeWorkspace.saveErrorReadOnly') : message)
+      setSaveErrorRevealPath(isReadOnlySaveError ? activeRelativePath : null)
       // 通知被关闭后保存遇到 mtime 冲突：重新激活「保留 / 重载」入口，避免用户被堵死。
       if (message.includes('File has changed on disk')) {
         lastNotifiedExternalMtimeRef.current = null

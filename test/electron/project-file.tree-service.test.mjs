@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -10,7 +10,7 @@ import { loadTsModule } from '../helpers/load-ts-module.mjs'
 // `app.getPath('userData')` — stub electron before the module graph loads.
 stubElectronApp(mkdtempSync(join(tmpdir(), 'project-file-electron-')))
 
-const { getProjectFileAutoLoadDecision, listProjectDirectoryFiles, listProjectFiles } = loadTsModule('src/core/electron/main/project-file/tree-service.ts')
+const { getProjectFileAutoLoadDecision, listProjectDirectoryFiles, listProjectFiles, searchProjectDirectories } = loadTsModule('src/core/electron/main/project-file/tree-service.ts')
 
 test('listProjectFiles keeps directories lazy without probing descendants', async () => {
   const projectPath = mkdtempSync(join(tmpdir(), 'project-file-tree-'))
@@ -79,4 +79,55 @@ test('getProjectFileAutoLoadDecision rescans after cache TTL expiry', async () =
   } finally {
     Date.now = realNow
   }
+})
+
+function createSearchProjectFixture() {
+  const projectPath = mkdtempSync(join(tmpdir(), 'project-file-dir-search-'))
+  mkdirSync(join(projectPath, 'src', 'components'), { recursive: true })
+  mkdirSync(join(projectPath, 'src', 'utils'), { recursive: true })
+  mkdirSync(join(projectPath, 'docs'), { recursive: true })
+  mkdirSync(join(projectPath, 'node_modules', 'pkg'), { recursive: true })
+  writeFileSync(join(projectPath, 'src', 'components', 'Button.tsx'), 'export {}', 'utf8')
+  writeFileSync(join(projectPath, 'src', 'utils', 'helpers.ts'), 'export {}', 'utf8')
+  writeFileSync(join(projectPath, 'docs', 'guide.md'), '# guide', 'utf8')
+  writeFileSync(join(projectPath, 'README.md'), '# demo', 'utf8')
+  writeFileSync(join(projectPath, 'node_modules', 'pkg', 'index.js'), 'module.exports = {}', 'utf8')
+  return projectPath
+}
+
+const dirSearchPaths = (matches) => matches.map((node) => node.relativePath)
+
+test('searchProjectDirectories derives folders from the file list with directory kind and name-only matching', async () => {
+  const projectPath = createSearchProjectFixture()
+  const matches = await searchProjectDirectories(projectPath, 'utils')
+  assert.deepEqual(dirSearchPaths(matches), ['src/utils'])
+  assert.equal(matches[0].kind, 'directory')
+  assert.equal(matches[0].name, 'utils')
+
+  // 只匹配目录名本身（用户 2026-10-22 要求）：'src' 只命中名为 src 的目录，不按路径波及子目录。
+  assert.deepEqual(dirSearchPaths(await searchProjectDirectories(projectPath, 'src')), ['src'])
+  // 子序列模糊：'cmp' 命中 components。
+  assert.deepEqual(dirSearchPaths(await searchProjectDirectories(projectPath, 'cmp')), ['src/components'])
+})
+
+test('searchProjectDirectories scopes to the right-clicked folder subtree and excludes the scope root', async () => {
+  const projectPath = createSearchProjectFixture()
+  // 范围根自身不算「子目录」：scoped 搜索只命中范围内的目录。
+  assert.deepEqual(dirSearchPaths(await searchProjectDirectories(projectPath, 'compo', 'src')), ['src/components'])
+  // docs 子树内搜 utils：无结果。
+  assert.deepEqual(await searchProjectDirectories(projectPath, 'utils', 'docs'), [])
+})
+
+test('searchProjectDirectories skips excluded directories and rejects unsafe scope', async () => {
+  const projectPath = createSearchProjectFixture()
+  // node_modules 内容被排除清单过滤，派生的目录集合里不会有它。
+  assert.deepEqual(await searchProjectDirectories(projectPath, 'node'), [])
+
+  await assert.rejects(() => searchProjectDirectories(projectPath, 'src', '../outside'), /Path traversal/)
+  await assert.rejects(() => searchProjectDirectories(projectPath, 'src', 'README.md'), /not a directory/)
+})
+
+test('searchProjectDirectories returns empty for blank query', async () => {
+  const projectPath = createSearchProjectFixture()
+  assert.deepEqual(await searchProjectDirectories(projectPath, '   '), [])
 })

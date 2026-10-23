@@ -156,7 +156,23 @@ export async function writeProjectFile(projectPath: string, relativePath: string
     }
     ensureWithinRoot(rootRealPath, writeTargetRealPath)
 
-    await fs.writeFile(writeTargetRealPath, nextContent, { encoding: 'utf-8' })
+    try {
+      await fs.writeFile(writeTargetRealPath, nextContent, { encoding: 'utf-8' })
+    } catch (error) {
+      // Windows 只读属性下写打开报 EPERM，POSIX 权限不足报 EACCES：access(W_OK) 同样失败时
+      // 转换为可读的只读/权限提示，避免把裸的 "EPERM: operation not permitted" 直接抛给用户。
+      const code = (error as NodeJS.ErrnoException)?.code
+      if (code === 'EPERM' || code === 'EACCES') {
+        const writeAllowed = await fs.access(writeTargetRealPath, fs.constants.W_OK).then(
+          () => true,
+          () => false,
+        )
+        if (!writeAllowed) {
+          throw new ProjectFileServiceError('File is read-only. Clear the read-only attribute (or check write permission) and retry.')
+        }
+      }
+      throw error
+    }
     const afterStat = await fs.stat(writeTargetRealPath)
 
     return {
@@ -244,4 +260,20 @@ export async function openProjectFileInSystem(projectPath: string, relativePath:
   } finally {
     await fileHandle.close().catch(() => undefined)
   }
+}
+
+/** 在系统文件管理器中打开并选中该文件（如 Windows 资源管理器），供只读提示等场景让用户自行处理文件属性。 */
+export async function revealProjectFileInFileManager(projectPath: string, relativePath: string): Promise<{ ok: boolean; error?: string }> {
+  const rootRealPath = await resolveRoot(projectPath)
+  const normalizedRelativePath = normalizeRelativeInput(relativePath)
+  validateRelativePathLooksSafe(normalizedRelativePath)
+  const targetRealPath = await fs.realpath(path.resolve(rootRealPath, normalizedRelativePath))
+  ensureWithinRoot(rootRealPath, targetRealPath)
+
+  const resolved = resolvePathForCurrentHost(targetRealPath)
+  if (!resolved) {
+    return { ok: false, error: 'Failed to resolve file path for current host.' }
+  }
+  shell.showItemInFolder(resolved)
+  return { ok: true }
 }

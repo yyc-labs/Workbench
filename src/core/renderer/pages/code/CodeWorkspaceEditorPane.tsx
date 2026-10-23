@@ -1,35 +1,35 @@
-import { memo, type CSSProperties, type Ref, type RefObject } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { MONO_FONT_STACK } from '../../lib/fonts'
-import type { Components } from 'react-markdown'
 import { Check, ChevronDown, ChevronUp, Code2, Columns2, Copy, Eye, FileText, RefreshCw, X } from 'lucide-react'
+import { type CSSProperties, memo, type Ref, type RefObject } from 'react'
+import type { Components } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import remarkGfm from 'remark-gfm'
 import type { ProjectFileNodeKind, ProjectFilePreviewKind, ProjectFileUnsupportedReason, TranscriptFileReference } from '../../../shared/types'
 import { ModalShell } from '../../components/ModalShell'
 import { StructuredPreviewTableWidthControl, useStructuredPreviewTableWidth } from '../../components/StructuredPreviewTableWidth'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
-import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
+import { MONO_FONT_STACK } from '../../lib/fonts'
 import { CodeMarkdownTocButton } from './CodeMarkdownTocButton'
-import { formatCodeLanguageLabel } from './code.markdown'
-import { transformMarkdownUrl } from './code.markdownUrls'
-import { remarkBoxDrawingTables } from './code.markdownBoxTables'
-import { MarkdownPreviewSurface } from './MarkdownPreviewSurface'
-import { MarkdownPreviewVisibilityProvider } from './code.markdownVisibility'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
-import type { MarkdownPreviewMode } from './code.workspace.types'
 import { buildYycWorkbenchPreviewUrl } from './code.helpers'
+import { formatCodeLanguageLabel } from './code.markdown'
+import { remarkBoxDrawingTables } from './code.markdownBoxTables'
+import { transformMarkdownUrl } from './code.markdownUrls'
+import { MarkdownPreviewVisibilityProvider } from './code.markdownVisibility'
+import type { MarkdownPreviewMode } from './code.workspace.types'
+import { MarkdownPreviewSurface } from './MarkdownPreviewSurface'
+import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
+import { FileDocxViewer } from './viewers/docx/FileDocxViewer'
 import { FileCsvViewer } from './viewers/FileCsvViewer'
 import { FileExcludedViewer } from './viewers/FileExcludedViewer'
 import { FileHtmlViewer } from './viewers/FileHtmlViewer'
 import { FileImageViewer } from './viewers/FileImageViewer'
 import { FileMediaViewer } from './viewers/FileMediaViewer'
 import { FilePdfViewer } from './viewers/FilePdfViewer'
-import { FileDocxViewer } from './viewers/docx/FileDocxViewer'
 import { FileUnsupportedViewer } from './viewers/FileUnsupportedViewer'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 // mdc 文件的 Agent 规则元数据卡片已结构化展示这三个键。
 const RULE_FRONTMATTER_KEYS = new Set(['description', 'globs', 'alwaysapply'])
@@ -107,6 +107,8 @@ type CodeWorkspaceEditorPaneProps = {
   onClosePreviewSearch: () => void
   onEditorScrollStateChange: (state: MonacoEditorScrollState) => void
   onFocusSearch: () => void
+  /** Ctrl+↑/↓ 搜索命中间快捷跳转（面板实现）；返回 false 表示未处理。 */
+  onQuickMatchJump?: (direction: 'next' | 'previous') => boolean
   onGoToNextPreviewSearchMatch: () => void
   onGoToPreviousPreviewSearchMatch: () => void
   onHandleSave: () => void
@@ -167,6 +169,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   onClosePreviewSearch,
   onEditorScrollStateChange,
   onFocusSearch,
+  onQuickMatchJump,
   onGoToNextPreviewSearchMatch,
   onGoToPreviousPreviewSearchMatch,
   onHandleSave,
@@ -363,6 +366,7 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               onScrollStateChange={onEditorScrollStateChange}
               onCursorPositionChange={onSetCursorPosition}
               onFocusSearch={onFocusSearch}
+              onQuickMatchJump={onQuickMatchJump}
               onSave={onHandleSave}
             />
           )}

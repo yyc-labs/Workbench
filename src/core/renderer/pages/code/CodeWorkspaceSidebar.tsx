@@ -42,6 +42,12 @@ type CodeWorkspaceSidebarProps = {
   isSearchingContent: boolean
   isSearchingFiles: boolean
   locateRequestToken: number
+  /** 17：右键「定位所在文件夹」请求（token 单调递增；relativePath 为空 = 项目根）。 */
+  locateFolderRequest?: { relativePath: string; token: number } | null
+  /** 17：右键「定位所在文件夹」（file 节点菜单项）。 */
+  onLocateNodeFolder?: (relativePath: string) => void | Promise<void>
+  /** 17：右键「搜索文件夹」（directory 节点菜单项）。 */
+  onSearchFoldersInFolder?: (payload: CodeTreeContextMenuPayload) => void | Promise<void>
   onApplyContentSearchScopePreset: (preset: ContentSearchScopePreset) => void
   onChangeContentSearchQuery: (nextValue: string) => void
   onContentSearchHistoryNavigate?: (direction: 'older' | 'newer') => void
@@ -124,6 +130,9 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
   isSearchingContent,
   isSearchingFiles,
   locateRequestToken,
+  locateFolderRequest,
+  onLocateNodeFolder,
+  onSearchFoldersInFolder,
   onApplyContentSearchScopePreset,
   onChangeContentSearchQuery,
   onContentSearchHistoryNavigate,
@@ -256,6 +265,9 @@ export const CodeWorkspaceSidebar = memo(function CodeWorkspaceSidebar({
             flatFileListMode={hasSearchQuery}
             flatListLineTarget={fileSearchLineTarget}
             locateRequestToken={locateRequestToken}
+            locateFolderRequest={locateFolderRequest}
+            onLocateNodeFolder={onLocateNodeFolder}
+            onSearchFoldersInFolder={onSearchFoldersInFolder}
             onToggleDirectory={onToggleTreeDirectory}
             onSelectFile={onSelectTreeFile}
             onSelectExcluded={onSelectExcluded}

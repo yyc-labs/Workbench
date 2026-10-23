@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react'
+import { type MutableRefObject, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import type { ProjectCodeSession } from '../../../shared/types'
 import type { MonacoCodeEditorHandle } from './MonacoCodeEditor'
 import { sanitizeProjectCodeSessionByPaths } from './useProjectCodeSession'
@@ -60,11 +60,19 @@ export function useCodeWorkspaceRestoreState({
       if (!location) return false
       const editor = editorRef.current
       if (!editor) return false
+      // 编辑器尚未绑定到目标文件时拒绝 reveal：此时 revealPosition 会作用在旧 model 上，
+      // 随后的 setModel 会把位置冲掉——首次点击「只打开文件不跳转」即此 races（请求
+      // 早于 filePath 提交 / 晚于切模型 effect 时，句柄存在但模型已换代）。返回 false 让
+      // flush 的重试循环保留 pending，等模型切换后再验。
+      if (editor.getActiveFilePath() !== location.relativePath) return false
       editor.revealPosition(location.lineNumber, location.column)
       if (highlight) {
         editor.highlightLine(location.lineNumber, location.endLine)
       }
-      return true
+      // 落点校验：Monaco 内部按 modelKey 延迟刷新，路径校验通过但刷新未生效时位置不会变；
+      // 行号不符即视为未完成，继续重试而不是消费掉 pending。
+      const position = editor.getPosition()
+      return Boolean(position && position.lineNumber === Math.max(1, Math.floor(location.lineNumber)))
     },
     [editorRef],
   )

@@ -123,3 +123,72 @@ export function buildContentSearchTreeData(files: ProjectFileContentSearchResult
   sortTreeChildren(topLevelNodes)
   return topLevelNodes
 }
+
+// ── 命中行显示窗口（悬浮卡片） ─────────────────────────────
+
+/** 命中行可见窗口的目标宽度（等宽单位：ASCII 记 1，CJK/全角记 2）。 */
+const MATCH_WINDOW_UNITS = 60
+
+function charWeight(character: string): number {
+  const code = character.codePointAt(0) ?? 0
+  // CJK 部首起（含全角标点、CJK、emoji）按 2 个单位计，其余记 1。
+  return code >= 0x2e80 ? 2 : 1
+}
+
+function weightedLength(text: string, start: number, end: number): number {
+  let units = 0
+  for (let index = start; index < end; index += 1) {
+    units += charWeight(text[index])
+  }
+  return units
+}
+
+export interface MatchLineDisplay {
+  text: string
+  ellipsisBefore: boolean
+  ellipsisAfter: boolean
+  /** 匹配文字在 text 中的起止偏移（相对位置，始终落在 [0, text.length] 内）。 */
+  matchStart: number
+  matchEnd: number
+}
+
+/**
+ * 命中行开窗：整行放得下时原样展示；放不下时以匹配文字为中心截取窗口，
+ * 前后被裁掉的部分以省略号标记（匹配文字一定落在可见窗口内）。
+ * column / endColumn 为 1 基字符位置，超出 lineText 长度时按行尾兜底。
+ */
+export function buildMatchLineDisplay(match: ProjectFileContentMatch): MatchLineDisplay {
+  const line = match.lineText
+  const matchStart = Math.min(Math.max(0, match.column - 1), line.length)
+  const matchEnd = Math.min(line.length, Math.max(matchStart + 1, match.endColumn - 1))
+
+  if (weightedLength(line, 0, line.length) <= MATCH_WINDOW_UNITS) {
+    return { text: line, ellipsisBefore: false, ellipsisAfter: false, matchStart, matchEnd }
+  }
+
+  // 前后上下文尽量均分剩余预算，使匹配文字居于窗口中间。
+  const contextUnits = Math.max(0, Math.floor((MATCH_WINDOW_UNITS - weightedLength(line, matchStart, matchEnd)) / 2))
+  let windowStart = matchStart
+  let beforeUnits = 0
+  while (windowStart > 0 && beforeUnits < contextUnits) {
+    windowStart -= 1
+    beforeUnits += charWeight(line[windowStart])
+  }
+
+  let windowEnd = matchEnd
+  let usedUnits = weightedLength(line, windowStart, windowEnd)
+  while (windowEnd < line.length) {
+    const nextUnits = charWeight(line[windowEnd])
+    if (usedUnits + nextUnits > MATCH_WINDOW_UNITS) break
+    usedUnits += nextUnits
+    windowEnd += 1
+  }
+
+  return {
+    text: line.slice(windowStart, windowEnd),
+    ellipsisBefore: windowStart > 0,
+    ellipsisAfter: windowEnd < line.length,
+    matchStart: matchStart - windowStart,
+    matchEnd: matchEnd - windowStart,
+  }
+}

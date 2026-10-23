@@ -424,11 +424,16 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     setPendingScriptConfirm(null)
   }, [isScriptConfirmBusy])
 
-  // ── 13.5 文件夹内按名搜索 ─────────────────────────────────────
-  const [folderSearchTarget, setFolderSearchTarget] = useState<CodeTreeContextMenuPayload | null>(null)
+  // ── 13.5 文件夹内按名搜索 / 17 搜索文件夹 ─────────────────────
+  // 同一弹层实例按 searchKind 分流：file = 按名称查找文件，directory = 搜索文件夹。
+  const [folderSearchTarget, setFolderSearchTarget] = useState<{ payload: CodeTreeContextMenuPayload; searchKind: 'file' | 'directory' } | null>(null)
 
   const handleFindTreeNodeFilesByName = useCallback((payload: CodeTreeContextMenuPayload) => {
-    setFolderSearchTarget(payload)
+    setFolderSearchTarget({ payload, searchKind: 'file' })
+  }, [])
+
+  const handleSearchFoldersInFolder = useCallback((payload: CodeTreeContextMenuPayload) => {
+    setFolderSearchTarget({ payload, searchKind: 'directory' })
   }, [])
 
   const closeFolderFileSearch = useCallback(() => {
@@ -491,6 +496,7 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     handleExecuteScriptInSystemTerminal,
     handleFindTreeNodeFilesByName,
     handleFolderSearchContextMenu,
+    handleSearchFoldersInFolder,
     handleOpenContentSearchResult,
     handleOpenSmartEmptyFile,
     handleOpenTreeNodeFolder,

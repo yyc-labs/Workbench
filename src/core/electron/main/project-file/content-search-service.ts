@@ -1,36 +1,28 @@
-import type {
-  ProjectFileContentMatch,
-  ProjectFileContentSearchOptions,
-  ProjectFileContentSearchResponse,
-  ProjectFileContentSearchResult,
-} from '../../../shared/types'
+import type { ProjectFileContentMatch, ProjectFileContentSearchOptions, ProjectFileContentSearchResponse, ProjectFileContentSearchResult } from '../../../shared/types'
 import {
+  byteOffsetToUtf16Index,
+  decodeRgOutputData,
+  execFileUtf8WithLimits,
+  fileDepth,
   MAX_CONTENT_SEARCH_FILES,
   MAX_CONTENT_SEARCH_MATCHES_PER_FILE,
   MAX_CONTENT_SEARCH_TOTAL_MATCHES,
   MAX_TREE_DEPTH,
+  normalizeContentSearchIncludeGlobs,
+  normalizeListedRelativePath,
+  normalizeSearchLineText,
   ProjectFileServiceError,
+  parseSearchMatchLine,
   RG_CONTENT_SEARCH_MAX_BUFFER,
   RG_CONTENT_SEARCH_MAX_COLUMNS,
   RG_CONTENT_SEARCH_TIMEOUT_MS,
   RG_EXCLUDE_GLOBS,
-  decodeRgOutputData,
-  execFileUtf8WithLimits,
-  fileDepth,
-  normalizeContentSearchIncludeGlobs,
-  normalizeListedRelativePath,
-  normalizeSearchLineText,
-  parseSearchMatchLine,
   resolveRoot,
   shouldSkipListedFilePath,
   toContentSearchResultRecord,
 } from './shared'
 
-export async function searchProjectContent(
-  projectPath: string,
-  query: string,
-  options?: ProjectFileContentSearchOptions
-): Promise<ProjectFileContentSearchResponse> {
+export async function searchProjectContent(projectPath: string, query: string, options?: ProjectFileContentSearchOptions): Promise<ProjectFileContentSearchResponse> {
   const normalizedQuery = query.trim()
   if (!normalizedQuery) {
     return {
@@ -64,12 +56,7 @@ export async function searchProjectContent(
 
   let output = ''
   try {
-    output = await execFileUtf8WithLimits(
-      rootRealPath,
-      args,
-      RG_CONTENT_SEARCH_TIMEOUT_MS,
-      RG_CONTENT_SEARCH_MAX_BUFFER
-    )
+    output = await execFileUtf8WithLimits(rootRealPath, args, RG_CONTENT_SEARCH_TIMEOUT_MS, RG_CONTENT_SEARCH_MAX_BUFFER)
   } catch (error) {
     const typedError = error as NodeJS.ErrnoException & { code?: unknown; stdout?: string }
     const errorCode = String(typedError.code ?? '')
@@ -109,8 +96,11 @@ export async function searchProjectContent(
     const lineTextRaw = decodeRgOutputData(parsed.data?.lines)
     const lineText = normalizeSearchLineText(lineTextRaw)
     const submatch = parsed.data?.submatches?.[0]
-    const start = typeof submatch?.start === 'number' ? submatch.start : 0
-    const end = typeof submatch?.end === 'number' ? submatch.end : start + normalizedQuery.length
+    // rg 的 submatch 偏移是字节偏移：转换为 UTF-16 字符索引，保证中文行的高亮与跳转位置正确。
+    const matchByteStart = typeof submatch?.start === 'number' ? submatch.start : 0
+    const matchByteEnd = typeof submatch?.end === 'number' ? submatch.end : matchByteStart + Buffer.byteLength(normalizedQuery, 'utf8')
+    const start = byteOffsetToUtf16Index(lineText, matchByteStart)
+    const end = byteOffsetToUtf16Index(lineText, matchByteEnd)
     const column = Math.max(1, start + 1)
     const endColumn = Math.max(column, end + 1)
 

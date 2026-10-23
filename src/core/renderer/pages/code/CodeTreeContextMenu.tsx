@@ -1,4 +1,4 @@
-import { Archive, ClipboardCopy, Copy, FileSearch, FolderOpen, Play, Search, TerminalSquare } from 'lucide-react'
+import { Archive, ClipboardCopy, Copy, FileSearch, FolderOpen, FolderSearch, Play, Search, TerminalSquare } from 'lucide-react'
 import { type ComponentType, type ReactNode, useEffect, useRef, useState } from 'react'
 import type { ProjectFileNodeKind } from '../../../shared/types'
 import { ContextCascader, type ContextCascaderSection } from '../../components/ui/ContextCascader'
@@ -38,8 +38,12 @@ interface CodeTreeContextMenuProps {
   onZipFolder?: (zipName?: string) => void | Promise<void>
   /** 13.2：复制 zip 到剪贴板（项目内不落盘，仅 directory 时由调用方传入）。 */
   onCopyZipToClipboard?: ContextMenuAction
+  /** 17：定位所在文件夹（仅 file 时由调用方传入；树内跳转并展开该文件所在目录）。 */
+  onLocateNodeFolder?: ContextMenuAction
   /** 13.5：按名称查找文件（仅 directory 时由调用方传入）。 */
   onFindFilesByName?: ContextMenuAction
+  /** 17：搜索文件夹（仅 directory 时由调用方传入；在右键目录子树内按名称找文件夹）。 */
+  onSearchFoldersInFolder?: ContextMenuAction
   /** 13.3：在系统终端中运行脚本（resolveExecutableScript 命中时由调用方传入）。 */
   onRunScriptInSystemTerminal?: ContextMenuAction
   /** 13.3：在内置终端中运行脚本（resolveExecutableScript 命中时由调用方传入）。 */
@@ -128,6 +132,8 @@ export function CodeTreeContextMenu({
   onZipFolder,
   onCopyZipToClipboard,
   onFindFilesByName,
+  onSearchFoldersInFolder,
+  onLocateNodeFolder,
   onRunScriptInSystemTerminal,
   onRunScriptInEmbeddedTerminal,
   resolveRunnableScript,
@@ -187,14 +193,20 @@ export function CodeTreeContextMenu({
 
   const sections: ContextCascaderSection[] = []
 
-  sections.push({
-    id: 'open',
-    label: t('codeFileTree.sectionOpen'),
-    items: [
-      { id: 'open-folder', label: openFolderLabel, icon: actionIcon(FolderOpen, 'warning'), onSelect: onOpenFolder },
-      { id: 'open-terminal', label: t('codeFileTree.openCurrentTerminal'), icon: actionIcon(TerminalSquare, 'muted'), onSelect: onOpenTerminal },
-    ],
-  })
+  const openItems: ContextCascaderSection['items'] = [
+    { id: 'open-folder', label: openFolderLabel, icon: actionIcon(FolderOpen, 'warning'), onSelect: onOpenFolder },
+    { id: 'open-terminal', label: t('codeFileTree.openCurrentTerminal'), icon: actionIcon(TerminalSquare, 'muted'), onSelect: onOpenTerminal },
+  ]
+  // 17：定位所在/父文件夹——file 与 directory 共用同一回调（都是跳转到节点所在父目录并展开），标签按节点类型区分。
+  if (onLocateNodeFolder) {
+    openItems.push({
+      id: 'locate-node-folder',
+      label: nodeKind === 'file' ? t('codeFileTree.locateNodeFolder') : t('codeFileTree.locateParentFolder'),
+      icon: actionIcon(FolderSearch, 'muted'),
+      onSelect: onLocateNodeFolder,
+    })
+  }
+  sections.push({ id: 'open', label: t('codeFileTree.sectionOpen'), items: openItems })
 
   const searchItems: ContextCascaderSection['items'] = [
     {
@@ -206,6 +218,10 @@ export function CodeTreeContextMenu({
   ]
   if (nodeKind === 'directory' && onFindFilesByName) {
     searchItems.push({ id: 'find-files-by-name', label: t('codeFileTree.searchFilesByName'), icon: actionIcon(FileSearch, 'muted'), onSelect: onFindFilesByName })
+  }
+  // 17：搜索文件夹——与「按名称查找文件」同范围（右键目录子树），结果点击在树内跳转并展开。
+  if (nodeKind === 'directory' && onSearchFoldersInFolder) {
+    searchItems.push({ id: 'search-folders-in-folder', label: t('codeFileTree.searchFoldersInFolder'), icon: actionIcon(FolderSearch, 'muted'), onSelect: onSearchFoldersInFolder })
   }
   sections.push({ id: 'search', label: t('codeFileTree.sectionSearch'), items: searchItems })
 

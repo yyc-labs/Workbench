@@ -1,10 +1,10 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { FileText, Folder, Search } from 'lucide-react'
+import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText, Search } from 'lucide-react'
 import type { ProjectFileNode } from '../../../shared/types'
-import { DebouncedSearchInput } from './DebouncedSearchInput'
-import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import { useI18n } from '../../i18n'
+import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
+import { DebouncedSearchInput } from './DebouncedSearchInput'
 
 const SEARCH_DEBOUNCE_MS = 250
 const POPOVER_WIDTH = 320
@@ -17,7 +17,10 @@ interface FolderFileSearchPopoverProps {
   folderRelativePath: string
   folderName: string
   projectPath: string
-  onOpenFile: (relativePath: string) => void
+  /** 搜索类型：file = 按名称查找文件（13.5 原有）；directory = 搜索文件夹（17 新增）。 */
+  searchKind: 'file' | 'directory'
+  /** 结果点击统一出口：按 node.kind 由调用方分发（打开文件 / 树内定位文件夹）。 */
+  onSelectResult: (node: ProjectFileNode) => void
   onContextMenu: (payload: CodeTreeContextMenuPayload) => void
   onClose: () => void
 }
@@ -26,8 +29,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
-/** 文件夹内按名称搜索弹层（13.5）。z-index 9997：右键结果项时 CodeTreeContextMenu(9998) 浮于其上。 */
-function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, projectPath, onOpenFile, onContextMenu, onClose }: FolderFileSearchPopoverProps) {
+/** 文件夹内按名称搜索弹层（13.5 文件 / 17 文件夹共用）。z-index 9997：右键结果项时 CodeTreeContextMenu(9998) 浮于其上。 */
+function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, projectPath, searchKind, onSelectResult, onContextMenu, onClose }: FolderFileSearchPopoverProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ProjectFileNode[]>([])
@@ -96,8 +99,8 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
     setIsSearching(true)
 
     let cancelled = false
-    void window.electronAPI
-      .searchProjectFiles(projectPath, trimmed, folderRelativePath)
+    const searchRequest = searchKind === 'directory' ? window.electronAPI.searchProjectDirectories(projectPath, trimmed, folderRelativePath) : window.electronAPI.searchProjectFiles(projectPath, trimmed, folderRelativePath)
+    void searchRequest
       .then((matches) => {
         if (cancelled || requestSeqRef.current !== seq) return
         setResults(matches)
@@ -114,12 +117,12 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
     }
   }, [folderRelativePath, projectPath, query])
 
-  const handleSelectFile = useCallback(
-    (relativePath: string) => {
-      onOpenFile(relativePath)
+  const handleSelectResult = useCallback(
+    (node: ProjectFileNode) => {
+      onSelectResult(node)
       onClose()
     },
-    [onClose, onOpenFile],
+    [onClose, onSelectResult],
   )
 
   const handleResultContextMenu = useCallback(
@@ -154,7 +157,7 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
         <DebouncedSearchInput
           inputRef={searchInputRef}
           leadingIcon={null}
-          placeholder={t('codeFileTree.searchFilesPlaceholder', { folder: folderName })}
+          placeholder={t(searchKind === 'directory' ? 'codeFileTree.searchFoldersPlaceholder' : 'codeFileTree.searchFilesPlaceholder', { folder: folderName })}
           debounceMs={SEARCH_DEBOUNCE_MS}
           onQueryChange={setQuery}
           inputClassName="w-full bg-transparent text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
@@ -162,7 +165,7 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ height: listHeight }}>
         {isEmpty ? (
-          <div className="px-3 py-4 text-[11px] text-[color:var(--color-muted-foreground)]">{t('codeFileTree.searchFilesEmpty')}</div>
+          <div className="px-3 py-4 text-[11px] text-[color:var(--color-muted-foreground)]">{t(searchKind === 'directory' ? 'codeFileTree.searchFoldersEmpty' : 'codeFileTree.searchFilesEmpty')}</div>
         ) : (
           results.map((node) => {
             const subPath = node.relativePath.slice(0, Math.max(0, node.relativePath.length - node.name.length - 1))
@@ -171,11 +174,11 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
                 key={node.relativePath}
                 type="button"
                 className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)]"
-                onClick={() => handleSelectFile(node.relativePath)}
+                onClick={() => handleSelectResult(node)}
                 onContextMenu={(event) => handleResultContextMenu(event, node)}
                 title={node.relativePath}
               >
-                <FileText className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
+                {node.kind === 'directory' ? <Folder className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-warning)]" /> : <FileText className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12px] text-[color:var(--color-foreground)]">{node.name}</span>
                   {subPath ? <span className="block truncate text-[10px] text-[color:var(--color-muted-foreground)]">{subPath}</span> : null}
