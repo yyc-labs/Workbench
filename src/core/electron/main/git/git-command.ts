@@ -1,4 +1,5 @@
 import { spawn } from 'child_process'
+import { createHash } from 'node:crypto'
 import { StringDecoder } from 'string_decoder'
 import { toHostAccessiblePath } from '../host-path'
 import { resolveWslVsCodeTarget } from '../shell/openers'
@@ -8,6 +9,20 @@ import type { GitOutputLimitInfo } from '../../../shared/types'
 export const DEFAULT_GIT_OUTPUT_LIMIT_BYTES = 512 * 1024
 export const DEFAULT_GIT_COMMAND_TIMEOUT_MS = 30_000
 export const DEFAULT_GIT_OPERATION_TIMEOUT_MS = 120_000
+
+// Git 性能埋点（默认关闭，见 docs/todo/04-ai-commit-与-git-plan-detail.md §2）。
+// WORKBENCH_GIT_TRACE=1 开启命令级计时；WORKBENCH_GIT_TRACE_PATHS=1 额外输出原始仓库路径（默认只输出路径哈希）。
+export const GIT_TRACE_ENABLED = process.env.WORKBENCH_GIT_TRACE === '1'
+const GIT_TRACE_PATHS_ENABLED = process.env.WORKBENCH_GIT_TRACE_PATHS === '1'
+
+export function gitTraceRepoKey(cwd: string): string {
+  if (GIT_TRACE_PATHS_ENABLED) return cwd
+  return createHash('sha256').update(cwd).digest('hex').slice(0, 12)
+}
+
+export function emitGitTrace(record: Record<string, unknown>): void {
+  console.debug(`[git-trace] ${JSON.stringify(record)}`)
+}
 
 type LimitedGitText = {
   text: string
@@ -88,11 +103,7 @@ export function formatGitOutputLimitNotice(limit: GitOutputLimitInfo, label = 'o
   return `[truncated ${label}: kept ${limit.keptBytes}/${limit.totalBytes} bytes, omitted ${omittedBytes} bytes]`
 }
 
-export function appendGitOutputLimitNotice(
-  text: string,
-  limit: GitOutputLimitInfo | undefined,
-  label = 'output'
-): string {
+export function appendGitOutputLimitNotice(text: string, limit: GitOutputLimitInfo | undefined, label = 'output'): string {
   if (!limit) return text
   const notice = formatGitOutputLimitNotice(limit, label)
   const base = text.replace(/\s+$/, '')
@@ -100,17 +111,11 @@ export function appendGitOutputLimitNotice(
 }
 
 export function formatGitCommand(args: string[]): string {
-  const escaped = args.map((arg) => (
-    /\s/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg
-  ))
+  const escaped = args.map((arg) => (/\s/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg))
   return `git ${escaped.join(' ')}`
 }
 
-export function normalizeGitOperationOutput(
-  stdout: string,
-  stderr: string,
-  limits?: { stdoutLimit?: GitOutputLimitInfo; stderrLimit?: GitOutputLimitInfo }
-): string {
+export function normalizeGitOperationOutput(stdout: string, stderr: string, limits?: { stdoutLimit?: GitOutputLimitInfo; stderrLimit?: GitOutputLimitInfo }): string {
   const segments: string[] = []
   const normalizedStdout = stdout.replace(/\r/g, '').trim()
   const normalizedStderr = stderr.replace(/\r/g, '').trim()
@@ -135,28 +140,40 @@ export function normalizeGitDiffOutput(output: string): string {
 export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
   const getDefaultWslDistro = () => deps.getDefaultWslDistro() || 'Ubuntu'
 
-  function runGitCommand(cwd: string, args: string[], limits?: GitCommandLimits): Promise<GitCommandExecutionResult> {
+  function runGitCommand(cwd: string, args: string[], limits?: GitCommandLimits, traceActionId?: string): Promise<GitCommandExecutionResult> {
     return new Promise((resolve) => {
       const stdoutAccumulator = createLimitedUtf8Accumulator(limits?.stdoutLimitBytes ?? Number.POSITIVE_INFINITY)
       const stderrAccumulator = createLimitedUtf8Accumulator(limits?.stderrLimitBytes ?? Number.POSITIVE_INFINITY)
       const timeoutMs = limits?.timeoutMs ?? DEFAULT_GIT_COMMAND_TIMEOUT_MS
-      const wslTarget = process.platform === 'win32'
-        ? resolveWslVsCodeTarget(cwd, getDefaultWslDistro())
-        : null
-      const hostCwd = process.platform === 'win32'
-        ? toHostAccessiblePath(cwd, getDefaultWslDistro())
-        : cwd
+      const wslTarget = process.platform === 'win32' ? resolveWslVsCodeTarget(cwd, getDefaultWslDistro()) : null
+      const hostCwd = process.platform === 'win32' ? toHostAccessiblePath(cwd, getDefaultWslDistro()) : cwd
       const useWslGit = Boolean(wslTarget && wslBridge.isAvailable())
       let settled = false
       let timedOut = false
       let timeout: NodeJS.Timeout | null = null
       let forceKillTimeout: NodeJS.Timeout | null = null
+      const traceStartedAt = GIT_TRACE_ENABLED ? performance.now() : 0
+      let stdoutBytes = 0
+      let stderrBytes = 0
 
       const finish = (result: GitCommandExecutionResult) => {
         if (settled) return
         settled = true
         if (timeout) clearTimeout(timeout)
         if (forceKillTimeout) clearTimeout(forceKillTimeout)
+        if (GIT_TRACE_ENABLED) {
+          emitGitTrace({
+            ...(traceActionId ? { actionId: traceActionId } : {}),
+            repoKey: gitTraceRepoKey(cwd),
+            mode: useWslGit ? `wsl:${wslTarget!.distro}` : 'windows-native',
+            cmd: args[0] ?? '',
+            durationMs: Math.round(performance.now() - traceStartedAt),
+            code: result.code,
+            timedOut,
+            stdoutBytes,
+            stderrBytes,
+          })
+        }
         resolve(result)
       }
 
@@ -179,14 +196,14 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
       try {
         child = useWslGit
           ? spawn('wsl.exe', ['-d', wslTarget!.distro, '--cd', wslTarget!.linuxPath, 'git', ...args], {
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
+              shell: false,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            })
           : spawn('git', args, {
-            cwd: hostCwd,
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
+              cwd: hostCwd,
+              shell: false,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            })
       } catch (error) {
         const buffers = finishBuffers(error instanceof Error ? error.message : String(error))
         finish({
@@ -207,9 +224,11 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
       }
 
       child.stdout?.on('data', (buf: Buffer) => {
+        stdoutBytes += buf.length
         stdoutAccumulator.pushChunk(buf)
       })
       child.stderr?.on('data', (buf: Buffer) => {
+        stderrBytes += buf.length
         stderrAccumulator.pushChunk(buf)
       })
 
@@ -232,8 +251,8 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
     })
   }
 
-  function listGitLines(cwd: string, args: string[], options?: GitLineListOptions): Promise<string[]> {
-    return runGitCommand(cwd, args, options).then((result) => {
+  function listGitLines(cwd: string, args: string[], options?: GitLineListOptions, traceActionId?: string): Promise<string[]> {
+    return runGitCommand(cwd, args, options, traceActionId).then((result) => {
       if (result.code !== 0) return []
       const lines = result.stdout
         .replace(/\r/g, '')
@@ -245,16 +264,21 @@ export function createGitCommandRunner(deps: GitCommandRunnerDependencies) {
     })
   }
 
-  async function runGitCommandSequence(cwd: string, commandArgsList: string[][]): Promise<GitCommandSequenceResult> {
+  async function runGitCommandSequence(cwd: string, commandArgsList: string[][], traceActionId?: string): Promise<GitCommandSequenceResult> {
     const command = commandArgsList.map((args) => formatGitCommand(args)).join(' && ')
     const outputChunks: string[] = []
 
     for (const args of commandArgsList) {
-      const execution = await runGitCommand(cwd, args, {
-        stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-        timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
-      })
+      const execution = await runGitCommand(
+        cwd,
+        args,
+        {
+          stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+          stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+          timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
+        },
+        traceActionId,
+      )
       const stepOutput = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
         stdoutLimit: execution.stdoutLimit,
         stderrLimit: execution.stderrLimit,

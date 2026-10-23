@@ -3,6 +3,7 @@ import type { AiCommitConfig, AiCommitRunOverride, AiCommitTaskSnapshot, AiCommi
 import { useAppStore } from '../../stores/appStore'
 import { BASE_AI_STEPS, applyStep, clampMaxBullets, clampSplitMaxBatches, completePreviousSteps, createBaseAiSteps, getFocusedStepKey, parseAiFlowLine, restoreAiState } from './detail.aiFlow'
 import { translateCurrent } from '../../i18n'
+import { beginGitTraceTiming, endGitTraceTiming } from './gitTrace'
 import type { AiCommitStatus, AiFlowNode, AiStepKey, AiStepState, DetailGitRepositoryList, DetailGitRepositorySummary, DetailGitSnapshot } from './detail.types'
 
 type UseAiCommitFlowOptions = {
@@ -375,6 +376,7 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
     setGitSnapshotError(null)
     const requestSeq = gitSnapshotRequestSeqRef.current + 1
     gitSnapshotRequestSeqRef.current = requestSeq
+    const traceStartedAt = beginGitTraceTiming()
     try {
       const result = await api.getGitRepositorySnapshot(selectedGitRepository.repoRoot)
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return
@@ -386,6 +388,7 @@ export function useAiCommitFlow({ projectId, projectPath, toolProcessId, aiCommi
       if (requestSeq !== gitSnapshotRequestSeqRef.current) return
       setGitSnapshotError(error instanceof Error ? error.message : String(error))
     } finally {
+      endGitTraceTiming('ui-refresh', traceStartedAt)
       if (requestSeq === gitSnapshotRequestSeqRef.current) setGitSnapshotLoading(false)
     }
   }, [selectedGitRepository])

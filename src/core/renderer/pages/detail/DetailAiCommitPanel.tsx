@@ -14,6 +14,7 @@ import { DetailAiCommitOperationConfirmModal } from './DetailAiCommitOperationCo
 import { DetailAiCommitWorkingTreePanel } from './DetailAiCommitWorkingTreePanel'
 import { DetailGitRepositorySelector } from './DetailGitRepositorySelector'
 import { buildCommitHistoryDisplayItems } from './detail.commitHistory'
+import { beginGitTraceTiming, endGitTraceTiming } from './gitTrace'
 import type { IndexedBranchCandidate, MiddlePanelMode, OperationConfirmState, ProjectLinkItem } from './detail.aiCommitPanel.types'
 import { computeOperationState, getGitOperationItems, PanelGitOperationKind, type OperationCardState } from './detail.gitOperations'
 import { DetailGitDiffDrawer } from './DetailGitDiffDrawer'
@@ -551,6 +552,7 @@ function DetailAiCommitPanel({
 
   const setFileStaged = async (file: GitChangedFile, stage: boolean) => {
     if (!gitSnapshot || stagingFilePath || bulkStageAction) return
+    const traceStartedAt = beginGitTraceTiming()
     setFileActionError(null)
     setStagingFilePath(file.path)
     try {
@@ -566,6 +568,7 @@ function DetailAiCommitPanel({
       setFileActionError(error instanceof Error ? error.message : String(error))
     } finally {
       await onRefreshGitSnapshot()
+      endGitTraceTiming('file-stage', traceStartedAt)
       setStagingFilePath(null)
     }
   }
@@ -577,6 +580,7 @@ function DetailAiCommitPanel({
 
     setFileActionError(null)
     setBulkStageAction(stage ? 'stage' : 'unstage')
+    const traceStartedAt = beginGitTraceTiming()
     let failedCount = 0
     try {
       for (const file of files) {
@@ -596,6 +600,7 @@ function DetailAiCommitPanel({
       try {
         await onRefreshGitSnapshot()
       } finally {
+        endGitTraceTiming('file-stage-bulk', traceStartedAt)
         setBulkStageAction(null)
       }
     }
@@ -611,6 +616,7 @@ function DetailAiCommitPanel({
     const message = commitMessage.trim()
     if (!gitSnapshot || commitPending || commitBlockedReason || !message) return
 
+    const traceStartedAt = beginGitTraceTiming()
     setCommitError(null)
     setCommitPending(true)
     try {
@@ -648,6 +654,7 @@ function DetailAiCommitPanel({
       try {
         await onRefreshGitSnapshot()
       } finally {
+        endGitTraceTiming('commit', traceStartedAt)
         setCommitPending(false)
       }
     }
@@ -700,6 +707,7 @@ function DetailAiCommitPanel({
 
   const runUndoCommit = async () => {
     if (!commitUndo || commitUndoRunning || !gitSnapshot) return
+    const traceStartedAt = beginGitTraceTiming()
     setCommitUndoRunning(true)
     try {
       const result = await window.electronAPI.runGitOperation({ repoRoot: commitUndo.repoRoot, operation: 'undo-commit', expectedHead: commitUndo.expectedHead })
@@ -712,6 +720,7 @@ function DetailAiCommitPanel({
       setMiddlePanelMode('git-log')
     } finally {
       await onRefreshGitSnapshot()
+      endGitTraceTiming('undo-commit', traceStartedAt)
       setCommitUndoRunning(false)
     }
   }
@@ -734,6 +743,7 @@ function DetailAiCommitPanel({
     const state = operationStates[operation]
     if (state.disabled || !gitSnapshot) return
 
+    const traceStartedAt = beginGitTraceTiming()
     setRunningOperation(operation)
     try {
       const result = await window.electronAPI.runGitOperation({
@@ -758,6 +768,7 @@ function DetailAiCommitPanel({
       setMiddlePanelMode('git-log')
     } finally {
       await onRefreshGitSnapshot()
+      endGitTraceTiming(`op:${operation}`, traceStartedAt)
       setRunningOperation(null)
     }
   }

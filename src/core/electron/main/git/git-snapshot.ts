@@ -1,4 +1,4 @@
-import { DEFAULT_GIT_OUTPUT_LIMIT_BYTES, normalizeGitOperationOutput, type GitCommandRunner } from './git-command'
+import { DEFAULT_GIT_OUTPUT_LIMIT_BYTES, emitGitTrace, GIT_TRACE_ENABLED, gitTraceRepoKey, normalizeGitOperationOutput, type GitCommandRunner } from './git-command'
 import { promises as fs } from 'node:fs'
 import type { GitBranchInfo, GitChangedFile, GitChangeKind, GitChangeScope, GitHistoryCommitInfo, GitRepositorySnapshot } from '../../../shared/types'
 
@@ -144,11 +144,16 @@ function parseGitStatus(raw: string): { branch: GitBranchInfo; changedFiles: Git
 export function createGitSnapshotReader(runner: GitCommandRunner) {
   const { runGitCommand, listGitLines } = runner
 
-  async function readGitCommitFilesChangedMap(cwd: string, limit: number): Promise<Map<string, string[]>> {
-    const result = await runGitCommand(cwd, ['log', `-${limit}`, '--pretty=format:%H%x00', '--name-only', '-z'], {
-      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-    })
+  async function readGitCommitFilesChangedMap(cwd: string, limit: number, traceActionId?: string): Promise<Map<string, string[]>> {
+    const result = await runGitCommand(
+      cwd,
+      ['log', `-${limit}`, '--pretty=format:%H%x00', '--name-only', '-z'],
+      {
+        stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      },
+      traceActionId,
+    )
     if (result.code !== 0) return new Map()
 
     const records = result.stdout.replace(/\r/g, '').split('\x00')
@@ -175,11 +180,16 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return filesByHash
   }
 
-  async function readGitCommitHistory(cwd: string, limit: number): Promise<GitHistoryCommitInfo[]> {
-    const result = await runGitCommand(cwd, ['log', `-${limit}`, '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e'], {
-      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-    })
+  async function readGitCommitHistory(cwd: string, limit: number, traceActionId?: string): Promise<GitHistoryCommitInfo[]> {
+    const result = await runGitCommand(
+      cwd,
+      ['log', `-${limit}`, '--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%cI%x1f%D%x1f%B%x1e'],
+      {
+        stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      },
+      traceActionId ? `${traceActionId}:log-history` : undefined,
+    )
     if (result.code !== 0) return []
 
     const records = result.stdout
@@ -221,7 +231,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       })
     }
 
-    const filesChangedByHash = await readGitCommitFilesChangedMap(cwd, limit)
+    const filesChangedByHash = await readGitCommitFilesChangedMap(cwd, limit, traceActionId ? `${traceActionId}:log-files` : undefined)
     for (const commit of commits) {
       const changedFiles = filesChangedByHash.get(commit.hash.toLowerCase()) ?? []
       commit.changedFiles = changedFiles
@@ -232,7 +242,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
   }
 
   async function readRecentCommits(cwd: string): Promise<GitHistoryCommitInfo[]> {
-    const commits = await readGitCommitHistory(cwd, 5)
+    const commits = await readGitCommitHistory(cwd, 5, 'recent-commits')
     if (commits.length === 0) return []
 
     const latestTime = new Date(commits[0].committedAt).getTime()
@@ -249,18 +259,29 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     return withinOneMinute.length > 0 ? withinOneMinute : [commits[0]]
   }
 
-  async function readGitRefOid(cwd: string, ref: string): Promise<string | undefined> {
+  async function readGitRefOid(cwd: string, ref: string, traceActionId?: string): Promise<string | undefined> {
     const normalizedRef = ref.trim()
     if (!normalizedRef) return undefined
-    const result = await runGitCommand(cwd, ['rev-parse', '--verify', normalizedRef])
+    const result = await runGitCommand(cwd, ['rev-parse', '--verify', normalizedRef], undefined, traceActionId)
     if (result.code !== 0) return undefined
     const oid = result.stdout.replace(/\r/g, '').trim()
     return /^[0-9a-f]{40}$/i.test(oid) ? oid : undefined
   }
 
-  async function readGitRepositorySnapshot(repoRoot: string): Promise<GitRepositorySnapshot> {
+  async function readGitRepositorySnapshot(repoRoot: string, traceActionId = 'snapshot'): Promise<GitRepositorySnapshot> {
+    const snapshotStartedAt = GIT_TRACE_ENABLED ? performance.now() : 0
+    const emitSnapshotSummary = (repoKeyRoot: string) => {
+      if (!GIT_TRACE_ENABLED) return
+      emitGitTrace({
+        actionId: traceActionId,
+        repoKey: gitTraceRepoKey(repoKeyRoot),
+        cmd: 'snapshot',
+        durationMs: Math.round(performance.now() - snapshotStartedAt),
+      })
+    }
     const inputRepoRoot = repoRoot.trim()
     if (!inputRepoRoot) {
+      emitSnapshotSummary(inputRepoRoot)
       return {
         repoRoot: '',
         isGitRepository: false,
@@ -281,7 +302,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       // Keep the caller-provided path so the error can still point at the requested repoRoot.
     }
 
-    const repositoryResult = await runner.runGitCommand(checkedRepoRoot, ['rev-parse', '--show-toplevel'])
+    const repositoryResult = await runner.runGitCommand(checkedRepoRoot, ['rev-parse', '--show-toplevel'], undefined, `${traceActionId}:rev-parse-toplevel`)
     const repositoryRoot = repositoryResult.code === 0 ? repositoryResult.stdout.replace(/\r/g, '').trim() : ''
     const effectiveRepoRoot = repositoryRoot || checkedRepoRoot
     const repository = repositoryRoot
@@ -294,12 +315,18 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
         }
       : undefined
     const emptyBranch = emptyGitBranchInfo()
-    const statusResult = await runGitCommand(effectiveRepoRoot, ['status', '--porcelain=v2', '--branch', '-uall', '-z'], {
-      stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-      stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-    })
+    const statusResult = await runGitCommand(
+      effectiveRepoRoot,
+      ['status', '--porcelain=v2', '--branch', '-uall', '-z'],
+      {
+        stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+      },
+      `${traceActionId}:status`,
+    )
 
     if (statusResult.code !== 0) {
+      emitSnapshotSummary(effectiveRepoRoot)
       return {
         repoRoot: effectiveRepoRoot,
         isGitRepository: false,
@@ -318,17 +345,27 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     }
 
     const [localBranches, remoteBranches, recentCommits] = await Promise.all([
-      listGitLines(effectiveRepoRoot, ['branch', '--format=%(refname:short)'], {
-        stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-        stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-        maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
-      }),
-      listGitLines(effectiveRepoRoot, ['branch', '--remotes', '--format=%(refname:short)'], {
-        stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-        stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
-        maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
-      }),
-      readGitCommitHistory(effectiveRepoRoot, 10),
+      listGitLines(
+        effectiveRepoRoot,
+        ['branch', '--format=%(refname:short)'],
+        {
+          stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+          stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+          maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
+        },
+        `${traceActionId}:branch-local`,
+      ),
+      listGitLines(
+        effectiveRepoRoot,
+        ['branch', '--remotes', '--format=%(refname:short)'],
+        {
+          stdoutLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+          stderrLimitBytes: GIT_BRANCH_LIST_OUTPUT_LIMIT_BYTES,
+          maxLines: MAX_GIT_BRANCH_LIST_ITEMS,
+        },
+        `${traceActionId}:branch-remote`,
+      ),
+      readGitCommitHistory(effectiveRepoRoot, 10, `${traceActionId}:history`),
     ])
 
     const parsed = parseGitStatus(statusResult.stdout)
@@ -338,7 +375,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
     const filteredRemoteBranches = remoteBranches.filter((item) => !/\/HEAD$/.test(item))
     const remoteBranchSet = new Set(filteredRemoteBranches)
     const upstreamGone = parsed.branch.upstream ? !remoteBranchSet.has(parsed.branch.upstream) : false
-    const upstreamOid = parsed.branch.upstream && !upstreamGone ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream) : undefined
+    const upstreamOid = parsed.branch.upstream && !upstreamGone ? await readGitRefOid(effectiveRepoRoot, parsed.branch.upstream, `${traceActionId}:rev-parse-upstream`) : undefined
     const branch = {
       ...parsed.branch,
       upstreamGone,
@@ -347,6 +384,7 @@ export function createGitSnapshotReader(runner: GitCommandRunner) {
       remoteBranches: filteredRemoteBranches,
     }
 
+    emitSnapshotSummary(effectiveRepoRoot)
     return {
       repoRoot: effectiveRepoRoot,
       isGitRepository: true,

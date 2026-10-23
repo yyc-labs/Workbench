@@ -250,6 +250,7 @@ export interface AiGatewayElectronApi {
 }
 
 export interface GitElectronApi {
+  gitTraceEnabled: boolean
   getLatestCommit: (repoRoot: string) => Promise<LatestCommitSummary[]>
   listGitRepositories: (workspacePath: string) => Promise<GitRepositoryListResult>
   getGitRepositorySnapshot: (repoRoot: string) => Promise<GitRepositorySnapshot>

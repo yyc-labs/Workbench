@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n'
 import type { AiCommitStatus } from './detail.types'
 import { classifyGitOperationResult, commitGitWorkflowNodePositions, createGitWorkflowEdgeId, createGitWorkflowNode, createInitialGitWorkflowRunState, loadGitWorkflowGraph, removeGitWorkflowNode, saveGitWorkflowGraph, validateGitWorkflowGraph } from './gitWorkflow.graph'
 import { getGitWorkflowOperationDefinition } from './gitWorkflow.operations'
+import { beginGitTraceTiming, endGitTraceTiming } from './gitTrace'
 import type { GitWorkflowEdge, GitWorkflowEdgeKind, GitWorkflowExecutionContext, GitWorkflowNode, GitWorkflowNodeData, GitWorkflowNodeOutcome, GitWorkflowRunState, GitWorkflowValidationContext, GitWorkflowValidationResult, PersistedGitWorkflowGraph } from './gitWorkflow.types'
 
 type GitWorkflowSaveState = 'idle' | 'saving' | 'saved'
@@ -353,8 +354,10 @@ export function useGitWorkflowRunner({ projectId, gitSnapshot, onRefreshGitSnaps
         ...(outcome.kind === 'cancelled' ? { reason: outcome.reason } : {}),
       })
 
+      const traceStartedAt = beginGitTraceTiming()
       try {
         await onRefreshGitSnapshot()
+        endGitTraceTiming('workflow-refresh', traceStartedAt)
       } catch {
         // Snapshot refresh failure should not collapse the run state.
       }

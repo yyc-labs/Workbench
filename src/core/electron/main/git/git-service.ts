@@ -39,7 +39,7 @@ export function createGitService(deps: GitServiceDependencies) {
       }
     }
 
-    const snapshot = await readGitRepositorySnapshot(repoRoot)
+    const snapshot = await readGitRepositorySnapshot(repoRoot, 'precheck')
     if (!snapshot.isGitRepository) {
       const reason = snapshot.error || translateMain(deps.getLocale(), 'git.notARepository')
       return {
@@ -334,18 +334,23 @@ export function createGitService(deps: GitServiceDependencies) {
     let commitHead: string | undefined
 
     if (commandSequence && commandSequence.length > 0) {
-      const sequenceResult = await runGitCommandSequence(resolvedRepoRoot, commandSequence)
+      const sequenceResult = await runGitCommandSequence(resolvedRepoRoot, commandSequence, `op:${operation}`)
       ok = sequenceResult.ok
       output = sequenceResult.output
       exitCode = sequenceResult.exitCode
       command = sequenceResult.command
       error = sequenceResult.error
     } else {
-      const execution = await runGitCommand(resolvedRepoRoot, args, {
-        stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-        stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
-        timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
-      })
+      const execution = await runGitCommand(
+        resolvedRepoRoot,
+        args,
+        {
+          stdoutLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+          stderrLimitBytes: DEFAULT_GIT_OUTPUT_LIMIT_BYTES,
+          timeoutMs: DEFAULT_GIT_OPERATION_TIMEOUT_MS,
+        },
+        `op:${operation}`,
+      )
       output = normalizeGitOperationOutput(execution.stdout, execution.stderr, {
         stdoutLimit: execution.stdoutLimit,
         stderrLimit: execution.stderrLimit,
@@ -357,7 +362,7 @@ export function createGitService(deps: GitServiceDependencies) {
     }
 
     if (ok && operation === 'commit') {
-      const afterSnapshot = await readGitRepositorySnapshot(resolvedRepoRoot)
+      const afterSnapshot = await readGitRepositorySnapshot(resolvedRepoRoot, 'after-commit')
       commitHead = afterSnapshot.branch.oid
     }
 
