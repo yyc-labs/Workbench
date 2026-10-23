@@ -24,10 +24,12 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
   // 变更文件列表上限：应用级设置（对所有仓库生效），持久化在 appConfig
   const configLimit = useAppStore((state) => state.config.gitChangedFilesLimit)
   const [limitInput, setLimitInput] = useState(String(configLimit ?? 99))
+  const [limitSavedHint, setLimitSavedHint] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
+    setLimitSavedHint(false)
   }, [open])
 
   const commitLimitInput = async () => {
@@ -37,8 +39,11 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
       return
     }
     // 范围钳制在主进程 config 归一化中完成（10–2000）
+    const before = useAppStore.getState().config.gitChangedFilesLimit ?? 99
     await useAppStore.getState().setGitChangedFilesLimit(parsed)
-    setLimitInput(String(useAppStore.getState().config.gitChangedFilesLimit ?? 99))
+    const after = useAppStore.getState().config.gitChangedFilesLimit ?? 99
+    setLimitInput(String(after))
+    setLimitSavedHint(after !== before)
   }
 
   useEffect(() => {
@@ -150,6 +155,7 @@ export function DetailGitStatusOptimizationModal({ onClose, open, repoRoot }: De
               }
             }}
           />
+          {limitSavedHint ? <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--color-success)]">{t('detail.gitStatusOptLimitSaved')}</p> : null}
         </div>
       </div>
       {applyError ? <p className="mt-3 rounded-[10px] border border-[color:var(--color-destructive)]/30 bg-[color:var(--color-destructive-background)] p-3 text-[12px] leading-5 text-[color:var(--color-destructive)]">{applyError}</p> : null}
