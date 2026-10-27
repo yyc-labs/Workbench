@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
 import { Tooltip } from '../../../components/ui/tooltip'
 import { useI18n } from '../../../i18n'
-import { useEffectiveTheme } from '../../../hooks/useEffectiveTheme'
-import { base64ToUint8Array } from '../../../lib/bytes'
-import { FileViewerOpenButton, FileViewerShell, FileViewerState, usePreviewIframeMouseGestureBridge } from './fileViewerShared'
+import { FileViewerOpenButton, FileViewerShell, FileViewerState } from './fileViewerShared'
+import { PdfDocumentSurface } from './PdfDocumentSurface'
 
 type FilePdfViewerProps = {
   src: string
@@ -12,72 +11,37 @@ type FilePdfViewerProps = {
   relativePath: string
 }
 
-type PdfFrameMessage = { type: 'pdf:ready' } | { type: 'pdf:error' } | { type: 'pdf:escape' }
-
 /**
- * Renders a PDF inside a dedicated iframe page (`pdf-viewer.html`) powered by
- * pdf.js. Chromium's built-in PDF viewer cannot be used here: on Electron 42
- * its sandboxed renderer crashes with "object null is not iterable" while
- * requesting preload data over a sync IPC that the main process never answers.
- *
- * Navigation is handled inside the frame like a browser PDF reader: all pages
- * are stacked and rendered progressively (first page appears immediately),
- * plain wheel scrolls through them, Ctrl/Cmd + wheel zooms.
+ * PDF 预览：FileViewerShell（工具栏）+ PdfDocumentSurface（iframe 渲染面）。
+ * 渲染面已提取为独立组件，DOCX 高保真预览复用同一渲染面（18 号计划 v2④）。
  */
 export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerProps) {
   const { t } = useI18n()
-  const theme = useEffectiveTheme()
-  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  usePreviewIframeMouseGestureBridge(iframeRef)
 
-  const viewerSrc = useMemo(() => new URL('pdf-viewer.html', window.location.href).href, [])
-  const pdfData = useMemo(() => base64ToUint8Array(src), [src])
-
-  const postToFrame = useCallback((message: unknown) => {
-    iframeRef.current?.contentWindow?.postMessage(message, '*')
-  }, [])
-
-  // New document: reset state and (re)open it in the frame once loaded.
-  // Bumping refreshKey re-posts `pdf:open` so the frame rebuilds from scratch.
+  // src 变化（切换文件）时重置状态，渲染面内部会重发 pdf:open。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: src 变化本身即触发信号，effect 体无需引用。
   useEffect(() => {
     setError(null)
     setIsLoading(true)
-    postToFrame({ type: 'pdf:open', data: pdfData })
-  }, [pdfData, postToFrame, refreshKey])
+  }, [src])
 
-  // Keep the frame's theme in sync with the workbench.
-  useEffect(() => {
-    postToFrame({ type: 'pdf:theme', theme })
-  }, [theme, postToFrame])
+  // 新文档或刷新：重置状态，渲染面内部会重发 pdf:open。
+  const handleReload = useCallback(() => {
+    setError(null)
+    setIsLoading(true)
+    setRefreshKey((value) => value + 1)
+  }, [])
 
-  // Frame → host messages (document loaded, load errors).
-  useEffect(() => {
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== iframeRef.current?.contentWindow) return
-      const message = event.data as PdfFrameMessage | undefined
-      if (!message || typeof message.type !== 'string') return
-      switch (message.type) {
-        case 'pdf:ready':
-          setIsLoading(false)
-          break
-        case 'pdf:error':
-          setIsLoading(false)
-          setError(t('codeWorkspace.pdfLoadFailed'))
-          break
-        case 'pdf:escape':
-          setIsFullscreen(false)
-          break
-        default:
-          break
-      }
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+  const handleReady = useCallback(() => setIsLoading(false), [])
+  const handleError = useCallback(() => {
+    setIsLoading(false)
+    setError(t('codeWorkspace.pdfLoadFailed'))
   }, [t])
+  const handleEscape = useCallback(() => setIsFullscreen(false), [])
 
   return (
     <FileViewerShell
@@ -87,7 +51,7 @@ export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerP
       actions={
         <>
           <Tooltip content={t('codeWorkspace.pdfRefresh')} interactive={false}>
-            <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={() => setRefreshKey((value) => value + 1)}>
+            <button type="button" className="code-editor-preview-mode-btn inline-flex items-center gap-1.5" onClick={handleReload}>
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
           </Tooltip>
@@ -96,17 +60,7 @@ export function FilePdfViewer({ src, projectPath, relativePath }: FilePdfViewerP
       }
     >
       <div className="code-file-viewer-pdf-viewport">
-        <iframe
-          ref={iframeRef}
-          src={viewerSrc}
-          aria-label={relativePath}
-          className="code-file-viewer-iframe"
-          sandbox="allow-scripts allow-same-origin"
-          onLoad={() => {
-            postToFrame({ type: 'pdf:theme', theme })
-            postToFrame({ type: 'pdf:open', data: pdfData })
-          }}
-        />
+        <PdfDocumentSurface src={src} ariaLabel={relativePath} reloadKey={refreshKey} onReady={handleReady} onError={handleError} onEscape={handleEscape} />
         {isLoading || error ? (
           <div className="code-file-viewer-pdf-overlay">
             <FileViewerState loading={isLoading} error={error ?? undefined} />

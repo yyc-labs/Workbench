@@ -2,16 +2,15 @@ import { type Dispatch, type SetStateAction, useCallback, useRef, useState } fro
 import type { ProjectFileNodeKind } from '../../../shared/types'
 import { toast } from '../../components/ui/toast'
 import { useI18n } from '../../i18n'
-import { resolveInteractiveShellCommand } from '../../lib/interactiveShell'
+import { buildScriptCommand, type ExecutableScriptInfo, resolveExecutableScript } from '../../lib/executableScripts'
 import { resolveProcessUseWsl } from '../../lib/processEnvironmentResolution'
-import { sendTerminalCommand } from '../../lib/terminalCommand'
+import { fileNameFromRelativePath, joinProjectPath } from '../../lib/projectPaths'
+import { createAppStoreTerminalDeps, runCommandInEmbeddedShell, runCommandInSystemTerminal } from '../../lib/runActions/terminalExecution'
 import { useAppStore } from '../../stores/appStore'
 import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import { copyTextToClipboard } from './code.clipboard'
-import { buildScriptCommand, type ExecutableScriptInfo, resolveExecutableScript } from './code.executable'
 import { formatFileSize } from './code.helpers'
-import { fileNameFromRelativePath } from './code.markdownShared'
-import { defaultSelectedZipName, joinProjectPath, normalizeRelativePathForCopy, projectNameFromPath, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } from './code.pathActions'
+import { defaultSelectedZipName, normalizeRelativePathForCopy, projectNameFromPath, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } from './code.pathActions'
 import { type CodeTreeContextMenuSnapshot, dedupeByNormalizedPath, joinLines, pruneEntriesForArchive, toAbsolutePathItems, toNameItems } from './code.treeSelection'
 import type { FileSearchLineTarget } from './code.types'
 
@@ -320,61 +319,36 @@ export function useCodeTreePathActions({ isNarrowViewport, openContentSearchMatc
     [projectPath],
   )
 
-  const allocateScriptProcessKey = useCallback(() => {
-    const processes = useAppStore.getState().processes
-    const prefix = `${projectId}::script::`
-    const used = new Set<number>()
-    for (const key of Object.keys(processes)) {
-      if (!key.startsWith(prefix)) continue
-      const n = Number.parseInt(key.slice(prefix.length), 10)
-      if (Number.isInteger(n) && n >= 0) used.add(n)
-    }
-    let n = 0
-    while (used.has(n)) n += 1
-    return `${prefix}${n}`
-  }, [projectId])
-
   const executeScript = useCallback(
     async (channel: 'system' | 'embedded', relativePath: string, nodeKind: ProjectFileNodeKind, info: ExecutableScriptInfo) => {
       // cwd 是文件父目录（resolveTreeNodeFolderPath），命令参数必须只用文件名——
-      // 用完整 relativePath 会拼出 <parent>/<relativePath> 双路径（scripts\scripts\…）。
+      // 用完整 relativePath 会拼出 <parent>/<relativePath> 双路径（scripts\\scripts\\…）。
       const cwd = resolveTreeNodeFolderPath(projectPath, relativePath, nodeKind)
       const command = buildScriptCommand(info, fileNameFromRelativePath(relativePath))
+      // 启动/分配/发送链路统一走 lib/runActions 共享模块（19 号计划 §3.5），编辑器运行入口复用同一实现。
+      const deps = createAppStoreTerminalDeps(useAppStore, {
+        onProcessOutput: window.electronAPI.onProcessOutput,
+        openPathTerminal: (cwdPath, terminalCommand) => window.electronAPI.openPathTerminal(cwdPath, terminalCommand),
+      })
       if (channel === 'system') {
-        void window.electronAPI.openPathTerminal(cwd, command).then((opened) => {
-          if (!opened) toast.error(t('codeFileTree.terminalLaunchFailed'))
-        })
+        const opened = await runCommandInSystemTerminal(deps, { cwd, command })
+        if (!opened) toast.error(t('codeFileTree.terminalLaunchFailed'))
         return
       }
       // 内置通道：启动交互 shell，再把命令作为键盘输入发送——脚本结束后 shell 回到提示符，
       // 终端保持打开供查看输出（直接 spawn 一次性命令会在退出时带着终端一起消失）。
-      // 显式传 'silent' 启动模式，避免 isPrimaryProjectRun 命中时被劫持到外部终端。
-      const processKey = allocateScriptProcessKey()
       const useWsl = resolveProcessUseWsl(cwd) ?? false
-      let shellCommand: string
-      try {
-        shellCommand = await resolveInteractiveShellCommand(useWsl)
-      } catch {
-        toast.error(t('codeFileTree.terminalLaunchFailed'))
-        return
-      }
-      const startProject = useAppStore.getState().startProject
-      const ok = await startProject(projectId, shellCommand, processKey, useWsl, cwd, 'silent')
-      if (!ok) {
-        toast.error(t('codeFileTree.terminalLaunchFailed'))
-        return
-      }
-      // 脚本输出归属集合面板：初始 title 用脚本文件名（D6），并唤起面板聚焦该终端（D5 显式终端动作）。
-      const store = useAppStore.getState()
-      store.renameTerminal(projectId, processKey, fileNameFromRelativePath(relativePath))
-      store.revealTerminal(projectId, processKey)
-      // 命令经 shell 输入通道下发：等该终端首条输出（shell 就绪）后发送，超时按 type-ahead 兜底。
-      sendTerminalCommand(processKey, command, {
-        onOutput: window.electronAPI.onProcessOutput,
-        sendInput: (key, data) => useAppStore.getState().sendInput(key, data),
+      const ok = await runCommandInEmbeddedShell(deps, {
+        projectId,
+        cwd,
+        command,
+        // 脚本输出归属集合面板：初始 title 用脚本文件名（D6），并唤起面板聚焦该终端（D5 显式终端动作）。
+        title: fileNameFromRelativePath(relativePath),
+        useWsl,
       })
+      if (!ok) toast.error(t('codeFileTree.terminalLaunchFailed'))
     },
-    [allocateScriptProcessKey, projectId, projectPath, t],
+    [projectId, projectPath, t],
   )
 
   const [pendingScriptConfirm, setPendingScriptConfirm] = useState<PendingScriptExecution | null>(null)

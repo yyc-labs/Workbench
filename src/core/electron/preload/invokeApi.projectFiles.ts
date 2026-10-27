@@ -2,6 +2,11 @@ import { ipcRenderer } from 'electron'
 import type { ProjectFileArchiveEntry, ProjectFileContentSearchOptions, ProjectFileNode, ProjectFileTreeOptions } from '../../shared/types'
 import { IPC } from '../main/ipc'
 
+/** 排队中任务取消（v2⑤）：renderer 切换文件/关闭预览时调用；已进入转换的任务不中断。 */
+function cancelDocxPreview(requestId: string) {
+  return ipcRenderer.invoke(IPC.PROJECT_FILE_DOCX_PREVIEW_CANCEL, requestId)
+}
+
 export function createProjectFileInvokeApi() {
   return {
     getProjectFileAutoLoadDecision: (projectPath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_AUTOLOAD_DECISION, projectPath),
@@ -37,5 +42,11 @@ export function createProjectFileInvokeApi() {
     copyProjectEntriesToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[]) => ipcRenderer.invoke(IPC.PROJECT_FILE_CLIPBOARD_ENTRIES, projectPath, entries) as Promise<{ name: string; count: number }>,
 
     copyProjectEntriesZipToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[], zipName?: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_ZIP_ENTRIES_CLIPBOARD, projectPath, entries, zipName) as Promise<{ name: string; size: number }>,
+
+    docxPreview: (projectPath: string, relativePath: string, requestId?: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_DOCX_PREVIEW, projectPath, relativePath, requestId),
+
+    cancelDocxPreview: (requestId: string) => cancelDocxPreview(requestId),
+
+    readDocxSource: (projectPath: string, relativePath: string) => ipcRenderer.invoke(IPC.PROJECT_FILE_DOCX_READ_SOURCE, projectPath, relativePath),
   }
 }

@@ -55,7 +55,7 @@ export function resolveExecutableScript(relativePath: string, useWsl: boolean): 
 /**
  * 生成「解释器 + 脚本路径」命令。只由映射表解释器与校验后的相对路径构成，不接受任何用户自定义片段。
  */
-export function buildScriptCommand(info: ExecutableScriptInfo, relativePath: string): string {
+export function buildScriptCommand(info: Pick<ExecutableScriptInfo, 'runtime'>, relativePath: string): string {
   const normalizedPath = relativePath.trim().replace(/\\/g, '/')
   switch (info.runtime) {
     case 'node':

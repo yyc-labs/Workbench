@@ -29,6 +29,7 @@ import { useCodeTreePathActions } from './useCodeTreePathActions'
 import { type ContentSearchScopePreset, parseFileSearchLineTarget, useCodeWorkspaceExplorerState } from './useCodeWorkspaceExplorerState'
 import { useCodeWorkspaceRestoreState } from './useCodeWorkspaceRestoreState'
 import { useCodeWorkspaceScrollSync } from './useCodeWorkspaceScrollSync'
+import { useEditorRunActions } from './useEditorRunActions'
 import { useMarkdownPreviewModeState } from './useMarkdownPreviewModeState'
 import { useMarkdownPreviewSearch } from './useMarkdownPreviewSearch'
 import { appendProjectCodeTab, CODE_FILE_DRAWER_SECTION_LIMIT, MAX_PROJECT_CODE_SESSION_CURSOR_POSITIONS, normalizeProjectCodeSession } from './useProjectCodeSession'
@@ -885,6 +886,14 @@ export function CodeWorkspacePanel({
     setIsQuickDrawerOpen,
   })
 
+  // 19 号计划：编辑器上下文感知快捷运行——顶部运行菜单与行级 CodeLens 共享同一份动作。
+  const { runActions, runAction } = useEditorRunActions({
+    projectId,
+    projectPath,
+    activeRelativePath,
+    editorValue,
+  })
+
   useEffect(() => {
     const revealTarget = (location.state as CodeWorkspaceNavigationState | null)?.revealTarget
     if (!revealTarget) return
@@ -1206,6 +1215,8 @@ export function CodeWorkspacePanel({
                 codePreview={codePreview}
                 editorRef={editorRef}
                 editorValue={editorValue}
+                runActions={runActions}
+                onRunAction={runAction}
                 effectiveMarkdownPreviewMode={effectiveMarkdownPreviewMode}
                 excludedNodeKind={activeFile?.excludedNodeKind ?? 'file'}
                 fileKind={activeKind}

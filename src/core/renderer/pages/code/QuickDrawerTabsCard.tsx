@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '../../i18n'
-import { fileNameFromRelativePath } from './code.markdownShared'
+import { fileNameFromRelativePath } from '../../lib/projectPaths'
 
 type QuickDrawerTabsCardProps = {
   openTabs: string[]

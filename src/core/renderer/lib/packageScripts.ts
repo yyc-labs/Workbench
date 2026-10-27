@@ -6,6 +6,7 @@ const MAX_PACKAGE_SCRIPT_JSON_PARSE_FALLBACK_LENGTH = 64 * 1024
 export function scriptCommand(packageManager: ProjectInfo['packageManager'] | undefined, script: string): string {
   const pm = packageManager || 'npm'
   if (pm === 'yarn') return script === 'start' ? 'yarn start' : `yarn ${script}`
+  if (pm === 'bun') return script === 'start' ? 'bun start' : `bun run ${script}`
   if (script === 'start') return `${pm} start`
   return `${pm} run ${script}`
 }
@@ -142,10 +143,12 @@ function findJsonValueEnd(content: string, startIndex: number): number | null {
   return findJsonPrimitiveEnd(content, startIndex)
 }
 
-function extractTopLevelObjectKeys(content: string, objectStartIndex: number): string[] | null {
+type JsonObjectKeyPosition = { name: string; startIndex: number }
+
+function extractObjectKeyPositions(content: string, objectStartIndex: number): JsonObjectKeyPosition[] | null {
   if (content[objectStartIndex] !== '{') return null
 
-  const keys: string[] = []
+  const keys: JsonObjectKeyPosition[] = []
   let index = objectStartIndex + 1
 
   while (index < content.length) {
@@ -156,7 +159,7 @@ function extractTopLevelObjectKeys(content: string, objectStartIndex: number): s
 
     const keyResult = readJsonStringValue(content, index)
     if (!keyResult) return null
-    keys.push(keyResult.value)
+    keys.push({ name: keyResult.value, startIndex: index })
 
     index = skipJsonWhitespace(content, keyResult.nextIndex)
     if (content[index] !== ':') return null
@@ -197,7 +200,8 @@ function extractPackageScriptsFromJsonText(content: string): string[] | null {
     index = skipJsonWhitespace(content, index + 1)
     if (keyResult.value === 'scripts') {
       if (content[index] !== '{') return []
-      return extractTopLevelObjectKeys(content, index)
+      const positions = extractObjectKeyPositions(content, index)
+      return positions?.map((entry) => entry.name) ?? null
     }
 
     const valueEndIndex = findJsonValueEnd(content, index)
@@ -213,6 +217,74 @@ function extractPackageScriptsFromJsonText(content: string): string[] | null {
   }
 
   return null
+}
+
+function countLinesBefore(content: string, index: number): number {
+  let lines = 0
+  for (let i = 0; i < index; i++) {
+    if (content.charCodeAt(i) === 10) lines += 1
+  }
+  return lines
+}
+
+/**
+ * 流式提取 scripts 中每个条目的名字与 key 所在行（1-based），顺序为文档原始顺序。
+ * 内容非法（注释、尾逗号、截断等）时返回 null。
+ */
+function extractPackageScriptsWithLines(content: string): PackageScriptEntry[] | null {
+  let index = skipJsonWhitespace(content, 0)
+  if (content[index] !== '{') return null
+  index += 1
+
+  while (index < content.length) {
+    index = skipJsonWhitespace(content, index)
+    const current = content[index]
+    if (current === '}') return []
+    if (current !== '"') return null
+
+    const keyResult = readJsonStringValue(content, index)
+    if (!keyResult) return null
+
+    index = skipJsonWhitespace(content, keyResult.nextIndex)
+    if (content[index] !== ':') return null
+
+    index = skipJsonWhitespace(content, index + 1)
+    if (keyResult.value === 'scripts') {
+      if (content[index] !== '{') return []
+      const positions = extractObjectKeyPositions(content, index)
+      if (!positions) return null
+      return positions.map((entry) => ({ name: entry.name, line: countLinesBefore(content, entry.startIndex) + 1 }))
+    }
+
+    const valueEndIndex = findJsonValueEnd(content, index)
+    if (valueEndIndex == null) return null
+
+    index = skipJsonWhitespace(content, valueEndIndex)
+    if (content[index] === ',') {
+      index += 1
+      continue
+    }
+    if (content[index] === '}') return []
+    return null
+  }
+
+  return null
+}
+
+export interface PackageScriptEntry {
+  name: string
+  /** script key 在文件中的行号（1-based）。 */
+  line: number
+}
+
+/**
+ * 编辑器快捷运行场景（19 号计划 §11.1）：只走流式路径并携带行号。
+ * 与 `parsePackageScripts` 不同，这里不做 JSON.parse 兜底——兜底路径没有位置信息，
+ * 而编辑器需要行级定位；内容暂时非法时返回 null，调用方应隐藏运行入口。
+ * 顺序保持 package.json 文档原始顺序（§2.2：菜单不按语义重排）。
+ */
+export function parsePackageScriptsWithLines(content: string): PackageScriptEntry[] | null {
+  return extractPackageScriptsWithLines(content)
 }
 
 function parsePackageScriptsViaJson(content: string): string[] {

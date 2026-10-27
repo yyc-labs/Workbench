@@ -126,6 +126,7 @@ export const createSettingsActionsSlice: StateCreator<AppState, [], [], Settings
         pdfPreviewLimitMb: updated.pdfPreviewLimitMb,
         audioPreviewLimitMb: updated.audioPreviewLimitMb,
         videoPreviewLimitMb: updated.videoPreviewLimitMb,
+        docxPreviewLimitMb: updated.docxPreviewLimitMb,
       },
     }))
   },

@@ -29,3 +29,38 @@ export function resolveWorkingDirectoryPreview(projectPath: string, workingDirec
   }
   return `${normalizePathForCompare(projectPath)}/${raw.replace(/^[\\/]+/, '').replace(/[\\/]+/g, '/')}`
 }
+
+export function splitRelativePath(relativePath: string): string[] {
+  return relativePath
+    .trim()
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+}
+
+function trimTrailingPathSeparators(pathValue: string): string {
+  const trimmed = pathValue.trim()
+  if (!trimmed) return ''
+  if (/^[A-Za-z]:[\\/]+$/.test(trimmed)) {
+    return `${trimmed.slice(0, 2)}\\`
+  }
+  return trimmed.replace(/[\\/]+$/, '')
+}
+
+export function joinProjectPath(projectRootPath: string, relativePath: string): string {
+  const normalizedRoot = trimTrailingPathSeparators(projectRootPath)
+  const segments = splitRelativePath(relativePath)
+  if (segments.length === 0) return normalizedRoot || projectRootPath
+
+  const separator = normalizedRoot.includes('\\') ? '\\' : '/'
+  const joined = segments.join(separator)
+  if (!normalizedRoot) return joined
+  return normalizedRoot.endsWith(separator) ? `${normalizedRoot}${joined}` : `${normalizedRoot}${separator}${joined}`
+}
+
+export function fileNameFromRelativePath(relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/')
+  const segments = normalized.split('/')
+  return segments[segments.length - 1] || relativePath
+}

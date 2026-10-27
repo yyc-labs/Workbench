@@ -12,6 +12,7 @@ import { ZoomPanViewport } from '../../components/ZoomPanViewport'
 import { useScrollableContentCapture } from '../../hooks/useScrollableContentCapture'
 import { useI18n } from '../../i18n'
 import { MONO_FONT_STACK } from '../../lib/fonts'
+import type { RunAction } from '../../lib/runActions/types'
 import { CodeMarkdownTocButton } from './CodeMarkdownTocButton'
 import type { ParsedMarkdownDocument } from './code.frontmatterParser'
 import { buildYycWorkbenchPreviewUrl } from './code.helpers'
@@ -20,6 +21,7 @@ import { remarkBoxDrawingTables } from './code.markdownBoxTables'
 import { transformMarkdownUrl } from './code.markdownUrls'
 import { MarkdownPreviewVisibilityProvider } from './code.markdownVisibility'
 import type { MarkdownPreviewMode } from './code.workspace.types'
+import { EditorRunToolbar } from './EditorRunToolbar'
 import { MarkdownPreviewSurface } from './MarkdownPreviewSurface'
 import { MonacoCodeEditor, type MonacoCodeEditorHandle, type MonacoEditorScrollState } from './MonacoCodeEditor'
 import { FileDocxViewer } from './viewers/docx/FileDocxViewer'
@@ -137,6 +139,9 @@ type CodeWorkspaceEditorPaneProps = {
   structuredPreviewComponents: Components
   transcriptReferences: TranscriptFileReference[]
   viewMode: 'files' | 'search'
+  /** 编辑器快捷运行（19 号计划）：顶部入口与行级 CodeLens 共享同一份动作。 */
+  runActions: RunAction[]
+  onRunAction: (action: RunAction) => void
 }
 
 export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
@@ -198,6 +203,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
   structuredPreviewComponents,
   transcriptReferences,
   viewMode,
+  runActions,
+  onRunAction,
 }: CodeWorkspaceEditorPaneProps) {
   const { t } = useI18n()
   const structuredPreviewCapture = useScrollableContentCapture()
@@ -263,6 +270,13 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
           {t('codeWorkspace.readingFile')}
         </div>
       )}
+      {!isMarkdownFile && runActions.length > 0 && (
+        // 悬浮在编辑器右上角（与 isReading 徽标同位；文件切换即清空动作，两者不重叠），
+        // 不占独立行；Monaco find widget 位于 z-10040 的 fixed overflow 容器，不会被遮挡。
+        <div className="pointer-events-none absolute right-3 top-2 z-20">
+          <EditorRunToolbar actions={runActions} onRunAction={onRunAction} />
+        </div>
+      )}
       {isMarkdownFile && (
         <div className="code-editor-preview-toolbar">
           <span className="text-[11px] text-[color:var(--color-muted-foreground)]">{t('codeWorkspace.markdown')}</span>
@@ -326,8 +340,8 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
             <FileImageViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} monacoTheme={monacoTheme} />
           ) : fileKind === 'pdf' && binaryDataUrl ? (
             <FilePdfViewer src={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
-          ) : fileKind === 'docx' && binaryDataUrl ? (
-            <FileDocxViewer data={binaryDataUrl} projectPath={projectPath} relativePath={activeRelativePath} />
+          ) : fileKind === 'docx' ? (
+            <FileDocxViewer projectPath={projectPath} relativePath={activeRelativePath} />
           ) : fileKind === 'html' ? (
             <FileHtmlViewer
               previewUrl={buildYycWorkbenchPreviewUrl(projectId, activeRelativePath, monacoTheme === 'vs-dark' ? 'dark' : 'light')}
@@ -368,6 +382,9 @@ export const CodeWorkspaceEditorPane = memo(function CodeWorkspaceEditorPane({
               onFocusSearch={onFocusSearch}
               onQuickMatchJump={onQuickMatchJump}
               onSave={onHandleSave}
+              // 行级 CodeLens 运行入口暂时下线（19 号计划 §13.2 偏差 6）；
+              // 恢复时改回：runCodeLens={runActions.length > 0 ? { actions: runActions, onRunAction } : undefined}
+              runCodeLens={undefined}
             />
           )}
         </div>

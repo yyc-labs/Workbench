@@ -46,17 +46,26 @@ export async function readProjectFile(projectPath: string, relativePath: string)
       return toUnsupportedReadResult(normalizedRelativePath, stat)
     }
 
-    if (kind === 'image' || kind === 'pdf' || kind === 'docx' || kind === 'video' || kind === 'audio') {
-      // 各类型上限可在设置页分别调整（imagePreviewLimitMb 等），主进程按当前配置动态生效；docx 属文档，与 PDF 共用上限。
+    if (kind === 'docx') {
+      // 高保真预览由主进程内部转换（docx-preview-service），读取链路只返回 kind 供 renderer 分流，
+      // 不再把源文件读成 base64（默认路径零双读）；源文件上限在转换服务内按 docxPreviewLimitMb 执行。
+      return {
+        relativePath: normalizedRelativePath,
+        content: '',
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        language: inferLanguageFromPath(normalizedRelativePath),
+        encoding: 'base64',
+        kind,
+        mimeType: mimeTypeFromPreviewPath(normalizedRelativePath),
+      }
+    }
+
+    if (kind === 'image' || kind === 'pdf' || kind === 'video' || kind === 'audio') {
+      // 各类型上限可在设置页分别调整（imagePreviewLimitMb 等），主进程按当前配置动态生效。
       const config = loadConfig()
       const limitMb =
-        kind === 'image'
-          ? (config.imagePreviewLimitMb ?? DEFAULT_IMAGE_PREVIEW_LIMIT_MB)
-          : kind === 'pdf' || kind === 'docx'
-            ? (config.pdfPreviewLimitMb ?? DEFAULT_PDF_PREVIEW_LIMIT_MB)
-            : kind === 'video'
-              ? (config.videoPreviewLimitMb ?? DEFAULT_VIDEO_PREVIEW_LIMIT_MB)
-              : (config.audioPreviewLimitMb ?? DEFAULT_AUDIO_PREVIEW_LIMIT_MB)
+        kind === 'image' ? (config.imagePreviewLimitMb ?? DEFAULT_IMAGE_PREVIEW_LIMIT_MB) : kind === 'pdf' ? (config.pdfPreviewLimitMb ?? DEFAULT_PDF_PREVIEW_LIMIT_MB) : kind === 'video' ? (config.videoPreviewLimitMb ?? DEFAULT_VIDEO_PREVIEW_LIMIT_MB) : (config.audioPreviewLimitMb ?? DEFAULT_AUDIO_PREVIEW_LIMIT_MB)
       const previewLimitBytes = limitMb * 1024 * 1024
       if (stat.size > previewLimitBytes) {
         return toUnsupportedReadResult(normalizedRelativePath, stat, 'size-limit')

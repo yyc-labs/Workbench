@@ -183,7 +183,30 @@ export function applySavedProjectSnapshot(
   return project
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __workbenchWorkspaceHydrated__: boolean | undefined
+}
+
+/**
+ * 工作区是否已完成水合（initApp / loadConfig 至少跑完一次）。
+ * 水合前内存 projects 是空数组；此时任何 persistWorkspace 都会用空列表覆盖磁盘上的
+ * 完整项目配置（热更新 / reload 后 store 重建时曾触发过项目丢失事故），必须跳过。
+ * 标志挂在 globalThis 上：测试的 TS 加载器对同一文件会产生多个实例，模块级变量无法跨实例共享。
+ */
+export function markWorkspaceHydrated(): void {
+  globalThis.__workbenchWorkspaceHydrated__ = true
+}
+
+function isWorkspaceHydrated(): boolean {
+  return globalThis.__workbenchWorkspaceHydrated__ === true
+}
+
 export async function persistWorkspace(projects: ProjectInfo[], folders: ProjectFolder[], tags: ProjectTag[], removedProjects?: RemovedProjectSnapshot[]): Promise<void> {
+  if (!isWorkspaceHydrated()) {
+    console.warn('[persistWorkspace] skipped: workspace not hydrated yet; refuse to overwrite saved projects with an uninitialized store')
+    return
+  }
   const payload: Record<string, unknown> = {
     projects: toSavedProjects(projects),
     folders,

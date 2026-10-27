@@ -2,7 +2,7 @@ import type { StateCreator } from 'zustand'
 import { shouldUseWslForRuntimeEntrypoint } from '../../shared/runtimeEntrypoint'
 import type { AppConfig, Capability, SavedProject, TmuxSessionInfo } from '../../shared/types'
 import { detectProjectEnvironment } from '../lib/projectEnvironment'
-import { applySavedProjectSnapshot, createFallbackProject } from './appStore.helpers'
+import { applySavedProjectSnapshot, createFallbackProject, markWorkspaceHydrated } from './appStore.helpers'
 import { hydrateFloatingPanel } from './appStore.terminalCollectionSlice'
 import type { AppState } from './appStore.types'
 
@@ -95,6 +95,7 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
         floatingPanel: hydrateFloatingPanel(config.floatingPanel),
         isAppReady: true,
       })
+      markWorkspaceHydrated()
 
       get().rehydrateProcessUrlsFromStorage()
 
@@ -144,5 +145,6 @@ export const createInitActionsSlice: StateCreator<AppState, [], [], InitActionsS
       capability,
       floatingPanel: hydrateFloatingPanel(config.floatingPanel),
     })
+    markWorkspaceHydrated()
   },
 })

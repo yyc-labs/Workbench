@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { FolderOpen, Map } from 'lucide-react'
+// import { FolderOpen, Map } from 'lucide-react' // 暂时隐藏右下角悬浮入口，恢复按钮时一并恢复
 import { RecentProjectsDrawer, RecentProjectsMetaDialogHost } from '../components/RecentProjectsDrawer'
 import { GlobalTitleTooltipBridge } from '../components/GlobalTitleTooltipBridge'
 import { DockerLaunchPromptDialog } from '../components/run-tasks/DockerLaunchPromptDialog'
@@ -352,7 +352,8 @@ function GlobalRecentProjectsDrawerHost() {
 
   return (
     <>
-      <div className="fixed bottom-5 right-5 z-[91] flex items-center gap-2">
+      {/* 暂时隐藏右下角悬浮入口（路由目录 / 全部项目），需要时恢复此处注释。 */}
+      {/* <div className="fixed bottom-5 right-5 z-[91] flex items-center gap-2">
         <button
           type="button"
           className="quiet-control inline-flex items-center gap-1.5 rounded-full border-0 px-3 py-1.5 text-xs text-[color:var(--color-muted-foreground)] transition-colors hover:bg-[color:var(--color-accent)] hover:text-[color:var(--color-foreground)]"
@@ -371,7 +372,7 @@ function GlobalRecentProjectsDrawerHost() {
           <FolderOpen className="h-3.5 w-3.5" />
           {t('common.recentProjects')}
         </button>
-      </div>
+      </div> */}
 
       <RecentProjectsDrawer open={open} currentProjectId={currentProjectId} onClose={closeDrawer} onSelectProject={handleSelectProject} onRemoveProject={handleRemoveProject} onEditProjectMetadata={setMetaDialogProjectId} />
 

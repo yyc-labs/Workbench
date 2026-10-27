@@ -21,6 +21,9 @@ globalThis.localStorage = {
 }
 
 const { createWorkspaceActionsSlice } = loadTsModule('src/core/renderer/stores/appStore.workspaceSlice.ts')
+// persistWorkspace 有水合防护（未水合时跳过写盘，防止空列表覆盖配置）：store 级测试直接标记已水合
+const { markWorkspaceHydrated } = loadTsModule('src/core/renderer/stores/appStore.helpers.ts')
+markWorkspaceHydrated()
 
 function createMiniStore(initialState) {
   let state = initialState

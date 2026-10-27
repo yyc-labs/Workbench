@@ -1,9 +1,9 @@
-import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginDisplayMode, ProjectFileExclusionsConfig } from '../../../shared/types'
 import { useEffect, useState } from 'react'
-import { useI18n } from '../../i18n'
+import type { AppLocale, CloseWindowBehavior, ConfigRecoveryInfo, LaunchOnLoginDisplayMode, ProjectFileExclusionsConfig } from '../../../shared/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Textarea } from '../../components/ui/textarea'
+import { useI18n } from '../../i18n'
 import type { ThemeMode } from './settings.types'
 import { ThemeSegmentedControl } from './ThemeSegmentedControl'
 
@@ -19,6 +19,7 @@ type GeneralPanelProps = {
   pdfPreviewLimitMb: number
   audioPreviewLimitMb: number
   videoPreviewLimitMb: number
+  docxPreviewLimitMb: number
   supportsLaunchOnLogin: boolean
   supportsCloseWindowBehavior: boolean
   configRecovery?: ConfigRecoveryInfo
@@ -29,7 +30,7 @@ type GeneralPanelProps = {
   onCloseWindowBehaviorChange: (behavior: CloseWindowBehavior) => void | Promise<void>
   onCodeFileExclusionsChange: (exclusions: ProjectFileExclusionsConfig) => void | Promise<void>
   onCodeTreeAutoLoadFileLimitChange: (limit: number) => void | Promise<void>
-  onFilePreviewLimitsChange: (limits: { imagePreviewLimitMb?: number; pdfPreviewLimitMb?: number; audioPreviewLimitMb?: number; videoPreviewLimitMb?: number }) => void | Promise<void>
+  onFilePreviewLimitsChange: (limits: { imagePreviewLimitMb?: number; pdfPreviewLimitMb?: number; audioPreviewLimitMb?: number; videoPreviewLimitMb?: number; docxPreviewLimitMb?: number }) => void | Promise<void>
 }
 
 type PreviewLimitInputProps = {
@@ -92,6 +93,7 @@ function SettingsGeneralPanel({
   pdfPreviewLimitMb,
   audioPreviewLimitMb,
   videoPreviewLimitMb,
+  docxPreviewLimitMb,
   supportsLaunchOnLogin,
   supportsCloseWindowBehavior,
   configRecovery,
@@ -172,6 +174,7 @@ function SettingsGeneralPanel({
             <PreviewLimitInput label={t('settings.general.pdfPreviewLimitLabel')} value={pdfPreviewLimitMb} placeholder="3" onCommit={(limitMb) => void onFilePreviewLimitsChange({ pdfPreviewLimitMb: limitMb })} />
             <PreviewLimitInput label={t('settings.general.audioPreviewLimitLabel')} value={audioPreviewLimitMb} placeholder="5" onCommit={(limitMb) => void onFilePreviewLimitsChange({ audioPreviewLimitMb: limitMb })} />
             <PreviewLimitInput label={t('settings.general.videoPreviewLimitLabel')} value={videoPreviewLimitMb} placeholder="10" onCommit={(limitMb) => void onFilePreviewLimitsChange({ videoPreviewLimitMb: limitMb })} />
+            <PreviewLimitInput label={t('settings.general.docxPreviewLimitLabel')} value={docxPreviewLimitMb} placeholder="3" onCommit={(limitMb) => void onFilePreviewLimitsChange({ docxPreviewLimitMb: limitMb })} />
           </div>
           <p className="mt-3 text-[11px] leading-5 text-[color:var(--color-muted-foreground)]">{t('settings.general.filePreviewLimitsHint')}</p>
           <div className="mt-6">

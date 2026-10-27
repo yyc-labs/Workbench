@@ -1,18 +1,14 @@
 import { readdirSync, readFileSync } from 'fs'
-import { join } from 'path'
-import { basename } from 'path'
-import type { ProjectInfo } from '../../shared/types'
-import { RULES, globMatch, detectPackageManager, projectIdFromPath } from '../../shared/rules'
+import { basename, join } from 'path'
+import { detectPackageManager, globMatch, projectIdFromPath, RULES } from '../../shared/rules'
+import type { PackageManager, ProjectInfo } from '../../shared/types'
 
-function substitutePackageManager(
-  command: string,
-  pm: 'pnpm' | 'yarn' | 'npm'
-): string {
+function substitutePackageManager(command: string, pm: PackageManager): string {
   if (pm === 'npm') return command
   return command.replace('npm', pm)
 }
 
-function resolveDefaultCommand(type: ProjectInfo['type'], baseCommand: string, pm: 'pnpm' | 'yarn' | 'npm'): string {
+function resolveDefaultCommand(type: ProjectInfo['type'], baseCommand: string, pm: PackageManager): string {
   if (type === 'python') return baseCommand
   if (type === 'android') {
     // Keep command shell-compatible for both cmd.exe and bash/zsh.
@@ -24,12 +20,7 @@ function resolveDefaultCommand(type: ProjectInfo['type'], baseCommand: string, p
 
 function isLikelyAndroidProject(files: string[]): boolean {
   const hasSettingsGradle = files.some((f) => globMatch('settings.gradle*', f))
-  const hasAndroidSignals =
-    files.includes('app')
-    || files.some((f) => globMatch('build.gradle*', f))
-    || files.includes('gradle.properties')
-    || files.includes('local.properties')
-    || files.includes('gradle')
+  const hasAndroidSignals = files.includes('app') || files.some((f) => globMatch('build.gradle*', f)) || files.includes('gradle.properties') || files.includes('local.properties') || files.includes('gradle')
 
   return hasSettingsGradle && hasAndroidSignals
 }
@@ -74,9 +65,7 @@ export function detectProject(dirPath: string): ProjectInfo | null {
   const sortedRules = [...RULES].sort((a, b) => b.priority - a.priority)
 
   for (const rule of sortedRules) {
-    const matchedPatterns = rule.matchPatterns.filter((pattern) =>
-      files.some((f) => globMatch(pattern, f))
-    )
+    const matchedPatterns = rule.matchPatterns.filter((pattern) => files.some((f) => globMatch(pattern, f)))
 
     if (matchedPatterns.length === 0) continue
 
@@ -89,11 +78,7 @@ export function detectProject(dirPath: string): ProjectInfo | null {
       continue
     }
 
-    const command = resolveDefaultCommand(
-      rule.type,
-      rule.type === 'python' ? rule.defaultCommand.replace('{name}', name) : rule.defaultCommand,
-      pm
-    )
+    const command = resolveDefaultCommand(rule.type, rule.type === 'python' ? rule.defaultCommand.replace('{name}', name) : rule.defaultCommand, pm)
 
     return {
       id: projectIdFromPath(dirPath),

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { defaultSelectedZipName, joinProjectPath, normalizeRelativePathForCopy, projectNameFromPath, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } = loadTsModule('src/core/renderer/pages/code/code.pathActions.ts')
+const { joinProjectPath } = loadTsModule('src/core/renderer/lib/projectPaths.ts')
+
+const { defaultSelectedZipName, normalizeRelativePathForCopy, projectNameFromPath, removeRelativePathSlashes, resolveFileParentFolderPath, resolveTreeNodeFolderPath } = loadTsModule('src/core/renderer/pages/code/code.pathActions.ts')
 
 test('code path actions normalize relative paths for copy', () => {
   assert.equal(normalizeRelativePathForCopy(' src\\core//renderer/pages/code/CodeWorkspacePanel.tsx '), 'src/core/renderer/pages/code/CodeWorkspacePanel.tsx')

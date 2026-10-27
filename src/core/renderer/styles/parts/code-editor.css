@@ -154,10 +154,23 @@
   font-weight: 700;
 }
 
-/* 转录引用 gutter 标记：渲染在行号数字右侧的 lines decorations 区。
-   装饰元素由 Monaco 撑满整个 gutter 单元格，圆点用背景绘制，不依赖元素自身尺寸。 */
-.monaco-transcript-ref-gutter {
+/* 转录引用标记：装饰仅作为行标记（.cldr 元素，无视觉），圆点通过 :has() 画在所在行的
+   行号元素内。行号元素撑满行高并 flex 右对齐数字，::before 作为伸缩项撑满数字左侧的
+   剩余宽度，圆点用背景居中绘制——任意位数行号都居中于「刨去行号数字的剩余区域」。
+   命中区域仅圆点附近：hook 侧按 DOT_* 常量做几何判定，两边需保持同步。 */
+.monaco-editor .margin-view-overlays > div:has(> .cldr.monaco-transcript-ref-gutter) > .line-numbers {
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   cursor: pointer;
+}
+
+.monaco-editor .margin-view-overlays > div:has(> .cldr.monaco-transcript-ref-gutter) > .line-numbers::before {
+  content: "";
+  flex: 1 1 0;
+  align-self: stretch;
   background-image: radial-gradient(circle closest-side, color-mix(in srgb, var(--color-primary) 62%, transparent) 99%, transparent);
   background-repeat: no-repeat;
   background-position: center;
@@ -165,7 +178,7 @@
   transition: background-size 120ms ease;
 }
 
-.monaco-transcript-ref-gutter:hover {
+.monaco-editor .margin-view-overlays > div:has(> .cldr.monaco-transcript-ref-gutter) > .line-numbers:hover::before {
   background-size: 9px 9px;
 }
 
@@ -402,4 +415,13 @@
   inline-size: max-content;
   min-inline-size: 100%;
   max-inline-size: none;
+}
+
+/* 19 号计划：编辑器快捷运行 CodeLens——颜色接入主题 token；hover 走主色（激活态语义）。 */
+.monaco-editor .codelens-decoration {
+  color: var(--color-muted-foreground);
+}
+
+.monaco-editor .codelens-decoration > a:hover {
+  color: var(--color-primary) !important;
 }

@@ -5,12 +5,14 @@ import { MONO_FONT_STACK } from '../../lib/fonts'
 import { getMonacoOverflowWidgetsContainer, installMonacoFindWidgetHoverGuard, type MonacoThemeName, syncMonacoOverflowWidgetsTheme } from '../../lib/monacoEnvironment'
 import { monacoLineHeightForFontSize, readMonacoEditorFontSizePreference, writeMonacoEditorFontSizePreference } from '../../lib/monacoFontPreference'
 import { loadMonacoEditorModule } from '../../lib/monacoPreload'
+import type { RunAction } from '../../lib/runActions/types'
 import { extractRelativeImportRanges, resolveFilePathFromModelUri, resolveImportCandidatePaths, resolveImportTarget } from './code.importLink'
 import { MonacoCodeEditorFindBar } from './MonacoCodeEditorFindBar'
 import { MonacoEditorContextMenu } from './MonacoEditorContextMenu'
 import { acquireMonacoModelCacheKey, getMonacoViewState, getOrCreateMonacoModel, releaseMonacoModelCacheKey, saveMonacoViewState, toMonacoModelCacheKey } from './monacoModelCache'
 import { TranscriptReferenceHoverCard } from './TranscriptReferenceHoverCard'
 import { ensureTextmateForLanguage, syncTextmateTheme } from './textmate.monaco'
+import { useMonacoRunCodeLens } from './useMonacoRunCodeLens'
 import { useMonacoSearchWidget } from './useMonacoSearchWidget'
 import { useMonacoTranscriptGutter } from './useMonacoTranscriptGutter'
 
@@ -66,6 +68,8 @@ interface MonacoCodeEditorProps {
   /** 转录文件引用：在行号右侧渲染 gutter 标记，点击打开转录内容抽屉。 */
   transcriptReferences?: TranscriptFileReference[]
   onOpenTranscriptReference?: (item: TranscriptFileReference) => void
+  /** 编辑器快捷运行（19 号计划）：行级 CodeLens 动作与执行回调。 */
+  runCodeLens?: { actions: RunAction[]; onRunAction: (action: RunAction) => void }
 }
 
 const EMPTY_TRANSCRIPT_FILE_REFERENCES: TranscriptFileReference[] = []
@@ -158,7 +162,7 @@ interface EditorContextMenuSnapshot {
 }
 
 export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEditorProps>(function MonacoCodeEditor(
-  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onQuickMatchJump, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu, transcriptReferences, onOpenTranscriptReference },
+  { value, language, theme, filePath, projectPath, isReadOnly = false, onChange, onOpenFile, onPasteImage, onSave, onFocusSearch, onQuickMatchJump, onScrollStateChange, onCursorPositionChange, onRequestProjectContextMenu, transcriptReferences, onOpenTranscriptReference, runCodeLens },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -233,6 +237,17 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
     monacoRef,
     references: transcriptReferences ?? EMPTY_TRANSCRIPT_FILE_REFERENCES,
     onOpenReference: (item) => onOpenTranscriptReferenceRef.current?.(item),
+  })
+
+  // 编辑器快捷运行（19 号计划 §2.2 方式 B 回退：CodeLens）。配置经 ref 传递，避免闭包过期。
+  const runCodeLensRef = useRef(runCodeLens)
+  runCodeLensRef.current = runCodeLens
+  const runCodeLensController = useMonacoRunCodeLens({
+    editorRef,
+    monacoRef,
+    actions: runCodeLens?.actions ?? [],
+    projectPath,
+    onRunAction: (action) => runCodeLensRef.current?.onRunAction(action),
   })
 
   const [activeTheme, setActiveTheme] = useState<MonacoThemeName>(theme)
@@ -473,6 +488,9 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         fontFamily: MONO_FONT_STACK,
         fontSize: fontSizeRef.current,
         lineHeight: monacoLineHeightForFontSize(fontSizeRef.current),
+        // CodeLens 与代码同字体、小两号：保持度量统一且不与正文抢视觉（19 号计划 UI）。
+        codeLensFontFamily: MONO_FONT_STACK,
+        codeLensFontSize: Math.max(10, fontSizeRef.current - 2),
         tabSize: 2,
         scrollBeyondLastLine: false,
         smoothScrolling: true,
@@ -496,6 +514,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
       syncMonacoOverflowWidgetsTheme(activeThemeRef.current)
       editorRef.current = editor
       transcriptGutter.syncEditorInstance(editor)
+      runCodeLensController.syncEditorInstance(editor)
       activeModelKeyRef.current = initialKey
       activeFilePathRef.current = filePath
       // 恢复本会话存档的视图状态（光标/滚动/选区/折叠）；有存档才 focus，首次打开不抢焦点。
@@ -785,6 +804,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
         editorRef.current = null
       }
       transcriptGutter.syncEditorInstance(null)
+      runCodeLensController.syncEditorInstance(null)
       // 模块缓存中的 Model 保留（撤销栈跨挂载不丢失），只释放本实例的引用计数。
       for (const key of Array.from(acquiredModelKeysRef.current)) {
         releaseModelCacheKey(key)
@@ -895,7 +915,7 @@ export const MonacoCodeEditor = forwardRef<MonacoCodeEditorHandle, MonacoCodeEdi
 
   return (
     <div className="relative h-full w-full">
-      {transcriptGutter.hover && <TranscriptReferenceHoverCard hover={transcriptGutter.hover} onOpenReference={transcriptGutter.openReference} onDismiss={transcriptGutter.dismissPinned} />}
+      {transcriptGutter.hover && <TranscriptReferenceHoverCard hover={transcriptGutter.hover} onOpenReference={transcriptGutter.openReference} onDismiss={transcriptGutter.dismissPinned} onHoverHold={transcriptGutter.holdHover} />}
       {searchVisible && (
         <MonacoCodeEditorFindBar
           activeSearchMatchIndex={activeSearchMatchIndex}

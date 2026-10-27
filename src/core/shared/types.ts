@@ -62,7 +62,7 @@ export type {
   TranscriptViewerMode,
 } from './types/transcript'
 
-export type PackageManager = 'npm' | 'yarn' | 'pnpm'
+export type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun'
 
 export type BackendMode = 'tmux' | 'wsl-pty' | 'direct-pty' | 'spawn'
 export type AppLocale = 'system' | 'en-US' | 'zh-CN'
@@ -1663,6 +1663,12 @@ export interface AppConfig {
   pdfPreviewLimitMb?: number
   audioPreviewLimitMb?: number
   videoPreviewLimitMb?: number
+  /** DOCX 源文件预览大小上限（MB）；DOCX 转换预览在主进程内部执行，与 PDF 上限独立（18 号计划 D4）。 */
+  docxPreviewLimitMb?: number
+  /** DOCX→PDF 转换缓存容量预算（MB），超限按 mtime 淘汰；仅配置文件可改，不进设置页（D5）。 */
+  docxPreviewCacheBudgetMb?: number
+  /** LibreOffice soffice.exe 覆盖路径；预留字段，本期不进设置页（D2）。 */
+  docxPreviewSofficePath?: string
   /** Chromium session/cache storage location. Changes apply after restart. */
   cacheLocation?: AppCacheLocationConfig
   /** Removed project metadata snapshots kept for same-path restore on re-add. */
@@ -1859,6 +1865,19 @@ export interface ProjectFileArchiveEntry {
 
 export interface ProjectFileStatResult {
   relativePath: string
+  size: number
+  mtimeMs: number
+}
+
+/** DOCX 高保真预览（主进程 LibreOffice 转 PDF）的错误原因。cancelled 仅在 renderer 主动取消排队任务时返回，调用方应直接丢弃。 */
+export type DocxPreviewErrorReason = 'timeout' | 'conversion-failed' | 'output-missing' | 'source-changed' | 'source-too-large' | 'output-too-large' | 'queue-full' | 'cancelled'
+
+export type DocxPreviewResult = { status: 'ok'; pdfBase64: string; fromCache: boolean } | { status: 'engine-missing' } | { status: 'error'; reason: DocxPreviewErrorReason }
+
+/** 手动基础预览按需读取的原始 DOCX（仅 fallback 路径使用，默认高保真路径不读取源文件）。 */
+export interface ProjectDocxSourceResult {
+  relativePath: string
+  base64: string
   size: number
   mtimeMs: number
 }

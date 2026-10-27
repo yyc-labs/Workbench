@@ -109,8 +109,8 @@ export const PREVIEW_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif'
 export const PREVIEW_HTML_EXTENSIONS = new Set(['.html', '.htm'])
 export const PREVIEW_PDF_EXTENSIONS = new Set(['.pdf'])
 export const PREVIEW_DOCX_EXTENSIONS = new Set(['.docx'])
-/** docx 预览暂不开放：渲染链路（viewers/docx/）已就绪，验证后置为 true 即可放开。 */
-const DOCX_PREVIEW_ENABLED = false
+/** docx 高保真预览（18 号计划：主进程 LibreOffice 转 PDF + PdfDocumentSurface 复用）已实施，验收后放开。 */
+const DOCX_PREVIEW_ENABLED = true
 export const PREVIEW_VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mkv', '.avi', '.webm'])
 export const PREVIEW_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'])
 export const PREVIEW_CSV_EXTENSIONS = new Set(['.csv', '.tsv'])

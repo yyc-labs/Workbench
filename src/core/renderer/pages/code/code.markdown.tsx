@@ -1,25 +1,25 @@
-import { Children, createElement, isValidElement, useCallback, useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { Element as HastElement } from 'hast'
 import { Check, Copy, Maximize2, X } from 'lucide-react'
-import { MONO_FONT_STACK } from '../../lib/fonts'
-import ReactMarkdown from 'react-markdown'
+import type { ReactNode } from 'react'
+import { Children, createElement, isValidElement, useCallback, useEffect, useState } from 'react'
 import type { Components, ExtraProps } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { joinProjectPath } from './code.pathActions'
-import { copyTextToClipboard } from './code.clipboard'
-import { MermaidBlock } from './code.markdownMermaid'
-import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps } from './code.markdownStructuredBlocks'
-import { extractHastText, MARKDOWN_PREVIEW_SCROLL_ROOT_SELECTOR, scrollMarkdownPreviewToAnchor, slugifyMarkdownHeading } from './code.markdownShared'
-import type { Element as HastElement } from 'hast'
-import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
-import { useI18n } from '../../i18n'
+import { projectIdFromPath } from '../../../shared/rules'
 import { ModalShell } from '../../components/ModalShell'
 import { ZoomPanViewport } from '../../components/ZoomPanViewport'
-import { projectIdFromPath } from '../../../shared/rules'
-import { buildYycWorkbenchPreviewUrl } from './code.helpers'
-import { useMarkdownNearViewport } from './code.markdownVisibility'
+import { useI18n } from '../../i18n'
+import { MONO_FONT_STACK } from '../../lib/fonts'
+import { fileNameFromRelativePath, joinProjectPath } from '../../lib/projectPaths'
 import { isSvgImageSrc, pinSvgImageIntrinsicSize } from '../../lib/svgImageIntrinsicSize'
+import { copyTextToClipboard } from './code.clipboard'
+import { buildYycWorkbenchPreviewUrl } from './code.helpers'
+import { MermaidBlock } from './code.markdownMermaid'
+import { extractHastText, MARKDOWN_PREVIEW_SCROLL_ROOT_SELECTOR, scrollMarkdownPreviewToAnchor, slugifyMarkdownHeading } from './code.markdownShared'
+import { createSourceTrackedBlockComponent, createStructuredBlockComponent, getSourceLineDataProps, type MarkdownStructuredBlockClickPayload, type MarkdownStructuredBlockKind, type SourceLineDataProps } from './code.markdownStructuredBlocks'
+import { decodeMarkdownUrlPathSafely, isWindowsAbsolutePath, normalizeAbsoluteMarkdownFileUrl, toFileUrlFromAbsolutePath } from './code.markdownUrls'
+import { useMarkdownNearViewport } from './code.markdownVisibility'
 
 export type {
   MarkdownStructuredBlockClickPayload,
@@ -83,7 +83,7 @@ export function relativePosixPath(fromDirectory: string, toPath: string): string
 export function sanitizeMarkdownImageAlt(relativePath: string): string {
   const fileName = fileNameFromRelativePath(relativePath)
   const withoutExtension = fileName.replace(/\.[A-Za-z0-9]+$/, '').trim()
-  const safe = withoutExtension.replace(/[\[\]\r\n]+/g, ' ').trim()
+  const safe = withoutExtension.replace(/[[\]\r\n]+/g, ' ').trim()
   return safe || 'image'
 }
 
@@ -774,10 +774,4 @@ export function createMarkdownComponents({
       )
     },
   }
-}
-
-export function fileNameFromRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/')
-  const segments = normalized.split('/')
-  return segments[segments.length - 1] || relativePath
 }

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "updatedAt": 1793007223359,
+  "tasks": [
+    {
+      "id": "default",
+      "name": "default",
+      "command": "npm run dist:win",
+      "isDefault": true,
+      "startupMode": "terminal"
+    }
+  ]
+}

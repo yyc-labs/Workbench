@@ -2,9 +2,9 @@ import { FileSearch } from 'lucide-react'
 import { useLayoutEffect, useRef } from 'react'
 import type { ProjectFileContentMatch, ProjectFileNodeKind } from '../../../shared/types'
 import { useI18n } from '../../i18n'
+import { fileNameFromRelativePath } from '../../lib/projectPaths'
 import type { CodeTreeContextMenuPayload } from './CodeTreeContextMenu'
 import { buildMatchLineDisplay } from './code.contentSearchTree'
-import { fileNameFromRelativePath } from './code.markdownShared'
 
 interface ActiveContentSearchLocation {
   relativePath: string

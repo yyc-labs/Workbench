@@ -153,13 +153,21 @@ export function useCodeFileState({ projectId, projectPath, persistedLastCodeFile
         const result = await window.electronAPI.readProjectFile(projectPath, relativePath)
         if (!mountedRef.current || openRequestSeqRef.current !== requestSeq) return false
 
-        const isBinaryKind = result.kind === 'image' || result.kind === 'pdf' || result.kind === 'docx' || result.kind === 'video' || result.kind === 'audio'
+        const isBinaryKind = result.kind === 'image' || result.kind === 'pdf' || result.kind === 'video' || result.kind === 'audio'
+        // docx 高保真预览在主进程内部转换（docx-preview-service），读取链路只返回 kind，
+        // 不构造 binary data URL（默认路径零双读，18 号计划 v2⑦）。
+        const isNonEditableKind = isBinaryKind || result.kind === 'docx'
         const isUnsupportedKind = result.kind === 'unsupported'
 
         setActiveFile(toActiveCodeFile(result))
         setActiveRelativePath(result.relativePath)
 
-        if (isBinaryKind) {
+        if (isNonEditableKind && !isBinaryKind) {
+          setBinaryDataUrl(null)
+          setEditorValueState('')
+          setSavedContentFingerprint(0)
+          setSavedContentLength(0)
+        } else if (isBinaryKind) {
           setBinaryDataUrl(`data:${result.mimeType ?? ''};base64,${result.content}`)
           setEditorValueState('')
           setSavedContentFingerprint(0)

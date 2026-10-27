@@ -221,7 +221,7 @@ export interface AppState {
   setCodeFileExclusions: (exclusions: ProjectFileExclusionsConfig) => Promise<void>
   setCodeTreeAutoLoadFileLimit: (limit: number) => Promise<void>
   setGitChangedFilesLimit: (limit: number) => Promise<void>
-  setFilePreviewLimits: (limits: Partial<Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb'>>) => Promise<void>
+  setFilePreviewLimits: (limits: Partial<Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb' | 'docxPreviewLimitMb'>>) => Promise<void>
   setCacheLocation: (cacheLocation: AppCacheLocationConfig) => Promise<void>
   setAiEnvironmentConfig: (aiEnvironment: NonNullable<AppConfig['aiEnvironment']>) => Promise<void>
   setRuntimeLauncherScript: (scriptPath: string) => Promise<void>

@@ -386,6 +386,7 @@ export function SettingsPage() {
                   pdfPreviewLimitMb={config.pdfPreviewLimitMb ?? 3}
                   audioPreviewLimitMb={config.audioPreviewLimitMb ?? 5}
                   videoPreviewLimitMb={config.videoPreviewLimitMb ?? 10}
+                  docxPreviewLimitMb={config.docxPreviewLimitMb ?? 3}
                   supportsLaunchOnLogin={capability?.hostPlatform === 'windows'}
                   supportsCloseWindowBehavior={capability?.hostPlatform === 'windows'}
                   configRecovery={config.configRecovery}

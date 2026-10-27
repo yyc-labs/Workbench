@@ -49,6 +49,8 @@ export const DEFAULT_IMAGE_PREVIEW_LIMIT_MB = 10
 export const DEFAULT_PDF_PREVIEW_LIMIT_MB = 3
 export const DEFAULT_AUDIO_PREVIEW_LIMIT_MB = 5
 export const DEFAULT_VIDEO_PREVIEW_LIMIT_MB = 10
+export const DEFAULT_DOCX_PREVIEW_LIMIT_MB = 3
+export const DEFAULT_DOCX_PREVIEW_CACHE_BUDGET_MB = 200
 const MIN_FILE_PREVIEW_LIMIT_MB = 1
 const MAX_FILE_PREVIEW_LIMIT_MB = 1024
 export const DEFAULT_CODE_TREE_AUTOLOAD_FILE_LIMIT = 4000
@@ -145,6 +147,8 @@ const DEFAULT_CONFIG: AppConfig = {
   pdfPreviewLimitMb: DEFAULT_PDF_PREVIEW_LIMIT_MB,
   audioPreviewLimitMb: DEFAULT_AUDIO_PREVIEW_LIMIT_MB,
   videoPreviewLimitMb: DEFAULT_VIDEO_PREVIEW_LIMIT_MB,
+  docxPreviewLimitMb: DEFAULT_DOCX_PREVIEW_LIMIT_MB,
+  docxPreviewCacheBudgetMb: DEFAULT_DOCX_PREVIEW_CACHE_BUDGET_MB,
   cacheLocation: DEFAULT_CACHE_LOCATION_CONFIG,
   removedProjects: [],
   folders: [],
@@ -775,7 +779,7 @@ function normalizeGitChangedFilesLimit(value: unknown): number {
   return Math.min(MAX_GIT_CHANGED_FILES_LIMIT, Math.max(MIN_GIT_CHANGED_FILES_LIMIT, Math.round(parsed)))
 }
 
-type FilePreviewLimits = Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb'>
+type FilePreviewLimits = Pick<AppConfig, 'imagePreviewLimitMb' | 'pdfPreviewLimitMb' | 'audioPreviewLimitMb' | 'videoPreviewLimitMb' | 'docxPreviewLimitMb'>
 
 /** 归一化四类预览上限；旧版单一 filePreviewLimitMb 不再继承，统一使用约定默认值。 */
 function normalizeFilePreviewLimits(source: Partial<AppConfig> & { filePreviewLimitMb?: unknown }): FilePreviewLimits {
@@ -784,6 +788,7 @@ function normalizeFilePreviewLimits(source: Partial<AppConfig> & { filePreviewLi
     pdfPreviewLimitMb: normalizePreviewLimitMb(source.pdfPreviewLimitMb, DEFAULT_PDF_PREVIEW_LIMIT_MB),
     audioPreviewLimitMb: normalizePreviewLimitMb(source.audioPreviewLimitMb, DEFAULT_AUDIO_PREVIEW_LIMIT_MB),
     videoPreviewLimitMb: normalizePreviewLimitMb(source.videoPreviewLimitMb, DEFAULT_VIDEO_PREVIEW_LIMIT_MB),
+    docxPreviewLimitMb: normalizePreviewLimitMb(source.docxPreviewLimitMb, DEFAULT_DOCX_PREVIEW_LIMIT_MB),
   }
 }
 
@@ -1056,9 +1061,12 @@ export async function updateConfig(partial: Partial<AppConfig>): Promise<AppConf
     pdfPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'pdfPreviewLimitMb') ? partial.pdfPreviewLimitMb : current.pdfPreviewLimitMb, DEFAULT_PDF_PREVIEW_LIMIT_MB),
     audioPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'audioPreviewLimitMb') ? partial.audioPreviewLimitMb : current.audioPreviewLimitMb, DEFAULT_AUDIO_PREVIEW_LIMIT_MB),
     videoPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'videoPreviewLimitMb') ? partial.videoPreviewLimitMb : current.videoPreviewLimitMb, DEFAULT_VIDEO_PREVIEW_LIMIT_MB),
+    docxPreviewLimitMb: normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'docxPreviewLimitMb') ? partial.docxPreviewLimitMb : current.docxPreviewLimitMb, DEFAULT_DOCX_PREVIEW_LIMIT_MB),
   }
   updated.launchOnLogin = Object.prototype.hasOwnProperty.call(partial, 'launchOnLogin') ? normalizeBooleanFlag(partial.launchOnLogin, current.launchOnLogin ?? false) : (current.launchOnLogin ?? false)
   updated.launchOnLoginDisplayMode = Object.prototype.hasOwnProperty.call(partial, 'launchOnLoginDisplayMode') ? normalizeLaunchOnLoginDisplayMode(partial.launchOnLoginDisplayMode) : normalizeLaunchOnLoginDisplayMode(current.launchOnLoginDisplayMode)
+  updated.docxPreviewCacheBudgetMb = normalizePreviewLimitMb(Object.prototype.hasOwnProperty.call(partial, 'docxPreviewCacheBudgetMb') ? partial.docxPreviewCacheBudgetMb : current.docxPreviewCacheBudgetMb, DEFAULT_DOCX_PREVIEW_CACHE_BUDGET_MB)
+  updated.docxPreviewSofficePath = Object.prototype.hasOwnProperty.call(partial, 'docxPreviewSofficePath') ? (typeof partial.docxPreviewSofficePath === 'string' && partial.docxPreviewSofficePath.trim() ? partial.docxPreviewSofficePath.trim() : undefined) : current.docxPreviewSofficePath
   updated.closeWindowBehavior = Object.prototype.hasOwnProperty.call(partial, 'closeWindowBehavior') ? normalizeCloseWindowBehavior(partial.closeWindowBehavior) : normalizeCloseWindowBehavior(current.closeWindowBehavior)
   delete (updated as AppConfig & { codexSettingsSnapshot?: unknown }).codexSettingsSnapshot
   delete (updated as AppConfig & { filePreviewLimitMb?: unknown }).filePreviewLimitMb

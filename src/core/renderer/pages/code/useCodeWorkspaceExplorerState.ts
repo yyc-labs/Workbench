@@ -241,12 +241,16 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
   }, [])
 
   // remembered 持久化提交：归一化后经 store action 交主进程协调器（本期不新建 renderer 定时器）。
-  const persistRememberedDirectories = useCallback(
-    (next: Set<string>) => {
-      onPersistRememberedDirectories?.(normalizeRememberedDirectories(Array.from(next)) ?? [])
-    },
-    [onPersistRememberedDirectories],
-  )
+  // 回调经 latest-ref 间接调用：CodeWorkspacePanel 以内联箭头传入本回调，若直接进 deps 会让
+  // persistRememberedDirectories → persistRevealDirectories → ensureTreePathLoaded 每轮渲染
+  // 换新身份，locate effect（依赖 ensureTreePathLoaded）随之每轮重跑——折叠包含激活文件的
+  // 文件夹时，ensureTreePathLoaded 会把刚折叠的祖先重新展开并再次持久化，与折叠互相触发
+  // 形成死循环（2026-10-23 折叠卡死回归的根因）。
+  const onPersistRememberedDirectoriesRef = useRef(onPersistRememberedDirectories)
+  onPersistRememberedDirectoriesRef.current = onPersistRememberedDirectories
+  const persistRememberedDirectories = useCallback((next: Set<string>) => {
+    onPersistRememberedDirectoriesRef.current?.(normalizeRememberedDirectories(Array.from(next)) ?? [])
+  }, [])
 
   // reveal 转正提交：文件 reveal（打开/定位文件带出的祖先展开）与手动展开同等持久化，
   // 直接写入 remembered 并提交落盘，不再维护运行时临时展开集合。
@@ -640,6 +644,13 @@ export function useCodeWorkspaceExplorerState({ activePane, activeRelativePath, 
         // reveal 转正：成功展开的祖先目录写入 remembered 并持久化（expandTreePath 仅在
         // loadDirectory 成功后回调，加载失败的路径不会进入记忆）。
         onRevealDirectory: (directoryRelativePath) => {
+          // 同步并入 ref：expandTreePath 用 raw setState 写展开集合，ref 的 effect 同步
+          // 赶不上同一微任务内紧随其后的 toggleDirectory/commit——懒加载折叠目录时 commit
+          // 会基于缺祖先的旧集合并把祖先覆盖掉，arborist diff 随即 close 祖先，定位滚动
+          // 找不到目标行（搜索文件夹结果点击只展开不跳转的根因）。
+          if (!expandedDirectoriesRef.current.has(directoryRelativePath)) {
+            expandedDirectoriesRef.current = new Set(expandedDirectoriesRef.current).add(directoryRelativePath)
+          }
           persistRevealDirectories([directoryRelativePath])
         },
       })

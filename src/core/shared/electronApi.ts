@@ -81,6 +81,8 @@ import type {
   MarkdownDocumentWriteResult,
   ProcessInfo,
   ProcessPortInventory,
+  DocxPreviewResult,
+  ProjectDocxSourceResult,
   ProjectFileArchiveEntry,
   ProjectFileAutoLoadDecision,
   ProjectFileContentSearchOptions,
@@ -286,6 +288,11 @@ export interface ProjectFileElectronApi {
   copyProjectFileToClipboard: (projectPath: string, fileRelativePath: string) => Promise<{ name: string; size: number }>
   copyProjectEntriesToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[]) => Promise<{ name: string; count: number }>
   copyProjectEntriesZipToClipboard: (projectPath: string, entries: ProjectFileArchiveEntry[], zipName?: string) => Promise<{ name: string; size: number }>
+  /** DOCX 高保真预览：主进程 LibreOffice 转 PDF（快照 + 缓存 + 串行队列）。requestId 用于取消排队中任务。 */
+  docxPreview: (projectPath: string, relativePath: string, requestId?: string) => Promise<DocxPreviewResult>
+  cancelDocxPreview: (requestId: string) => Promise<void>
+  /** 手动基础预览按需读取原始 DOCX（仅 fallback 路径使用）。 */
+  readDocxSource: (projectPath: string, relativePath: string) => Promise<ProjectDocxSourceResult>
 }
 
 export interface MarkdownDocumentElectronApi {

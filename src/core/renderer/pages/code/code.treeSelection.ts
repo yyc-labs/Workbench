@@ -1,6 +1,6 @@
 import type { ProjectFileNode } from '../../../shared/types'
-import { fileNameFromRelativePath } from './code.markdownShared'
-import { joinProjectPath, normalizeRelativePathForCopy } from './code.pathActions'
+import { fileNameFromRelativePath, joinProjectPath } from '../../lib/projectPaths'
+import { normalizeRelativePathForCopy } from './code.pathActions'
 
 /**
  * 文件树多选纯逻辑（16 号计划 §7）。

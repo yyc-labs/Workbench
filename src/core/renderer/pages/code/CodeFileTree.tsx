@@ -616,6 +616,10 @@ export const CodeFileTree = memo(function CodeFileTree({
     if (locateFolderRequest.token === handledLocateFolderTokenRef.current) return
     handledLocateFolderTokenRef.current = locateFolderRequest.token
     const folderPath = locateFolderRequest.relativePath
+    // 定位期间抑制「跟随当前文件」自动滚动：reveal 链路（搜索文件夹结果点击/定位所在文件夹）
+    // 会连续变更 nodes/expandedDirectories，跟随 effect 在本 effect 之后声明，同一 commit 内
+    // 会把视图拉回激活文件，覆盖掉定位滚动（未展开文件夹搜索点击后跳错位置的根因）。
+    renewSuppressFollowScroll()
     if (!folderPath) {
       const listElement = treeRef.current?.listEl.current
       if (listElement) listElement.scrollTop = 0
@@ -639,7 +643,7 @@ export const CodeFileTree = memo(function CodeFileTree({
       window.cancelAnimationFrame(flashFrame)
       cancelReveal()
     }
-  }, [locateFolderRequest, revealTreeNodePath])
+  }, [locateFolderRequest, renewSuppressFollowScroll, revealTreeNodePath])
 
   useEffect(() => {
     // 统一时序（§2.3）：scope 清理优先于 active 同步（C1）。

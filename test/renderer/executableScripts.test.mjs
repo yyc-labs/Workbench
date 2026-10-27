@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loadTsModule } from '../helpers/load-ts-module.mjs'
 
-const { buildScriptCommand, resolveExecutableScript } = loadTsModule('src/core/renderer/pages/code/code.executable.ts')
+const { buildScriptCommand, resolveExecutableScript } = loadTsModule('src/core/renderer/lib/executableScripts.ts')
 
 test('resolveExecutableScript maps extensions by environment', () => {
   // node / python 两种环境都展示

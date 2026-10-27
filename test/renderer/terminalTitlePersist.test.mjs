@@ -27,6 +27,9 @@ globalThis.localStorage = {
 }
 
 const { createTerminalCollectionSlice } = loadTsModule('src/core/renderer/stores/appStore.terminalCollectionSlice.ts')
+// persistWorkspace 有水合防护（未水合时跳过写盘）：标题持久化测试直接标记已水合
+const { markWorkspaceHydrated } = loadTsModule('src/core/renderer/stores/appStore.helpers.ts')
+markWorkspaceHydrated()
 
 const tick = async (times = 4) => {
   for (let i = 0; i < times; i += 1) {

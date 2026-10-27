@@ -1,5 +1,6 @@
 export { copyProjectEntriesToClipboard, copyProjectEntriesZipToClipboard, copyProjectFileToClipboard, copyProjectFolderZipToClipboard, createProjectFolderZip, prewarmClipboardWorker } from './project-file/archive-service'
 export { searchProjectContent } from './project-file/content-search-service'
+export { cancelDocxPreview, previewDocxFile, readDocxSource } from './project-file/docx-preview-service'
 export {
   openProjectFileInSystem,
   readProjectFile,

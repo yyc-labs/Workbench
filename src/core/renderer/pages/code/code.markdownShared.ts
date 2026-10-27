@@ -91,12 +91,6 @@ export function extractMarkdownHeadings(markdownBody: string, lineOffset = 0): M
   return headings
 }
 
-export function fileNameFromRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/')
-  const segments = normalized.split('/')
-  return segments[segments.length - 1] || relativePath
-}
-
 function parseSourceLineAttribute(value: string | null): number | null {
   if (!value) return null
   const parsed = Number.parseInt(value, 10)

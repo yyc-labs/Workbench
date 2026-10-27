@@ -1,5 +1,5 @@
 import { FileText, Folder, Search } from 'lucide-react'
-import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ProjectFileNode } from '../../../shared/types'
 import { useI18n } from '../../i18n'
@@ -35,9 +35,12 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ProjectFileNode[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  // 键盘导航高亮：-1 = 未高亮，回车此时等价于选第一个结果。
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const requestSeqRef = useRef(0)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
   // 打开即聚焦搜索框。
   useEffect(() => {
@@ -87,6 +90,8 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
 
   useEffect(() => {
     const trimmed = query.trim()
+    // 查询变化 = 结果集即将更换，键盘高亮回到未选中态。
+    setHighlightedIndex(-1)
     if (!trimmed) {
       requestSeqRef.current += 1
       setResults([])
@@ -125,6 +130,38 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
     [onClose, onSelectResult],
   )
 
+  // 键盘导航：上下键在高亮项间移动（无高亮时上/下键都落到首项），回车确认；
+  // 未高亮时回车 = 第一个结果。事件从聚焦的搜索输入框冒泡到面板层统一处理。
+  const handlePanelKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (results.length <= 0) return
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
+        setHighlightedIndex((prev) => Math.min(prev + 1, results.length - 1))
+        return
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
+        setHighlightedIndex((prev) => Math.max(prev - 1, 0))
+        return
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        const index = highlightedIndex >= 0 && highlightedIndex < results.length ? highlightedIndex : 0
+        const node = results[index]
+        if (node) handleSelectResult(node)
+      }
+    },
+    [handleSelectResult, highlightedIndex, results],
+  )
+
+  // 高亮项移出可视区时滚动跟随（block: nearest 避免无关跳动）。
+  useEffect(() => {
+    if (highlightedIndex < 0) return
+    const item = listRef.current?.children[highlightedIndex] as HTMLElement | undefined
+    item?.scrollIntoView({ block: 'nearest' })
+  }, [highlightedIndex])
+
   const handleResultContextMenu = useCallback(
     (event: MouseEvent, node: ProjectFileNode) => {
       event.preventDefault()
@@ -151,6 +188,7 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={handlePanelKeyDown}
     >
       <div className="flex items-center gap-2 px-2 py-1.5">
         <Search className="h-3.5 w-3.5 shrink-0 text-[color:var(--color-muted-foreground)]" />
@@ -163,18 +201,19 @@ function FolderFileSearchPopoverInner({ x, y, folderRelativePath, folderName, pr
           inputClassName="w-full bg-transparent text-[12px] text-[color:var(--color-foreground)] outline-none placeholder:text-[color:var(--color-muted-foreground)]"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto" style={{ height: listHeight }}>
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" style={{ height: listHeight }}>
         {isEmpty ? (
           <div className="px-3 py-4 text-[11px] text-[color:var(--color-muted-foreground)]">{t(searchKind === 'directory' ? 'codeFileTree.searchFoldersEmpty' : 'codeFileTree.searchFilesEmpty')}</div>
         ) : (
-          results.map((node) => {
+          results.map((node, index) => {
             const subPath = node.relativePath.slice(0, Math.max(0, node.relativePath.length - node.name.length - 1))
             return (
               <button
                 key={node.relativePath}
                 type="button"
-                className="flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)]"
+                className={`flex w-full items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors hover:bg-[color:var(--color-accent)] ${index === highlightedIndex ? 'bg-[color:var(--color-accent)]' : ''}`}
                 onClick={() => handleSelectResult(node)}
+                onMouseEnter={() => setHighlightedIndex(index)}
                 onContextMenu={(event) => handleResultContextMenu(event, node)}
                 title={node.relativePath}
               >

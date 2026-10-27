@@ -1,7 +1,8 @@
 import { FolderSearch } from 'lucide-react'
 import type { ProjectFileNodeKind } from '../../../../shared/types'
 import { useI18n } from '../../../i18n'
-import { joinProjectPath, resolveTreeNodeFolderPath } from '../code.pathActions'
+import { joinProjectPath } from '../../../lib/projectPaths'
+import { resolveTreeNodeFolderPath } from '../code.pathActions'
 import { FileViewerOpenButton, FileViewerShell } from './fileViewerShared'
 
 type FileExcludedViewerProps = {
